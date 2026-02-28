@@ -1,0 +1,39 @@
+{
+  "name": "pano-boilerplate-plugin",
+  "type": "module",
+  "exports": {
+    ".": {
+      "node": "./server/server.mjs",
+      "default": "./client/client.mjs"
+    }
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "cross-env DEV=true rollup -c --watch",
+    "prepublishOnly": "npm run build",
+    "lint:prettier": "prettier -c . --config .prettierrc",
+    "format:prettier": "prettier --write . --config .prettierrc"
+  },
+  "peerDependencies": {
+    "svelte": "^5.46.1"
+  },
+  "devDependencies": {
+    "@panomc/sdk": "1.0.0-dev.25",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "@rollup/plugin-terser": "^0.4.4",
+    "cross-env": "^10.1.0",
+    "prettier": "^3.4.2",
+    "prettier-plugin-svelte": "^3.3.3",
+    "rollup": "^4.32.1",
+    "rollup-plugin-delete": "^2.1.0",
+    "rollup-plugin-svelte": "^7.2.2",
+    "svelte": "^5.46.1"
+  },
+  "keywords": [
+    "svelte"
+  ],
+  "files": [
+    "src",
+    "dist"
+  ]
+}
