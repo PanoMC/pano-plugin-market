@@ -173,7 +173,7 @@ pluginBeanContext.beanFactory.registerSingleton(PluginConfigManager::class.java.
 Templates for translations must include support for **Turkish (tr)**, **English (en)**, and **Russian (ru)**.
 
 ### 🏠 Localized Translations
-- **Boilerplate Bridge**: The `main.js` in the boilerplate defines a custom `_` (underscore) method that automatically handles the plugin's namespace (e.g., `plugins.your-plugin-id.key`).
+- **Market Bridge**: The `main.js` in the market plugin defines a custom `_` (underscore) method that automatically handles the plugin's namespace (e.g., `plugins.your-plugin-id.key`).
 - **Usage**: When using this localized `_` function in Svelte components, provide only the relative key (e.g., use `$_('title')` instead of the full path).
 - **Isolation**: Plugins must strictly use their own translation keys. Never modify or rely on translations from other plugins or the Pano host unless explicitly instructed.
 

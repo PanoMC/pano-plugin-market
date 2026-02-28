@@ -1,5 +1,7 @@
 {
-  "name": "pano-boilerplate-plugin",
+  "name": "pano-plugin-market",
+  "version": "1.0.0",
+  "description": "Flexible plugin that lets you easily list, manage, and sell products on your website.",
   "type": "module",
   "exports": {
     ".": {

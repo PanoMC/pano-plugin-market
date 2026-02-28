@@ -1,8 +1,8 @@
-package com.panomc.plugins.boilerplate
+package com.panomc.plugins.market
 
 import com.panomc.platform.api.PanoPlugin
 
-class BoilerplatePlugin : PanoPlugin() {
+class MarketPlugin : PanoPlugin() {
     override suspend fun onStart() {
         logger.info("Starting...")
     }
