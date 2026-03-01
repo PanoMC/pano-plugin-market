@@ -21,6 +21,30 @@ export default class PanoMarketPlugin extends PanoPlugin {
         permission: `pano.plugin.${pluginId}.manage`,
       });
 
+      pano.ui.page.register({
+        path: '/market/categories',
+        component: viewComponent(() => import('./panel/pages/MarketCategoriesPage.svelte')),
+        permission: `pano.plugin.${pluginId}.manage`,
+      });
+
+      pano.ui.page.register({
+        path: '/market/products',
+        component: viewComponent(() => import('./panel/pages/MarketProductsPage.svelte')),
+        permission: `pano.plugin.${pluginId}.manage`,
+      });
+
+      pano.ui.page.register({
+        path: '/market/comparisons',
+        component: viewComponent(() => import('./panel/pages/MarketComparisonsPage.svelte')),
+        permission: `pano.plugin.${pluginId}.manage`,
+      });
+
+      pano.ui.page.register({
+        path: '/market/settings',
+        component: viewComponent(() => import('./panel/pages/MarketSettingsPage.svelte')),
+        permission: `pano.plugin.${pluginId}.manage`,
+      });
+
       // Add Sidebar Link in Panel
       pano.ui.nav.site.editNavLinks((navigationItems) => {
         const marketNav = {
