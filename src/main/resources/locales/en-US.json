@@ -1,4 +1,9 @@
 {
   "nav-store": "Store",
-  "nav-market": "Market"
+  "nav-market": "Market",
+  "nav-stats": "Statistics",
+  "nav-categories": "Categories",
+  "nav-products": "Products",
+  "nav-comparisons": "Comparisons",
+  "nav-settings": "Settings"
 }

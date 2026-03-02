@@ -1,13 +1,5 @@
 import { PanoPlugin, viewComponent } from '@panomc/sdk';
-import { derived } from 'svelte/store';
-import { _ as i18n } from '@panomc/sdk/utils/language';
-
-const pluginId = 'pano-plugin-market';
-
-// this is to render plugin translations
-export const _ = derived(i18n, ($_fn) => {
-  return (key, options) => $_fn(`plugins.${pluginId}.${key}`, options);
-});
+import { pluginId } from './i18n';
 
 export default class PanoMarketPlugin extends PanoPlugin {
   onLoad() {
@@ -17,31 +9,37 @@ export default class PanoMarketPlugin extends PanoPlugin {
       // Register Panel Admin Page
       pano.ui.page.register({
         path: '/market',
-        component: viewComponent(() => import('./panel/pages/MarketAdminPage.svelte')),
+        component: viewComponent(() => import('./panel/pages/Stats.svelte')),
         permission: `pano.plugin.${pluginId}.manage`,
       });
 
       pano.ui.page.register({
         path: '/market/categories',
-        component: viewComponent(() => import('./panel/pages/MarketCategoriesPage.svelte')),
+        component: viewComponent(() => import('./panel/pages/Categories.svelte')),
+        permission: `pano.plugin.${pluginId}.manage`,
+      });
+
+      pano.ui.page.register({
+        path: '/market/categories/create-category',
+        component: viewComponent(() => import('./panel/pages/CreateCategory.svelte')),
         permission: `pano.plugin.${pluginId}.manage`,
       });
 
       pano.ui.page.register({
         path: '/market/products',
-        component: viewComponent(() => import('./panel/pages/MarketProductsPage.svelte')),
+        component: viewComponent(() => import('./panel/pages/Products.svelte')),
         permission: `pano.plugin.${pluginId}.manage`,
       });
 
       pano.ui.page.register({
         path: '/market/comparisons',
-        component: viewComponent(() => import('./panel/pages/MarketComparisonsPage.svelte')),
+        component: viewComponent(() => import('./panel/pages/Comparisons.svelte')),
         permission: `pano.plugin.${pluginId}.manage`,
       });
 
       pano.ui.page.register({
         path: '/market/settings',
-        component: viewComponent(() => import('./panel/pages/MarketSettingsPage.svelte')),
+        component: viewComponent(() => import('./panel/pages/Settings.svelte')),
         permission: `pano.plugin.${pluginId}.manage`,
       });
 

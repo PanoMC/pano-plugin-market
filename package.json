@@ -20,7 +20,7 @@
     "svelte": "^5.46.1"
   },
   "devDependencies": {
-    "@panomc/sdk": "1.0.0-dev.25",
+    "@panomc/sdk": "1.0.0-dev.28",
     "@rollup/plugin-node-resolve": "^16.0.0",
     "@rollup/plugin-terser": "^0.4.4",
     "cross-env": "^10.1.0",
@@ -37,5 +37,8 @@
   "files": [
     "src",
     "dist"
-  ]
+  ],
+  "dependencies": {
+    "chart.js": "^4.5.1"
+  }
 }

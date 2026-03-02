@@ -1,4 +1,9 @@
 {
   "nav-store": "Market",
-  "nav-market": "Market"
+  "nav-market": "Market",
+  "nav-stats": "İstatistikler",
+  "nav-categories": "Kategoriler",
+  "nav-products": "Ürünler",
+  "nav-comparisons": "Karşılaştırma",
+  "nav-settings": "Ayarlar"
 }
