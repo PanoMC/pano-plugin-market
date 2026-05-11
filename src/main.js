@@ -32,8 +32,20 @@ export default class PanoMarketPlugin extends PanoPlugin {
       });
 
       pano.ui.page.register({
+        path: '/market/products/create-product',
+        component: viewComponent(() => import('./panel/pages/CreateProduct.svelte')),
+        permission: `pano.plugin.${pluginId}.manage`,
+      });
+
+      pano.ui.page.register({
         path: '/market/comparisons',
         component: viewComponent(() => import('./panel/pages/Comparisons.svelte')),
+        permission: `pano.plugin.${pluginId}.manage`,
+      });
+      
+      pano.ui.page.register({
+        path: '/market/gifts',
+        component: viewComponent(() => import('./panel/pages/Gifts.svelte')),
         permission: `pano.plugin.${pluginId}.manage`,
       });
 

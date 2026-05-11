@@ -205,7 +205,7 @@
           responsive: true, 
           maintainAspectRatio: false, 
           plugins: { 
-            legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 6 } } 
+            legend: { display: false } 
           },
           cutout: '70%'
         }
@@ -370,7 +370,6 @@
           <!-- Weekly Sales -->
           <div class="col-md-6">
             <div class="d-flex align-items-center gap-2 mb-3">
-              <i class="fas fa-chart-line text-primary"></i>
               <h6 class="fw-bold mb-0">Haftalık Satış Grafiği</h6>
             </div>
             <div class="p-3  border rounded-3" style="height: 280px;">
@@ -381,7 +380,6 @@
           <!-- Monthly Sales -->
           <div class="col-md-6">
             <div class="d-flex align-items-center gap-2 mb-3">
-              <i class="fas fa-calendar-alt text-info"></i>
               <h6 class="fw-bold mb-0">Aylık Satış Grafiği</h6>
             </div>
             <div class="p-3  border rounded-3" style="height: 280px;">
@@ -392,7 +390,6 @@
           <!-- Top Products -->
           <div class="col-md-6">
             <div class="d-flex align-items-center gap-2 mb-3">
-              <i class="fas fa-fire text-danger"></i>
               <h6 class="fw-bold mb-0">En Çok Satılan Ürünler</h6>
             </div>
             <div class="p-3  border rounded-3" style="height: 280px;">
@@ -403,7 +400,6 @@
           <!-- Payment Methods -->
           <div class="col-md-6">
             <div class="d-flex align-items-center gap-2 mb-3">
-              <i class="fas fa-credit-card text-success"></i>
               <h6 class="fw-bold mb-0">En Çok Kullanılan Ödeme Yöntemleri</h6>
             </div>
             <div class="p-3  border rounded-3" style="height: 280px;">
@@ -429,12 +425,13 @@
             {#each latestSales as sale}
               <tr>
                 <td class="ps-3">
-                  <code 
-                    class="user-select-all cursor-pointer focus-ring rounded" 
+                  <button 
+                    type="button"
+                    class="btn btn-link p-0 text-decoration-none font-monospace user-select-all cursor-pointer focus-ring rounded border-0" 
                     use:tooltip={['Kopyala']}
                     onclick={() => copyToClipboard(sale.id)}>
                     #{sale.id}
-                  </code>
+                  </button>
                 </td>
                 <td>
                   <a href="/players/{sale.player}" class="text-decoration-none d-flex align-items-center focus-ring rounded" use:tooltip={['Görüntüle']}>
@@ -445,9 +442,9 @@
                 <td>
                   <div class="d-flex flex-wrap gap-1 align-items-center">
                     {#if sale.products.length > 0}
-                      <a href="#" class="badge text-bg-primary text-decoration-none focus-ring rounded" use:tooltip={['Görüntüle']}>
+                      <span class="badge text-bg-primary focus-ring rounded" use:tooltip={['Görüntüle']}>
                         {sale.products[0]}
-                      </a>
+                      </span>
                       {#if sale.products.length > 1}
                         <span 
                           class="badge text-bg-secondary cursor-help rounded-pill" 
@@ -463,9 +460,9 @@
                   </div>
                 </td>
                 <td>
-                  <a href="#" class="badge text-bg-secondary focus-ring rounded text-decoration-none" use:tooltip={['Düzenle']}>
+                  <span class="badge text-bg-secondary focus-ring rounded" use:tooltip={['Düzenle']}>
                     {sale.price}
-                  </a>
+                  </span>
                 </td>
                 <td>
                   {sale.payment}

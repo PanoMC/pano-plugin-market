@@ -40,29 +40,29 @@
   }
 </script>
 
-{#snippet left()}
-  <a href="/market/categories" class="btn btn-link px-0 text-decoration-none d-flex align-items-center gap-2">
-    <i class="fas fa-arrow-left"></i>
-    <span>Kategorilere Dön</span>
-  </a>
-{/snippet}
+<MarketLayout>
+  {#snippet left()}
+    <a href="/panel/market/categories" class="btn btn-link px-0 text-decoration-none d-flex align-items-center gap-2">
+      <i class="fas fa-arrow-left"></i>
+      <span>Kategorilere Dön</span>
+    </a>
+  {/snippet}
 
-{#snippet right()}
-  <button 
-    class="btn btn-primary d-flex align-items-center gap-2" 
-    onclick={saveCategory}
-    disabled={loading || !category.name}>
-    {#if loading}
-      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-    {:else}
-      <i class="fas fa-save"></i>
-    {/if}
-    <span>Kaydet</span>
-  </button>
-{/snippet}
+  {#snippet right()}
+    <button 
+      class="btn btn-primary d-flex align-items-center gap-2" 
+      onclick={saveCategory}
+      disabled={loading || !category.name}>
+      {#if loading}
+        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+      {:else}
+        <i class="fas fa-save"></i>
+      {/if}
+      <span>Kaydet</span>
+    </button>
+  {/snippet}
 
-<MarketLayout {left} {right}>
-  <div class="row g-4 animate__animated animate__fadeIn">
+  <div class="row g-4">
     <!-- Main Content -->
     <div class="col-lg-8">
       <div class="card h-100 border-0 shadow-sm">
@@ -75,7 +75,7 @@
             <input 
               id="category-name"
               type="text" 
-              class="form-control form-control-lg bg-light border-0" 
+              class="form-control form-control-lg" 
               placeholder="Örn: VIP Üyelikler"
               bind:value={category.name} />
           </div>
@@ -101,7 +101,7 @@
           <div class="card-body p-4 pt-2 vstack gap-3">
             <div class="form-group">
               <label for="category-status" class="form-label fw-semibold small text-uppercase text-muted lh-1 mb-2">Durum</label>
-              <select id="category-status" class="form-select bg-light border-0" bind:value={category.status}>
+              <select id="category-status" class="form-select" bind:value={category.status}>
                 <option value="active">Aktif</option>
                 <option value="passive">Pasif</option>
                 <option value="hidden">Gizli</option>
@@ -113,7 +113,7 @@
               <input 
                 id="category-order"
                 type="number" 
-                class="form-control bg-light border-0" 
+                class="form-control" 
                 bind:value={category.order} />
               <div class="form-text small">Mağazada görünecek sıra (Küçükten büyüğe).</div>
             </div>
@@ -158,7 +158,7 @@
 
 <style>
   .min-vh-50 {
-    min-vh: 50vh;
+    min-height: 50vh;
   }
   
   /* Hover effects for custom designs */
