@@ -5,7 +5,8 @@ import terser from '@rollup/plugin-terser';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const production = !process.env.DEV;
+const dev = process.env.DEV === 'true';
+const production = !dev;
 
 const bundleSdk = process.env.BUNDLE_SDK === 'true';
 
@@ -92,7 +93,7 @@ export default [
         compilerOptions: {
           generate: 'client',
           css: 'external',
-          dev: !production,
+          dev,
         },
         emitCss: false,
       }),
