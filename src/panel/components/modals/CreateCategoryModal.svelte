@@ -3,6 +3,7 @@
   import { base } from '@panomc/sdk/svelte';
   import { showToast } from '@panomc/sdk/toasts';
   import tooltip from '@panomc/sdk/utils/tooltip';
+  import IconPicker from '../IconPicker.svelte';
 
   let { isEdit = false, category = null } = $props();
 
@@ -178,17 +179,9 @@
         <div class="row g-3 mb-3">
           <!-- Icon -->
           <div class="col-sm-7">
-            <div class="input-group">
-              <span class="input-group-text bg-body-tertiary">
-                <i class="fas {iconClass} fs-5" style="color: {categoryColor}; width: 24px; text-align: center;"></i>
-              </span>
-              <div class="form-floating">
-                <input type="text" class="form-control" id="categoryIconInput" bind:value={iconClass} placeholder="İkon (Örn: fa-star)" />
-                <label for="categoryIconInput">İkon (Örn: fa-star)</label>
-              </div>
-            </div>
+            <IconPicker bind:value={iconClass} color={categoryColor} />
           </div>
-          
+
           <!-- Color -->
           <div class="col-sm-5">
             <div class="d-flex align-items-center h-100 gap-2 border rounded p-2 px-3 bg-body-tertiary">
