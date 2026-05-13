@@ -1,8 +1,9 @@
 <script>
   import MarketLayout from '../layouts/MarketLayout.svelte';
-  import { CardHeader, CardFilters, CardFiltersItem, Pagination } from '@panomc/sdk/components/panel';
+  import { CardHeader, CardFilters, CardFiltersItem, Pagination, SearchInput } from '@panomc/sdk/components/panel';
   import { onMount } from 'svelte';
   import { flip } from 'svelte/animate';
+  import CreateCategoryModal from '../components/modals/CreateCategoryModal.svelte';
 
   let page = $state(1);
   let view = $state('table');
@@ -10,6 +11,20 @@
   let dragTarget = $state(null);
   let pendingDragPoint = null;
   let previewFrame = null;
+  let search = $state('');
+
+  let isEditModal = $state(false);
+  let selectedCategory = $state(null);
+
+  function openCreateModal() {
+    isEditModal = false;
+    selectedCategory = null;
+  }
+
+  function openEditModal(category) {
+    isEditModal = true;
+    selectedCategory = category;
+  }
 
   let categories = $state([
     { id: 1, name: 'VIP Üyelikler', icon: 'fa-crown', description: 'Sunucumuzdaki tüm VIP paketlerini burada bulabilirsiniz.', productsCount: 5, status: 'active', color: '#0dcaf0', image: null, children: [] },
@@ -350,16 +365,22 @@
 
 <MarketLayout>
   {#snippet right()}
-    <a href="/panel/market/categories/create-category" class="btn btn-secondary border-0">
+    <button type="button" class="btn btn-secondary border-0" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={openCreateModal}>
       <i class="fa-solid fa-plus"></i>
       <span class="d-lg-inline d-none ms-2">Kategori Ekle</span>
-    </a>
+    </button>
   {/snippet}
 
   <div class="card">
     <CardHeader>
       <div slot="left">
         {categories.length} Kategori
+      </div>
+      <div slot="middle" style="width: 250px;">
+        <SearchInput
+          initialValue={search}
+          placeholder="Kategori ara..."
+          onchange={(val) => (search = val)} />
       </div>
       <CardFilters slot="right">
         <CardFiltersItem button active={view === 'table'} onclick={() => (view = 'table')}>Tablo</CardFiltersItem>
@@ -369,7 +390,7 @@
 
     {#if view === 'table'}
       <div class="table-responsive">
-      <table class="table table-hover align-middle">
+      <table class="table table-hover align-middle text-nowrap">
         <thead>
           <tr>
             <th scope="col" style="width: 50px;"></th>
@@ -393,36 +414,36 @@
                     <span class="fas fa-ellipsis-v"></span>
                   </button>
                   <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
-                    <button type="button" class="dropdown-item">
+                    <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={() => openEditModal(category)}>
                       <i class="fas fa-pen me-2"></i> Düzenle
                     </button>
-                    <button type="button" class="dropdown-item">
-                      <i class="fas fa-trash me-2 text-danger"></i> Sil
+                    <button type="button" class="dropdown-item text-danger">
+                      <i class="fas fa-trash me-2"></i> Sil
                     </button>
                   </div>
                 </div>
               </th>
               <td class="align-middle">
-                <div class="d-flex align-items-center justify-content-center bg-primary-subtle rounded overflow-hidden" style="width: 40px; height: 40px;">
+                <a href="#" class="d-flex align-items-center justify-content-center bg-primary-subtle rounded overflow-hidden text-decoration-none" style="width: 40px; height: 40px;" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
                   {#if category.image}
                     <img src={category.image} alt={category.name} class="w-100 h-100 object-fit-cover" />
                   {:else}
                     <img src="/assets/images/category.png" alt={category.name} class="w-100 h-100 object-fit-cover opacity-50" />
                   {/if}
-                </div>
+                </a>
               </td>
               <td class="align-middle">
-                <div class="d-flex align-items-center gap-3">
+                <a href="#" class="d-flex align-items-center gap-3 text-decoration-none" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
                   <div class="d-flex align-items-center justify-content-center bg-primary-subtle rounded" style="width: 32px; height: 32px; flex-shrink: 0;">
                     <i class="fas {category.icon} fs-6" style="color: {category.color}"></i>
                   </div>
                   <div>
-                    <div class="fw-bold">{category.name}</div>
-                    <div class="small text-muted text-truncate d-none d-md-block" style="max-width: 300px;">
+                    <div class="">{category.name}</div>
+                    <div class="small text-truncate d-none d-md-block" style="max-width: 300px;">
                       {category.description || '-'}
                     </div>
                   </div>
-                </div>
+                </a>
               </td>
               <td class="align-middle text-center">
                 {#if category.status === 'active'}
@@ -431,8 +452,8 @@
                   <span class="badge text-bg-danger">Pasif</span>
                 {/if}
               </td>
-              <td class="align-middle text-center text-nowrap">
-                <span class="badge text-bg-primary fw-normal">{category.productsCount} Ürün</span>
+              <td class="align-middle text-center">
+                <span>{category.productsCount} Ürün</span>
               </td>
             </tr>
           {/each}
@@ -447,12 +468,10 @@
             {...paginationEvents} />
       </div>
     {:else if view === 'sort'}
-      <div class="card-body">
-        <div class="alert alert-info border-0 bg-info-subtle text-info-emphasis d-flex align-items-center mb-4">
-          <i class="fas fa-info-circle fs-4 me-3"></i>
-          <div>
-            Satırın üstüne, ortasına veya altına sürükleyerek kategori konumunu seçin.
-          </div>
+      <div class="card-body overflow-x-auto">
+        <div class="alert alert-info d-flex align-items-center mb-3">
+          <i class="fas fa-info-circle me-3"></i>
+          Satırın üstüne, ortasına veya altına sürükleyerek kategori konumunu seçin.
         </div>
 
         {#snippet categoryRows(items)}
@@ -464,7 +483,7 @@
               role="listitem"
               animate:flip={{ duration: 150 }}>
               <div
-                class="list-group-item category-row d-flex align-items-center gap-3 p-3 bg-body text-start w-100"
+                class="list-group-item category-row d-flex align-items-center gap-2 gap-md-3 p-2 p-md-3 bg-body text-start w-100 text-nowrap"
                 class:opacity-50={category.id === draggedId}
                 class:bg-body-tertiary={category.id === draggedId}
                 class:category-row-active={isDragTarget(category.id, 'inside')}
@@ -477,7 +496,7 @@
                 aria-label="{category.name} kategorisini taşı"
                 ondragstart={(e) => onDragStart(e, category.id)}
                 ondragend={onDragEnd}>
-                <div class="dropdown">
+                <div class="dropdown me-2">
                   <button
                     type="button"
                     class="btn btn-link text-body-emphasis p-0"
@@ -488,50 +507,54 @@
                     <span class="fas fa-ellipsis-v"></span>
                   </button>
                   <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
-                    <button type="button" class="dropdown-item">
+                    <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={() => openEditModal(category)}>
                       <i class="fas fa-pen me-2"></i> Düzenle
                     </button>
-                    <button type="button" class="dropdown-item">
-                      <i class="fas fa-trash me-2 text-danger"></i> Sil
+                    <button type="button" class="dropdown-item text-danger">
+                      <i class="fas fa-trash me-2"></i> Sil
                     </button>
                   </div>
                 </div>
 
-                <span class="text-muted cursor-grab">
+                <span class="cursor-grab">
                   <i class="fas fa-grip-vertical"></i>
                 </span>
 
-                <div class="d-flex align-items-center justify-content-center bg-primary-subtle rounded overflow-hidden sort-thumb">
+                <a href="#" class="d-none d-sm-flex align-items-center justify-content-center bg-primary-subtle rounded overflow-hidden sort-thumb text-decoration-none" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
                   {#if category.image}
                     <img src={category.image} alt={category.name} class="w-100 h-100 object-fit-cover" />
                   {:else}
                     <img src="/assets/images/category.png" alt={category.name} class="w-100 h-100 object-fit-cover opacity-50" />
                   {/if}
-                </div>
+                </a>
 
-                <div class="d-flex align-items-center gap-3 flex-grow-1 overflow-hidden">
+                <a href="#" class="d-flex align-items-center gap-2 gap-md-3 flex-grow-1 overflow-hidden text-decoration-none" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
                   <div class="d-flex align-items-center justify-content-center bg-primary-subtle rounded category-icon flex-shrink-0">
                     <i class="fas {category.icon} fs-6" style="color: {category.color}"></i>
                   </div>
                   <div class="overflow-hidden">
-                    <div class="fw-medium">{category.name}</div>
-                    <div class="small text-muted text-truncate d-none d-md-block" style="max-width: 300px;">
+                    <div class="">{category.name}</div>
+                    <div class="small text-truncate d-none d-md-block" style="max-width: 300px;">
                       {category.description || '-'}
                     </div>
                   </div>
-                </div>
+                </a>
 
                 {#if isDragTarget(category.id, 'inside')}
-                  <span class="badge text-bg-primary fw-normal">Alt kategori yap</span>
+                  <span class="badge text-bg-primary d-none d-md-inline-block">Alt kategori yap</span>
                 {/if}
+                
+                <div class="ms-auto d-flex align-items-center gap-1 gap-md-2">
+                  {#if category.status === 'active'}
+                    <span class="badge text-bg-success">Aktif</span>
+                  {:else}
+                    <span class="badge text-bg-danger">Pasif</span>
+                  {/if}
 
-                {#if category.status === 'active'}
-                  <span class="badge text-bg-success">Aktif</span>
-                {:else}
-                  <span class="badge text-bg-danger">Pasif</span>
-                {/if}
-
-                <span class="badge text-bg-secondary fw-normal">{category.productsCount} Ürün</span>
+                  <span>
+                    {category.productsCount} <span class="d-none d-md-inline">Ürün</span>
+                  </span>
+                </div>
               </div>
 
               {#if category.children?.length}
@@ -557,6 +580,8 @@
   </div>
 </MarketLayout>
 
+<CreateCategoryModal isEdit={isEditModal} category={selectedCategory} />
+
 <style>
   .category-sort-item {
     background: var(--bs-body-bg);
@@ -565,6 +590,7 @@
 
   .category-sort-list {
     gap: 0.125rem;
+    min-width: fit-content;
   }
 
   .category-row {
@@ -623,6 +649,13 @@
   .category-children {
     margin-left: 1.5rem;
     padding-left: 0.5rem;
+  }
+
+  @media (max-width: 576px) {
+    .category-children {
+      margin-left: 0.75rem;
+      padding-left: 0.25rem;
+    }
   }
 
 </style>

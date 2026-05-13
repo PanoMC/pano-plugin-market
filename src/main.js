@@ -50,6 +50,12 @@ export default class PanoMarketPlugin extends PanoPlugin {
       });
 
       pano.ui.page.register({
+        path: '/market/coupons',
+        component: viewComponent(() => import('./panel/pages/Coupons.svelte')),
+        permission: `pano.plugin.${pluginId}.manage`,
+      });
+
+      pano.ui.page.register({
         path: '/market/settings',
         component: viewComponent(() => import('./panel/pages/Settings.svelte')),
         permission: `pano.plugin.${pluginId}.manage`,

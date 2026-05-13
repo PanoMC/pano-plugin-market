@@ -2,14 +2,14 @@
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import { CardHeader, CardFilters, CardFiltersItem, NoContent, SearchInput, Pagination } from '@panomc/sdk/components/panel';
   import { _ } from '../../i18n';
-  import CreateGiftModal from '../components/modals/CreateGiftModal.svelte';
+  import CreateCouponModal from '../components/modals/CreateCouponModal.svelte';
 
   let page = $state(1);
-  let gifts = $state([
-    { id: 1, code: 'YENIYIL24', type: 'credit', credit: '1000', usage: 10, usageLimit: 50, status: 'active', expiry: '31 Ara 2024' },
-    { id: 2, code: 'VIPHEDIYE', type: 'product', product: 'VIP Üyelik (Aylık)', usage: 5, usageLimit: 5, status: 'inactive', expiry: 'Sınırsız' },
-    { id: 3, code: 'TELAFIOYUN', type: 'product', product: 'Kasa Anahtarı x10', usage: 120, usageLimit: null, status: 'active', expiry: 'Sınırsız' },
-    { id: 4, code: 'HOSGELDIN', type: 'credit', credit: '500', usage: 45, usageLimit: 100, status: 'active', expiry: '01 Haz 2024' },
+  let coupons = $state([
+    { id: 1, code: 'YAZ2024', discount: 20, usage: 45, usageLimit: 100, status: 'active', expiry: '31 Ağu 2024' },
+    { id: 2, code: 'HOSGELDIN', discount: 50, usage: 120, usageLimit: null, status: 'active', expiry: null },
+    { id: 3, code: 'VIPINDIRIM', discount: 15, usage: 5, usageLimit: 10, status: 'active', expiry: '15 Eyl 2024' },
+    { id: 4, code: 'ESKIKUPON', discount: 30, usage: 100, usageLimit: 100, status: 'inactive', expiry: '01 Oca 2024' },
   ]);
   let search = $state('');
 
@@ -20,21 +20,21 @@
 
 <MarketLayout>
   {#snippet right()}
-    <button type="button" class="btn btn-secondary border-0" data-bs-toggle="modal" data-bs-target="#createGiftModal">
+    <button type="button" class="btn btn-secondary border-0" data-bs-toggle="modal" data-bs-target="#createCouponModal">
       <i class="fa-solid fa-plus"></i>
-      <span class="d-lg-inline d-none ms-2">Hediye Oluştur</span>
+      <span class="d-lg-inline d-none ms-2">Kupon Oluştur</span>
     </button>
   {/snippet}
 
   <div class="card">
     <CardHeader>
       <div slot="left">
-        {gifts.length} Hediye
+        {coupons.length} Kupon
       </div>
       <div slot="middle" style="width: 250px;">
         <SearchInput
           initialValue={search}
-          placeholder="Hediye ara..."
+          placeholder="Kupon ara..."
           onchange={(val) => (search = val)} />
       </div>
       <CardFilters slot="right">
@@ -44,7 +44,7 @@
       </CardFilters>
     </CardHeader>
 
-    {#if gifts.length === 0}
+    {#if coupons.length === 0}
       <NoContent />
     {:else}
       <div class="table-responsive">
@@ -52,15 +52,15 @@
           <thead>
             <tr>
               <th scope="col" style="width: 50px;"></th>
-              <th scope="col">Hediye Kodu</th>
-              <th scope="col">İçerik</th>
+              <th scope="col">Kupon Kodu</th>
+              <th scope="col">İndirim</th>
               <th scope="col">Kullanım</th>
               <th scope="col">Durum</th>
               <th scope="col">Son Kullanma</th>
             </tr>
           </thead>
           <tbody>
-            {#each gifts as gift}
+            {#each coupons as coupon}
               <tr>
                 <th scope="row">
                   <div class="dropdown position-static">
@@ -73,7 +73,7 @@
                       <span class="fas fa-ellipsis-v"></span>
                     </button>
                     <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
-                      <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createGiftModal">
+                      <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createCouponModal">
                         <i class="fas fa-pen me-2"></i>
                         Düzenle
                       </button>
@@ -85,27 +85,23 @@
                   </div>
                 </th>
                 <td>
-                  <span class="font-monospace">{gift.code}</span>
+                  <span class="font-monospace">{coupon.code}</span>
                 </td>
                 <td>
-                  {#if gift.type === 'credit'}
-                    <span class="fw-medium"><i class="fas fa-coins me-1 text-warning"></i>{gift.credit} Kredi</span>
-                  {:else}
-                    <span class="fw-medium"><i class="fas fa-box-open me-1 text-info"></i>{gift.product}</span>
-                  {/if}
+                  <span class="fw-medium">%{coupon.discount}</span>
                 </td>
                 <td>
-                  {gift.usage} / {gift.usageLimit ? gift.usageLimit : 'Sınırsız'}
+                  {coupon.usage} / {coupon.usageLimit ? coupon.usageLimit : 'Sınırsız'}
                 </td>
                 <td>
-                  {#if gift.status === 'active'}
+                  {#if coupon.status === 'active'}
                     <span class="badge text-bg-success">Aktif</span>
                   {:else}
                     <span class="badge text-bg-danger">Pasif</span>
                   {/if}
                 </td>
                 <td>
-                  {gift.expiry ? gift.expiry : 'Sınırsız'}
+                  {coupon.expiry ? coupon.expiry : 'Sınırsız'}
                 </td>
               </tr>
             {/each}
@@ -124,4 +120,4 @@
   </div>
 </MarketLayout>
 
-<CreateGiftModal />
+<CreateCouponModal />

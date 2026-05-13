@@ -20,6 +20,9 @@
     <PageNavItem href="/market/gifts" startsWith={true}>
       {$_('nav-gifts')}
     </PageNavItem>
+    <PageNavItem href="/market/coupons" startsWith={true}>
+      {$_('nav-coupons')}
+    </PageNavItem>
     <PageNavItem href="/market/settings" startsWith={true}>
       {$_('nav-settings')}
     </PageNavItem>

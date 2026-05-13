@@ -1,10 +1,11 @@
 <script>
   import MarketLayout from '../layouts/MarketLayout.svelte';
-  import { CardHeader, CardFilters, CardFiltersItem, Pagination } from '@panomc/sdk/components/panel';
+  import { CardHeader, CardFilters, CardFiltersItem, Pagination, SearchInput } from '@panomc/sdk/components/panel';
   import { _ } from '../../i18n';
   import tooltip from '@panomc/sdk/utils/tooltip';
 
   let page = $state(1);
+  let search = $state('');
 
   const products = [
     { id: 1, name: 'VIP Üyelik (Aylık)', type: 'Süreli', category: 'VIP Üyelikler', price: '45.00 ₺', stock: 'Sınırsız', status: 'active', image: null },
@@ -29,6 +30,12 @@
     <CardHeader>
       <div slot="left">
         {products.length} Ürün
+      </div>
+      <div slot="middle" style="width: 250px;">
+        <SearchInput
+          initialValue={search}
+          placeholder="Ürün ara..."
+          onchange={(val) => (search = val)} />
       </div>
       <CardFilters slot="right">
         <CardFiltersItem button active={true}>Tümü</CardFiltersItem>
@@ -73,8 +80,8 @@
                       <i class="fas fa-clone me-2"></i>
                       Klonla
                     </button>
-                    <button type="button" class="dropdown-item">
-                      <i class="fas fa-trash me-2 text-danger"></i>
+                    <button type="button" class="dropdown-item text-danger">
+                      <i class="fas fa-trash me-2"></i>
                       Sil
                     </button>
                   </div>
@@ -110,7 +117,7 @@
               <td>
                 <span class="badge text-bg-primary fw-medium border-0">{product.category}</span>
               </td>
-              <td class="fw-bold">
+              <td class="">
                 {product.price}
               </td>
               <td>

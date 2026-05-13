@@ -370,7 +370,7 @@
           <!-- Weekly Sales -->
           <div class="col-md-6">
             <div class="d-flex align-items-center gap-2 mb-3">
-              <h6 class="fw-bold mb-0">Haftalık Satış Grafiği</h6>
+              <h6 class="mb-0">Haftalık Satış Grafiği</h6>
             </div>
             <div class="p-3  border rounded-3" style="height: 280px;">
               <canvas bind:this={salesWeeklyChartElement}></canvas>
@@ -380,7 +380,7 @@
           <!-- Monthly Sales -->
           <div class="col-md-6">
             <div class="d-flex align-items-center gap-2 mb-3">
-              <h6 class="fw-bold mb-0">Aylık Satış Grafiği</h6>
+              <h6 class="mb-0">Aylık Satış Grafiği</h6>
             </div>
             <div class="p-3  border rounded-3" style="height: 280px;">
               <canvas bind:this={salesMonthlyChartElement}></canvas>
@@ -390,7 +390,7 @@
           <!-- Top Products -->
           <div class="col-md-6">
             <div class="d-flex align-items-center gap-2 mb-3">
-              <h6 class="fw-bold mb-0">En Çok Satılan Ürünler</h6>
+              <h6 class="mb-0">En Çok Satılan Ürünler</h6>
             </div>
             <div class="p-3  border rounded-3" style="height: 280px;">
               <canvas bind:this={topProductsChartElement}></canvas>
@@ -400,7 +400,7 @@
           <!-- Payment Methods -->
           <div class="col-md-6">
             <div class="d-flex align-items-center gap-2 mb-3">
-              <h6 class="fw-bold mb-0">En Çok Kullanılan Ödeme Yöntemleri</h6>
+              <h6 class="mb-0">En Çok Kullanılan Ödeme Yöntemleri</h6>
             </div>
             <div class="p-3  border rounded-3" style="height: 280px;">
               <canvas bind:this={paymentMethodsChartElement}></canvas>

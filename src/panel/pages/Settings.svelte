@@ -4,5 +4,4 @@
 </script>
 
 <MarketLayout>
-  <!-- Ayarlar sayfası içeriği buraya gelecek -->
 </MarketLayout>
