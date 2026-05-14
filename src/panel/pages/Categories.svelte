@@ -395,7 +395,7 @@
           <tr>
             <th scope="col" style="width: 50px;"></th>
             <th scope="col" style="width: 60px;"></th>
-            <th scope="col">Kategori İçeriği</th>
+            <th scope="col">Kategori</th>
             <th scope="col" class="text-center" style="width: 120px;">Durum</th>
             <th scope="col" class="text-center" style="width: 150px;">Ürün Sayısı</th>
           </tr>

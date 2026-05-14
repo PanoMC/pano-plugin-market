@@ -6,7 +6,7 @@
     color = '#0d6efd',
     label = 'İkon',
     placeholder = 'İkon ara (ör: star)',
-    placement = 'bottom-start'
+    placement = 'top-start'
   } = $props();
 
   let open = $state(false);
@@ -91,68 +91,75 @@
       <i class="fas {value} fs-5" style="color: {color};"></i>
     </span>
     <span class="flex-grow-1 text-truncate small text-body-secondary">{value}</span>
-    <i class="fas fa-chevron-down small text-body-secondary"></i>
+    <i class="fas fa-chevron-up text-body-secondary"></i>
   </button>
 
   {#if open}
     <div
       bind:this={panelEl}
-      class="icon-picker-panel card shadow border position-absolute mt-1 p-2"
-      class:start-0={placement === 'bottom-start'}
-      class:end-0={placement === 'bottom-end'}
+      class="icon-picker-panel card border position-absolute overflow-hidden"
+      class:mt-1={placement.startsWith('bottom')}
+      class:mb-1={placement.startsWith('top')}
+      class:top-100={placement.startsWith('bottom')}
+      class:bottom-100={placement.startsWith('top')}
+      class:start-0={placement.endsWith('start')}
+      class:end-0={placement.endsWith('end')}
       role="dialog"
       aria-label={label}>
-      <div class="input-group input-group-sm mb-2">
-        <span class="input-group-text bg-body-tertiary">
-          <i class="fas fa-magnifying-glass"></i>
-        </span>
-        <input
-          bind:this={searchInput}
-          type="text"
-          class="form-control"
-          placeholder={placeholder}
-          bind:value={search} />
-        {#if search}
-          <button type="button" class="btn btn-outline-secondary" onclick={() => (search = '')} aria-label="Temizle">
-            <i class="fas fa-xmark"></i>
-          </button>
+      
+      <div class="card-header bg-transparent p-2 vstack gap-2">
+        <div class="input-group input-group-sm">
+          <input
+            bind:this={searchInput}
+            type="text"
+            class="form-control"
+            placeholder={placeholder}
+            bind:value={search} />
+          {#if search}
+            <button type="button" class="btn btn-secondary" onclick={() => (search = '')} aria-label="Temizle">
+              <i class="fas fa-xmark"></i>
+            </button>
+          {/if}
+        </div>
+
+        {#if !search}
+          <div class="d-flex flex-wrap gap-1 category-tabs">
+            {#each ICON_CATEGORIES as cat (cat.key)}
+              <button
+                type="button"
+                class="btn btn-sm text-decoration-none"
+                class:btn-primary={activeCategory === cat.key}
+                class:text-white={activeCategory === cat.key}
+                class:btn-link={activeCategory !== cat.key}
+                onclick={() => (activeCategory = cat.key)}>
+                {cat.label}
+              </button>
+            {/each}
+          </div>
         {/if}
       </div>
 
-      {#if !search}
-        <div class="d-flex flex-wrap gap-1 mb-2 category-tabs">
-          {#each ICON_CATEGORIES as cat (cat.key)}
-            <button
-              type="button"
-              class="btn btn-sm"
-              class:btn-primary={activeCategory === cat.key}
-              class:btn-outline-secondary={activeCategory !== cat.key}
-              onclick={() => (activeCategory = cat.key)}>
-              {cat.label}
-            </button>
-          {/each}
+      <div class="card-body p-2 pt-0">
+        <div class="icon-grid overflow-auto pe-1 pt-2">
+          {#if filteredIcons.length === 0}
+            <div class="text-center text-body-secondary small py-4">
+              <i class="fas fa-circle-info me-1"></i>
+              Sonuç bulunamadı.
+            </div>
+          {:else}
+            {#each filteredIcons as name (name)}
+              <button
+                type="button"
+                class="icon-btn btn btn-sm btn-link border-0 text-decoration-none text-body d-flex align-items-center justify-content-center"
+                class:active={name === value}
+                title={name}
+                aria-label={name}
+                onclick={() => selectIcon(name)}>
+                <i class="fas {name} fs-5" style={name === value ? `color: ${color};` : ''}></i>
+              </button>
+            {/each}
+          {/if}
         </div>
-      {/if}
-
-      <div class="icon-grid overflow-auto pe-1">
-        {#if filteredIcons.length === 0}
-          <div class="text-center text-body-secondary small py-4">
-            <i class="fas fa-circle-info me-1"></i>
-            Sonuç bulunamadı.
-          </div>
-        {:else}
-          {#each filteredIcons as name (name)}
-            <button
-              type="button"
-              class="icon-btn btn btn-sm d-flex align-items-center justify-content-center"
-              class:active={name === value}
-              title={name}
-              aria-label={name}
-              onclick={() => selectIcon(name)}>
-              <i class="fas {name} fs-5" style={name === value ? `color: ${color};` : ''}></i>
-            </button>
-          {/each}
-        {/if}
       </div>
     </div>
   {/if}
@@ -174,24 +181,16 @@
 
   .icon-btn {
     aspect-ratio: 1 / 1;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--bs-body-color);
-    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+    background: transparent !important;
+    transition: transform 0.15s, color 0.15s;
   }
 
   .icon-btn:hover {
-    background: var(--bs-body-tertiary-bg, var(--bs-tertiary-bg));
-    border-color: var(--bs-border-color);
-  }
-
-  .icon-btn.active {
-    background: var(--bs-primary-bg-subtle);
-    border-color: var(--bs-primary);
+    transform: scale(1.15);
   }
 
   .category-tabs .btn {
     font-size: 0.75rem;
-    padding: 0.15rem 0.5rem;
+    padding: 0.25rem 0.5rem;
   }
 </style>

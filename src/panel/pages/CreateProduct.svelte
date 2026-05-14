@@ -1,24 +1,136 @@
 <script>
   import MarketLayout from '../layouts/MarketLayout.svelte';
-  import { Editor } from '@panomc/sdk/components/panel';
-  import { _ } from '../../i18n';
-  import tooltip from '@panomc/sdk/utils/tooltip';
+  import { Editor, DragAndDropZone, NoContent } from '@panomc/sdk/components/panel';
 
   let product = $state({
     name: '',
-    type: 'Eşya',
-    category: -1,
-    price: '',
-    stock: '',
-    status: 'active',
     description: '',
+    type: 'Süreli',
+    category: -1,
+    price: 0,
+    hasDiscount: false,
+    discountPrice: 0,
+    discountDuration: 'Lifetime',
+    discountExpiry: '',
+    hasStockLimit: false,
+    stock: 0,
+    requiredProducts: [],
+    requireOnlyOne: false,
+    status: 'active',
+    featured: false,
+    durationStatus: 'Lifetime',
+    permission: '',
+    priority: 0,
+    actions: [],
     image: null
   });
 
-  let loading = $state(false);
-  let isEditorEmpty = $state(true);
+  let selectedFile = $state(null);
+  let previewUrl = $state(null);
+  let fileInput;
 
-  // Mock categories for the select box
+  let activeTab = $state('general');
+  let isDirty = $state(false);
+
+  let initialProduct = JSON.stringify(product);
+  $effect(() => {
+    if (JSON.stringify(product) !== initialProduct || selectedFile) {
+      isDirty = true;
+    }
+  });
+
+  const productTypes = ['Süreli', 'Cüzdan', 'Eşya', 'Kozmetik', 'Efekt'];
+  
+  const tabs = [
+    { id: 'general', label: 'Genel' },
+    { id: 'pricing', label: 'Fiyatlandırma' },
+    { id: 'restrictions', label: 'Limiting' },
+    { id: 'actions', label: 'Aksiyonlar' }
+  ];
+
+  function addAction(type) {
+    const newAction = {
+      id: Date.now(),
+      type: type, // 'credit', 'permission', 'command'
+      value: (type === 'permission' || type === 'command') ? [] : '',
+      currentInput: '',
+      delay: type === 'command' ? 0 : undefined,
+      targetServers: type === 'command' ? [] : undefined
+    };
+    product.actions = [...product.actions, newAction];
+    isDirty = true;
+    
+    // Close modal if using bootstrap JS
+    const modalElement = document.getElementById('addActionModal');
+    if (typeof bootstrap !== 'undefined') {
+      const modal = bootstrap.Modal.getInstance(modalElement);
+      if (modal) modal.hide();
+    }
+  }
+
+  function toggleActionServer(action, serverId) {
+    action.targetServers = action.targetServers || [];
+    if (action.targetServers.includes(serverId)) {
+      action.targetServers = action.targetServers.filter(id => id !== serverId);
+    } else {
+      action.targetServers = [...action.targetServers, serverId];
+    }
+    isDirty = true;
+  }
+
+  // Mock servers
+  const servers = [
+    { id: 1, name: 'Survival #1' },
+    { id: 2, name: 'Creative' },
+    { id: 3, name: 'Skyblock' },
+    { id: 4, name: 'Lobi' }
+  ];
+
+  function addArrayItem(action, event) {
+    if (event.key === 'Enter' && action.currentInput.trim()) {
+      event.preventDefault();
+      if (!action.value.includes(action.currentInput.trim())) {
+        action.value = [...action.value, action.currentInput.trim()];
+        action.currentInput = '';
+        isDirty = true;
+      }
+    }
+  }
+
+  function removeArrayItem(action, item) {
+    action.value = action.value.filter(n => n !== item);
+    isDirty = true;
+  }
+
+  function addPermissionNode(action, event) { addArrayItem(action, event); }
+  function removePermissionNode(action, node) { removeArrayItem(action, node); }
+  function addCommand(action, event) { addArrayItem(action, event); }
+  function removeCommand(action, command) { removeArrayItem(action, command); }
+
+  function getActionLabel(type) {
+    switch(type) {
+      case 'credit': return 'Kredi Yükle';
+      case 'permission': return 'Yetkilendir';
+      case 'command': return 'Komut Çalıştır';
+      default: return 'Aksiyon';
+    }
+  }
+
+  function getActionIcon(type) {
+    switch(type) {
+      case 'credit': return 'fas fa-coins text-warning';
+      case 'permission': return 'fas fa-gavel text-info';
+      case 'command': return 'fas fa-terminal text-secondary';
+      default: return 'fas fa-bolt';
+    }
+  }
+
+  function removeAction(id) {
+    product.actions = product.actions.filter(a => a.id !== id);
+    isDirty = true;
+  }
+
+  // Mock categories (in real app these would be fetched)
   const categories = [
     { id: 1, name: 'VIP Üyelikler' },
     { id: 2, name: 'Kredi Paketleri' },
@@ -27,230 +139,647 @@
     { id: 5, name: 'Kozmetik Ürünler' }
   ];
 
-  function handleImageUpload(e) {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        product.image = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    }
-  }
+  // Mock products for requirements
+  const allProducts = [
+    { id: 101, name: 'VIP Başlangıç Paketi' },
+    { id: 102, name: 'Kredi Cüzdanı' },
+    { id: 103, name: 'Özel Kozmetik Seti' },
+    { id: 104, name: 'Sınırsız Yetki Belgesi' }
+  ];
 
-  function removeImage() {
-    product.image = null;
-  }
-
-  async function saveProduct(publish) {
-    loading = true;
-    if (publish) {
-      product.status = 'active';
+  function toggleProduct(id) {
+    if (product.requiredProducts.includes(id)) {
+      product.requiredProducts = product.requiredProducts.filter(p => p !== id);
     } else {
-      product.status = 'inactive';
+      product.requiredProducts = [...product.requiredProducts, id];
     }
-    console.log('Saving product:', product);
-    // Simulate API call
-    setTimeout(() => {
-      loading = false;
-      alert(publish ? 'Ürün başarıyla yayınlandı!' : 'Ürün taslak olarak kaydedildi!');
-    }, 1000);
+    isDirty = true;
+  }
+
+  function handleSave() {
+    console.log('Ürün kaydediliyor:', product);
+    isDirty = false;
+    initialProduct = JSON.stringify(product);
+  }
+
+  function processFile(file) {
+    selectedFile = file;
+    isDirty = true;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      previewUrl = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function onRemoveImage() {
+    selectedFile = null;
+    previewUrl = null;
+    isDirty = true;
+    if (fileInput) fileInput.value = '';
+  }
+
+  function onFileChange(event) {
+    const file = event.target.files[0];
+    if (file) {
+      processFile(file);
+    }
   }
 </script>
 
 <MarketLayout>
   {#snippet left()}
-    <a href="/panel/market/products" class="btn btn-link px-0 text-decoration-none d-flex align-items-center gap-2">
-      <i class="fas fa-arrow-left"></i>
-      <span>Ürünlere Dön</span>
-    </a>
+    <div class="d-flex align-items-center gap-4">
+      <a href="/panel/market/products" class="btn btn-link text-decoration-none p-0">
+        <i class="fas fa-arrow-left"></i>
+        <span class="ms-2">Ürünler</span>
+      </a>
+
+      <ul class="nav nav-pills">
+        {#each tabs as tab}
+          <li class="nav-item">
+            <button 
+              class="nav-link {activeTab === tab.id ? 'active' : ''}" 
+              onclick={() => activeTab = tab.id}>
+              {tab.label}
+            </button>
+          </li>
+        {/each}
+      </ul>
+    </div>
   {/snippet}
 
   {#snippet right()}
-    <button
-      class="btn btn-link"
-      type="button"
-      class:disabled={loading || !product.name}
-      onclick={() => saveProduct(false)}
-      use:tooltip={['Taslak Olarak Kaydet', { placement: 'bottom' }]}
-      aria-label="Kaydet">
-      <i class="fas fa-save"></i>
-    </button>
-
-    <button
-      class="btn btn-primary d-flex align-items-center gap-2"
-      type="button"
-      class:disabled={loading || !product.name}
-      onclick={() => saveProduct(true)}>
-      {#if loading}
-        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-      {:else}
-        <i class="fas fa-paper-plane"></i>
+    <div class="hstack gap-1">
+      <button class="btn btn-link link-danger" title="Kaldır">
+        <i class="fas fa-trash"></i>
+      </button>
+      <button class="btn btn-link" title="Taslaklara Taşı">
+        <i class="fa-solid fa-sheet-plastic"></i>
+      </button>
+      <button class="btn btn-link" title="Ön İzle">
+        <i class="fas fa-eye"></i>
+      </button>
+      {#if activeTab === 'actions'}
+        <button 
+          class="btn btn-link" 
+          title="Aksiyon Ekle" 
+          data-bs-toggle="modal" 
+          data-bs-target="#addActionModal">
+          <i class="fas fa-plus"></i>
+        </button>
       {/if}
-      <span class="d-lg-inline d-none">Yayınla</span>
-    </button>
+      <button class="btn btn-secondary border-0 ms-2" onclick={handleSave} disabled={!isDirty}>
+        <i class="fas fa-save"></i>
+        <span class="d-lg-inline d-none ms-2">Kaydet</span>
+      </button>
+    </div>
   {/snippet}
 
-  <div class="row g-4">
-    <!-- Main Content -->
-    <div class="col-lg-8">
-      <div class="card h-100 w-100 border-0 shadow-sm">
-        <div class="card-body p-4 pt-4 d-flex flex-column gap-4">
-          <div class="w-100">
-            <label for="product-name" class="form-label fw-semibold small text-uppercase text-muted lh-1 mb-2">Ürün Adı</label>
-            <input
-              id="product-name"
-              class="form-control form-control-lg fw-medium"
-              type="text"
-              placeholder="Ürün Adı (Örn: VIP Üyelik)"
-              bind:value={product.name} />
-          </div>
+  {#if activeTab === 'general' || activeTab === 'pricing' || activeTab === 'restrictions' || activeTab === 'actions'}
+    <section class="row g-3">
+      <!-- Ana Sütun -->
+      <div class="col-lg-8">
+        {#if activeTab === 'general'}
+          <div class="card h-100 w-100 animate__animated animate__fadeIn">
+            <div class="card-body d-flex flex-column gap-3">
+              <input
+                type="text"
+                class="form-control form-control-lg"
+                id="productName"
+                placeholder="Ürün Başlığı"
+                bind:value={product.name} />
 
-          <div class="w-100 flex-grow-1 d-flex flex-column min-vh-50">
-            <!-- Editor -->
-            <label for="product-description" class="form-label fw-semibold small text-uppercase text-muted lh-1 mb-2">Ürün Açıklaması</label>
-            <div class="flex-grow-1">
-              <textarea 
-                id="product-description"
-                class="form-control bg-light border-0" 
-                rows="10" 
-                bind:value={product.description}></textarea>
+              <div class="w-100 flex-grow-1 d-flex flex-column">
+                <Editor id="product-description" bind:content={product.description} />
+              </div>
             </div>
-            <!-- Editor End -->
           </div>
-        </div>
-      </div>
-    </div>
+        {:else if activeTab === 'pricing'}
+          <div class="card animate__animated animate__fadeIn">
+            <div class="card-body p-4">
+              <!-- Normal Fiyat -->
+              <div class="row mb-3 align-items-center">
+                <label class="col-sm-3 col-form-label" for="p-price">Fiyat</label>
+                <div class="col-sm-9">
+                  <div class="input-group">
+                    <input type="number" id="p-price" class="form-control" placeholder="0.00" bind:value={product.price} />
+                    <span class="input-group-text">₺</span>
+                  </div>
+                </div>
+              </div>
 
-    <!-- Sidebar / Options -->
-    <div class="col-lg-4">
-      <div class="vstack gap-4">
-        
-        <!-- Options Card -->
-        <div class="card border-0 shadow-sm">
-          <div class="card-header bg-transparent border-0 pt-4 px-4 pb-2">
-            <h5 class="card-title mb-0">Ürün Ayarları</h5>
+              <!-- İndirim Switch -->
+              <div class="row mb-3 align-items-center">
+                <label class="col-sm-3 col-form-label" for="p-discount">İndirim Uygula</label>
+                <div class="col-sm-9">
+                  <div class="form-check form-switch m-0">
+                    <input class="form-check-input" type="checkbox" role="switch" id="p-discount" bind:checked={product.hasDiscount} />
+                  </div>
+                </div>
+              </div>
+
+              {#if product.hasDiscount}
+                <!-- İndirimli Fiyat -->
+                <div class="row mb-3 align-items-center animate__animated animate__fadeInDown animate__faster">
+                  <label class="col-sm-3 col-form-label" for="p-d-price">İndirimli Fiyat</label>
+                  <div class="col-sm-9">
+                    <div class="input-group">
+                      <input type="number" id="p-d-price" class="form-control" placeholder="0.00" bind:value={product.discountPrice} />
+                      <span class="input-group-text">₺</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- İndirim Durumu -->
+                <div class="row mb-3 align-items-center animate__animated animate__fadeInDown animate__faster">
+                  <label class="col-sm-3 col-form-label" for="p-d-duration">İndirim Durumu</label>
+                  <div class="col-sm-9">
+                    <select id="p-d-duration" class="form-select" bind:value={product.discountDuration}>
+                      <option value="Lifetime">Sınırsız</option>
+                      <option value="Temporary">Süreli (Tarih Seçin)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {#if product.discountDuration === 'Temporary'}
+                  <!-- İndirim Bitiş Tarihi -->
+                  <div class="row mb-3 align-items-center animate__animated animate__fadeInDown animate__faster">
+                    <label class="col-sm-3 col-form-label" for="p-d-expiry">İndirim Bitiş Tarihi</label>
+                    <div class="col-sm-9">
+                      <input type="datetime-local" id="p-d-expiry" class="form-control" bind:value={product.discountExpiry} />
+                    </div>
+                  </div>
+                {/if}
+              {/if}
+            </div>
           </div>
-          <div class="card-body p-4 pt-2">
-            <ul class="list-group list-group-flush p-0 m-0">
-              
-              <!-- Category -->
-              <li class="list-group-item bg-transparent px-0 py-3 border-light">
-                <div class="d-flex flex-column gap-2">
-                  <label for="product-category" class="form-label fw-semibold small text-muted mb-0">Kategori</label>
-                  <select id="product-category" class="form-select" bind:value={product.category}>
-                    <option value={-1}>Kategori Seçilmedi</option>
-                    {#each categories as category (category.id)}
-                      <option value={category.id}>{category.name}</option>
+        {:else if activeTab === 'restrictions'}
+          <div class="card animate__animated animate__fadeIn">
+            <div class="card-body p-4">
+              <!-- Stok Switch -->
+              <div class="row mb-3 align-items-center">
+                <label class="col-sm-3 col-form-label" for="p-stock-switch">Stok Sınırı</label>
+                <div class="col-sm-9">
+                  <div class="form-check form-switch m-0 d-flex align-items-center gap-2">
+                    <input 
+                      class="form-check-input" 
+                      type="checkbox" 
+                      role="switch" 
+                      id="p-stock-switch" 
+                      bind:checked={product.hasStockLimit} />
+                    <span class="small text-muted">
+                      {product.hasStockLimit ? 'Aktif' : 'Pasif'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {#if product.hasStockLimit}
+                <!-- Stok Adeti -->
+                <div class="row mb-3 align-items-center animate__animated animate__fadeInDown animate__faster">
+                  <label class="col-sm-3 col-form-label" for="p-stock-amount">Stok Adeti</label>
+                  <div class="col-sm-9">
+                    <input 
+                      type="number" 
+                      id="p-stock-amount" 
+                      class="form-control" 
+                      placeholder="0" 
+                      bind:value={product.stock} />
+                  </div>
+                </div>
+              {/if}
+
+              <hr class="my-4 opacity-25" />
+
+              <!-- Gerekli Ürünler -->
+              <div class="row mb-3">
+                <label class="col-sm-3 col-form-label" for="p-required">Gerekli Ürünler</label>
+                <div class="col-sm-9">
+                  <div class="list-group list-group-flush border rounded overflow-y-auto mb-0" style="max-height: 200px;">
+                    {#each allProducts as item}
+                      <label class="list-group-item d-flex align-items-center gap-3 py-2 cursor-pointer list-group-item-action">
+                        <input 
+                          class="form-check-input flex-shrink-0 mt-0 cursor-pointer" 
+                          type="checkbox" 
+                          checked={product.requiredProducts.includes(item.id)} 
+                          onclick={() => toggleProduct(item.id)}>
+                        <span class="small fw-medium text-truncate">{item.name}</span>
+                      </label>
                     {/each}
-                  </select>
+                  </div>
+                  <div class="form-text small mt-2">
+                    Bu ürünün satın alınabilmesi için müşterinin yukarıda seçilen ürünlere sahip olması gerekir.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tek Ürün Şartı -->
+              <div class="row mb-3 align-items-center">
+                <label class="col-sm-3 col-form-label" for="p-require-one">Tek Ürün Yeterliliği</label>
+                <div class="col-sm-9">
+                  <div class="form-check form-switch m-0 d-flex align-items-center gap-2">
+                    <input 
+                      class="form-check-input" 
+                      type="checkbox" 
+                      role="switch" 
+                      id="p-require-one" 
+                      bind:checked={product.requireOnlyOne} />
+                    <span class="small text-muted">
+                      Seçili listeden en az bir ürünün satın alınmış olması yeterlidir.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        {:else if activeTab === 'actions'}
+          <div class="animate__animated animate__fadeIn">
+            {#if product.actions.length > 0}
+              <div class="accordion mb-3" id="actionsAccordion">
+                {#each product.actions as action, index}
+                  <div class="accordion-item card mb-2 border">
+                    <h2 class="accordion-header d-flex align-items-center">
+                      <button 
+                        class="accordion-button {index === 0 ? '' : 'collapsed'} bg-transparent fw-medium flex-grow-1" 
+                        type="button" 
+                        data-bs-toggle="collapse" 
+                        data-bs-target="#collapse-{action.id}">
+                        <i class="{getActionIcon(action.type)} me-2 opacity-75"></i>
+                        {getActionLabel(action.type)}
+                        {#if action.value}
+                          {#if Array.isArray(action.value)}
+                            {#if action.value.length > 0}
+                              <span class="ms-2 badge text-bg-secondary small fw-normal border">
+                                {action.value.length}
+                              </span>
+                            {/if}
+                          {:else if action.value}
+                            <span class="ms-2 badge text-bg-secondary small fw-normal border text-truncate" style="max-width: 150px;">{action.value}</span>
+                          {/if}
+                        {/if}
+                      </button>
+                      <button 
+                        class="btn btn-link link-danger px-3 py-0 border-0" 
+                        title="Aksiyonu Sil"
+                        onclick={(e) => { e.stopPropagation(); removeAction(action.id); }}>
+                        <i class="fas fa-trash-can small"></i>
+                      </button>
+                    </h2>
+                    <div 
+                      id="collapse-{action.id}" 
+                      class="accordion-collapse collapse {index === 0 ? 'show' : ''}" 
+                      data-bs-parent="#actionsAccordion">
+                      <div class="accordion-body p-4">
+                        {#if action.type === 'credit'}
+                          <div class="row mb-0 align-items-center">
+                            <label class="col-sm-3 col-form-label" for="action-val-{action.id}">Miktar</label>
+                            <div class="col-sm-9">
+                              <input 
+                                type="number" 
+                                id="action-val-{action.id}" 
+                                class="form-control" 
+                                placeholder="0" 
+                                bind:value={action.value} />
+                            </div>
+                          </div>
+                        {:else if action.type === 'permission'}
+                          <div class="row mb-0">
+                            <label class="col-sm-3 col-form-label" for="action-val-{action.id}">Yetki Node</label>
+                            <div class="col-sm-9">
+                              <input 
+                                type="text" 
+                                id="action-val-{action.id}" 
+                                class="form-control font-monospace mb-2" 
+                                placeholder="Yetki yazın ve Enter'a basın..." 
+                                bind:value={action.currentInput}
+                                onkeydown={(e) => addPermissionNode(action, e)} />
+                              
+                              <div class="d-flex flex-wrap gap-1">
+                                {#each action.value as node}
+                                  <span class="badge rounded-pill text-bg-primary d-flex align-items-center gap-2 py-2 px-3">
+                                    <span class="font-monospace small">{node}</span>
+                                    <i 
+                                      class="fas fa-xmark cursor-pointer opacity-75 hover-opacity-100" 
+                                      role="button" 
+                                      tabindex="0"
+                                      onclick={() => removePermissionNode(action, node)}
+                                      onkeydown={(e) => e.key === 'Enter' && removePermissionNode(action, node)}></i>
+                                  </span>
+                                {/each}
+                              </div>
+                            </div>
+                          </div>
+                        {:else if action.type === 'command'}
+                          <!-- Hedef Sunucu -->
+                          <div class="row mb-3">
+                            <label class="col-sm-3 col-form-label" for="action-server-{action.id}">Hedef Sunucu</label>
+                            <div class="col-sm-9">
+                              <div class="list-group list-group-flush border rounded overflow-y-auto mb-0" style="max-height: 150px;">
+                                {#each servers as server}
+                                  <label class="list-group-item d-flex align-items-center gap-3 py-2 cursor-pointer list-group-item-action">
+                                    <input 
+                                      class="form-check-input flex-shrink-0 mt-0 cursor-pointer" 
+                                      type="checkbox" 
+                                      checked={(action.targetServers || []).includes(server.id)} 
+                                      onclick={() => toggleActionServer(action, server.id)}>
+                                    <span class="small fw-medium text-truncate">{server.name}</span>
+                                  </label>
+                                {/each}
+                              </div>
+                              <div class="form-text small mt-2">
+                                Komutların çalıştırılacağı sunucuları seçin.
+                              </div>
+                            </div>
+                          </div>
+
+                          <!-- Komutlar -->
+                          <div class="row mb-3">
+                            <label class="col-sm-3 col-form-label" for="action-val-{action.id}">Komutlar</label>
+                            <div class="col-sm-9">
+                              <input 
+                                type="text" 
+                                id="action-val-{action.id}" 
+                                class="form-control mb-2" 
+                                placeholder="Komut yazın ve Enter'a basın..." 
+                                bind:value={action.currentInput}
+                                onkeydown={(e) => addCommand(action, e)} />
+                              
+                              <div class="d-flex flex-wrap gap-1">
+                                {#each action.value as cmd}
+                                  <span class="badge rounded-pill text-bg-primary d-flex align-items-center gap-2 py-2 px-3">
+                                    <span class="small">{cmd}</span>
+                                    <i 
+                                      class="fas fa-xmark cursor-pointer opacity-75 hover-opacity-100" 
+                                      role="button" 
+                                      tabindex="0"
+                                      onclick={() => removeCommand(action, cmd)}
+                                      onkeydown={(e) => e.key === 'Enter' && removeCommand(action, cmd)}></i>
+                                  </span>
+                                {/each}
+                              </div>
+                            </div>
+                          </div>
+
+                          <!-- Gecikme -->
+                          <div class="row mb-0 align-items-center">
+                            <label class="col-sm-3 col-form-label" for="action-delay-{action.id}">Gecikme</label>
+                            <div class="col-sm-9">
+                              <div class="input-group">
+                                <input 
+                                  type="number" 
+                                  id="action-delay-{action.id}" 
+                                  class="form-control" 
+                                  placeholder="0" 
+                                  bind:value={action.delay} />
+                                <span class="input-group-text bg-transparent small">saniye</span>
+                              </div>
+                              <div class="form-text small mt-2">
+                                Değişkenler: <code>{'{player}'}</code>, <code>{'{product}'}</code>
+                              </div>
+                            </div>
+                          </div>
+                        {/if}
+                      </div>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <NoContent />
+            {/if}
+          </div>
+        {/if}
+      </div>
+
+      <!-- Yan Sütun: Özellikler ve Ayarlar -->
+      <div class="col-lg-4">
+        <div class="card">
+          <div class="card-body">
+            <ul class="list-group p-0 m-0">
+              <!-- Görsel Yükleme -->
+              <li class="list-group-item p-2">
+                {#if previewUrl}
+                  <div class="position-relative w-100">
+                    <div
+                      class="rounded border d-flex align-items-center justify-content-center bg-body-tertiary position-relative overflow-hidden"
+                      style="aspect-ratio: 1/1; cursor: pointer;"
+                      role="button"
+                      tabindex="0"
+                      onclick={() => fileInput.click()}
+                      onkeydown={(e) => e.key === 'Enter' && fileInput.click()}>
+                      <img
+                        src={previewUrl}
+                        alt="Ürün Önizleme"
+                        class="w-100 h-100 object-fit-cover" />
+                    </div>
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle rounded-circle shadow-sm"
+                      style="z-index: 10; width: 24px; height: 24px; padding: 0;"
+                      onclick={onRemoveImage}>
+                      <i class="fas fa-minus small"></i>
+                    </button>
+                  </div>
+                {:else}
+                  <DragAndDropZone
+                    style="aspect-ratio: 1/1;"
+                    icon="fas fa-image fa-3x"
+                    title="Ürün Görseli"
+                    accept={['image/png', 'image/jpeg', 'image/gif', 'image/webp']}
+                    on:drop={(e) => processFile(e.detail)} />
+                {/if}
+                <input
+                  type="file"
+                  class="d-none"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  onchange={onFileChange}
+                  bind:this={fileInput} />
+              </li>
+
+              <!-- Durum Seçimi -->
+              <li class="list-group-item">
+                <div class="row g-0 align-items-center">
+                  <div class="col-6">Durum</div>
+                  <div class="col-6 d-flex justify-content-end align-items-center gap-2">
+                    <span class="small text-muted">
+                      {product.status === 'active' ? 'Aktif' : 'Pasif'}
+                    </span>
+                    <div class="form-check form-switch m-0">
+                      <input 
+                        class="form-check-input" 
+                        type="checkbox" 
+                        role="switch" 
+                        id="productStatusSwitch" 
+                        checked={product.status === 'active'}
+                        onchange={(e) => product.status = e.target.checked ? 'active' : 'inactive'} />
+                    </div>
+                  </div>
                 </div>
               </li>
 
-              <!-- Type -->
-              <li class="list-group-item bg-transparent px-0 py-3 border-light">
-                <div class="d-flex flex-column gap-2">
-                  <label for="product-type" class="form-label fw-semibold small text-muted mb-0">Ürün Tipi</label>
-                  <select id="product-type" class="form-select" bind:value={product.type}>
-                    <option value="Süreli">Süreli (Aylık/Yıllık)</option>
-                    <option value="Cüzdan">Cüzdan / Kredi</option>
-                    <option value="Eşya">Oyun İçi Eşya</option>
-                    <option value="Kozmetik">Kozmetik</option>
-                    <option value="Efekt">Efekt</option>
-                  </select>
+              <!-- Öne Çıkarılan Ürün -->
+              <li class="list-group-item">
+                <div class="row g-0 align-items-center">
+                  <div class="col-6">Öne Çıkarılan</div>
+                  <div class="col-6 d-flex justify-content-end">
+                    <div class="form-check form-switch m-0">
+                      <input 
+                        class="form-check-input" 
+                        type="checkbox" 
+                        role="switch" 
+                        id="productFeaturedSwitch" 
+                        bind:checked={product.featured} />
+                    </div>
+                  </div>
                 </div>
               </li>
 
-              <!-- Price & Stock -->
-              <li class="list-group-item bg-transparent px-0 py-3 border-light">
-                <div class="row g-2">
+              <!-- Kategori Seçimi -->
+              <li class="list-group-item">
+                <div class="row g-0 align-items-center">
+                  <div class="col-6">Kategori</div>
                   <div class="col-6">
-                    <label for="product-price" class="form-label fw-semibold small text-muted mb-2">Fiyat (₺)</label>
-                    <input id="product-price" type="number" class="form-control" placeholder="0.00" bind:value={product.price} />
-                  </div>
-                  <div class="col-6">
-                    <label for="product-stock" class="form-label fw-semibold small text-muted mb-2">Stok</label>
-                    <input id="product-stock" type="number" class="form-control" placeholder="Sınırsız" bind:value={product.stock} />
+                    <select class="form-select form-select-sm" bind:value={product.category}>
+                      <option value={-1} selected>Kategorisiz</option>
+                      {#each categories as cat}
+                        <option value={cat.id}>{cat.name}</option>
+                      {/each}
+                    </select>
                   </div>
                 </div>
               </li>
-              
-              <!-- Status -->
-              <li class="list-group-item bg-transparent px-0 py-3 border-0">
-                <div class="d-flex justify-content-between align-items-center">
-                  <span class="fw-semibold small text-muted">Durum</span>
-                  <div>
-                    {#if product.status === 'active'}
-                      <span class="badge text-bg-success">Aktif / Yayında</span>
-                    {:else}
-                      <span class="badge text-bg-secondary">Pasif / Taslak</span>
-                    {/if}
+
+              <!-- Ürün Tipi -->
+              <li class="list-group-item">
+                <div class="row g-0 align-items-center">
+                  <div class="col-6">Tip</div>
+                  <div class="col-6">
+                    <select class="form-select form-select-sm" bind:value={product.type}>
+                      {#each productTypes as type}
+                        <option value={type}>{type}</option>
+                      {/each}
+                    </select>
+                  </div>
+                </div>
+              </li>
+
+              <!-- Süre Durumu -->
+              <li class="list-group-item">
+                <div class="row g-0 align-items-center">
+                  <div class="col-6">Süre</div>
+                  <div class="col-6">
+                    <select class="form-select form-select-sm" bind:value={product.durationStatus}>
+                      <option value="Lifetime">Sınırsız</option>
+                      <option value="Temporary">Süreli</option>
+                      <option value="One-Time">Tek Seferlik</option>
+                    </select>
+                  </div>
+                </div>
+              </li>
+
+              <!-- Yetki -->
+              <li class="list-group-item">
+                <div class="row g-0 align-items-center">
+                  <div class="col-6">Yetki</div>
+                  <div class="col-6">
+                    <input 
+                      type="text" 
+                      class="form-control form-control-sm" 
+                      placeholder="Yetki veya Grup" 
+                      bind:value={product.permission} />
+                  </div>
+                </div>
+              </li>
+
+              <!-- Öncelik -->
+              <li class="list-group-item">
+                <div class="row g-0 align-items-center">
+                  <div class="col-6">Öncelik</div>
+                  <div class="col-6">
+                    <input 
+                      type="number" 
+                      class="form-control form-control-sm" 
+                      placeholder="0" 
+                      bind:value={product.priority} />
                   </div>
                 </div>
               </li>
             </ul>
           </div>
         </div>
+      </div>
+    </section>
+  {/if}
 
-        <!-- Thumbnail Card -->
-        <div class="card border-0 shadow-sm overflow-hidden">
-          <div class="card-header bg-transparent border-0 pt-4 px-4">
-            <h5 class="card-title mb-0">Küçük Resim</h5>
-          </div>
-          <div class="card-body p-4 pt-2">
-            {#if product.image}
-              <div class="position-relative rounded overflow-hidden group border">
-                <img src={product.image} alt="Ürün Önizleme" class="w-100 object-fit-cover" style="aspect-ratio: 16/9;" />
-                <div class="position-absolute top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex align-items-center justify-content-center opacity-0 hover-opacity-100 transition-all">
-                  <button class="btn btn-danger btn-sm rounded-pill px-3" onclick={removeImage}>
-                    <i class="fas fa-trash me-1"></i> Kaldır
-                  </button>
-                </div>
+  <!-- Aksiyon Ekle Modalı -->
+  <div class="modal fade" id="addActionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+      <div class="modal-content border-0 shadow">
+        <div class="modal-header border-0 pb-0">
+          <h6 class="modal-title fw-bold">Aksiyon Seçin</h6>
+          <button type="button" class="btn-close small" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body p-3">
+          <div class="list-group list-group-flush border rounded overflow-hidden">
+            <button 
+              type="button" 
+              class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-3"
+              onclick={() => addAction('credit')}>
+              <i class="fas fa-coins text-warning fa-lg"></i>
+              <div class="d-flex flex-column">
+                <span class="fw-medium">Kredi Yükle</span>
+                <span class="x-small text-muted">Oyuncuya bakiye ekler</span>
               </div>
-            {:else}
-              <label class="d-flex flex-column align-items-center justify-content-center border-2 border-dashed rounded p-5 cursor-pointer hover-bg-light transition-all text-muted" style="border-style: dashed !important;">
-                <input type="file" class="visually-hidden" accept="image/*" onchange={handleImageUpload} />
-                <i class="fas fa-image fa-3x mb-3 text-primary opacity-50"></i>
-                <span class="small fw-semibold text-center">Görsel Yüklemek İçin Tıkla</span>
-                <span class="x-small text-center mt-1">Önerilen: 1280x720px</span>
-              </label>
-            {/if}
+            </button>
+            <button 
+              type="button" 
+              class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-3"
+              onclick={() => addAction('permission')}>
+              <i class="fas fa-gavel text-info fa-lg"></i>
+              <div class="d-flex flex-column">
+                <span class="fw-medium">Yetkilendir</span>
+                <span class="x-small text-muted">Yetki grubu veya node ekler</span>
+              </div>
+            </button>
+            <button 
+              type="button" 
+              class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-3"
+              onclick={() => addAction('command')}>
+              <i class="fas fa-terminal text-secondary fa-lg"></i>
+              <div class="d-flex flex-column">
+                <span class="fw-medium">Komut Çalıştır</span>
+                <span class="x-small text-muted">Özel konsol komutu çalıştırır</span>
+              </div>
+            </button>
           </div>
         </div>
-
       </div>
     </div>
   </div>
 </MarketLayout>
 
 <style>
-  .min-vh-50 {
-    min-height: 50vh;
+  :global(.editor-container .ProseMirror) {
+    min-height: 300px;
   }
   
-  /* Hover effects for image upload */
-  .hover-bg-light:hover {
-    background-color: var(--bs-light);
+  .uppercase {
+    text-transform: uppercase;
   }
   
-  .hover-opacity-100 {
-    opacity: 0;
-    transition: opacity 0.2s ease;
-  }
-  
-  .group:hover .hover-opacity-100 {
-    opacity: 1;
-  }
-
-  .transition-all {
-    transition: all 0.2s ease-in-out;
-  }
-  
-  .cursor-pointer {
-    cursor: pointer;
+  .tracking-wider {
+    letter-spacing: 0.05em;
   }
   
   .x-small {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
+  }
+  .cursor-pointer {
+    cursor: pointer;
+  }
+
+  .transition-all {
+    transition: all 0.2s ease;
   }
 </style>

@@ -5,8 +5,8 @@
   import { onMount } from 'svelte';
 
   const SECTIONS = [
-    { key: 'general', label: 'Genel Ayarlar', icon: 'fa-sliders' },
-    { key: 'payments', label: 'Ödeme Yöntemleri', icon: 'fa-credit-card' }
+    { key: 'general', label: 'Genel Ayarlar' },
+    { key: 'payments', label: 'Ödeme Yöntemleri' }
   ];
 
   let section = $state('general');
@@ -36,13 +36,12 @@
         {#each SECTIONS as item (item.key)}
           <button
             type="button"
-            class="nav-link d-flex align-items-center gap-2"
+            class="nav-link text-start"
             class:active={section === item.key}
             role="tab"
             aria-selected={section === item.key}
             onclick={() => (section = item.key)}>
-            <i class="fas {item.icon}"></i>
-            <span>{item.label}</span>
+            {item.label}
           </button>
         {/each}
       </div>
