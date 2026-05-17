@@ -328,7 +328,7 @@
                       role="switch" 
                       id="p-stock-switch" 
                       bind:checked={product.hasStockLimit} />
-                    <span class="small text-muted">
+                    <span class="small text-body-secondary">
                       {product.hasStockLimit ? 'Aktif' : 'Pasif'}
                     </span>
                   </div>
@@ -385,7 +385,7 @@
                       role="switch" 
                       id="p-require-one" 
                       bind:checked={product.requireOnlyOne} />
-                    <span class="small text-muted">
+                    <span class="small text-body-secondary">
                       Seçili listeden en az bir ürünün satın alınmış olması yeterlidir.
                     </span>
                   </div>
@@ -602,7 +602,7 @@
                 <div class="row g-0 align-items-center">
                   <div class="col-6">Durum</div>
                   <div class="col-6 d-flex justify-content-end align-items-center gap-2">
-                    <span class="small text-muted">
+                    <span class="small text-body-secondary">
                       {product.status === 'active' ? 'Aktif' : 'Pasif'}
                     </span>
                     <div class="form-check form-switch m-0">
@@ -729,7 +729,7 @@
               <i class="fas fa-coins text-warning fa-lg"></i>
               <div class="d-flex flex-column">
                 <span class="fw-medium">Kredi Yükle</span>
-                <span class="x-small text-muted">Oyuncuya bakiye ekler</span>
+                <span class="x-small text-body-secondary">Oyuncuya bakiye ekler</span>
               </div>
             </button>
             <button 
@@ -739,17 +739,17 @@
               <i class="fas fa-gavel text-info fa-lg"></i>
               <div class="d-flex flex-column">
                 <span class="fw-medium">Yetkilendir</span>
-                <span class="x-small text-muted">Yetki grubu veya node ekler</span>
+                <span class="x-small text-body-secondary">Yetki grubu veya node ekler</span>
               </div>
             </button>
             <button 
               type="button" 
               class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-3"
               onclick={() => addAction('command')}>
-              <i class="fas fa-terminal text-secondary fa-lg"></i>
+              <i class="fas fa-terminal text-body-secondary fa-lg"></i>
               <div class="d-flex flex-column">
                 <span class="fw-medium">Komut Çalıştır</span>
-                <span class="x-small text-muted">Özel konsol komutu çalıştırır</span>
+                <span class="x-small text-body-secondary">Özel konsol komutu çalıştırır</span>
               </div>
             </button>
           </div>

@@ -2,7 +2,6 @@
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import { CardHeader, CardFilters, CardFiltersItem, Pagination, SearchInput } from '@panomc/sdk/components/panel';
   import { _ } from '../../i18n';
-  import tooltip from '@panomc/sdk/utils/tooltip';
   import {
     Chart,
     LineController,
@@ -428,13 +427,13 @@
                   <button 
                     type="button"
                     class="btn btn-link p-0 text-decoration-none font-monospace user-select-all cursor-pointer focus-ring rounded border-0" 
-                    use:tooltip={['Kopyala']}
+                    title="Kopyala"
                     onclick={() => copyToClipboard(sale.id)}>
                     #{sale.id}
                   </button>
                 </td>
                 <td>
-                  <a href="/players/{sale.player}" class="text-decoration-none d-flex align-items-center focus-ring rounded" use:tooltip={['Görüntüle']}>
+                  <a href="/players/{sale.player}" class="text-decoration-none d-flex align-items-center focus-ring rounded" title="Görüntüle">
                     <img src="https://minotar.net/avatar/{sale.player}/24" class="rounded-circle me-2" style="width: 24px; height: 24px;" alt={sale.player} />
                     <span>{sale.player}</span>
                   </a>
@@ -442,7 +441,7 @@
                 <td>
                   <div class="d-flex flex-wrap gap-1 align-items-center">
                     {#if sale.products.length > 0}
-                      <span class="badge text-bg-primary focus-ring rounded" use:tooltip={['Görüntüle']}>
+                      <span class="badge text-bg-primary focus-ring rounded" title="Görüntüle">
                         {sale.products[0]}
                       </span>
                       {#if sale.products.length > 1}
@@ -460,7 +459,7 @@
                   </div>
                 </td>
                 <td>
-                  <span class="badge text-bg-secondary focus-ring rounded" use:tooltip={['Düzenle']}>
+                  <span class="badge text-bg-secondary focus-ring rounded" title="Düzenle">
                     {sale.price}
                   </span>
                 </td>

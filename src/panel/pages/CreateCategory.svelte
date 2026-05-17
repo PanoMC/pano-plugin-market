@@ -71,7 +71,7 @@
         </div>
         <div class="card-body p-4 pt-2 d-flex flex-column gap-4">
           <div class="form-group">
-            <label for="category-name" class="form-label fw-semibold small text-uppercase text-muted lh-1 mb-2">Kategori Adı</label>
+            <label for="category-name" class="form-label fw-semibold small text-uppercase text-body-secondary lh-1 mb-2">Kategori Adı</label>
             <input 
               id="category-name"
               type="text" 
@@ -81,7 +81,7 @@
           </div>
 
           <div class="form-group flex-grow-1 d-flex flex-column">
-            <label for="category-description" class="form-label fw-semibold small text-uppercase text-muted lh-1 mb-2">Açıklama</label>
+            <label for="category-description" class="form-label fw-semibold small text-uppercase text-body-secondary lh-1 mb-2">Açıklama</label>
             <div class="flex-grow-1 min-vh-50">
               <Editor id="category-description" bind:content={category.description} />
             </div>
@@ -100,7 +100,7 @@
           </div>
           <div class="card-body p-4 pt-2 vstack gap-3">
             <div class="form-group">
-              <label for="category-status" class="form-label fw-semibold small text-uppercase text-muted lh-1 mb-2">Durum</label>
+              <label for="category-status" class="form-label fw-semibold small text-uppercase text-body-secondary lh-1 mb-2">Durum</label>
               <select id="category-status" class="form-select" bind:value={category.status}>
                 <option value="active">Aktif</option>
                 <option value="passive">Pasif</option>
@@ -109,7 +109,7 @@
             </div>
 
             <div class="form-group">
-              <label for="category-order" class="form-label fw-semibold small text-uppercase text-muted lh-1 mb-2">Sıralama</label>
+              <label for="category-order" class="form-label fw-semibold small text-uppercase text-body-secondary lh-1 mb-2">Sıralama</label>
               <input 
                 id="category-order"
                 type="number" 
@@ -136,7 +136,7 @@
                 </div>
               </div>
             {:else}
-              <label class="d-flex flex-column align-items-center justify-content-center border-2 border-dashed rounded p-5 cursor-pointer hover-bg-light transition-all text-muted" style="border-style: dashed !important;">
+              <label class="d-flex flex-column align-items-center justify-content-center border-2 border-dashed rounded p-5 cursor-pointer hover-bg-light transition-all text-body-secondary" style="border-style: dashed !important;">
                 <input type="file" class="visually-hidden" accept="image/*" onchange={handleImageUpload} />
                 <i class="fas fa-cloud-upload-alt fa-2x mb-2 text-primary opacity-50"></i>
                 <span class="small fw-semibold">Görsel Yüklemek İçin Tıkla</span>

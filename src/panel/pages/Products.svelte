@@ -2,7 +2,6 @@
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import { CardHeader, CardFilters, CardFiltersItem, Pagination, SearchInput } from '@panomc/sdk/components/panel';
   import { _ } from '../../i18n';
-  import tooltip from '@panomc/sdk/utils/tooltip';
 
   let page = $state(1);
   let search = $state('');
@@ -67,7 +66,7 @@
                     type="button"
                     class="btn btn-link"
                     data-bs-toggle="dropdown"
-                    use:tooltip={['İşlemler']}
+                    title="İşlemler"
                     aria-label="İşlemler">
                     <span class="fas fa-ellipsis-v"></span>
                   </button>
@@ -99,7 +98,7 @@
               <td>
                 <button
                   type="button"
-                  use:tooltip={['Düzenle']}
+                  title="Düzenle"
                   class="btn btn-link p-0 border-0 text-decoration-none text-start fw-medium focus-ring">
                   {product.name}
                 </button>
