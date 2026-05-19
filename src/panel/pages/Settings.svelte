@@ -2,11 +2,13 @@
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import GeneralSettings from '../components/settings/GeneralSettings.svelte';
   import PaymentMethods from '../components/settings/PaymentMethods.svelte';
+  import CreditSettings from '../components/settings/CreditSettings.svelte';
   import { onMount } from 'svelte';
 
   const SECTIONS = [
     { key: 'general', label: 'Genel Ayarlar' },
-    { key: 'payments', label: 'Ödeme Yöntemleri' }
+    { key: 'payments', label: 'Ödeme Yöntemleri' },
+    { key: 'credits', label: 'Kredi Ayarları' }
   ];
 
   let section = $state('general');
@@ -52,6 +54,8 @@
         <GeneralSettings />
       {:else if section === 'payments'}
         <PaymentMethods />
+      {:else if section === 'credits'}
+        <CreditSettings />
       {/if}
     </div>
   </div>

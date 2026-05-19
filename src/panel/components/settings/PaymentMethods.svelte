@@ -94,10 +94,11 @@
           {@const configured = isConfigured(method)}
           <div class="col-md-6 col-xl-4">
             <div
-              class="card h-100 position-relative"
+              class="card h-100 position-relative focus-ring"
               role="button"
               tabindex="0"
               style="cursor: pointer;"
+              title="Düzenle"
               aria-label="{method.name} ayarlarını aç"
               data-bs-toggle="modal"
               data-bs-target="#paymentMethodSettingsModal"

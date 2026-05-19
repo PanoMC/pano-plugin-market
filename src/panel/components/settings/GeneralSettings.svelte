@@ -7,6 +7,11 @@
   let testMode = $state(false);
   let allowGuestCheckout = $state(true);
   let minimumOrderAmount = $state(0);
+  let removeCents = $state(false);
+  let showBestsellers = $state(true);
+  let showFeaturedProducts = $state(true);
+  let sendEmailAfterPurchase = $state(true);
+  let combineDiscountsAndCoupons = $state(true);
 
   const currencies = [
     { value: 'TRY', label: 'Türk Lirası (₺)' },
@@ -49,9 +54,9 @@
     </div>
 
     <div class="row mb-3">
-      <label class="col-md-6 col-form-label" for="vatInput">KDV (%)</label>
+      <label class="col-md-6 col-form-label" for="vatInput">Vergi (%)</label>
       <div class="col-md-6">
-        <input type="number" min="0" max="100" step="0.5" class="form-control" id="vatInput" placeholder="KDV %" bind:value={vatPercent} />
+        <input type="number" min="0" max="100" step="0.5" class="form-control" id="vatInput" placeholder="Vergi %" bind:value={vatPercent} />
       </div>
     </div>
 
@@ -65,7 +70,7 @@
     <hr class="my-4" />
 
     <div class="row mb-3">
-      <label class="col-md-6" for="vatInPriceInput">Fiyatlara KDV dahildir göster</label>
+      <label class="col-md-6" for="vatInPriceInput">Fiyatlara vergi dahildir göster</label>
       <div class="col d-flex align-items-center">
         <div class="form-check form-switch m-0">
           <input class="form-check-input" type="checkbox" role="switch" id="vatInPriceInput" bind:checked={showVatInPrice} />
@@ -90,6 +95,53 @@
         </div>
       </div>
     </div>
+
+    <div class="row mb-3">
+      <label class="col-md-6" for="removeCentsInput">Para biriminden .00 kısmını kaldır</label>
+      <div class="col d-flex align-items-center">
+        <div class="form-check form-switch m-0">
+          <input class="form-check-input" type="checkbox" role="switch" id="removeCentsInput" bind:checked={removeCents} />
+        </div>
+      </div>
+    </div>
+
+    <div class="row mb-3">
+      <label class="col-md-6" for="showBestsellersInput">En çok satanları göster (Bestseller)</label>
+      <div class="col d-flex align-items-center">
+        <div class="form-check form-switch m-0">
+          <input class="form-check-input" type="checkbox" role="switch" id="showBestsellersInput" bind:checked={showBestsellers} />
+        </div>
+      </div>
+    </div>
+
+    <div class="row mb-3">
+      <label class="col-md-6" for="showFeaturedProductsInput">Öne çıkan ürünleri göster (Featured Products)</label>
+      <div class="col d-flex align-items-center">
+        <div class="form-check form-switch m-0">
+          <input class="form-check-input" type="checkbox" role="switch" id="showFeaturedProductsInput" bind:checked={showFeaturedProducts} />
+        </div>
+      </div>
+    </div>
+
+    <div class="row mb-3">
+      <label class="col-md-6" for="sendEmailAfterPurchaseInput">Satın alımdan sonra e-posta gönder</label>
+      <div class="col d-flex align-items-center">
+        <div class="form-check form-switch m-0">
+          <input class="form-check-input" type="checkbox" role="switch" id="sendEmailAfterPurchaseInput" bind:checked={sendEmailAfterPurchase} />
+        </div>
+      </div>
+    </div>
+
+    <div class="row mb-3">
+      <label class="col-md-6" for="combineDiscountsAndCouponsInput">Genel indirimler ve kuponlar birlikte kullanılabilir mi</label>
+      <div class="col d-flex align-items-center">
+        <div class="form-check form-switch m-0">
+          <input class="form-check-input cursor-pointer" type="checkbox" role="switch" id="combineDiscountsAndCouponsInput" bind:checked={combineDiscountsAndCoupons} />
+        </div>
+      </div>
+    </div>
+
+
   </div>
 
   <div class="card-footer d-flex justify-content-start">

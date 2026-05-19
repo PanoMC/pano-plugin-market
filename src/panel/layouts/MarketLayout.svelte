@@ -8,6 +8,9 @@
 {#snippet defaultLeft()}
   <PageNav>
     <PageNavItem href="/market">{$_('nav-stats')}</PageNavItem>
+    <PageNavItem href="/market/orders" startsWith={true}>
+      {$_('nav-orders')}
+    </PageNavItem>
     <PageNavItem href="/market/products" startsWith={true}>
       {$_('nav-products')}
     </PageNavItem>
@@ -20,8 +23,8 @@
     <PageNavItem href="/market/gifts" startsWith={true}>
       {$_('nav-gifts')}
     </PageNavItem>
-    <PageNavItem href="/market/coupons" startsWith={true}>
-      {$_('nav-coupons')}
+    <PageNavItem href="/market/discounts" startsWith={true}>
+      {$_('nav-discounts')}
     </PageNavItem>
     <PageNavItem href="/market/settings" startsWith={true}>
       {$_('nav-settings')}

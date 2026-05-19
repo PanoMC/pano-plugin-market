@@ -2,10 +2,11 @@
   "nav-store": "Магазин",
   "nav-market": "Маркет",
   "nav-stats": "Статистика",
+  "nav-orders": "Заказы",
   "nav-categories": "Категории",
   "nav-products": "Товары",
   "nav-comparisons": "Сравнение",
   "nav-gifts": "Подарки",
-  "nav-coupons": "Купоны",
+  "nav-discounts": "Скидки",
   "nav-settings": "Настройки"
 }

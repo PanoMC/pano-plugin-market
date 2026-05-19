@@ -1,7 +1,8 @@
 <script>
   import { NoContent } from '@panomc/sdk/components/panel';
+  import { onMount } from 'svelte';
 
-  let { isEdit = false } = $props();
+  let { isEdit = $bindable(false) } = $props();
 
   let comparisonName = $state('');
   let status = $state('active');
@@ -44,6 +45,24 @@
   );
 
   let cellValues = $state({});
+
+  onMount(() => {
+    const modalEl = document.getElementById('createComparisonModal');
+    if (modalEl) {
+      const handleShow = (event) => {
+        const trigger = event.relatedTarget;
+        if (trigger && (trigger.classList.contains('dropdown-item') || trigger.closest('.dropdown-item') || trigger.classList.contains('btn-link') || trigger.closest('.btn-link'))) {
+          isEdit = true;
+        } else {
+          isEdit = false;
+        }
+      };
+      modalEl.addEventListener('show.bs.modal', handleShow);
+      return () => {
+        modalEl.removeEventListener('show.bs.modal', handleShow);
+      };
+    }
+  });
 </script>
 
 <div class="modal fade" id="createComparisonModal" tabindex="-1" aria-labelledby="createComparisonModalLabel" aria-hidden="true">

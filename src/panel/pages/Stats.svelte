@@ -61,16 +61,16 @@
   };
 
   const latestSales = [
-    { id: 1050, player: 'Kemal', products: ['100 Kredi'], price: '10.00 ₺', date: 'Bugün, 16:10', payment: 'Kredi Kartı: Tebex' },
-    { id: 1049, player: 'Ahmet', products: ['VIP+ (Limitsiz)', 'Giriş Mesajı', 'Özel Kanat', 'Efekt Paketi'], price: '350.00 ₺', date: 'Bugün, 15:55', payment: 'EFT: Havale' },
-    { id: 1048, player: 'Mehmet', products: ['Kasa Anahtarı x10'], price: '45.00 ₺', date: 'Bugün, 15:30', payment: 'Mobil Ödeme' },
-    { id: 1047, player: 'Okan', products: ['500 Kredi'], price: '50.00 ₺', date: 'Bugün, 14:50', payment: 'Kredi Kartı: Shopier' },
-    { id: 1046, player: 'Can', products: ['VIP (Aylık)'], price: '45.00 ₺', date: 'Bugün, 14:35', payment: 'Kredi Kartı: Stripe' },
-    { id: 1045, player: 'Selim', products: ['VIP+ (Aylık)'], price: '75.00 ₺', date: 'Bugün, 14:20', payment: 'EFT: Havale' },
-    { id: 1044, player: 'Cihan', products: ['1000 Kredi', 'Ek Renk'], price: '110.00 ₺', date: 'Bugün, 12:45', payment: 'Kredi Kartı: Tebex' },
-    { id: 1043, player: 'Eren', products: ['Kasa Anahtarı x5'], price: '25.00 ₺', date: 'Dün, 23:10', payment: 'Mobil Ödeme' },
-    { id: 1042, player: 'Yavuz', products: ['VIP (Limitsiz)'], price: '250.00 ₺', date: 'Dün, 18:30', payment: 'Kredi Kartı: Shopier' },
-    { id: 1041, player: 'Mert', products: ['İsim Değiştirme'], price: '15.00 ₺', date: '2 gün önce', payment: 'EFT: Havale' }
+    { id: 1050, player: 'Kemal', products: ['100 Kredi'], price: '10.00 ₺', date: 'Bugün, 16:10', payment: 'Kredi Kartı: Tebex', status: 'success' },
+    { id: 1049, player: 'Ahmet', products: ['VIP+ (Limitsiz)', 'Giriş Mesajı', 'Özel Kanat', 'Efekt Paketi'], price: '350.00 ₺', date: 'Bugün, 15:55', payment: 'EFT: Havale', status: 'success' },
+    { id: 1048, player: 'Mehmet', products: ['Kasa Anahtarı x10'], price: '45.00 ₺', date: 'Bugün, 15:30', payment: 'Mobil Ödeme', status: 'danger' },
+    { id: 1047, player: 'Okan', products: ['500 Kredi'], price: '50.00 ₺', date: 'Bugün, 14:50', payment: 'Kredi Kartı: Shopier', status: 'success' },
+    { id: 1046, player: 'Can', products: ['VIP (Aylık)'], price: '45.00 ₺', date: 'Bugün, 14:35', payment: 'Kredi Kartı: Stripe', status: 'success' },
+    { id: 1045, player: 'Selim', products: ['VIP+ (Aylık)'], price: '75.00 ₺', date: 'Bugün, 14:20', payment: 'EFT: Havale', status: 'success' },
+    { id: 1044, player: 'Cihan', products: ['1000 Kredi', 'Ek Renk'], price: '110.00 ₺', date: 'Bugün, 12:45', payment: 'Kredi Kartı: Tebex', status: 'success' },
+    { id: 1043, player: 'Eren', products: ['Kasa Anahtarı x5'], price: '25.00 ₺', date: 'Dün, 23:10', payment: 'Mobil Ödeme', status: 'success' },
+    { id: 1042, player: 'Yavuz', products: ['VIP (Limitsiz)'], price: '250.00 ₺', date: 'Dün, 18:30', payment: 'Kredi Kartı: Shopier', status: 'success' },
+    { id: 1041, player: 'Mert', products: ['İsim Değiştirme'], price: '15.00 ₺', date: '2 gün önce', payment: 'EFT: Havale', status: 'danger' }
   ];
 
   let weeklyChartElement = $state();
@@ -417,6 +417,7 @@
               <th>Ürün</th>
               <th>Fiyat</th>
               <th>Ödeme Yöntemi</th>
+              <th>Durum</th>
               <th class="pe-3">Tarih</th>
             </tr>
           </thead>
@@ -466,7 +467,14 @@
                 <td>
                   {sale.payment}
                 </td>
-                <td>{sale.date}</td>
+                <td>
+                  {#if sale.status === 'success'}
+                    <span class="badge text-bg-success">Başarılı</span>
+                  {:else if sale.status === 'danger'}
+                    <span class="badge text-bg-danger">İade</span>
+                  {/if}
+                </td>
+                <td class="pe-3">{sale.date}</td>
               </tr>
             {/each}
           </tbody>

@@ -14,6 +14,12 @@ export default class PanoMarketPlugin extends PanoPlugin {
       });
 
       pano.ui.page.register({
+        path: '/market/orders',
+        component: viewComponent(() => import('./panel/pages/Orders.svelte')),
+        permission: `pano.plugin.${pluginId}.manage`,
+      });
+
+      pano.ui.page.register({
         path: '/market/categories',
         component: viewComponent(() => import('./panel/pages/Categories.svelte')),
         permission: `pano.plugin.${pluginId}.manage`,
@@ -50,8 +56,8 @@ export default class PanoMarketPlugin extends PanoPlugin {
       });
 
       pano.ui.page.register({
-        path: '/market/coupons',
-        component: viewComponent(() => import('./panel/pages/Coupons.svelte')),
+        path: '/market/discounts',
+        component: viewComponent(() => import('./panel/pages/Discounts.svelte')),
         permission: `pano.plugin.${pluginId}.manage`,
       });
 

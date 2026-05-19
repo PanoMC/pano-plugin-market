@@ -365,7 +365,7 @@
 
 <MarketLayout>
   {#snippet right()}
-    <button type="button" class="btn btn-secondary border-0" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={openCreateModal}>
+    <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={openCreateModal}>
       <i class="fa-solid fa-plus"></i>
       <span class="d-lg-inline d-none ms-2">Kategori Ekle</span>
     </button>
@@ -424,16 +424,22 @@
                 </div>
               </th>
               <td class="align-middle">
-                <a href="#" class="d-flex align-items-center justify-content-center bg-primary-subtle rounded overflow-hidden text-decoration-none" style="width: 40px; height: 40px;" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
+                <a href="#" class="d-flex align-items-center justify-content-center bg-primary-subtle rounded overflow-hidden text-decoration-none focus-ring" style="width: 40px; height: 40px;" title="Düzenle" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
                   {#if category.image}
                     <img src={category.image} alt={category.name} class="w-100 h-100 object-fit-cover" />
                   {:else}
-                    <img src="/assets/images/category.png" alt={category.name} class="w-100 h-100 object-fit-cover opacity-50" />
+                    <!-- Premium vector category icon representing default folder/grid -->
+                    <svg class="w-100 h-100 p-2 text-primary opacity-75" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                      <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                      <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                      <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5" class="opacity-50"/>
+                    </svg>
                   {/if}
                 </a>
               </td>
               <td class="align-middle">
-                <a href="#" class="d-flex align-items-center gap-3 text-decoration-none" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
+                <a href="#" class="d-flex align-items-center gap-3 text-decoration-none focus-ring" title="Düzenle" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
                   <div class="d-flex align-items-center justify-content-center bg-primary-subtle rounded" style="width: 32px; height: 32px; flex-shrink: 0;">
                     <i class="fas {category.icon} fs-6" style="color: {category.color}"></i>
                   </div>
@@ -520,15 +526,21 @@
                   <i class="fas fa-grip-vertical"></i>
                 </span>
 
-                <a href="#" class="d-none d-sm-flex align-items-center justify-content-center bg-primary-subtle rounded overflow-hidden sort-thumb text-decoration-none" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
+                <a href="#" class="d-none d-sm-flex align-items-center justify-content-center bg-primary-subtle rounded overflow-hidden sort-thumb text-decoration-none focus-ring" title="Düzenle" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
                   {#if category.image}
                     <img src={category.image} alt={category.name} class="w-100 h-100 object-fit-cover" />
                   {:else}
-                    <img src="/assets/images/category.png" alt={category.name} class="w-100 h-100 object-fit-cover opacity-50" />
+                    <!-- Premium vector category icon representing default folder/grid -->
+                    <svg class="w-100 h-100 p-2 text-primary opacity-75" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                      <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                      <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                      <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5" class="opacity-50"/>
+                    </svg>
                   {/if}
                 </a>
 
-                <a href="#" class="d-flex align-items-center gap-2 gap-md-3 flex-grow-1 overflow-hidden text-decoration-none" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
+                <a href="#" class="d-flex align-items-center gap-2 gap-md-3 flex-grow-1 overflow-hidden text-decoration-none focus-ring" title="Düzenle" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
                   <div class="d-flex align-items-center justify-content-center bg-primary-subtle rounded category-icon flex-shrink-0">
                     <i class="fas {category.icon} fs-6" style="color: {category.color}"></i>
                   </div>

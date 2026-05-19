@@ -2,10 +2,11 @@
   "nav-store": "Market",
   "nav-market": "Market",
   "nav-stats": "İstatistikler",
+  "nav-orders": "Siparişler",
   "nav-categories": "Kategoriler",
   "nav-products": "Ürünler",
   "nav-comparisons": "Karşılaştırma",
   "nav-gifts": "Hediyeler",
-  "nav-coupons": "Kuponlar",
+  "nav-discounts": "İndirimler",
   "nav-settings": "Ayarlar"
 }

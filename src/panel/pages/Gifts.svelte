@@ -6,10 +6,11 @@
 
   let page = $state(1);
   let gifts = $state([
-    { id: 1, code: 'YENIYIL24', type: 'credit', credit: '1000', usage: 10, usageLimit: 50, status: 'active', expiry: '31 Ara 2024' },
-    { id: 2, code: 'VIPHEDIYE', type: 'product', product: 'VIP Üyelik (Aylık)', usage: 5, usageLimit: 5, status: 'inactive', expiry: 'Sınırsız' },
-    { id: 3, code: 'TELAFIOYUN', type: 'product', product: 'Kasa Anahtarı x10', usage: 120, usageLimit: null, status: 'active', expiry: 'Sınırsız' },
-    { id: 4, code: 'HOSGELDIN', type: 'credit', credit: '500', usage: 45, usageLimit: 100, status: 'active', expiry: '01 Haz 2024' },
+    { id: 1, code: 'YENIYIL24', type: 'credit', credit: '1000', status: 'active', startDate: '01 Ara 2024', expiry: '31 Ara 2024' },
+    { id: 2, code: 'VIPHEDIYE', type: 'product', product: 'VIP Üyelik (Aylık)', status: 'inactive', startDate: '-', expiry: 'Süresiz' },
+    { id: 3, code: 'TELAFIOYUN', type: 'product', product: 'Kasa Anahtarı x10', status: 'active', startDate: '-', expiry: 'Süresiz' },
+    { id: 4, code: 'HOSGELDIN', type: 'credit', credit: '500', status: 'active', startDate: '01 Oca 2024', expiry: '01 Haz 2024' },
+    { id: 5, code: 'SANSLIKUTU', type: 'random', details: 'Rastgele Hediye (3 Ürün Seçili)', status: 'active', startDate: '18 May 2026', expiry: 'Süresiz' }
   ]);
   let search = $state('');
 
@@ -20,7 +21,7 @@
 
 <MarketLayout>
   {#snippet right()}
-    <button type="button" class="btn btn-secondary border-0" data-bs-toggle="modal" data-bs-target="#createGiftModal">
+    <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#createGiftModal">
       <i class="fa-solid fa-plus"></i>
       <span class="d-lg-inline d-none ms-2">Hediye Oluştur</span>
     </button>
@@ -53,10 +54,9 @@
             <tr>
               <th scope="col" style="width: 50px;"></th>
               <th scope="col">Hediye Kodu</th>
-              <th scope="col">İçerik</th>
-              <th scope="col">Kullanım</th>
+              <th scope="col">Ürünler</th>
               <th scope="col">Durum</th>
-              <th scope="col">Son Kullanma</th>
+              <th scope="col">Geçerlilik Süresi</th>
             </tr>
           </thead>
           <tbody>
@@ -85,17 +85,20 @@
                   </div>
                 </th>
                 <td>
-                  <span class="font-monospace">{gift.code}</span>
+                  <a href="#" class="font-monospace text-decoration-none focus-ring" title="Düzenle" data-bs-toggle="modal" data-bs-target="#createGiftModal" onclick={(e) => e.preventDefault()}>
+                    {gift.code}
+                  </a>
                 </td>
                 <td>
-                  {#if gift.type === 'credit'}
-                    <span class="fw-medium"><i class="fas fa-coins me-1 text-warning"></i>{gift.credit} Kredi</span>
-                  {:else}
-                    <span class="fw-medium"><i class="fas fa-box-open me-1 text-info"></i>{gift.product}</span>
-                  {/if}
-                </td>
-                <td>
-                  {gift.usage} / {gift.usageLimit ? gift.usageLimit : 'Sınırsız'}
+                  <a href="#" class="text-decoration-none focus-ring d-inline-block" title="Düzenle" data-bs-toggle="modal" data-bs-target="#createGiftModal" onclick={(e) => e.preventDefault()}>
+                    {#if gift.type === 'credit'}
+                      <span class="badge bg-primary px-2.5 py-1.5 fw-medium cursor-pointer"><i class="fas fa-coins me-1"></i>{gift.credit} Kredi</span>
+                    {:else if gift.type === 'random'}
+                      <span class="badge bg-primary px-2.5 py-1.5 fw-medium cursor-pointer"><i class="fas fa-shuffle me-1"></i>{gift.details}</span>
+                    {:else}
+                      <span class="badge bg-primary px-2.5 py-1.5 fw-medium cursor-pointer"><i class="fas fa-box-open me-1"></i>{gift.product}</span>
+                    {/if}
+                  </a>
                 </td>
                 <td>
                   {#if gift.status === 'active'}
@@ -105,7 +108,14 @@
                   {/if}
                 </td>
                 <td>
-                  {gift.expiry ? gift.expiry : 'Sınırsız'}
+                  {#if gift.expiry === 'Süresiz' || !gift.expiry}
+                    <span class="text-body-secondary font-monospace" style="font-size: 0.85rem;">Süresiz</span>
+                  {:else}
+                    <div class="d-flex flex-column lh-sm">
+                      <span class="text-body-secondary font-monospace" style="font-size: 0.75rem;">Bşl: {gift.startDate}</span>
+                      <span class="font-monospace" style="font-size: 0.85rem;">Bti: {gift.expiry}</span>
+                    </div>
+                  {/if}
                 </td>
               </tr>
             {/each}

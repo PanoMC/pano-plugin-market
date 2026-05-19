@@ -2,10 +2,11 @@
   "nav-store": "Store",
   "nav-market": "Market",
   "nav-stats": "Statistics",
+  "nav-orders": "Orders",
   "nav-categories": "Categories",
   "nav-products": "Products",
   "nav-comparisons": "Comparisons",
   "nav-gifts": "Gifts",
-  "nav-coupons": "Coupons",
+  "nav-discounts": "Discounts",
   "nav-settings": "Settings"
 }

@@ -1,17 +1,20 @@
 <script>
-  let { isEdit = false } = $props();
+  import { onMount } from 'svelte';
+  import ProductSelector from '../ProductSelector.svelte';
+
+  let { isEdit = $bindable(false) } = $props();
 
   let giftCode = $state('');
-  let giftType = $state('product'); // 'product' or 'credit'
+  let giftType = $state('product'); // 'product', 'credit', or 'random'
   
   let selectedProductId = $state('');
   let creditAmount = $state('');
+  let selectedRandomProductIds = $state([]);
 
   let isExpiryUnlimited = $state(true);
+  let startDate = $state('');
   let expiryDate = $state('');
-  
-  let isRedeemUnlimited = $state(true);
-  let redeemLimit = $state('');
+  let status = $state('active'); // 'active' or 'inactive'
 
   function generateGiftCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -29,17 +32,51 @@
     { id: 4, name: 'Özel Kanat' },
     { id: 5, name: 'Efekt Paketi' }
   ];
+
+
+  onMount(() => {
+    const modalEl = document.getElementById('createGiftModal');
+    if (modalEl) {
+      const handleShow = (event) => {
+        const trigger = event.relatedTarget;
+        if (trigger && (trigger.classList.contains('dropdown-item') || trigger.closest('.dropdown-item') || trigger.classList.contains('font-monospace') || trigger.closest('.font-monospace'))) {
+          isEdit = true;
+        } else {
+          isEdit = false;
+        }
+      };
+      modalEl.addEventListener('show.bs.modal', handleShow);
+      return () => {
+        modalEl.removeEventListener('show.bs.modal', handleShow);
+      };
+    }
+  });
 </script>
 
 <div class="modal fade" id="createGiftModal" tabindex="-1" aria-labelledby="createGiftModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="createGiftModalLabel">Hediye Oluştur</h5>
+        <h5 class="modal-title" id="createGiftModalLabel">
+          {#if isEdit}Hediyeyi Düzenle{:else}Hediye Oluştur{/if}
+        </h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
       </div>
       <div class="modal-body pb-0">
         
+        <!-- Status Switch -->
+        <div class="mb-3">
+          <div class="form-check form-switch m-0 d-flex align-items-center">
+            <input class="form-check-input cursor-pointer" type="checkbox" role="switch" id="giftStatusSwitch"
+                   checked={status === 'active'}
+                   onchange={(e) => status = e.target.checked ? 'active' : 'inactive'}
+                   style="width: 2.5em; height: 1.25em;">
+            <label class="form-check-label ms-2 cursor-pointer mt-1" for="giftStatusSwitch">
+              Aktif
+            </label>
+          </div>
+        </div>
+
         <!-- Gift Code -->
         <div class="input-group mb-3">
           <div class="form-floating">
@@ -57,24 +94,21 @@
           <div class="d-flex flex-column flex-sm-row gap-2 gap-sm-3 mb-3 mt-1">
             <div class="form-check m-0">
               <input class="form-check-input cursor-pointer" type="radio" name="giftType" id="typeProduct" value="product" bind:group={giftType}>
-              <label class="form-check-label cursor-pointer" for="typeProduct">Ürün Hediye Et</label>
+              <label class="form-check-label cursor-pointer" for="typeProduct">Ürün</label>
             </div>
             <div class="form-check m-0">
               <input class="form-check-input cursor-pointer" type="radio" name="giftType" id="typeCredit" value="credit" bind:group={giftType}>
-              <label class="form-check-label cursor-pointer" for="typeCredit">Kredi Hediye Et</label>
+              <label class="form-check-label cursor-pointer" for="typeCredit">Kredi</label>
+            </div>
+            <div class="form-check m-0">
+              <input class="form-check-input cursor-pointer" type="radio" name="giftType" id="typeRandom" value="random" bind:group={giftType}>
+              <label class="form-check-label cursor-pointer" for="typeRandom">Rastgele</label>
             </div>
           </div>
 
           {#if giftType === 'product'}
-            <div class="list-group list-group-flush border rounded overflow-y-auto mb-0" style="max-height: 200px;">
-              {#each products as product}
-                <label class="list-group-item d-flex align-items-center gap-3 py-2 cursor-pointer list-group-item-action">
-                  <input class="form-check-input flex-shrink-0 mt-0 cursor-pointer" type="radio" name="giftProduct" value={product.id} bind:group={selectedProductId}>
-                  <span>{product.name}</span>
-                </label>
-              {/each}
-            </div>
-          {:else}
+            <ProductSelector products={products} bind:selected={selectedProductId} multiple={false} maxHeight="200px" />
+          {:else if giftType === 'credit'}
             <div class="input-group">
               <div class="form-floating">
                 <input type="number" class="form-control" id="creditAmountInput" bind:value={creditAmount} placeholder="Kredi Miktarı" min="1" />
@@ -84,35 +118,40 @@
                 <i class="fas fa-coins text-warning"></i>
               </span>
             </div>
+          {:else if giftType === 'random'}
+            <div class="vstack gap-2 animate__animated animate__fadeIn">
+              <label class="form-label mb-0">Rastgele Verilecek Ürünler</label>
+              <ProductSelector products={products} bind:selected={selectedRandomProductIds} multiple={true} maxHeight="180px" />
+            </div>
           {/if}
         </div>
 
-        <!-- Expiry Date -->
-        <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center mb-3 gap-2">
-          <div class="form-floating w-100">
-            <input type="date" class="form-control" id="giftExpiryInput" bind:value={expiryDate} disabled={isExpiryUnlimited} placeholder="Son Kullanma Tarihi" />
-            <label for="giftExpiryInput">Son Kullanma Tarihi</label>
-          </div>
-          <div class="form-check form-switch m-0 pe-2 pt-1 pt-sm-0">
+        <!-- Date / Expiry Settings -->
+        <div class="vstack gap-2 mb-3">
+          <div class="form-check form-switch m-0">
             <input class="form-check-input cursor-pointer" type="checkbox" role="switch" id="giftExpirySwitch" bind:checked={isExpiryUnlimited} style="width: 2.5em; height: 1.25em;">
-            <label class="form-check-label ms-1 cursor-pointer mt-1" for="giftExpirySwitch">Asla</label>
+            <label class="form-check-label ms-1 cursor-pointer mt-1" for="giftExpirySwitch">Süresiz</label>
           </div>
-        </div>
-
-        <!-- Redeem Limit -->
-        <div class="d-flex flex-column flex-sm-row align-items-start align-items-sm-center mb-0 gap-2">
-          <div class="form-floating w-100">
-            <input type="number" class="form-control" id="giftRedeemLimitInput" bind:value={redeemLimit} disabled={isRedeemUnlimited} placeholder="Kullanım Sınırı" min="1" />
-            <label for="giftRedeemLimitInput">Kullanım Sınırı</label>
-          </div>
-          <div class="form-check form-switch m-0 pe-2 pt-1 pt-sm-0">
-            <input class="form-check-input cursor-pointer" type="checkbox" role="switch" id="giftRedeemLimitSwitch" bind:checked={isRedeemUnlimited} style="width: 2.5em; height: 1.25em;">
-            <label class="form-check-label ms-1 cursor-pointer mt-1" for="giftRedeemLimitSwitch">Sınırsız</label>
-          </div>
+          {#if !isExpiryUnlimited}
+            <div class="row g-3 animate__animated animate__fadeIn">
+              <div class="col-6">
+                <div class="form-floating">
+                  <input type="date" class="form-control" id="giftStartDateInput" bind:value={startDate} placeholder="Başlangıç Tarihi" />
+                  <label for="giftStartDateInput">Başlangıç Tarihi</label>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="form-floating">
+                  <input type="date" class="form-control" id="giftExpiryInput" bind:value={expiryDate} placeholder="Bitiş Tarihi" />
+                  <label for="giftExpiryInput">Bitiş Tarihi</label>
+                </div>
+              </div>
+            </div>
+          {/if}
         </div>
 
       </div>
-      <div class="modal-footer border-0 p-3 pt-3">
+      <div class="modal-footer p-3 pt-3">
         {#if isEdit}
           <button type="button" class="btn btn-primary w-100 m-0">Kaydet</button>
         {:else}

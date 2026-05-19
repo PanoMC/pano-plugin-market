@@ -4,7 +4,7 @@
     <hr class="my-4" />
     <div class="card shadow-sm border-0">
       <div class="card-body p-5">
-        <p class="mb-0 text-muted">A flexible plugin that lets you easily list, manage, and sell products on your website.</p>
+        <p class="mb-0 text-body-secondary">A flexible plugin that lets you easily list, manage, and sell products on your website.</p>
       </div>
     </div>
   </div>

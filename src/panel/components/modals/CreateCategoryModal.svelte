@@ -104,7 +104,7 @@
         <h5 class="modal-title" id="createCategoryModalLabel">{isEdit ? 'Kategori Düzenle' : 'Kategori Oluştur'}</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
       </div>
-      <div class="modal-body pb-0">
+      <div class="modal-body pb-3">
         
         <!-- Image Upload -->
         <div class="mb-3 text-center">
@@ -202,15 +202,15 @@
               checked={categoryStatus === 'active'}
               onchange={(e) => categoryStatus = e.target.checked ? 'active' : 'inactive'} />
             <label class="form-check-label cursor-pointer user-select-none" for="category-status">
-              {categoryStatus === 'active' ? 'Aktif' : 'Pasif'}
+              Aktif
             </label>
           </div>
         </div>
 
       </div>
-      <div class="modal-footer border-0 p-3 pt-3">
+      <div class="modal-footer p-3 pt-3">
         {#if isEdit}
-          <button type="button" class="btn btn-primary w-100 m-0">Düzenle</button>
+          <button type="button" class="btn btn-primary w-100 m-0">Kaydet</button>
         {:else}
           <button type="button" class="btn btn-secondary w-100 m-0">Oluştur</button>
         {/if}

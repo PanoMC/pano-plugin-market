@@ -21,9 +21,9 @@
 
 <MarketLayout>
   {#snippet right()}
-    <button type="button" class="btn btn-secondary border-0" data-bs-toggle="modal" data-bs-target="#createComparisonModal">
+    <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#createComparisonModal">
       <i class="fa-solid fa-plus"></i>
-      <span class="d-lg-inline d-none ms-2">Yeni Karşılaştırma</span>
+      <span class="d-lg-inline d-none ms-2">Karşılaştırma Oluştur</span>
     </button>
   {/snippet}
 
