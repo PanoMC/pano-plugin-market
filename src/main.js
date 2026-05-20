@@ -48,6 +48,12 @@ export default class PanoMarketPlugin extends PanoPlugin {
         component: viewComponent(() => import('./panel/pages/Comparisons.svelte')),
         permission: `pano.plugin.${pluginId}.manage`,
       });
+
+      pano.ui.page.register({
+        path: '/market/comparisons/create-comparison',
+        component: viewComponent(() => import('./panel/pages/CreateComparison.svelte')),
+        permission: `pano.plugin.${pluginId}.manage`,
+      });
       
       pano.ui.page.register({
         path: '/market/gifts',

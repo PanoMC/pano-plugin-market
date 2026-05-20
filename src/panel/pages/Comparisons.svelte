@@ -2,7 +2,6 @@
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import { CardHeader, CardFilters, CardFiltersItem, Pagination, SearchInput, NoContent } from '@panomc/sdk/components/panel';
   import { _ } from '../../i18n';
-  import CreateComparisonModal from '../components/modals/CreateComparisonModal.svelte';
 
   let page = $state(1);
   let search = $state('');
@@ -21,10 +20,10 @@
 
 <MarketLayout>
   {#snippet right()}
-    <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#createComparisonModal">
+    <a href="/panel/market/comparisons/create-comparison" class="btn btn-secondary d-flex align-items-center gap-2">
       <i class="fa-solid fa-plus"></i>
-      <span class="d-lg-inline d-none ms-2">Karşılaştırma Oluştur</span>
-    </button>
+      <span class="d-lg-inline d-none">Karşılaştırma Oluştur</span>
+    </a>
   {/snippet}
 
   <div class="card">
@@ -73,10 +72,10 @@
                       <span class="fas fa-ellipsis-v"></span>
                     </button>
                     <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
-                      <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createComparisonModal">
+                      <a href="/panel/market/comparisons/create-comparison?id={comp.id}" class="dropdown-item">
                         <i class="fas fa-pen me-2"></i>
                         Düzenle
-                      </button>
+                      </a>
                       <button type="button" class="dropdown-item">
                         <i class="fas fa-clone me-2"></i>
                         Klonla
@@ -89,14 +88,12 @@
                   </div>
                 </th>
                 <td>
-                  <button
-                    type="button"
+                  <a
+                    href="/panel/market/comparisons/create-comparison?id={comp.id}"
                     title="Düzenle"
-                    data-bs-toggle="modal" 
-                    data-bs-target="#createComparisonModal"
                     class="btn btn-link p-0 border-0 text-decoration-none text-start fw-medium focus-ring">
                     {comp.name}
-                  </button>
+                  </a>
                 </td>
                 <td>
                   <div class="d-flex flex-wrap gap-1">
@@ -132,5 +129,3 @@
     {/if}
   </div>
 </MarketLayout>
-
-<CreateComparisonModal />
