@@ -10,6 +10,71 @@ const production = !dev;
 
 const bundleSdk = process.env.BUNDLE_SDK === 'true';
 
+// --- Svelte version guard ---------------------------------------------------
+// The svelte COMPILER this plugin builds with must match the runtime the Pano
+// host (theme/panel) serves in the browser — compiled output and runtime are only
+// guaranteed compatible at the exact same version (svelte's internal API may
+// change even in patch releases). @panomc/sdk pins the correct version as a
+// regular dependency, so the plugin must NOT declare svelte itself: an override
+// can drift from the host runtime and break the plugin at hydration.
+function checkSvelteVersion() {
+  const read = (p) => JSON.parse(fs.readFileSync(p, 'utf8'));
+
+  let sdkPin = null;
+  try {
+    sdkPin =
+      read(path.resolve('node_modules/@panomc/sdk/package.json')).dependencies
+        ?.svelte ?? null;
+  } catch {
+    // sdk not installed — rollup will fail on its own with a clearer error.
+  }
+
+  let installed = null;
+  try {
+    installed = read(path.resolve('node_modules/svelte/package.json')).version;
+  } catch {
+    // svelte missing entirely — rollup-plugin-svelte will fail on its own.
+  }
+
+  let ownDecl = null;
+  try {
+    const own = read(path.resolve('package.json'));
+    ownDecl =
+      own.dependencies?.svelte ??
+      own.devDependencies?.svelte ??
+      own.peerDependencies?.svelte ??
+      null;
+  } catch {
+    // no readable package.json — nothing to validate.
+  }
+
+  if (ownDecl) {
+    console.warn(
+      `[pano] WARNING: package.json declares svelte ${ownDecl}, but the svelte version ` +
+        `comes from @panomc/sdk. A local override can drift from the Pano host runtime ` +
+        `and break the plugin at hydration — remove the svelte entry and re-install.`,
+    );
+  }
+
+  // The sdk pins an exact version; only enforce when it is one (not a range).
+  if (sdkPin && /^\d/.test(sdkPin) && installed && installed !== sdkPin) {
+    console.error(
+      `[pano] ERROR: installed svelte is ${installed} but @panomc/sdk requires exactly ` +
+        `${sdkPin}. Compiled plugin output is only compatible with the Pano host runtime ` +
+        `at the same version. Remove any svelte override from package.json and re-install.`,
+    );
+    process.exit(1);
+  }
+
+  if (!sdkPin && installed) {
+    console.warn(
+      `[pano] WARNING: the installed @panomc/sdk does not pin a svelte version; building ` +
+        `with svelte ${installed}. Make sure it matches the Pano host runtime version.`,
+    );
+  }
+}
+checkSvelteVersion();
+
 function manifestPlugin() {
   return {
     name: 'manifest',
@@ -70,18 +135,28 @@ export default [
       dir: 'src/main/resources/plugin-ui/client', // Client directory
       entryFileNames: 'client.mjs', // Client entry file
     },
-    // We should externalize svelte here too so that SSR uses the host's svelte instance
-    // external: (id) => id.startsWith('@panomc/sdk') || id.startsWith('svelte'),
-    // In production SSR builds, bundle SDK into the plugin so it's self-contained
-    // In dev mode, keep SDK external for faster rebuilds
+    // Bare 'svelte'/'svelte/*', 'svelte-i18n' and '@panomc/sdk*' specifiers stay
+    // EXTERNAL in both dev and production: the host (theme/panel) injects an import
+    // map that resolves them to stable /runtime shim modules, and each shim re-exports
+    // the HOST bundle's own live module instance. Host pages and plugins therefore
+    // share a single Svelte runtime and a single SDK instance (same effect scheduler,
+    // same stores/contexts). Bundling a private SDK copy into the plugin would split
+    // store/context state from the host's instance, so the SDK must never be bundled
+    // in normal builds. BUNDLE_SDK=true is an escape hatch that bundles everything
+    // (self-contained build, no host import map required).
+    // NOTE: the match is exact/subpath, NOT a prefix — the host import map only
+    // provides these specifiers. A prefix match would leave third-party packages like
+    // 'svelte-select' as unresolvable bare imports in the browser; such dependencies
+    // must be bundled into the plugin.
     external: (id) => {
       if (bundleSdk) return false;
-      // Always externalize svelte as SSR needs to use the host's svelte instance
-      if (id.startsWith('svelte')) return true;
-      // In dev mode, also externalize SDK for faster rebuilds
-      // In production (non-dev), bundle SDK to avoid module resolution issues
-      if (id.startsWith('@panomc/sdk')) return !production;
-      return false;
+      return (
+        id === 'svelte' ||
+        id.startsWith('svelte/') ||
+        id === 'svelte-i18n' ||
+        id === '@panomc/sdk' ||
+        id.startsWith('@panomc/sdk/')
+      );
     },
     plugins: [
       ...baseConfig.plugins,
