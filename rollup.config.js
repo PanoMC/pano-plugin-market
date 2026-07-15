@@ -87,13 +87,46 @@ function manifestPlugin() {
   };
 }
 
+// --- Entry facade -------------------------------------------------------------
+// The host imports the entry with a cache-busting query (client.mjs?v=<uiHash>)
+// while lazy chunks import it query-less ('./client.mjs'). The browser keys its
+// module map by FULL URL, so any module state living in the entry file would be
+// evaluated twice and lazy chunks would read unassigned exports (e.g. `pano`
+// undefined → "can't access property ui"). To prevent that, the build goes
+// through a virtual facade entry and src/main.js is forced into a shared chunk:
+// the emitted client.mjs/server.mjs is a pure re-export facade with no state of
+// its own, and all module state lives at a single query-less chunk URL.
+const realEntry = path.resolve('src/main.js');
+const virtualEntryId = '\0pano-entry-facade';
+
+function entryFacadePlugin() {
+  return {
+    name: 'pano-entry-facade',
+    resolveId(id) {
+      if (id === 'pano:entry') return virtualEntryId;
+    },
+    load(id) {
+      if (id === virtualEntryId) {
+        return (
+          `export * from ${JSON.stringify(realEntry)};\n` +
+          `export { default } from ${JSON.stringify(realEntry)};\n`
+        );
+      }
+    },
+  };
+}
+
 const baseConfig = {
-  input: 'src/main.js',
+  input: 'pano:entry',
   output: {
     format: 'es',
     chunkFileNames: '[name]-[hash].js', // Chunk file naming
+    manualChunks(id) {
+      if (id === realEntry) return 'main';
+    },
   },
   plugins: [
+    entryFacadePlugin(),
     del({
       targets: ['src/main/resources/plugin-ui/*'], // Always clean the resources folder
       runOnce: true, // Run only once
