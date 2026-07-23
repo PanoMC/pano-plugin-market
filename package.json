@@ -17,7 +17,7 @@
     "format:prettier": "prettier --write . --config .prettierrc"
   },
   "devDependencies": {
-    "@panomc/sdk": "1.0.0-dev.35",
+    "@panomc/sdk": "1.0.0-dev.39",
     "@rollup/plugin-node-resolve": "^16.0.0",
     "@rollup/plugin-terser": "^0.4.4",
     "cross-env": "^10.1.0",
