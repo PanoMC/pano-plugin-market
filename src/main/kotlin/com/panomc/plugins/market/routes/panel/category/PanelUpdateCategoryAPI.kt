@@ -9,6 +9,7 @@ import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.db.dao.MarketCategoryDao
 import com.panomc.plugins.market.db.model.MarketCategory
+import com.panomc.plugins.market.error.InvalidCategoryMove
 import com.panomc.plugins.market.log.UpdatedMarketCategoryLog
 import com.panomc.plugins.market.permission.ManageMarketPermission
 import com.panomc.plugins.market.util.ImageUtil
@@ -91,6 +92,14 @@ class PanelUpdateCategoryAPI(
             throw BadRequest()
         }
 
+        // The color is interpolated into an inline style on the storefront — accept only a
+        // strict hex color so no arbitrary CSS can be injected. Validated up-front, before
+        // any destructive side effect (old image deletion) can run.
+        val color = data.getString("color") ?: "#0d6efd"
+        if (!color.matches(HEX_COLOR_REGEX)) {
+            throw BadRequest()
+        }
+
         validateImage(fileUpload)
 
         val sqlClient = databaseManager.getSqlClient()
@@ -109,10 +118,19 @@ class PanelUpdateCategoryAPI(
         }
 
         val icon = data.getString("icon") ?: "fa-folder"
-        val color = data.getString("color") ?: "#0d6efd"
         val status = data.getString("status")?.let { MarketStatus.valueOf(it) } ?: MarketStatus.ACTIVE
         val parentId = data.getLong("parentId")
         val position = data.getInteger("position") ?: existingCategory.position
+
+        // Reject reparenting onto a missing category, itself or its own subtree (would create a
+        // parent-chain cycle that drops the whole cycle from the tree view) — mirrors PanelSortCategoriesAPI.
+        if (parentId != null && parentId != existingCategory.parentId) {
+            val categories = marketCategoryDao.getAll(null, sqlClient)
+
+            if (categories.none { it.id == parentId } || parentId in collectSubtreeIds(id, categories)) {
+                throw InvalidCategoryMove()
+            }
+        }
 
         val category = MarketCategory(
             id = id,
@@ -151,21 +169,44 @@ class PanelUpdateCategoryAPI(
         return Successful()
     }
 
+    private companion object {
+        private val HEX_COLOR_REGEX = Regex("^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+    }
+
+    private fun collectSubtreeIds(rootId: Long, categories: List<MarketCategory>): Set<Long> {
+        val childrenByParent = categories.groupBy { it.parentId }
+        val result = mutableSetOf(rootId)
+        val queue = ArrayDeque<Long>()
+        queue.add(rootId)
+
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            childrenByParent[current].orEmpty().forEach { child ->
+                if (result.add(child.id)) {
+                    queue.add(child.id)
+                }
+            }
+        }
+
+        return result
+    }
+
     private fun validateImage(fileUpload: FileUpload?) {
         if (fileUpload != null) {
             if (fileUpload.size() > 5 * 1024 * 1024) {
                 throw BadRequest()
             }
 
-            val allowedTypes = listOf("image/webp", "image/jpeg", "image/png", "image/gif")
-            if (!allowedTypes.contains(fileUpload.contentType())) {
+            // The multipart Content-Type header is client-controlled; the magic-byte sniff is authoritative.
+            if (ImageUtil.detectImageExtension(File(fileUpload.uploadedFileName())) == null) {
                 throw BadRequest()
             }
         }
     }
 
     private fun saveUploadedFile(fileUpload: FileUpload): String {
-        val extension = fileUpload.fileName().split(".").last()
+        // Extension comes from the sniffed byte signature, never from the client-supplied filename.
+        val extension = ImageUtil.detectImageExtension(File(fileUpload.uploadedFileName())) ?: throw BadRequest()
         val fileName =
             "category-${System.currentTimeMillis()}-${fileUpload.uploadedFileName().split(File.separator).last()}.$extension"
         val destFile = File(plugin.uploadsDir, fileName)

@@ -1,11 +1,12 @@
 <script>
   import { ICON_CATEGORIES, ALL_ICONS } from '../data/fa-icons.js';
+  import { _ } from '../../i18n';
 
   let {
     value = $bindable('fa-folder'),
     color = '#0d6efd',
-    label = 'İkon',
-    placeholder = 'İkon ara (ör: star)',
+    label = $_('components.icon-picker.label'),
+    placeholder = $_('components.icon-picker.placeholder'),
     placement = 'top-start'
   } = $props();
 
@@ -116,7 +117,7 @@
             placeholder={placeholder}
             bind:value={search} />
           {#if search}
-            <button type="button" class="btn btn-secondary" onclick={() => (search = '')} aria-label="Temizle">
+            <button type="button" class="btn btn-secondary" onclick={() => (search = '')} aria-label={$_('components.icon-picker.clear')}>
               <i class="fas fa-xmark"></i>
             </button>
           {/if}
@@ -132,7 +133,7 @@
                 class:text-white={activeCategory === cat.key}
                 class:btn-link={activeCategory !== cat.key}
                 onclick={() => (activeCategory = cat.key)}>
-                {cat.label}
+                {$_(cat.label)}
               </button>
             {/each}
           </div>
@@ -144,7 +145,7 @@
           {#if filteredIcons.length === 0}
             <div class="text-center text-body-secondary small py-4">
               <i class="fas fa-circle-info me-1"></i>
-              Sonuç bulunamadı.
+              {$_('components.icon-picker.no-results')}
             </div>
           {:else}
             {#each filteredIcons as name (name)}

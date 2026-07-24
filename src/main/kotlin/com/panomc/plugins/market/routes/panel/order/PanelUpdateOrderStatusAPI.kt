@@ -3,6 +3,7 @@ package com.panomc.plugins.market.routes.panel.order
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
+import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NotFound
 import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
@@ -53,7 +54,24 @@ class PanelUpdateOrderStatusAPI(
         val status = OrderStatus.valueOf(data.getString("status"))
 
         val sqlClient = databaseManager.getSqlClient()
-        marketOrderDao.getById(id, sqlClient) ?: throw NotFound()
+        val order = marketOrderDao.getById(id, sqlClient) ?: throw NotFound()
+
+        // Re-applying the current status is a no-op so fulfillment side effects can never be re-triggered.
+        if (order.status == status) {
+            return Successful()
+        }
+
+        // Explicit state machine: PENDING may resolve any way, COMPLETED may only be refunded,
+        // FAILED and REFUNDED are terminal.
+        val allowedTransitions = when (order.status) {
+            OrderStatus.PENDING -> setOf(OrderStatus.COMPLETED, OrderStatus.FAILED, OrderStatus.REFUNDED)
+            OrderStatus.COMPLETED -> setOf(OrderStatus.REFUNDED)
+            OrderStatus.FAILED, OrderStatus.REFUNDED -> emptySet()
+        }
+
+        if (status !in allowedTransitions) {
+            throw BadRequest()
+        }
 
         marketOrderDao.updateStatus(id, status, sqlClient)
 

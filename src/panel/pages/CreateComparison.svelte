@@ -1,40 +1,100 @@
+<script module>
+  import ApiUtil from '@panomc/sdk/utils/api';
+
+  /**
+   * @type {import("@sveltejs/kit").PageLoad}
+   */
+  export async function load(event) {
+    const {
+      parent,
+      url: { searchParams },
+    } = event;
+    const { pageTitle } = await parent();
+
+    pageTitle.set('plugins.pano-plugin-market.pages.create-comparison.title');
+
+    const id = searchParams.get('id');
+
+    const productsRes = await ApiUtil.get({
+      path: '/api/panel/market/products/simple',
+      request: event,
+    });
+    const products = productsRes && !productsRes.error ? productsRes.products || [] : [];
+
+    let comparison = null;
+    if (id) {
+      const res = await ApiUtil.get({
+        path: `/api/panel/market/comparisons/${id}`,
+        request: event,
+      });
+      if (res && !res.error) {
+        comparison = res;
+      }
+    }
+
+    return { data: { products, comparison } };
+  }
+</script>
+
 <script>
   import MarketLayout from '../layouts/MarketLayout.svelte';
-  import { onMount } from 'svelte';
+  import { base, goto, page } from '@panomc/sdk/svelte';
+  import { showToast } from '@panomc/sdk/toasts';
+  import { _ } from '../../i18n';
 
-  let isEdit = $state(false);
-  let loading = $state(false);
-  
-  // Model states
-  let comparison = $state({
-    name: '',
-    status: 'active',
-    priority: 0,
-    selectedProducts: [null, null], // Starts with two empty column slots by default for clean UX
-    features: [
-      { id: 1, name: 'Özel Giriş Mesajı' },
-      { id: 2, name: 'Uçma Yetkisi' },
-      { id: 3, name: 'Renk Değiştirme' }
-    ],
-    cellValues: {}
-  });
+  let { data } = $props();
 
-  const products = [
-    { id: 1, name: 'VIP Üyelik (Aylık)' },
-    { id: 2, name: 'VIP+ Üyelik (Aylık)' },
-    { id: 3, name: 'MVP Üyelik (Aylık)' },
-    { id: 4, name: 'MVP+ Üyelik (Aylık)' },
-    { id: 5, name: '1000 Kredi' },
-    { id: 6, name: 'Kasa Anahtarı x10' }
-  ];
+  // An edit URL whose comparison no longer exists (deleted / stale bookmark):
+  // render an explicit error state instead of silently becoming a create form
+  // whose Kaydet would POST a duplicate (SSR-safe: no toast during init).
+  const comparisonMissing = $derived(!!$page.url.searchParams.get('id') && !data.comparison);
 
-  function toggleProduct(id) {
-    if (comparison.selectedProducts.includes(id)) {
-      comparison.selectedProducts = comparison.selectedProducts.filter(pId => pId !== id);
-    } else {
-      comparison.selectedProducts = [...comparison.selectedProducts, id];
+  function mapComparison(res) {
+    if (!res) {
+      return {
+        name: '',
+        status: 'active',
+        priority: 0,
+        selectedProducts: [null, null], // Starts with two empty column slots by default for clean UX
+        features: [],
+        cellValues: {}
+      };
     }
+    return {
+      name: res.name || '',
+      status: res.status === 'ACTIVE' ? 'active' : 'inactive',
+      priority: res.priority ?? 0,
+      // selectedProducts round-trips with its null column slots preserved.
+      selectedProducts: Array.isArray(res.selectedProducts) ? res.selectedProducts : [null, null],
+      features: Array.isArray(res.features) ? res.features : [],
+      cellValues: res.cellValues && typeof res.cellValues === 'object' ? res.cellValues : {}
+    };
   }
+
+  // Derived directly from load() data so they can never go stale if it re-runs.
+  let comparisonDbId = $derived(data.comparison?.id ?? null);
+  let isEdit = $derived(!!data.comparison);
+  let products = $derived(data.products || []);
+
+  let saving = $state(false);
+
+  // Editable form model, seeded from load() data.
+  // svelte-ignore state_referenced_locally -- intentional init-time seeding; the
+  // effect below re-syncs if load() ever re-runs without a remount.
+  let comparison = $state(mapComparison(data.comparison));
+
+  // Defensive re-sync if load() ever re-runs without a component remount — the
+  // current host remounts on every data change, but that is its private contract.
+  let appliedRecord = null;
+  let recordEffectRan = false;
+  $effect(() => {
+    const record = data.comparison;
+    if (recordEffectRan && record !== appliedRecord) {
+      comparison = mapComparison(record);
+    }
+    recordEffectRan = true;
+    appliedRecord = record;
+  });
 
   function addColumn() {
     comparison.selectedProducts = [...comparison.selectedProducts, null];
@@ -58,71 +118,83 @@
     comparison.features = comparison.features.filter(f => f.id !== id);
   }
 
-  onMount(() => {
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get('id');
-    if (id) {
-      isEdit = true;
-      if (id === '1') {
-        comparison.name = 'VIP Paketleri Karşılaştırması';
-        comparison.selectedProducts = [1, 2, 3, 4];
-        comparison.status = 'active';
-        comparison.priority = 10;
-        comparison.cellValues = {
-          '1-1': 'yes', '1-2': 'yes', '1-3': 'yes', '1-4': 'yes',
-          '2-1': 'no', '2-2': 'yes', '2-3': 'yes', '2-4': 'yes',
-          '3-1': 'no', '3-2': 'no', '3-3': 'yes', '3-4': 'yes',
-        };
-      } else if (id === '2') {
-        comparison.name = 'Kredi Paketleri Karşılaştırması';
-        comparison.selectedProducts = [5, null];
-        comparison.status = 'active';
-        comparison.priority = 5;
-      } else if (id === '3') {
-        comparison.name = 'Kasa Anahtarları';
-        comparison.selectedProducts = [6, null];
-        comparison.status = 'inactive';
-        comparison.priority = 0;
-      }
+  async function handleSave() {
+    if (!comparison.name || !comparison.name.trim()) {
+      showToast($_('pages.create-comparison.toast-title-required'));
+      return;
     }
-  });
 
-  function handleSave() {
-    loading = true;
-    setTimeout(() => {
-      loading = false;
-      alert(isEdit ? 'Karşılaştırma başarıyla güncellendi!' : 'Karşılaştırma başarıyla oluşturuldu!');
-      window.location.href = '/panel/market/comparisons';
-    }, 800);
+    saving = true;
+    try {
+      const body = {
+        name: comparison.name,
+        status: comparison.status === 'active' ? 'ACTIVE' : 'INACTIVE',
+        priority: Number(comparison.priority) || 0,
+        selectedProducts: comparison.selectedProducts,
+        features: comparison.features,
+        cellValues: comparison.cellValues
+      };
+
+      let result;
+      if (comparisonDbId) {
+        result = await ApiUtil.put({ path: `/api/panel/market/comparisons/${comparisonDbId}`, body });
+      } else {
+        result = await ApiUtil.post({ path: '/api/panel/market/comparisons', body });
+      }
+
+      if (result?.error) {
+        showToast($_('pages.create-comparison.toast-error'));
+        return;
+      }
+
+      showToast(isEdit ? $_('pages.create-comparison.toast-updated') : $_('pages.create-comparison.toast-created'));
+      goto(`${base}/market/comparisons`);
+    } catch (e) {
+      console.error('[Market] Failed to save comparison', e);
+      showToast($_('pages.create-comparison.toast-error'));
+    } finally {
+      saving = false;
+    }
   }
 </script>
 
 <MarketLayout>
   {#snippet left()}
     <div class="d-flex align-items-center gap-4">
-      <a href="/panel/market/comparisons" class="btn btn-link text-decoration-none p-0">
+      <a href="{base}/market/comparisons" class="btn btn-link text-decoration-none p-0">
         <i class="fas fa-arrow-left"></i>
-        <span class="ms-2">Karşılaştırmalar</span>
+        <span class="ms-2">{$_('pages.create-comparison.back-link')}</span>
       </a>
     </div>
   {/snippet}
 
   {#snippet right()}
+    {#if !comparisonMissing}
     <div class="hstack gap-1">
-      <button 
-        class="btn btn-secondary ms-2 shadow-sm" 
-        onclick={handleSave} 
-        disabled={loading || !comparison.name}>
-        {#if loading}
+      <button
+        class="btn btn-secondary ms-2 shadow-sm"
+        onclick={handleSave}
+        disabled={saving || !comparison.name}>
+        {#if saving}
           <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
         {:else}
           <i class="fas fa-save"></i>
         {/if}
-        <span class="d-lg-inline d-none ms-2">{isEdit ? 'Kaydet' : 'Oluştur'}</span>
+        <span class="d-lg-inline d-none ms-2">{isEdit ? $_('common.save') : $_('common.create')}</span>
       </button>
     </div>
+    {/if}
   {/snippet}
 
+  {#if comparisonMissing}
+    <div class="card animate__animated animate__fadeIn">
+      <div class="card-body text-center text-body-secondary py-5">
+        <i class="fas fa-circle-exclamation mb-2 fs-3"></i>
+        <div>{$_('pages.create-comparison.not-found')}</div>
+        <a href="{base}/market/comparisons" class="btn btn-secondary mt-3">{$_('pages.create-comparison.back-to-comparisons')}</a>
+      </div>
+    </div>
+  {:else}
   <section class="row g-3">
     <!-- Ana Sütun (Table Matrix Builder) -->
     <div class="col-lg-8">
@@ -135,9 +207,9 @@
                 type="text"
                 class="form-control"
                 id="comparisonName"
-                placeholder="Karşılaştırma Başlığı"
+                placeholder={$_('pages.create-comparison.title-label')}
                 bind:value={comparison.name} />
-              <label for="comparisonName">Karşılaştırma Başlığı</label>
+              <label for="comparisonName">{$_('pages.create-comparison.title-label')}</label>
             </div>
           </div>
         </div>
@@ -149,7 +221,7 @@
               <table class="table table-bordered align-middle mb-0">
                 <thead>
                   <tr>
-                    <th scope="col" style="min-width: 250px;">Özellik Adı</th>
+                    <th scope="col" style="min-width: 250px;">{$_('pages.create-comparison.feature-name-header')}</th>
                     {#each comparison.selectedProducts as prodId, colIndex}
                       <th scope="col" class="text-center" style="min-width: 200px;">
                         <div class="d-flex align-items-center gap-1">
@@ -157,7 +229,7 @@
                             class="form-select text-truncate" 
                             value={prodId || ''} 
                             onchange={(e) => updateColumnProduct(colIndex, e.target.value)}>
-                            <option value="">-- Ürün Seçin --</option>
+                            <option value="">{$_('pages.create-comparison.select-product')}</option>
                             {#each products as prod}
                               <option value={prod.id} disabled={comparison.selectedProducts.includes(prod.id) && prod.id !== prodId}>
                                 {prod.name}
@@ -168,8 +240,8 @@
                             type="button" 
                             class="btn-close" 
                             onclick={() => removeColumn(colIndex)}
-                            title="Sütunu Sil"
-                            aria-label="Sütunu Sil"></button>
+                            title={$_('pages.create-comparison.delete-column')}
+                            aria-label={$_('pages.create-comparison.delete-column')}></button>
                         </div>
                       </th>
                     {/each}
@@ -178,7 +250,7 @@
                         type="button" 
                         class="btn btn-primary d-flex align-items-center justify-content-center mx-auto" 
                         onclick={addColumn}
-                        title="Ürün Sütunu Ekle">
+                        title={$_('pages.create-comparison.add-column')}>
                         <i class="fas fa-plus"></i>
                       </button>
                     </th>
@@ -191,8 +263,8 @@
                         <input 
                           type="text" 
                           class="form-control" 
-                          bind:value={feature.name} 
-                          placeholder="Örn: Uçma Yetkisi" />
+                          bind:value={feature.name}
+                          placeholder={$_('pages.create-comparison.feature-name-placeholder')} />
                       </td>
                       {#each comparison.selectedProducts as prodId}
                         <td class="text-center">
@@ -203,15 +275,15 @@
                                 <input 
                                   type="text" 
                                   class="form-control text-center animate__animated animate__fadeIn animate__fast" 
-                                  placeholder="Örn: 10 GB" 
+                                  placeholder={$_('pages.create-comparison.custom-value-placeholder')}
                                   value={val === 'custom' ? '' : val} 
                                   oninput={(e) => comparison.cellValues[`${feature.id}-${prodId}`] = e.target.value} />
                                 <button 
                                   type="button" 
                                   class="btn-close" 
                                   onclick={() => comparison.cellValues[`${feature.id}-${prodId}`] = 'yes'}
-                                  title="Seçeneğe Geri Dön"
-                                  aria-label="Seçeneğe Geri Dön"></button>
+                                  title={$_('pages.create-comparison.back-to-option')}
+                                  aria-label={$_('pages.create-comparison.back-to-option')}></button>
                               </div>
                             {:else}
                               <select 
@@ -221,11 +293,11 @@
                                 style="max-width: 120px;">
                                 <option value="yes">✔</option>
                                 <option value="no">❌</option>
-                                <option value="custom">Özel Tanım</option>
+                                <option value="custom">{$_('pages.create-comparison.custom-define')}</option>
                               </select>
                             {/if}
                           {:else}
-                            <span class="text-body-secondary font-monospace">- Seçilmemiş -</span>
+                            <span class="text-body-secondary font-monospace">{$_('pages.create-comparison.not-selected')}</span>
                           {/if}
                         </td>
                       {/each}
@@ -234,8 +306,8 @@
                           type="button" 
                           class="btn-close" 
                           onclick={() => removeFeature(feature.id)}
-                          title="Satırı Sil"
-                          aria-label="Satırı Sil"></button>
+                          title={$_('pages.create-comparison.delete-row')}
+                          aria-label={$_('pages.create-comparison.delete-row')}></button>
                       </td>
                     </tr>
                   {/each}
@@ -243,7 +315,7 @@
                   {#if comparison.features.length === 0}
                     <tr>
                       <td colspan={comparison.selectedProducts.length + 2} class="text-center py-4 text-body-secondary">
-                        <span>Henüz hiçbir özellik eklenmemiş.</span>
+                        <span>{$_('pages.create-comparison.empty-features')}</span>
                       </td>
                     </tr>
                   {/if}
@@ -255,7 +327,7 @@
                         type="button" 
                         class="btn btn-primary d-inline-flex align-items-center justify-content-center" 
                         onclick={addFeature}
-                        title="Özellik Satırı Ekle">
+                        title={$_('pages.create-comparison.add-feature')}>
                         <i class="fas fa-plus"></i>
                       </button>
                     </td>
@@ -278,10 +350,10 @@
               <!-- Durum Seçimi -->
               <li class="list-group-item">
                 <div class="row g-0 align-items-center">
-                  <div class="col-6">Durum</div>
+                  <div class="col-6">{$_('common.status')}</div>
                   <div class="col-6 d-flex justify-content-end align-items-center gap-2">
                     <span>
-                      {comparison.status === 'active' ? 'Aktif' : 'Pasif'}
+                      {comparison.status === 'active' ? $_('common.active') : $_('common.inactive')}
                     </span>
                     <div class="form-check form-switch m-0">
                       <input 
@@ -299,7 +371,7 @@
               <!-- Sıralama -->
               <li class="list-group-item">
                 <div class="row g-0 align-items-center">
-                  <div class="col-6">Öncelik</div>
+                  <div class="col-6">{$_('pages.create-comparison.priority')}</div>
                   <div class="col-6">
                     <input 
                       type="number" 
@@ -315,6 +387,7 @@
       </div>
     </div>
   </section>
+  {/if}
 </MarketLayout>
 
 <style>

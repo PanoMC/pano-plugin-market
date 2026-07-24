@@ -2,50 +2,79 @@
   import { DragAndDropZone } from '@panomc/sdk/components/panel';
   import { base } from '@panomc/sdk/svelte';
   import { showToast } from '@panomc/sdk/toasts';
+  import ApiUtil from '@panomc/sdk/utils/api';
   import tooltip from '@panomc/sdk/utils/tooltip';
   import IconPicker from '../IconPicker.svelte';
+  import { _ } from '../../../i18n';
 
-  let { isEdit = false, category = null } = $props();
+  let { isEdit = false, category = null, onSaved = () => {} } = $props();
+
+  // Lowercase form values -> backend MarketStatus enum names.
+  const STATUS_MAP = { active: 'ACTIVE', inactive: 'INACTIVE', hidden: 'HIDDEN' };
 
   let categoryName = $state('');
   let description = $state('');
   let iconClass = $state('fa-folder');
   let categoryColor = $state('#0d6efd');
-  let categoryStatus = $state('active'); // 'active' or 'inactive'
+  let categoryStatus = $state('active'); // 'active', 'inactive' or 'hidden'
+
+  // Preserved on edit so PUT does not reparent/reorder the category.
+  let editParentId = $state(null);
+  let editPosition = $state(null);
 
   let fileInput = $state(null);
   let selectedFile = $state(null);
   let previewUrl = $state(null);
-  let categoryImageUrl = $state('');
+  let imageFileName = $state('');
+  let removeImage = $state(false);
+  let loading = $state(false);
 
-  $effect(() => {
+  function initForm() {
     if (isEdit && category) {
       categoryName = category.name || '';
       description = category.description || '';
       iconClass = category.icon || 'fa-folder';
       categoryColor = category.color || '#0d6efd';
       categoryStatus = category.status || 'active';
-      categoryImageUrl = category.image || '';
+      imageFileName = category.imageFileName || '';
+      editParentId = category.parentId ?? null;
+      editPosition = category.position ?? null;
       previewUrl = null;
       selectedFile = null;
+      removeImage = false;
     } else if (!isEdit) {
       categoryName = '';
       description = '';
       iconClass = 'fa-folder';
       categoryColor = '#0d6efd';
       categoryStatus = 'active';
-      categoryImageUrl = '';
+      imageFileName = '';
+      editParentId = null;
+      editPosition = null;
       previewUrl = null;
       selectedFile = null;
+      removeImage = false;
     }
+  }
+
+  // Re-init when the target category prop changes.
+  $effect(initForm);
+
+  // Also re-init on every open: the page may re-open the modal with the same prop
+  // values (create -> create, or reopening the same row after an abandoned edit),
+  // which would not re-trigger the prop-keyed effect.
+  $effect(() => {
+    const el = document.getElementById('createCategoryModal');
+    if (!el) return;
+    const handler = () => initForm();
+    el.addEventListener('show.bs.modal', handler);
+    return () => el.removeEventListener('show.bs.modal', handler);
   });
 
   let displayImageUrl = $derived(
     previewUrl ||
-      (categoryImageUrl
-        ? categoryImageUrl.startsWith('http')
-          ? categoryImageUrl
-          : `${base}${categoryImageUrl}`
+      (!removeImage && imageFileName
+        ? `${base}/api/panel/market/categories/image/${imageFileName}`
         : null)
   );
 
@@ -54,18 +83,19 @@
     const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
     if (file.size > maxSize) {
-      showToast('Dosya boyutu çok büyük (Maks. 5MB)');
+      showToast($_('modals.category.toast-file-too-large'));
       if (fileInput) fileInput.value = '';
       return;
     }
 
     if (!allowedTypes.includes(file.type)) {
-      showToast('Geçersiz dosya türü (Sadece resim)');
+      showToast($_('modals.category.toast-invalid-file-type'));
       if (fileInput) fileInput.value = '';
       return;
     }
 
     selectedFile = file;
+    removeImage = false;
     const reader = new FileReader();
     reader.onload = (e) => {
       previewUrl = e.target.result;
@@ -83,16 +113,80 @@
   function onRemoveImage() {
     selectedFile = null;
     previewUrl = null;
-    categoryImageUrl = '';
+    removeImage = true;
     if (fileInput) fileInput.value = '';
   }
 
   function handleFileError(event) {
     const { error } = event.detail;
     if (error === 'INVALID_SIZE') {
-      showToast('Dosya boyutu çok büyük (Maks. 5MB)');
+      showToast($_('modals.category.toast-file-too-large'));
     } else if (error === 'INVALID_TYPE') {
-      showToast('Geçersiz dosya türü (Sadece resim)');
+      showToast($_('modals.category.toast-invalid-file-type'));
+    }
+  }
+
+  function closeModal() {
+    const el = document.getElementById('createCategoryModal');
+    if (el && typeof window !== 'undefined' && window.bootstrap) {
+      window.bootstrap.Modal.getOrCreateInstance(el).hide();
+    }
+  }
+
+  async function saveCategory() {
+    if (!categoryName || categoryName.trim() === '') {
+      showToast($_('modals.category.toast-name-required'));
+      return;
+    }
+
+    loading = true;
+
+    try {
+      const formData = new FormData();
+      formData.append('name', categoryName.trim());
+      formData.append('description', description || '');
+      formData.append('icon', iconClass || 'fa-folder');
+      formData.append('color', categoryColor || '#0d6efd');
+      formData.append('status', STATUS_MAP[categoryStatus] || 'ACTIVE');
+
+      if (selectedFile) {
+        formData.append('image', selectedFile);
+      }
+
+      let result;
+      if (isEdit && category) {
+        // Preserve hierarchy: PUT treats a missing parentId as "move to root".
+        if (editParentId !== null && editParentId !== undefined) {
+          formData.append('parentId', editParentId);
+        }
+        if (editPosition !== null && editPosition !== undefined) {
+          formData.append('position', editPosition);
+        }
+        formData.append('removeImage', removeImage);
+
+        result = await ApiUtil.put({
+          path: `/api/panel/market/categories/${category.id}`,
+          body: formData,
+          headers: {},
+        });
+      } else {
+        result = await ApiUtil.post({
+          path: '/api/panel/market/categories',
+          body: formData,
+          headers: {},
+        });
+      }
+
+      if (result.error) throw result.error;
+
+      showToast(isEdit ? $_('modals.category.toast-updated') : $_('modals.category.toast-created'));
+      closeModal();
+      onSaved();
+    } catch (e) {
+      console.error('[Market] Failed to save category', e);
+      showToast($_('modals.category.toast-save-error'));
+    } finally {
+      loading = false;
     }
   }
 </script>
@@ -101,8 +195,8 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="createCategoryModalLabel">{isEdit ? 'Kategori Düzenle' : 'Kategori Oluştur'}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+        <h5 class="modal-title" id="createCategoryModalLabel">{isEdit ? $_('modals.category.title-edit') : $_('modals.category.title-create')}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label={$_('common.close')}></button>
       </div>
       <div class="modal-body pb-3">
         
@@ -116,19 +210,19 @@
                   style="aspect-ratio: 21/9; cursor: pointer;"
                   role="button"
                   tabindex="0"
-                  use:tooltip={['Değiştir', { placement: 'bottom' }]}
+                  use:tooltip={[$_('modals.category.change-image'), { placement: 'bottom' }]}
                   onclick={() => fileInput.click()}
                   onkeydown={(e) => e.key === 'Enter' && fileInput.click()}>
                   <img
                     src={displayImageUrl}
-                    alt="Önizleme"
+                    alt={$_('modals.category.image-preview-alt')}
                     class="w-100 h-100 object-fit-cover" />
                   <div class="preview-overlay position-absolute bottom-0 start-0 w-100 p-3 text-white text-start">
                     <div class="d-flex align-items-center gap-2">
                       <div class="d-flex align-items-center justify-content-center bg-white rounded" style="width: 24px; height: 24px;">
                         <i class="fas {iconClass} fs-6" style="color: {categoryColor};"></i>
                       </div>
-                      <span>{categoryName || 'Kategori Adı'}</span>
+                      <span>{categoryName || $_('modals.category.name-placeholder')}</span>
                     </div>
                   </div>
                 </div>
@@ -136,7 +230,8 @@
                   type="button"
                   class="btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle"
                   style="z-index: 10;"
-                  use:tooltip={['Kaldır', { placement: 'bottom' }]}
+                  use:tooltip={[$_('modals.category.remove-image'), { placement: 'bottom' }]}
+                  aria-label={$_('modals.category.remove-image')}
                   onclick={(e) => { e.stopPropagation(); onRemoveImage(); }}>
                   <i class="fas fa-minus"></i>
                 </button>
@@ -145,8 +240,8 @@
               <DragAndDropZone
                 style="aspect-ratio: 21/9;"
                 icon="fas fa-image fa-2x"
-                title="Kategori Görseli (İsteğe Bağlı)"
-                subtitle="Sürükleyip bırakın veya seçmek için tıklayın"
+                title={$_('modals.category.image-upload-title')}
+                subtitle={$_('modals.category.image-upload-subtitle')}
                 accept={['image/png', 'image/jpeg', 'image/gif', 'image/webp']}
                 maxFileSize={5 * 1024 * 1024}
                 on:drop={(e) => processFile(e.detail)}
@@ -166,14 +261,14 @@
 
         <!-- Category Name -->
         <div class="form-floating mb-3">
-          <input type="text" class="form-control" id="categoryNameInput" bind:value={categoryName} placeholder="Kategori Adı" />
-          <label for="categoryNameInput">Kategori Adı</label>
+          <input type="text" class="form-control" id="categoryNameInput" bind:value={categoryName} placeholder={$_('modals.category.name-placeholder')} />
+          <label for="categoryNameInput">{$_('modals.category.name-placeholder')}</label>
         </div>
 
         <!-- Description -->
         <div class="form-floating mb-3">
-          <textarea class="form-control" id="categoryDescInput" bind:value={description} placeholder="Açıklama" style="height: 80px"></textarea>
-          <label for="categoryDescInput">Açıklama</label>
+          <textarea class="form-control" id="categoryDescInput" bind:value={description} placeholder={$_('modals.category.description')} style="height: 80px"></textarea>
+          <label for="categoryDescInput">{$_('modals.category.description')}</label>
         </div>
 
         <div class="row g-3 mb-3">
@@ -185,34 +280,46 @@
           <!-- Color -->
           <div class="col-sm-5">
             <div class="d-flex align-items-center h-100 gap-2 border rounded p-2 px-3 bg-body-tertiary">
-              <input type="color" class="form-control form-control-color p-0 border-0 bg-transparent" id="categoryColorInput" bind:value={categoryColor} title="Renk Seç" style="width: 32px; height: 32px; cursor: pointer;" />
-              <label for="categoryColorInput" class="form-label mb-0 cursor-pointer">Renk Seç</label>
+              <input type="color" class="form-control form-control-color p-0 border-0 bg-transparent" id="categoryColorInput" bind:value={categoryColor} title={$_('modals.category.pick-color')} style="width: 32px; height: 32px; cursor: pointer;" />
+              <label for="categoryColorInput" class="form-label mb-0 cursor-pointer">{$_('modals.category.pick-color')}</label>
             </div>
           </div>
         </div>
 
         <!-- Status -->
-        <div class="mb-0">
-          <div class="form-check form-switch mt-2 mb-0">
-            <input
-              class="form-check-input cursor-pointer"
-              type="checkbox"
-              role="switch"
-              id="category-status"
-              checked={categoryStatus === 'active'}
-              onchange={(e) => categoryStatus = e.target.checked ? 'active' : 'inactive'} />
-            <label class="form-check-label cursor-pointer user-select-none" for="category-status">
-              Aktif
-            </label>
-          </div>
+        <div class="form-floating mb-0">
+          <select class="form-select" id="category-status" bind:value={categoryStatus}>
+            <option value="active">{$_('common.active')}</option>
+            <option value="inactive">{$_('common.inactive')}</option>
+            <option value="hidden">{$_('common.hidden')}</option>
+          </select>
+          <label for="category-status">{$_('common.status')}</label>
         </div>
 
       </div>
       <div class="modal-footer p-3 pt-3">
         {#if isEdit}
-          <button type="button" class="btn btn-primary w-100 m-0">Kaydet</button>
+          <button
+            type="button"
+            class="btn btn-primary w-100 m-0 d-flex align-items-center justify-content-center gap-2"
+            disabled={loading || !categoryName}
+            onclick={saveCategory}>
+            {#if loading}
+              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+            {/if}
+            {$_('common.save')}
+          </button>
         {:else}
-          <button type="button" class="btn btn-secondary w-100 m-0">Oluştur</button>
+          <button
+            type="button"
+            class="btn btn-secondary w-100 m-0 d-flex align-items-center justify-content-center gap-2"
+            disabled={loading || !categoryName}
+            onclick={saveCategory}>
+            {#if loading}
+              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+            {/if}
+            {$_('common.create')}
+          </button>
         {/if}
       </div>
     </div>

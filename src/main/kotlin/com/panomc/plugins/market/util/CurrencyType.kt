@@ -1,5 +1,5 @@
 package com.panomc.plugins.market.util
 
-enum class CurrencyType {
-    TRY, USD, EUR, GBP
+enum class CurrencyType(val symbol: String) {
+    TRY("₺"), USD("$"), EUR("€"), GBP("£")
 }

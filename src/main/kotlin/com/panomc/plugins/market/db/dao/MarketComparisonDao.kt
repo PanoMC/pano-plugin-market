@@ -16,6 +16,9 @@ abstract class MarketComparisonDao : Dao<MarketComparison>(MarketComparison::cla
 
     abstract suspend fun getAllPaged(page: Long, status: MarketStatus?, search: String?, sqlClient: SqlClient): List<MarketComparison>
 
+    // Public storefront: all comparisons of a given status, unpaged, ordered priority DESC then id DESC.
+    abstract suspend fun getAllByStatus(status: MarketStatus, sqlClient: SqlClient): List<MarketComparison>
+
     abstract suspend fun count(status: MarketStatus?, search: String?, sqlClient: SqlClient): Long
 
     // Resolves product ids to their display names via a raw query on the market_product table

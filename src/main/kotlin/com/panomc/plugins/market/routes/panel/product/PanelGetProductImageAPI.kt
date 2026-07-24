@@ -7,7 +7,6 @@ import com.panomc.platform.model.PanelApi
 import com.panomc.platform.model.Path
 import com.panomc.platform.model.Result
 import com.panomc.platform.model.RouteType
-import com.panomc.platform.util.MimeTypeUtil
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.permission.ManageMarketPermission
@@ -74,10 +73,13 @@ class PanelGetProductImageAPI(
         }
 
         val etag = "\"${product.imageFileName}\""
-        val mimeType = MimeTypeUtil.getMimeTypeFromFileName(file.absolutePath)
+        // Force a safe image Content-Type from the allowlisted stored extension — never svg/html.
+        val mimeType = ImageUtil.getSafeMimeType(file.name)
 
         val response = context.response()
         response.putHeader("Content-Type", mimeType)
+        response.putHeader("Content-Disposition", "inline")
+        response.putHeader("X-Content-Type-Options", "nosniff")
         response.putHeader("ETag", etag)
         response.putHeader("Cache-Control", "public, max-age=$CACHE_TTL_SECONDS, immutable")
 

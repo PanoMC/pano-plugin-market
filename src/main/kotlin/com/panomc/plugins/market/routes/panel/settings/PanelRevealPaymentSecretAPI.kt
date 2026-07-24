@@ -8,6 +8,7 @@ import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.db.dao.MarketPaymentMethodDao
 import com.panomc.plugins.market.error.InvalidPassword
+import com.panomc.plugins.market.log.RevealedMarketPaymentSecretLog
 import com.panomc.plugins.market.permission.ManageMarketPermission
 import com.panomc.plugins.market.util.PaymentMethodCatalog
 import io.vertx.core.json.JsonObject
@@ -71,6 +72,13 @@ class PanelRevealPaymentSecretAPI(
 
         val stored = marketPaymentMethodDao.getByMethodId(methodId, sqlClient)
         val settings = if (stored != null) JsonObject(stored.settings) else JsonObject()
+
+        // Audit the disclosure of live gateway secrets (records only the method id, never the secret
+        // values), mirroring the mutation logs so secret reveals are traceable.
+        databaseManager.panelActivityLogDao.add(
+            RevealedMarketPaymentSecretLog(userId, username, methodId, plugin.pluginId),
+            sqlClient
+        )
 
         return Successful(mapOf("settings" to settings))
     }

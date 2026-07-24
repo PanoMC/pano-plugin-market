@@ -17,6 +17,8 @@ abstract class MarketCategoryDao : Dao<MarketCategory>(MarketCategory::class.jav
 
     abstract suspend fun getAll(search: String?, sqlClient: SqlClient): List<MarketCategory>
 
+    abstract suspend fun getNamesByIds(ids: List<Long>, sqlClient: SqlClient): Map<Long, String>
+
     abstract suspend fun getMaxPosition(parentId: Long?, sqlClient: SqlClient): Int
 
     abstract suspend fun updateParentAndPosition(id: Long, parentId: Long?, position: Int, sqlClient: SqlClient)

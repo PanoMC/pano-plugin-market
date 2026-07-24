@@ -15,6 +15,10 @@ abstract class MarketProductDao : Dao<MarketProduct>(MarketProduct::class.java) 
 
     abstract suspend fun getBySlug(slug: String, sqlClient: SqlClient): MarketProduct?
 
+    // Public storefront listing: only ACTIVE products, ordered priority DESC then name ASC.
+    // (Duration-window and category-visibility filtering happen in the handler.)
+    abstract suspend fun getVisibleProducts(sqlClient: SqlClient): List<MarketProduct>
+
     abstract suspend fun getByImageFileName(imageFileName: String, sqlClient: SqlClient): MarketProduct?
 
     abstract suspend fun getAllPaged(page: Long, search: String?, status: String?, sqlClient: SqlClient): List<MarketProduct>

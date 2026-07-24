@@ -36,6 +36,7 @@ class MarketOrderDaoImpl : MarketOrderDao() {
                               `status` VARCHAR(16) NOT NULL DEFAULT 'PENDING',
                               `createdAt` BIGINT(20) NOT NULL,
                               `updatedAt` BIGINT(20) NOT NULL,
+                              `exchangeRate` DOUBLE,
                               PRIMARY KEY (`id`),
                               INDEX (`userId`),
                               INDEX (`status`, `createdAt`)
@@ -143,6 +144,15 @@ class MarketOrderDaoImpl : MarketOrderDao() {
             .coAwait()
     }
 
+    override suspend fun updateExchangeRate(id: Long, exchangeRate: Double, sqlClient: SqlClient) {
+        val query = "UPDATE `${getTablePrefix() + tableName}` SET `exchangeRate` = ?, `updatedAt` = ? WHERE `id` = ?"
+
+        sqlClient
+            .preparedQuery(query)
+            .execute(Tuple.of(exchangeRate, System.currentTimeMillis(), id))
+            .coAwait()
+    }
+
     override suspend fun anonymizeByUserId(userId: Long, sqlClient: SqlClient) {
         val query = "UPDATE `${getTablePrefix() + tableName}` SET `userId` = NULL WHERE `userId` = ?"
 
@@ -152,41 +162,47 @@ class MarketOrderDaoImpl : MarketOrderDao() {
             .coAwait()
     }
 
-    override suspend fun countAndRevenueBetween(from: Long, to: Long, sqlClient: SqlClient): Pair<Long, Long> {
+    // Per-order conversion factor: frozen rate if set, otherwise the currency-based fallback
+    // (statsCurrency -> 1.0, salesCurrency -> the current view rate, otherwise 1.0). Bind order:
+    // statsCurrency, salesCurrency, exchangeRate.
+    private val conversionFactor =
+        "COALESCE(`exchangeRate`, CASE WHEN `currency` = ? THEN 1.0 WHEN `currency` = ? THEN ? ELSE 1.0 END)"
+
+    override suspend fun countAndRevenueBetween(from: Long, to: Long, statsCurrency: String, salesCurrency: String, exchangeRate: Double, sqlClient: SqlClient): Pair<Long, Double> {
         val query =
-            "SELECT COUNT(`id`), COALESCE(SUM(`totalPrice`), 0) FROM `${getTablePrefix() + tableName}` WHERE `status` = ? AND `createdAt` >= ? AND `createdAt` < ?"
+            "SELECT COUNT(`id`), COALESCE(SUM(`totalPrice` * $conversionFactor), 0) AS revenue FROM `${getTablePrefix() + tableName}` WHERE `status` = ? AND `createdAt` >= ? AND `createdAt` < ?"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
-            .execute(Tuple.of(OrderStatus.COMPLETED.name, from, to))
+            .execute(Tuple.of(statsCurrency, salesCurrency, exchangeRate, OrderStatus.COMPLETED.name, from, to))
             .coAwait()
 
         val row = rows.toList()[0]
-        return row.getLong(0) to row.getLong(1)
+        return row.getLong(0) to (row.getDouble("revenue") / 100.0)
     }
 
-    override suspend fun revenueByDay(from: Long, to: Long, sqlClient: SqlClient): Map<String, Long> =
-        revenueGrouped("%Y-%m-%d", from, to, sqlClient)
+    override suspend fun revenueByDay(from: Long, to: Long, statsCurrency: String, salesCurrency: String, exchangeRate: Double, sqlClient: SqlClient): Map<String, Double> =
+        revenueGrouped("%Y-%m-%d", from, to, statsCurrency, salesCurrency, exchangeRate, sqlClient)
 
-    override suspend fun revenueByWeek(from: Long, to: Long, sqlClient: SqlClient): Map<String, Long> =
-        revenueGrouped("%x%v", from, to, sqlClient)
+    override suspend fun revenueByWeek(from: Long, to: Long, statsCurrency: String, salesCurrency: String, exchangeRate: Double, sqlClient: SqlClient): Map<String, Double> =
+        revenueGrouped("%x%v", from, to, statsCurrency, salesCurrency, exchangeRate, sqlClient)
 
-    override suspend fun revenueByMonth(from: Long, to: Long, sqlClient: SqlClient): Map<String, Long> =
-        revenueGrouped("%Y-%m", from, to, sqlClient)
+    override suspend fun revenueByMonth(from: Long, to: Long, statsCurrency: String, salesCurrency: String, exchangeRate: Double, sqlClient: SqlClient): Map<String, Double> =
+        revenueGrouped("%Y-%m", from, to, statsCurrency, salesCurrency, exchangeRate, sqlClient)
 
-    private suspend fun revenueGrouped(format: String, from: Long, to: Long, sqlClient: SqlClient): Map<String, Long> {
+    private suspend fun revenueGrouped(format: String, from: Long, to: Long, statsCurrency: String, salesCurrency: String, exchangeRate: Double, sqlClient: SqlClient): Map<String, Double> {
         val query =
-            "SELECT DATE_FORMAT(FROM_UNIXTIME(`createdAt` / 1000), '$format') AS bucket, COALESCE(SUM(`totalPrice`), 0) AS revenue" +
+            "SELECT DATE_FORMAT(FROM_UNIXTIME(`createdAt` / 1000), '$format') AS bucket, COALESCE(SUM(`totalPrice` * $conversionFactor), 0) AS revenue" +
                     " FROM `${getTablePrefix() + tableName}` WHERE `status` = ? AND `createdAt` >= ? AND `createdAt` < ?" +
                     " GROUP BY bucket ORDER BY bucket ASC"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
-            .execute(Tuple.of(OrderStatus.COMPLETED.name, from, to))
+            .execute(Tuple.of(statsCurrency, salesCurrency, exchangeRate, OrderStatus.COMPLETED.name, from, to))
             .coAwait()
 
-        val result = LinkedHashMap<String, Long>()
-        rows.forEach { row -> result[row.getString("bucket")] = row.getLong("revenue") }
+        val result = LinkedHashMap<String, Double>()
+        rows.forEach { row -> result[row.getString("bucket")] = row.getDouble("revenue") / 100.0 }
         return result
     }
 

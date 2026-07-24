@@ -10,6 +10,7 @@ import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.log.UpdatedMarketSettingsLog
 import com.panomc.plugins.market.permission.ManageMarketPermission
 import com.panomc.plugins.market.util.CurrencyType
+import com.panomc.plugins.market.util.ExchangeRateMode
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
@@ -49,6 +50,10 @@ class PanelUpdateMarketSettingsAPI(
                         .optionalProperty("storeName", stringSchema())
                         .optionalProperty("storeDescription", stringSchema())
                         .optionalProperty("currency", enumSchema(*CurrencyType.entries.map { it.name }.toTypedArray()))
+                        .optionalProperty("statsCurrency", enumSchema(*CurrencyType.entries.map { it.name }.toTypedArray()))
+                        .optionalProperty("exchangeRateMode", enumSchema(*ExchangeRateMode.entries.map { it.name }.toTypedArray()))
+                        .optionalProperty("exchangeRate", numberSchema())
+                        .optionalProperty("exchangeRateAutoIntervalHours", intSchema())
                         .optionalProperty("vatPercent", numberSchema())
                         .optionalProperty("showVatInPrice", booleanSchema())
                         .optionalProperty("testMode", booleanSchema())
@@ -57,8 +62,10 @@ class PanelUpdateMarketSettingsAPI(
                         .optionalProperty("removeCents", booleanSchema())
                         .optionalProperty("showBestsellers", booleanSchema())
                         .optionalProperty("showFeaturedProducts", booleanSchema())
+                        .optionalProperty("showComparisons", booleanSchema())
                         .optionalProperty("sendEmailAfterPurchase", booleanSchema())
                         .optionalProperty("combineDiscountsAndCoupons", booleanSchema())
+                        .allowAdditionalProperties(false)
                 )
             )
             .build()
@@ -67,6 +74,10 @@ class PanelUpdateMarketSettingsAPI(
         authProvider.requirePermission(ManageMarketPermission(), context)
 
         val body = context.body().asJsonObject()
+        // Defence-in-depth: `version` drives config migrations and must never be settable through the
+        // API. The schema already rejects unknown keys, but strip it explicitly in case it is ever
+        // added as a declared property.
+        body.remove("version")
 
         val merged = JsonObject.mapFrom(configManager.config).mergeIn(body)
         configManager.saveConfig(merged)

@@ -50,7 +50,7 @@ class PanelUpdateGiftAPI(
                         .optionalProperty("productIds", arraySchema())
                         .optionalProperty("startDate", numberSchema())
                         .optionalProperty("expiryDate", numberSchema())
-                        .optionalProperty("status", enumSchema(*MarketStatus.entries.map { it.name }.toTypedArray()))
+                        .optionalProperty("status", enumSchema(MarketStatus.ACTIVE.name, MarketStatus.INACTIVE.name))
                 )
             )
             .predicate(RequestPredicate.BODY_REQUIRED)

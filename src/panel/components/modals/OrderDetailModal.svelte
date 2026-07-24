@@ -4,7 +4,7 @@
   import ApiUtil from '@panomc/sdk/utils/api';
   import { _ } from '../../../i18n';
 
-  let { orderId = null, currencySymbol = '₺', onUpdated = () => {} } = $props();
+  let { orderId = null, currencySymbol = '', onUpdated = () => {} } = $props();
 
   // Currency code -> symbol. An order can carry a currency different from the
   // current sales currency (historical orders), so the total is shown in the
@@ -75,6 +75,13 @@
     }
   }
 
+  function closeModal() {
+    const el = document.getElementById('orderDetailModal');
+    if (el && typeof window !== 'undefined' && window.bootstrap) {
+      window.bootstrap.Modal.getOrCreateInstance(el).hide();
+    }
+  }
+
   // Fetch on every open: the modal is mounted once and reused for each row.
   $effect(() => {
     const el = document.getElementById('orderDetailModal');
@@ -101,7 +108,11 @@
       if (res && res.error) throw new Error(res.error);
 
       showToast($_('modals.order-detail.toast-rate-updated'));
-      await fetchOrder();
+      // Close the modal first: onUpdated() navigates with invalidateAll, which
+      // remounts the whole plugin page (and would destroy this modal, leaving an
+      // orphan backdrop). Closing here avoids that and drops the now-pointless
+      // in-place refetch.
+      closeModal();
       onUpdated();
     } catch (e) {
       console.error('[Market] Failed to update order exchange rate', e);
@@ -127,7 +138,9 @@
       }
 
       showToast($_('modals.order-detail.toast-rate-refreshed'));
-      await fetchOrder();
+      // Close before navigating (onUpdated -> invalidateAll remount) so the modal
+      // isn't torn out mid-render and no orphan backdrop is left behind.
+      closeModal();
       onUpdated();
     } catch (e) {
       console.error('[Market] Failed to refresh order exchange rate', e);
@@ -175,7 +188,7 @@
             <dt class="col-4 text-body-secondary fw-normal">{$_('modals.order-detail.items')}</dt>
             <dd class="col-8">
               <div class="d-flex flex-wrap gap-1">
-                {#each order.items || [] as item}
+                {#each order.items || [] as item, i (item.id ?? i)}
                   <span class="badge text-bg-primary">
                     {item.productName}{#if item.quantity && item.quantity > 1}<span class="ms-1 opacity-75">×{item.quantity}</span>{/if}
                   </span>

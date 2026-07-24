@@ -4,7 +4,7 @@
 export const ICON_CATEGORIES = [
   {
     key: 'popular',
-    label: 'Popüler',
+    label: 'components.icon-picker.categories.popular',
     icons: [
       'fa-star', 'fa-crown', 'fa-gem', 'fa-trophy', 'fa-medal', 'fa-award',
       'fa-fire', 'fa-bolt', 'fa-rocket', 'fa-gift', 'fa-tag', 'fa-tags',
@@ -13,7 +13,7 @@ export const ICON_CATEGORIES = [
   },
   {
     key: 'money',
-    label: 'Para & Mağaza',
+    label: 'components.icon-picker.categories.money',
     icons: [
       'fa-coins', 'fa-money-bill', 'fa-money-bill-wave', 'fa-money-bill-trend-up',
       'fa-dollar-sign', 'fa-euro-sign', 'fa-sterling-sign', 'fa-yen-sign',
@@ -24,7 +24,7 @@ export const ICON_CATEGORIES = [
   },
   {
     key: 'game',
-    label: 'Oyun & Sunucu',
+    label: 'components.icon-picker.categories.game',
     icons: [
       'fa-cube', 'fa-cubes', 'fa-cubes-stacked', 'fa-gamepad', 'fa-dice',
       'fa-dice-d20', 'fa-dice-d6', 'fa-chess', 'fa-chess-knight', 'fa-chess-king',
@@ -35,7 +35,7 @@ export const ICON_CATEGORIES = [
   },
   {
     key: 'items',
-    label: 'Eşyalar',
+    label: 'components.icon-picker.categories.items',
     icons: [
       'fa-key', 'fa-lock', 'fa-lock-open', 'fa-box', 'fa-box-open', 'fa-boxes-stacked',
       'fa-treasure-chest', 'fa-bag-shopping', 'fa-suitcase', 'fa-briefcase',
@@ -45,7 +45,7 @@ export const ICON_CATEGORIES = [
   },
   {
     key: 'weapons',
-    label: 'Silahlar & Savaş',
+    label: 'components.icon-picker.categories.weapons',
     icons: [
       'fa-shield', 'fa-shield-halved', 'fa-shield-heart', 'fa-khanda',
       'fa-gun', 'fa-hammer', 'fa-screwdriver', 'fa-screwdriver-wrench',
@@ -56,7 +56,7 @@ export const ICON_CATEGORIES = [
   },
   {
     key: 'cosmetic',
-    label: 'Kozmetik',
+    label: 'components.icon-picker.categories.cosmetic',
     icons: [
       'fa-shirt', 'fa-hat-cowboy', 'fa-mask', 'fa-paint-roller', 'fa-paintbrush',
       'fa-palette', 'fa-droplet', 'fa-spray-can', 'fa-spray-can-sparkles',
@@ -66,7 +66,7 @@ export const ICON_CATEGORIES = [
   },
   {
     key: 'user',
-    label: 'Kullanıcı & Rol',
+    label: 'components.icon-picker.categories.user',
     icons: [
       'fa-user', 'fa-user-plus', 'fa-user-tie', 'fa-user-shield', 'fa-user-secret',
       'fa-user-ninja', 'fa-user-astronaut', 'fa-user-graduate', 'fa-user-group',
@@ -76,7 +76,7 @@ export const ICON_CATEGORIES = [
   },
   {
     key: 'food',
-    label: 'Yiyecek',
+    label: 'components.icon-picker.categories.food',
     icons: [
       'fa-apple-whole', 'fa-carrot', 'fa-bread-slice', 'fa-pizza-slice',
       'fa-burger', 'fa-hotdog', 'fa-cookie', 'fa-cookie-bite',
@@ -86,7 +86,7 @@ export const ICON_CATEGORIES = [
   },
   {
     key: 'nature',
-    label: 'Doğa & Hayvan',
+    label: 'components.icon-picker.categories.nature',
     icons: [
       'fa-tree', 'fa-seedling', 'fa-leaf', 'fa-clover', 'fa-spa',
       'fa-cat', 'fa-dog', 'fa-fish', 'fa-horse', 'fa-cow',
@@ -96,7 +96,7 @@ export const ICON_CATEGORIES = [
   },
   {
     key: 'tech',
-    label: 'Teknoloji',
+    label: 'components.icon-picker.categories.tech',
     icons: [
       'fa-microchip', 'fa-memory', 'fa-hard-drive', 'fa-database', 'fa-server',
       'fa-cloud', 'fa-cloud-arrow-up', 'fa-cloud-arrow-down', 'fa-wifi',
@@ -106,7 +106,7 @@ export const ICON_CATEGORIES = [
   },
   {
     key: 'symbols',
-    label: 'Semboller',
+    label: 'components.icon-picker.categories.symbols',
     icons: [
       'fa-circle', 'fa-square', 'fa-triangle-exclamation', 'fa-diamond',
       'fa-heart', 'fa-bookmark', 'fa-bell', 'fa-bell-slash',

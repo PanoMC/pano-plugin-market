@@ -16,21 +16,26 @@ abstract class MarketOrderDao : Dao<MarketOrder>(MarketOrder::class.java) {
 
     abstract suspend fun updateStatus(id: Long, status: OrderStatus, sqlClient: SqlClient)
 
+    abstract suspend fun updateExchangeRate(id: Long, exchangeRate: Double, sqlClient: SqlClient)
+
     abstract suspend fun anonymizeByUserId(userId: Long, sqlClient: SqlClient)
 
-    // Stats aggregates — COMPLETED orders only. Money columns stay x100 Longs; the endpoint converts.
+    // Stats aggregates — COMPLETED orders only. Revenue is converted per-order into the stats
+    // currency inside the query (frozen `exchangeRate` when present, else the currency-based
+    // fallback: statsCurrency -> 1.0, salesCurrency -> the current view rate, otherwise 1.0) and
+    // returned as decimal stats-currency amounts (the x100 minor units are divided out).
 
-    /** COUNT and SUM(totalPrice) of COMPLETED orders with createdAt in [from, to). */
-    abstract suspend fun countAndRevenueBetween(from: Long, to: Long, sqlClient: SqlClient): Pair<Long, Long>
+    /** COUNT and converted stats-currency revenue of COMPLETED orders with createdAt in [from, to). */
+    abstract suspend fun countAndRevenueBetween(from: Long, to: Long, statsCurrency: String, salesCurrency: String, exchangeRate: Double, sqlClient: SqlClient): Pair<Long, Double>
 
-    /** COMPLETED revenue grouped by calendar day, keyed 'yyyy-MM-dd', ascending. */
-    abstract suspend fun revenueByDay(from: Long, to: Long, sqlClient: SqlClient): Map<String, Long>
+    /** COMPLETED converted revenue grouped by calendar day, keyed 'yyyy-MM-dd', ascending. */
+    abstract suspend fun revenueByDay(from: Long, to: Long, statsCurrency: String, salesCurrency: String, exchangeRate: Double, sqlClient: SqlClient): Map<String, Double>
 
-    /** COMPLETED revenue grouped by ISO week, keyed 'YYYYWW', ascending. */
-    abstract suspend fun revenueByWeek(from: Long, to: Long, sqlClient: SqlClient): Map<String, Long>
+    /** COMPLETED converted revenue grouped by ISO week, keyed 'YYYYWW', ascending. */
+    abstract suspend fun revenueByWeek(from: Long, to: Long, statsCurrency: String, salesCurrency: String, exchangeRate: Double, sqlClient: SqlClient): Map<String, Double>
 
-    /** COMPLETED revenue grouped by month, keyed 'yyyy-MM', ascending. */
-    abstract suspend fun revenueByMonth(from: Long, to: Long, sqlClient: SqlClient): Map<String, Long>
+    /** COMPLETED converted revenue grouped by month, keyed 'yyyy-MM', ascending. */
+    abstract suspend fun revenueByMonth(from: Long, to: Long, statsCurrency: String, salesCurrency: String, exchangeRate: Double, sqlClient: SqlClient): Map<String, Double>
 
     /** COMPLETED order count grouped by paymentLabel, descending. */
     abstract suspend fun paymentMethodDistribution(sqlClient: SqlClient): Map<String, Long>

@@ -143,6 +143,25 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
         return rows.toEntities()
     }
 
+    override suspend fun getNamesByIds(ids: List<Long>, sqlClient: SqlClient): Map<Long, String> {
+        if (ids.isEmpty()) return emptyMap()
+
+        val placeholders = ids.joinToString(", ") { "?" }
+        val query = "SELECT `id`, `name` FROM `${getTablePrefix() + tableName}` WHERE `id` IN ($placeholders)"
+
+        val params = Tuple.tuple()
+        ids.forEach { params.addLong(it) }
+
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery(query)
+            .execute(params)
+            .coAwait()
+
+        val names = mutableMapOf<Long, String>()
+        rows.forEach { names[it.getLong("id")] = it.getString("name") }
+        return names
+    }
+
     override suspend fun getMaxPosition(parentId: Long?, sqlClient: SqlClient): Int {
         val query =
             "SELECT MAX(`position`) FROM `${getTablePrefix() + tableName}` WHERE `parentId` <=> ?"

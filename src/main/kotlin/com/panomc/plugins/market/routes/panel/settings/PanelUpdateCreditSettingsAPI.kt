@@ -49,6 +49,7 @@ class PanelUpdateCreditSettingsAPI(
                         .optionalProperty("creditName", stringSchema())
                         .optionalProperty("cashbackPercent", numberSchema())
                         .optionalProperty("onlyAcceptCredits", booleanSchema())
+                        .allowAdditionalProperties(false)
                 )
             )
             .build()
@@ -57,6 +58,10 @@ class PanelUpdateCreditSettingsAPI(
         authProvider.requirePermission(ManageMarketPermission(), context)
 
         val body = context.body().asJsonObject()
+        // Defence-in-depth: `version` drives config migrations and must never be settable through the
+        // API. The schema already rejects unknown keys, but strip it explicitly in case it is ever
+        // added as a declared property.
+        body.remove("version")
 
         val merged = JsonObject.mapFrom(configManager.config).mergeIn(body)
         configManager.saveConfig(merged)

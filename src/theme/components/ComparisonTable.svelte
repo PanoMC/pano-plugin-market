@@ -8,7 +8,7 @@
           {#each columns as col (col.id)}
             <th scope="col" class="text-center" style="min-width: 140px;">
               <div class="fw-semibold text-truncate">{col.name}</div>
-              <div class="small text-body-secondary">{formatPrice(col.price, settings.currencySymbol)}</div>
+              <div class="small text-body-secondary">{formatPrice(col.price, settings)}</div>
             </th>
           {/each}
         </tr>
@@ -18,15 +18,16 @@
           <tr>
             <th scope="row" class="fw-normal">{feature.name}</th>
             {#each columns as col (col.id)}
+              {@const key = `${feature.id}-${col.id}`}
+              <!-- Missing and empty-string cells both mean "yes", matching the panel editor. -->
+              {@const val = (comparison.cellValues || {})[key] || 'yes'}
               <td class="text-center">
-                {@const key = `${feature.id}-${col.id}`}
-                {@const val = key in (comparison.cellValues || {}) ? comparison.cellValues[key] : 'yes'}
                 {#if val === 'yes'}
-                  <i class="fa-solid fa-check text-success" aria-label={$_('theme.store.comparison-yes')}></i>
+                  <i class="fa-solid fa-check text-success" role="img" aria-label={$_('theme.store.comparison-yes')}></i>
                 {:else if val === 'no'}
-                  <i class="fa-solid fa-xmark text-danger" aria-label={$_('theme.store.comparison-no')}></i>
+                  <i class="fa-solid fa-xmark text-danger" role="img" aria-label={$_('theme.store.comparison-no')}></i>
                 {:else}
-                  <span>{val || '—'}</span>
+                  <span>{val}</span>
                 {/if}
               </td>
             {/each}

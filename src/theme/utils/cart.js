@@ -23,10 +23,10 @@ function readInitial() {
         (item) =>
           item &&
           typeof item.productId === 'number' &&
-          typeof item.quantity === 'number' &&
-          item.quantity > 0
+          typeof item.quantity === 'number'
       )
-      .map((item) => ({ productId: item.productId, quantity: Math.floor(item.quantity) }));
+      .map((item) => ({ productId: item.productId, quantity: Math.floor(item.quantity) }))
+      .filter((item) => item.quantity > 0);
   } catch (e) {
     return [];
   }
@@ -44,15 +44,21 @@ if (browser) {
   });
 }
 
-export function addToCart(productId, quantity = 1) {
+export function addToCart(productId, quantity = 1, stock = null) {
   cart.update((items) => {
+    // Client-side stock cap (a null/undefined stock means unlimited). The future
+    // checkout API must still re-validate quantities server-side.
+    const cap = typeof stock === 'number' ? stock : Infinity;
     const existing = items.find((item) => item.productId === productId);
     if (existing) {
       return items.map((item) =>
-        item.productId === productId ? { ...item, quantity: item.quantity + quantity } : item
+        item.productId === productId
+          ? { ...item, quantity: Math.min(item.quantity + quantity, cap) }
+          : item
       );
     }
-    return [...items, { productId, quantity }];
+    if (Math.min(quantity, cap) < 1) return items;
+    return [...items, { productId, quantity: Math.min(quantity, cap) }];
   });
 }
 

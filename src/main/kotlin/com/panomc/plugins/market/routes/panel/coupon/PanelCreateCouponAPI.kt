@@ -53,7 +53,7 @@ class PanelCreateCouponAPI(
                         .optionalProperty("expiryDate", numberSchema())
                         .optionalProperty("redeemLimit", numberSchema())
                         .optionalProperty("customerRedeemLimit", numberSchema())
-                        .optionalProperty("status", enumSchema(*MarketStatus.entries.map { it.name }.toTypedArray()))
+                        .optionalProperty("status", enumSchema(MarketStatus.ACTIVE.name, MarketStatus.INACTIVE.name))
                 )
             )
             .predicate(RequestPredicate.BODY_REQUIRED)

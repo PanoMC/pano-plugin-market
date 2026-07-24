@@ -7,6 +7,7 @@ import com.panomc.platform.error.NotFound
 import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.db.dao.MarketProductDao
+import com.panomc.plugins.market.db.model.MarketProduct
 import com.panomc.plugins.market.log.CreatedMarketProductLog
 import com.panomc.plugins.market.permission.ManageMarketPermission
 import com.panomc.plugins.market.util.ImageUtil

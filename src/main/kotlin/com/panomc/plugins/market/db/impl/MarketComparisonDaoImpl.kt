@@ -131,6 +131,18 @@ class MarketComparisonDaoImpl : MarketComparisonDao() {
         return rows.toEntities()
     }
 
+    override suspend fun getAllByStatus(status: MarketStatus, sqlClient: SqlClient): List<MarketComparison> {
+        val query =
+            "SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}` WHERE `status` = ? ORDER BY `priority` DESC, `id` DESC"
+
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery(query)
+            .execute(Tuple.of(status.name))
+            .coAwait()
+
+        return rows.toEntities()
+    }
+
     override suspend fun count(status: MarketStatus?, search: String?, sqlClient: SqlClient): Long {
         val query = StringBuilder("SELECT COUNT(`id`) FROM `${getTablePrefix() + tableName}` WHERE 1=1")
         val params = Tuple.tuple()

@@ -3,6 +3,7 @@ package com.panomc.plugins.market.db.impl
 import com.panomc.platform.annotation.Dao
 import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.model.MarketProduct
+import com.panomc.plugins.market.util.MarketStatus
 import io.vertx.core.json.JsonArray
 import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.mysqlclient.MySQLClient
@@ -156,6 +157,18 @@ class MarketProductDaoImpl : MarketProductDao() {
             .coAwait()
 
         return rows.toEntities().getOrNull(0)
+    }
+
+    override suspend fun getVisibleProducts(sqlClient: SqlClient): List<MarketProduct> {
+        val query =
+            "SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}` WHERE `status` = ? ORDER BY `priority` DESC, `name` ASC"
+
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery(query)
+            .execute(Tuple.of(MarketStatus.ACTIVE.name))
+            .coAwait()
+
+        return rows.toEntities()
     }
 
     override suspend fun getByImageFileName(imageFileName: String, sqlClient: SqlClient): MarketProduct? {

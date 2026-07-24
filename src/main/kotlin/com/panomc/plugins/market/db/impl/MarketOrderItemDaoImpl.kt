@@ -81,19 +81,39 @@ class MarketOrderItemDaoImpl : MarketOrderItemDao() {
         return rows.toEntities()
     }
 
-    override suspend fun topProductsBetween(from: Long, to: Long, limit: Int, sqlClient: SqlClient): List<Pair<String, Long>> {
+    override suspend fun topProductsBetween(from: Long, to: Long, limit: Int, statsCurrency: String, salesCurrency: String, exchangeRate: Double, sqlClient: SqlClient): List<Pair<String, Double>> {
+        // Per-order conversion factor: frozen rate if set, else the currency-based fallback. Bind
+        // order: statsCurrency, salesCurrency, exchangeRate.
+        val conversionFactor =
+            "COALESCE(o.`exchangeRate`, CASE WHEN o.`currency` = ? THEN 1.0 WHEN o.`currency` = ? THEN ? ELSE 1.0 END)"
+
         val query =
-            "SELECT i.`productName` AS name, COALESCE(SUM(i.`quantity` * i.`unitPrice`), 0) AS revenue" +
+            "SELECT i.`productName` AS name, COALESCE(SUM(i.`quantity` * i.`unitPrice` * $conversionFactor), 0) AS revenue" +
                     " FROM `${getTablePrefix() + tableName}` i INNER JOIN `$orderTableName` o ON i.`orderId` = o.`id`" +
                     " WHERE o.`status` = ? AND o.`createdAt` >= ? AND o.`createdAt` < ?" +
                     " GROUP BY i.`productName` ORDER BY revenue DESC LIMIT ?"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
-            .execute(Tuple.of(OrderStatus.COMPLETED.name, from, to, limit))
+            .execute(Tuple.of(statsCurrency, salesCurrency, exchangeRate, OrderStatus.COMPLETED.name, from, to, limit))
             .coAwait()
 
-        return rows.map { row -> row.getString("name") to row.getLong("revenue") }
+        return rows.map { row -> row.getString("name") to (row.getDouble("revenue") / 100.0) }
+    }
+
+    override suspend fun topProductIds(limit: Int, sqlClient: SqlClient): List<Long> {
+        val query =
+            "SELECT i.`productId` AS productId, SUM(i.`quantity`) AS sold" +
+                    " FROM `${getTablePrefix() + tableName}` i INNER JOIN `$orderTableName` o ON i.`orderId` = o.`id`" +
+                    " WHERE o.`status` = ? AND i.`productId` IS NOT NULL" +
+                    " GROUP BY i.`productId` ORDER BY sold DESC LIMIT ?"
+
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery(query)
+            .execute(Tuple.of(OrderStatus.COMPLETED.name, limit))
+            .coAwait()
+
+        return rows.map { it.getLong("productId") }
     }
 
     override suspend fun uninstall(sqlClient: SqlClient) {

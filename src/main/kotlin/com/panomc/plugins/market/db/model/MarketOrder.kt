@@ -14,4 +14,5 @@ open class MarketOrder(
     val status: OrderStatus = OrderStatus.PENDING,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
+    val exchangeRate: Double? = null,
 ) : DBEntity()

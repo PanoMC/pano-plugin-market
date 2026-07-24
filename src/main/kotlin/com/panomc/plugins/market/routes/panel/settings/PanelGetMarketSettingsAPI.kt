@@ -70,8 +70,12 @@ class PanelGetMarketSettingsAPI(
             )
         }
 
-        val response = JsonObject.mapFrom(configManager.config)
+        val config = configManager.config
+
+        val response = JsonObject.mapFrom(config)
             .put("paymentMethods", paymentMethods)
+            .put("currencySymbol", config.currency.symbol)
+            .put("statsCurrencySymbol", config.statsCurrency.symbol)
 
         return Successful(response.map)
     }

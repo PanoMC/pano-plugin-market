@@ -85,6 +85,13 @@ class PanelCreateCategoryAPI(
             throw BadRequest()
         }
 
+        // The color is interpolated into an inline style on the storefront — accept
+        // only a strict hex color so no arbitrary CSS can be injected.
+        val color = data.getString("color")
+        if (color != null && !color.matches(HEX_COLOR_REGEX)) {
+            throw BadRequest()
+        }
+
         validateImage(fileUpload)
 
         val sqlClient = databaseManager.getSqlClient()
@@ -102,14 +109,13 @@ class PanelCreateCategoryAPI(
             name = name,
             description = data.getString("description"),
             icon = data.getString("icon") ?: "fa-folder",
-            color = data.getString("color") ?: "#0d6efd",
+            color = color ?: "#0d6efd",
             status = data.getString("status")?.let { MarketStatus.valueOf(it) } ?: MarketStatus.ACTIVE,
             parentId = parentId,
             position = position,
             imageFileName = imageFileName
         )
 
-        val sqlClient = databaseManager.getSqlClient()
         val id = marketCategoryDao.add(category, sqlClient)
 
         val userId = authProvider.getUserIdFromRoutingContext(context)
@@ -123,21 +129,26 @@ class PanelCreateCategoryAPI(
         return Successful(mapOf("id" to id))
     }
 
+    private companion object {
+        private val HEX_COLOR_REGEX = Regex("^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+    }
+
     private fun validateImage(fileUpload: FileUpload?) {
         if (fileUpload != null) {
             if (fileUpload.size() > 5 * 1024 * 1024) {
                 throw BadRequest()
             }
 
-            val allowedTypes = listOf("image/webp", "image/jpeg", "image/png", "image/gif")
-            if (!allowedTypes.contains(fileUpload.contentType())) {
+            // The multipart Content-Type header is client-controlled; the magic-byte sniff is authoritative.
+            if (ImageUtil.detectImageExtension(File(fileUpload.uploadedFileName())) == null) {
                 throw BadRequest()
             }
         }
     }
 
     private fun saveUploadedFile(fileUpload: FileUpload): String {
-        val extension = fileUpload.fileName().split(".").last()
+        // Extension comes from the sniffed byte signature, never from the client-supplied filename.
+        val extension = ImageUtil.detectImageExtension(File(fileUpload.uploadedFileName())) ?: throw BadRequest()
         val fileName =
             "category-${System.currentTimeMillis()}-${fileUpload.uploadedFileName().split(File.separator).last()}.$extension"
         val destFile = File(plugin.uploadsDir, fileName)

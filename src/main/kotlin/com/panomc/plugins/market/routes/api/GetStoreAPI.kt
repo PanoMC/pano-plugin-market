@@ -91,16 +91,19 @@ class GetStoreAPI(
 
         // ACTIVE comparisons; raw JSON blobs decoded verbatim (productIds may contain null slots).
         // The front-end resolves ids against the products list and drops any that are not visible.
+        // Gated behind the config toggle, mirroring bestsellers.
         val comparisons = JsonArray()
-        marketComparisonDao.getAllByStatus(MarketStatus.ACTIVE, sqlClient).forEach { comparison ->
-            comparisons.add(
-                JsonObject()
-                    .put("id", comparison.id)
-                    .put("name", comparison.name)
-                    .put("productIds", JsonArray(comparison.productIds))
-                    .put("features", JsonArray(comparison.features))
-                    .put("cellValues", JsonObject(comparison.cellValues))
-            )
+        if (config.showComparisons) {
+            marketComparisonDao.getAllByStatus(MarketStatus.ACTIVE, sqlClient).forEach { comparison ->
+                comparisons.add(
+                    JsonObject()
+                        .put("id", comparison.id)
+                        .put("name", comparison.name)
+                        .put("productIds", JsonArray(comparison.productIds))
+                        .put("features", JsonArray(comparison.features))
+                        .put("cellValues", JsonObject(comparison.cellValues))
+                )
+            }
         }
 
         val settings = JsonObject()
@@ -110,8 +113,10 @@ class GetStoreAPI(
             .put("currencySymbol", config.currency.symbol)
             .put("creditsEnabled", config.creditsEnabled)
             .put("creditName", config.creditName)
+            .put("removeCents", config.removeCents)
             .put("showBestsellers", config.showBestsellers)
             .put("showFeaturedProducts", config.showFeaturedProducts)
+            .put("showComparisons", config.showComparisons)
 
         return Successful(
             mapOf(

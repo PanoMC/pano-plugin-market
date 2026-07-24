@@ -8,7 +8,6 @@ import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.permission.ManageMarketPermission
-import com.panomc.plugins.market.util.MarketStatus
 import com.panomc.plugins.market.util.MoneyUtil
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -17,7 +16,6 @@ import io.vertx.ext.web.validation.ValidationHandler
 import io.vertx.ext.web.validation.builder.Parameters.optionalParam
 import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
-import io.vertx.json.schema.common.dsl.Schemas.enumSchema
 import io.vertx.json.schema.common.dsl.Schemas.numberSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 import kotlin.math.ceil
@@ -41,7 +39,7 @@ class PanelGetProductsAPI(
         ValidationHandlerBuilder.create(schemaRepository)
             .queryParameter(optionalParam("page", numberSchema()))
             .queryParameter(optionalParam("search", stringSchema()))
-            .queryParameter(optionalParam("status", enumSchema(MarketStatus.ACTIVE.name, MarketStatus.INACTIVE.name)))
+            .queryParameter(optionalParam("status", stringSchema()))
             .build()
 
     override suspend fun handle(context: RoutingContext): Result {

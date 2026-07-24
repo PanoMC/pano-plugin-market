@@ -28,10 +28,10 @@
             </div>
             <div class="col-md-7 vstack gap-3">
               <div class="d-flex flex-wrap gap-2 align-items-center">
-                <span class="fs-4 fw-bold">{formatPrice(product.price, settings.currencySymbol)}</span>
+                <span class="fs-4 fw-bold">{formatPrice(product.price, settings)}</span>
                 {#if settings.creditsEnabled && product.creditPrice > 0}
                   <span class="badge text-bg-info">
-                    <i class="fa-solid fa-coins me-1"></i>{product.creditPrice} {settings.creditName}
+                    <i class="fa-solid fa-coins me-1"></i>{product.creditPrice} {settings.creditName || $_('theme.store.credits')}
                   </span>
                 {/if}
                 {#if product.featured}
@@ -100,7 +100,23 @@
       modalInstance = new window.bootstrap.Modal(modalEl);
       modalEl.addEventListener('hidden.bs.modal', () => dispatch('close'));
     }
-    return () => modalInstance?.dispose();
+    return () => {
+      // Bootstrap's hide() animates asynchronously; during a client-side
+      // navigation the modal element is torn out before the transition ends,
+      // which both throws (Bootstrap touching removed nodes) and leaves the
+      // body scroll-locked with an orphaned backdrop. Dispose synchronously
+      // and scrub Bootstrap's global side effects by hand instead.
+      try {
+        modalInstance?.dispose();
+      } catch (e) {
+        /* element already detached */
+      }
+      modalInstance = null;
+      document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+      document.body.classList.remove('modal-open');
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('padding-right');
+    };
   });
 
   // Show whenever a product is selected; the parent nulls `product` on close.
@@ -108,7 +124,7 @@
 
   function add() {
     if (!product || product.stock === 0) return;
-    addToCart(product.id, 1);
+    addToCart(product.id, 1, product.stock);
     showToast(`plugins.${pluginId}.theme.store.added-to-cart`);
   }
 </script>

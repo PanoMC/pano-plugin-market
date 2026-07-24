@@ -88,4 +88,13 @@ class PanelCreateComparisonAPI(
 
         return Successful(mapOf("id" to id))
     }
+
+    // cellValues holds yes | no | arbitrary custom text — validated only as length-capped strings, never an enum.
+    private fun validateCellValues(cellValues: JsonObject) {
+        cellValues.forEach { (_, value) ->
+            if (value !is String || value.length > 500) {
+                throw BadRequest()
+            }
+        }
+    }
 }

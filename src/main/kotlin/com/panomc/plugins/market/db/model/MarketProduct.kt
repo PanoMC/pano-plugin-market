@@ -28,6 +28,7 @@ open class MarketProduct(
     val actions: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
-    // Resolved via a LEFT JOIN in getAllPaged only; @Ignore keeps it out of the column projection.
-    @Ignore val categoryName: String? = null,
+    // Resolved via a LEFT JOIN in getAllPaged only; @field:Ignore forces the annotation onto the
+    // backing field so the host Dao.fields projection (which reads field.declaredAnnotations) skips it.
+    @field:Ignore val categoryName: String? = null,
 ) : DBEntity()

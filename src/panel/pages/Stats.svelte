@@ -1,7 +1,64 @@
+<script module>
+  import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
+
+  /**
+   * @type {import("@sveltejs/kit").PageLoad}
+   */
+  export async function load(event) {
+    const {
+      parent,
+      url: { searchParams }
+    } = event;
+    const { pageTitle } = await parent();
+
+    pageTitle.set('plugins.pano-plugin-market.pages.stats.title');
+
+    const view = searchParams.get('view') === 'chart' ? 'chart' : 'table';
+
+    // The recent-sales widget's page + search live in the URL (?page= / ?search=)
+    // alongside the ?view= toggle; load() reads them and fetches the orders list.
+    const pageNum = parseInt(searchParams.get('page')) || 1;
+    const search = searchParams.get('search');
+
+    const fetchOrders = (p) =>
+      ApiUtil.get({
+        path:
+          '/api/panel/market/orders' +
+          buildQueryParams({ page: p === 1 ? null : p, search }),
+        request: event
+      });
+
+    let effectivePage = pageNum;
+    let [statsRes, ordersRes] = await Promise.all([
+      ApiUtil.get({ path: '/api/panel/market/stats', request: event }),
+      fetchOrders(pageNum)
+    ]);
+
+    // A stale ?page= (bookmark / back button) can point past the last page; fall
+    // back to page 1 with the same search instead of showing an empty widget.
+    if (ordersRes?.error === 'PAGE_NOT_FOUND' && pageNum > 1) {
+      effectivePage = 1;
+      ordersRes = await fetchOrders(1);
+    }
+
+    return {
+      data: {
+        view,
+        page: effectivePage,
+        search: search || '',
+        stats: statsRes && !statsRes.error ? statsRes : null,
+        orders: ordersRes && !ordersRes.error ? ordersRes.orders || [] : [],
+        totalPage: ordersRes && !ordersRes.error ? ordersRes.totalPage || 1 : 1
+      }
+    };
+  }
+</script>
+
 <script>
   import MarketLayout from '../layouts/MarketLayout.svelte';
-  import { CardHeader, CardFilters, CardFiltersItem, Pagination, SearchInput } from '@panomc/sdk/components/panel';
   import { _ } from '../../i18n';
+  import { CardHeader, CardFilters, CardFiltersItem, Pagination, SearchInput, NoContent, Date as DateComponent } from '@panomc/sdk/components/panel';
+  import { base, page as pageStore, goto } from '@panomc/sdk/svelte';
   import {
     Chart,
     LineController,
@@ -29,54 +86,129 @@
     ArcElement
   );
 
-  let view = $state('table'); // table | chart
-  let page = $state(1);
-  let search = $state('');
+  let { data } = $props();
+
+  // 'table' | 'chart' — the URL (?view=) is the source of truth; load() parses it.
+  let view = $derived(data.view);
+
+  // Recent-sales page + search are read from the URL that produced load()'s data,
+  // so the address bar stays deep-linkable and the back button is correct.
+  let page = $derived(data.page || 1);
+  let search = $derived(data.search || '');
   let isSearching = $state(false);
 
-  // Persistence: Get from URL on load
-  import { onMount } from 'svelte';
-  onMount(() => {
-    const params = new URLSearchParams(window.location.search);
-    const v = params.get('view');
-    if (v === 'table' || v === 'chart') {
-      view = v;
-    }
-  });
+  // Stats summary + chart data from GET /stats (loaded in load())
+  const stats = $derived(data.stats); // { summary, charts, statsCurrency, statsCurrencySymbol }
 
-  // Persistence: Update URL when view changes
-  $effect(() => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.get('view') !== view) {
-      url.searchParams.set('view', view);
-      window.history.replaceState({}, '', url);
-    }
-  });
+  // STATS-currency symbol from the /stats response; all revenue values from the
+  // backend are already converted into the stats currency (do NOT convert again).
+  const statsCurrencySymbol = $derived(stats?.statsCurrencySymbol || '');
 
-  // Mock data for design
-  const summaryStats = {
-    weekly: { count: 154, revenue: '1,250.00 ₺', color: '#6c757d', previous: 140, trend: 'up' },
-    monthly: { count: 642, revenue: '5,400.00 ₺', color: '#0dcaf0', previous: 700, trend: 'down' },
-    total: { count: 12450, revenue: '125,000.00 ₺', color: '#0d6efd', previous: 11000, trend: 'up' }
+  // Latest sales table (reuses GET /orders): data comes from load() and
+  // re-derives whenever it re-runs; search/pagination navigate via the URL.
+  let orders = $derived(data.orders);
+  let totalPage = $derived(data.totalPage);
+
+  // Recent-sales rows carry each order's OWN currency (raw, un-converted amounts),
+  // so they display with the order's currency symbol — NOT the stats symbol, which
+  // is only correct for the backend-converted summary/chart figures.
+  const CURRENCY_SYMBOLS = { TRY: '₺', USD: '$', EUR: '€', GBP: '£' };
+
+  const COLORS = { weekly: '#6c757d', monthly: '#0dcaf0', total: '#0d6efd' };
+  const PAYMENT_PALETTE = ['#0d6efd', '#0dcaf0', '#ffc107', '#6c757d', '#198754', '#dc3545', '#6610f2'];
+
+  // backend OrderStatus name -> badge display
+  const ORDER_STATUS = {
+    COMPLETED: { label: 'pages.stats.order-status.completed', cls: 'text-bg-success' },
+    REFUNDED: { label: 'pages.stats.order-status.refunded', cls: 'text-bg-danger' },
+    PENDING: { label: 'pages.stats.order-status.pending', cls: 'text-bg-warning' },
+    FAILED: { label: 'pages.stats.order-status.failed', cls: 'text-bg-danger' }
   };
 
-  const latestSales = [
-    { id: 1050, player: 'Kemal', products: ['100 Kredi'], price: '10.00 ₺', date: 'Bugün, 16:10', payment: 'Kredi Kartı: Tebex', status: 'success' },
-    { id: 1049, player: 'Ahmet', products: ['VIP+ (Limitsiz)', 'Giriş Mesajı', 'Özel Kanat', 'Efekt Paketi'], price: '350.00 ₺', date: 'Bugün, 15:55', payment: 'EFT: Havale', status: 'success' },
-    { id: 1048, player: 'Mehmet', products: ['Kasa Anahtarı x10'], price: '45.00 ₺', date: 'Bugün, 15:30', payment: 'Mobil Ödeme', status: 'danger' },
-    { id: 1047, player: 'Okan', products: ['500 Kredi'], price: '50.00 ₺', date: 'Bugün, 14:50', payment: 'Kredi Kartı: Shopier', status: 'success' },
-    { id: 1046, player: 'Can', products: ['VIP (Aylık)'], price: '45.00 ₺', date: 'Bugün, 14:35', payment: 'Kredi Kartı: Stripe', status: 'success' },
-    { id: 1045, player: 'Selim', products: ['VIP+ (Aylık)'], price: '75.00 ₺', date: 'Bugün, 14:20', payment: 'EFT: Havale', status: 'success' },
-    { id: 1044, player: 'Cihan', products: ['1000 Kredi', 'Ek Renk'], price: '110.00 ₺', date: 'Bugün, 12:45', payment: 'Kredi Kartı: Tebex', status: 'success' },
-    { id: 1043, player: 'Eren', products: ['Kasa Anahtarı x5'], price: '25.00 ₺', date: 'Dün, 23:10', payment: 'Mobil Ödeme', status: 'success' },
-    { id: 1042, player: 'Yavuz', products: ['VIP (Limitsiz)'], price: '250.00 ₺', date: 'Dün, 18:30', payment: 'Kredi Kartı: Shopier', status: 'success' },
-    { id: 1041, player: 'Mert', products: ['İsim Değiştirme'], price: '15.00 ₺', date: '2 gün önce', payment: 'EFT: Havale', status: 'danger' }
-  ];
+  function formatMoney(value, symbol) {
+    const formatted = (Number(value) || 0).toLocaleString('tr-TR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+    return symbol ? `${formatted} ${symbol}` : formatted;
+  }
+
+  const summaryStats = $derived.by(() => {
+    const s = stats?.summary;
+    const block = (b, color) => ({
+      count: b?.count ?? 0,
+      revenue: formatMoney(b?.revenue ?? 0, statsCurrencySymbol),
+      color,
+      change: Math.abs(Math.round(b?.trend ?? 0)),
+      trend: (b?.trend ?? 0) >= 0 ? 'up' : 'down',
+      spark: b?.spark ?? []
+    });
+    return {
+      weekly: block(s?.weekly, COLORS.weekly),
+      monthly: block(s?.monthly, COLORS.monthly),
+      total: block(s?.total, COLORS.total)
+    };
+  });
+
+  // View toggle goes through the router (replaceState keeps history clean and
+  // $page in sync — raw window.history.replaceState would desync SvelteKit);
+  // the default 'table' keeps the URL param-free.
+  function setView(next) {
+    if (next === view) return;
+    const params = $pageStore.url.searchParams;
+    goto(
+      $pageStore.url.pathname +
+        buildQueryParams({
+          view: next === 'chart' ? 'chart' : null,
+          // Preserve the recent-sales paging/search so toggling views doesn't
+          // silently reset the list back to page 1 with no search.
+          page: params.get('page'),
+          search: params.get('search')
+        }),
+      { replaceState: true, keepFocus: true, noscroll: true }
+    );
+  }
+
+  // Navigate to the same route with the recent-sales page/search encoded in the
+  // URL (the ?view= toggle is preserved) so load() re-runs with the new params.
+  // The panel host remounts the plugin page on every load() re-run ({#key data});
+  // that remount is the accepted cost of URL-driven navigation here.
+  async function navigate({ page: pageNum = page, search: searchVal = search } = {}) {
+    isSearching = true;
+
+    const queryParams = buildQueryParams({
+      view: view === 'chart' ? 'chart' : null,
+      page: pageNum && pageNum !== 1 ? pageNum : null,
+      search: searchVal ? searchVal.trim() || null : null
+    });
+
+    await goto(`${base}/market${queryParams}`, {
+      invalidateAll: true,
+      keepFocus: true,
+      noscroll: true
+    });
+  }
+
+  // Re-initialize Bootstrap popovers whenever the rows change (load() re-run).
+  $effect(() => {
+    const unused = orders;
+    if (typeof window !== 'undefined' && window.bootstrap) {
+      let popovers = [];
+      const timer = setTimeout(() => {
+        const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+        popovers = [...popoverTriggerList].map((el) => new window.bootstrap.Popover(el));
+      }, 50);
+      return () => {
+        clearTimeout(timer);
+        popovers.forEach((p) => p.dispose());
+      };
+    }
+  });
 
   let weeklyChartElement = $state();
   let monthlyChartElement = $state();
   let totalChartElement = $state();
-  
+
   let salesWeeklyChartElement = $state();
   let salesMonthlyChartElement = $state();
   let topProductsChartElement = $state();
@@ -86,7 +218,7 @@
   let salesWeeklyChart, salesMonthlyChart, topProductsChart, paymentMethodsChart;
 
   function onPageClick(pageNum) {
-    page = pageNum;
+    navigate({ page: pageNum });
   }
 
   function copyToClipboard(text) {
@@ -121,90 +253,114 @@
     });
   }
 
+  // ISO week key "YYYYWW" -> "WW. Hafta"
+  function weekLabel(key) {
+    return $_('pages.stats.week-label', { values: { week: parseInt(String(key).slice(-2), 10) } });
+  }
 
-  
   function initCharts() {
-    // 1 Week Sales Chart
+    const charts = stats?.charts;
+    if (!charts) return;
+
+    // 1 Week Sales Chart (last 8 ISO weeks)
     if (salesWeeklyChartElement) {
       if (salesWeeklyChart) salesWeeklyChart.destroy();
       salesWeeklyChart = new Chart(salesWeeklyChartElement, {
         type: 'line',
         data: {
-          labels: ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'],
+          labels: (charts.weeklyRevenue?.labels || []).map(weekLabel),
           datasets: [{
-            label: 'Son 7 Gün (₺)',
-            data: [120, 190, 300, 250, 420, 580, 490],
+            label: $_('pages.stats.chart.weekly-revenue'),
+            data: charts.weeklyRevenue?.values || [],
             borderColor: '#0d6efd',
             backgroundColor: '#0d6efd20',
             fill: true,
             tension: 0.4
           }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx) => formatMoney(ctx.parsed.y, statsCurrencySymbol) } }
+          }
+        }
       });
     }
 
-    // 1 Month Sales Chart
+    // 1 Month Sales Chart (last 6 months)
     if (salesMonthlyChartElement) {
       if (salesMonthlyChart) salesMonthlyChart.destroy();
       salesMonthlyChart = new Chart(salesMonthlyChartElement, {
         type: 'line',
         data: {
-          labels: ['1. Hafta', '2. Hafta', '3. Hafta', '4. Hafta'],
+          labels: charts.monthlyRevenue?.labels || [],
           datasets: [{
-            label: 'Son 30 Gün (₺)',
-            data: [1200, 1900, 1500, 2400],
+            label: $_('pages.stats.chart.monthly-revenue'),
+            data: charts.monthlyRevenue?.values || [],
             borderColor: '#0dcaf0',
             backgroundColor: '#0dcaf020',
             fill: true,
             tension: 0.4
           }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx) => formatMoney(ctx.parsed.y, statsCurrencySymbol) } }
+          }
+        }
       });
     }
 
-    // En Çok Satılan Ürünler Chart
+    // En Çok Satılan Ürünler Chart (revenue per product)
     if (topProductsChartElement) {
       if (topProductsChart) topProductsChart.destroy();
       topProductsChart = new Chart(topProductsChartElement, {
         type: 'bar',
         data: {
-          labels: ['VIP+', 'Kredi', 'Kasa', 'Renk', 'İsim'],
+          labels: charts.topProducts?.labels || [],
           datasets: [{
-            label: 'Satış Adedi',
-            data: [45, 82, 36, 24, 12],
+            label: $_('pages.stats.chart.revenue'),
+            data: charts.topProducts?.values || [],
             backgroundColor: '#0d6efd',
             borderRadius: 6
           }]
         },
-        options: { 
-          responsive: true, 
-          maintainAspectRatio: false, 
-          plugins: { legend: { display: false } },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx) => formatMoney(ctx.parsed.y, statsCurrencySymbol) } }
+          },
           scales: { y: { beginAtZero: true } }
         }
       });
     }
 
-    // En Çok Kullanılan Ödeme Yöntemi Chart
+    // En Çok Kullanılan Ödeme Yöntemi Chart (order counts)
     if (paymentMethodsChartElement) {
       if (paymentMethodsChart) paymentMethodsChart.destroy();
+      const pmLabels = charts.paymentMethods?.labels || [];
       paymentMethodsChart = new Chart(paymentMethodsChartElement, {
         type: 'doughnut',
         data: {
-          labels: ['Kredi Kartı', 'EFT/Havale', 'Mobil Ödeme', 'Stripe'],
+          labels: pmLabels,
           datasets: [{
-            data: [55, 25, 15, 5],
-            backgroundColor: ['#0d6efd', '#0dcaf0', '#ffc107', '#6c757d'],
+            data: charts.paymentMethods?.values || [],
+            backgroundColor: pmLabels.map((_, i) => PAYMENT_PALETTE[i % PAYMENT_PALETTE.length]),
             borderWidth: 0
           }]
         },
-        options: { 
-          responsive: true, 
-          maintainAspectRatio: false, 
-          plugins: { 
-            legend: { display: false } 
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
           },
           cutout: '70%'
         }
@@ -212,17 +368,15 @@
     }
   }
 
-
-
   $effect(() => {
-    if (weeklyChartElement && !weeklyChart) {
-      weeklyChart = createSparkline(weeklyChartElement, [10, 15, 8, 12, 20, 18, 25], summaryStats.weekly.color);
+    if (weeklyChartElement && !weeklyChart && summaryStats.weekly.spark.length) {
+      weeklyChart = createSparkline(weeklyChartElement, summaryStats.weekly.spark, COLORS.weekly);
     }
-    if (monthlyChartElement && !monthlyChart) {
-      monthlyChart = createSparkline(monthlyChartElement, [100, 120, 110, 140, 130, 160, 150, 180], summaryStats.monthly.color);
+    if (monthlyChartElement && !monthlyChart && summaryStats.monthly.spark.length) {
+      monthlyChart = createSparkline(monthlyChartElement, summaryStats.monthly.spark, COLORS.monthly);
     }
-    if (totalChartElement && !totalChart) {
-      totalChart = createSparkline(totalChartElement, [1000, 2000, 3500, 5000, 7500, 90000, 110000, 125000], summaryStats.total.color);
+    if (totalChartElement && !totalChart && summaryStats.total.spark.length) {
+      totalChart = createSparkline(totalChartElement, summaryStats.total.spark, COLORS.total);
     }
 
     return () => {
@@ -236,8 +390,7 @@
   });
 
   $effect(() => {
-    console.log('Current view changed:', view);
-    if (view === 'chart') {
+    if (view === 'chart' && stats) {
       // Use requestAnimationFrame to ensure DOM is updated
       const raf = requestAnimationFrame(() => {
         if (salesWeeklyChartElement || salesMonthlyChartElement || topProductsChartElement || paymentMethodsChartElement) {
@@ -268,15 +421,15 @@
         <div class="card-body p-0 d-flex flex-column">
            <div class="p-3 pb-2">
               <div class="d-flex justify-content-between align-items-start">
-                <p class="card-text mb-1 small">Bu Haftanın Satışları</p>
+                <p class="card-text mb-1 small">{$_('pages.stats.summary.weekly-title')}</p>
                 <div class="d-flex align-items-center gap-1 small opacity-75">
                   <i class="fas fa-arrow-{summaryStats.weekly.trend === 'up' ? 'up' : 'down'}"></i>
-                  <span>{summaryStats.weekly.previous}</span>
+                  <span>%{summaryStats.weekly.change}</span>
                 </div>
               </div>
               <div class="d-flex align-items-baseline gap-2">
                 <h3 class="mb-0">{summaryStats.weekly.revenue}</h3>
-                <span class="small">{summaryStats.weekly.count} Satış</span>
+                <span class="small">{$_('pages.stats.summary.sales-count', { values: { count: summaryStats.weekly.count } })}</span>
               </div>
            </div>
           <div style="height: 60px; min-height: 60px; width: 100%; margin-top: auto;">
@@ -292,15 +445,15 @@
         <div class="card-body p-0 d-flex flex-column">
            <div class="p-3 pb-2">
               <div class="d-flex justify-content-between align-items-start">
-                <p class="card-text mb-1 small">Bu Ayın Satışları</p>
+                <p class="card-text mb-1 small">{$_('pages.stats.summary.monthly-title')}</p>
                 <div class="d-flex align-items-center gap-1 small opacity-75">
                   <i class="fas fa-arrow-{summaryStats.monthly.trend === 'up' ? 'up' : 'down'}"></i>
-                  <span>{summaryStats.monthly.previous}</span>
+                  <span>%{summaryStats.monthly.change}</span>
                 </div>
               </div>
               <div class="d-flex align-items-baseline gap-2">
                 <h3 class="mb-0">{summaryStats.monthly.revenue}</h3>
-                <span class="small">{summaryStats.monthly.count} Satış</span>
+                <span class="small">{$_('pages.stats.summary.sales-count', { values: { count: summaryStats.monthly.count } })}</span>
               </div>
            </div>
           <div style="height: 60px; min-height: 60px; width: 100%; margin-top: auto;">
@@ -316,15 +469,15 @@
         <div class="card-body p-0 d-flex flex-column">
            <div class="p-3 pb-2">
               <div class="d-flex justify-content-between align-items-start">
-                <p class="card-text mb-1 small">Toplam Satış</p>
+                <p class="card-text mb-1 small">{$_('pages.stats.summary.total-title')}</p>
                 <div class="d-flex align-items-center gap-1 small opacity-75">
                   <i class="fas fa-arrow-{summaryStats.total.trend === 'up' ? 'up' : 'down'}"></i>
-                  <span>{summaryStats.total.previous}</span>
+                  <span>%{summaryStats.total.change}</span>
                 </div>
               </div>
               <div class="d-flex align-items-baseline gap-2">
                 <h3 class="mb-0">{summaryStats.total.revenue}</h3>
-                <span class="small">{summaryStats.total.count} Satış</span>
+                <span class="small">{$_('pages.stats.summary.sales-count', { values: { count: summaryStats.total.count } })}</span>
               </div>
            </div>
           <div style="height: 60px; min-height: 60px; width: 100%; margin-top: auto;">
@@ -339,7 +492,7 @@
   <div class="card">
     <CardHeader>
       <div slot="left">
-        Son Satışlar
+        {$_('pages.stats.recent-sales')}
       </div>
       <div slot="middle" style="width: 250px;">
         {#if view === 'table'}
@@ -347,18 +500,15 @@
             initialValue={search}
             searching={isSearching}
             debounceMs={500}
-            onchange={(e) => {
-              search = e;
-              console.log('Searching for:', search);
-            }} />
+            onchange={(e) => navigate({ search: e, page: 1 })} />
         {/if}
       </div>
       <CardFilters slot="right">
-        <CardFiltersItem button onclick={() => view = 'table'} active={view === 'table'}>
-          Tablo
+        <CardFiltersItem button onclick={() => setView('table')} active={view === 'table'}>
+          {$_('pages.stats.view.table')}
         </CardFiltersItem>
-        <CardFiltersItem button onclick={() => view = 'chart'} active={view === 'chart'}>
-          Grafik
+        <CardFiltersItem button onclick={() => setView('chart')} active={view === 'chart'}>
+          {$_('pages.stats.view.chart')}
         </CardFiltersItem>
       </CardFilters>
     </CardHeader>
@@ -369,7 +519,7 @@
           <!-- Weekly Sales -->
           <div class="col-md-6">
             <div class="d-flex align-items-center gap-2 mb-3">
-              <h6 class="mb-0">Haftalık Satış Grafiği</h6>
+              <h6 class="mb-0">{$_('pages.stats.chart.weekly-heading')}</h6>
             </div>
             <div class="p-3  border rounded-3" style="height: 280px;">
               <canvas bind:this={salesWeeklyChartElement}></canvas>
@@ -379,7 +529,7 @@
           <!-- Monthly Sales -->
           <div class="col-md-6">
             <div class="d-flex align-items-center gap-2 mb-3">
-              <h6 class="mb-0">Aylık Satış Grafiği</h6>
+              <h6 class="mb-0">{$_('pages.stats.chart.monthly-heading')}</h6>
             </div>
             <div class="p-3  border rounded-3" style="height: 280px;">
               <canvas bind:this={salesMonthlyChartElement}></canvas>
@@ -389,7 +539,7 @@
           <!-- Top Products -->
           <div class="col-md-6">
             <div class="d-flex align-items-center gap-2 mb-3">
-              <h6 class="mb-0">En Çok Satılan Ürünler</h6>
+              <h6 class="mb-0">{$_('pages.stats.chart.top-products-heading')}</h6>
             </div>
             <div class="p-3  border rounded-3" style="height: 280px;">
               <canvas bind:this={topProductsChartElement}></canvas>
@@ -399,7 +549,7 @@
           <!-- Payment Methods -->
           <div class="col-md-6">
             <div class="d-flex align-items-center gap-2 mb-3">
-              <h6 class="mb-0">En Çok Kullanılan Ödeme Yöntemleri</h6>
+              <h6 class="mb-0">{$_('pages.stats.chart.payment-methods-heading')}</h6>
             </div>
             <div class="p-3  border rounded-3" style="height: 280px;">
               <canvas bind:this={paymentMethodsChartElement}></canvas>
@@ -408,73 +558,81 @@
         </div>
       </div>
     {:else}
+      {#if orders.length === 0}
+        <NoContent />
+      {:else}
       <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
           <thead>
             <tr>
-              <th class="ps-3" style="width: 120px;">Satış ID</th>
-              <th>Oyuncu</th>
-              <th>Ürün</th>
-              <th>Fiyat</th>
-              <th>Ödeme Yöntemi</th>
-              <th>Durum</th>
-              <th class="pe-3">Tarih</th>
+              <th class="ps-3" style="width: 120px;">{$_('pages.stats.table.sale-id')}</th>
+              <th>{$_('pages.stats.table.player')}</th>
+              <th>{$_('pages.stats.table.product')}</th>
+              <th>{$_('pages.stats.table.price')}</th>
+              <th>{$_('pages.stats.table.payment-method')}</th>
+              <th>{$_('common.status')}</th>
+              <th class="pe-3">{$_('pages.stats.table.date')}</th>
             </tr>
           </thead>
           <tbody>
-            {#each latestSales as sale}
+            {#each orders as order (order.id)}
+              {@const products = (order.items || []).map((i) => i.productName)}
               <tr>
                 <td class="ps-3">
-                  <button 
+                  <button
                     type="button"
-                    class="btn btn-link p-0 text-decoration-none font-monospace user-select-all cursor-pointer focus-ring rounded border-0" 
-                    title="Kopyala"
-                    onclick={() => copyToClipboard(sale.id)}>
-                    #{sale.id}
+                    class="btn btn-link p-0 text-decoration-none font-monospace user-select-all cursor-pointer focus-ring rounded border-0"
+                    title={$_('pages.stats.copy')}
+                    onclick={() => copyToClipboard(order.id)}>
+                    #{order.id}
                   </button>
                 </td>
                 <td>
-                  <a href="/players/{sale.player}" class="text-decoration-none d-flex align-items-center focus-ring rounded" title="Görüntüle">
-                    <img src="https://minotar.net/avatar/{sale.player}/24" class="rounded-circle me-2" style="width: 24px; height: 24px;" alt={sale.player} />
-                    <span>{sale.player}</span>
-                  </a>
+                  {#if order.playerUsername}
+                    <a href="{base}/players/detail/{order.playerUsername}" class="text-decoration-none d-flex align-items-center focus-ring rounded" title={$_('pages.stats.view-title')}>
+                      <img src="https://minotar.net/avatar/{order.playerUsername}/24" class="rounded-circle me-2" style="width: 24px; height: 24px;" alt={order.playerUsername} />
+                      <span>{order.playerUsername}</span>
+                    </a>
+                  {:else}
+                    <span class="text-body-secondary">-</span>
+                  {/if}
                 </td>
                 <td>
                   <div class="d-flex flex-wrap gap-1 align-items-center">
-                    {#if sale.products.length > 0}
-                      <span class="badge text-bg-primary focus-ring rounded" title="Görüntüle">
-                        {sale.products[0]}
+                    {#if products.length > 0}
+                      <span class="badge text-bg-primary focus-ring rounded" title={$_('pages.stats.view-title')}>
+                        {products[0]}
                       </span>
-                      {#if sale.products.length > 1}
-                        <span 
-                          class="badge text-bg-secondary cursor-help rounded-pill" 
+                      {#if products.length > 1}
+                        <span
+                          class="badge text-bg-secondary cursor-help rounded-pill"
                           data-bs-toggle="popover"
                           data-bs-trigger="hover focus"
                           data-bs-placement="top"
                           data-bs-html="true"
-                          data-bs-content={sale.products.slice(1).map(p => `<span class='badge text-bg-primary me-1'>${p}</span>`).join('')}>
-                          +{sale.products.length - 1}
+                          data-bs-content={products.slice(1).map(p => `<span class='badge text-bg-primary me-1'>${p}</span>`).join('')}>
+                          +{products.length - 1}
                         </span>
                       {/if}
                     {/if}
                   </div>
                 </td>
                 <td>
-                  <span class="badge text-bg-secondary focus-ring rounded" title="Düzenle">
-                    {sale.price}
+                  <span class="badge text-bg-secondary focus-ring rounded" title={$_('common.edit')}>
+                    {formatMoney(order.totalPrice, CURRENCY_SYMBOLS[order.currency] || '')}
                   </span>
                 </td>
                 <td>
-                  {sale.payment}
+                  {order.paymentLabel || '-'}
                 </td>
                 <td>
-                  {#if sale.status === 'success'}
-                    <span class="badge text-bg-success">Başarılı</span>
-                  {:else if sale.status === 'danger'}
-                    <span class="badge text-bg-danger">İade</span>
+                  {#if ORDER_STATUS[order.status]}
+                    <span class="badge {ORDER_STATUS[order.status].cls}">{$_(ORDER_STATUS[order.status].label)}</span>
+                  {:else}
+                    <span class="badge text-bg-secondary">{order.status}</span>
                   {/if}
                 </td>
-                <td class="pe-3">{sale.date}</td>
+                <td class="pe-3"><DateComponent time={order.createdAt} relativeFormat={true} /></td>
               </tr>
             {/each}
           </tbody>
@@ -484,11 +642,12 @@
       <div class="card-footer">
         <Pagination
           {page}
-          totalPage={10}
+          {totalPage}
           on:firstPageClick={() => onPageClick(1)}
-          on:lastPageClick={() => onPageClick(10)}
+          on:lastPageClick={() => onPageClick(totalPage)}
           on:pageLinkClick={(event) => onPageClick(event.detail.page)} />
       </div>
+      {/if}
     {/if}
   </div>
 </MarketLayout>

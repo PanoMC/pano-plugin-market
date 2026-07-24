@@ -37,7 +37,7 @@
             <div class="flex-grow-1" style="min-width: 0;">
               <div class="text-truncate fw-semibold">{line.product.name}</div>
               <div class="small text-body-secondary">
-                {formatPrice(line.product.price, settings.currencySymbol)}
+                {formatPrice(line.product.price, settings)}
               </div>
             </div>
             <div class="input-group input-group-sm flex-nowrap" style="width: 104px;">
@@ -53,7 +53,14 @@
                 type="button"
                 class="btn btn-outline-secondary"
                 aria-label={$_('theme.store.cart.increase')}
-                on:click={() => setQuantity(line.product.id, line.quantity + 1)}>
+                disabled={line.product.stock != null && line.quantity >= line.product.stock}
+                on:click={() =>
+                  setQuantity(
+                    line.product.id,
+                    line.product.stock != null
+                      ? Math.min(line.quantity + 1, line.product.stock)
+                      : line.quantity + 1
+                  )}>
                 <i class="fa-solid fa-plus"></i>
               </button>
             </div>
@@ -71,7 +78,7 @@
       <div class="mt-auto">
         <div class="d-flex justify-content-between align-items-center fw-bold fs-5 mb-3">
           <span>{$_('theme.store.cart.total')}</span>
-          <span>{formatPrice(total, settings.currencySymbol)}</span>
+          <span>{formatPrice(total, settings)}</span>
         </div>
         <button type="button" class="btn btn-primary w-100" disabled>
           <i class="fa-solid fa-lock me-2"></i>{$_('theme.store.cart.checkout')}
@@ -91,6 +98,7 @@
 </div>
 
 <script>
+  import { onMount } from 'svelte';
   import { base } from '@panomc/sdk/svelte';
   import { NoContent } from '@panomc/sdk/components/theme';
   import { _ } from '../../i18n';
@@ -99,6 +107,28 @@
 
   export let productMap = {};
   export let settings = {};
+
+  // The offcanvas opens via data-bs-toggle, so Bootstrap owns its backdrop and
+  // the body scroll lock. If the user navigates away while it is open, the
+  // element is torn out mid-hide and those globals leak onto the next page —
+  // dispose synchronously and scrub them by hand. Cleanup lives in onMount's
+  // return (NOT onDestroy): onMount never runs during SSR, while onDestroy
+  // DOES run on the server and crashes the host's server renderer.
+  onMount(() => {
+    return () => {
+      if (!window.bootstrap) return;
+      const el = document.getElementById('marketCartOffcanvas');
+      const instance = el && window.bootstrap.Offcanvas.getInstance(el);
+      try {
+        instance?.dispose();
+      } catch (e) {
+        /* element already detached */
+      }
+      document.querySelectorAll('.offcanvas-backdrop').forEach((node) => node.remove());
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('padding-right');
+    };
+  });
 
   // Resolve cart lines against the known products; drop items whose product is no
   // longer visible (e.g. removed since it was added).

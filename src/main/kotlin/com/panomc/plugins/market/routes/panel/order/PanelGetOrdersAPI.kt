@@ -18,7 +18,6 @@ import io.vertx.ext.web.validation.ValidationHandler
 import io.vertx.ext.web.validation.builder.Parameters.optionalParam
 import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
-import io.vertx.json.schema.common.dsl.Schemas.enumSchema
 import io.vertx.json.schema.common.dsl.Schemas.numberSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 import kotlin.math.ceil
@@ -38,7 +37,7 @@ class PanelGetOrdersAPI(
         ValidationHandlerBuilder.create(schemaRepository)
             .queryParameter(optionalParam("page", numberSchema()))
             .queryParameter(optionalParam("search", stringSchema()))
-            .queryParameter(optionalParam("status", enumSchema(*OrderStatus.entries.map { it.name }.toTypedArray())))
+            .queryParameter(optionalParam("status", stringSchema()))
             .build()
 
     override suspend fun handle(context: RoutingContext): Result {
@@ -47,7 +46,9 @@ class PanelGetOrdersAPI(
         val parameters = getParameters(context)
         val page = parameters.queryParameter("page")?.long ?: 1L
         val search = parameters.queryParameter("search")?.string
-        val status = parameters.queryParameter("status")?.string?.let { OrderStatus.valueOf(it) }
+        val status = parameters.queryParameter("status")?.string?.let { statusName ->
+            OrderStatus.entries.find { it.name == statusName }
+        }
 
         val sqlClient = databaseManager.getSqlClient()
         val orders = marketOrderDao.getAllPaged(page, search, status, sqlClient)

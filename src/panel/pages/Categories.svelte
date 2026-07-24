@@ -1,17 +1,76 @@
+<script module>
+  import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
+
+  /**
+   * @type {import("@sveltejs/kit").PageLoad}
+   */
+  export async function load(event) {
+    const {
+      parent,
+      url: { searchParams },
+    } = event;
+    const { pageTitle } = await parent();
+    pageTitle.set('plugins.pano-plugin-market.pages.categories.title');
+
+    const search = searchParams.get('search');
+
+    const queryParams = buildQueryParams({
+      search,
+    });
+
+    try {
+      const res = await ApiUtil.get({
+        path: '/api/panel/market/categories' + queryParams,
+        request: event,
+      });
+
+      if (res.error) throw res.error;
+
+      return { data: res };
+    } catch (e) {
+      console.error('[Market] Failed to load categories', e);
+      return { data: { categories: [], categoryCount: 0 } };
+    }
+  }
+</script>
+
 <script>
   import MarketLayout from '../layouts/MarketLayout.svelte';
-  import { CardHeader, CardFilters, CardFiltersItem, Pagination, SearchInput } from '@panomc/sdk/components/panel';
-  import { onMount } from 'svelte';
+  import { CardHeader, CardFilters, CardFiltersItem, SearchInput, NoContent } from '@panomc/sdk/components/panel';
   import { flip } from 'svelte/animate';
+  import { base, page, goto } from '@panomc/sdk/svelte';
+  import { showToast } from '@panomc/sdk/toasts';
+  import { _ } from '../../i18n';
   import CreateCategoryModal from '../components/modals/CreateCategoryModal.svelte';
 
-  let page = $state(1);
-  let view = $state('table');
+  let { data } = $props();
+
+  // View toggle (table | sort) lives in the URL (?view=) exactly like every other
+  // view/section toggle in this plugin, so it survives the panel host's remount on
+  // each load() re-run ({#key data}) — otherwise reordering/searching would bounce
+  // the user out of Sort mode — and stays deep-linkable. The default 'table' keeps
+  // the URL param-free.
+  let view = $derived($page.url.searchParams.get('view') === 'sort' ? 'sort' : 'table');
   let draggedId = $state(null);
   let dragTarget = $state(null);
   let pendingDragPoint = null;
   let previewFrame = null;
-  let search = $state('');
+  let searching = $state(false);
+
+  // Optimistic tree override applied while drag-sorting; cleared once the
+  // reconciling reload lands so the derived list takes over again.
+  let optimisticCategories = $state(null);
+
+  // Search lives in the URL (?search=); read it straight from the URL so the
+  // address bar stays deep-linkable and the back button is correct.
+  let searchValue = $derived($page.url.searchParams.get('search') || '');
+
+  // Category tree data comes from load(); re-derives whenever load() re-runs.
+  let categoriesData = $derived(data.categories || []);
+  let categoryCount = $derived(data.categoryCount ?? (data.categories?.length ?? 0));
+
+  let mappedCategories = $derived(categoriesData.map(mapCategory));
+  let categories = $derived(optimisticCategories ?? mappedCategories);
 
   let isEditModal = $state(false);
   let selectedCategory = $state(null);
@@ -26,37 +85,91 @@
     selectedCategory = category;
   }
 
-  let categories = $state([
-    { id: 1, name: 'VIP Üyelikler', icon: 'fa-crown', description: 'Sunucumuzdaki tüm VIP paketlerini burada bulabilirsiniz.', productsCount: 5, status: 'active', color: '#0dcaf0', image: null, children: [] },
-    { 
-      id: 2, 
-      name: 'Kredi Paketleri', 
-      icon: 'fa-coins', 
-      description: 'Mağaza içi harcamalarınız için kredi satın alın.', 
-      productsCount: 12, 
-      status: 'active', 
-      color: '#0d6efd', 
-      image: null, 
-      children: [
-        { id: 6, name: 'Bonus Paketler', icon: 'fa-gift', description: 'Ekstra bonus veren paketler.', productsCount: 3, status: 'active', color: '#198754', image: null, children: [] }
-      ] 
-    },
-    { id: 3, name: 'Kasa Anahtarları', icon: 'fa-key', description: 'Gizemli kasaları açmak için gereken anahtarlar.', productsCount: 8, status: 'active', color: '#ffc107', image: null, children: [] },
-    { id: 4, name: 'Özel Eşyalar', icon: 'fa-star', description: 'Sadece sınırlı süre için mevcut olan özel eşyalar.', productsCount: 15, status: 'inactive', color: '#6c757d', image: null, children: [] },
-    { id: 5, name: 'Kozmetik Ürünler', icon: 'fa-shirt', description: 'Karakterinizi özelleştirebileceğiniz kozmetik ürünler.', productsCount: 20, status: 'active', color: '#d63384', image: null, children: [] }
-  ]);
-
-  function onPageClick(pageNum) {
-    page = pageNum;
+  // Enum name (ACTIVE/INACTIVE/HIDDEN) -> lowercase display value the markup/modal expect.
+  function mapCategory(node) {
+    return {
+      id: node.id,
+      name: node.name,
+      description: node.description,
+      icon: node.icon || 'fa-folder',
+      color: node.color || '#0d6efd',
+      status: (node.status || 'ACTIVE').toLowerCase(),
+      productsCount: node.productsCount ?? 0,
+      parentId: node.parentId ?? null,
+      position: node.position ?? 0,
+      imageFileName: node.imageFileName || null,
+      image: node.imageFileName
+        ? `${base}/api/panel/market/categories/image/${node.imageFileName}`
+        : null,
+      children: (node.children || []).map(mapCategory),
+    };
   }
 
-  const paginationEvents = {
-    ['$$events']: {
-      firstPageClick: () => onPageClick(1),
-      lastPageClick: () => onPageClick(5),
-      pageLinkClick: (event) => onPageClick(event.detail.page),
-    },
-  };
+  // Navigate to the same route with the search encoded in the URL so the address
+  // bar stays deep-linkable; load() re-runs with the new param. The panel host
+  // remounts the plugin page on every load() re-run ({#key data}); that remount
+  // is the accepted cost of URL-driven navigation here.
+  function refreshData() {
+    searching = true;
+    const queryParams = buildQueryParams({
+      search: $page.url.searchParams.get('search') || null,
+      view: $page.url.searchParams.get('view') === 'sort' ? 'sort' : null,
+    });
+    return goto(`${base}/market/categories${queryParams}`, {
+      invalidateAll: true,
+      keepFocus: true,
+      noscroll: true,
+    });
+  }
+
+  function onSearchChange(value) {
+    searching = true;
+    const queryParams = buildQueryParams({
+      search: value ? value.trim() || null : null,
+      view: $page.url.searchParams.get('view') === 'sort' ? 'sort' : null,
+    });
+    return goto(`${base}/market/categories${queryParams}`, {
+      invalidateAll: true,
+      keepFocus: true,
+      noscroll: true,
+    });
+  }
+
+  // Toggle table/sort through the router so the choice lives in the URL and
+  // survives the remount; preserve the active ?search. No invalidateAll — the
+  // list data doesn't depend on the view, and `view` re-derives from $page.
+  function setView(next) {
+    if (next === view) return;
+    const queryParams = buildQueryParams({
+      view: next === 'sort' ? 'sort' : null,
+      search: $page.url.searchParams.get('search') || null,
+    });
+    return goto(`${base}/market/categories${queryParams}`, {
+      replaceState: true,
+      keepFocus: true,
+      noscroll: true,
+    });
+  }
+
+  async function deleteCategory(category) {
+    if (!window.confirm($_('pages.categories.confirm-delete', { values: { name: category.name } }))) {
+      return;
+    }
+
+    try {
+      const result = await ApiUtil.delete({
+        path: `/api/panel/market/categories/${category.id}`,
+      });
+
+      if (result.error) throw result.error;
+
+      showToast($_('pages.categories.toast-delete-success'));
+      await refreshData();
+    } catch (e) {
+      console.error('[Market] Failed to delete category', e);
+      showToast($_('pages.categories.toast-delete-error'));
+    }
+  }
 
   function onDragStart(e, id) {
     draggedId = id;
@@ -210,8 +323,36 @@
 
     if (!nextCategories) return false;
 
-    categories = nextCategories;
+    optimisticCategories = nextCategories;
     return true;
+  }
+
+  // Persist a single applied move to the backend; reload to reconcile the tree on failure.
+  async function persistCategoryMove(sourceId, target) {
+    const positionMap = { before: 'BEFORE', after: 'AFTER', inside: 'INSIDE' };
+
+    const body = target.id === null
+      ? { id: sourceId, position: 'ROOT' }
+      : { id: sourceId, position: positionMap[target.position], targetId: target.id };
+
+    try {
+      const result = await ApiUtil.post({
+        path: '/api/panel/market/categories/sort',
+        body,
+      });
+
+      if (result.error) throw result.error;
+
+      // Reconcile the optimistic tree against the server's canonical order.
+      await refreshData();
+    } catch (e) {
+      console.error('[Market] Failed to sort categories', e);
+      showToast($_('pages.categories.toast-sort-error'));
+      // Revert to the server's order.
+      await refreshData();
+    } finally {
+      optimisticCategories = null;
+    }
   }
 
   function cancelPendingPreview() {
@@ -352,52 +493,54 @@
     cancelPendingPreview();
     const target = getDropTargetFromPoint(e.clientX, e.clientY);
     if (target) {
+      const sourceId = draggedId;
       applyDropTarget(target);
-      applyCategoryMove(target);
+      if (applyCategoryMove(target)) {
+        persistCategoryMove(sourceId, target);
+      }
     }
     onDragEnd();
   }
-
-  onMount(() => {
-    console.log('Categories page loaded');
-  });
 </script>
 
 <MarketLayout>
   {#snippet right()}
     <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={openCreateModal}>
       <i class="fa-solid fa-plus"></i>
-      <span class="d-lg-inline d-none ms-2">Kategori Ekle</span>
+      <span class="d-lg-inline d-none ms-2">{$_('pages.categories.add-category')}</span>
     </button>
   {/snippet}
 
   <div class="card">
     <CardHeader>
       <div slot="left">
-        {categories.length} Kategori
+        {$_('pages.categories.category-count', { values: { count: categoryCount } })}
       </div>
       <div slot="middle" style="width: 250px;">
         <SearchInput
-          initialValue={search}
-          placeholder="Kategori ara..."
-          onchange={(val) => (search = val)} />
+          initialValue={searchValue}
+          {searching}
+          placeholderKey="plugins.pano-plugin-market.search.categories"
+          onchange={onSearchChange} />
       </div>
       <CardFilters slot="right">
-        <CardFiltersItem button active={view === 'table'} onclick={() => (view = 'table')}>Tablo</CardFiltersItem>
-        <CardFiltersItem button active={view === 'sort'} onclick={() => (view = 'sort')}>Sıralama</CardFiltersItem>
+        <CardFiltersItem button active={view === 'table'} onclick={() => setView('table')}>{$_('pages.categories.view-table')}</CardFiltersItem>
+        <CardFiltersItem button active={view === 'sort'} onclick={() => setView('sort')}>{$_('pages.categories.view-sort')}</CardFiltersItem>
       </CardFilters>
     </CardHeader>
 
-    {#if view === 'table'}
+    {#if categories.length === 0}
+      <NoContent />
+    {:else if view === 'table'}
       <div class="table-responsive">
       <table class="table table-hover align-middle text-nowrap">
         <thead>
           <tr>
             <th scope="col" style="width: 50px;"></th>
             <th scope="col" style="width: 60px;"></th>
-            <th scope="col">Kategori</th>
-            <th scope="col" class="text-center" style="width: 120px;">Durum</th>
-            <th scope="col" class="text-center" style="width: 150px;">Ürün Sayısı</th>
+            <th scope="col">{$_('pages.categories.table.category')}</th>
+            <th scope="col" class="text-center" style="width: 120px;">{$_('common.status')}</th>
+            <th scope="col" class="text-center" style="width: 150px;">{$_('pages.categories.table.product-count')}</th>
           </tr>
         </thead>
         <tbody>
@@ -409,22 +552,22 @@
                     type="button"
                     class="btn btn-link"
                     data-bs-toggle="dropdown"
-                    title="İşlemler"
-                    aria-label="İşlemler">
+                    title={$_('common.actions')}
+                    aria-label={$_('common.actions')}>
                     <span class="fas fa-ellipsis-v"></span>
                   </button>
                   <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
                     <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={() => openEditModal(category)}>
-                      <i class="fas fa-pen me-2"></i> Düzenle
+                      <i class="fas fa-pen me-2"></i> {$_('common.edit')}
                     </button>
-                    <button type="button" class="dropdown-item text-danger">
-                      <i class="fas fa-trash me-2"></i> Sil
+                    <button type="button" class="dropdown-item text-danger" onclick={() => deleteCategory(category)}>
+                      <i class="fas fa-trash me-2"></i> {$_('common.delete')}
                     </button>
                   </div>
                 </div>
               </th>
               <td class="align-middle">
-                <a href="#" class="d-flex align-items-center justify-content-center bg-primary-subtle rounded overflow-hidden text-decoration-none focus-ring" style="width: 40px; height: 40px;" title="Düzenle" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
+                <a href="#" class="d-flex align-items-center justify-content-center bg-primary-subtle rounded overflow-hidden text-decoration-none focus-ring" style="width: 40px; height: 40px;" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
                   {#if category.image}
                     <img src={category.image} alt={category.name} class="w-100 h-100 object-fit-cover" />
                   {:else}
@@ -439,7 +582,7 @@
                 </a>
               </td>
               <td class="align-middle">
-                <a href="#" class="d-flex align-items-center gap-3 text-decoration-none focus-ring" title="Düzenle" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
+                <a href="#" class="d-flex align-items-center gap-3 text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
                   <div class="d-flex align-items-center justify-content-center bg-primary-subtle rounded" style="width: 32px; height: 32px; flex-shrink: 0;">
                     <i class="fas {category.icon} fs-6" style="color: {category.color}"></i>
                   </div>
@@ -453,31 +596,26 @@
               </td>
               <td class="align-middle text-center">
                 {#if category.status === 'active'}
-                  <span class="badge text-bg-success">Aktif</span>
+                  <span class="badge text-bg-success">{$_('common.active')}</span>
+                {:else if category.status === 'hidden'}
+                  <span class="badge text-bg-secondary">{$_('common.hidden')}</span>
                 {:else}
-                  <span class="badge text-bg-danger">Pasif</span>
+                  <span class="badge text-bg-danger">{$_('common.inactive')}</span>
                 {/if}
               </td>
               <td class="align-middle text-center">
-                <span>{category.productsCount} Ürün</span>
+                <span>{$_('pages.categories.product-count-value', { values: { count: category.productsCount } })}</span>
               </td>
             </tr>
           {/each}
         </tbody>
       </table>
     </div>
-
-      <div class="card-footer">
-         <Pagination
-            {page}
-            totalPage={5}
-            {...paginationEvents} />
-      </div>
     {:else if view === 'sort'}
       <div class="card-body overflow-x-auto">
         <div class="alert alert-info d-flex align-items-center mb-3">
           <i class="fas fa-info-circle me-3"></i>
-          Satırın üstüne, ortasına veya altına sürükleyerek kategori konumunu seçin.
+          {$_('pages.categories.sort-hint')}
         </div>
 
         {#snippet categoryRows(items)}
@@ -499,7 +637,7 @@
                 data-category-id={category.id}
                 data-drop-position="row"
                 draggable="true"
-                aria-label="{category.name} kategorisini taşı"
+                aria-label={$_('pages.categories.drag-aria', { values: { name: category.name } })}
                 ondragstart={(e) => onDragStart(e, category.id)}
                 ondragend={onDragEnd}>
                 <div class="dropdown me-2">
@@ -507,17 +645,17 @@
                     type="button"
                     class="btn btn-link text-body-emphasis p-0"
                     data-bs-toggle="dropdown"
-                    title="İşlemler"
-                    aria-label="İşlemler"
+                    title={$_('common.actions')}
+                    aria-label={$_('common.actions')}
                     draggable="false">
                     <span class="fas fa-ellipsis-v"></span>
                   </button>
                   <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
                     <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={() => openEditModal(category)}>
-                      <i class="fas fa-pen me-2"></i> Düzenle
+                      <i class="fas fa-pen me-2"></i> {$_('common.edit')}
                     </button>
-                    <button type="button" class="dropdown-item text-danger">
-                      <i class="fas fa-trash me-2"></i> Sil
+                    <button type="button" class="dropdown-item text-danger" onclick={() => deleteCategory(category)}>
+                      <i class="fas fa-trash me-2"></i> {$_('common.delete')}
                     </button>
                   </div>
                 </div>
@@ -526,7 +664,7 @@
                   <i class="fas fa-grip-vertical"></i>
                 </span>
 
-                <a href="#" class="d-none d-sm-flex align-items-center justify-content-center bg-primary-subtle rounded overflow-hidden sort-thumb text-decoration-none focus-ring" title="Düzenle" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
+                <a href="#" class="d-none d-sm-flex align-items-center justify-content-center bg-primary-subtle rounded overflow-hidden sort-thumb text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
                   {#if category.image}
                     <img src={category.image} alt={category.name} class="w-100 h-100 object-fit-cover" />
                   {:else}
@@ -540,7 +678,7 @@
                   {/if}
                 </a>
 
-                <a href="#" class="d-flex align-items-center gap-2 gap-md-3 flex-grow-1 overflow-hidden text-decoration-none focus-ring" title="Düzenle" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
+                <a href="#" class="d-flex align-items-center gap-2 gap-md-3 flex-grow-1 overflow-hidden text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
                   <div class="d-flex align-items-center justify-content-center bg-primary-subtle rounded category-icon flex-shrink-0">
                     <i class="fas {category.icon} fs-6" style="color: {category.color}"></i>
                   </div>
@@ -553,18 +691,20 @@
                 </a>
 
                 {#if isDragTarget(category.id, 'inside')}
-                  <span class="badge text-bg-primary d-none d-md-inline-block">Alt kategori yap</span>
+                  <span class="badge text-bg-primary d-none d-md-inline-block">{$_('pages.categories.make-subcategory')}</span>
                 {/if}
                 
                 <div class="ms-auto d-flex align-items-center gap-1 gap-md-2">
                   {#if category.status === 'active'}
-                    <span class="badge text-bg-success">Aktif</span>
+                    <span class="badge text-bg-success">{$_('common.active')}</span>
+                  {:else if category.status === 'hidden'}
+                    <span class="badge text-bg-secondary">{$_('common.hidden')}</span>
                   {:else}
-                    <span class="badge text-bg-danger">Pasif</span>
+                    <span class="badge text-bg-danger">{$_('common.inactive')}</span>
                   {/if}
 
                   <span>
-                    {category.productsCount} <span class="d-none d-md-inline">Ürün</span>
+                    {category.productsCount} <span class="d-none d-md-inline">{$_('pages.categories.product-label')}</span>
                   </span>
                 </div>
               </div>
@@ -592,7 +732,7 @@
   </div>
 </MarketLayout>
 
-<CreateCategoryModal isEdit={isEditModal} category={selectedCategory} />
+<CreateCategoryModal isEdit={isEditModal} category={selectedCategory} onSaved={refreshData} />
 
 <style>
   .category-sort-item {

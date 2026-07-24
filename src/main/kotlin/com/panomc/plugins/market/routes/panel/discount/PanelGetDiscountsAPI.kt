@@ -6,9 +6,12 @@ import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.error.PageNotFound
 import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
+import com.panomc.plugins.market.db.dao.MarketCategoryDao
 import com.panomc.plugins.market.db.dao.MarketDiscountDao
+import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.model.MarketDiscount
 import com.panomc.plugins.market.permission.ManageMarketPermission
+import com.panomc.plugins.market.util.DiscountScope
 import com.panomc.plugins.market.util.MoneyUtil
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
@@ -22,7 +25,9 @@ import kotlin.math.ceil
 @Endpoint
 class PanelGetDiscountsAPI(
     private val plugin: MarketPlugin,
-    private val discountDao: MarketDiscountDao
+    private val discountDao: MarketDiscountDao,
+    private val marketProductDao: MarketProductDao,
+    private val marketCategoryDao: MarketCategoryDao
 ) : PanelApi() {
     override val paths = listOf(Path("/api/panel/market/discounts", RouteType.GET))
 
@@ -54,16 +59,31 @@ class PanelGetDiscountsAPI(
             throw PageNotFound()
         }
 
+        // Resolve every scoped id (PRODUCTS' productIds / CATEGORIES' categoryIds) to a name in one query each.
+        val allProductIds = discounts
+            .filter { it.scope == DiscountScope.PRODUCTS }
+            .flatMap { it.productIds ?: emptyList() }
+            .distinct()
+        val allCategoryIds = discounts
+            .filter { it.scope == DiscountScope.CATEGORIES }
+            .flatMap { it.categoryIds ?: emptyList() }
+            .distinct()
+        val productNames = marketProductDao.getByIds(allProductIds, sqlClient).associate { it.id to it.name }
+        val categoryNames = marketCategoryDao.getNamesByIds(allCategoryIds, sqlClient)
+
         return Successful(
             mapOf(
-                "discounts" to discounts.map { it.toMap() },
+                "discounts" to discounts.map { it.toMap(productNames, categoryNames) },
                 "discountCount" to count,
                 "totalPage" to totalPageNum
             )
         )
     }
 
-    private fun MarketDiscount.toMap(): Map<String, Any?> = linkedMapOf(
+    private fun MarketDiscount.toMap(
+        productNames: Map<Long, String>,
+        categoryNames: Map<Long, String>
+    ): Map<String, Any?> = linkedMapOf(
         "id" to id,
         "name" to name,
         "value" to MoneyUtil.toDecimal(value),
@@ -72,6 +92,12 @@ class PanelGetDiscountsAPI(
         "scope" to scope.name,
         "productIds" to productIds,
         "categoryIds" to categoryIds,
+        // Resolved display names for the list table; raw id arrays above stay for modal prefill.
+        "products" to when (scope) {
+            DiscountScope.ALL -> listOf("all")
+            DiscountScope.PRODUCTS -> productIds.orEmpty().mapNotNull { productNames[it] }
+            DiscountScope.CATEGORIES -> categoryIds.orEmpty().mapNotNull { categoryNames[it] }
+        },
         "startDate" to startDate,
         "expiryDate" to expiryDate,
         "usageLimit" to usageLimit,

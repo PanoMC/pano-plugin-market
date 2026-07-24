@@ -4,6 +4,7 @@ import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.api.config.PluginConfigManager
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
+import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NotFound
 import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
@@ -59,7 +60,9 @@ class PanelRefreshOrderExchangeRateAPI(
         val order = marketOrderDao.getById(id, sqlClient) ?: throw NotFound()
 
         val config = configManager.config
-        val from = CurrencyType.valueOf(order.currency)
+        // order.currency is a free-form VARCHAR, not enum-constrained at write time; a legacy or
+        // removed code would make valueOf() throw an uncaught 500. Look it up safely instead.
+        val from = CurrencyType.entries.firstOrNull { it.name == order.currency } ?: throw BadRequest()
 
         val rate = exchangeRateService.fetchRateForDate(from, config.statsCurrency, order.createdAt)
             ?: exchangeRateService.fetchRate(from, config.statsCurrency)

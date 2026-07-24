@@ -191,8 +191,8 @@ class PanelUpdateProductAPI(
             throw BadRequest()
         }
 
-        val allowedTypes = listOf("image/webp", "image/jpeg", "image/png", "image/gif")
-        if (!allowedTypes.contains(fileUpload.contentType())) {
+        // The multipart Content-Type header is client-controlled; the magic-byte sniff is authoritative.
+        if (ImageUtil.detectImageExtension(File(fileUpload.uploadedFileName())) == null) {
             throw BadRequest()
         }
     }
@@ -280,7 +280,8 @@ class PanelUpdateProductAPI(
     }
 
     private fun saveUploadedFile(fileUpload: FileUpload): String {
-        val extension = fileUpload.fileName().split(".").last()
+        // Extension comes from the sniffed byte signature, never from the client-supplied filename.
+        val extension = ImageUtil.detectImageExtension(File(fileUpload.uploadedFileName())) ?: throw BadRequest()
         val fileName =
             "product-${System.currentTimeMillis()}-${fileUpload.uploadedFileName().split(File.separator).last()}.$extension"
         val destFile = File(plugin.uploadsDir, fileName)

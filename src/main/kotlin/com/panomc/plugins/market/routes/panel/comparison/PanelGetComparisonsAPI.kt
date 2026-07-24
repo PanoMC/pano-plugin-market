@@ -32,7 +32,7 @@ class PanelGetComparisonsAPI(
         ValidationHandlerBuilder.create(schemaRepository)
             .queryParameter(optionalParam("page", numberSchema()))
             .queryParameter(optionalParam("search", stringSchema()))
-            .queryParameter(optionalParam("status", enumSchema(MarketStatus.ACTIVE.name, MarketStatus.INACTIVE.name)))
+            .queryParameter(optionalParam("status", stringSchema()))
             .build()
 
     override suspend fun handle(context: RoutingContext): Result {
@@ -41,7 +41,9 @@ class PanelGetComparisonsAPI(
         val parameters = getParameters(context)
         val page = parameters.queryParameter("page")?.long ?: 1L
         val search = parameters.queryParameter("search")?.string
-        val status = parameters.queryParameter("status")?.string?.let { MarketStatus.valueOf(it) }
+        val status = parameters.queryParameter("status")?.string?.let { statusName ->
+            MarketStatus.entries.find { it.name == statusName }
+        }
 
         val sqlClient = databaseManager.getSqlClient()
         val comparisons = marketComparisonDao.getAllPaged(page, status, search, sqlClient)

@@ -2,6 +2,7 @@
   <div
     role="button"
     tabindex="0"
+    aria-label={product.name}
     on:click={() => dispatch('select', product)}
     on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), dispatch('select', product))}
     style="cursor: pointer;">
@@ -34,10 +35,10 @@
   <div class="card-body d-flex flex-column">
     <h3 class="h6 card-title mb-1 text-truncate" title={product.name}>{product.name}</h3>
     <div class="mb-3">
-      <span class="fw-bold">{formatPrice(product.price, settings.currencySymbol)}</span>
+      <span class="fw-bold">{formatPrice(product.price, settings)}</span>
       {#if settings.creditsEnabled && product.creditPrice > 0}
         <span class="badge text-bg-info ms-1">
-          <i class="fa-solid fa-coins me-1"></i>{product.creditPrice} {settings.creditName}
+          <i class="fa-solid fa-coins me-1"></i>{product.creditPrice} {settings.creditName || $_('theme.store.credits')}
         </span>
       {/if}
     </div>
@@ -70,7 +71,7 @@
 
   function add() {
     if (soldOut) return;
-    addToCart(product.id, 1);
+    addToCart(product.id, 1, product.stock);
     showToast(`plugins.${pluginId}.theme.store.added-to-cart`);
   }
 </script>
