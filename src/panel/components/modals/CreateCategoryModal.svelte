@@ -3,7 +3,6 @@
   import { base } from '@panomc/sdk/svelte';
   import { showToast } from '@panomc/sdk/toasts';
   import ApiUtil from '@panomc/sdk/utils/api';
-  import tooltip from '@panomc/sdk/utils/tooltip';
   import IconPicker from '../IconPicker.svelte';
   import { _ } from '../../../i18n';
 
@@ -210,7 +209,7 @@
                   style="aspect-ratio: 21/9; cursor: pointer;"
                   role="button"
                   tabindex="0"
-                  use:tooltip={[$_('modals.category.change-image'), { placement: 'bottom' }]}
+                  title={$_('modals.category.change-image')}
                   onclick={() => fileInput.click()}
                   onkeydown={(e) => e.key === 'Enter' && fileInput.click()}>
                   <img
@@ -230,7 +229,7 @@
                   type="button"
                   class="btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle"
                   style="z-index: 10;"
-                  use:tooltip={[$_('modals.category.remove-image'), { placement: 'bottom' }]}
+                  title={$_('modals.category.remove-image')}
                   aria-label={$_('modals.category.remove-image')}
                   onclick={(e) => { e.stopPropagation(); onRemoveImage(); }}>
                   <i class="fas fa-minus"></i>
