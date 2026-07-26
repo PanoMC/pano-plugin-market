@@ -41,8 +41,7 @@
   import IconPicker from '../components/IconPicker.svelte';
   import ProductSelector from '../components/ProductSelector.svelte';
   import { base, goto, page } from '@panomc/sdk/svelte';
-  import { showToast } from '@panomc/sdk/toasts';
-  import { _ } from '../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../i18n';
 
   let { data } = $props();
 
@@ -368,7 +367,7 @@
 
   async function handleSave() {
     if (!product.name || !product.name.trim()) {
-      showToast($_('pages.create-product.name-required'));
+      showErrorToast($_('pages.create-product.name-required'));
       return;
     }
 
@@ -376,7 +375,7 @@
     // value with a blanket 400, which would surface as a generic error toast.
     for (const action of product.actions || []) {
       if (action.type === 'credit' && !(Number(action.value) > 0)) {
-        showToast($_('pages.create-product.credit-amount-invalid'));
+        showErrorToast($_('pages.create-product.credit-amount-invalid'));
         return;
       }
     }
@@ -444,17 +443,21 @@
       }
 
       if (result?.error) {
-        showToast(mapSaveError(result.error));
+        showErrorToast(mapSaveError(result.error));
         return;
       }
 
-      showToast(productDbId ? $_('pages.create-product.update-success') : $_('pages.create-product.create-success'));
+      showSuccessToast(
+        productDbId
+          ? $_('pages.create-product.update-success')
+          : $_('pages.create-product.create-success'),
+      );
       isDirty = false;
       initialProduct = JSON.stringify(product);
       goto(`${base}/market/products`);
     } catch (e) {
       console.error('[Market] Failed to save product', e);
-      showToast($_('pages.create-product.save-error'));
+      showErrorToast($_('pages.create-product.save-error'));
     } finally {
       saving = false;
     }
@@ -468,14 +471,14 @@
     try {
       const result = await ApiUtil.delete({ path: `/api/panel/market/products/${productDbId}` });
       if (result?.error) {
-        showToast($_('pages.create-product.delete-error'));
+        showErrorToast($_('pages.create-product.delete-error'));
         return;
       }
-      showToast($_('pages.create-product.delete-success'));
+      showSuccessToast($_('pages.create-product.delete-success'));
       goto(`${base}/market/products`);
     } catch (e) {
       console.error('[Market] Failed to delete product', e);
-      showToast($_('pages.create-product.delete-error'));
+      showErrorToast($_('pages.create-product.delete-error'));
     } finally {
       saving = false;
     }

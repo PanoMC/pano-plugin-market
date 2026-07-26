@@ -1,7 +1,6 @@
 <script>
-  import { showToast } from '@panomc/sdk/toasts';
   import ApiUtil from '@panomc/sdk/utils/api';
-  import { _ } from '../../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
 
   let { isEdit = false, creatorCode = null, currencySymbol = '', onSaved = () => {} } = $props();
 
@@ -111,20 +110,20 @@
 
   async function saveCreatorCode() {
     if (!creator || creator.trim() === '') {
-      showToast($_('modals.creator-code.toast-creator-required'));
+      showErrorToast($_('modals.creator-code.toast-creator-required'));
       return;
     }
     if (!code || code.trim() === '') {
-      showToast($_('modals.creator-code.toast-code-required'));
+      showErrorToast($_('modals.creator-code.toast-code-required'));
       return;
     }
     if (discount === '' || discount == null || isNaN(Number(discount))) {
-      showToast($_('modals.creator-code.toast-discount-required'));
+      showErrorToast($_('modals.creator-code.toast-discount-required'));
       return;
     }
     const commissionValue = commission === '' || commission == null ? 0 : Number(commission);
     if (commissionValue < 0 || commissionValue > 100) {
-      showToast($_('modals.creator-code.toast-commission-range'));
+      showErrorToast($_('modals.creator-code.toast-commission-range'));
       return;
     }
 
@@ -157,19 +156,21 @@
 
       if (result.error) {
         if (result.error === 'CODE_ALREADY_EXISTS') {
-          showToast($_('modals.creator-code.toast-code-exists'));
+          showErrorToast($_('modals.creator-code.toast-code-exists'));
         } else {
-          showToast($_('modals.creator-code.toast-save-error'));
+          showErrorToast($_('modals.creator-code.toast-save-error'));
         }
         return;
       }
 
-      showToast(isEdit ? $_('modals.creator-code.toast-updated') : $_('modals.creator-code.toast-created'));
+      showSuccessToast(
+        isEdit ? $_('modals.creator-code.toast-updated') : $_('modals.creator-code.toast-created'),
+      );
       closeModal();
       onSaved();
     } catch (e) {
       console.error('[Market] Failed to save creator code', e);
-      showToast($_('modals.creator-code.toast-save-error'));
+      showErrorToast($_('modals.creator-code.toast-save-error'));
     } finally {
       loading = false;
     }

@@ -1,10 +1,9 @@
 <script>
   import { DragAndDropZone } from '@panomc/sdk/components/panel';
   import { base } from '@panomc/sdk/svelte';
-  import { showToast } from '@panomc/sdk/toasts';
   import ApiUtil from '@panomc/sdk/utils/api';
   import IconPicker from '../IconPicker.svelte';
-  import { _ } from '../../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
 
   let { isEdit = false, category = null, onSaved = () => {} } = $props();
 
@@ -82,13 +81,13 @@
     const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
     if (file.size > maxSize) {
-      showToast($_('modals.category.toast-file-too-large'));
+      showErrorToast($_('modals.category.toast-file-too-large'));
       if (fileInput) fileInput.value = '';
       return;
     }
 
     if (!allowedTypes.includes(file.type)) {
-      showToast($_('modals.category.toast-invalid-file-type'));
+      showErrorToast($_('modals.category.toast-invalid-file-type'));
       if (fileInput) fileInput.value = '';
       return;
     }
@@ -119,9 +118,9 @@
   function handleFileError(event) {
     const { error } = event.detail;
     if (error === 'INVALID_SIZE') {
-      showToast($_('modals.category.toast-file-too-large'));
+      showErrorToast($_('modals.category.toast-file-too-large'));
     } else if (error === 'INVALID_TYPE') {
-      showToast($_('modals.category.toast-invalid-file-type'));
+      showErrorToast($_('modals.category.toast-invalid-file-type'));
     }
   }
 
@@ -134,7 +133,7 @@
 
   async function saveCategory() {
     if (!categoryName || categoryName.trim() === '') {
-      showToast($_('modals.category.toast-name-required'));
+      showErrorToast($_('modals.category.toast-name-required'));
       return;
     }
 
@@ -178,12 +177,14 @@
 
       if (result.error) throw result.error;
 
-      showToast(isEdit ? $_('modals.category.toast-updated') : $_('modals.category.toast-created'));
+      showSuccessToast(
+        isEdit ? $_('modals.category.toast-updated') : $_('modals.category.toast-created'),
+      );
       closeModal();
       onSaved();
     } catch (e) {
       console.error('[Market] Failed to save category', e);
-      showToast($_('modals.category.toast-save-error'));
+      showErrorToast($_('modals.category.toast-save-error'));
     } finally {
       loading = false;
     }

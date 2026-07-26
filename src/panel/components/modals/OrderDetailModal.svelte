@@ -1,8 +1,7 @@
 <script>
   import { Date as DateComponent } from '@panomc/sdk/components/panel';
-  import { showToast } from '@panomc/sdk/toasts';
   import ApiUtil from '@panomc/sdk/utils/api';
-  import { _ } from '../../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
 
   let { orderId = null, currencySymbol = '', onUpdated = () => {} } = $props();
 
@@ -69,7 +68,7 @@
     } catch (e) {
       console.error('[Market] Failed to load order detail', e);
       loadError = true;
-      showToast($_('modals.order-detail.toast-load-error'));
+      showErrorToast($_('modals.order-detail.toast-load-error'));
     } finally {
       loading = false;
     }
@@ -94,7 +93,7 @@
   async function saveRate() {
     const val = parseFloat(String(rateInput).replace(',', '.'));
     if (!Number.isFinite(val) || val <= 0) {
-      showToast($_('modals.order-detail.toast-invalid-rate'));
+      showErrorToast($_('modals.order-detail.toast-invalid-rate'));
       return;
     }
 
@@ -107,7 +106,7 @@
 
       if (res && res.error) throw new Error(res.error);
 
-      showToast($_('modals.order-detail.toast-rate-updated'));
+      showSuccessToast($_('modals.order-detail.toast-rate-updated'));
       // Close the modal first: onUpdated() navigates with invalidateAll, which
       // remounts the whole plugin page (and would destroy this modal, leaving an
       // orphan backdrop). Closing here avoids that and drops the now-pointless
@@ -116,7 +115,7 @@
       onUpdated();
     } catch (e) {
       console.error('[Market] Failed to update order exchange rate', e);
-      showToast($_('modals.order-detail.toast-rate-error'));
+      showErrorToast($_('modals.order-detail.toast-rate-error'));
     } finally {
       saving = false;
     }
@@ -131,20 +130,20 @@
 
       if (res && res.error) {
         if (res.error === 'EXCHANGE_RATE_FETCH_FAILED') {
-          showToast($_('modals.order-detail.toast-fetch-failed'));
+          showErrorToast($_('modals.order-detail.toast-fetch-failed'));
           return;
         }
         throw new Error(res.error);
       }
 
-      showToast($_('modals.order-detail.toast-rate-refreshed'));
+      showSuccessToast($_('modals.order-detail.toast-rate-refreshed'));
       // Close before navigating (onUpdated -> invalidateAll remount) so the modal
       // isn't torn out mid-render and no orphan backdrop is left behind.
       closeModal();
       onUpdated();
     } catch (e) {
       console.error('[Market] Failed to refresh order exchange rate', e);
-      showToast($_('modals.order-detail.toast-rate-error'));
+      showErrorToast($_('modals.order-detail.toast-rate-error'));
     } finally {
       refreshing = false;
     }

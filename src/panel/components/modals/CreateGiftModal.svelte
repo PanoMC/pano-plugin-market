@@ -1,8 +1,7 @@
 <script>
-  import { showToast } from '@panomc/sdk/toasts';
   import ApiUtil from '@panomc/sdk/utils/api';
   import ProductSelector from '../ProductSelector.svelte';
-  import { _ } from '../../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
 
   let { isEdit = false, gift = null, onSaved = () => {} } = $props();
 
@@ -88,22 +87,22 @@
 
   async function saveGift() {
     if (!giftCode || giftCode.trim() === '') {
-      showToast($_('modals.gift.toast-code-required'));
+      showErrorToast($_('modals.gift.toast-code-required'));
       return;
     }
 
     const typeEnum = giftType.toUpperCase();
 
     if (typeEnum === 'PRODUCT' && !selectedProductId) {
-      showToast($_('modals.gift.toast-select-product'));
+      showErrorToast($_('modals.gift.toast-select-product'));
       return;
     }
     if (typeEnum === 'CREDIT' && (creditAmount === '' || creditAmount === null || Number(creditAmount) <= 0)) {
-      showToast($_('modals.gift.toast-invalid-credit'));
+      showErrorToast($_('modals.gift.toast-invalid-credit'));
       return;
     }
     if (typeEnum === 'RANDOM' && (!selectedRandomProductIds || selectedRandomProductIds.length === 0)) {
-      showToast($_('modals.gift.toast-select-at-least-one'));
+      showErrorToast($_('modals.gift.toast-select-at-least-one'));
       return;
     }
 
@@ -144,19 +143,19 @@
 
       if (result.error) {
         if (result.error === 'CODE_ALREADY_EXISTS') {
-          showToast($_('modals.gift.toast-code-exists'));
+          showErrorToast($_('modals.gift.toast-code-exists'));
         } else {
-          showToast($_('modals.gift.toast-save-error'));
+          showErrorToast($_('modals.gift.toast-save-error'));
         }
         return;
       }
 
-      showToast(isEdit ? $_('modals.gift.toast-updated') : $_('modals.gift.toast-created'));
+      showSuccessToast(isEdit ? $_('modals.gift.toast-updated') : $_('modals.gift.toast-created'));
       closeModal();
       onSaved();
     } catch (e) {
       console.error('[Market] Failed to save gift', e);
-      showToast($_('modals.gift.toast-save-error'));
+      showErrorToast($_('modals.gift.toast-save-error'));
     } finally {
       loading = false;
     }

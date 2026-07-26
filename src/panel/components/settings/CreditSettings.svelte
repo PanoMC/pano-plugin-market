@@ -1,7 +1,6 @@
 <script>
   import ApiUtil from '@panomc/sdk/utils/api';
-  import { showToast } from '@panomc/sdk/toasts';
-  import { _ } from '../../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
 
   let { settings: initialSettings = {} } = $props();
 
@@ -50,14 +49,14 @@
       });
 
       if (body.error) {
-        showToast($_('settings.credits.toast-error'));
+        showErrorToast($_('settings.credits.toast-error'));
         return;
       }
 
-      showToast($_('settings.credits.toast-success'));
+      showSuccessToast($_('settings.credits.toast-success'));
       await refresh();
     } catch (e) {
-      showToast($_('settings.credits.toast-error'));
+      showErrorToast($_('settings.credits.toast-error'));
     } finally {
       saving = false;
     }

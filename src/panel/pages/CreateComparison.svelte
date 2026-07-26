@@ -39,8 +39,7 @@
 <script>
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import { base, goto, page } from '@panomc/sdk/svelte';
-  import { showToast } from '@panomc/sdk/toasts';
-  import { _ } from '../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../i18n';
 
   let { data } = $props();
 
@@ -120,7 +119,7 @@
 
   async function handleSave() {
     if (!comparison.name || !comparison.name.trim()) {
-      showToast($_('pages.create-comparison.toast-title-required'));
+      showErrorToast($_('pages.create-comparison.toast-title-required'));
       return;
     }
 
@@ -143,15 +142,19 @@
       }
 
       if (result?.error) {
-        showToast($_('pages.create-comparison.toast-error'));
+        showErrorToast($_('pages.create-comparison.toast-error'));
         return;
       }
 
-      showToast(isEdit ? $_('pages.create-comparison.toast-updated') : $_('pages.create-comparison.toast-created'));
+      showSuccessToast(
+        isEdit
+          ? $_('pages.create-comparison.toast-updated')
+          : $_('pages.create-comparison.toast-created'),
+      );
       goto(`${base}/market/comparisons`);
     } catch (e) {
       console.error('[Market] Failed to save comparison', e);
-      showToast($_('pages.create-comparison.toast-error'));
+      showErrorToast($_('pages.create-comparison.toast-error'));
     } finally {
       saving = false;
     }

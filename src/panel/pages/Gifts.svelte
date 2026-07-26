@@ -59,9 +59,8 @@
 <script>
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import { CardHeader, CardFilters, CardFiltersItem, NoContent, SearchInput, Pagination } from '@panomc/sdk/components/panel';
-  import { showToast } from '@panomc/sdk/toasts';
   import { base, goto, page } from '@panomc/sdk/svelte';
-  import { _ } from '../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../i18n';
   import CreateGiftModal from '../components/modals/CreateGiftModal.svelte';
 
   let { data } = $props();
@@ -155,14 +154,14 @@
 
       if (result.error) throw result.error;
 
-      showToast($_('pages.gifts.toast-delete-success'));
+      showSuccessToast($_('pages.gifts.toast-delete-success'));
       // The deleted row may have been the last on this page; step back so the
       // refetch does not request a now-out-of-range page (backend -> PAGE_NOT_FOUND).
       const targetPage = gifts.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
       await navigate({ page: targetPage });
     } catch (e) {
       console.error('[Market] Failed to delete gift', e);
-      showToast($_('pages.gifts.toast-delete-error'));
+      showErrorToast($_('pages.gifts.toast-delete-error'));
     }
   }
 

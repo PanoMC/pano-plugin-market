@@ -56,8 +56,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { base } from '@panomc/sdk/svelte';
-  import { showToast } from '@panomc/sdk/toasts';
-  import { _ } from '../../i18n';
+  import { _, showSuccessToast } from '../../i18n';
   import { pluginId } from '../../i18n';
   import { addToCart } from '../utils/cart';
   import { formatPrice } from '../utils/format';
@@ -72,6 +71,6 @@
   function add() {
     if (soldOut) return;
     addToCart(product.id, 1, product.stock);
-    showToast(`plugins.${pluginId}.theme.store.added-to-cart`);
+    showSuccessToast(`plugins.${pluginId}.theme.store.added-to-cart`);
   }
 </script>

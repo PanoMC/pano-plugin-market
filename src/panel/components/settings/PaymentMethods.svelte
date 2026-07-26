@@ -3,10 +3,9 @@
   import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
   import { CardHeader, CardFilters, CardFiltersItem, SearchInput, NoContent } from '@panomc/sdk/components/panel';
   import { base, page, goto } from '@panomc/sdk/svelte';
-  import { showToast } from '@panomc/sdk/toasts';
   import { PAYMENT_METHODS, createDefaultMethodState } from '../../data/payment-methods.js';
   import PaymentMethodSettingsModal from '../modals/PaymentMethodSettingsModal.svelte';
-  import { _ } from '../../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
 
   let { settings: initialSettings = {} } = $props();
 
@@ -117,7 +116,9 @@
     const next = !st.enabled;
 
     if (next && !isConfigured(method)) {
-      showToast($_('settings.payments.toast-required-settings', { values: { name: $_(method.name) } }));
+      showErrorToast(
+        $_('settings.payments.toast-required-settings', { values: { name: $_(method.name) } }),
+      );
       setMethodEnabled(method.id, false, input);
       activeMethod = method;
       return;
@@ -141,20 +142,30 @@
       if (body.error) {
         setMethodEnabled(method.id, !next, input);
         if (body.error === 'PAYMENT_METHOD_NOT_CONFIGURED') {
-          showToast($_('settings.payments.toast-enable-failed-not-configured', { values: { name: $_(method.name) } }));
+          showErrorToast(
+            $_('settings.payments.toast-enable-failed-not-configured', {
+              values: { name: $_(method.name) },
+            }),
+          );
         } else {
-          showToast($_('settings.payments.toast-update-error', { values: { name: $_(method.name) } }));
+          showErrorToast(
+            $_('settings.payments.toast-update-error', { values: { name: $_(method.name) } }),
+          );
         }
         return;
       }
 
-      showToast(next
-        ? $_('settings.payments.toast-activated', { values: { name: $_(method.name) } })
-        : $_('settings.payments.toast-deactivated', { values: { name: $_(method.name) } }));
+      showSuccessToast(
+        next
+          ? $_('settings.payments.toast-activated', { values: { name: $_(method.name) } })
+          : $_('settings.payments.toast-deactivated', { values: { name: $_(method.name) } }),
+      );
       await refresh();
     } catch (e) {
       setMethodEnabled(method.id, !next, input);
-      showToast($_('settings.payments.toast-update-error', { values: { name: $_(method.name) } }));
+      showErrorToast(
+        $_('settings.payments.toast-update-error', { values: { name: $_(method.name) } }),
+      );
     }
   }
 
@@ -195,17 +206,29 @@
       });
 
       if (body.error) {
-        showToast($_('settings.payments.toast-save-error', { values: { name: method ? $_(method.name) : '' } }));
+        showErrorToast(
+          $_('settings.payments.toast-save-error', {
+            values: { name: method ? $_(method.name) : '' },
+          }),
+        );
         return;
       }
 
       // Close first, then refresh so local state reflects the server's
       // masked-secret truth + enabled flags via the reloaded settings prop.
       closeSettingsModal();
-      showToast($_('settings.payments.toast-save-success', { values: { name: method ? $_(method.name) : '' } }));
+      showSuccessToast(
+        $_('settings.payments.toast-save-success', {
+          values: { name: method ? $_(method.name) : '' },
+        }),
+      );
       await refresh();
     } catch (e) {
-      showToast($_('settings.payments.toast-save-error', { values: { name: method ? $_(method.name) : '' } }));
+      showErrorToast(
+        $_('settings.payments.toast-save-error', {
+          values: { name: method ? $_(method.name) : '' },
+        }),
+      );
     }
   }
 </script>

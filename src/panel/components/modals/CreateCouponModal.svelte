@@ -1,8 +1,7 @@
 <script>
-  import { showToast } from '@panomc/sdk/toasts';
   import ApiUtil from '@panomc/sdk/utils/api';
   import ProductSelector from '../ProductSelector.svelte';
-  import { _ } from '../../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
 
   let { isEdit = false, coupon = null, currencySymbol = '', onSaved = () => {} } = $props();
 
@@ -135,11 +134,11 @@
 
   async function saveCoupon() {
     if (!couponCode || couponCode.trim() === '') {
-      showToast($_('modals.coupon.toast-code-required'));
+      showErrorToast($_('modals.coupon.toast-code-required'));
       return;
     }
     if (discount === '' || discount == null || isNaN(Number(discount))) {
-      showToast($_('modals.coupon.toast-discount-required'));
+      showErrorToast($_('modals.coupon.toast-discount-required'));
       return;
     }
 
@@ -181,19 +180,21 @@
 
       if (result.error) {
         if (result.error === 'CODE_ALREADY_EXISTS') {
-          showToast($_('modals.coupon.toast-code-exists'));
+          showErrorToast($_('modals.coupon.toast-code-exists'));
         } else {
-          showToast($_('modals.coupon.toast-save-error'));
+          showErrorToast($_('modals.coupon.toast-save-error'));
         }
         return;
       }
 
-      showToast(isEdit ? $_('modals.coupon.toast-updated') : $_('modals.coupon.toast-created'));
+      showSuccessToast(
+        isEdit ? $_('modals.coupon.toast-updated') : $_('modals.coupon.toast-created'),
+      );
       closeModal();
       onSaved();
     } catch (e) {
       console.error('[Market] Failed to save coupon', e);
-      showToast($_('modals.coupon.toast-save-error'));
+      showErrorToast($_('modals.coupon.toast-save-error'));
     } finally {
       loading = false;
     }

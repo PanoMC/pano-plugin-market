@@ -60,8 +60,7 @@
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import { CardHeader, CardFilters, CardFiltersItem, Pagination, SearchInput, NoContent } from '@panomc/sdk/components/panel';
   import { base, page, goto } from '@panomc/sdk/svelte';
-  import { showToast } from '@panomc/sdk/toasts';
-  import { _ } from '../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../i18n';
 
   let { data } = $props();
 
@@ -143,14 +142,14 @@
     try {
       const res = await ApiUtil.post({ path: `/api/panel/market/comparisons/${id}/clone` });
       if (res?.error) {
-        showToast($_('pages.comparisons.toast-clone-error'));
+        showErrorToast($_('pages.comparisons.toast-clone-error'));
       } else {
-        showToast($_('pages.comparisons.toast-clone-success'));
+        showSuccessToast($_('pages.comparisons.toast-clone-success'));
         await refreshData();
       }
     } catch (e) {
       console.error('[Market] Failed to clone comparison', e);
-      showToast($_('pages.comparisons.toast-clone-error'));
+      showErrorToast($_('pages.comparisons.toast-clone-error'));
     } finally {
       buttonsLoading = false;
     }
@@ -163,9 +162,9 @@
     try {
       const res = await ApiUtil.delete({ path: `/api/panel/market/comparisons/${comp.id}` });
       if (res?.error) {
-        showToast($_('pages.comparisons.toast-delete-error'));
+        showErrorToast($_('pages.comparisons.toast-delete-error'));
       } else {
-        showToast($_('pages.comparisons.toast-delete-success'));
+        showSuccessToast($_('pages.comparisons.toast-delete-success'));
         // The deleted row may have been the last on this page; step back a page.
         const targetPage =
           comparisons.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
@@ -173,7 +172,7 @@
       }
     } catch (e) {
       console.error('[Market] Failed to delete comparison', e);
-      showToast($_('pages.comparisons.toast-delete-error'));
+      showErrorToast($_('pages.comparisons.toast-delete-error'));
     } finally {
       buttonsLoading = false;
     }

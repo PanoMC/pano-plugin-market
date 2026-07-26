@@ -39,8 +39,7 @@
   import { CardHeader, CardFilters, CardFiltersItem, SearchInput, NoContent } from '@panomc/sdk/components/panel';
   import { flip } from 'svelte/animate';
   import { base, page, goto } from '@panomc/sdk/svelte';
-  import { showToast } from '@panomc/sdk/toasts';
-  import { _ } from '../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../i18n';
   import CreateCategoryModal from '../components/modals/CreateCategoryModal.svelte';
 
   let { data } = $props();
@@ -163,11 +162,11 @@
 
       if (result.error) throw result.error;
 
-      showToast($_('pages.categories.toast-delete-success'));
+      showSuccessToast($_('pages.categories.toast-delete-success'));
       await refreshData();
     } catch (e) {
       console.error('[Market] Failed to delete category', e);
-      showToast($_('pages.categories.toast-delete-error'));
+      showErrorToast($_('pages.categories.toast-delete-error'));
     }
   }
 
@@ -347,7 +346,7 @@
       await refreshData();
     } catch (e) {
       console.error('[Market] Failed to sort categories', e);
-      showToast($_('pages.categories.toast-sort-error'));
+      showErrorToast($_('pages.categories.toast-sort-error'));
       // Revert to the server's order.
       await refreshData();
     } finally {

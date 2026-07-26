@@ -1,9 +1,8 @@
 <script>
   import { CardHeader, CardFilters, CardFiltersItem, SearchInput, Pagination, NoContent } from '@panomc/sdk/components/panel';
-  import { showToast } from '@panomc/sdk/toasts';
   import { base, goto } from '@panomc/sdk/svelte';
   import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
-  import { _ } from '../../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
 
   // All view state (page/search/status) is URL-driven: the page load() reads the
   // query params and passes the resulting list + the current filter values down as
@@ -79,14 +78,14 @@
 
       if (result.error) throw result.error;
 
-      showToast($_('discounts.creators.toast-delete-success'));
+      showSuccessToast($_('discounts.creators.toast-delete-success'));
       // The deleted row may have been the last on this page; step back so the
       // reload does not request a now-out-of-range page (backend -> PAGE_NOT_FOUND).
       const targetPage = creatorCodes.length === 1 && page > 1 ? page - 1 : page;
       await navigate({ page: targetPage });
     } catch (e) {
       console.error('[Market] Failed to delete creator code', e);
-      showToast($_('discounts.creators.toast-delete-error'));
+      showErrorToast($_('discounts.creators.toast-delete-error'));
     }
   }
 

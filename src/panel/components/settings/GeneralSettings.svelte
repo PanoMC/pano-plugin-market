@@ -1,8 +1,7 @@
 <script>
   import ApiUtil from '@panomc/sdk/utils/api';
-  import { showToast } from '@panomc/sdk/toasts';
   import { Date as DateComponent } from '@panomc/sdk/components/panel';
-  import { _ } from '../../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
 
   let { settings: initialSettings = {} } = $props();
 
@@ -102,18 +101,18 @@
 
       if (body.error) {
         if (body.error === 'EXCHANGE_RATE_FETCH_FAILED') {
-          showToast($_('settings.general.exchange-rate.toast-refresh-failed'));
+          showErrorToast($_('settings.general.exchange-rate.toast-refresh-failed'));
         } else {
-          showToast($_('settings.general.exchange-rate.toast-refresh-error'));
+          showErrorToast($_('settings.general.exchange-rate.toast-refresh-error'));
         }
         return;
       }
 
       // Reload settings so the new rate + timestamp are reflected in the UI.
       await refresh();
-      showToast($_('settings.general.exchange-rate.toast-refresh-success'));
+      showSuccessToast($_('settings.general.exchange-rate.toast-refresh-success'));
     } catch (e) {
-      showToast($_('settings.general.exchange-rate.toast-refresh-error'));
+      showErrorToast($_('settings.general.exchange-rate.toast-refresh-error'));
     } finally {
       refreshingRate = false;
     }
@@ -154,14 +153,14 @@
       });
 
       if (result.error) {
-        showToast($_('settings.general.toast-error'));
+        showErrorToast($_('settings.general.toast-error'));
         return;
       }
 
-      showToast($_('settings.general.toast-success'));
+      showSuccessToast($_('settings.general.toast-success'));
       await refresh();
     } catch (e) {
-      showToast($_('settings.general.toast-error'));
+      showErrorToast($_('settings.general.toast-error'));
     } finally {
       saving = false;
     }

@@ -71,8 +71,7 @@
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import { CardHeader, CardFilters, CardFiltersItem, Pagination, SearchInput, NoContent } from '@panomc/sdk/components/panel';
   import { base, goto, page } from '@panomc/sdk/svelte';
-  import { showToast } from '@panomc/sdk/toasts';
-  import { _ } from '../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../i18n';
 
   let { data } = $props();
 
@@ -145,14 +144,14 @@
     try {
       const res = await ApiUtil.post({ path: `/api/panel/market/products/${id}/clone` });
       if (res?.error) {
-        showToast($_('pages.products.toast-clone-error'));
+        showErrorToast($_('pages.products.toast-clone-error'));
       } else {
-        showToast($_('pages.products.toast-clone-success'));
+        showSuccessToast($_('pages.products.toast-clone-success'));
         await navigate();
       }
     } catch (e) {
       console.error('[Market] Failed to clone product', e);
-      showToast($_('pages.products.toast-clone-error'));
+      showErrorToast($_('pages.products.toast-clone-error'));
     } finally {
       buttonsLoading = false;
     }
@@ -165,16 +164,16 @@
     try {
       const res = await ApiUtil.delete({ path: `/api/panel/market/products/${product.id}` });
       if (res?.error) {
-        showToast($_('pages.products.toast-delete-error'));
+        showErrorToast($_('pages.products.toast-delete-error'));
       } else {
-        showToast($_('pages.products.toast-delete-success'));
+        showSuccessToast($_('pages.products.toast-delete-success'));
         // If we removed the last row on a non-first page, step back a page.
         const targetPage = products.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
         await navigate({ page: targetPage });
       }
     } catch (e) {
       console.error('[Market] Failed to delete product', e);
-      showToast($_('pages.products.toast-delete-error'));
+      showErrorToast($_('pages.products.toast-delete-error'));
     } finally {
       buttonsLoading = false;
     }

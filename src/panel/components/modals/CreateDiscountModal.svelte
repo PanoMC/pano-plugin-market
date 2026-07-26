@@ -1,9 +1,8 @@
 <script>
   import { onMount } from 'svelte';
-  import { showToast } from '@panomc/sdk/toasts';
   import ApiUtil from '@panomc/sdk/utils/api';
   import ProductSelector from '../ProductSelector.svelte';
-  import { _ } from '../../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
 
   let { isEdit = false, discount = null, currencySymbol = '', onSaved = () => {} } = $props();
 
@@ -152,11 +151,11 @@
 
   async function saveDiscount() {
     if (!name || name.trim() === '') {
-      showToast($_('modals.discount.toast-name-required'));
+      showErrorToast($_('modals.discount.toast-name-required'));
       return;
     }
     if (value === '' || value == null || isNaN(Number(value))) {
-      showToast($_('modals.discount.toast-value-required'));
+      showErrorToast($_('modals.discount.toast-value-required'));
       return;
     }
 
@@ -196,12 +195,14 @@
 
       if (result.error) throw result.error;
 
-      showToast(isEdit ? $_('modals.discount.toast-updated') : $_('modals.discount.toast-created'));
+      showSuccessToast(
+        isEdit ? $_('modals.discount.toast-updated') : $_('modals.discount.toast-created'),
+      );
       closeModal();
       onSaved();
     } catch (e) {
       console.error('[Market] Failed to save discount', e);
-      showToast($_('modals.discount.toast-save-error'));
+      showErrorToast($_('modals.discount.toast-save-error'));
     } finally {
       loading = false;
     }
