@@ -2,6 +2,7 @@ package com.panomc.plugins.market.service
 
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.util.CurrencyType
+import com.panomc.plugins.market.util.NetworkFailureUtil
 import io.vertx.ext.web.client.WebClient
 import io.vertx.kotlin.coroutines.coAwait
 import org.slf4j.LoggerFactory
@@ -50,7 +51,7 @@ class ExchangeRateService(private val plugin: MarketPlugin) {
             val rates = response.bodyAsJsonObject()?.getJsonObject("rates")
             rates?.getDouble(to.name)
         } catch (e: Exception) {
-            logger.warn("Exchange rate fetch for ${from.name} -> ${to.name} failed", e)
+            logFailure("Exchange rate fetch for ${from.name} -> ${to.name} failed", e)
             null
         }
     }
@@ -82,8 +83,29 @@ class ExchangeRateService(private val plugin: MarketPlugin) {
             val rates = response.bodyAsJsonObject()?.getJsonObject("rates")
             rates?.getDouble(to.name)
         } catch (e: Exception) {
-            logger.warn("Historical rate fetch for ${from.name} -> ${to.name} failed", e)
+            logFailure("Historical rate fetch for ${from.name} -> ${to.name} failed", e)
             null
         }
+    }
+
+    /**
+     * Reports a failed fetch as an operator-facing line rather than a stack dump.
+     *
+     * Not reaching the rate provider is an environment condition and, for a service documented to
+     * be best-effort, an entirely survivable one - the caller just falls back to a stored or manual
+     * rate. The ~25 Vert.x/Netty frames behind it are identical every time and add nothing to "what
+     * failed and why", so they are reduced to one line, with the trace still available at DEBUG.
+     * Every other exception keeps its stack trace, because there the frames are the only thing that
+     * points at the bug.
+     */
+    private fun logFailure(message: String, error: Throwable) {
+        if (!NetworkFailureUtil.isConnectivityFailure(error)) {
+            logger.warn(message, error)
+
+            return
+        }
+
+        logger.warn("{}: {}", message, NetworkFailureUtil.describe(error))
+        logger.debug(message, error)
     }
 }
