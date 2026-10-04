@@ -115,7 +115,7 @@ class PanelCreateProductAPI(
         val product = MarketProduct(
             slug = slug,
             name = name,
-            description = data.getString("description"),
+            description = HtmlSanitizer.sanitizeOrNull(data.getString("description")),
             categoryId = data.getLong("categoryId")?.takeIf { it != -1L },
             price = MoneyUtil.toMinor(data.getDouble("price") ?: 0.0),
             creditPrice = MoneyUtil.toMinor(data.getDouble("creditPrice") ?: 0.0),

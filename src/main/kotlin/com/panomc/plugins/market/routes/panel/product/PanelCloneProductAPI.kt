@@ -10,6 +10,7 @@ import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.model.MarketProduct
 import com.panomc.plugins.market.log.CreatedMarketProductLog
 import com.panomc.plugins.market.permission.ManageMarketPermission
+import com.panomc.plugins.market.util.HtmlSanitizer
 import com.panomc.plugins.market.util.ImageUtil
 import com.panomc.plugins.market.util.MarketStatus
 import com.panomc.plugins.market.util.SlugUtil
@@ -63,7 +64,7 @@ class PanelCloneProductAPI(
         val product = MarketProduct(
             slug = slug,
             name = name,
-            description = original.description,
+            description = HtmlSanitizer.sanitizeOrNull(original.description),
             categoryId = original.categoryId,
             price = original.price,
             creditPrice = original.creditPrice,

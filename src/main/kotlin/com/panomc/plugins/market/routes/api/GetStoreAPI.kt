@@ -12,6 +12,7 @@ import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.model.MarketCategory
 import com.panomc.plugins.market.db.model.MarketProduct
+import com.panomc.plugins.market.util.HtmlSanitizer
 import com.panomc.plugins.market.util.MarketStatus
 import com.panomc.plugins.market.util.MoneyUtil
 import com.panomc.plugins.market.util.ProductDurationType
@@ -141,7 +142,8 @@ class GetStoreAPI(
             .put("id", product.id)
             .put("slug", product.slug)
             .put("name", product.name)
-            .put("description", product.description)
+            // Sanitized on output too: rows saved before write-time sanitizing may still hold raw HTML.
+            .put("description", HtmlSanitizer.sanitizeOrNull(product.description))
             .put("categoryId", product.categoryId)
             .put("price", MoneyUtil.toDecimal(product.price))
             .put("creditPrice", MoneyUtil.toDecimal(product.creditPrice))

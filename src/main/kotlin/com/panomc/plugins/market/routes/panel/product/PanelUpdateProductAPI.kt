@@ -138,7 +138,7 @@ class PanelUpdateProductAPI(
             id = id,
             slug = slug,
             name = name,
-            description = data.getString("description"),
+            description = HtmlSanitizer.sanitizeOrNull(data.getString("description")),
             categoryId = categoryId,
             price = price,
             creditPrice = creditPrice,
