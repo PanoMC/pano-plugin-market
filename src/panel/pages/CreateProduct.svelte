@@ -94,7 +94,7 @@
 
   let selectedFile = $state(null);
   let previewUrl = $state(null);
-  let fileInput;
+  let fileInput = $state(null);
 
   let hasPermission = $state(false);
   let hasRequiredProducts = $state(false);

@@ -3,8 +3,8 @@
     role="button"
     tabindex="0"
     aria-label={product.name}
-    on:click={() => dispatch('select', product)}
-    on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), dispatch('select', product))}
+    onclick={() => onselect?.(product)}
+    onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onselect?.(product))}
     style="cursor: pointer;">
     <div class="ratio ratio-16x9 bg-body-tertiary rounded-top overflow-hidden">
       {#if product.imageFileName}
@@ -46,7 +46,7 @@
       type="button"
       class="btn btn-sm btn-primary mt-auto w-100"
       disabled={soldOut}
-      on:click={add}>
+      onclick={add}>
       <i class="fa-solid fa-cart-plus me-1"></i>
       {soldOut ? $_('theme.store.sold-out') : $_('theme.store.add-to-cart')}
     </button>
@@ -54,19 +54,15 @@
 </div>
 
 <script>
-  import { createEventDispatcher } from 'svelte';
   import { base } from '@panomc/sdk/svelte';
   import { _, showSuccessToast } from '../../i18n';
   import { pluginId } from '../../i18n';
   import { addToCart } from '../utils/cart';
   import { formatPrice } from '../utils/format';
 
-  export let product;
-  export let settings = {};
+  let { product, settings = {}, onselect } = $props();
 
-  const dispatch = createEventDispatcher();
-
-  $: soldOut = product.stock === 0;
+  let soldOut = $derived(product.stock === 0);
 
   function add() {
     if (soldOut) return;

@@ -4,7 +4,7 @@
     class="list-group-item list-group-item-action d-flex align-items-center gap-2"
     class:active={selected === node.id}
     style="padding-left: {0.75 + depth * 1.25}rem;"
-    on:click={() => dispatch('select', { id: node.id })}>
+    onclick={() => onselect?.({ id: node.id })}>
     <i
       class="fa-solid {node.icon || 'fa-folder'} flex-shrink-0"
       style={node.color ? `color: ${node.color};` : ''}></i>
@@ -15,18 +15,15 @@
   {#if node.children && node.children.length}
     <ul class="list-group list-group-flush">
       {#each node.children as child (child.id)}
-        <svelte:self node={child} {selected} depth={depth + 1} on:select />
+        <CategoryNode node={child} {selected} depth={depth + 1} {onselect} />
       {/each}
     </ul>
   {/if}
 </li>
 
 <script>
-  import { createEventDispatcher } from 'svelte';
+  // Self-import: the recursive tree renders the component through its own name.
+  import CategoryNode from './CategoryNode.svelte';
 
-  export let node;
-  export let selected = null;
-  export let depth = 0;
-
-  const dispatch = createEventDispatcher();
+  let { node, selected = null, depth = 0, onselect } = $props();
 </script>

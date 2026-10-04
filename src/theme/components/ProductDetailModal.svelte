@@ -65,7 +65,7 @@
                 type="button"
                 class="btn btn-primary mt-auto"
                 disabled={product.stock === 0}
-                on:click={add}>
+                onclick={add}>
                 <i class="fa-solid fa-cart-plus me-1"></i>
                 {product.stock === 0 ? $_('theme.store.sold-out') : $_('theme.store.add-to-cart')}
               </button>
@@ -78,26 +78,22 @@
 </div>
 
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { base, browser } from '@panomc/sdk/svelte';
   import { _, showSuccessToast } from '../../i18n';
   import { pluginId } from '../../i18n';
   import { addToCart } from '../utils/cart';
   import { formatPrice } from '../utils/format';
 
-  export let product = null;
-  export let settings = {};
-  export let categoryName = null;
+  let { product = null, settings = {}, categoryName = null, onclose } = $props();
 
-  const dispatch = createEventDispatcher();
-
-  let modalEl;
-  let modalInstance = null;
+  let modalEl = $state();
+  let modalInstance = $state.raw(null);
 
   onMount(() => {
     if (browser && window.bootstrap) {
       modalInstance = new window.bootstrap.Modal(modalEl);
-      modalEl.addEventListener('hidden.bs.modal', () => dispatch('close'));
+      modalEl.addEventListener('hidden.bs.modal', () => onclose?.());
     }
     return () => {
       // Bootstrap's hide() animates asynchronously; during a client-side
@@ -119,7 +115,9 @@
   });
 
   // Show whenever a product is selected; the parent nulls `product` on close.
-  $: if (modalInstance && product) modalInstance.show();
+  $effect(() => {
+    if (modalInstance && product) modalInstance.show();
+  });
 
   function add() {
     if (!product || product.stock === 0) return;

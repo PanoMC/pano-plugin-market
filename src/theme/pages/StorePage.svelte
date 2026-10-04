@@ -5,7 +5,7 @@
         categories={categories}
         selected={selectedCategory}
         totalCount={products.length}
-        on:select={onCategorySelect} />
+        onselect={onCategorySelect} />
     </div>
   </aside>
 
@@ -44,7 +44,7 @@
         <div class="row g-3">
           {#each featuredProducts as product (product.id)}
             <div class="col-6 col-md-4 col-xl-3">
-              <ProductCard {product} {settings} on:select={openDetail} />
+              <ProductCard {product} {settings} onselect={openDetail} />
             </div>
           {/each}
         </div>
@@ -59,7 +59,7 @@
         <div class="row g-3">
           {#each bestsellerProducts as product (product.id)}
             <div class="col-6 col-md-4 col-xl-3">
-              <ProductCard {product} {settings} on:select={openDetail} />
+              <ProductCard {product} {settings} onselect={openDetail} />
             </div>
           {/each}
         </div>
@@ -82,7 +82,7 @@
         <div class="row g-3">
           {#each filteredProducts as product (product.id)}
             <div class="col-6 col-md-4 col-xl-3">
-              <ProductCard {product} {settings} on:select={openDetail} />
+              <ProductCard {product} {settings} onselect={openDetail} />
             </div>
           {/each}
         </div>
@@ -108,11 +108,11 @@
   product={selectedProduct}
   {settings}
   categoryName={selectedProduct ? categoryNameMap[selectedProduct.categoryId] || null : null}
-  on:close={() => (selectedProduct = null)} />
+  onclose={() => (selectedProduct = null)} />
 
 <CartOffcanvas {productMap} {settings} />
 
-<script context="module">
+<script module>
   import ApiUtil from '@panomc/sdk/utils/api';
 
   export async function load(event) {
@@ -191,7 +191,7 @@
 </script>
 
 <script>
-  import { onMount } from 'svelte';
+  import { untrack } from 'svelte';
   import { browser } from '@panomc/sdk/svelte';
   import { NoContent } from '@panomc/sdk/components/theme';
   import { _ } from '../../i18n';
@@ -202,45 +202,53 @@
   import ComparisonTable from '../components/ComparisonTable.svelte';
   import CartOffcanvas from '../components/CartOffcanvas.svelte';
 
-  export let data;
+  let { data } = $props();
 
-  $: ({ settings, categories, products, bestsellers, comparisons } = data);
+  let settings = $derived(data.settings);
+  let categories = $derived(data.categories);
+  let products = $derived(data.products);
+  let bestsellers = $derived(data.bestsellers);
+  let comparisons = $derived(data.comparisons);
 
-  let lastInitialCategory = data.initialCategory ?? null;
-  let selectedCategory = lastInitialCategory;
-  let search = '';
-  let selectedProduct = null;
-  let mounted = false;
+  // Plain (non-reactive) bookkeeping for the deep-link re-sync below.
+  let lastInitialCategory = untrack(() => data.initialCategory ?? null);
+  let selectedCategory = $state(lastInitialCategory);
+  let search = $state('');
+  let selectedProduct = $state(null);
 
   // Re-sync when a client-side navigation delivers a new ?category deep link
   // while this component instance is reused (load() re-parses it every time).
-  $: if ((data.initialCategory ?? null) !== lastInitialCategory) {
-    lastInitialCategory = data.initialCategory ?? null;
-    selectedCategory = lastInitialCategory;
-  }
+  $effect.pre(() => {
+    const next = data.initialCategory ?? null;
 
-  onMount(() => {
-    mounted = true;
+    if (next !== lastInitialCategory) {
+      lastInitialCategory = next;
+      selectedCategory = next;
+    }
   });
 
   // Purge persisted cart lines whose product no longer exists (removed/deactivated/
   // expired since it was added). Skipped when the product list is empty so a failed
-  // load (fallback data) cannot wipe a valid cart.
-  $: if (mounted && products.length) {
-    cart.update((items) => items.filter((item) => productMap[item.productId]));
-  }
+  // load (fallback data) cannot wipe a valid cart. Effects only run after mount.
+  $effect(() => {
+    if (products.length) {
+      cart.update((items) => items.filter((item) => productMap[item.productId]));
+    }
+  });
 
-  $: showFeatured = settings.showFeaturedProducts;
-  $: showBestsellers = settings.showBestsellers;
+  let showFeatured = $derived(settings.showFeaturedProducts);
+  let showBestsellers = $derived(settings.showBestsellers);
 
   // Product lookup by id.
-  $: productMap = products.reduce((acc, p) => {
-    acc[p.id] = p;
-    return acc;
-  }, {});
+  let productMap = $derived(
+    products.reduce((acc, p) => {
+      acc[p.id] = p;
+      return acc;
+    }, {})
+  );
 
   // Flattened id -> name map for category labels (grid heading + modal).
-  $: categoryNameMap = flattenNames(categories, {});
+  let categoryNameMap = $derived(flattenNames(categories, {}));
 
   function flattenNames(nodes, acc) {
     for (const node of nodes) {
@@ -250,44 +258,45 @@
     return acc;
   }
 
-  $: featuredProducts = products.filter((p) => p.featured);
+  let featuredProducts = $derived(products.filter((p) => p.featured));
 
-  $: bestsellerProducts = bestsellers
-    .map((id) => productMap[id])
-    .filter(Boolean);
+  let bestsellerProducts = $derived(bestsellers.map((id) => productMap[id]).filter(Boolean));
 
   // Featured / bestseller sections only surface on the default view.
-  $: showSections = selectedCategory == null && !search.trim();
+  let showSections = $derived(selectedCategory == null && !search.trim());
 
-  $: filteredProducts = products.filter((p) => {
-    const matchesCategory = selectedCategory == null || p.categoryId === selectedCategory;
-    const term = search.trim().toLowerCase();
-    const matchesSearch = !term || (p.name || '').toLowerCase().includes(term);
-    return matchesCategory && matchesSearch;
-  });
+  let filteredProducts = $derived(
+    products.filter((p) => {
+      const matchesCategory = selectedCategory == null || p.categoryId === selectedCategory;
+      const term = search.trim().toLowerCase();
+      const matchesSearch = !term || (p.name || '').toLowerCase().includes(term);
+      return matchesCategory && matchesSearch;
+    })
+  );
 
-  $: resolvedComparisons = comparisons.filter(
-    (c) => (c.productIds || []).some((id) => id != null && productMap[id])
+  let resolvedComparisons = $derived(
+    comparisons.filter((c) => (c.productIds || []).some((id) => id != null && productMap[id]))
   );
 
   // Count only lines that resolve to a visible product, mirroring CartOffcanvas,
   // so the badge never disagrees with the opened cart.
-  $: cartCount = $cart.reduce(
-    (sum, item) => (productMap[item.productId] ? sum + item.quantity : sum),
-    0
+  let cartCount = $derived(
+    $cart.reduce((sum, item) => (productMap[item.productId] ? sum + item.quantity : sum), 0)
   );
 
-  function onCategorySelect(event) {
-    selectedCategory = event.detail.id;
+  function onCategorySelect(detail) {
+    selectedCategory = detail.id;
   }
 
-  function openDetail(event) {
-    selectedProduct = event.detail;
+  function openDetail(product) {
+    selectedProduct = product;
   }
 
   // Reflect the selected category in the URL for deep-linking, without a reload
   // (filtering is entirely client-side).
-  $: if (browser && mounted) syncUrl(selectedCategory);
+  $effect(() => {
+    if (browser) syncUrl(selectedCategory);
+  });
 
   function syncUrl(categoryId) {
     try {

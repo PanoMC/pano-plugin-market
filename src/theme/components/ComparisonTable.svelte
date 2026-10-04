@@ -42,13 +42,13 @@
   import { _ } from '../../i18n';
   import { formatPrice } from '../utils/format';
 
-  export let comparison;
-  export let productMap = {};
-  export let settings = {};
+  let { comparison, productMap = {}, settings = {} } = $props();
 
   // Resolve the comparison's product id slots against the visible product list,
   // dropping null slots and ids that are hidden/removed (not present in the map).
-  $: columns = (comparison.productIds || [])
-    .filter((id) => id != null && productMap[id])
-    .map((id) => productMap[id]);
+  let columns = $derived(
+    (comparison.productIds || [])
+      .filter((id) => id != null && productMap[id])
+      .map((id) => productMap[id])
+  );
 </script>

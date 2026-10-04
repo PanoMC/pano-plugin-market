@@ -45,7 +45,7 @@
                 type="button"
                 class="btn btn-outline-secondary"
                 aria-label={$_('theme.store.cart.decrease')}
-                on:click={() => setQuantity(line.product.id, line.quantity - 1)}>
+                onclick={() => setQuantity(line.product.id, line.quantity - 1)}>
                 <i class="fa-solid fa-minus"></i>
               </button>
               <span class="input-group-text flex-grow-1 justify-content-center bg-body">{line.quantity}</span>
@@ -54,7 +54,7 @@
                 class="btn btn-outline-secondary"
                 aria-label={$_('theme.store.cart.increase')}
                 disabled={line.product.stock != null && line.quantity >= line.product.stock}
-                on:click={() =>
+                onclick={() =>
                   setQuantity(
                     line.product.id,
                     line.product.stock != null
@@ -68,7 +68,7 @@
               type="button"
               class="btn btn-sm btn-link text-danger"
               aria-label={$_('theme.store.cart.remove')}
-              on:click={() => removeFromCart(line.product.id)}>
+              onclick={() => removeFromCart(line.product.id)}>
               <i class="fa-solid fa-trash"></i>
             </button>
           </li>
@@ -89,7 +89,7 @@
         <button
           type="button"
           class="btn btn-link btn-sm text-danger w-100 mt-1"
-          on:click={clearCart}>
+          onclick={clearCart}>
           {$_('theme.store.cart.clear')}
         </button>
       </div>
@@ -105,8 +105,7 @@
   import { cart, setQuantity, removeFromCart, clearCart } from '../utils/cart';
   import { formatPrice } from '../utils/format';
 
-  export let productMap = {};
-  export let settings = {};
+  let { productMap = {}, settings = {} } = $props();
 
   // The offcanvas opens via data-bs-toggle, so Bootstrap owns its backdrop and
   // the body scroll lock. If the user navigates away while it is open, the
@@ -132,12 +131,13 @@
 
   // Resolve cart lines against the known products; drop items whose product is no
   // longer visible (e.g. removed since it was added).
-  $: resolvedItems = $cart
-    .map((item) => ({ product: productMap[item.productId], quantity: item.quantity }))
-    .filter((line) => line.product);
+  let resolvedItems = $derived(
+    $cart
+      .map((item) => ({ product: productMap[item.productId], quantity: item.quantity }))
+      .filter((line) => line.product)
+  );
 
-  $: total = resolvedItems.reduce(
-    (sum, line) => sum + Number(line.product.price || 0) * line.quantity,
-    0
+  let total = $derived(
+    resolvedItems.reduce((sum, line) => sum + Number(line.product.price || 0) * line.quantity, 0)
   );
 </script>
