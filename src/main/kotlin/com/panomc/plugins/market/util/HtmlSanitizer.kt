@@ -7,7 +7,8 @@ package com.panomc.plugins.market.util
  * The platform ships no HTML parser/sanitizer (no Jsoup on the host classpath), so this is a small
  * tokenizer that REBUILDS the markup instead of filtering it: only allowlisted tags with allowlisted,
  * re-escaped attributes are emitted, every text run is escaped, and everything else (comments, doctype,
- * unknown tags, scripts, event handlers, style, javascript:/data: URLs) is dropped. Because nothing from
+ * unknown tags, scripts, event handlers, javascript:/data: URLs) is dropped. The only inline style kept
+ * is a filtered subset of text-styling declarations on span (the editor's colour/font picker output). Because nothing from
  * the input is copied through verbatim there is no re-serialisation (mXSS) gap, and no raw-text element
  * (script, style, textarea, title, svg, math, ...) can ever reach the output.
  *
@@ -36,11 +37,17 @@ object HtmlSanitizer {
     )
 
     private val ALLOWED_ATTRIBUTES = mapOf(
+        "span" to setOf("style"),
         "a" to setOf("href", "title", "target"),
         "img" to setOf("src", "alt", "title", "width", "height"),
         "th" to setOf("colspan", "rowspan"),
         "td" to setOf("colspan", "rowspan")
     )
+
+    // The properties the panel editor's TipTap TextStyleKit can emit; anything else is dropped.
+    private val ALLOWED_STYLE_PROPERTIES = setOf("color", "background-color", "font-size", "font-family", "line-height")
+    private val STYLE_VALUE = Regex("^[#a-zA-Z0-9 .,%()'\\-]{1,64}$")
+    private val FORBIDDEN_STYLE_FRAGMENTS = listOf("url(", "expression(", "\\", "/*")
 
     private val LINK_SCHEMES = setOf("http", "https", "mailto", "tel")
     private val IMAGE_SCHEMES = setOf("http", "https")
@@ -142,6 +149,7 @@ object HtmlSanitizer {
                     "href" -> value.takeIf { isSafeUrl(it, LINK_SCHEMES, allowRelative = true) }
                     "src" -> value.takeIf { isSafeUrl(it, IMAGE_SCHEMES, allowRelative = true) }
                     "width", "height", "colspan", "rowspan" -> value.trim().takeIf { DIGITS.matches(it) }
+                    "style" -> sanitizeStyle(value)
                     "target" -> value.trim().takeIf { it.equals("_blank", ignoreCase = true) }?.lowercase()
                     else -> value
                 } ?: continue
@@ -289,6 +297,27 @@ object HtmlSanitizer {
                 }
             }
         }
+    }
+
+    // Keeps only allowlisted declarations with a plain value (no functions that fetch or evaluate, no
+    // escapes, no comments); returns null when nothing survives so the attribute is omitted.
+    private fun sanitizeStyle(value: String): String? {
+        val kept = value.split(';').mapNotNull { declaration ->
+            val colon = declaration.indexOf(':')
+            if (colon == -1) return@mapNotNull null
+
+            val property = declaration.substring(0, colon).trim().lowercase()
+            val propertyValue = declaration.substring(colon + 1).trim()
+            val lower = propertyValue.lowercase()
+
+            if (property !in ALLOWED_STYLE_PROPERTIES) return@mapNotNull null
+            if (!STYLE_VALUE.matches(propertyValue)) return@mapNotNull null
+            if (FORBIDDEN_STYLE_FRAGMENTS.any { it in lower }) return@mapNotNull null
+
+            "$property: $propertyValue"
+        }
+
+        return kept.joinToString("; ").takeIf { it.isNotEmpty() }
     }
 
     private fun codePointToString(codePoint: Int): String? =

@@ -78,7 +78,13 @@ class HtmlSanitizerTest {
         ).forEach { assertFalse(lower.contains(it), "found $it; $ctx") }
 
         assertFalse(Regex("\\son[a-z]+\\s*=").containsMatchIn(lower), "event handler; $ctx")
-        assertFalse(Regex("\\sstyle\\s*=").containsMatchIn(lower), "style attribute; $ctx")
+        // A style attribute may only survive on span, and never with a fetching/evaluating value.
+        assertFalse(Regex("<(?!span)[a-z0-9]+[^>]*\\sstyle\\s*=").containsMatchIn(lower), "style attribute outside span; $ctx")
+        Regex("\\sstyle=\"([^\"]*)\"").findAll(lower).forEach { style ->
+            listOf("url(", "expression(", "javascript:", "\\", "/*").forEach {
+                assertFalse(style.groupValues[1].contains(it), "dangerous style value $it; $ctx")
+            }
+        }
         assertFalse(Regex("(href|src)=\"\\s*(javascript|vbscript|data):").containsMatchIn(lower), "bad url; $ctx")
 
         // Only allowlisted tags, with only allowlisted attributes, may appear.
@@ -94,7 +100,7 @@ class HtmlSanitizerTest {
 
         Regex("\\s([a-zA-Z\\-]+)=\"").findAll(output).forEach { attr ->
             assertTrue(
-                attr.groupValues[1] in setOf("href", "src", "alt", "title", "width", "height", "colspan", "rowspan", "target", "rel"),
+                attr.groupValues[1] in setOf("href", "src", "alt", "title", "width", "height", "colspan", "rowspan", "target", "rel", "style"),
                 "attribute ${attr.groupValues[1]} not allowed; $ctx"
             )
         }
@@ -131,6 +137,28 @@ class HtmlSanitizerTest {
         assertEquals("<b>bold</b>", HtmlSanitizer.sanitize("<b onclick=\"x()\">bold</b>"))
         assertEquals("<div>hi</div>", HtmlSanitizer.sanitize("<div style=\"color:red\" class=\"a\">hi</div>"))
         assertEquals("<img src=\"x\">", HtmlSanitizer.sanitize("<img src=x onerror=alert(1)>"))
+    }
+
+    @Test
+    fun `text styling on span keeps only filtered declarations`() {
+        assertEquals("<span style=\"color: #ff0000\">x</span>", HtmlSanitizer.sanitize("<span style=\"color: #ff0000\">x</span>"))
+        assertEquals(
+            "<span style=\"color: red\">x</span>",
+            HtmlSanitizer.sanitize("<span style=\"color:red;background:url(javascript:alert(1))\">x</span>")
+        )
+        assertEquals(
+            "<span style=\"color: rgb(1, 2, 3); font-size: 14px\">x</span>",
+            HtmlSanitizer.sanitize("<span style=\"COLOR : rgb(1, 2, 3);font-size:14px\">x</span>")
+        )
+        assertEquals("<span>x</span>", HtmlSanitizer.sanitize("<span style=\"background-color:url(x)\">x</span>"))
+        assertEquals("<span>x</span>", HtmlSanitizer.sanitize("<span style=\"color:expression(alert(1))\">x</span>"))
+        assertEquals("<span>x</span>", HtmlSanitizer.sanitize("<span style=\"color:\\72ed\">x</span>"))
+        assertEquals("<span>x</span>", HtmlSanitizer.sanitize("<span style=\"position:fixed\">x</span>"))
+        assertEquals("<span>x</span>", HtmlSanitizer.sanitize("<span style=\"color:red/*;*/x\">x</span>"))
+        // Entity-encoded separators are decoded before filtering, so they cannot smuggle a declaration.
+        assertEquals("<span>x</span>", HtmlSanitizer.sanitize("<span style=\"background&#58;url(x)\">x</span>"))
+        // Only span carries a style.
+        assertEquals("<p>x</p>", HtmlSanitizer.sanitize("<p style=\"color:red\">x</p>"))
     }
 
     @Test
