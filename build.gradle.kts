@@ -68,7 +68,7 @@ dependencies {
     if (bootstrap) {
         compileOnly(project(mapOf("path" to ":Pano")))
     } else {
-        compileOnly("com.github.panomc:pano:v1.0.0-alpha.336")
+        compileOnly("com.github.panomc:pano:v1.0.0-alpha.492")
     }
 
     compileOnly(kotlin("stdlib-jdk8"))
@@ -86,6 +86,14 @@ dependencies {
 
     // https://mvnrepository.com/artifact/org.springframework/spring-context
     compileOnly("org.springframework:spring-context:${springContextVersion}")
+
+    // Same JUnit setup as the host (see Pano/build.gradle.kts).
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.13.3")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.13.3")
+    // Gradle 9 requires the JUnit Platform launcher on the test runtime classpath explicitly.
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.13.3")
+    testImplementation("io.vertx:vertx-unit:${vertxVersion}")
+    testImplementation("io.vertx:vertx-lang-kotlin-coroutines:${vertxVersion}")
 }
 
 tasks {
@@ -237,4 +245,15 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
     }
+}
+
+// JUnit Platform for Jupiter tests; the test executor runs on JDK 21 like the host (the main
+// classes compile to Java 11 bytecode, which JDK 21 runs fine).
+tasks.named<Test>("test") {
+    useJUnitPlatform()
+    javaLauncher.set(
+        javaToolchains.launcherFor {
+            languageVersion.set(JavaLanguageVersion.of(21))
+        }
+    )
 }
