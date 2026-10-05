@@ -59,7 +59,22 @@
           showCompany={req.showCompany}
           onchange={(patch) => onchange(patch)}
           {onblur} />
-      {:else if req.showCompany && req.copy}
+      {:else if req.copy && req.copyFields.length > 0}
+        <p class="small text-body-secondary mb-0" id="market-checkout-billing-copy-missing">
+          {$_('theme.checkout.billing-copy-missing')}
+        </p>
+        <AddressForm
+          kind="billing"
+          required={copyRequired}
+          value={info}
+          {errors}
+          countries={COUNTRY_CODES}
+          fields={req.copyFields}
+          onchange={(patch) => onchange(patch)}
+          {onblur} />
+      {/if}
+
+      {#if !req.showAddress && req.showCompany && req.copy}
         <div>
           <label class="form-label" for={fieldId('billing', 'company')}>
             {$_('theme.checkout.address.company')}
@@ -187,4 +202,7 @@
     onsame = () => {},
     onblur = () => {},
   } = $props();
+
+  // the fields the copied shipping address lacks are required inputs
+  const copyRequired = $derived(new Set(req.copyFields ?? []));
 </script>

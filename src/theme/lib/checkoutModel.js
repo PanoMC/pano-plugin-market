@@ -178,6 +178,36 @@ export function extraShippingFields(quote) {
   return out;
 }
 
+export const NO_CARRIER_EXTRAS = Object.freeze({ key: '', fields: Object.freeze([]) });
+
+/** Scope of the carrier extras: they hold for one destination country and one shipping method. */
+export const carrierExtrasKey = (country, shippingMethodId) =>
+  `${text(country).toUpperCase()}|${shippingMethodId ?? ''}`;
+
+/**
+ * Carrier extras kept as page state (sticky): the fields SHIPPING_ADDRESS_INVALID named stay required while the
+ * draft's country and shipping method are unchanged, even when a later quote (asked without the incomplete
+ * address, so answered SHIPPING_ADDRESS_REQUIRED) no longer carries the message. Otherwise the address would be
+ * sent and withheld in turn, one quote per flip. `current` = `{ key, fields }`; `draft` = the checkout draft
+ * (read after the quote's selections were applied).
+ */
+export function nextCarrierExtras(current, quote, draft) {
+  const key = carrierExtrasKey(draft?.shippingAddress?.country, draft?.shippingMethodId);
+  const kept = current && current.key === key ? current.fields : [];
+  const found = extraShippingFields(quote);
+
+  if (found.length === 0) return kept.length > 0 ? current : NO_CARRIER_EXTRAS;
+
+  return { key, fields: [...new Set([...kept, ...found])] };
+}
+
+/** The carrier extras in effect for `draft`: none once its country or shipping method differs from the scope. */
+export function carrierExtrasFor(current, draft) {
+  const key = carrierExtrasKey(draft?.shippingAddress?.country, draft?.shippingMethodId);
+
+  return current && current.key === key ? current.fields : [];
+}
+
 // ---- page state machine (14 §10.3) ------------------------------------------------------------------------
 
 /**
@@ -250,14 +280,14 @@ export function shippingCountries(config) {
   return list.length ? list.map((c) => c.toUpperCase()) : [...COUNTRY_CODES];
 }
 
-/** Required field names of a shipping address (config per-country set plus the carrier's extras). */
-export function shippingRequired(config, address, quote = null) {
-  return requiredAddressFields(config?.addressFields, address?.country, extraShippingFields(quote));
+/** Required field names of a shipping address (config per-country set plus the carrier's `extra` fields). */
+export function shippingRequired(config, address, extra = []) {
+  return requiredAddressFields(config?.addressFields, address?.country, extra);
 }
 
 /** `{ ok, errors }`: a shipping address is complete when it has no validation error and a country. */
-export function checkShippingAddress(config, address, quote = null) {
-  const required = shippingRequired(config, address, quote);
+export function checkShippingAddress(config, address, extra = []) {
+  const required = shippingRequired(config, address, extra);
   required.add('country');
   const errors = validateAddress(address, required, shippingCountries(config));
 
@@ -317,7 +347,12 @@ export function mapBuyerFields(requiredBuyerFields, addressFields, country) {
 /**
  * What the billing section shows and requires.
  * `info` = draft.billingInfo (address fields + type + identityNumber / taxOffice / taxNumber);
- * `shippingAddress` = the effective shipping address (copied when "same as shipping" is on).
+ * `shippingAddress` = the effective shipping address (copied when "same as shipping" is on);
+ * `shippingExtra` = the carrier's extra shipping fields, `shippingSaved` = a saved address is chosen (the shipping
+ * section then validates nothing on the address itself).
+ * While the shipping address is copied, every required billing address field the copy lacks (not enforced by the
+ * shipping section: e.g. a phone) is listed in `copyFields` and shown as a billing input, so the buyer is never
+ * stuck on BUYER_INFO_REQUIRED with the field hidden.
  */
 export function billingRequirements({
   config,
@@ -327,6 +362,8 @@ export function billingRequirements({
   sameAsShipping = true,
   shippingAddress = null,
   shippingRequired: shippingNeeded = false,
+  shippingExtra = [],
+  shippingSaved = false,
 }) {
   const mode = config?.billingInfoMode || 'OFF';
   const type = info?.type === 'COMPANY' ? 'COMPANY' : 'INDIVIDUAL';
@@ -374,6 +411,26 @@ export function billingRequirements({
     f === 'company' ? type === 'COMPANY' : mode !== 'OFF' || mapped.has(f),
   );
 
+  let copyFields = [];
+
+  if (isOpen && copy) {
+    // what the shipping section already enforces cannot be missing while it is valid (typing in progress)
+    const enforced = shippingSaved
+      ? new Set()
+      : new Set([
+          ...requiredAddressFields(config?.addressFields, country, shippingExtra),
+          'country',
+        ]);
+    const wanted = new Set(
+      [...required].filter(
+        (f) => ADDRESS_FIELDS.includes(f) && f !== 'company' && !enforced.has(f),
+      ),
+    );
+    const lacking = validateAddress(addressOf(shippingAddress), wanted, COUNTRY_CODES);
+
+    copyFields = ADDRESS_FIELDS.filter((f) => wanted.has(f) && f in lacking);
+  }
+
   return {
     mode,
     visible,
@@ -386,6 +443,7 @@ export function billingRequirements({
     // the address inputs are hidden while the shipping address is copied
     showAddress: isOpen && !copy,
     copy: isOpen && copy,
+    copyFields,
     showIdentity: isOpen && showIdentity,
     identityRequired,
     showCompany: isOpen && type === 'COMPANY',
@@ -406,6 +464,9 @@ export function validateBilling(req, info) {
     );
     for (const field of Object.keys(address))
       if (req.fields.includes(field)) errors[field] = address[field];
+  } else if (req.copy && req.copyFields?.length > 0) {
+    const address = validateAddress(info, new Set(req.copyFields), COUNTRY_CODES);
+    for (const field of req.copyFields) if (address[field]) errors[field] = address[field];
   }
 
   if (req.showIdentity) {
@@ -436,7 +497,12 @@ export function effectiveBillingInfo(req, info, shippingAddress = null) {
   if (!req.open) return null;
 
   const source = req.copy
-    ? { ...addressOf(shippingAddress), company: req.showCompany ? info?.company : '' }
+    ? {
+        ...addressOf(shippingAddress),
+        company: req.showCompany ? info?.company : '',
+        // what the copy lacks comes from the billing inputs
+        ...Object.fromEntries((req.copyFields ?? []).map((f) => [f, info?.[f]])),
+      }
     : info;
   const out = wireAddress(source, req.copy ? ADDRESS_FIELDS : req.fields);
   out.type = req.type;
@@ -474,10 +540,18 @@ export function firstInvalidId(errors) {
 
 /**
  * Client validation over every visible section. `draft` is the checkout draft, `user` the logged-in user
- * (or null), `savedAddresses` the buyer's saved addresses. Returns
+ * (or null), `saved` the buyer's saved addresses, `carrierExtras` the sticky extra shipping fields. Returns
  * `{ errors: { guest, gift, shipping, billing }, valid, firstId, billing: <requirements> }`.
  */
-export function validateCheckout({ config, quote, topup = null, draft, user = null, saved = [] }) {
+export function validateCheckout({
+  config,
+  quote,
+  topup = null,
+  draft,
+  user = null,
+  saved = [],
+  carrierExtras = [],
+}) {
   const visible = sectionsVisible({ config, quote, topup });
   const errors = { guest: {}, gift: {}, shipping: {}, billing: {} };
 
@@ -500,7 +574,7 @@ export function validateCheckout({ config, quote, topup = null, draft, user = nu
 
   if (visible.shipping) {
     if (draft.shippingAddressId === null || draft.shippingAddressId === undefined) {
-      const checked = checkShippingAddress(config, draft.shippingAddress, quote);
+      const checked = checkShippingAddress(config, draft.shippingAddress, carrierExtras);
       Object.assign(errors.shipping, checked.errors);
     }
 
@@ -521,6 +595,8 @@ export function validateCheckout({ config, quote, topup = null, draft, user = nu
     sameAsShipping: draft.billingSameAsShipping,
     shippingAddress: effective,
     shippingRequired: visible.shipping,
+    shippingExtra: carrierExtras,
+    shippingSaved: draft.shippingAddressId !== null && draft.shippingAddressId !== undefined,
   });
 
   if (visible.billing) errors.billing = validateBilling(req, draft.billingInfo);

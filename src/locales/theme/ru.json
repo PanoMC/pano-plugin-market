@@ -187,6 +187,7 @@
       "billing-type-INDIVIDUAL": "Физическое лицо",
       "billing-type-COMPANY": "Компания",
       "billing-same": "Совпадают с адресом доставки",
+      "billing-copy-missing": "В адресе доставки нет этих данных. Пожалуйста, добавьте их.",
       "address": {
         "firstName": "Имя",
         "lastName": "Фамилия",

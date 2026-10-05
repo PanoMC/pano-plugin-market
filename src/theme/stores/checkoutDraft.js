@@ -1,16 +1,22 @@
 // Checkout draft (14 §10.2): sessionStorage['pano-plugin-market-checkout'], restored on mount and written on
 // every change (debounced 200 ms). Legal acceptance is never stored. Cleared after a successful checkout and
-// on logout. `createCheckoutDraft(deps)` builds an instance with injectable storage and timers (tests);
+// on logout. The logout clear is global (registered with the session like the cart store, loaded by register.js,
+// so it also fires when the buyer logs out on any other page); in addition the stored JSON carries the owner's
+// user key (never part of the draft) and a draft of another user is not restored.
+// `createCheckoutDraft(deps)` builds an instance with injectable storage and timers (tests);
 // `checkoutDraft` is the instance of the running theme. Nothing here reads storage at module top level.
 import { get, writable } from 'svelte/store';
 import { emptyAddress } from '../lib/checkoutModel.js';
-import { isLoggedIn } from './session.js';
+import { onSessionInit, user } from './session.js';
 
 export const DRAFT_KEY = 'pano-plugin-market-checkout';
 export const DRAFT_DEBOUNCE = 200;
 
 const ADDRESS_KEYS = Object.keys(emptyAddress());
 const BILLING_KEYS = [...ADDRESS_KEYS, 'type', 'identityNumber', 'taxOffice', 'taxNumber'];
+
+/** Owner key of a session user ('' for a guest); the cart store uses the same shape. */
+export const ownerKeyOf = (u) => (u ? `u:${u.id ?? u.username ?? ''}` : '');
 
 export const defaultDraft = () => ({
   guest: { username: '', email: '' },
@@ -53,6 +59,21 @@ function pickStrings(source, keys, base) {
   const out = { ...base };
   if (isObject(source)) for (const key of keys) out[key] = str(source[key], base[key]);
   return out;
+}
+
+/** Owner key stored beside a draft ('' = guest or unknown). */
+export function storedOwner(raw) {
+  let value = raw;
+
+  if (typeof raw === 'string') {
+    try {
+      value = JSON.parse(raw);
+    } catch (e) {
+      return '';
+    }
+  }
+
+  return isObject(value) && typeof value.owner === 'string' ? value.owner : '';
 }
 
 /** Draft of a stored string: unknown keys dropped, wrong types replaced by the default; garbage => defaults. */
@@ -124,6 +145,8 @@ export function createCheckoutDraft(overrides = {}) {
 
   let restored = false;
   let timer = null;
+  // user key the draft belongs to: null = not told yet, '' = guest
+  let owner = null;
 
   const store = () => {
     try {
@@ -137,7 +160,7 @@ export function createCheckoutDraft(overrides = {}) {
     timer = null;
 
     try {
-      store()?.setItem(DRAFT_KEY, JSON.stringify(get(state)));
+      store()?.setItem(DRAFT_KEY, JSON.stringify({ ...get(state), owner: owner ?? '' }));
     } catch (e) {
       // storage unavailable (private mode / quota): the draft lives for this page only
     }
@@ -149,9 +172,15 @@ export function createCheckoutDraft(overrides = {}) {
     timer = deps.timing.set(write, deps.timing.ms);
   }
 
-  /** Reads the stored draft (once per mount; garbage => defaults) and starts persisting changes. */
-  function restore() {
+  /**
+   * Reads the stored draft (once per mount; garbage => defaults) and starts persisting changes. A draft stored
+   * for another (non-empty) user key is dropped: `ownerKey` = the current user key ('' guest), default = the one
+   * the session told us last.
+   */
+  function restore(ownerKey) {
     let raw = null;
+
+    if (typeof ownerKey === 'string') owner = ownerKey;
 
     try {
       raw = store()?.getItem(DRAFT_KEY) ?? null;
@@ -159,7 +188,17 @@ export function createCheckoutDraft(overrides = {}) {
       raw = null;
     }
 
-    state.set(raw === null ? defaultDraft() : parseDraft(raw));
+    const foreign = raw !== null && storedOwner(raw) !== '' && storedOwner(raw) !== (owner ?? '');
+
+    if (foreign) {
+      try {
+        store()?.removeItem(DRAFT_KEY);
+      } catch (e) {
+        // not critical
+      }
+    }
+
+    state.set(raw === null || foreign ? defaultDraft() : parseDraft(raw));
     restored = true;
 
     return get(state);
@@ -206,14 +245,15 @@ export function createCheckoutDraft(overrides = {}) {
     restored = false;
   }
 
-  /** Clears the draft when the buyer logs out (logged in -> not logged in). Returns the unsubscribe. */
-  function watchLogout(loggedIn = isLoggedIn) {
-    let was = null;
+  /**
+   * The session's user changed (`key`: '' = guest). Logging out or switching from a logged-in user to another
+   * key clears the draft; logging in from a guest session keeps it (the buyer returns to the same checkout).
+   */
+  function sessionChanged(key) {
+    const previous = owner;
+    owner = key;
 
-    return loggedIn.subscribe((value) => {
-      if (was === true && value === false) clear();
-      was = value;
-    });
+    if (previous !== null && previous !== '' && previous !== key) clear();
   }
 
   return {
@@ -225,8 +265,15 @@ export function createCheckoutDraft(overrides = {}) {
     flush,
     clear,
     detach,
-    watchLogout,
+    sessionChanged,
   };
 }
 
 export const checkoutDraft = createCheckoutDraft();
+
+/** Clears `draft` on logout / user switch, whichever page is open. Returns the unregister function. */
+export function bindDraftToSession(draft, session = { onSessionInit, user }) {
+  return session.onSessionInit(() => draft.sessionChanged(ownerKeyOf(get(session.user))));
+}
+
+bindDraftToSession(checkoutDraft);

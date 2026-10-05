@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { get, writable } from 'svelte/store';
 import './sdkMocks.js';
 
-const { createCheckoutDraft, defaultDraft, parseDraft, DRAFT_KEY } =
+const { bindDraftToSession, createCheckoutDraft, defaultDraft, ownerKeyOf, parseDraft, DRAFT_KEY } =
   await import('../../stores/checkoutDraft.js');
+const session = await import('../../stores/session.js');
 
 function fakeStorage(initial = {}) {
   const data = new Map(Object.entries(initial));
@@ -126,7 +127,9 @@ describe('createCheckoutDraft', () => {
     const stored = JSON.parse(storage.getItem(DRAFT_KEY));
     expect('acceptLegal' in stored).toBe(false);
     expect('legalAccepted' in stored).toBe(false);
-    expect(Object.keys(stored).sort()).toEqual(Object.keys(defaultDraft()).sort());
+    // the owner key is stored beside the draft, never part of it
+    expect(Object.keys(stored).sort()).toEqual([...Object.keys(defaultDraft()), 'owner'].sort());
+    expect('owner' in get(draft)).toBe(false);
   });
 
   test('clear empties the storage, cancels the pending write and resets the state', () => {
@@ -150,18 +153,99 @@ describe('createCheckoutDraft', () => {
     expect(timing.pending.size).toBe(0);
   });
 
-  test('logout (true -> false) clears the draft, login does not', () => {
-    const loggedIn = writable(false);
+  test('sessionChanged: logout and user switch clear the draft, the first bind and a login do not', () => {
     draft.restore();
-    const stop = draft.watchLogout(loggedIn);
-
     draft.patch({ couponCode: 'KEEP' });
-    loggedIn.set(true);
+
+    draft.sessionChanged(''); // first bind as a guest
+    expect(get(draft).couponCode).toBe('KEEP');
+    draft.sessionChanged('u:1'); // login keeps the guest draft
     expect(get(draft).couponCode).toBe('KEEP');
 
-    loggedIn.set(false);
+    draft.sessionChanged(''); // logout
     expect(get(draft).couponCode).toBe('');
-    stop();
+    expect(storage.data.has(DRAFT_KEY)).toBe(false);
+
+    draft.patch({ couponCode: 'ALEX' });
+    draft.sessionChanged('u:1');
+    draft.patch({ couponCode: 'STEVE' });
+    draft.sessionChanged('u:2'); // another user
+    expect(get(draft).couponCode).toBe('');
+  });
+
+  test('logout while the checkout page is not mounted still clears the stored draft', () => {
+    globalThis.window = {};
+    try {
+      session.resetSession();
+      const sessionStore = writable({ user: { id: 1, username: 'Steve' } });
+      bindDraftToSession(draft);
+
+      // the buyer typed on the checkout page, then left it (detach flushes to the storage)
+      draft.restore(ownerKeyOf({ id: 1, username: 'Steve' }));
+      draft.patch({ guest: { username: 'Steve', email: 's@x.io' }, couponCode: 'SAVE' });
+      draft.detach();
+      expect(JSON.parse(storage.getItem(DRAFT_KEY)).guest.email).toBe('s@x.io');
+
+      // a navbar on another page binds the session and the buyer logs out there
+      session.bindSession(sessionStore);
+      sessionStore.set({});
+
+      expect(storage.data.has(DRAFT_KEY)).toBe(false);
+      expect(draft.restore('').guest.email).toBe('');
+    } finally {
+      delete globalThis.window;
+      session.resetSession();
+    }
+  });
+
+  test('restore under another user drops the stored draft', () => {
+    draft.restore('u:1');
+    draft.patch({
+      couponCode: 'SAVE',
+      shippingAddress: { ...defaultDraft().shippingAddress, city: 'Izmir' },
+    });
+    draft.flush();
+    draft.detach();
+
+    // same user: restored
+    const same = createCheckoutDraft({ storage, timing });
+    expect(same.restore('u:1').couponCode).toBe('SAVE');
+    same.detach();
+
+    // another user or a guest after logout: defaults, stale storage removed
+    const other = createCheckoutDraft({ storage, timing });
+    expect(other.restore('u:2')).toEqual(defaultDraft());
+    expect(storage.data.has(DRAFT_KEY)).toBe(false);
+
+    draft.restore('u:1');
+    draft.patch({ couponCode: 'SAVE' });
+    draft.flush();
+    draft.detach();
+    const guest = createCheckoutDraft({ storage, timing });
+    expect(guest.restore('')).toEqual(defaultDraft());
+  });
+
+  test('a guest draft (empty or missing owner) is restored for any user', () => {
+    storage.setItem(DRAFT_KEY, JSON.stringify({ couponCode: 'G', owner: '' }));
+    expect(createCheckoutDraft({ storage, timing }).restore('u:5').couponCode).toBe('G');
+
+    storage.setItem(DRAFT_KEY, JSON.stringify({ couponCode: 'OLD' }));
+    expect(createCheckoutDraft({ storage, timing }).restore('u:5').couponCode).toBe('OLD');
+  });
+
+  test('without an owner told, a draft stored for a user is not restored', () => {
+    storage.setItem(DRAFT_KEY, JSON.stringify({ couponCode: 'X', owner: 'u:1' }));
+
+    expect(draft.restore().couponCode).toBe('');
+  });
+
+  test('a draft written after a login carries the new owner', () => {
+    draft.restore('');
+    draft.sessionChanged('u:3');
+    draft.patch({ couponCode: 'Z' });
+    draft.flush();
+
+    expect(JSON.parse(storage.getItem(DRAFT_KEY)).owner).toBe('u:3');
   });
 
   test('an unavailable storage never throws', () => {

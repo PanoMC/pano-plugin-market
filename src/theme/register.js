@@ -1,6 +1,8 @@
 import { viewComponent } from '@panomc/sdk';
 import { pluginId } from '../i18n';
 import { setPano } from './utils/host.js';
+// side effect: the checkout draft clears itself on logout from any page (14 §10.2)
+import './stores/checkoutDraft.js';
 
 // Registers the storefront. Items 1-6 of 14 §5 always run; items 7-11 are each wrapped so a theme
 // that lacks a namespace only loses that item (a console.warn), never the whole plugin.

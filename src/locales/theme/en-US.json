@@ -187,6 +187,7 @@
       "billing-type-INDIVIDUAL": "Individual",
       "billing-type-COMPANY": "Company",
       "billing-same": "Same as the shipping address",
+      "billing-copy-missing": "The shipping address does not include these details. Please add them.",
       "address": {
         "firstName": "First name",
         "lastName": "Last name",

@@ -4,6 +4,7 @@ import {
   billingRequirements,
   buildQuoteBody,
   canonicalBody,
+  carrierExtrasFor,
   checkShippingAddress,
   derivePageState,
   effectiveBillingInfo,
@@ -14,6 +15,8 @@ import {
   lineNamesWith,
   mapBuyerFields,
   mergeServerCodes,
+  NO_CARRIER_EXTRAS,
+  nextCarrierExtras,
   parseTopup,
   persistPatch,
   quoteDelay,
@@ -282,12 +285,8 @@ describe('shipping address', () => {
     ).toBe('FIELD_INVALID');
   });
 
-  test('carrier extras of the quote add required fields', () => {
-    const quote = {
-      messages: [{ code: 'SHIPPING_ADDRESS_INVALID', level: 'error', fields: ['neighborhood'] }],
-    };
-
-    expect(checkShippingAddress(config(), trAddress(), quote).errors).toEqual({
+  test('carrier extras add required fields', () => {
+    expect(checkShippingAddress(config(), trAddress(), ['neighborhood']).errors).toEqual({
       neighborhood: 'FIELD_REQUIRED',
     });
   });
@@ -909,5 +908,227 @@ describe('server cart codes and persistence', () => {
     ).toEqual({ creatorCode: 'YT' });
     expect(persistPatch(held, { couponCode: null })).toEqual({ couponCode: null });
     expect(persistPatch(held, { couponCode: 'A' })).toEqual({});
+  });
+});
+
+describe('sticky carrier extras (no quote loop)', () => {
+  const invalid = (fields) => ({
+    messages: [{ code: 'SHIPPING_ADDRESS_INVALID', level: 'error', fields }],
+  });
+  const required = { messages: [{ code: 'SHIPPING_ADDRESS_REQUIRED', level: 'error' }] };
+  const draft = (country = 'DE', method = 5) => ({
+    shippingAddress: { country },
+    shippingMethodId: method,
+  });
+
+  test('the extras are kept by a quote without the message while country and method are unchanged', () => {
+    const first = nextCarrierExtras(NO_CARRIER_EXTRAS, invalid(['district']), draft());
+    expect(first).toEqual({ key: 'DE|5', fields: ['district'] });
+
+    const second = nextCarrierExtras(first, required, draft());
+    expect(second).toBe(first);
+    expect(carrierExtrasFor(second, draft())).toEqual(['district']);
+
+    // a second message adds to the set
+    expect(nextCarrierExtras(first, invalid(['neighborhood']), draft()).fields).toEqual([
+      'district',
+      'neighborhood',
+    ]);
+  });
+
+  test('a new country or shipping method drops them', () => {
+    const held = nextCarrierExtras(NO_CARRIER_EXTRAS, invalid(['district']), draft());
+
+    expect(carrierExtrasFor(held, draft('TR'))).toEqual([]);
+    expect(carrierExtrasFor(held, draft('DE', 6))).toEqual([]);
+    expect(carrierExtrasFor(held, draft('de'))).toEqual(['district']);
+    expect(nextCarrierExtras(held, required, draft('TR'))).toBe(NO_CARRIER_EXTRAS);
+    expect(nextCarrierExtras(held, invalid(['district']), draft('TR'))).toEqual({
+      key: 'TR|5',
+      fields: ['district'],
+    });
+  });
+
+  test('quote sequence: the address is not sent and withheld in turn', () => {
+    const cfg = config({
+      shippingCountries: ['DE'],
+      addressFields: { '*': ['firstName', 'lastName', 'country', 'city', 'line1'] },
+    });
+    const d = draft('DE', 5);
+    const address = trAddress({ country: 'DE', district: '', phone: '' });
+
+    // the server of the carrier needs a district; without an address it asks for the address
+    const server = (body) =>
+      !body.shippingAddress
+        ? required
+        : body.shippingAddress.district
+          ? { messages: [] }
+          : invalid(['district']);
+
+    let extras = NO_CARRIER_EXTRAS;
+    const bodies = [];
+
+    for (let i = 0; i < 8; i++) {
+      const check = checkShippingAddress(cfg, address, carrierExtrasFor(extras, d));
+      const body = { shippingAddress: check.ok ? address : null };
+      bodies.push(canonicalBody(body));
+      extras = nextCarrierExtras(extras, server(body), d);
+    }
+
+    // one probe with the address, one without, then the request never changes again
+    expect(bodies.slice(2).every((b) => b === bodies[1])).toBe(true);
+    expect(new Set(bodies).size).toBe(2);
+    expect(carrierExtrasFor(extras, d)).toEqual(['district']);
+
+    // the buyer fills the field: the address is sent again and the extras stay required
+    const filled = { ...address, district: 'Mitte' };
+    expect(checkShippingAddress(cfg, filled, carrierExtrasFor(extras, d)).ok).toBe(true);
+    extras = nextCarrierExtras(extras, server({ shippingAddress: filled }), d);
+    expect(carrierExtrasFor(extras, d)).toEqual(['district']);
+  });
+
+  test('validateCheckout requires the sticky extras', () => {
+    const cfg = config({
+      addressFields: { '*': ['firstName', 'lastName', 'country', 'city', 'line1'] },
+    });
+    const base = draftWith({
+      shippingAddress: trAddress({ country: 'DE', district: '' }),
+    });
+    const run = (carrierExtras) =>
+      validateCheckout({
+        config: cfg,
+        quote: { requiresShipping: true },
+        draft: base,
+        user: { username: 'Steve' },
+        carrierExtras,
+      });
+
+    expect(run([]).valid).toBe(true);
+    expect(run(['district']).errors.shipping).toEqual({ district: 'FIELD_REQUIRED' });
+    expect(run(['district']).firstId).toBe('market-checkout-shipping-district');
+  });
+});
+
+describe('billing with the shipping address copied (required fields it lacks)', () => {
+  // the shipping set has no phone, the billing side asks for it
+  const lean = { '*': ['firstName', 'lastName', 'country', 'city', 'line1'] };
+  const shipping = trAddress({ country: 'DE', phone: '' });
+  const user = { username: 'Steve' };
+
+  const run = (billingInfoMode, requiredBuyerFields, info = {}, address = shipping) => {
+    const draft = draftWith({
+      shippingAddress: address,
+      billingOpen: true,
+      billingSameAsShipping: true,
+      billingInfo: { ...defaultDraft().billingInfo, ...info },
+    });
+
+    return validateCheckout({
+      config: config({ billingInfoMode, addressFields: lean }),
+      quote: { requiresShipping: true, requiredBuyerFields },
+      draft,
+      user,
+    });
+  };
+
+  test('mode OFF, PHONE named: the phone input is shown and required', () => {
+    const r = run('OFF', ['PHONE']);
+
+    expect(r.billing.copy).toBe(true);
+    expect(r.billing.showAddress).toBe(false);
+    expect(r.billing.copyFields).toEqual(['phone']);
+    expect(r.valid).toBe(false);
+    expect(r.errors.billing).toEqual({ phone: 'FIELD_REQUIRED' });
+    expect(r.firstId).toBe('market-checkout-billing-phone');
+  });
+
+  test('mode OPTIONAL forced open by BILLING_ADDRESS + PHONE', () => {
+    const r = run('OPTIONAL', ['BILLING_ADDRESS', 'PHONE']);
+
+    expect(r.billing.copy).toBe(true);
+    expect(r.billing.copyFields).toEqual(['phone']);
+    expect(r.errors.billing).toEqual({ phone: 'FIELD_REQUIRED' });
+    expect(r.firstId).toBe('market-checkout-billing-phone');
+  });
+
+  test('mode REQUIRED, PHONE named', () => {
+    const r = run('REQUIRED', ['PHONE']);
+
+    expect(r.billing.copyFields).toEqual(['phone']);
+    expect(r.errors.billing).toEqual({ phone: 'FIELD_REQUIRED' });
+  });
+
+  test('typing the phone makes the billing valid and the body carries it', () => {
+    const r = run('REQUIRED', ['PHONE'], { phone: '+4915112345678' });
+
+    expect(r.errors.billing).toEqual({});
+    expect(r.valid).toBe(true);
+
+    const info = effectiveBillingInfo(
+      r.billing,
+      { phone: '+4915112345678', type: 'INDIVIDUAL' },
+      shipping,
+    );
+    expect(info.phone).toBe('+4915112345678');
+    expect(info.firstName).toBe('Ayse');
+    expect(info.line1).toBe('Main St 1');
+
+    // an invalid phone is an error on the same input
+    expect(run('REQUIRED', ['PHONE'], { phone: '0555' }).errors.billing).toEqual({
+      phone: 'FIELD_INVALID',
+    });
+  });
+
+  test('a copied address that already has the field needs no extra input', () => {
+    const r = run('OFF', ['PHONE'], {}, trAddress({ country: 'DE', phone: '+4915112345678' }));
+
+    expect(r.billing.copyFields).toEqual([]);
+    expect(r.valid).toBe(true);
+  });
+
+  test('fields the shipping section enforces never show up while the address is being typed', () => {
+    // firstName is in the shipping set: an incomplete address is the shipping section's error, not billing's
+    const r = run(
+      'REQUIRED',
+      ['FIRST_NAME'],
+      {},
+      trAddress({ country: 'DE', firstName: '', phone: '' }),
+    );
+
+    expect(r.billing.copyFields).toEqual([]);
+    expect(r.errors.shipping.firstName).toBe('FIELD_REQUIRED');
+  });
+
+  test('a saved shipping address is checked against every required billing field', () => {
+    const draft = draftWith({
+      shippingAddressId: 9,
+      billingOpen: true,
+      billingInfo: { ...defaultDraft().billingInfo },
+    });
+    const r = validateCheckout({
+      config: config({ billingInfoMode: 'REQUIRED', addressFields: lean }),
+      quote: { requiresShipping: true, requiredBuyerFields: ['PHONE'] },
+      draft,
+      user,
+      saved: [{ id: 9, ...trAddress({ country: 'DE', phone: '', city: '' }) }],
+    });
+
+    expect(r.billing.copyFields).toEqual(['phone', 'city']);
+    expect(r.errors.billing).toEqual({ phone: 'FIELD_REQUIRED', city: 'FIELD_REQUIRED' });
+  });
+
+  test('the shipping carrier extras count as enforced by the shipping section', () => {
+    const r = validateCheckout({
+      config: config({ billingInfoMode: 'REQUIRED', addressFields: lean }),
+      quote: { requiresShipping: true, requiredBuyerFields: ['BILLING_ADDRESS'] },
+      draft: draftWith({
+        shippingAddress: trAddress({ country: 'DE', phone: '', district: '' }),
+        billingOpen: true,
+      }),
+      user,
+      carrierExtras: ['district'],
+    });
+
+    expect(r.billing.copyFields).toEqual([]);
   });
 });

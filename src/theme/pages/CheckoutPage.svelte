@@ -149,11 +149,14 @@
     billingRequirements,
     buildQuoteBody,
     canonicalBody,
+    carrierExtrasFor,
     checkShippingAddress,
     derivePageState,
     effectiveBillingInfo,
     lineNamesWith,
     mergeServerCodes,
+    NO_CARRIER_EXTRAS,
+    nextCarrierExtras,
     persistPatch,
     quoteHasCode,
     sectionsVisible,
@@ -166,7 +169,7 @@
   import { createQuoteRunner } from '../lib/quoteRunner.js';
   import { validateEmail, validateGiftRecipient, validateUsername } from '../lib/validation.js';
   import { cart } from '../stores/cart.js';
-  import { checkoutDraft } from '../stores/checkoutDraft.js';
+  import { checkoutDraft, ownerKeyOf } from '../stores/checkoutDraft.js';
   import { now } from '../stores/clock.js';
   import { effectiveCurrency, initCurrency, preferred } from '../stores/currency.js';
   import { bindSession, isLoggedIn, user } from '../stores/session.js';
@@ -200,6 +203,9 @@
   let addresses = $state([]);
   let addressesLoaded = $state(false);
   let errors = $state({ guest: {}, gift: {}, shipping: {}, billing: {} });
+  // extra shipping fields the carrier asked for: sticky for the draft's country + shipping method (never derived
+  // from the latest quote alone, or the address would be sent and withheld in turn)
+  let carrierExtrasState = $state(NO_CARRIER_EXTRAS);
   // values the quote is asked with: taken over on blur (14 §10.6)
   let committed = $state({ username: '', email: '', recipient: '', message: '' });
   let unmounted = false;
@@ -211,7 +217,8 @@
   const waitSeconds = $derived(Math.max(0, Math.ceil((rateUntil - $now) / 1000)));
 
   const visible = $derived(sectionsVisible({ config, quote, topup }));
-  const typedCheck = $derived(checkShippingAddress(config, draft.shippingAddress, quote));
+  const carrierExtras = $derived(carrierExtrasFor(carrierExtrasState, draft));
+  const typedCheck = $derived(checkShippingAddress(config, draft.shippingAddress, carrierExtras));
   const effectiveShipping = $derived(shippingAddressOf(draft, addresses));
   const shippingReady = $derived(
     visible.shipping && (draft.shippingAddressId !== null || typedCheck.ok),
@@ -225,6 +232,8 @@
       sameAsShipping: draft.billingSameAsShipping,
       shippingAddress: effectiveShipping,
       shippingRequired: visible.shipping,
+      shippingExtra: carrierExtras,
+      shippingSaved: draft.shippingAddressId !== null,
     }),
   );
   const billingBody = $derived(
@@ -310,6 +319,8 @@
       const patch = applyQuoteSelections(checkoutDraft.get(), next);
       if (Object.keys(patch).length) checkoutDraft.patch(patch);
 
+      carrierExtrasState = nextCarrierExtras(carrierExtrasState, next, checkoutDraft.get());
+
       cart.clampToQuote(next);
       persistToServerCart();
     },
@@ -387,6 +398,7 @@
     draft: checkoutDraft.get(),
     user: get(user),
     saved: addresses,
+    carrierExtras: carrierExtrasFor(carrierExtrasState, checkoutDraft.get()),
   });
 
   /** Recomputes the error of one field (on blur). */
@@ -495,8 +507,7 @@
   onMount(() => {
     initCurrency();
 
-    const stopLogoutWatch = checkoutDraft.watchLogout();
-    const restored = checkoutDraft.restore();
+    const restored = checkoutDraft.restore(ownerKeyOf(get(user)));
 
     committed = {
       username: restored.guest.username,
@@ -526,7 +537,6 @@
     return () => {
       unmounted = true;
       runner.stop();
-      stopLogoutWatch();
       checkoutDraft.detach();
     };
   });

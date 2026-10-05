@@ -187,6 +187,7 @@
       "billing-type-INDIVIDUAL": "Bireysel",
       "billing-type-COMPANY": "Kurumsal",
       "billing-same": "Teslimat adresiyle aynı",
+      "billing-copy-missing": "Teslimat adresinde bu bilgiler yok. Lütfen ekleyin.",
       "address": {
         "firstName": "Ad",
         "lastName": "Soyad",
