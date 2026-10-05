@@ -266,14 +266,27 @@ class OrderDraft(
     val reservation: Reservation,
     val uses: List<CodeUse>,
     val customer: CustomerKeys,
-    val attempt: AttemptDraft,
+    /** The first attempt; `null` for a manual order (06 section 14.3: no attempt row), which only [OrderService.createManual] writes. */
+    val attempt: AttemptDraft?,
     /** The payer whose server cart the transaction empties (06 section 2.4), `null` = leave every cart alone. */
     val clearCartOfUser: Long?,
-    val actorUserId: Long?
+    val actorUserId: Long?,
+    /** The `CREATED` event of the timeline: the buyer's checkout (default), or the admin of a manual order with its flags in `data`. */
+    val created: CreatedEvent = CreatedEvent.STOREFRONT
 )
+
+/** The `CREATED` timeline row of an order (06 section 5.3 B11, section 14.3 `audit`). */
+class CreatedEvent(val actorType: OrderActorType, val source: OrderSource, val data: JsonObject = JsonObject()) {
+    companion object {
+        val STOREFRONT = CreatedEvent(OrderActorType.BUYER, OrderSource.STOREFRONT)
+    }
+}
 
 /** What the order transaction produced. */
 class CreatedOrder(val order: MarketOrder, val items: List<MarketOrderItem>, val attempt: MarketPayment)
+
+/** What the transaction of a manual order produced: the order and its items, never an attempt. */
+class CreatedManualOrder(val order: MarketOrder, val items: List<MarketOrderItem>)
 
 /**
  * The same `(buyerKey, Idempotency-Key)` was already placed (06 section 5.1): thrown inside the order transaction so that
@@ -324,6 +337,26 @@ class OrderService(
     private fun table(name: String) = "`${orders.prefix()}$name`"
 
     suspend fun create(conn: SqlConnection, draft: OrderDraft): CreatedOrder {
+        val attemptDraft = checkNotNull(draft.attempt) { "an order with a payment attempt needs an attempt draft; a manual order goes through createManual" }
+        val (order, rows) = insertWhole(conn, draft)
+        val attempt = addAttempt(conn, order, attemptDraft)
+
+        return CreatedOrder(orders.getById(order.id, conn)!!, rows, attempt)
+    }
+
+    /**
+     * The order transaction of a manual order (06 section 14.3): everything [create] writes except the payment attempt (`markPaid` is O2 by the
+     * caller in the same transaction, a pending manual order is paid later from the order page, which writes the attempt then).
+     */
+    suspend fun createManual(conn: SqlConnection, draft: OrderDraft): CreatedManualOrder {
+        check(draft.attempt == null) { "a manual order has no attempt" }
+
+        val (order, rows) = insertWhole(conn, draft)
+
+        return CreatedManualOrder(orders.getById(order.id, conn)!!, rows)
+    }
+
+    private suspend fun insertWhole(conn: SqlConnection, draft: OrderDraft): Pair<MarketOrder, List<MarketOrderItem>> {
         val order = insertOrder(conn, draft)
         val orderId = order.id
 
@@ -360,17 +393,15 @@ class OrderService(
 
         orderEvents.add(
             MarketOrderEvent(
-                orderId = orderId, type = OrderEventType.CREATED, actorType = OrderActorType.BUYER, actorUserId = draft.actorUserId,
-                data = JsonObject().put("source", OrderSource.STOREFRONT.name).encode(), createdAt = now, updatedAt = now
+                orderId = orderId, type = OrderEventType.CREATED, actorType = draft.created.actorType, actorUserId = draft.actorUserId,
+                data = draft.created.data.copy().put("source", draft.created.source.name).encode(), createdAt = now, updatedAt = now
             ),
             conn
         )
 
         draft.clearCartOfUser?.let { cartClear(conn, it) }
 
-        val attempt = addAttempt(conn, order, draft.attempt)
-
-        return CreatedOrder(orders.getById(orderId, conn)!!, rows, attempt)
+        return order to rows
     }
 
     private suspend fun insertOrder(conn: SqlConnection, draft: OrderDraft): MarketOrder {
@@ -556,6 +587,9 @@ class OrderService(
         var creditsHeld = order.creditAmount > 0 && order.reservationState == ReservationState.HELD
 
         for (effect in decision.effects) {
+            // a manual order the admin created with `runDeliveries = false` / `sendMail = false` (06 section 14.3) takes no delivery rows / no order mail at O2
+            if (skippedByManualFlags(conn, order, effect)) continue
+
             when (effect) {
                 is OrderEffect.CommitReservation -> reservationsOrThrow().commit(conn, locked)
 
@@ -668,6 +702,20 @@ class OrderService(
         if (closed.isNotEmpty()) after += AfterCommit.CancelAtGateway(closed.distinctBy { it.id })
 
         return TransitionResult(decision, order.status, after)
+    }
+
+    /**
+     * 06 section 14.3: the flags of a manual order live in the `data` of its `CREATED` row ([ManualFlags]); `QueueGrantDeliveries` is skipped when
+     * `runDeliveries` is off, `QueueMail` when `sendMail` is off. Every other order and effect is untouched (and costs no read).
+     */
+    private suspend fun skippedByManualFlags(conn: SqlConnection, order: MarketOrder, effect: OrderEffect): Boolean {
+        if (order.source != OrderSource.PANEL) return false
+        if (effect !is OrderEffect.QueueGrantDeliveries && effect !is OrderEffect.QueueMail) return false
+
+        val created = orderEvents.getByOrderId(order.id, conn).firstOrNull { it.type == OrderEventType.CREATED }
+        val flags = ManualFlags.of(created?.data)
+
+        return if (effect is OrderEffect.QueueGrantDeliveries) !flags.runDeliveries else !flags.sendMail
     }
 
     /**
