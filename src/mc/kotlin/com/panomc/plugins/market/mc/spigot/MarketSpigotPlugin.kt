@@ -9,7 +9,16 @@ import com.panomc.plugins.market.mc.core.link.JulMcLog
 import com.panomc.plugins.market.mc.core.link.MarketComponent
 import com.panomc.plugins.market.mc.core.link.PresenceRules
 import com.panomc.plugins.market.mc.core.link.PresenceTracker
+import com.panomc.plugins.market.mc.core.feature.Feature
+import com.panomc.plugins.market.mc.core.feature.Msg
+import com.panomc.plugins.market.mc.spigot.gui.BukkitMenuView
+import com.panomc.plugins.market.mc.spigot.gui.MenuPlayer
+import com.panomc.plugins.market.mc.spigot.gui.StoreMenu
+import com.panomc.plugins.market.mc.spigot.gui.menuChat
+import com.panomc.plugins.market.mc.spigot.placeholder.PlaceholderCache
+import com.panomc.plugins.market.mc.spigot.placeholder.PlaceholderHook
 import com.panomc.plugins.pano.core.helper.PanoPluginMain
+import java.util.concurrent.atomic.AtomicBoolean
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
@@ -23,7 +32,7 @@ import org.bukkit.plugin.java.JavaPlugin
  * Main class on Spigot / Paper / Folia (19 section 4). Obtains the Pano core through the `Pano` plugin, opens the
  * state under `plugins/PanoMarket/`, starts the sync loop and the connection monitor and feeds the authenticated
  * joins into the engine, then adds the optional in-game features of MC-05 (commands, broadcast, join notifications; the
- * chest GUI, placeholders and Vault follow in MC-06 / MC-07).
+ * chest GUI and the placeholders of MC-06; Vault follows in MC-07).
  */
 class MarketSpigotPlugin : JavaPlugin(), Listener {
     private val tracker = PresenceTracker()
@@ -33,6 +42,10 @@ class MarketSpigotPlugin : JavaPlugin(), Listener {
     private var host: SpigotFeatureHost? = null
     private var commands: SpigotCommands? = null
     private var gameLink: CoreGameLink? = null
+    private var menu: StoreMenu? = null
+    private var menuView: BukkitMenuView? = null
+    private var placeholders: PlaceholderHook? = null
+    private val placeholdersOn = AtomicBoolean(false)
 
     @Volatile
     private var authActive = false
@@ -79,7 +92,8 @@ class MarketSpigotPlugin : JavaPlugin(), Listener {
             rules = presenceRules
             val platform = SpigotMcPlatform(
                 this, scheduler, tracker, log, flavor,
-                neverJoinedUuid = { name -> panoMain.getNeverJoinedPlayerUniqueId(name) }
+                neverJoinedUuid = { name -> panoMain.getNeverJoinedPlayerUniqueId(name) },
+                placeholderProbe = { placeholdersOn.get() }
             )
             val c = MarketComponent(
                 dataFolder.toPath(), platform, CorePanoLink { CorePanoLink.managerOf(panoMain) }, log, description.version,
@@ -98,6 +112,8 @@ class MarketSpigotPlugin : JavaPlugin(), Listener {
                 featureHost.remember(it)
                 presenceRules.onJoin(it.name, it.uniqueId.toString())
             }
+            installGui(f, scheduler, link, log)
+            installPlaceholders(f, link, log)
             commands = SpigotCommands(this, f, featureHost, log).also { it.register() }
             c.start()
             log.info("Market component enabled on $flavor (version ${description.version}).")
@@ -107,7 +123,43 @@ class MarketSpigotPlugin : JavaPlugin(), Listener {
         }
     }
 
+    /** The chest GUI (MC-06): `/store menu`, the listener and the model. Switched off by the panel or config.yml, the sub-command answers "switched off". */
+    private fun installGui(f: MarketFeatures, scheduler: MarketScheduler, link: CoreGameLink, log: JulMcLog) {
+        val view = BukkitMenuView(
+            scheduler, log, { f.messages.text(Msg.MENU_TITLE, null) }, menuChat(scheduler, log)
+        )
+        val model = StoreMenu(f.config, f.messages, link, view, { f.runtime() }, { name -> tracker.uuid(name) }, description.version)
+        view.model = model
+        server.pluginManager.registerEvents(view, this)
+        menuView = view
+        menu = model
+        f.commands.registerSub("store", "menu", Feature.STORE_MENU) { sender, _ ->
+            if (sender.isConsole) {
+                sender.send(f.messages.text(Msg.COMMAND_PLAYER_ONLY, null))
+            } else {
+                model.open(MenuPlayer(sender.name, sender.uuid, sender.locale))
+            }
+        }
+    }
+
+    /** PlaceholderAPI (MC-06): the expansion is registered only when the plugin is enabled and the feature is on. */
+    private fun installPlaceholders(f: MarketFeatures, link: CoreGameLink, log: JulMcLog) {
+        if (!f.config.local.features.allows(Feature.PLACEHOLDERS)) return
+        val cache = PlaceholderCache(f.config, link, description.version, log, isOnline = { name -> Bukkit.getPlayerExact(name) != null })
+        val hook = PlaceholderHook(cache, description.version, log)
+        hook.install()
+        placeholdersOn.set(hook.registered)
+        placeholders = hook
+    }
+
     override fun onDisable() {
+        menu?.shutdown()
+        menuView?.closeAll()
+        menu = null
+        menuView = null
+        placeholders?.uninstall()
+        placeholders = null
+        placeholdersOn.set(false)
         commands?.unregister()
         commands = null
         component?.stop()
