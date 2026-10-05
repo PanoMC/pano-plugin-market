@@ -50,8 +50,8 @@ class CascadeDecisionRequired : Error(400)
 
 class StatusQueryNotSupported : Error(400)
 
-/** [fieldErrors]: `{dotted.path: CODE}`. */
-class InvalidProviderSettings(fieldErrors: Map<String, String> = emptyMap()) :
+/** [fieldErrors]: `{dotted.path: CODE}`; the settings keys of a provider carry a localized text object (02 section 4) instead of a code. */
+class InvalidProviderSettings(fieldErrors: Map<String, Any?> = emptyMap()) :
     Error(400, extras = mapOf("fieldErrors" to fieldErrors))
 
 class InvalidSettings(fieldErrors: Map<String, String> = emptyMap()) :

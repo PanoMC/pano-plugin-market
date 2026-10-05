@@ -1,98 +1,86 @@
-package com.panomc.plugins.market.routes.panel.settings
+package com.panomc.plugins.market.routes.panel.settings.payment
 
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
-import com.panomc.platform.error.NotFound
-import com.panomc.platform.model.*
+import com.panomc.platform.model.Path
+import com.panomc.platform.model.Result
+import com.panomc.platform.model.RouteType
+import com.panomc.platform.model.Successful
 import com.panomc.plugins.market.MarketPlugin
-import com.panomc.plugins.market.db.dao.MarketPaymentMethodDao
+import com.panomc.plugins.market.error.RequestValueException
+import com.panomc.plugins.market.log.SortedMarketPaymentMethodsLog
 import com.panomc.plugins.market.log.UpdatedMarketPaymentMethodLog
-import com.panomc.plugins.market.permission.ManageMarketPermission
-import com.panomc.plugins.market.util.PaymentMethodCatalog
+import com.panomc.plugins.market.permission.MarketNode
+import com.panomc.plugins.market.routes.base.MarketPanelApi
+import com.panomc.plugins.market.service.PaymentMethodRules
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
 import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters
 import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
-import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
 /**
- * Admin endpoint: saves a payment method's credentials. Only known catalog field keys are stored;
- * a secret field left blank or holding the mask sentinel keeps its stored value. Secrets are never
- * echoed back and never written to the activity log.
+ * `POST /api/panel/market/payment-methods/:id` saves a provider (`settings{}` + optional `config{}`, 04 section 8) and
+ * `POST /api/panel/market/payment-methods/sort` orders the providers (`ids*[]`). One class answers both so that the
+ * fixed `sort` path is always matched before `:id` (two routes at the same order would match in an unspecified order);
+ * `sort` is therefore not usable as a provider id here.
  */
 @Endpoint
-class PanelUpdatePaymentMethodAPI(
-    private val plugin: MarketPlugin,
-    private val marketPaymentMethodDao: MarketPaymentMethodDao
-) : PanelApi() {
-    override val paths = listOf(Path("/api/panel/market/payment-methods/:id", RouteType.POST))
+class PanelSavePaymentMethodAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
+    override val nodes: Set<MarketNode> = setOf(MarketNode.SETTINGS)
 
-    private val authProvider by lazy {
-        plugin.applicationContext.getBean(AuthProvider::class.java)
-    }
+    override val paths = listOf(
+        Path("/api/panel/market/payment-methods/sort", RouteType.POST),
+        Path("/api/panel/market/payment-methods/:id", RouteType.POST)
+    )
 
-    private val databaseManager by lazy {
-        plugin.applicationContext.getBean(DatabaseManager::class.java)
-    }
+    private val authProvider by lazy { plugin.applicationContext.getBean(AuthProvider::class.java) }
+
+    private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository)
-            .pathParameter(Parameters.param("id", stringSchema()))
-            .body(
-                Bodies.json(
-                    objectSchema()
-                        .requiredProperty("settings", objectSchema())
-                )
-            )
+            .body(Bodies.json(objectSchema().allowAdditionalProperties(true)))
             .predicate(RequestPredicate.BODY_REQUIRED)
             .build()
 
-    companion object {
-        private const val SECRET_MASK = "********"
-    }
+    override suspend fun handleAuthorized(context: RoutingContext): Result {
+        val service = paymentMethodService(plugin)
+        val body = context.body().asJsonObject() ?: JsonObject()
+        val sqlClient = databaseManager.getSqlClient()
+        val userId = authProvider.getUserIdFromRoutingContext(context)
+        val username = databaseManager.userDao.getUsernameFromUserId(userId, sqlClient)!!
 
-    override suspend fun handle(context: RoutingContext): Result {
-        authProvider.requirePermission(ManageMarketPermission(), context)
-
-        val methodId = getParameters(context).pathParameter("id").string
-        val method = PaymentMethodCatalog.getById(methodId) ?: throw NotFound()
-
-        val incoming = context.body().asJsonObject().getJsonObject("settings")
-
-        val sqlClient = getSqlClient()
-        val stored = marketPaymentMethodDao.getByMethodId(methodId, sqlClient)
-        val merged = if (stored != null) JsonObject(stored.settings) else JsonObject()
-
-        // Overlay only known catalog fields; a blank/masked secret means "keep the stored value".
-        method.fields.forEach { field ->
-            if (!incoming.containsKey(field.key)) return@forEach
-
-            val value = incoming.getValue(field.key)
-
-            if (field.secret) {
-                val asString = value as? String
-                if (asString == SECRET_MASK || asString.isNullOrEmpty()) return@forEach
+        if (context.request().path().trimEnd('/').endsWith("/payment-methods/sort")) {
+            val ids = try {
+                PaymentMethodRules.parseProviderIds(body.getValue("ids") as? io.vertx.core.json.JsonArray)
+            } catch (e: IllegalArgumentException) {
+                throw RequestValueException("ids", e.message ?: "INVALID")
             }
 
-            merged.put(field.key, value)
+            service.sort(ids)
+            databaseManager.panelActivityLogDao.add(SortedMarketPaymentMethodsLog(userId, username, plugin.pluginId), sqlClient)
+
+            return Successful()
         }
 
-        marketPaymentMethodDao.upsertByMethodId(methodId, stored?.enabled ?: false, merged.encode(), sqlClient)
+        val id = context.pathParam("id")
+        val settings = optionalObject(body, "settings")
+        val config = optionalObject(body, "config")
+        val saved = service.save(id, settings, config)
 
-        val adminUserId = authProvider.getUserIdFromRoutingContext(context)
-        val adminUsername = databaseManager.userDao.getUsernameFromUserId(adminUserId, sqlClient)!!
+        databaseManager.panelActivityLogDao.add(UpdatedMarketPaymentMethodLog(userId, username, id, plugin.pluginId), sqlClient)
 
-        databaseManager.panelActivityLogDao.add(
-            UpdatedMarketPaymentMethodLog(adminUserId, adminUsername, methodId, plugin.pluginId),
-            sqlClient
-        )
+        return Successful(saved.message?.let { mapOf("message" to it.toJson()) } ?: emptyMap<String, Any>())
+    }
 
-        return Successful()
+    private fun optionalObject(body: JsonObject, key: String): JsonObject? {
+        if (!body.containsKey(key) || body.getValue(key) == null) return null
+
+        return body.getValue(key) as? JsonObject ?: throw RequestValueException(key, "INVALID")
     }
 }

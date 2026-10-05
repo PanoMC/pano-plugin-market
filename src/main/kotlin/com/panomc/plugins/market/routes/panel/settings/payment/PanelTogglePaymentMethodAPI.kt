@@ -1,17 +1,16 @@
-package com.panomc.plugins.market.routes.panel.settings
+package com.panomc.plugins.market.routes.panel.settings.payment
 
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
-import com.panomc.platform.error.NotFound
-import com.panomc.platform.model.*
+import com.panomc.platform.model.Path
+import com.panomc.platform.model.Result
+import com.panomc.platform.model.RouteType
+import com.panomc.platform.model.Successful
 import com.panomc.plugins.market.MarketPlugin
-import com.panomc.plugins.market.db.dao.MarketPaymentMethodDao
-import com.panomc.plugins.market.error.PaymentMethodNotConfigured
-import com.panomc.plugins.market.log.UpdatedMarketPaymentMethodLog
-import com.panomc.plugins.market.permission.ManageMarketPermission
-import com.panomc.plugins.market.util.PaymentMethodCatalog
-import io.vertx.core.json.JsonObject
+import com.panomc.plugins.market.log.ToggledMarketPaymentMethodLog
+import com.panomc.plugins.market.permission.MarketNode
+import com.panomc.plugins.market.routes.base.MarketPanelApi
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
@@ -24,67 +23,38 @@ import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
 /**
- * Admin endpoint: enables/disables a payment method. Enabling re-checks that every required field
- * is filled server-side (the stored settings), rejecting with PaymentMethodNotConfigured otherwise.
+ * `POST /api/panel/market/payment-methods/:id/toggle` (`P:SET`). Enabling needs a usable provider (409 `PROVIDER_UNAVAILABLE`),
+ * every required setting (`PAYMENT_METHOD_NOT_CONFIGURED`), a public https site where the provider needs one (400
+ * `PUBLIC_URL_REQUIRED`) and a passing `validateSettings`.
  */
 @Endpoint
-class PanelTogglePaymentMethodAPI(
-    private val plugin: MarketPlugin,
-    private val marketPaymentMethodDao: MarketPaymentMethodDao
-) : PanelApi() {
+class PanelTogglePaymentMethodAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
+    override val nodes: Set<MarketNode> = setOf(MarketNode.SETTINGS)
+
     override val paths = listOf(Path("/api/panel/market/payment-methods/:id/toggle", RouteType.POST))
 
-    private val authProvider by lazy {
-        plugin.applicationContext.getBean(AuthProvider::class.java)
-    }
+    private val authProvider by lazy { plugin.applicationContext.getBean(AuthProvider::class.java) }
 
-    private val databaseManager by lazy {
-        plugin.applicationContext.getBean(DatabaseManager::class.java)
-    }
+    private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository)
             .pathParameter(Parameters.param("id", stringSchema()))
-            .body(
-                Bodies.json(
-                    objectSchema()
-                        .requiredProperty("enabled", booleanSchema())
-                )
-            )
+            .body(Bodies.json(objectSchema().requiredProperty("enabled", booleanSchema())))
             .predicate(RequestPredicate.BODY_REQUIRED)
             .build()
 
-    override suspend fun handle(context: RoutingContext): Result {
-        authProvider.requirePermission(ManageMarketPermission(), context)
-
-        val methodId = getParameters(context).pathParameter("id").string
-        val method = PaymentMethodCatalog.getById(methodId) ?: throw NotFound()
-
+    override suspend fun handleAuthorized(context: RoutingContext): Result {
+        val id = getParameters(context).pathParameter("id").string
         val enabled = context.body().asJsonObject().getBoolean("enabled")
 
-        val sqlClient = getSqlClient()
-        val stored = marketPaymentMethodDao.getByMethodId(methodId, sqlClient)
-        val settings = if (stored != null) JsonObject(stored.settings) else JsonObject()
+        paymentMethodService(plugin).toggle(id, enabled)
 
-        if (enabled) {
-            method.requiredFieldKeys.forEach { key ->
-                val value = settings.getValue(key)
+        val sqlClient = databaseManager.getSqlClient()
+        val userId = authProvider.getUserIdFromRoutingContext(context)
+        val username = databaseManager.userDao.getUsernameFromUserId(userId, sqlClient)!!
 
-                if (value == null || value.toString().isEmpty()) {
-                    throw PaymentMethodNotConfigured()
-                }
-            }
-        }
-
-        marketPaymentMethodDao.upsertByMethodId(methodId, enabled, settings.encode(), sqlClient)
-
-        val adminUserId = authProvider.getUserIdFromRoutingContext(context)
-        val adminUsername = databaseManager.userDao.getUsernameFromUserId(adminUserId, sqlClient)!!
-
-        databaseManager.panelActivityLogDao.add(
-            UpdatedMarketPaymentMethodLog(adminUserId, adminUsername, methodId, plugin.pluginId),
-            sqlClient
-        )
+        databaseManager.panelActivityLogDao.add(ToggledMarketPaymentMethodLog(userId, username, id, enabled, plugin.pluginId), sqlClient)
 
         return Successful()
     }
