@@ -1067,6 +1067,78 @@
       "replay-description": "Saklanan istek yeniden işlenir. Ağ geçidine hiçbir şey gönderilmez.",
       "toast-replayed": "Olay yeniden oynatıldı: {status}.",
       "toast-replayed-generic": "Olay yeniden oynatıldı."
+    },
+    "shipping-method": {
+      "title": "Kargo Yöntemi",
+      "back": "Kargo Yöntemleri",
+      "mixed-basis": "Bu yöntemin bir bölgesinde birden fazla hesaplama tabanı var. Düzenleyici o bölgenin yalnızca ilk tabanını tutar; kaydetmek diğerlerinin yerine geçer.",
+      "no-zones": "Henüz kargo bölgesi yok. Bir yöntem yalnızca fiyatı olan bölgelerde sunulur.",
+      "open-zones": "Bölgeleri Aç",
+      "general": "Genel",
+      "name": "Ad",
+      "description": "Açıklama",
+      "provider": "Sağlayıcı",
+      "provider-off": "kapalı",
+      "service": "Servis",
+      "service-any": "Herhangi Bir Servis",
+      "service-code": "Servis kodu",
+      "pricing": "Fiyatlandırma",
+      "rate-source": "Fiyat kaynağı",
+      "rate-source-needs-quote": "Canlı fiyat verebilen bir kargo firması gerekir",
+      "free-threshold": "Ücretsiz kargo eşiği",
+      "handling-fee": "İşlem ücreti",
+      "vat-default": "Mağaza KDV Oranını Kullan",
+      "delivery": "Teslimat ve Sınırlar",
+      "min-days": "En az teslimat günü",
+      "max-days": "En çok teslimat günü",
+      "max-weight": "En yüksek ağırlık (g)",
+      "tracking": "Manuel Takip",
+      "carrier-name": "Kargo firması adı",
+      "tracking-template": "Takip adresi şablonu",
+      "tracking-template-hint": "Takip numarasının geleceği yere {token} yazın, örneğin https://kargo.example/takip/{token}.",
+      "rates": "Fiyatlar",
+      "carrier-zones": "Bu bölgelerde sunulur",
+      "basis": "Hesaplama tabanı",
+      "remove-zone": "Bölgeyi kaldır",
+      "price": "Fiyat",
+      "from": "Başlangıç",
+      "to": "Bitiş",
+      "per-kg": "Başlanan Her Kg İçin",
+      "per-item": "Her Ek Ürün İçin",
+      "no-limit": "Sınır yok",
+      "remove-row": "Satırı kaldır",
+      "add-row": "Satır Ekle",
+      "add-zone": "Bölge Ekle",
+      "gap": "{from} ile {to} arasında boşluk var: aradaki değerler için hiçbir fiyat sunulmaz.",
+      "unit-gram": "g",
+      "unit-piece": "adet",
+      "toast-created": "Kargo yöntemi oluşturuldu.",
+      "toast-updated": "Kargo yöntemi kaydedildi.",
+      "errors": {
+        "REQUIRED": "Bir değer girin.",
+        "TOO_LONG": "Bu metin çok uzun.",
+        "TOO_MANY": "Çok fazla kayıt var.",
+        "INVALID": "Geçerli bir değer girin.",
+        "OUT_OF_RANGE": "Bu değer aralık dışında.",
+        "MIN_GT_MAX": "Üst değer alt değerden küçük olamaz.",
+        "INVALID_TEMPLATE": "http:// veya https:// ile başlayın ve takip yer tutucusunu ekleyin.",
+        "CARRIER_QUOTE_UNSUPPORTED": "Bu sağlayıcı canlı fiyat veremez.",
+        "COUNTRY_REQUIRED": "En az bir ülke seçin.",
+        "EVERYWHERE_EXISTS": "Başka bir bölge zaten \"Diğer Her Yer\".",
+        "NEGATIVE": "Değerler negatif olamaz.",
+        "RANGE_ORDER": "Aralığın sonu başlangıcından büyük olmalı.",
+        "OVERLAP": "Aralıklar çakışmamalı. Bir aralık öncekinin bittiği yerden başlayabilir.",
+        "OPEN_NOT_LAST": "Yalnızca son aralığın sınırı olmayabilir.",
+        "FLAT_SINGLE": "Sabit fiyat tam olarak bir satır alır.",
+        "NO_ROWS": "En az bir satır ekleyin.",
+        "CELL": "İşaretli tüm değerleri doldurun.",
+        "RATES_REQUIRED": "Fiyatı olan en az bir bölge ekleyin.",
+        "ZONE_REQUIRED": "En az bir bölge seçin.",
+        "DUPLICATE_ZONE": "Bir bölge yalnızca bir kez yer alabilir.",
+        "UNKNOWN_ZONE": "Bu fiyatlardaki bir bölge artık yok. Kaldırın.",
+        "RATE_OVERLAP": "Sunucu bir bölgede çakışan aralıklar buldu. Aralıkları kontrol edin.",
+        "RATE_UNREACHABLE": "Aynı bölgede sabit fiyattan sonra gelen bir satır hiçbir zaman uygulanamaz."
+      }
     }
   },
   "common": {
@@ -1667,6 +1739,14 @@
       "block": {
         "title": "Bu engel kaldırılsın mı?",
         "description": "Bu değer mağazadan tekrar alışveriş yapabilir."
+      },
+      "zone": {
+        "title": "Bu bölge silinsin mi?",
+        "description": "{name} ve {count, plural, other {# fiyat satırı}} silinecek. Siparişler geçmişlerini korur."
+      },
+      "method": {
+        "title": "Bu kargo yöntemi silinsin mi?",
+        "description": "{name} artık ödemede sunulmayacak. Siparişler geçmişlerini korur."
       }
     },
     "cancel-subscription": {
@@ -1834,6 +1914,33 @@
       "delivered": "Teslim",
       "body": "İçerik",
       "response": "Son Yanıt"
+    },
+    "shipping-zone": {
+      "heading-create": "Bölge Oluştur",
+      "heading-edit": "Bölgeyi Düzenle",
+      "name": "Ad",
+      "everywhere": "Diğer Her Yer",
+      "search-countries": "Ülke ara",
+      "selected": "{count, plural, other {# ülke seçildi}}",
+      "regions": "Eyaletler ve bölgeler (boş = tüm ülke)",
+      "states-placeholder": "Bir eyalet ekleyip Enter'a basın",
+      "postal": "Posta kodu kalıpları",
+      "postal-placeholder": "34*, 1000-1999 veya tam kod",
+      "toast-created": "Bölge oluşturuldu.",
+      "toast-updated": "Bölge kaydedildi.",
+      "errors": {
+        "REQUIRED": "Bir değer girin.",
+        "TOO_LONG": "Bu metin çok uzun.",
+        "TOO_MANY": "Çok fazla kayıt var.",
+        "INVALID": "Geçerli bir değer girin.",
+        "COUNTRY_REQUIRED": "En az bir ülke seçin.",
+        "EVERYWHERE_EXISTS": "Başka bir bölge zaten \"Diğer Her Yer\"."
+      }
+    },
+    "carrier": {
+      "webhook-url": "Webhook adresi",
+      "no-webhook-url": "Bu kargo firmasının webhook adresi yok.",
+      "balance": "Bakiye"
     }
   },
   "settings": {
@@ -2390,6 +2497,55 @@
         "description": "Aynı olay uç noktaya tekrar gönderilir."
       },
       "toast-redelivered": "Gönderim yeniden sıraya alındı."
+    },
+    "shipping-zones": {
+      "count": "{count} Bölge",
+      "create": "Bölge Oluştur",
+      "first-match": "Bölgeler yukarıdan aşağıya kontrol edilir ve adresle eşleşen ilk bölge kullanılır. Özel bölgeleri genel olanların üstüne koyun.",
+      "shadowed": "Bu bölge hiçbir zaman eşleşmez: daha üstteki etkin bir bölge tüm ülkelerini zaten kapsıyor.",
+      "everywhere": "Diğer Her Yer",
+      "more": "+{count}",
+      "table": {
+        "countries": "Ülkeler",
+        "regions": "Bölgeler",
+        "postal": "Posta Kodu Kalıpları"
+      },
+      "toast-deleted": "Bölge silindi."
+    },
+    "shipping-methods": {
+      "count": "{count} Kargo Yöntemi",
+      "create": "Yöntem Oluştur",
+      "no-rates": "Fiyat Yok",
+      "no-rates-hint": "Bu yöntemin fiyat satırı olmadığı için hiçbir yerde sunulmaz.",
+      "table": {
+        "provider": "Sağlayıcı",
+        "rate-source": "Fiyat Kaynağı",
+        "zones": "Bölgeler",
+        "free-threshold": "Ücretsiz Eşiği"
+      },
+      "toast-deleted": "Kargo yöntemi silindi."
+    },
+    "shipping-carriers": {
+      "count": "{count} Kargo Firması",
+      "test-mode-title": "Test Modu",
+      "test-mode-hint": "Test modundaki kargo firmaları yalnızca ayar veya sipariş yetkisi olan yetkililerin oluşturduğu siparişlerde kullanılır.",
+      "no-plugins-title": "Kargo Eklentisi Kurulu Değil",
+      "no-plugins-body": "Yalnızca manuel kargo kullanılabilir. Etiket almak ve canlı fiyat sorgulamak için mağazadan bir kargo eklentisi kurun.",
+      "open-store": "Mağazayı Aç",
+      "methods": "{count, plural, other {# yöntem}}",
+      "incompatible": "Bu eklenti bu mağazanın desteklemediği {spiVersion} kargo arayüzü sürümünü kullanıyor. Eklentiyi güncelleyin.",
+      "unavailable": "Bu kargo firmasının eklentisi çalışmıyor. Ayarları saklanıyor.",
+      "unavailable-hint": "Bu kargo firmasını yeniden kullanmak için eklentiyi başlatın.",
+      "open-addons": "Eklentileri Aç",
+      "toggle-aria": "{name} firmasını etkinleştir",
+      "manual-locked": "Manuel kargo kapatılamaz.",
+      "configure-first": "Önce kargo firmasını yapılandırın",
+      "view": "Görüntüle",
+      "configure": "Yapılandır",
+      "docs": "Dokümantasyon",
+      "toast-activated": "{name} etkinleştirildi.",
+      "toast-deactivated": "{name} devre dışı bırakıldı.",
+      "toast-saved": "Kargo firması kaydedildi."
     }
   },
   "discounts": {
@@ -3004,6 +3160,17 @@
     "webhook-signing": {
       "NONE": "Yok",
       "HMAC_SHA256": "HMAC SHA-256"
+    },
+    "rate-basis": {
+      "FLAT": "Sabit Fiyat",
+      "WEIGHT": "Ağırlığa Göre",
+      "AMOUNT": "Sepet Tutarına Göre",
+      "QUANTITY": "Adede Göre"
+    },
+    "shipping-rate-source": {
+      "RULES": "Kendi Fiyatlarım",
+      "CARRIER": "Canlı Kargo Fiyatı",
+      "CARRIER_WITH_FALLBACK": "Yedek Fiyatlı Canlı Fiyat"
     }
   },
   "alerts": {

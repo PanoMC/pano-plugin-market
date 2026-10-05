@@ -12,6 +12,9 @@ import HealthPanel from './HealthPanel.svelte';
 import MailSettings from './MailSettings.svelte';
 import MinecraftSettings from './MinecraftSettings.svelte';
 import SecuritySettings from './SecuritySettings.svelte';
+import ShippingCarriers from './ShippingCarriers.svelte';
+import ShippingMethods from './ShippingMethods.svelte';
+import ShippingZones from './ShippingZones.svelte';
 import StoreModuleSettings from './StoreModuleSettings.svelte';
 import WebhookDeliveries from './WebhookDeliveries.svelte';
 import Webhooks from './Webhooks.svelte';
@@ -25,6 +28,9 @@ export const SECTION_COMPONENTS = {
   payments: PaymentMethods,
   credits: CreditSettings,
   delivery: DeliverySettings,
+  'shipping-methods': ShippingMethods,
+  'shipping-zones': ShippingZones,
+  'shipping-carriers': ShippingCarriers,
   modules: StoreModuleSettings,
   security: SecuritySettings,
   mail: MailSettings,

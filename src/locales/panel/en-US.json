@@ -1067,6 +1067,78 @@
       "replay-description": "The stored request is processed again. Nothing is sent to the gateway.",
       "toast-replayed": "The event was replayed: {status}.",
       "toast-replayed-generic": "The event was replayed."
+    },
+    "shipping-method": {
+      "title": "Shipping Method",
+      "back": "Shipping Methods",
+      "mixed-basis": "A zone of this method has rates of more than one basis. The editor keeps only the first basis of that zone; saving replaces the others.",
+      "no-zones": "There is no shipping zone yet. A method is offered only in zones it has rates for.",
+      "open-zones": "Open Zones",
+      "general": "General",
+      "name": "Name",
+      "description": "Description",
+      "provider": "Provider",
+      "provider-off": "off",
+      "service": "Service",
+      "service-any": "Any Service",
+      "service-code": "Service code",
+      "pricing": "Pricing",
+      "rate-source": "Rate source",
+      "rate-source-needs-quote": "Needs a carrier that can quote live rates",
+      "free-threshold": "Free shipping from",
+      "handling-fee": "Handling fee",
+      "vat-default": "Use Store Default VAT",
+      "delivery": "Delivery And Limits",
+      "min-days": "Minimum delivery days",
+      "max-days": "Maximum delivery days",
+      "max-weight": "Maximum weight (g)",
+      "tracking": "Manual Tracking",
+      "carrier-name": "Carrier name",
+      "tracking-template": "Tracking URL template",
+      "tracking-template-hint": "Put {token} where the tracking number goes, for example https://carrier.example/track/{token}.",
+      "rates": "Rates",
+      "carrier-zones": "Offered in these zones",
+      "basis": "Basis",
+      "remove-zone": "Remove zone",
+      "price": "Price",
+      "from": "From",
+      "to": "To (up to)",
+      "per-kg": "Per Started Kg",
+      "per-item": "Per Extra Item",
+      "no-limit": "No limit",
+      "remove-row": "Remove row",
+      "add-row": "Add Row",
+      "add-zone": "Add Zone",
+      "gap": "There is a gap between {from} and {to}: nothing is offered for values in between.",
+      "unit-gram": "g",
+      "unit-piece": "pcs",
+      "toast-created": "Shipping method created.",
+      "toast-updated": "Shipping method saved.",
+      "errors": {
+        "REQUIRED": "Enter a value.",
+        "TOO_LONG": "This text is too long.",
+        "TOO_MANY": "There are too many entries.",
+        "INVALID": "Enter a valid value.",
+        "OUT_OF_RANGE": "This value is out of range.",
+        "MIN_GT_MAX": "The maximum must not be below the minimum.",
+        "INVALID_TEMPLATE": "Start with http:// or https:// and include the tracking placeholder.",
+        "CARRIER_QUOTE_UNSUPPORTED": "This provider cannot quote live rates.",
+        "COUNTRY_REQUIRED": "Select at least one country.",
+        "EVERYWHERE_EXISTS": "Another zone is already \"Everywhere Else\".",
+        "NEGATIVE": "Values cannot be negative.",
+        "RANGE_ORDER": "The end of a range must be above its start.",
+        "OVERLAP": "Ranges must not overlap. A range may start where the previous one ends.",
+        "OPEN_NOT_LAST": "Only the last range can have no limit.",
+        "FLAT_SINGLE": "A flat rate takes exactly one row.",
+        "NO_ROWS": "Add at least one row.",
+        "CELL": "Fill in every highlighted value.",
+        "RATES_REQUIRED": "Add at least one zone with rates.",
+        "ZONE_REQUIRED": "Tick at least one zone.",
+        "DUPLICATE_ZONE": "A zone can appear only once.",
+        "UNKNOWN_ZONE": "A zone of these rates no longer exists. Remove it.",
+        "RATE_OVERLAP": "The server found overlapping ranges in a zone. Check the ranges.",
+        "RATE_UNREACHABLE": "A row follows a flat rate in the same zone and can never apply."
+      }
     }
   },
   "common": {
@@ -1667,6 +1739,14 @@
       "block": {
         "title": "Remove this block?",
         "description": "The value can buy from the store again."
+      },
+      "zone": {
+        "title": "Delete this zone?",
+        "description": "{name} and its {count, plural, one {# rate row} other {# rate rows}} will be removed. Orders keep their history."
+      },
+      "method": {
+        "title": "Delete this shipping method?",
+        "description": "{name} will no longer be offered at checkout. Orders keep their history."
       }
     },
     "cancel-subscription": {
@@ -1834,6 +1914,33 @@
       "delivered": "Delivered",
       "body": "Body",
       "response": "Last Response"
+    },
+    "shipping-zone": {
+      "heading-create": "Create Zone",
+      "heading-edit": "Edit Zone",
+      "name": "Name",
+      "everywhere": "Everywhere Else",
+      "search-countries": "Search countries",
+      "selected": "{count, plural, one {# country selected} other {# countries selected}}",
+      "regions": "States and regions (empty = the whole country)",
+      "states-placeholder": "Add a state and press Enter",
+      "postal": "Postal patterns",
+      "postal-placeholder": "34*, 1000-1999 or an exact code",
+      "toast-created": "Zone created.",
+      "toast-updated": "Zone saved.",
+      "errors": {
+        "REQUIRED": "Enter a value.",
+        "TOO_LONG": "This text is too long.",
+        "TOO_MANY": "There are too many entries.",
+        "INVALID": "Enter a valid value.",
+        "COUNTRY_REQUIRED": "Select at least one country.",
+        "EVERYWHERE_EXISTS": "Another zone is already \"Everywhere Else\"."
+      }
+    },
+    "carrier": {
+      "webhook-url": "Webhook URL",
+      "no-webhook-url": "This carrier has no webhook URL.",
+      "balance": "Balance"
     }
   },
   "settings": {
@@ -2390,6 +2497,55 @@
         "description": "The same event is sent again to the endpoint."
       },
       "toast-redelivered": "Delivery queued again."
+    },
+    "shipping-zones": {
+      "count": "{count} Zones",
+      "create": "Create Zone",
+      "first-match": "Zones are checked from top to bottom and the first zone that matches the address is used. Put specific zones above general ones.",
+      "shadowed": "This zone can never match: an earlier active zone already covers all of its countries.",
+      "everywhere": "Everywhere Else",
+      "more": "+{count}",
+      "table": {
+        "countries": "Countries",
+        "regions": "Regions",
+        "postal": "Postal Patterns"
+      },
+      "toast-deleted": "Zone deleted."
+    },
+    "shipping-methods": {
+      "count": "{count} Shipping Methods",
+      "create": "Create Method",
+      "no-rates": "No Rates",
+      "no-rates-hint": "This method has no rate rows, so it is not offered anywhere.",
+      "table": {
+        "provider": "Provider",
+        "rate-source": "Rate Source",
+        "zones": "Zones",
+        "free-threshold": "Free From"
+      },
+      "toast-deleted": "Shipping method deleted."
+    },
+    "shipping-carriers": {
+      "count": "{count} Carriers",
+      "test-mode-title": "Test Mode",
+      "test-mode-hint": "Carriers in test mode are used only for orders created by staff members with settings or order permissions.",
+      "no-plugins-title": "No Carrier Plugins Installed",
+      "no-plugins-body": "Only the manual carrier is available. Install a carrier plugin from the store to buy labels and get live rates.",
+      "open-store": "Open The Store",
+      "methods": "{count, plural, one {# method} other {# methods}}",
+      "incompatible": "This plugin uses shipping interface version {spiVersion}, which this store does not support. Update the plugin.",
+      "unavailable": "The plugin of this carrier is not running. Its settings are kept.",
+      "unavailable-hint": "Start the plugin to use this carrier again.",
+      "open-addons": "Open Addons",
+      "toggle-aria": "Enable {name}",
+      "manual-locked": "The manual carrier cannot be turned off.",
+      "configure-first": "Configure the carrier first",
+      "view": "View",
+      "configure": "Configure",
+      "docs": "Documentation",
+      "toast-activated": "{name} activated.",
+      "toast-deactivated": "{name} deactivated.",
+      "toast-saved": "Carrier saved."
     }
   },
   "discounts": {
@@ -3004,6 +3160,17 @@
     "webhook-signing": {
       "NONE": "None",
       "HMAC_SHA256": "HMAC SHA-256"
+    },
+    "rate-basis": {
+      "FLAT": "Flat Rate",
+      "WEIGHT": "By Weight",
+      "AMOUNT": "By Cart Amount",
+      "QUANTITY": "By Quantity"
+    },
+    "shipping-rate-source": {
+      "RULES": "Own Rates",
+      "CARRIER": "Live Carrier Rate",
+      "CARRIER_WITH_FALLBACK": "Live Rate With Fallback"
     }
   },
   "alerts": {
