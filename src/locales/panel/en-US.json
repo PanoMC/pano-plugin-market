@@ -1225,19 +1225,6 @@
       "upgrade-mode-DIFFERENCE": "Pay The Difference",
       "upgrade-mode-FULL": "Pay Full Price"
     },
-    "payment-method": {
-      "title": "{name} Settings",
-      "logo-alt": "{name} logo",
-      "go-to-docs": "Go to documentation",
-      "hide-secret": "Hide",
-      "show-secret": "Show secret value",
-      "reveal-prompt": "Enter your password to view secret values",
-      "password-placeholder": "Your password",
-      "show": "Show",
-      "toast-invalid-password": "Incorrect password.",
-      "toast-reveal-error": "An error occurred while revealing secret values.",
-      "toast-field-required": "{field} is required."
-    },
     "gift": {
       "create-title": "Create Gift",
       "edit-title": "Edit Gift",
@@ -1714,6 +1701,51 @@
       "date": "Date",
       "headers": "Headers",
       "body": "Body"
+    },
+    "provider": {
+      "tab-settings": "Settings",
+      "tab-rules": "Checkout Rules",
+      "tab-status": "Status",
+      "read-only-title": "Read Only",
+      "save-first": "Save your changes first",
+      "imported": "{categories} categories and {products} products imported.",
+      "custom-label": "Custom name",
+      "custom-description": "Custom description",
+      "fee-buyer": "Pass The Fee To The Buyer",
+      "fee-percent": "Fee percentage",
+      "fee-fixed": "Fixed fee",
+      "min-amount": "Minimum cart amount",
+      "max-amount": "Maximum cart amount",
+      "all-currencies": "All Supported Currencies",
+      "test-mode": "Test Mode",
+      "test-mode-hint": "Only staff members with settings or payment permissions can use a method in test mode.",
+      "test-mode-derived": "Test mode follows the keys you entered and cannot be changed here.",
+      "webhook-urls": "Webhook URLs",
+      "webhook-url": "Webhook URL of the {channel} channel",
+      "no-webhook-urls": "This method has no webhook URL.",
+      "last-inbound": "Last Verified Webhook",
+      "last-error": "Last Error",
+      "no-error": "None",
+      "cap-refund": "Refunds",
+      "cap-recurring": "Subscriptions",
+      "cap-status-query": "Status query",
+      "cap-disputes": "Dispute events",
+      "cap-guests": "Guest checkout",
+      "cap-physical-goods": "Physical goods",
+      "cap-mixed-credit": "Mixed credit payment",
+      "cap-currencies": "Currencies",
+      "all-supported": "All supported",
+      "plugin": "Plugin",
+      "spi-version": "(interface {version})",
+      "error": {
+        "TOO_LONG": "This text is too long.",
+        "INVALID": "Enter a valid value.",
+        "OUT_OF_RANGE": "This value is out of range.",
+        "FEE_REQUIRED": "Enter a percentage or a fixed fee, or turn the buyer fee off.",
+        "MIN_GT_MAX": "The maximum must not be below the minimum.",
+        "REQUIRED": "Select at least one currency."
+      },
+      "stored-settings": "Stored settings"
     }
   },
   "settings": {
@@ -1787,115 +1819,26 @@
         "turkey": "Turkey",
         "global": "Global"
       },
-      "empty": "No payment methods match the filter.",
-      "open-settings-aria": "Open {name} settings",
-      "fill-required-first": "Fill in the required settings first",
       "logo-alt": "{name} logo",
-      "toast-required-settings": "Fill in the required settings for {name}.",
-      "toast-enable-failed-not-configured": "{name} could not be enabled: fill in the required settings first.",
-      "toast-update-error": "An error occurred while updating {name}.",
       "toast-activated": "{name} activated.",
       "toast-deactivated": "{name} deactivated.",
-      "toast-save-error": "An error occurred while saving {name} settings.",
-      "toast-save-success": "{name} settings saved.",
-      "methods": {
-        "mobil-odeme": {
-          "name": "Mobile Payment",
-          "description": "Pay via carrier billing through Turkcell, Vodafone and Türk Telekom."
-        },
-        "bank-transfer": {
-          "name": "Bank Transfer",
-          "description": "Manually approved bank transfer/EFT; players upload receipts."
-        },
-        "stripe": {
-          "fields": {
-            "webhookSecret": "Webhook Secret"
-          },
-          "description": "Leading infrastructure for global card payments, with subscription and pay-by-link support.",
-          "name": "Stripe"
-        },
-        "coinbase-commerce": {
-          "fields": {
-            "webhookSecret": "Webhook Shared Secret"
-          },
-          "description": "Pay with popular cryptocurrencies such as BTC, ETH, USDT.",
-          "name": "Coinbase Commerce"
-        },
-        "tebex": {
-          "description": "The most widely used store & payment infrastructure for Minecraft servers.",
-          "name": "Tebex"
-        },
-        "iyzico": {
-          "description": "Turkey’s leading online payment infrastructure, with 3D Secure & installment support.",
-          "name": "Iyzico"
-        },
-        "shopier": {
-          "description": "Popular Turkish payment method supporting Turkish Lira, deposits and sales via link.",
-          "name": "Shopier"
-        },
-        "paytr": {
-          "description": "Widely used in Turkey, providing virtual POS and pay-by-link.",
-          "name": "PayTR"
-        },
-        "sipay": {
-          "description": "Turkish provider offering virtual POS, pay-by-link and international card acceptance.",
-          "name": "Sipay"
-        },
-        "param": {
-          "description": "Payment platform combining bank transfer/EFT and card payments in Turkey.",
-          "name": "Param"
-        },
-        "paypal": {
-          "description": "Globally recognized wallet payment, ideal for international players.",
-          "name": "PayPal"
-        },
-        "mollie": {
-          "description": "Common in the European market; iDEAL, SEPA, card and other local payments.",
-          "name": "Mollie"
-        },
-        "btcpay": {
-          "description": "Open-source, self-hosted cryptocurrency payment processor.",
-          "name": "BTCPay Server"
-        }
-      },
-      "fields": {
-        "webstoreId": "Webstore ID",
-        "secret": "Secret Key",
-        "mode": "Mode",
-        "apiKey": "API Key",
-        "secretKey": "Secret Key",
-        "sandbox": "Sandbox Mode",
-        "apiSecret": "API Secret",
-        "merchantId": "Merchant ID",
-        "merchantKey": "Merchant Key",
-        "merchantSalt": "Merchant Salt",
-        "testMode": "Test Mode",
-        "appId": "App ID",
-        "appSecret": "App Secret",
-        "clientCode": "Client Code",
-        "clientUsername": "Client Username",
-        "clientPassword": "Client Password",
-        "guid": "GUID",
-        "operatorTurkcell": "Turkcell Enabled",
-        "operatorVodafone": "Vodafone Enabled",
-        "operatorTurkTelekom": "Türk Telekom Enabled",
-        "providerKey": "Provider Key",
-        "publishableKey": "Publishable Key",
-        "clientId": "Client ID",
-        "clientSecret": "Client Secret",
-        "profileId": "Profile ID",
-        "serverUrl": "Server URL",
-        "storeId": "Store ID",
-        "bankName": "Bank Name",
-        "iban": "IBAN",
-        "accountHolder": "Account Holder",
-        "description": "Description (Shown to Player)",
-        "autoApprove": "Auto-Approve (via Bot)"
-      },
-      "options": {
-        "live": "Live",
-        "test": "Test"
-      }
+      "toast-saved": "Payment method saved.",
+      "configure-first": "Configure the method first",
+      "incompatible": "This plugin uses payment interface version {spiVersion}, which this store does not support. Update the plugin.",
+      "unavailable": "The plugin of this payment method is not running. Its settings are kept.",
+      "unavailable-hint": "Start the plugin to use this method again.",
+      "open-addons": "Open Addons",
+      "external-pricing": "The gateway sets the price, so fees and amount limits cannot be changed here.",
+      "test-mode-title": "Test Mode",
+      "test-mode-hint": "Methods in test mode are offered only to staff members with settings or payment permissions. Buyers do not see them.",
+      "no-plugins-title": "No Payment Plugins Installed",
+      "no-plugins-body": "Only the built-in methods are available. Install a payment plugin from the store to accept card and gateway payments.",
+      "open-store": "Open The Store",
+      "region-label": "Region",
+      "toggle-aria": "Enable {name}",
+      "view": "View",
+      "configure": "Configure",
+      "docs": "Documentation"
     }
   },
   "discounts": {
@@ -2458,6 +2401,23 @@
       "REFUND": "Refunded",
       "CHARGEBACK": "Chargeback",
       "PROVIDER_UNAVAILABLE": "Provider unavailable"
+    },
+    "verification": {
+      "UNVERIFIED": "Unverified",
+      "DOC_SAMPLES": "Docs Tested",
+      "SANDBOX": "Sandbox Tested",
+      "LIVE": "Live Tested"
+    },
+    "refund-support": {
+      "NONE": "Manual only",
+      "FULL_ONLY": "Full refunds",
+      "PARTIAL": "Partial refunds",
+      "PER_LINE": "Per item"
+    },
+    "recurring-support": {
+      "NONE": "Not supported",
+      "GATEWAY_MANAGED": "Managed by the gateway",
+      "MERCHANT_INITIATED": "Charged by the store"
     }
   },
   "alerts": {
@@ -2519,5 +2479,22 @@
       "title": "Payment Provider Unavailable",
       "body": "These payment providers cannot take payments right now: {providers}"
     }
+  },
+  "schema": {
+    "errors": {
+      "REQUIRED": "This field is required.",
+      "INVALID_NUMBER": "Enter a whole number.",
+      "OUT_OF_RANGE": "This number is out of range.",
+      "INVALID_URL": "Enter a valid http or https address.",
+      "INVALID_OPTION": "Select one of the options.",
+      "INVALID_FORMAT": "This value has the wrong format."
+    },
+    "reveal": "Show secret value",
+    "hide": "Hide",
+    "remove-secret": "Remove Stored Value",
+    "secret-will-be-removed": "Will be removed when you save",
+    "password-prompt": "Enter your password to view secret values",
+    "password-placeholder": "Your password",
+    "reveal-confirm": "Show"
   }
 }

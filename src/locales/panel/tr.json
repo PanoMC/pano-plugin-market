@@ -1225,19 +1225,6 @@
       "upgrade-mode-DIFFERENCE": "Farkı Öde",
       "upgrade-mode-FULL": "Tam Fiyatı Öde"
     },
-    "payment-method": {
-      "title": "{name} Ayarları",
-      "logo-alt": "{name} logosu",
-      "go-to-docs": "Dokümantasyona git",
-      "hide-secret": "Gizle",
-      "show-secret": "Gizli değeri göster",
-      "reveal-prompt": "Gizli değerleri görmek için şifrenizi girin",
-      "password-placeholder": "Şifreniz",
-      "show": "Göster",
-      "toast-invalid-password": "Şifre hatalı.",
-      "toast-reveal-error": "Gizli değerler gösterilirken bir hata oluştu.",
-      "toast-field-required": "{field} zorunlu."
-    },
     "gift": {
       "create-title": "Hediye Oluştur",
       "edit-title": "Hediyeyi Düzenle",
@@ -1714,6 +1701,51 @@
       "date": "Tarih",
       "headers": "Başlıklar",
       "body": "Gövde"
+    },
+    "provider": {
+      "tab-settings": "Ayarlar",
+      "tab-rules": "Ödeme Kuralları",
+      "tab-status": "Durum",
+      "read-only-title": "Salt Okunur",
+      "save-first": "Önce değişikliklerinizi kaydedin",
+      "imported": "{categories} kategori ve {products} ürün içe aktarıldı.",
+      "custom-label": "Özel ad",
+      "custom-description": "Özel açıklama",
+      "fee-buyer": "Komisyonu Alıcıya Yansıt",
+      "fee-percent": "Komisyon yüzdesi",
+      "fee-fixed": "Sabit komisyon",
+      "min-amount": "Minimum sepet tutarı",
+      "max-amount": "Maksimum sepet tutarı",
+      "all-currencies": "Desteklenen Tüm Para Birimleri",
+      "test-mode": "Test Modu",
+      "test-mode-hint": "Test modundaki bir yöntemi yalnızca ayar veya ödeme yetkisi olan yetkililer kullanabilir.",
+      "test-mode-derived": "Test modu girdiğiniz anahtarlara göre belirlenir ve buradan değiştirilemez.",
+      "webhook-urls": "Webhook Adresleri",
+      "webhook-url": "{channel} kanalının webhook adresi",
+      "no-webhook-urls": "Bu yöntemin webhook adresi yok.",
+      "last-inbound": "Son Doğrulanan Webhook",
+      "last-error": "Son Hata",
+      "no-error": "Yok",
+      "cap-refund": "İadeler",
+      "cap-recurring": "Abonelikler",
+      "cap-status-query": "Durum sorgulama",
+      "cap-disputes": "İtiraz olayları",
+      "cap-guests": "Misafir ödemesi",
+      "cap-physical-goods": "Fiziksel ürünler",
+      "cap-mixed-credit": "Karma kredi ödemesi",
+      "cap-currencies": "Para birimleri",
+      "all-supported": "Desteklenen tümü",
+      "plugin": "Eklenti",
+      "spi-version": "(arayüz {version})",
+      "error": {
+        "TOO_LONG": "Bu metin çok uzun.",
+        "INVALID": "Geçerli bir değer girin.",
+        "OUT_OF_RANGE": "Bu değer izin verilen aralığın dışında.",
+        "FEE_REQUIRED": "Bir yüzde veya sabit komisyon girin ya da alıcıya komisyon yansıtmayı kapatın.",
+        "MIN_GT_MAX": "Maksimum tutar minimum tutarın altında olamaz.",
+        "REQUIRED": "En az bir para birimi seçin."
+      },
+      "stored-settings": "Kayıtlı ayarlar"
     }
   },
   "settings": {
@@ -1787,115 +1819,26 @@
         "turkey": "Türkiye",
         "global": "Global"
       },
-      "empty": "Filtreye uygun ödeme yöntemi bulunamadı.",
-      "open-settings-aria": "{name} ayarlarını aç",
-      "fill-required-first": "Önce zorunlu ayarları doldurun",
       "logo-alt": "{name} logosu",
-      "toast-required-settings": "{name} için zorunlu ayarları doldurun.",
-      "toast-enable-failed-not-configured": "{name} etkinleştirilemedi: önce zorunlu ayarları doldurun.",
-      "toast-update-error": "{name} güncellenirken bir hata oluştu.",
       "toast-activated": "{name} aktifleştirildi.",
       "toast-deactivated": "{name} pasifleştirildi.",
-      "toast-save-error": "{name} ayarları kaydedilirken bir hata oluştu.",
-      "toast-save-success": "{name} ayarları kaydedildi.",
-      "methods": {
-        "mobil-odeme": {
-          "name": "Mobil Ödeme",
-          "description": "Turkcell, Vodafone ve Türk Telekom üzerinden fatura ile ödeme."
-        },
-        "bank-transfer": {
-          "name": "EFT / Havale",
-          "description": "Manuel onaylı banka havalesi/EFT; oyuncular dekont yükler."
-        },
-        "stripe": {
-          "fields": {
-            "webhookSecret": "Webhook Secret"
-          },
-          "description": "Global kart ödemeleri için lider altyapı, abonelik ve link ödeme desteği.",
-          "name": "Stripe"
-        },
-        "coinbase-commerce": {
-          "fields": {
-            "webhookSecret": "Webhook Shared Secret"
-          },
-          "description": "BTC, ETH, USDT gibi popüler kripto paralarla ödeme.",
-          "name": "Coinbase Commerce"
-        },
-        "tebex": {
-          "description": "Minecraft sunucuları için en yaygın kullanılan mağaza & ödeme altyapısı.",
-          "name": "Tebex"
-        },
-        "iyzico": {
-          "description": "Türkiye’nin önde gelen online ödeme altyapısı, 3D Secure & taksit desteği.",
-          "name": "Iyzico"
-        },
-        "shopier": {
-          "description": "Türk Lirası, kapora ve link ile satış destekleyen popüler TR ödeme yöntemi.",
-          "name": "Shopier"
-        },
-        "paytr": {
-          "description": "Türkiye’de yaygın kullanılan, sanal POS ve link ile ödeme sağlayan altyapı.",
-          "name": "PayTR"
-        },
-        "sipay": {
-          "description": "Sanal POS, link ile satış ve uluslararası kart kabulü sağlayan TR sağlayıcı.",
-          "name": "Sipay"
-        },
-        "param": {
-          "description": "Türkiye’de havale/EFT ve kart ödemelerini birleştiren ödeme platformu.",
-          "name": "Param"
-        },
-        "paypal": {
-          "description": "Dünya çapında bilinen, uluslararası oyuncular için ideal cüzdan ödemesi.",
-          "name": "PayPal"
-        },
-        "mollie": {
-          "description": "Avrupa pazarında yaygın; iDEAL, SEPA, kart ve diğer yerel ödemeler.",
-          "name": "Mollie"
-        },
-        "btcpay": {
-          "description": "Açık kaynak, self-hosted kripto para ödeme işlemcisi.",
-          "name": "BTCPay Server"
-        }
-      },
-      "fields": {
-        "webstoreId": "Webstore ID",
-        "secret": "Secret Key",
-        "mode": "Mod",
-        "apiKey": "API Key",
-        "secretKey": "Secret Key",
-        "sandbox": "Sandbox Modu",
-        "apiSecret": "API Secret",
-        "merchantId": "Merchant ID",
-        "merchantKey": "Merchant Key",
-        "merchantSalt": "Merchant Salt",
-        "testMode": "Test Modu",
-        "appId": "App ID",
-        "appSecret": "App Secret",
-        "clientCode": "Client Code",
-        "clientUsername": "Client Username",
-        "clientPassword": "Client Password",
-        "guid": "GUID",
-        "operatorTurkcell": "Turkcell Aktif",
-        "operatorVodafone": "Vodafone Aktif",
-        "operatorTurkTelekom": "Türk Telekom Aktif",
-        "providerKey": "Sağlayıcı Anahtarı",
-        "publishableKey": "Publishable Key",
-        "clientId": "Client ID",
-        "clientSecret": "Client Secret",
-        "profileId": "Profile ID",
-        "serverUrl": "Sunucu URL",
-        "storeId": "Store ID",
-        "bankName": "Banka Adı",
-        "iban": "IBAN",
-        "accountHolder": "Hesap Sahibi",
-        "description": "Açıklama (Oyuncuya Gösterilir)",
-        "autoApprove": "Otomatik Onay (Bot ile)"
-      },
-      "options": {
-        "live": "Canlı",
-        "test": "Test"
-      }
+      "toast-saved": "Ödeme yöntemi kaydedildi.",
+      "configure-first": "Önce yöntemi yapılandırın",
+      "incompatible": "Bu eklenti, mağazanın desteklemediği {spiVersion} sürümlü ödeme arayüzünü kullanıyor. Eklentiyi güncelleyin.",
+      "unavailable": "Bu ödeme yönteminin eklentisi çalışmıyor. Ayarları korunuyor.",
+      "unavailable-hint": "Yöntemi tekrar kullanmak için eklentiyi başlatın.",
+      "open-addons": "Eklentileri Aç",
+      "external-pricing": "Fiyatı ödeme altyapısı belirlediği için komisyon ve tutar sınırları buradan değiştirilemez.",
+      "test-mode-title": "Test Modu",
+      "test-mode-hint": "Test modundaki yöntemler yalnızca ayar veya ödeme yetkisi olan yetkililere sunulur. Alıcılar bu yöntemleri görmez.",
+      "no-plugins-title": "Ödeme Eklentisi Kurulu Değil",
+      "no-plugins-body": "Yalnızca yerleşik yöntemler kullanılabilir. Kart ve ödeme altyapısı ile ödeme almak için mağazadan bir ödeme eklentisi kurun.",
+      "open-store": "Mağazayı Aç",
+      "region-label": "Bölge",
+      "toggle-aria": "{name} yöntemini etkinleştir",
+      "view": "Görüntüle",
+      "configure": "Yapılandır",
+      "docs": "Dokümantasyon"
     }
   },
   "discounts": {
@@ -2458,6 +2401,23 @@
       "REFUND": "İade edildi",
       "CHARGEBACK": "Geri ödeme itirazı",
       "PROVIDER_UNAVAILABLE": "Sağlayıcı kullanılamıyor"
+    },
+    "verification": {
+      "UNVERIFIED": "Doğrulanmadı",
+      "DOC_SAMPLES": "Dokümanla Test Edildi",
+      "SANDBOX": "Sandbox Testi Yapıldı",
+      "LIVE": "Canlı Test Edildi"
+    },
+    "refund-support": {
+      "NONE": "Yalnızca manuel",
+      "FULL_ONLY": "Tam iade",
+      "PARTIAL": "Kısmi iade",
+      "PER_LINE": "Ürün bazında"
+    },
+    "recurring-support": {
+      "NONE": "Desteklenmiyor",
+      "GATEWAY_MANAGED": "Ödeme altyapısı yönetir",
+      "MERCHANT_INITIATED": "Mağaza tahsil eder"
     }
   },
   "alerts": {
@@ -2519,5 +2479,22 @@
       "title": "Ödeme Sağlayıcısı Kullanılamıyor",
       "body": "Bu ödeme sağlayıcıları şu anda ödeme alamıyor: {providers}"
     }
+  },
+  "schema": {
+    "errors": {
+      "REQUIRED": "Bu alan zorunludur.",
+      "INVALID_NUMBER": "Tam sayı girin.",
+      "OUT_OF_RANGE": "Bu sayı izin verilen aralığın dışında.",
+      "INVALID_URL": "Geçerli bir http veya https adresi girin.",
+      "INVALID_OPTION": "Seçeneklerden birini seçin.",
+      "INVALID_FORMAT": "Bu değerin biçimi yanlış."
+    },
+    "reveal": "Gizli değeri göster",
+    "hide": "Gizle",
+    "remove-secret": "Kayıtlı Değeri Kaldır",
+    "secret-will-be-removed": "Kaydettiğinizde kaldırılacak",
+    "password-prompt": "Gizli değerleri görmek için şifrenizi girin",
+    "password-placeholder": "Şifreniz",
+    "reveal-confirm": "Göster"
   }
 }

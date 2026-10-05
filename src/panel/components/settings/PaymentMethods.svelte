@@ -1,31 +1,269 @@
+{#if loadError}
+  <LoadError error={loadError} onRetry={load} />
+{:else if loading}
+  <div class="text-center text-body-secondary py-5">
+    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+    <span class="visually-hidden">{$_('common.loading')}</span>
+  </div>
+{:else}
+  {#if showTestHint}
+    <div class="alert alert-info d-flex align-items-start" role="alert">
+      <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
+      <div>
+        <b>{$_('settings.payments.test-mode-title')}</b>
+        <div>{$_('settings.payments.test-mode-hint')}</div>
+      </div>
+    </div>
+  {/if}
+
+  {#if noPlugins}
+    <div class="alert alert-info d-flex align-items-start" role="alert">
+      <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
+      <div>
+        <b>{$_('settings.payments.no-plugins-title')}</b>
+        <div>{$_('settings.payments.no-plugins-body')}</div>
+        {#if isHttpUrl(ctx?.storeUrl)}
+          <a class="alert-link" href={ctx.storeUrl} target="_blank" rel="noopener noreferrer">
+            {$_('settings.payments.open-store')}
+          </a>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
+  <div class="row g-2 align-items-center mb-3">
+    <div class="col-12 col-md">
+      {$_('settings.payments.method-count', { values: { count: visible.length } })}
+    </div>
+    <div class="col-12 col-md-4">
+      <SearchInput
+        initialValue={searchValue}
+        placeholderKey="plugins.pano-plugin-market.search.payment-methods"
+        onchange={(val) => applyFilters({ search: val })} />
+    </div>
+    <div class="col-12 col-md-auto">
+      <div class="btn-group" role="group" aria-label={$_('settings.payments.region-label')}>
+        {#each REGIONS as item (item)}
+          <button
+            type="button"
+            class="btn btn-outline-secondary"
+            class:active={regionFilter === item}
+            aria-pressed={regionFilter === item}
+            onclick={() => applyFilters({ region: item })}>
+            {item === 'all'
+              ? $_('common.all')
+              : item === 'tr'
+                ? $_('settings.payments.filters.turkey')
+                : $_('settings.payments.filters.global')}
+          </button>
+        {/each}
+      </div>
+    </div>
+  </div>
+
+  {#if visible.length === 0}
+    <NoContent />
+  {:else}
+    <div class="row g-3">
+      {#each visible as provider (provider.id)}
+        {@const behavior = rowBehavior(provider)}
+        {@const label = providerName(provider, locale(), rawTranslate)}
+        {@const orderIndex = ordered.findIndex((p) => p.id === provider.id)}
+        {@const checked = pending[provider.id] ?? behavior.switchOn}
+        <div class="col-md-6 col-xl-4">
+          <div class="card h-100" class:border-danger={behavior.danger}>
+            <div class="card-body d-flex flex-column gap-3">
+              <div class="d-flex align-items-start gap-2">
+                <div
+                  class="d-flex align-items-center justify-content-center rounded flex-shrink-0 overflow-hidden bg-body-secondary"
+                  style="width: 40px; height: 40px;">
+                  {#if !logoFailed[provider.id]}
+                    <img
+                      src={logoPath(base, provider.id)}
+                      alt={$_('settings.payments.logo-alt', { values: { name: label } })}
+                      loading="lazy"
+                      style="max-width: 70%; max-height: 70%; object-fit: contain;"
+                      onerror={() => (logoFailed[provider.id] = true)} />
+                  {:else}
+                    <i class={provider.descriptor?.icon || 'fa-solid fa-credit-card'} aria-hidden="true"
+                    ></i>
+                  {/if}
+                </div>
+                <div class="flex-grow-1 min-w-0">
+                  <h6 class="mb-1 text-break">{label}</h6>
+                  <p class="mb-0 text-body-secondary">
+                    {provider.config?.customDescription || txt(provider.descriptor?.description)}
+                  </p>
+                </div>
+              </div>
+
+              <div class="d-flex flex-wrap gap-1">
+                <StatusBadge kind="provider" value={provider.state} />
+                {#if effectiveTestMode(provider, ctx)}
+                  <span class="badge text-bg-warning">{$_('common.test')}</span>
+                {/if}
+                {#if provider.descriptor?.verification}
+                  <span class="badge text-bg-secondary">
+                    {$_(`enums.verification.${provider.descriptor.verification}`)}
+                  </span>
+                {/if}
+                {#if provider.descriptor?.region}
+                  <span class="badge text-bg-light border">
+                    {provider.descriptor.region === 'global'
+                      ? $_('settings.payments.filters.global')
+                      : provider.descriptor.region.toUpperCase()}
+                  </span>
+                {/if}
+              </div>
+
+              {#if behavior.reason === 'incompatible'}
+                <div class="small text-danger">
+                  {$_('settings.payments.incompatible', {
+                    values: { spiVersion: provider.spiVersion ?? '' },
+                  })}
+                </div>
+              {:else if behavior.reason === 'unavailable'}
+                <div class="small text-danger">
+                  {#if provider.lastError}
+                    <div class="text-break">{provider.lastError}</div>
+                  {/if}
+                  <div>{$_('settings.payments.unavailable')}</div>
+                  <div>
+                    {$_('settings.payments.unavailable-hint')}
+                    <a href="{base}/addons">{$_('settings.payments.open-addons')}</a>
+                  </div>
+                </div>
+              {/if}
+
+              <div class="d-flex align-items-center gap-2 mt-auto">
+                {#snippet toggle()}
+                  <div class="form-check form-switch m-0">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      role="switch"
+                      id="pm-toggle-{provider.id}"
+                      aria-label={$_('settings.payments.toggle-aria', { values: { name: label } })}
+                      {checked}
+                      disabled={behavior.switchDisabled || busy}
+                      onchange={(e) => toggleEnabled(provider, e)} />
+                  </div>
+                {/snippet}
+                {#if behavior.switchHint}
+                  <span use:tooltip={[$_('settings.payments.configure-first')]}>{@render toggle()}</span>
+                {:else}
+                  {@render toggle()}
+                {/if}
+
+                <button
+                  type="button"
+                  class="btn btn-outline-secondary btn-sm ms-auto"
+                  onclick={() => modal?.open(provider)}>
+                  {behavior.readOnly ? $_('settings.payments.view') : $_('settings.payments.configure')}
+                </button>
+
+                <div class="dropdown">
+                  <button
+                    type="button"
+                    class="btn btn-link btn-sm"
+                    data-bs-toggle="dropdown"
+                    title={$_('common.actions')}
+                    aria-label={$_('common.actions')}>
+                    <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-end animate__animated animate__fadeIn">
+                    <button
+                      type="button"
+                      class="dropdown-item"
+                      disabled={orderIndex <= 0 || busy}
+                      onclick={() => move(provider, -1)}>
+                      <i class="fa-solid fa-arrow-up me-2" aria-hidden="true"></i>
+                      {$_('common.move-up')}
+                    </button>
+                    <button
+                      type="button"
+                      class="dropdown-item"
+                      disabled={orderIndex === -1 || orderIndex >= ordered.length - 1 || busy}
+                      onclick={() => move(provider, 1)}>
+                      <i class="fa-solid fa-arrow-down me-2" aria-hidden="true"></i>
+                      {$_('common.move-down')}
+                    </button>
+                    {#if isHttpUrl(provider.descriptor?.docsUrl)}
+                      <a
+                        class="dropdown-item"
+                        href={provider.descriptor.docsUrl}
+                        target="_blank"
+                        rel="noopener">
+                        <i class="fa-solid fa-book me-2" aria-hidden="true"></i>
+                        {$_('settings.payments.docs')}
+                      </a>
+                    {/if}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
+{/if}
+
+<PaymentMethodModal bind:this={modal} {ctx} onRefresh={refresh} getProvider={findProvider} />
+
 <script>
-  import { tick } from 'svelte';
+  import { onMount } from 'svelte';
   import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
-  import { CardHeader, CardFilters, CardFiltersItem, SearchInput, NoContent } from '@panomc/sdk/components/panel';
+  import { NoContent, SearchInput } from '@panomc/sdk/components/panel';
   import { base, page, goto } from '@panomc/sdk/svelte';
-  import { PAYMENT_METHODS, createDefaultMethodState } from '../../data/payment-methods.js';
-  import PaymentMethodSettingsModal from '../modals/PaymentMethodSettingsModal.svelte';
-  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
+  import { tooltip } from '@panomc/sdk/utils/tooltip';
+  import { _ as rawI18n } from '@panomc/sdk/utils/language';
+  import { _, showSuccessToast } from '../../../i18n';
+  import LoadError from '../LoadError.svelte';
+  import StatusBadge from '../StatusBadge.svelte';
+  import PaymentMethodModal from '../modals/PaymentMethodModal.svelte';
+  import { call, marketPath } from '../../utils/api.js';
+  import { loadContext } from '../../utils/context.js';
+  import { currentLocale } from '../../utils/locale.js';
+  import {
+    REGIONS,
+    effectiveTestMode,
+    filterProviders,
+    isHttpUrl,
+    logoPath,
+    movedIds,
+    onlyBuiltIns,
+    providerName,
+    regionOf,
+    rowBehavior,
+    sortProviders,
+  } from '../../utils/payment-methods.js';
+  import { resolveText } from '../../utils/schema-form.js';
+  import { toastError } from '../../utils/toast.js';
 
-  let { settings: initialSettings = {} } = $props();
+  // The list is driven by the provider registry (GET /payment-providers), not by a catalogue. The
+  // settings page may pass the shared `ctx`; without it the component reads GET /context itself.
+  let { ctx: ctxProp = null } = $props();
 
-  // Local writable copy of the loaded settings: re-derived if the page load()
-  // re-runs, reassigned by the client-side refresh() after a save (navigating
-  // would remount the whole plugin page and drop the active settings tab).
-  let settings = $derived(initialSettings);
+  let providers = $state.raw([]);
+  let loadedCtx = $state.raw(null);
+  let loading = $state(true);
+  let loadError = $state(null);
+  let busy = $state(false);
+  // optimistic switch positions: provider id -> boolean, dropped when the request settles
+  let pending = $state({});
+  let logoFailed = $state({});
+  let modal = $state(null);
 
-  let activeMethod = $state(null);
+  const ctx = $derived(ctxProp ?? loadedCtx);
+  const locale = () => currentLocale();
+  const rawTranslate = (key) => $rawI18n(key, { default: key });
+  const txt = (text) => resolveText(text, currentLocale(), rawTranslate);
 
-  // Region/search filters live in the URL (?region=tr&search=...) so they are
-  // bookmarkable and back-button correct. They filter the static 13-method
-  // catalog client-side, so changing them navigates WITHOUT invalidateAll: the
-  // $page store updates, the filtered list recomputes, and no settings refetch
-  // (or plugin-page remount) happens. `section=payments` is preserved so the
-  // Settings page keeps rendering this tab; `all`/empty are omitted.
-  const regionFilter = $derived.by(() => {
-    const value = $page.url.searchParams.get('region');
-    return value === 'tr' || value === 'global' ? value : 'all';
-  });
+  // Region / search live in the URL (?region=tr&search=...). They filter the loaded list client
+  // side, so changing them navigates WITHOUT invalidateAll: the $page store updates and nothing is
+  // refetched. `section=payments` is kept so the Settings page keeps rendering this section.
+  const regionFilter = $derived(regionOf($page.url.searchParams.get('region')));
   const searchValue = $derived($page.url.searchParams.get('search') || '');
 
   function applyFilters({ region = regionFilter, search = searchValue } = {}) {
@@ -37,303 +275,109 @@
     goto(`${base}/market/settings${queryParams}`, { keepFocus: true, noscroll: true });
   }
 
-  // Overlay the server's { methodId: { enabled, settings } } onto the default catalog state.
-  // Secret fields arrive masked as '********' (still truthy, so the configured check passes).
-  function buildMethodState(paymentMethods) {
-    const fresh = createDefaultMethodState();
+  const ordered = $derived(sortProviders(providers, currentLocale(), rawTranslate));
+  const visible = $derived(
+    filterProviders(
+      ordered,
+      { region: regionFilter, search: searchValue },
+      currentLocale(),
+      rawTranslate,
+    ),
+  );
+  const noPlugins = $derived(onlyBuiltIns(providers));
+  const showTestHint = $derived(
+    Boolean(ctx?.testMode) || providers.some((p) => effectiveTestMode(p, ctx)),
+  );
 
-    if (paymentMethods) {
-      for (const method of PAYMENT_METHODS) {
-        const stored = paymentMethods[method.id];
-        if (!stored) continue;
+  const findProvider = (id) => providers.find((p) => p.id === id) ?? null;
 
-        fresh[method.id].enabled = Boolean(stored.enabled);
-
-        const stateSettings = stored.settings ?? {};
-        for (const field of method.fields) {
-          if (stateSettings[field.key] !== undefined) {
-            fresh[method.id].settings[field.key] = stateSettings[field.key];
-          }
-        }
-      }
-    }
-
-    return fresh;
+  async function fetchProviders() {
+    const result = await call(ApiUtil.get({ path: marketPath('/payment-providers') }));
+    if (!result.ok) return { error: result.error };
+    return { providers: Array.isArray(result.body.providers) ? result.body.providers : [] };
   }
 
-  // Writable derived: rebuilds from server state whenever the loaded settings
-  // change (e.g. after a refresh()). NOTE: the derived value is a plain object,
-  // NOT a $state proxy — mutating it in place (st.enabled = ...) does not
-  // re-render. All updates must go through setMethodEnabled/reassignment.
-  let methodState = $derived(buildMethodState(settings.paymentMethods));
-
-  // Reactively flip a method's enabled flag by reassigning the derived, and keep
-  // the clicked checkbox's DOM state in sync (a no-op state write, e.g. reverting
-  // false -> false after a rejected enable, would otherwise leave the user-clicked
-  // checkbox out of sync with the state).
-  function setMethodEnabled(methodId, enabled, input) {
-    methodState = {
-      ...methodState,
-      [methodId]: { ...methodState[methodId], enabled },
-    };
-    if (input) input.checked = enabled;
+  async function load() {
+    loading = true;
+    loadError = null;
+    const [fetched, context] = await Promise.all([
+      fetchProviders(),
+      ctxProp ? Promise.resolve(null) : loadContext(undefined),
+    ]);
+    if (fetched.error) loadError = fetched.error;
+    else providers = fetched.providers;
+    if (context) loadedCtx = context;
+    loading = false;
   }
 
+  // Reloads in place (no navigation: that would remount the settings page and drop its section).
   async function refresh() {
-    const body = await ApiUtil.get({ path: '/api/panel/market/settings' });
-    if (body && !body.error) {
-      settings = body;
-    }
+    const fetched = await fetchProviders();
+    if (!fetched.error) providers = fetched.providers;
   }
 
-  const filteredMethods = $derived.by(() => {
-    const term = searchValue.trim().toLowerCase();
-    return PAYMENT_METHODS.filter((m) => {
-      if (regionFilter !== 'all' && m.region !== regionFilter) return false;
-      if (!term) return true;
-      return (
-        $_(m.name).toLowerCase().includes(term) ||
-        $_(m.description).toLowerCase().includes(term) ||
-        m.id.toLowerCase().includes(term)
-      );
-    });
+  onMount(() => {
+    load();
   });
 
-  function isConfigured(method) {
-    const settings = methodState[method.id]?.settings ?? {};
-    return method.fields
-      .filter((f) => f.required)
-      .every((f) => Boolean(settings[f.key]));
-  }
-
-  async function toggleEnabled(method, event) {
+  async function toggleEnabled(provider, event) {
     // Captured synchronously; currentTarget is nulled once the handler yields.
-    const input = event?.currentTarget ?? null;
+    const input = event.currentTarget;
+    const next = input.checked;
+    const label = providerName(provider, currentLocale(), rawTranslate);
 
-    const st = methodState[method.id];
-    if (!st) return;
-
-    const next = !st.enabled;
-
-    if (next && !isConfigured(method)) {
-      showErrorToast(
-        $_('settings.payments.toast-required-settings', { values: { name: $_(method.name) } }),
+    pending[provider.id] = next;
+    busy = true;
+    let result;
+    try {
+      result = await call(
+        ApiUtil.post({
+          path: marketPath(`/payment-methods/${provider.id}/toggle`),
+          body: { enabled: next },
+        }),
       );
-      setMethodEnabled(method.id, false, input);
-      activeMethod = method;
+    } finally {
+      busy = false;
+    }
+
+    if (!result.ok) {
+      delete pending[provider.id];
+      input.checked = rowBehavior(provider).switchOn;
+      toastError($_, result);
+      if (result.error === 'PROVIDER_UNAVAILABLE' || result.error === 'NOT_FOUND') await refresh();
       return;
     }
 
-    // Optimistically reflect the checkbox the user just clicked; revert on failure.
-    setMethodEnabled(method.id, next, input);
+    showSuccessToast(
+      next
+        ? $_('settings.payments.toast-activated', { values: { name: label } })
+        : $_('settings.payments.toast-deactivated', { values: { name: label } }),
+    );
+    await refresh();
+    delete pending[provider.id];
+  }
 
+  async function move(provider, delta) {
+    const ids = movedIds(ordered, provider.id, delta);
+    if (!ids) return;
+    const before = providers;
+    // optimistic: positions follow the new id order
+    providers = providers.map((p) => ({
+      ...p,
+      config: { ...p.config, position: ids.indexOf(p.id) },
+    }));
+    busy = true;
+    let result;
     try {
-      const body = await ApiUtil.post({
-        path: `/api/panel/market/payment-methods/${method.id}/toggle`,
-        body: { enabled: next }
-      });
-
-      // No body: demo mode (ApiUtil already toasted) or a swallowed error — revert.
-      if (!body) {
-        setMethodEnabled(method.id, !next, input);
-        return;
-      }
-
-      if (body.error) {
-        setMethodEnabled(method.id, !next, input);
-        if (body.error === 'PAYMENT_METHOD_NOT_CONFIGURED') {
-          showErrorToast(
-            $_('settings.payments.toast-enable-failed-not-configured', {
-              values: { name: $_(method.name) },
-            }),
-          );
-        } else {
-          showErrorToast(
-            $_('settings.payments.toast-update-error', { values: { name: $_(method.name) } }),
-          );
-        }
-        return;
-      }
-
-      showSuccessToast(
-        next
-          ? $_('settings.payments.toast-activated', { values: { name: $_(method.name) } })
-          : $_('settings.payments.toast-deactivated', { values: { name: $_(method.name) } }),
-      );
-      await refresh();
-    } catch (e) {
-      setMethodEnabled(method.id, !next, input);
-      showErrorToast(
-        $_('settings.payments.toast-update-error', { values: { name: $_(method.name) } }),
-      );
+      result = await call(ApiUtil.post({ path: marketPath('/payment-methods/sort'), body: { ids } }));
+    } finally {
+      busy = false;
     }
-  }
-
-  // Open the shared settings modal for a specific method. We do NOT use Bootstrap's
-  // data-bs-toggle: it opens the modal synchronously on click, before Svelte flushes
-  // the activeMethod change into the modal's `method`/`settingsState` props, so the
-  // modal would init from the previously-clicked (stale) method. Instead we set
-  // activeMethod, await tick() so the props (and the modal's init $effect) settle,
-  // then show the modal programmatically — its show.bs.modal handler re-inits the
-  // form from the now-current method.
-  async function openSettings(method) {
-    activeMethod = method;
-    await tick();
-    const el = document.getElementById('paymentMethodSettingsModal');
-    if (el && typeof window !== 'undefined' && window.bootstrap) {
-      window.bootstrap.Modal.getOrCreateInstance(el).show();
+    if (!result.ok) {
+      providers = before;
+      toastError($_, result);
+      return;
     }
-  }
-
-  // Close the settings modal programmatically; the Kaydet button intentionally has no
-  // data-bs-dismiss so validation/API failures keep the modal (and typed values) open.
-  function closeSettingsModal() {
-    const el = document.getElementById('paymentMethodSettingsModal');
-    if (el && typeof window !== 'undefined' && window.bootstrap) {
-      window.bootstrap.Modal.getOrCreateInstance(el).hide();
-    }
-  }
-
-  async function onSettingsSaved(payload) {
-    if (!payload) return;
-
-    const method = PAYMENT_METHODS.find((m) => m.id === payload.id);
-
-    try {
-      const body = await ApiUtil.post({
-        path: `/api/panel/market/payment-methods/${payload.id}`,
-        body: { settings: payload.settings }
-      });
-
-      if (body.error) {
-        showErrorToast(
-          $_('settings.payments.toast-save-error', {
-            values: { name: method ? $_(method.name) : '' },
-          }),
-        );
-        return;
-      }
-
-      // Close first, then refresh so local state reflects the server's
-      // masked-secret truth + enabled flags via the reloaded settings prop.
-      closeSettingsModal();
-      showSuccessToast(
-        $_('settings.payments.toast-save-success', {
-          values: { name: method ? $_(method.name) : '' },
-        }),
-      );
-      await refresh();
-    } catch (e) {
-      showErrorToast(
-        $_('settings.payments.toast-save-error', {
-          values: { name: method ? $_(method.name) : '' },
-        }),
-      );
-    }
+    await refresh();
   }
 </script>
-
-<div class="card">
-  <CardHeader>
-    <div slot="left">
-      {$_('settings.payments.method-count', { values: { count: filteredMethods.length } })}
-    </div>
-    <div slot="middle" style="width: 250px;">
-      <SearchInput
-        initialValue={searchValue}
-        placeholderKey="plugins.pano-plugin-market.search.payment-methods"
-        onchange={(val) => applyFilters({ search: val })} />
-    </div>
-    <CardFilters slot="right">
-      <CardFiltersItem button active={regionFilter === 'all'} onclick={() => applyFilters({ region: 'all' })}>
-        {$_('common.all')}
-      </CardFiltersItem>
-      <CardFiltersItem button active={regionFilter === 'tr'} onclick={() => applyFilters({ region: 'tr' })}>
-        {$_('settings.payments.filters.turkey')}
-      </CardFiltersItem>
-      <CardFiltersItem button active={regionFilter === 'global'} onclick={() => applyFilters({ region: 'global' })}>
-        {$_('settings.payments.filters.global')}
-      </CardFiltersItem>
-    </CardFilters>
-  </CardHeader>
-
-  <div class="card-body">
-    {#if filteredMethods.length === 0}
-      <NoContent />
-    {:else}
-      <div class="row g-3">
-        {#each filteredMethods as method (method.id)}
-          {@const isEnabled = methodState[method.id]?.enabled}
-          {@const configured = isConfigured(method)}
-          <div class="col-md-6 col-xl-4">
-            <div
-              class="card h-100 position-relative focus-ring"
-              role="button"
-              tabindex="0"
-              style="cursor: pointer;"
-              title={$_('common.edit')}
-              aria-label={$_('settings.payments.open-settings-aria', { values: { name: $_(method.name) } })}
-              onclick={() => openSettings(method)}
-              onkeydown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  openSettings(method);
-                }
-              }}>
-              <div
-                class="position-absolute top-0 end-0 m-2 d-flex align-items-center gap-2"
-                role="presentation"
-                onclick={(e) => e.stopPropagation()}
-                onkeydown={(e) => e.stopPropagation()}>
-                <div
-                  class="form-check form-switch m-0"
-                  title={!configured ? $_('settings.payments.fill-required-first') : null}>
-                  <input
-                    class="form-check-input"
-                    type="checkbox"
-                    role="switch"
-                    id="pm-toggle-{method.id}"
-                    checked={isEnabled}
-                    disabled={!configured}
-                    onchange={(e) => toggleEnabled(method, e)} />
-                </div>
-              </div>
-
-              <div class="card-body">
-                <div class="d-flex align-items-start gap-2 pe-5">
-                  <div
-                    class="d-flex align-items-center justify-content-center rounded flex-shrink-0 overflow-hidden"
-                    style="width: 40px; height: 40px; background: {method.color}20;">
-                    {#if method.logo}
-                      <img
-                        src={method.logo}
-                        alt={$_('settings.payments.logo-alt', { values: { name: $_(method.name) } })}
-                        loading="lazy"
-                        style="max-width: 70%; max-height: 70%; object-fit: contain;" />
-                    {:else}
-                      <i class="fas {method.icon} fs-5" style="color: {method.color};"></i>
-                    {/if}
-                  </div>
-                  <div class="flex-grow-1 min-w-0">
-                    <div class="d-flex align-items-baseline gap-2 flex-wrap">
-                      <h6 class="mb-0 text-break">{$_(method.name)}</h6>
-                      {#if method.region === 'tr'}
-                        <span class="badge text-bg-primary">TR</span>
-                      {/if}
-                    </div>
-                    <p class="small text-body-secondary mb-0">{$_(method.description)}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </div>
-</div>
-
-<PaymentMethodSettingsModal
-  method={activeMethod}
-  settingsState={activeMethod ? methodState[activeMethod.id] : null}
-  onsave={onSettingsSaved} />
