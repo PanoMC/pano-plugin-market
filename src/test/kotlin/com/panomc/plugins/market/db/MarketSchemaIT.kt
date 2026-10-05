@@ -312,6 +312,11 @@ class MarketSchemaIT : MarketDbTestBase() {
         assertEquals(800L, creator.discount)
         assertEquals(4, creator.usedCount)
         assertEquals(9000L, creator.earnings)
+
+        // the counters above were set without redemption / earning rows: remove the rows so the invariants (I6, I14) hold afterwards
+        coupons.deleteById(couponId, pool)
+        discounts.deleteById(discountId, pool)
+        creators.deleteById(creatorId, pool)
     }
 
     // --- fixup framework ---------------------------------------------------------------------------------------

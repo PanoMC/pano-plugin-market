@@ -32,6 +32,21 @@ import org.junit.jupiter.api.Test
  * one-shot fixups (`soldCount`, `legacyUsedCount`) run exactly once, and orders written by the new code are left alone.
  */
 class MigrationFixupRerunIT : MarketMigrationTestBase() {
+    /**
+     * Tests that fabricate rows the invariants rightly reject (a paid order with no `paidAt`, a counter moved by hand) to
+     * prove that a fixup leaves them alone switch the check after the test off; every other test runs it in legacy mode.
+     */
+    private var invariantsApply = true
+
+    override suspend fun resetState() {
+        invariantsApply = true
+        super.resetState()
+    }
+
+    override suspend fun assertInvariants() {
+        if (invariantsApply) super.assertInvariants()
+    }
+
     private suspend fun migrate() {
         MarketMigration2to3().migrate(pool)
         MarketMigration3to4().migrate(pool)
@@ -162,6 +177,7 @@ class MigrationFixupRerunIT : MarketMigrationTestBase() {
 
     @Test
     fun `one-shot fixups run once, write their marker rows and fill the counters`(): Unit = runBlocking {
+        invariantsApply = false // fabricated rows, see invariantsApply
         migrate()
         ensure()
         // soldCount: quantities of the LEGACY COMPLETED order 2 (products 2 and 3); the PENDING and REFUNDED orders count nothing
@@ -192,6 +208,7 @@ class MigrationFixupRerunIT : MarketMigrationTestBase() {
 
     @Test
     fun `an order written by the new code is not touched by any fixup`(): Unit = runBlocking {
+        invariantsApply = false // fabricated rows, see invariantsApply
         migrate()
         val orderDao = MarketOrderDaoImpl()
         val itemDao = MarketOrderItemDaoImpl()
@@ -225,6 +242,7 @@ class MigrationFixupRerunIT : MarketMigrationTestBase() {
 
     @Test
     fun `a public id that collides is drawn again`(): Unit = runBlocking {
+        invariantsApply = false // fabricated rows, see invariantsApply
         migrate()
         val taken = "T".repeat(20)
         sql("UPDATE `pano_market_order` SET `publicId` = ?, `buyerKey` = 'u:101', `source` = 'STOREFRONT' WHERE `id` = 1", taken)
@@ -288,6 +306,7 @@ class MigrationFixupRerunIT : MarketMigrationTestBase() {
 
     @Test
     fun `a public id that keeps colliding gives up after five draws and a later run converts the row`(): Unit = runBlocking {
+        invariantsApply = false // fabricated rows, see invariantsApply
         migrate()
         val taken = "T".repeat(20)
         sql("UPDATE `pano_market_order` SET `publicId` = ?, `buyerKey` = 'u:101', `source` = 'STOREFRONT' WHERE `id` = 1", taken)
@@ -334,5 +353,48 @@ class MigrationFixupRerunIT : MarketMigrationTestBase() {
         assertTrue(fixed.clean, fixed.fixupErrors.toString())
         assertEquals(3L, count("market_order", "`source` = 'LEGACY' AND `publicId` IS NOT NULL AND `buyerKey` <> ''"))
         assertTrue(SchemaVerifier.verify(pool, prefix).ok)
+    }
+
+    @Test
+    fun `a gift created after the migration with an unlimited redeemLimit keeps NULL through ensure`(): Unit = runBlocking {
+        migrate()
+        ensure()
+        // the seeded gifts got redeemLimit 1 from the column default; a new unlimited one is NULL and no fixup may "repair" it
+        sql("INSERT INTO `pano_market_gift` (`code`, `type`, `redeemLimit`, `createdAt`, `updatedAt`) VALUES ('UNLIMITED', 'PRODUCT', NULL, 1, 1)")
+        assertEquals(1L, count("market_gift", "`code` = 'UNLIMITED' AND `redeemLimit` IS NULL"))
+        val report = ensure()
+        assertTrue(report.clean, report.fixupErrors.toString())
+        assertEquals(1L, count("market_gift", "`code` = 'UNLIMITED' AND `redeemLimit` IS NULL"))
+        assertEquals(2L, count("market_gift", "`redeemLimit` = 1"))
+    }
+
+    @Test
+    fun `a failed MODIFY of the order status is reported by the verifier by its column length and ensure repairs it`(): Unit = runBlocking {
+        migrate()
+        ensure()
+        // what a swallowed failure of 4 -> 5 leaves behind: the status column of version 2, VARCHAR(16)
+        sql("ALTER TABLE `pano_market_order` MODIFY COLUMN `status` VARCHAR(16) NOT NULL DEFAULT 'PENDING'")
+        val findings = SchemaVerifier.verify(pool, prefix).findings
+        assertEquals(1, findings.size, findings.toString())
+        assertTrue(findings.single().toString().contains("status"), findings.single().toString())
+        val report = ensure()
+        assertTrue(report.clean, report.ddlErrors.toString())
+        assertTrue(SchemaVerifier.verify(pool, prefix).ok)
+        assertEquals(
+            "varchar(24)",
+            sql("SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pano_market_order' AND COLUMN_NAME = 'status'").single().getString("t")
+        )
+    }
+
+    @Test
+    fun `the public ids the real fixups draw are random, unique and not time based UUIDs`(): Unit = runBlocking {
+        migrate()
+        val report = MarketSchema.ensure(pool, prefix) // production ids: SecureIds
+        assertTrue(report.clean, report.fixupErrors.toString())
+        val ids = sql("SELECT `publicId` AS p, `accessToken` AS a FROM `pano_market_order`")
+        assertEquals(3, ids.size)
+        assertEquals(3, ids.map { it.getString("p") }.toSet().size)
+        assertTrue(ids.all { it.getString("p").matches(Regex("[0-9A-HJKMNP-TV-Z]{20}")) && it.getString("a").matches(Regex("[0-9a-f]{40}")) })
+        assertTrue(ids.none { it.getString("p").contains("-") }, "no UUID() text")
     }
 }
