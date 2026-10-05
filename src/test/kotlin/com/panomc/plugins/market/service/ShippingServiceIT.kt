@@ -268,6 +268,162 @@ class ShippingServiceIT : MarketDaoITBase() {
         sendEmailAfterPurchase = mail, testMode = test
     )
 
+    // ================================================================================================ MK-145: labels
+
+    private fun pdfText(bytes: ByteArray): String = org.apache.pdfbox.Loader.loadPDF(bytes).use { org.apache.pdfbox.text.PDFTextStripper().getText(it) }
+
+    @Test
+    fun `manual shipment label is the generic PDF with recipient, tracking number and order number, and it is not stored`(): Unit = runBlocking {
+        val o = order(Line("Shirt", 1))
+        val s = ship(o, o.items.single() to 1, manual = manual(number = "TRK123456"))
+        val label = service.shipmentLabel(id(s), 0, false, pool)
+        val t = pdfText(label.bytes)
+
+        assertTrue(label.generic)
+        assertEquals(LabelFormat.PDF, label.format)
+        assertEquals(id(s), label.shipmentId)
+        assertEquals(o.id, label.orderId)
+        assertTrue(t.contains("Hans Meier"), t)
+        assertTrue(t.contains("TRK123456"), t)
+        assertTrue(t.contains("Order #${o.id}"), t)
+        assertNull(shipmentNow(id(s)).labelFile, "the generic label is rendered on demand, never stored")
+        assertEquals(0, Files.list(labels).use { it.count() }, "no file written")
+    }
+
+    @Test
+    fun `without a tracking number the barcode is the merchant reference`(): Unit = runBlocking {
+        val o = order(Line("Shirt", 1))
+        val s = ship(o, o.items.single() to 1, manual = manual(carrierName = "DHL", number = null))
+        val row = shipmentNow(id(s))
+
+        assertTrue(pdfText(service.shipmentLabel(id(s), 0, false, pool).bytes).contains(row.merchantReference))
+    }
+
+    @Test
+    fun `a stored carrier label is preferred and generic=true forces the generic one`(): Unit = runBlocking {
+        carrier.caps = ScriptedCarrier.caps(labelFormats = setOf(LabelFormat.PDF, LabelFormat.ZPL))
+        carrier.onCreate = { r ->
+            CreateShipmentResult.Created("CAR-${r.shipmentId}").also {
+                it.trackingNumber = "CT-77"
+                it.labels = listOf(LabelDocument(LabelFormat.ZPL, "^XA^FDstored^FS^XZ".toByteArray()))
+                it.documents = listOf(LabelDocument(LabelFormat.PDF, "customs-bytes".toByteArray()).also { d -> d.kind = LabelDocument.KIND_CUSTOMS })
+            }
+        }
+
+        val o = order(Line("Shirt", 1))
+        val s = carrierShip(o, o.items.single() to 1)
+        val stored = service.shipmentLabel(id(s), 0, false, pool)
+
+        assertFalse(stored.generic)
+        assertEquals(LabelFormat.ZPL, stored.format)
+        assertEquals("^XA^FDstored^FS^XZ", String(stored.bytes))
+        assertEquals(0, stored.index)
+
+        val doc = service.shipmentLabel(id(s), 1, false, pool)
+
+        assertEquals("customs-bytes", String(doc.bytes))
+        assertEquals(LabelFormat.PDF, doc.format)
+        assertEquals(1, doc.index)
+
+        val generic = service.shipmentLabel(id(s), 0, true, pool)
+
+        assertTrue(generic.generic)
+        assertEquals(LabelFormat.PDF, generic.format)
+        assertTrue(pdfText(generic.bytes).contains("CT-77"))
+        assertEquals("^XA^FDstored^FS^XZ", Files.readString(labels.resolve(shipmentNow(id(s)).labelFile!!)), "the stored file is untouched")
+        assertTrue(carrier.fetches.isEmpty(), "a stored label is never fetched again")
+        expect("NOT_FOUND", 404) { service.shipmentLabel(id(s), 2, false, pool) }
+    }
+
+    @Test
+    fun `a provider without label formats and no stored label gets the generic label`(): Unit = runBlocking {
+        carrier.caps = ScriptedCarrier.caps(labelFormats = emptySet())
+
+        val o = order(Line("Shirt", 1))
+        val s = carrierShip(o, o.items.single() to 1)
+        val label = service.shipmentLabel(id(s), 0, false, pool)
+
+        assertTrue(label.generic)
+        assertTrue(pdfText(label.bytes).contains("CAR-${id(s)}") || pdfText(label.bytes).contains(shipmentNow(id(s)).merchantReference))
+        assertTrue(carrier.fetches.isEmpty())
+    }
+
+    @Test
+    fun `no stored label, formats and a carrierReference - fetchLabel is stored once, CREATED becomes LABEL_READY and it is served`(): Unit = runBlocking {
+        carrier.caps = ScriptedCarrier.caps(labelFormats = setOf(LabelFormat.PDF))
+
+        val o = order(Line("Shirt", 1))
+        val s = carrierShip(o, o.items.single() to 1)
+
+        assertEquals("CREATED", s.getString("status"))
+        assertNull(shipmentNow(id(s)).labelFile)
+
+        carrier.onFetch = { com.panomc.plugins.market.spi.shipping.LabelResult.of(listOf(LabelDocument(LabelFormat.PDF, "%PDF-fetched".toByteArray()))) }
+
+        val label = service.shipmentLabel(id(s), 0, false, pool)
+
+        assertFalse(label.generic)
+        assertEquals("%PDF-fetched", String(label.bytes))
+
+        val row = shipmentNow(id(s))
+
+        assertEquals(ShipmentStatus.LABEL_READY, row.status)
+        assertEquals("${row.id}-0.pdf", row.labelFile)
+        assertEquals("PDF", row.labelFormat)
+        assertEquals("%PDF-fetched", Files.readString(labels.resolve(row.labelFile!!)))
+        assertEquals(1, carrier.fetches.size)
+
+        service.shipmentLabel(id(s), 0, false, pool)
+
+        assertEquals(1, carrier.fetches.size, "the second call reads the stored file")
+    }
+
+    @Test
+    fun `fetchLabel notReady or none is a 404 LABEL_NOT_READY and changes nothing`(): Unit = runBlocking {
+        carrier.caps = ScriptedCarrier.caps(labelFormats = setOf(LabelFormat.PDF))
+
+        val o = order(Line("Shirt", 1))
+        val s = carrierShip(o, o.items.single() to 1)
+
+        for (answer in listOf(com.panomc.plugins.market.spi.shipping.LabelResult.notReady(), com.panomc.plugins.market.spi.shipping.LabelResult.none())) {
+            carrier.onFetch = { answer }
+
+            val body = expect("NOT_FOUND", 404) { service.shipmentLabel(id(s), 0, false, pool) }
+
+            assertEquals("LABEL_NOT_READY", body.getString("reason"), body.encode())
+        }
+
+        val row = shipmentNow(id(s))
+
+        assertNull(row.labelFile)
+        assertEquals(ShipmentStatus.CREATED, row.status)
+    }
+
+    @Test
+    fun `a file name that leaves the labels directory is never read`(): Unit = runBlocking {
+        carrier.caps = ScriptedCarrier.caps(labelFormats = setOf(LabelFormat.PDF))
+        carrier.onCreate = { r -> CreateShipmentResult.Created("CAR-${r.shipmentId}").also { it.labels = listOf(LabelDocument(LabelFormat.PDF, "ok".toByteArray())) } }
+
+        val o = order(Line("Shirt", 1))
+        val s = carrierShip(o, o.items.single() to 1)
+        val outside = Files.createTempFile("market-outside", ".pdf")
+
+        Files.writeString(outside, "secret")
+
+        for (name in listOf("../${outside.fileName}", outside.toAbsolutePath().toString(), "..", "nope.pdf")) {
+            sql("UPDATE `pano_market_shipment` SET `labelFile` = ? WHERE `id` = ?", name, id(s))
+
+            val body = expect("NOT_FOUND", 404) { service.shipmentLabel(id(s), 0, false, pool) }
+
+            assertEquals("LABEL_NOT_READY", body.getString("reason"), name)
+        }
+    }
+
+    @Test
+    fun `an unknown shipment is a 404`(): Unit = runBlocking {
+        expect("NOT_FOUND", 404) { service.shipmentLabel(999_999, 0, false, pool) }
+    }
+
     // ================================================================================================ test 50: partial shipping
 
     @Test
@@ -1804,11 +1960,13 @@ class ShippingServiceIT : MarketDaoITBase() {
         @Volatile var onCancel: suspend (ShipmentView) -> CancelShipmentResult = { CancelShipmentResult.cancelled() }
         @Volatile var onTrack: suspend (TrackRequest) -> List<TrackingUpdate> = { emptyList() }
         @Volatile var onQuote: suspend (QuoteRequest) -> QuoteResult = { QuoteResult(emptyList()) }
+        @Volatile var onFetch: suspend (ShipmentView) -> com.panomc.plugins.market.spi.shipping.LabelResult = { com.panomc.plugins.market.spi.shipping.LabelResult.none() }
 
         val creates = CopyOnWriteArrayList<CreateShipmentRequest>()
         val cancels = CopyOnWriteArrayList<ShipmentView>()
         val tracks = CopyOnWriteArrayList<TrackRequest>()
         val quotes = CopyOnWriteArrayList<QuoteRequest>()
+        val fetches = CopyOnWriteArrayList<ShipmentView>()
 
         override fun settingsSchema(): SettingsSchema = settingsSchema {
             SenderKeys.ADDRESS.forEach { key -> text(key) { label = LocalizedText.of(key) } }
@@ -1833,6 +1991,12 @@ class ShippingServiceIT : MarketDaoITBase() {
             tracks += request
 
             return onTrack(request)
+        }
+
+        override suspend fun fetchLabel(ctx: ShippingContext, shipment: ShipmentView): com.panomc.plugins.market.spi.shipping.LabelResult {
+            fetches += shipment
+
+            return onFetch(shipment)
         }
 
         override suspend fun quote(ctx: ShippingContext, request: QuoteRequest): QuoteResult {

@@ -97,6 +97,10 @@ import com.panomc.plugins.market.db.tx.OrderChild
 import com.panomc.plugins.market.db.tx.OrderLockScope
 import com.panomc.plugins.market.db.tx.txRestartingOnOrderChange
 import com.panomc.plugins.market.error.InvalidShipment
+import com.panomc.plugins.market.pdf.GenericLabel
+import com.panomc.plugins.market.pdf.GenericLabelRenderer
+import com.panomc.plugins.market.pdf.LabelAddress
+import com.panomc.plugins.market.pdf.LabelCaptions
 import com.panomc.plugins.market.error.InvalidShipmentTransition
 import com.panomc.plugins.market.error.OrderNotShippable
 import com.panomc.plugins.market.error.ProviderUnavailable
@@ -2150,6 +2154,135 @@ class ShippingService(
         }
     }
 
+    // ------------------------------------------------------------------------------------------------ labels (MK-145)
+
+    /** One label file ready to be served (10 section 9.8): [index] 0 is the label, `n >= 1` the n-th document; [generic] = market's own PDF. */
+    class ShipmentLabel(val shipmentId: Long, val orderId: Long, val index: Int, val format: LabelFormat, val bytes: ByteArray, val generic: Boolean)
+
+    /**
+     * `GET /shipments/:id/label` (10 section 9.8). `generic = true`, or no stored label and a provider without label formats (or one that is gone):
+     * the [GenericLabelRenderer] PDF, rendered on a worker thread and not stored. Otherwise the stored file (`index 0` = `labelFile`, `n >= 1` =
+     * `documents[n - 1].file`, canonical path inside `labelsDir`); with none stored and a `carrierReference`, `fetchLabel` (15 s) and the result is
+     * stored as at creation (`CREATED` becomes `LABEL_READY`). `notReady` / `none` / a missing file: 404 `{reason: LABEL_NOT_READY}`.
+     */
+    suspend fun shipmentLabel(shipmentId: Long, index: Int, generic: Boolean, sqlClient: SqlClient): ShipmentLabel {
+        val row = shipmentOrNotFound(shipmentId, sqlClient)
+        val carrier = usableOrNull(row.providerId, sqlClient)
+        val formats = carrier?.capabilities?.labelFormats ?: emptySet()
+
+        if (generic || (row.labelFile == null && formats.isEmpty())) return genericLabel(row, carrier, sqlClient)
+
+        var current = row
+
+        if (index == 0 && current.labelFile == null) {
+            if (current.carrierReference == null || carrier == null) throw labelNotReady()
+
+            current = fetchLabel(current, carrier) ?: throw labelNotReady()
+        }
+
+        val documents = parse("{\"d\":${current.documents ?: "[]"}}")?.getJsonArray("d") ?: JsonArray()
+        val file: String?
+        val format: String?
+
+        if (index == 0) {
+            file = current.labelFile
+            format = current.labelFormat
+        } else {
+            val doc = if (index in 1..documents.size()) documents.getJsonObject(index - 1) else null
+
+            file = doc?.getString("file")
+            format = doc?.getString("format")
+        }
+
+        if (file == null || format == null) throw if (index == 0) labelNotReady() else NotFound()
+
+        val bytes = readLabelFile(file) ?: throw labelNotReady()
+
+        return ShipmentLabel(current.id, current.orderId, index, LabelFormat.valueOf(format), bytes, false)
+    }
+
+    private fun labelNotReady() = NotFound("", mapOf("reason" to "LABEL_NOT_READY"))
+
+    /** The file [name] from the row, resolved under `labelsDir`; null when it is missing or would leave the directory. */
+    private suspend fun readLabelFile(name: String): ByteArray? = withContext(Dispatchers.IO) {
+        val dir = fx().labelsDir
+
+        try {
+            if (!Files.isDirectory(dir)) return@withContext null
+
+            val root = dir.toRealPath()
+            val file = root.resolve(name).normalize()
+
+            if (!file.startsWith(root) || !Files.isRegularFile(file)) return@withContext null
+
+            val real = file.toRealPath()
+
+            if (!real.startsWith(root)) null else Files.readAllBytes(real)
+        } catch (e: java.io.IOException) {
+            log.warn("label file $name could not be read", e)
+
+            null
+        } catch (e: java.nio.file.InvalidPathException) {
+            null
+        }
+    }
+
+    /** `provider.fetchLabel` (15 s) for a shipment without a stored label; the result is stored and the row returned, `null` for notReady / none. */
+    private suspend fun fetchLabel(row: MarketShipment, carrier: Carrier): MarketShipment? {
+        val result = try {
+            withTimeout(LABEL_FETCH_TIMEOUT_MS) { carrier.provider.fetchLabel(contexts.create(carrier.provider, carrier.settings, row.testMode), viewOf(row)) }
+        } catch (e: CancellationException) {
+            if (e is TimeoutCancellationException) throw ShippingProviderError(TIMEOUT, row.id) else throw e
+        } catch (e: ProviderException) {
+            throw ShippingProviderError(e.code.name, row.id)
+        } catch (e: Exception) {
+            throw ShippingProviderError(INTERNAL, row.id)
+        }
+
+        if (result.documents.isEmpty()) return null
+
+        val created = CreateShipmentResult.Created(row.carrierReference ?: return null).also { c ->
+            c.labels = result.documents.filter { it.kind == LabelDocument.KIND_LABEL }
+            c.documents = result.documents.filter { it.kind != LabelDocument.KIND_LABEL }
+        }
+        val stored = storeDocuments(row.id, created)
+
+        if (stored.labelFile == null) return null
+
+        return inOrder(row.orderId) { conn, _ ->
+            val now = fx().shipments.getById(row.id, conn) ?: return@inOrder null
+
+            if (now.labelFile != null) return@inOrder now
+
+            val sets = LinkedHashMap<String, Any?>()
+
+            sets["labelFile"] = stored.labelFile
+            sets["labelFormat"] = stored.labelFormat
+            sets["documents"] = if (stored.documents.isEmpty) null else stored.documents.encode()
+
+            if (now.status == ShipmentStatus.CREATED) sets["status"] = ShipmentStatus.LABEL_READY.name
+
+            setShipment(conn, row.id, sets)
+            rederive(conn, row.orderId)
+            fx().shipments.getById(row.id, conn)
+        }
+    }
+
+    private suspend fun genericLabel(row: MarketShipment, carrier: Carrier?, sqlClient: SqlClient): ShipmentLabel {
+        val order = fx().orders.getById(row.orderId, sqlClient)
+        val manual = if (row.providerId == ManualShippingProvider.ID) carrier else carrierOf(ManualShippingProvider.ID, sqlClient, HashMap())
+        val sender = (carrier?.sender ?: manual?.sender)?.let { LabelAddress.lines(it) } ?: emptyList()
+        val paper = manual?.settings?.string(ManualShippingProvider.KEY_LABEL_PAPER) ?: ManualShippingProvider.PAPER_A6
+        val barcode = row.trackingNumber?.takeIf { it.isNotBlank() } ?: row.merchantReference
+        val label = GenericLabel(
+            sender = sender, recipient = LabelAddress.lines(parse(row.toAddress)), orderId = row.orderId, publicId = order?.publicId, weightGrams = row.weightGrams,
+            barcode = barcode, paper = paper, captions = LabelCaptions.of(order?.locale)
+        )
+        val bytes = withContext(Dispatchers.Default) { GenericLabelRenderer.render(label) }
+
+        return ShipmentLabel(row.id, row.orderId, 0, LabelFormat.PDF, bytes, true)
+    }
+
     // ------------------------------------------------------------------------------------------------ reading
 
     /** One shipment as the panel sees it (10 section 9.9). [detail] adds `items`, `events` and the addresses of `GET /shipments/:id`. */
@@ -2287,6 +2420,7 @@ class ShippingService(
         private const val MERCHANT_REFERENCE_LENGTH = 16
         private const val MERCHANT_REFERENCE_TRIES = 8
         private const val MAX_DOCUMENTS = 20
+        private const val LABEL_FETCH_TIMEOUT_MS = 15_000L
         private const val MAX_DOCUMENT_BYTES = 5 * 1024 * 1024
         private const val MAX_SERVICE_CODE = 128
         private const val MAX_RATE_REF = 255
