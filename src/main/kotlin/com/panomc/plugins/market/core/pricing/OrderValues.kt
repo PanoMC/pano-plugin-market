@@ -24,7 +24,9 @@ object OrderValues {
     fun creatorEarning(order: PriceBreakdown, commissionBp: Long): CreatorEarning {
         val c = order.conversions
         val earning = order.lines.filter { it.lineKind == LineKind.PRODUCT || it.lineKind == LineKind.BUNDLE }
-        val creditMode = order.paymentMethodId == MethodInput.CREDITS && order.creditAmount > 0L
+        // credit mode is how the order was priced, not which provider ended up with it: a full-credit order whose credit total is 0
+        // (a fixed coupon or discount takes the whole credit price) has method `free` and a money record above 0 that nobody paid
+        val creditMode = order.items.payWithCredits && order.items.credit?.payable == true
         val baseAmount = if (creditMode) {
             val credit = order.items.credit!!
             val keys = earning.mapTo(HashSet()) { it.lineKey }

@@ -18,7 +18,7 @@ import java.math.RoundingMode
  * minRemainder  = max(oq, the selected provider's minimum in the order currency, rounded up to the quantum)
  * capValue      = T0 - minRemainder                                (<= 0: nothing can be applied)
  * maxByTotal    = floor(capValue x 100 / (cv x fx))                (credits x 100)
- * maxApplicable = min(creditBalance, maxByTotal)
+ * maxApplicable = min(max(creditBalance, 0), maxByTotal)    (a user in credit debt has nothing to spend)
  * applied       = maxApplicable                                     for "MAX" (the quote only)
  *               = min(useCredits, maxApplicable)                    for a number: the quote clamps (CREDITS_REDUCED),
  *                                                                   checkout and /pay refuse a number above it
@@ -52,14 +52,14 @@ object MixedPayment {
      */
     fun apply(conversions: Conversions, t0: Long, providerMinimum: Long?, creditBalance: Long, request: Long?, strict: Boolean): Result {
         require(t0 >= 0) { "the total is never negative: $t0" }
-        require(creditBalance >= 0) { "the credit balance is never negative: $creditBalance" }
-        if (request != null && request < 0) throw PricingException(PricingError.INVALID_INPUT, "useCredits is negative")
-        if (strict && request == MAX) throw PricingException(PricingError.INVALID_INPUT, "MAX is accepted on the quote only")
+        checkRequest(request, strict)
+        // a user in credit debt (07 section 3.1, ALLOW_DEBT after a dispute clawback) has nothing to spend: the balance is passed as it is
+        val balance = maxOf(0L, creditBalance)
 
         val oq = conversions.oq
         val minRemainder = maxOf(oq, providerMinimum?.let { ceilToQuantum(it, oq) } ?: 0L)
         val capValue = Math.subtractExact(t0, minRemainder)
-        val maxApplicable = if (capValue <= 0L) 0L else minOf(creditBalance, floorCredits(conversions, capValue, creditBalance))
+        val maxApplicable = if (capValue <= 0L) 0L else minOf(balance, floorCredits(conversions, capValue, balance))
 
         val wanted = request ?: 0L
         var reduced = false
@@ -83,6 +83,12 @@ object MixedPayment {
             if (appliedValue <= 0L) applied = 0L // credits so small that their value rounds to nothing are not spent
         }
         return Result(maxApplicable, applied, appliedValue, Math.subtractExact(t0, appliedValue), reduced, rejected)
+    }
+
+    /** The request must be a valid one for the caller: never negative, and `MAX` only on the quote. */
+    fun checkRequest(request: Long?, strict: Boolean) {
+        if (request != null && request < 0) throw PricingException(PricingError.INVALID_INPUT, "useCredits is negative")
+        if (strict && request == MAX) throw PricingException(PricingError.INVALID_INPUT, "MAX is accepted on the quote only")
     }
 
     /** The money value of [credits] in the order currency, rounded half up to the quantum (the value covered by credits of a mixed order). */
