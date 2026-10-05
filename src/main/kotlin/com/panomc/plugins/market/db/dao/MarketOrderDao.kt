@@ -5,6 +5,9 @@ import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.sqlclient.SqlClient
 
+/** What a recipient holds or has on hold of one product, counted from order items (06 section 6.4). */
+class ProductOrderUsage(val productId: Long, val used: Long, val lastOrderAt: Long?)
+
 abstract class MarketOrderDao : MarketDao<MarketOrder>(MarketOrder::class.java) {
     /** Inserts every column of [order]; the new id. A duplicate `(buyerKey, idempotencyKey)` or `publicId` throws. */
     abstract suspend fun add(order: MarketOrder, sqlClient: SqlClient): Long
@@ -31,6 +34,15 @@ abstract class MarketOrderDao : MarketDao<MarketOrder>(MarketOrder::class.java) 
     abstract suspend fun updateExchangeRate(id: Long, exchangeRate: Double, sqlClient: SqlClient)
 
     abstract suspend fun anonymizeByUserId(userId: Long, sqlClient: SqlClient)
+
+    /**
+     * Per product of [productIds]: `SUM(quantity - refundedQuantity)` and `MAX(createdAt)` over the order items of orders whose
+     * `recipientKey` is one of [recipientKeys] and whose `reservationState` is `HELD` or `COMMITTED` (released orders free the
+     * allowance). An order that is still `HELD` and was bought by somebody else (`buyerKey <> recipientKey`) is left out, so a
+     * stranger's unpaid gift can neither use up a limit nor start a cooldown (06 section 6.4). Products without a row are absent.
+     * Driven by `idx_recipient`. Used for `limitPerPlayer` and `cooldownSeconds`.
+     */
+    abstract suspend fun usageByProduct(recipientKeys: Collection<String>, productIds: Collection<Long>, sqlClient: SqlClient): Map<Long, ProductOrderUsage>
 
     // Stats aggregates — COMPLETED orders only. Revenue is converted per-order into the stats
     // currency inside the query (frozen `exchangeRate` when present, else the currency-based

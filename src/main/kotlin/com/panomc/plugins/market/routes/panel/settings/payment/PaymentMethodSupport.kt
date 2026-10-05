@@ -118,7 +118,21 @@ internal fun paymentMethodService(plugin: MarketPlugin): PaymentMethodService {
     }
 }
 
-private fun buildService(plugin: MarketPlugin): PaymentMethodService {
+/** The secret cipher and the provider context factory of one plugin instance, shared by the panel service and the quote. */
+internal class PaymentWiring(val cipher: SecretCipher, val contexts: PaymentContexts, val site: () -> SiteInfo)
+
+@Volatile
+private var cachedWiring: Pair<MarketPlugin, PaymentWiring>? = null
+
+internal fun paymentWiring(plugin: MarketPlugin): PaymentWiring {
+    cachedWiring?.takeIf { it.first === plugin }?.let { return it.second }
+
+    return synchronized(PaymentMethodServiceHolder) {
+        cachedWiring?.takeIf { it.first === plugin }?.second ?: buildWiring(plugin).also { cachedWiring = plugin to it }
+    }
+}
+
+private fun buildWiring(plugin: MarketPlugin): PaymentWiring {
     val context = plugin.applicationContext
     val databaseManager by lazy { context.getBean(DatabaseManager::class.java) }
     val db = MarketDb({ databaseManager.getSqlClient() as Pool }, SystemClock)
@@ -141,14 +155,23 @@ private fun buildService(plugin: MarketPlugin): PaymentMethodService {
         SettingsPaymentContext(ProviderContextImpl(provider.id, settings, testMode, http, vertx, log, state, site(), SystemClock))
     }
 
+    return PaymentWiring(cipher, contexts, site)
+}
+
+private fun buildService(plugin: MarketPlugin): PaymentMethodService {
+    val context = plugin.applicationContext
+    val databaseManager by lazy { context.getBean(DatabaseManager::class.java) }
+    val db = MarketDb({ databaseManager.getSqlClient() as Pool }, SystemClock)
+    val wiring = paymentWiring(plugin)
+
     return PaymentMethodService(
         db = db,
         clock = SystemClock,
         methods = context.getBean(MarketPaymentMethodDao::class.java),
         throttles = context.getBean(MarketThrottleDao::class.java),
         lookup = providerLookup(plugin),
-        cipher = cipher,
-        contexts = contexts,
-        site = site
+        cipher = wiring.cipher,
+        contexts = wiring.contexts,
+        site = wiring.site
     )
 }
