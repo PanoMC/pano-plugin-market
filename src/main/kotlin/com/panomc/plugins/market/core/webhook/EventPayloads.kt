@@ -72,9 +72,21 @@ object EventPayloads {
         .put("uuid", uuid)
         .put("email", o.email)
 
+    /** The recipient name of [o]: the buyer's own name when no recipient is stored. */
+    fun recipientName(o: MarketOrder): String = o.recipientUsername.ifEmpty { o.playerUsername }
+
+    /**
+     * The account id the `recipient` object carries: the stored recipient id, falling back to the buyer's id **only**
+     * when the recipient is the buyer. A gift to a name that has no account stays `null` and never takes the payer's id.
+     */
+    fun recipientUserId(o: MarketOrder): Long? {
+        val self = o.recipientUsername.isEmpty() || (!o.isGift && o.recipientUsername.equals(o.playerUsername, ignoreCase = true))
+        return if (self) o.recipientUserId ?: o.userId else o.recipientUserId
+    }
+
     fun recipient(o: MarketOrder, uuid: String?): JsonObject = JsonObject()
-        .put("username", o.recipientUsername.ifEmpty { o.playerUsername })
-        .put("userId", o.recipientUserId ?: o.userId)
+        .put("username", recipientName(o))
+        .put("userId", recipientUserId(o))
         .put("uuid", uuid)
 
     /**

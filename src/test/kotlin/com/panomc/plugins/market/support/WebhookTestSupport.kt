@@ -71,7 +71,8 @@ class WebhookHarness(
     renderer: com.panomc.plugins.market.service.WebhookBodyRenderer = com.panomc.plugins.market.service.WebhookBodyRenderer.Unwired,
     reporter: com.panomc.plugins.market.service.WebhookDeliveryReporter? = null,
     disableAfter: Int = com.panomc.plugins.market.db.dao.MarketWebhookEndpointDao.DEFAULT_DISABLE_AFTER,
-    concurrency: Int = 5
+    concurrency: Int = 5,
+    uuidOf: suspend (Long?, String) -> String? = { _, _ -> null }
 ) {
     val cipher = WebhookTestSupport.cipher()
     val store = com.panomc.plugins.market.core.webhook.StoreInfo("Test Craft", "https://shop.example.com")
@@ -80,7 +81,7 @@ class WebhookHarness(
     )
     val service = com.panomc.plugins.market.service.WebhookService(
         w.db, w.clock, w.ids, w.webhookEndpoints, w.webhookDeliveries, w.orders, w.orderItems, sender, { store },
-        renderer = renderer, reporter = reporter, disableAfter = disableAfter, random = kotlin.random.Random(5)
+        renderer = renderer, reporter = reporter, uuidOf = uuidOf, disableAfter = disableAfter, random = kotlin.random.Random(5)
     )
     val job = com.panomc.plugins.market.job.WebhookJob(service, concurrency = concurrency)
 

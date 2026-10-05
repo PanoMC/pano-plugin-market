@@ -105,6 +105,26 @@ class EventPayloadsTest {
     }
 
     @Test
+    fun `a gift to a name without an account never carries the payer id`() {
+        val gift = MarketOrder(
+            id = 1, userId = 5, playerUsername = "Steve", publicId = "P",
+            recipientUsername = "Alex", recipientUserId = null, isGift = true
+        )
+        val r = EventPayloads.recipient(gift, null)
+        assertEquals("Alex", r.getString("username"))
+        assertNull(r.getValue("userId"))
+    }
+
+    @Test
+    fun `a gift to a registered player carries that player id and a self recipient keeps the buyer id`() {
+        val gift = MarketOrder(id = 1, userId = 5, playerUsername = "Steve", publicId = "P", recipientUsername = "Bob", recipientUserId = 9, isGift = true)
+        assertEquals(9, EventPayloads.recipient(gift, null).getLong("userId"))
+
+        val self = MarketOrder(id = 2, userId = 5, playerUsername = "Steve", publicId = "P", recipientUsername = "steve", recipientUserId = null, isGift = false)
+        assertEquals(5, EventPayloads.recipient(self, null).getLong("userId"))
+    }
+
+    @Test
     fun `bundle children keep their parent and entitlement ends are passed through`() {
         val child = MarketOrderItem(id = 10, orderId = 42, productName = "Kit", kind = OrderItemKind.BUNDLE_CHILD, parentItemId = 9, snapshot = "not json")
         val items = EventPayloads.items(listOf(item, child), expiresAt = mapOf(9L to 1_770_000_000_000L))
