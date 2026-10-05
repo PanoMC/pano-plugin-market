@@ -77,12 +77,16 @@ class PlaceholderTest {
     fun `with the real executor the request is made off the calling thread`() {
         val real = PlaceholderCache(config(), link, "1.4.0", log, clock)
         val seen = CountDownLatch(1)
+        val firstResolved = CountDownLatch(1)
         link.handler = { r ->
+            // the refresh may only finish after the first resolve returned, else the first read races the cache fill
+            firstResolved.await(5, TimeUnit.SECONDS)
             requestThreads.add(Thread.currentThread())
             seen.countDown()
             MarketQueryMessage(true, null, data)
         }
         assertEquals("", real.resolve("credits", "Steve"))
+        firstResolved.countDown()
         assertTrue(seen.await(5, TimeUnit.SECONDS), "the refresh ran")
         assertTrue(requestThreads.none { it === calling }, "no request on the calling thread")
         assertEquals("PanoMarket-placeholders", requestThreads[0].name)
