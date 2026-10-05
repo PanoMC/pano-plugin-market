@@ -100,8 +100,8 @@ interface MailComposition {
  * this class, so no mail is sent and the gap is visible in the outbox (panel resend works once the composer is wired).
  */
 object UnwiredMailComposition : MailComposition {
-    override suspend fun isObsolete(row: MarketMailOutbox, sqlClient: SqlClient): Boolean =
-        throw IllegalStateException("the mail composer is not wired (MK-142)")
+    /** Not obsolete, so the row reaches [compose], which fails it closed (a throw here would be retried as transient). */
+    override suspend fun isObsolete(row: MarketMailOutbox, sqlClient: SqlClient): Boolean = false
 
     override suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient): MailContent =
         throw IllegalStateException("the mail composer is not wired (MK-142)")

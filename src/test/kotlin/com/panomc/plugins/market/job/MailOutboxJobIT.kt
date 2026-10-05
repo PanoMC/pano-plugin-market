@@ -511,6 +511,61 @@ class MailOutboxJobIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a forced resend of a row older than seven days is sent, a plain old row is still STALE`(): Unit = runBlocking {
+        val old = enqueue(refId = 1)!!
+        val plain = enqueue(refId = 2)!!
+        w.clock.advance(7L * 24 * 3_600_000 + 1)
+        assertEquals(old, enqueue(refId = 1, force = true))
+
+        assertEquals(2, job.runOnce())
+
+        assertEquals(MailStatus.SENT, row(old).status)
+        assertEquals(1, row(old).attempts)
+        assertEquals(1, gateway.sent.size)
+        assertEquals(MailStatus.SKIPPED, row(plain).status)
+        assertEquals("STALE", row(plain).lastError)
+    }
+
+    @Test
+    fun `a failing relevance check is a retryable attempt, not a RENDER_ERROR`(): Unit = runBlocking {
+        val id = enqueue(kind = MailKind.ORDER_RECEIVED)!!
+        composition.obsoleteFailures[id] = java.util.concurrent.ConcurrentLinkedQueue(listOf(java.io.IOException("pool timeout")))
+
+        assertEquals(1, job.runOnce())
+        var r = row(id)
+        assertEquals(MailStatus.PENDING, r.status)
+        assertEquals(1, r.attempts)
+        assertTrue(r.lastError!!.startsWith("IOException: pool timeout"), r.lastError)
+        assertNull(r.claimedUntil)
+        val delay = r.nextAttemptAt!! - w.clock.now()
+        assertTrue(delay in MailOutboxJob.RETRY_BACKOFF.bounds(1), "delay $delay")
+        assertEquals(0, gateway.calls.size)
+
+        w.clock.advance(delay)
+        assertEquals(1, job.runOnce())
+        r = row(id)
+        assertEquals(MailStatus.SENT, r.status)
+        assertEquals(2, r.attempts)
+        assertEquals(1, gateway.sent.size)
+    }
+
+    @Test
+    fun `a relevance check that keeps failing ends FAILED only after ten attempts`(): Unit = runBlocking {
+        val id = enqueue(kind = MailKind.ORDER_RECEIVED)!!
+        composition.obsoleteFailures[id] = java.util.concurrent.ConcurrentLinkedQueue(List(10) { java.io.IOException("lock wait") })
+        repeat(9) {
+            assertEquals(1, job.runOnce())
+            assertEquals(MailStatus.PENDING, row(id).status)
+            w.clock.advance(row(id).nextAttemptAt!! - w.clock.now())
+        }
+        assertEquals(1, job.runOnce())
+        assertEquals(MailStatus.FAILED, row(id).status)
+        assertEquals(10, row(id).attempts)
+        assertTrue(row(id).lastError!!.startsWith("IOException: lock wait"))
+        assertEquals(0, gateway.calls.size)
+    }
+
+    @Test
     fun `a row older than seven days is skipped as STALE`(): Unit = runBlocking {
         val old = enqueue(refId = 1)!!
         w.clock.advance(7L * 24 * 3_600_000 + 1)

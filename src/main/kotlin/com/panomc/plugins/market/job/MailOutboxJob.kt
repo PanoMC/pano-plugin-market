@@ -74,11 +74,25 @@ class MailOutboxJob(
 
         if (!mailEnabled()) return skip(row, before, "MAIL_DISABLED", client)
         if (!mailOptionsAvailable()) return skip(row, before, "HOST_TOO_OLD", client)
-        if (row.createdAt < now - STALE_AFTER_MS) return skip(row, before, "STALE", client)
-
+        // A panel resend (params.forced) is a request to send now: it skips the relevance check and the age limit, which
+        // would otherwise end a resend of an old order mail SKIPPED without ever sending it (12 section 4.5).
         val forced = isForced(row)
+        if (!forced && row.createdAt < now - STALE_AFTER_MS) return skip(row, before, "STALE", client)
+
+        // The relevance check is a set of DB reads: a failure there is transient and goes through the retry path.
+        if (!forced) {
+            val obsolete = try {
+                composition.isObsolete(row, client)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                return fail(row, "${t.javaClass.simpleName}: ${t.message.orEmpty()}", client)
+            }
+            if (obsolete) return skip(row, before, "OBSOLETE", client)
+        }
+
+        // Only a compose exception is non-retryable (deterministic, 12 section 4.3.6).
         val content = try {
-            if (!forced && composition.isObsolete(row, client)) return skip(row, before, "OBSOLETE", client)
             composition.compose(row, client)
         } catch (e: CancellationException) {
             throw e

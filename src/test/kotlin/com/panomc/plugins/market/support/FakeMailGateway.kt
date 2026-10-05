@@ -102,8 +102,12 @@ class FakeMailComposition : MailComposition {
     val attachmentsById: MutableMap<Long, MailAttachments> = java.util.concurrent.ConcurrentHashMap()
     val obsoleteChecks = CopyOnWriteArrayList<Long>()
 
+    /** Failures `isObsolete` throws, one per entry per call, consumed in order (a transient DB error). */
+    val obsoleteFailures: MutableMap<Long, java.util.concurrent.ConcurrentLinkedQueue<Throwable>> = java.util.concurrent.ConcurrentHashMap()
+
     override suspend fun isObsolete(row: MarketMailOutbox, sqlClient: SqlClient): Boolean {
         obsoleteChecks.add(row.id)
+        obsoleteFailures[row.id]?.poll()?.let { throw it }
         return row.id in obsoleteIds
     }
 
