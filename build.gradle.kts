@@ -1,4 +1,7 @@
 import java.net.URL
+import java.nio.file.Files
+import java.nio.file.FileSystems
+import java.nio.file.StandardCopyOption
 import java.util.zip.ZipFile
 
 buildscript {
@@ -142,6 +145,8 @@ val resolvedCoreJar: File? = when {
     !panoCoreJar.isNullOrBlank() -> File(panoCoreJar)
     else -> findUmbrellaCoreJar()
 }
+// The Fabric subproject (-Pfabric, mc-fabric/) compiles against the same Core jar.
+extra["resolvedCoreJar"] = resolvedCoreJar
 
 // The release that panoMcVersion pins has to carry the pano-core asset. 1.0.0-alpha.66 does not (the asset is attached
 // by a later release, REL-03); resolving it through Ivy can only fail, so say so instead of a bare 404.
@@ -764,3 +769,56 @@ val verifyJar by tasks.registering {
     }
 }
 tasks.named("check") { dependsOn(verifyJar, "mcTest") }
+
+// Fabric jar (19 section 2.1, 2.3): only with -Pfabric (always in CI releases). `mc-fabric` is a sibling subproject that
+// settings.gradle.kts includes for -Pfabric only; its jar is bundled into the market jar as the resource
+// mc/pano-plugin-market-fabric.jar, which GET /api/panel/market/mc-component/download?platform=fabric streams. Without
+// -Pfabric nothing of this exists: the jar has no such entry (the endpoint answers 404 then) and the embedded platform
+// build (GM jar) never sees mc-fabric.
+//
+// The jar is appended to the finished market jar instead of being put into the resources: shadow unpacks every *.jar
+// file it is given as a source, which would merge the Fabric classes into the market jar.
+val fabricJarEntry = "mc/pano-plugin-market-fabric.jar"
+val fabricJarFile = layout.buildDirectory.file("mc/pano-plugin-market-fabric-$version.jar")
+// Whether the Fabric jar is bundled is an input of shadowJar: a build without -Pfabric after one with it must write a clean jar.
+tasks.shadowJar { inputs.property("withFabric", project.hasProperty("fabric")) }
+if (project.hasProperty("fabric")) {
+    tasks.shadowJar {
+        dependsOn(":mc-fabric:shadowJar")
+        inputs.file(fabricJarFile).withPropertyName("fabricJar")
+        doLast {
+            val target = archiveFile.get().asFile.toPath()
+            FileSystems.newFileSystem(target).use { fs ->
+                Files.createDirectories(fs.getPath("mc"))
+                Files.copy(
+                    fabricJarFile.get().asFile.toPath(), fs.getPath(fabricJarEntry), StandardCopyOption.REPLACE_EXISTING
+                )
+            }
+        }
+    }
+    // `build` also runs the tests and the jar rules of the Fabric jar.
+    tasks.named("build") { dependsOn(":mc-fabric:build") }
+}
+
+// The bundle is part of the market jar exactly when -Pfabric is given, and then it is the jar `:mc-fabric:build` wrote.
+tasks.named("verifyJar") {
+    val withFabric = project.hasProperty("fabric")
+    doLast {
+        val jar = tasks.shadowJar.get().archiveFile.get().asFile
+        ZipFile(jar).use { z ->
+            val entry = z.getEntry(fabricJarEntry)
+            if (!withFabric) {
+                require(entry == null) { "$fabricJarEntry is in the jar of a build without -Pfabric" }
+            } else {
+                require(entry != null) { "$fabricJarEntry is missing from the jar of a -Pfabric build" }
+                val bundled = z.getInputStream(entry).use { it.readBytes() }
+                val built = fabricJarFile.get().asFile.readBytes()
+                require(bundled.contentEquals(built)) { "$fabricJarEntry differs from build/mc/pano-plugin-market-fabric-$version.jar" }
+                require(bundled.size in 1_000..2_000_000) { "$fabricJarEntry has an implausible size ${bundled.size}" }
+                require(z.entries().asSequence().none { it.name.startsWith("com/panomc/plugins/market/mc/fabric/") || it.name == "fabric.mod.json" }) {
+                    "the Fabric classes or fabric.mod.json were unpacked into the market jar"
+                }
+            }
+        }
+    }
+}

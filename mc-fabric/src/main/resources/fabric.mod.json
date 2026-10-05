@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "panomarket",
+  "version": "${version}",
+  "name": "Pano Market",
+  "description": "In-game component of the Pano Market plugin. Delivers purchases, runs the store commands and the credit features.",
+  "authors": [
+    "Pano"
+  ],
+  "contact": {
+    "homepage": "https://panomc.com",
+    "sources": "https://github.com/PanoMC/pano-plugin-market"
+  },
+  "license": "MIT",
+  "environment": "server",
+  "entrypoints": {
+    "server": [
+      "com.panomc.plugins.market.mc.fabric.MarketFabricMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.0",
+    "fabric-api": "*",
+    "minecraft": ">=26.1",
+    "java": ">=25",
+    "pano": "*"
+  },
+  "suggests": {
+    "luckperms": "*"
+  }
+}
