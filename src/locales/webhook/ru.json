@@ -1,0 +1,91 @@
+{
+  "activity-logs": {
+    "CREATED_MARKET_WEBHOOK": "<b>{username}</b> создал(а) вебхук «{name}».",
+    "UPDATED_MARKET_WEBHOOK": "<b>{username}</b> изменил(а) вебхук «{name}».",
+    "DELETED_MARKET_WEBHOOK": "<b>{username}</b> удалил(а) вебхук «{name}».",
+    "TESTED_MARKET_WEBHOOK": "<b>{username}</b> отправил(а) тестовое сообщение на вебхук «{name}»."
+  },
+  "webhooks": {
+    "discord": {
+      "order": {
+        "paid": {
+          "title": "Новая покупка",
+          "description": "{username} купил(а) {items.inline}"
+        },
+        "refunded": {
+          "title": "Возврат по заказу",
+          "description": "Заказ #{order.id} игрока {username} возвращён ({refund.amount} {order.currency})"
+        },
+        "chargeback": {
+          "title": "Открыт чарджбэк",
+          "description": "Заказ #{order.id} игрока {username} оспорен",
+          "won": {
+            "title": "Чарджбэк выигран",
+            "description": "Спор по заказу #{order.id} решён в пользу магазина"
+          }
+        }
+      },
+      "subscription": {
+        "started": {
+          "title": "Подписка оформлена",
+          "description": "{username} оформил(а) подписку"
+        },
+        "renewed": {
+          "title": "Подписка продлена",
+          "description": "Подписка игрока {username} продлена"
+        },
+        "cancelled": {
+          "title": "Подписка отменена",
+          "description": "Подписка игрока {username} отменена"
+        },
+        "expired": {
+          "title": "Подписка истекла",
+          "description": "Подписка игрока {username} истекла"
+        }
+      },
+      "shipment": {
+        "shipped": {
+          "title": "Заказ отправлен",
+          "description": "Заказ игрока {username} в пути ({shipment.carrierName} {shipment.trackingNumber})"
+        },
+        "delivered": {
+          "title": "Заказ доставлен",
+          "description": "Заказ игрока {username} доставлен"
+        }
+      },
+      "test": {
+        "ping": {
+          "title": "Тестовое сообщение",
+          "description": "Это тестовое сообщение из вашего магазина"
+        }
+      },
+      "action": {
+        "grant": {
+          "title": "Действие доставки ({phase})",
+          "description": "{product.name} для {username}"
+        },
+        "renew": {
+          "title": "Действие доставки ({phase})",
+          "description": "{product.name} для {username}"
+        },
+        "expire": {
+          "title": "Действие доставки ({phase})",
+          "description": "{product.name} для {username}"
+        },
+        "revoke": {
+          "title": "Действие доставки ({phase})",
+          "description": "{product.name} для {username}"
+        }
+      },
+      "generic": {
+        "title": "Действие доставки",
+        "description": "{username}"
+      },
+      "label": {
+        "player": "Игрок",
+        "total": "Итого",
+        "items": "Товары"
+      }
+    }
+  }
+}

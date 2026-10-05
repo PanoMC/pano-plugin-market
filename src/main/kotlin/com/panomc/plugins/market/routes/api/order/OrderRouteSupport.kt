@@ -57,6 +57,8 @@ import com.panomc.plugins.market.service.ForeignEffects
 import com.panomc.plugins.market.service.InvoiceEffects
 import com.panomc.plugins.market.service.ShippingEffects
 import com.panomc.plugins.market.routes.panel.shipping.shippingService
+import com.panomc.plugins.market.routes.panel.webhook.discordLabelSource
+import com.panomc.plugins.market.routes.panel.webhook.discordWebhookRenderer
 import com.panomc.plugins.market.routes.api.payment.attemptLocks
 import com.panomc.plugins.market.service.OrderService
 import com.panomc.plugins.market.service.OutboundHttp
@@ -127,7 +129,9 @@ private fun buildWebhookService(plugin: MarketPlugin): WebhookService {
         orders = context.getBean(MarketOrderDao::class.java), orderItems = context.getBean(MarketOrderItemDao::class.java), sender = sender,
         store = { wiring.site().let { StoreInfo(it.name, it.baseUrl) } },
         // MK-102: the outcome of the outbox row of a product WEBHOOK action goes back to its delivery row (D12 / D21)
-        reporter = DeliveryWebhookReporter(deliveryService(plugin))
+        reporter = DeliveryWebhookReporter(deliveryService(plugin)),
+        // MK-106: format = DISCORD bodies (08 section 16)
+        renderer = discordWebhookRenderer(plugin)
     )
 }
 
@@ -170,7 +174,9 @@ private fun buildDeliveryService(plugin: MarketPlugin): DeliveryService {
         users = PlatformUserDirectory(databaseManager), accounts = PlatformPlayerAccounts(databaseManager), credits = creditService(plugin),
         permissions = PermissionGrantService(
             PlatformPermissionWriter(databaseManager, { context.getBean(PermissionManager::class.java) }, { context.getBean(ServerManager::class.java) }), SystemClock
-        )
+        ),
+        // MK-106: the WEBHOOK executor writes its outbox row here; the DISCORD bodies of action webhooks use the store's default locale
+        webhookDeliveries = context.getBean(MarketWebhookDeliveryDao::class.java), discordLabels = discordLabelSource(plugin)
     )
 }
 
@@ -228,6 +234,7 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
         // WIRE-1: StartShipping goes to the shipping service (derived shippingStatus); the rest still to PENDING_SLICES
         foreign = CreditEffects(
             credits, orderDao, context.getBean(MarketOrderEventDao::class.java), clock, { currentConfig(plugin) },
+            PlatformUserDirectory { context.getBean(DatabaseManager::class.java) },
             InvoiceEffects(
                 invoiceService(plugin), orderDao,
                 DeliveryEffects(

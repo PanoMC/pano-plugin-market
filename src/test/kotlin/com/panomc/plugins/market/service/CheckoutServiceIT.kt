@@ -1040,6 +1040,8 @@ class CheckoutServiceIT : MarketDaoITBase() {
 
         val pack = fx.product(slug = "pack", price = 500, columns = mapOf("kind" to "CREDIT_PACK", "creditAmount" to 50000))
 
+        h.config = h.config.copy(creditTopUpEnabled = true) // a pack is sold only while the top-up is on (07 section 8)
+
         assertTrue(fails { h.checkout(json("items" to listOf(line(pack)), "paymentMethodId" to "fake")) } is NotLoggedIn)
         nothingWritten()
     }
@@ -2105,6 +2107,16 @@ internal class CheckoutHarness(val w: TestWiring, private val vertx: Vertx) {
     @Volatile
     var shipper: ShippingQuoter? = null
 
+    /** The abuse limits of MK-152 (code lock, L4, L3); `null` = not enforced. A test sets them and calls [rebuild]. */
+    @Volatile
+    var codeGuard: CodeGuard? = null
+
+    @Volatile
+    var openOrders: OpenOrderLimit? = null
+
+    @Volatile
+    var throttle: ThrottleService? = null
+
     @Volatile
     var ledgerAvailable: Boolean = true
 
@@ -2232,7 +2244,7 @@ internal class CheckoutHarness(val w: TestWiring, private val vertx: Vertx) {
         legal = legal, users = directory, servers = ServerDirectory { _, _ -> emptySet() },
         blocks = BuyerBlocks { payer, recipient, email, ip, userId, _ -> blocked(payer, recipient, email, ip, userId) },
         shipping = ShippingQuoter { request, sql -> shipper?.quote(request, sql) ?: shippingResult ?: ShippingQuote(null) },
-        checkout = deps
+        checkout = deps, codeGuard = codeGuard, openOrders = openOrders, throttle = throttle
     )
 
     /**

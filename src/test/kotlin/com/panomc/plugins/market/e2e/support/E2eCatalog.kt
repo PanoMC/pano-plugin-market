@@ -72,8 +72,7 @@ class E2eCatalog(private val admin: E2eClient, private val db: E2eDb) {
         coupon("ONCE", JsonObject().put("name", "Once").put("discount", 50).put("unit", "PERCENT").put("redeemLimit", 3).put("customerRedeemLimit", 1))
         coupon("FULL", JsonObject().put("name", "Full").put("discount", 100).put("unit", "PERCENT"))
         creatorCode("STREAMER", JsonObject().put("creator", "streamer").put("discount", 5).put("unit", "PERCENT").put("commissionPercent", 10))
-        // 17 section 5.6 names the code GIFT1; MK-113 refuses a gift code shorter than AbuseLimits.MIN_GIFT_CODE_LENGTH (8), so the seed uses GIFT0001
-        gift("GIFT0001", JsonObject().put("type", "PRODUCT").put("productId", products["VIP"]).put("redeemLimit", 1))
+        gift("GIFTCODE1", JsonObject().put("type", "PRODUCT").put("productId", products["VIP"]).put("redeemLimit", 1))
 
         return this
     }
@@ -204,7 +203,8 @@ class E2eCatalog(private val admin: E2eClient, private val db: E2eDb) {
     private fun grantAndRevoke(vararg specs: Triple<String, Any, String>): String {
         val rows = JsonArray()
         specs.forEachIndexed { i, (type, value, _) -> rows.add(action("a${i + 1}", type, "GRANT", value)) }
-        specs.forEachIndexed { i, (type, value, _) -> rows.add(action("r${i + 1}", type, "REVOKE", value)) }
+        // CP-1: PERMISSION / CREDIT actions are state-only (ActionParser: INVALID_PHASE outside GRANT / RENEW); the undo of a grant is the
+        // automatic inverse the planner derives (08 section 11.2), so no authored REVOKE row exists.
         return rows.encode()
     }
 }

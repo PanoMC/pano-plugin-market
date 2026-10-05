@@ -10,6 +10,7 @@ import com.panomc.plugins.market.core.cart.CartLine
 import com.panomc.plugins.market.core.cart.CartLineKey
 import com.panomc.plugins.market.core.cart.CartMerger
 import com.panomc.plugins.market.core.abuse.IpRange
+import com.panomc.plugins.market.core.abuse.ThrottlePolicy
 import com.panomc.plugins.market.core.order.BillingSnapshot
 import com.panomc.plugins.market.core.order.ItemSnapshot
 import com.panomc.plugins.market.core.order.LineCode
@@ -139,6 +140,7 @@ import com.panomc.plugins.market.error.PurchaseLimitReached
 import com.panomc.plugins.market.error.ShippingAddressRequired
 import com.panomc.plugins.market.error.ShippingUnavailable
 import com.panomc.plugins.market.error.SubscriptionMustBeAlone
+import com.panomc.plugins.market.error.CodeAttemptsLocked
 import com.panomc.plugins.market.error.TooManyRequests
 import com.panomc.plugins.market.provider.ProviderLookup
 import com.panomc.plugins.market.provider.SecretCipher
@@ -165,7 +167,6 @@ import com.panomc.plugins.market.util.GiftType
 import com.panomc.plugins.market.util.MarketStatus
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.json.JsonArray
-import com.panomc.platform.util.RateLimiter
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.sqlclient.SqlClient
@@ -411,8 +412,19 @@ class CheckoutService(
     /** The saved addresses of a payer: a manual order of a physical product falls back to the payer's default one (06 section 14.3); `null` = none. */
     private val addresses: MarketAddressDao? = null,
     /** The wiring of [checkout]; `null` for a service that only quotes. */
-    private val checkout: CheckoutDeps? = null
+    private val checkout: CheckoutDeps? = null,
+    /** The brute-force lock of coupon and creator codes (11 section 12, MK-152); `null` = no lock and no counting. */
+    private val codeGuard: CodeGuard? = null,
+    /** L1 (11 section 11); `null` = this service's own limiters built from `checkoutRateLimitPerMinute`. */
+    rateLimits: MarketRateLimits? = null,
+    /** L4: unpaid held orders per buyer, recipient, e-mail and IP bucket; `null` = not enforced. */
+    private val openOrders: OpenOrderLimit? = null,
+    /** L3: orders created per IP and hour (`market_throttle`); `null` = not enforced. */
+    private val throttle: ThrottleService? = null
 ) {
+    private val limits: MarketRateLimits = rateLimits ?: MarketRateLimits(config)
+
+
     // ------------------------------------------------------------------------------------------------------ quote
 
     /** `POST /api/market/checkout/quote` (04 section 3). */
@@ -456,6 +468,8 @@ class CheckoutService(
         if (lines.size > CartLimits.MAX_LINES) throw InvalidCart(mapOf("cart" to listOf(CART_FULL)))
 
         val currencyAsked = input.currency ?: cart?.currency
+        val rawCoupon = if (topUp != null) null else (input.couponCode ?: cart?.couponCode)?.takeIf { it.isNotBlank() }
+        val rawCreator = if (topUp != null) null else (input.creatorCode ?: cart?.creatorCode)?.takeIf { it.isNotBlank() }
         val couponCode = if (topUp != null) null else CartLimits.normalizeCode(input.couponCode ?: cart?.couponCode)?.takeIf { CartLimits.codeFits(it) }
         val creatorCode = if (topUp != null) null else CartLimits.normalizeCode(input.creatorCode ?: cart?.creatorCode)?.takeIf { CartLimits.codeFits(it) }
         val recipientAsked = input.recipientUsername ?: cart?.recipientUsername
@@ -500,7 +514,8 @@ class CheckoutService(
             existingServerIds = existingServers,
             usage = facts.usage,
             owned = facts.owned,
-            subscribedProductIds = facts.subscribed
+            subscribedProductIds = facts.subscribed,
+            creditPacksEnabled = c.creditsEnabled && c.creditTopUpEnabled
         )
         val rules = LineRules.evaluate(ruleLines, ruleContext).let { if (manual != null) manualRules(it, manual.request.force) else it }
 
@@ -557,8 +572,40 @@ class CheckoutService(
         }
 
         val pricingMode = selected?.input?.pricingMode ?: PricingMode.MARKET
-        val coupon = if (couponCode != null) couponInput(couponCode, buyerKeyForUse, orderEmail, recipientKeys, sqlClient) else null
-        val creator = if (creatorCode != null) creatorInput(creatorCode, sqlClient) else null
+        // ---- the brute-force lock of codes (11 section 12.2): quote and phase A of checkout only, never the frozen re-run under the locks, never a manual order
+        val guard = codeGuard?.takeIf { frozen == null && manual == null && topUp == null && (rawCoupon != null || rawCreator != null) }
+        val codeSubjects = guard?.subjectsOf(caller.clientIp, payerKey).orEmpty()
+        val codeLock = guard?.lockedUntil(AbuseLimits.SCOPE_COUPON, codeSubjects)
+
+        // a locked subject is refused even with a valid code: the code is not looked up (checkout answers 429, the quote leaves the code out of the price)
+        if (codeLock != null && strict) throw CodeAttemptsLocked(guard!!.retryAfterSeconds(codeLock))
+
+        val coupon = if (couponCode != null && codeLock == null) couponInput(couponCode, buyerKeyForUse, orderEmail, recipientKeys, sqlClient) else null
+        val creator = if (creatorCode != null && codeLock == null) creatorInput(creatorCode, sqlClient) else null
+
+        if (guard != null && codeLock == null) {
+            // both tables are looked up whichever code field the text came in (the timing does not tell which table a code lives in); a code that is
+            // not found, malformed or soft-deleted is counted, an expired or used-up one is not
+            if (couponCode != null) creatorCodes.getByCode(couponCode, sqlClient)
+            if (creatorCode != null) coupons.getByCode(creatorCode, sqlClient)
+
+            val unknown = buildList {
+                if (rawCoupon != null && (coupon == null || !coupon.found)) add(rawCoupon)
+                if (rawCreator != null && (creator == null || !creator.found)) add(rawCreator)
+            }
+
+            for (code in unknown) guard.recordUnknown(AbuseLimits.SCOPE_COUPON, codeSubjects, code)
+
+            // an unknown code that came from the server cart is dropped from it, so the next quote does not send it again
+            if (cart != null && unknown.isNotEmpty()) {
+                val clear = HashMap<String, Any?>()
+
+                if (rawCoupon != null && (coupon == null || !coupon.found) && cart.couponCode != null && input.couponCode == null) clear["couponCode"] = null
+                if (rawCreator != null && (creator == null || !creator.found) && cart.creatorCode != null && input.creatorCode == null) clear["creatorCode"] = null
+
+                if (clear.isNotEmpty()) carts.updateFields(cart.id, clear, now, sqlClient)
+            }
+        }
         val automatic = discounts.getAutomatic(sqlClient).map { a ->
             val d = a.discount
 
@@ -670,6 +717,8 @@ class CheckoutService(
 
         // ---- the lines of the answer
         val quoteLines = quoteLines(rules.lines, lines, breakdown, catalog, separateCreditOrders(c, breakdown))
+        if (codeLock != null) messages += QuoteMessage(CODE_ATTEMPTS_LOCKED, LineRules.ERROR)
+
         val distinct = messages.distinct()
         val requiredFields = RequiredBuyerFields.of(
             c.billingInfoMode, selected?.caps?.requiredBuyerFields.orEmpty(),
@@ -678,7 +727,7 @@ class CheckoutService(
         )
         val canCheckout = quoteLines.isNotEmpty() &&
             quoteLines.all { it.errors.isEmpty() } &&
-            distinct.none { it.level == LineRules.ERROR } &&
+            distinct.none { it.level == LineRules.ERROR && it.code != CODE_ATTEMPTS_LOCKED } &&
             breakdown.canCheckout &&
             (chosen == null || chosen.available)
 
@@ -703,8 +752,10 @@ class CheckoutService(
             total = breakdown.total,
             credits = breakdown.credits?.let { QuoteCredits(true, c.creditName, it.balance, it.payableInCredits, it.creditTotal, it.maxApplicable, it.applied, it.appliedValue) },
             gatewayAmount = breakdown.gatewayAmount,
-            coupon = items.coupon?.let { QuoteCode(it.code, it.valid, it.reason?.name) },
-            creatorCode = items.creatorCode?.let { QuoteCode(it.code, it.valid, it.reason?.name) },
+            coupon = if (codeLock != null && rawCoupon != null) QuoteCode(CartLimits.normalizeCode(rawCoupon) ?: rawCoupon, false, CODE_ATTEMPTS_LOCKED)
+            else items.coupon?.let { QuoteCode(it.code, it.valid, it.reason?.name) },
+            creatorCode = if (codeLock != null && rawCreator != null) QuoteCode(CartLimits.normalizeCode(rawCreator) ?: rawCreator, false, CODE_ATTEMPTS_LOCKED)
+            else items.creatorCode?.let { QuoteCode(it.code, it.valid, it.reason?.name) },
             requiresShipping = items.requiresShipping,
             shippingOptions = shippingQuote.options,
             shippingMethodId = shippingQuote.methodId,
@@ -747,11 +798,11 @@ class CheckoutService(
         val locale = request.orderLocale ?: DEFAULT_LOCALE
         val payer = resolvePayer(input, caller, c, sqlClient)
 
-        limitIp(caller, c)
+        limitIp(caller)
 
         orders.getByBuyerAndIdempotencyKey(payer.key, request.idempotencyKey, sqlClient)?.let { return replay(it, request, deps, sqlClient) }
 
-        limitBuyer(payer.key, c)
+        limitBuyer(payer.key)
 
         if (blocks.blocked(payer.name, input.recipientUsername, payer.email, caller.clientIp, caller.userId, sqlClient)) throw BuyerBlocked()
 
@@ -767,6 +818,8 @@ class CheckoutService(
             try {
                 val plan = phaseA(request, caller, sqlClient)
                 val verified = verify(plan, request, caller)
+
+                limitOpenOrders(plan, caller, sqlClient)
 
                 try {
                     placed = phaseB(request, caller, payer, plan, verified, deps)
@@ -786,6 +839,8 @@ class CheckoutService(
         }
 
         duplicate?.let { return replay(it, request, deps, sqlClient) }
+
+        countOrderCreated(caller)
 
         return finish(checkNotNull(placed), deps, sqlClient)
     }
@@ -838,6 +893,32 @@ class CheckoutService(
         return a
     }
 
+    /**
+     * L4 held-unit cap on stock subjects: `MAX_QUANTITY` for every cart line that contributes units to a stock-limited subject whose sum exceeds
+     * `AbuseLimits.heldUnitsCap` of the subject's product. A subject without stock (a variant with NULL stock, a product without stock) is never capped.
+     */
+    private fun heldUnitLineErrors(a: Assessment): Map<String, List<String>> {
+        class Held(var units: Long = 0, val cap: Int, val lines: MutableSet<String> = LinkedHashSet())
+
+        val subjects = LinkedHashMap<Pair<Boolean, Long>, Held>()
+
+        for (l in a.items.lines) {
+            val product = l.productId?.let { a.catalog.products[it] } ?: continue
+            val variant = if (l.variantId != 0L) a.catalog.variants[l.variantId] else null
+            val stock = if (l.variantId != 0L) variant?.stock else product.stock
+
+            if (stock == null) continue
+
+            val subject = Pair(l.variantId != 0L, if (l.variantId != 0L) l.variantId else product.id)
+            val held = subjects.getOrPut(subject) { Held(cap = AbuseLimits.heldUnitsCap(product.maxQuantityPerOrder)) }
+
+            held.units += l.quantity
+            held.lines += l.parentLineKey ?: l.lineKey
+        }
+
+        return subjects.values.filter { it.units > it.cap }.flatMap { it.lines }.distinct().associateWith { listOf(LineCode.MAX_QUANTITY) }
+    }
+
     /** The A1 to A12 table of 06 section 5.2 in its order; throws the first failure. Phase B runs it again on the locked rows. */
     private fun failOn(a: Assessment, request: CheckoutRequest, caller: QuoteCaller, frozen: Boolean) {
         val messages = a.messages
@@ -867,6 +948,14 @@ class CheckoutService(
         val lineErrors = a.quote.lines.filter { l -> badRequestCodes(a, l).isNotEmpty() }.associate { it.lineKey to it.errors }
 
         if (lineErrors.isNotEmpty()) throw InvalidCart(lineErrors)
+
+        // L4 (11 section 11): one unpaid order on an offline method may hold at most min(maxQuantityPerOrder ?: 10, 10) units of a stock subject.
+        // The subjects are the ones the reservation takes (06 section 7.1): the variant when the line names one, else the product, and every
+        // child of a bundle on its own row with `line quantity x child quantity`; the units of all lines (and of a bundle's children) add up
+        val offline = a.selected?.id == OrderTimings.BANK_TRANSFER_PROVIDER || a.selected?.caps?.longPending == true
+        val hoarded = if (!offline) emptyMap() else heldUnitLineErrors(a)
+
+        if (hoarded.isNotEmpty()) throw InvalidCart(hoarded)
 
         // A5
         a.items.coupon?.let { if (!it.valid) throw InvalidCoupon((it.reason ?: PricingCode.CODE_NOT_FOUND).name) }
@@ -1902,36 +1991,37 @@ class CheckoutService(
     }
 
 
-    // ----- rate limit L1 (11 section 11): IP before the replay lookup, buyer after it
+    // ----- rate limits L1, L3, L4 (11 section 11): L1 IP before the replay lookup, L1 buyer after it; L4 and L3 before the order transaction
 
-    private class Limiters(val perMinute: Int, val ip: RateLimiter, val buyer: RateLimiter)
+    private fun limitIp(caller: QuoteCaller) = limits.checkoutIp(caller.clientIp)
 
-    @Volatile
-    private var limiters: Limiters? = null
+    private fun limitBuyer(buyerKey: String) = limits.checkoutBuyer(buyerKey)
 
-    private fun limitersFor(c: MarketConfig): Limiters? {
-        val perMinute = c.checkoutRateLimitPerMinute
+    /**
+     * L4 and L3, after phase A has resolved the recipient and before the order transaction (the SQL counts of L4 are never taken inside it). L3 is
+     * only checked here and counted by [countOrderCreated] once an order row exists: a replay, a refusal and a rolled-back transaction count nothing.
+     */
+    private suspend fun limitOpenOrders(a: Assessment, caller: QuoteCaller, sqlClient: SqlClient) {
+        openOrders?.check(a.payerKey, a.recipient?.key.orEmpty(), a.orderEmail, caller.clientIp, sqlClient)
 
-        if (perMinute <= 0) return null
+        val subject = ipSubject(caller) ?: return
+        val used = throttle?.windowOf(AbuseLimits.SCOPE_CHECKOUT, subject, AbuseLimits.ORDERS_PER_IP_WINDOW_MS) ?: return
 
-        return limiters?.takeIf { it.perMinute == perMinute }
-            ?: Limiters(perMinute, RateLimiter(perMinute, AbuseLimits.refillMs(perMinute)!!), RateLimiter(perMinute, AbuseLimits.refillMs(perMinute)!!)).also { limiters = it }
+        if (used.first >= AbuseLimits.MAX_ORDERS_PER_IP_PER_HOUR) throw TooManyRequests(maxOf(1L, Math.ceil((used.second - clock.now()) / 1000.0).toLong()))
     }
 
-    private fun limitIp(caller: QuoteCaller, c: MarketConfig) {
-        val l = limitersFor(c) ?: return
-        val bucket = IpRange.bucketKey(caller.clientIp) ?: return
+    /** L3 increment: one order was created for this address. Never fails the checkout (the order exists). */
+    private suspend fun countOrderCreated(caller: QuoteCaller) {
+        val subject = ipSubject(caller) ?: return
 
-        if (!l.ip.tryAcquire("ip:$bucket")) throw TooManyRequests(retryAfterSeconds(l.perMinute))
+        try {
+            throttle?.hit(AbuseLimits.SCOPE_CHECKOUT, subject, AbuseLimits.ORDERS_PER_IP_WINDOW_MS)
+        } catch (e: Exception) {
+            // the order is placed; a counter that could not be written must not turn a paid-for request into an error
+        }
     }
 
-    private fun limitBuyer(buyerKey: String, c: MarketConfig) {
-        val l = limitersFor(c) ?: return
-
-        if (!l.buyer.tryAcquire("b:$buyerKey")) throw TooManyRequests(retryAfterSeconds(l.perMinute))
-    }
-
-    private fun retryAfterSeconds(perMinute: Int): Long = maxOf(1L, Math.ceil(60.0 / perMinute).toLong())
+    private fun ipSubject(caller: QuoteCaller): String? = IpRange.bucketKey(caller.clientIp)?.let { ThrottlePolicy.truncate("ip:$it") }
 
     // ---------------------------------------------------------------------------------------------------- the cart
 
@@ -2640,6 +2730,7 @@ class CheckoutService(
 
     companion object {
         const val DEFAULT_LOCALE = "en-US"
+        const val CODE_ATTEMPTS_LOCKED = "CODE_ATTEMPTS_LOCKED"
 
         private const val PRODUCT_UNAVAILABLE = LineCode.PRODUCT_UNAVAILABLE
         private const val CREDITS_DISABLED = "CREDITS_DISABLED"

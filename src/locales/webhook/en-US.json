@@ -1,0 +1,91 @@
+{
+  "activity-logs": {
+    "CREATED_MARKET_WEBHOOK": "<b>{username}</b> created the \"{name}\" webhook.",
+    "UPDATED_MARKET_WEBHOOK": "<b>{username}</b> updated the \"{name}\" webhook.",
+    "DELETED_MARKET_WEBHOOK": "<b>{username}</b> deleted the \"{name}\" webhook.",
+    "TESTED_MARKET_WEBHOOK": "<b>{username}</b> sent a test message to the \"{name}\" webhook."
+  },
+  "webhooks": {
+    "discord": {
+      "order": {
+        "paid": {
+          "title": "New purchase",
+          "description": "{username} bought {items.inline}"
+        },
+        "refunded": {
+          "title": "Order refunded",
+          "description": "Order #{order.id} of {username} was refunded ({refund.amount} {order.currency})"
+        },
+        "chargeback": {
+          "title": "Chargeback opened",
+          "description": "Order #{order.id} of {username} was disputed",
+          "won": {
+            "title": "Chargeback won",
+            "description": "The dispute on order #{order.id} was decided in the store's favour"
+          }
+        }
+      },
+      "subscription": {
+        "started": {
+          "title": "Subscription started",
+          "description": "{username} started a subscription"
+        },
+        "renewed": {
+          "title": "Subscription renewed",
+          "description": "The subscription of {username} was renewed"
+        },
+        "cancelled": {
+          "title": "Subscription cancelled",
+          "description": "The subscription of {username} was cancelled"
+        },
+        "expired": {
+          "title": "Subscription expired",
+          "description": "The subscription of {username} has expired"
+        }
+      },
+      "shipment": {
+        "shipped": {
+          "title": "Order shipped",
+          "description": "The order of {username} is on its way ({shipment.carrierName} {shipment.trackingNumber})"
+        },
+        "delivered": {
+          "title": "Order delivered",
+          "description": "The order of {username} was delivered"
+        }
+      },
+      "test": {
+        "ping": {
+          "title": "Test message",
+          "description": "This is a test message from your store"
+        }
+      },
+      "action": {
+        "grant": {
+          "title": "Delivery action ({phase})",
+          "description": "{product.name} for {username}"
+        },
+        "renew": {
+          "title": "Delivery action ({phase})",
+          "description": "{product.name} for {username}"
+        },
+        "expire": {
+          "title": "Delivery action ({phase})",
+          "description": "{product.name} for {username}"
+        },
+        "revoke": {
+          "title": "Delivery action ({phase})",
+          "description": "{product.name} for {username}"
+        }
+      },
+      "generic": {
+        "title": "Delivery action",
+        "description": "{username}"
+      },
+      "label": {
+        "player": "Player",
+        "total": "Total",
+        "items": "Items"
+      }
+    }
+  }
+}

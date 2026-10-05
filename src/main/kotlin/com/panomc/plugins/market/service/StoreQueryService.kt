@@ -151,7 +151,7 @@ class StoreQueryService(
     suspend fun store(currency: String?, viewer: StoreViewer, sqlClient: SqlClient): JsonObject {
         val c = config()
         val catalog = load(currency, viewer, sqlClient)
-        val cards = catalog.visible.mapNotNull { catalog.card(it) }
+        val cards = catalog.listed.mapNotNull { catalog.card(it) }
         val byId = cards.associateBy { it.product.id }
         val size = c.storePageSize.coerceIn(1, MAX_PAGE_SIZE)
         val listed = sort(cards.toList(), ProductSort.PRIORITY)
@@ -215,7 +215,7 @@ class StoreQueryService(
         }
         val needle = query.search?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() }
 
-        val matching = catalog.visible.filter { p ->
+        val matching = catalog.listed.filter { p ->
             (subtree == null || p.categoryId in subtree) &&
                 (query.featured == null || p.featured == query.featured) &&
                 (query.kind == null || p.kind == query.kind) &&
@@ -268,6 +268,12 @@ class StoreQueryService(
         val requiredFieldProducts: Set<Long>
     ) {
         val categoryIds: Set<Long> = categories.map { it.id }.toSet()
+
+        /** Credit packs are sold only while the credit system and its top-up are on (07 section 8 and 14.1); the others are always listed. */
+        private val packsSellable = cfg.creditsEnabled && cfg.creditTopUpEnabled
+
+        /** What the listings show: [visible] without the credit packs while they cannot be bought. A pack's own page stays reachable (`purchasable.ok = false`). */
+        val listed: List<MarketProduct> = visible.filter { it.kind != ProductKind.CREDIT_PACK || packsSellable }
         private val categoryById = categories.associateBy { it.id }
         private val childrenOf = categories.groupBy { it.parentId }
         private val ownedProductIds: Set<Long> = owned.map { it.productId }.toSet()
@@ -362,6 +368,8 @@ class StoreQueryService(
 
         private fun purchasable(card: StoreCard): Pair<Boolean, String?> {
             val p = card.product
+
+            if (p.kind == ProductKind.CREDIT_PACK && !packsSellable) return false to "PRODUCT_UNAVAILABLE"
 
             if (!inStock(p, card.variants)) return false to "OUT_OF_STOCK"
 
