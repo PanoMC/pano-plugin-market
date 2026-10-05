@@ -57,7 +57,7 @@ class PanelCreateProductAPI(private val plugin: MarketPlugin) : MarketPanelApi()
         try {
             val stored = uploads.store()
             val input = ProductRequestParser.parse(data, stored.productImage, stored.variantImages)
-            val saved = catalog.create(input)
+            val saved = catalog.create(input, RoutingCaller(plugin, context))
 
             val sqlClient = databaseManager.getSqlClient()
             val userId = authProvider.getUserIdFromRoutingContext(context)
@@ -65,7 +65,7 @@ class PanelCreateProductAPI(private val plugin: MarketPlugin) : MarketPanelApi()
 
             databaseManager.panelActivityLogDao.add(CreatedMarketProductLog(userId, username, plugin.pluginId, saved.name), sqlClient)
 
-            return Successful(mapOf("id" to saved.id, "slug" to saved.slug, "warnings" to saved.warnings))
+            return Successful(saved.response())
         } catch (e: Throwable) {
             uploads.discard()
 

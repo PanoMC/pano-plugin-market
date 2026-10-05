@@ -34,14 +34,21 @@ import kotlin.random.Random
  */
 fun interface WebhookBodyRenderer {
     /** [envelope] is the JSON envelope of 08 section 15.4; the result is the exact request body. May throw. */
-    fun render(endpoint: MarketWebhookEndpoint, event: String, envelope: JsonObject): String
+    suspend fun render(endpoint: MarketWebhookEndpoint, event: String, envelope: JsonObject): String
+
+    /** As [render], plus a warning to record in `lastError` of the row without failing it (`TEMPLATE_ERROR`, 08 section 16.4). */
+    suspend fun renderChecked(endpoint: MarketWebhookEndpoint, event: String, envelope: JsonObject): RenderedBody =
+        RenderedBody(render(endpoint, event, envelope), null)
 
     /** Production binding until MK-106 lands. Fails closed: never produces a body. */
     object Unwired : WebhookBodyRenderer {
-        override fun render(endpoint: MarketWebhookEndpoint, event: String, envelope: JsonObject): String =
+        override suspend fun render(endpoint: MarketWebhookEndpoint, event: String, envelope: JsonObject): String =
             throw IllegalStateException("DISCORD_RENDERER_NOT_WIRED")
     }
 }
+
+/** A rendered body and the warning for the log, if any. */
+class RenderedBody(val body: String, val warning: String? = null)
 
 /**
  * Reports the end of a delivery row that belongs to a product `WEBHOOK` action (`deliveryId != 0`) back to the delivery
@@ -191,7 +198,7 @@ class WebhookService(
                 status = if (rendered.error == null) WebhookDeliveryStatus.PENDING else WebhookDeliveryStatus.DEAD,
                 attempts = 0, maxAttempts = endpoint.maxAttempts,
                 nextAttemptAt = if (rendered.error == null) now else null,
-                lastError = rendered.error,
+                lastError = rendered.error ?: rendered.warning,
                 createdAt = now, updatedAt = now
             )
 
@@ -201,13 +208,15 @@ class WebhookService(
         return inserted
     }
 
-    private class Rendered(val body: String, val error: String?)
+    private class Rendered(val body: String, val error: String?, val warning: String? = null)
 
-    private fun render(endpoint: MarketWebhookEndpoint, event: String, envelope: JsonObject): Rendered = try {
+    private suspend fun render(endpoint: MarketWebhookEndpoint, event: String, envelope: JsonObject): Rendered = try {
         when (endpoint.format) {
             WebhookFormat.JSON -> Rendered(envelope.encode(), null)
-            WebhookFormat.DISCORD -> Rendered(renderer.render(endpoint, event, envelope), null)
+            WebhookFormat.DISCORD -> renderer.renderChecked(endpoint, event, envelope).let { Rendered(it.body, null, it.warning) }
         }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
     } catch (e: Exception) {
         // Never break the business transaction over one endpoint's template: the row is in the log as DEAD.
         Rendered(envelope.encode(), "RENDER_FAILED")

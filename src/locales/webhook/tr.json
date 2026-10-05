@@ -1,0 +1,91 @@
+{
+  "activity-logs": {
+    "CREATED_MARKET_WEBHOOK": "<b>{username}</b> \"{name}\" webhook'unu oluşturdu.",
+    "UPDATED_MARKET_WEBHOOK": "<b>{username}</b> \"{name}\" webhook'unu güncelledi.",
+    "DELETED_MARKET_WEBHOOK": "<b>{username}</b> \"{name}\" webhook'unu sildi.",
+    "TESTED_MARKET_WEBHOOK": "<b>{username}</b> \"{name}\" webhook'una test mesajı gönderdi."
+  },
+  "webhooks": {
+    "discord": {
+      "order": {
+        "paid": {
+          "title": "Yeni satın alma",
+          "description": "{username}, {items.inline} satın aldı"
+        },
+        "refunded": {
+          "title": "Sipariş iade edildi",
+          "description": "{username} kullanıcısının #{order.id} numaralı siparişi iade edildi ({refund.amount} {order.currency})"
+        },
+        "chargeback": {
+          "title": "Ters ibraz açıldı",
+          "description": "{username} kullanıcısının #{order.id} numaralı siparişine itiraz edildi",
+          "won": {
+            "title": "Ters ibraz kazanıldı",
+            "description": "#{order.id} numaralı siparişteki itiraz mağaza lehine sonuçlandı"
+          }
+        }
+      },
+      "subscription": {
+        "started": {
+          "title": "Abonelik başladı",
+          "description": "{username} bir abonelik başlattı"
+        },
+        "renewed": {
+          "title": "Abonelik yenilendi",
+          "description": "{username} kullanıcısının aboneliği yenilendi"
+        },
+        "cancelled": {
+          "title": "Abonelik iptal edildi",
+          "description": "{username} kullanıcısının aboneliği iptal edildi"
+        },
+        "expired": {
+          "title": "Abonelik sona erdi",
+          "description": "{username} kullanıcısının aboneliği sona erdi"
+        }
+      },
+      "shipment": {
+        "shipped": {
+          "title": "Sipariş kargoya verildi",
+          "description": "{username} kullanıcısının siparişi yolda ({shipment.carrierName} {shipment.trackingNumber})"
+        },
+        "delivered": {
+          "title": "Sipariş teslim edildi",
+          "description": "{username} kullanıcısının siparişi teslim edildi"
+        }
+      },
+      "test": {
+        "ping": {
+          "title": "Test mesajı",
+          "description": "Bu, mağazanızdan gönderilen bir test mesajıdır"
+        }
+      },
+      "action": {
+        "grant": {
+          "title": "Teslimat eylemi ({phase})",
+          "description": "{username} için {product.name}"
+        },
+        "renew": {
+          "title": "Teslimat eylemi ({phase})",
+          "description": "{username} için {product.name}"
+        },
+        "expire": {
+          "title": "Teslimat eylemi ({phase})",
+          "description": "{username} için {product.name}"
+        },
+        "revoke": {
+          "title": "Teslimat eylemi ({phase})",
+          "description": "{username} için {product.name}"
+        }
+      },
+      "generic": {
+        "title": "Teslimat eylemi",
+        "description": "{username}"
+      },
+      "label": {
+        "player": "Oyuncu",
+        "total": "Toplam",
+        "items": "Ürünler"
+      }
+    }
+  }
+}

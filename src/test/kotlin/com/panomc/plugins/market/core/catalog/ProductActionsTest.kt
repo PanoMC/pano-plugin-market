@@ -41,10 +41,14 @@ class ProductActionsTest {
     }
 
     @Test
-    fun `unknown types, phases and modes are refused and WEBHOOK waits for the delivery slice`() {
+    fun `unknown types, phases and modes are refused and a WEBHOOK passes structurally for ProductActionRules`() {
         assertEquals("INVALID", ProductActions.normalize("""[{"type":"NOPE"}]""").errors["actions.0.type"])
-        assertEquals("INVALID", ProductActions.normalize("""[{"type":"WEBHOOK","value":{"url":"https://x.test"}}]""").errors["actions.0.type"])
-        assertEquals("INVALID_PHASE", ProductActions.normalize("""[{"type":"CREDIT","value":1,"phase":"LATER"}]""").errors["actions.0.phase"])
+        // MK-104: the strict rules of a webhook (URL policy, format, signing, secret) are ProductActionRules'; here only the shape counts
+        val webhook = ok("""[{"type":"WEBHOOK","value":{"url":"https://x.test","signing":"HMAC_SHA256","secret":"abc"}}]""").getJsonObject(0)
+        assertEquals("https://x.test", webhook.getJsonObject("value").getString("url"))
+        assertEquals("INVALID_VALUE", ProductActions.normalize("""[{"type":"WEBHOOK","value":"https://x.test"}]""").errors["actions.0.value"])
+        // 08 section 2.2: an unknown phase name is INVALID (INVALID_PHASE is the phase that does not fit the type)
+        assertEquals("INVALID", ProductActions.normalize("""[{"type":"CREDIT","value":1,"phase":"LATER"}]""").errors["actions.0.phase"])
         assertEquals("INVALID", ProductActions.normalize("""[{"type":"COMMAND","value":["a"],"serverMode":"EVERYWHERE"}]""").errors["actions.0.serverMode"])
         assertEquals("INVALID", ProductActions.normalize("""[{"type":"PERMISSION","value":["a"],"via":"MAGIC"}]""").errors["actions.0.via"])
     }
@@ -94,5 +98,23 @@ class ProductActionsTest {
 
         assertEquals(0, ProductActions.view("garbage").size())
         assertEquals(0, ProductActions.view(null).size())
+    }
+
+    @Test
+    fun `the panel view of a webhook secret is the mask or empty, never the stored text`() {
+        val view = ProductActions.view(
+            """[{"id":"w1","type":"WEBHOOK","value":{"url":"https://x.test","signing":"HMAC_SHA256","secret":"v1:abcdef"}},{"id":"w2","type":"WEBHOOK","value":{"url":"https://y.test"}}]"""
+        )
+
+        assertEquals("********", view.getJsonObject(0).getJsonObject("value").getString("secret"))
+        assertEquals("", view.getJsonObject(1).getJsonObject("value").getString("secret"))
+        assertEquals(false, view.encode().contains("abcdef"))
+    }
+
+    @Test
+    fun `a permission action keeps its serverMode`() {
+        val out = ok("""[{"type":"PERMISSION","value":["a.b"],"via":"SERVER","serverMode":"ALL_CONNECTED"}]""").getJsonObject(0)
+
+        assertEquals("ALL_CONNECTED", out.getString("serverMode"))
     }
 }

@@ -1,14 +1,13 @@
 package com.panomc.plugins.market.core.catalog
 
-import com.panomc.plugins.market.util.ProductActionType
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 
 /**
  * Normalisation of the `actions` JSON of a product on save (01 section 2.2, 08 section 2.2). This is the structural part
- * only: whitelisted keys per type, enum names, stable ids. The privilege rule (`ActionGuard`), server checks, variable
- * checks and `WEBHOOK` actions (which need the secret cipher and masking) belong to the delivery slices (MK-100, MK-104);
- * until then a `WEBHOOK` action is refused with `INVALID`.
+ * only: whitelisted keys per type, enum names, stable ids. The rules of 08 section 2.2 that need the catalogue (servers, fields,
+ * billing mode, the webhook URL and its secret) and the privilege rule (`ActionGuard`) run afterwards in `ProductActionRules`
+ * inside the save transaction (MK-104); a `WEBHOOK` action passes this step untouched and is judged there.
  *
  * Ids: an action keeps a valid `id` (`^[a-z0-9]{1,32}$`); one without gets `a<n>` where `n` is the highest number of an
  * existing `a<n>` id plus one (08 section 2.2: never reused after a deletion within one save). A duplicate id is
@@ -63,7 +62,7 @@ object ProductActions {
             }
 
             val clean = JsonObject()
-            val type = (raw.getValue("type") as? String)?.let { name -> ProductActionType.entries.firstOrNull { it.name == name } }
+            val type = (raw.getValue("type") as? String)?.let { name -> TYPES.firstOrNull { it == name } }
 
             if (type == null) {
                 errors["$path.type"] = "INVALID"
@@ -85,12 +84,12 @@ object ProductActions {
                 return@forEachIndexed
             }
 
-            clean.put("id", id).put("type", type.name)
+            clean.put("id", id).put("type", type)
 
             enumKey(raw, "phase", PHASES, path, errors)?.let { clean.put("phase", it) }
 
             when (type) {
-                ProductActionType.CREDIT -> {
+                "CREDIT" -> {
                     val value = when (val v = raw.getValue("value")) {
                         is Number -> v.toDouble()
                         is String -> v.trim().toDoubleOrNull()
@@ -101,13 +100,22 @@ object ProductActions {
                     else clean.put("value", value)
                 }
 
-                ProductActionType.PERMISSION -> {
+                "PERMISSION" -> {
                     stringList(raw.getValue("value"))?.let { clean.put("value", JsonArray(it)) }
                         ?: run { errors["$path.value"] = "INVALID_VALUE" }
                     enumKey(raw, "via", VIA, path, errors)?.let { clean.put("via", it) }
+                    enumKey(raw, "serverMode", SERVER_MODES, path, errors)?.let { clean.put("serverMode", it) }
                 }
 
-                ProductActionType.COMMAND -> {
+                "WEBHOOK" -> {
+                    // judged by ProductActionRules (URL policy, format, signing, secret); only the shape is checked here
+                    val value = raw.getValue("value")
+
+                    if (value is JsonObject) clean.put("value", value.copy()) else errors["$path.value"] = "INVALID_VALUE"
+                    raw.getValue("perUnit")?.let { clean.put("perUnit", it == true || it == "true") }
+                }
+
+                else -> {
                     stringList(raw.getValue("value"))?.let { clean.put("value", JsonArray(it)) }
                         ?: run { errors["$path.value"] = "INVALID_VALUE" }
                     enumKey(raw, "serverMode", SERVER_MODES, path, errors)?.let { clean.put("serverMode", it) }
@@ -117,7 +125,7 @@ object ProductActions {
                 }
             }
 
-            if (type != ProductActionType.CREDIT) {
+            if (type != "CREDIT") {
                 when (val delay = raw.getValue("delay")) {
                     null -> Unit
                     is Number, is String -> {
@@ -161,7 +169,8 @@ object ProductActions {
 
     /**
      * The stored `actions` for the panel: every action carries an `id` (a legacy row without one gets `a<n>` by the rule
-     * of [normalize], so a read followed by a save keeps the ids). Never throws; malformed storage reads as `[]`.
+     * of [normalize], so a read followed by a save keeps the ids) and a webhook secret reads as `"********"` / `""`. Never
+     * throws; malformed storage reads as `[]`.
      */
     fun view(stored: String?): JsonArray {
         val array = try {
@@ -185,12 +194,24 @@ object ProductActions {
             val id = copy.getValue("id")
 
             if (id !is String || id.isBlank()) copy.put("id", "a${++highest}")
+
+            // 11 section 8.2: a webhook secret is never returned, only whether one is set
+            val value = copy.getValue("value")
+
+            if (copy.getValue("type") == "WEBHOOK" && value is JsonObject) {
+                val set = (value.getValue("secret") as? String)?.isNotEmpty() == true
+
+                copy.put("value", value.copy().put("secret", if (set) SECRET_MASK else ""))
+            }
+
             out.add(copy)
         }
 
         return out
     }
 
+    private const val SECRET_MASK = "********"
+    private val TYPES = listOf("CREDIT", "PERMISSION", "COMMAND", "WEBHOOK")
     private const val MAX_DELAY_SECONDS = 2_592_000
     private const val MAX_TARGET_SERVERS = 100
 
@@ -199,7 +220,8 @@ object ProductActions {
 
         if (value is String && value in allowed) return value
 
-        errors["$path.$key"] = if (key == "phase") "INVALID_PHASE" else "INVALID"
+        // 08 section 2.2: an unknown phase / serverMode / via name is INVALID (INVALID_PHASE is the rule of a phase that does not fit the type or billing mode)
+        errors["$path.$key"] = "INVALID"
 
         return null
     }

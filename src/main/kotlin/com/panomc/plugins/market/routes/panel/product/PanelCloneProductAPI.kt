@@ -44,7 +44,7 @@ class PanelCloneProductAPI(private val plugin: MarketPlugin) : MarketPanelApi() 
         val copies = mutableListOf<String>()
 
         try {
-            val result = catalog.clone(id, CloneSuffix.of(context.request().getHeader("Accept-Language"))) { fileName ->
+            val result = catalog.clone(id, CloneSuffix.of(context.request().getHeader("Accept-Language")), RoutingCaller(plugin, context)) { fileName ->
                 copyImageFile(fileName)?.also { copies.add(it) }
             }
 
