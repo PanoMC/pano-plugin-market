@@ -1146,11 +1146,11 @@ class InboundDispatcherTest {
         }
         val router = Router.router(vertx)
 
-        fun mount(path: String, kind: InboundKind, outcome: (io.vertx.ext.web.RoutingContext) -> ReturnOutcome? = { null }) {
+        fun mount(path: String, callOf: (io.vertx.ext.web.RoutingContext) -> InboundCall?) {
             router.route(path).handler(api.bodyHandler()).handler { context ->
                 CoroutineScope(vertx.dispatcher()).launch {
                     try {
-                        val call = InboundRouteSupport.callOf(context, kind, outcome(context)) { "203.0.113.9" }
+                        val call = callOf(context)
 
                         if (call == null) InboundRouteSupport.notFound(context) else InboundRouteSupport.send(context, dispatcher.handle(call))
                     } catch (t: Throwable) {
@@ -1160,10 +1160,15 @@ class InboundDispatcherTest {
             }
         }
 
+        fun mount(path: String, kind: InboundKind) = mount(path) { InboundRouteSupport.callOf(it, kind) { "203.0.113.9" } }
+
         mount("/api/market/payments/:providerId/webhook", InboundKind.WEBHOOK)
         mount("/api/market/payments/:providerId/webhook/:channel", InboundKind.WEBHOOK)
         mount("/api/market/payments/:providerId/notify/:attemptToken", InboundKind.NOTIFY)
-        mount("/api/market/payments/:providerId/return/:attemptToken/:outcome", InboundKind.RETURN) { InboundRouteSupport.outcomeOf(it.pathParam("outcome")) }
+
+        // the two return routes of PaymentReturnAPI: the paths and the STEP / outcome decision are the route's own constants and function
+        mount(InboundRouteSupport.RETURN_STEP_PATH) { InboundRouteSupport.returnCallOf(it) { "203.0.113.9" } }
+        mount(InboundRouteSupport.RETURN_OUTCOME_PATH) { InboundRouteSupport.returnCallOf(it) { "203.0.113.9" } }
 
         return router
     }
@@ -1275,6 +1280,71 @@ class InboundDispatcherTest {
 
         assertEquals(404, client.get(port, "localhost", "/api/market/payments/fake/notify/${"f".repeat(40)}").send().coAwait().statusCode(), "a token nobody holds")
         assertEquals(before, rows().size, "nothing was stored by any of them")
+    }
+
+    @Test
+    fun `over HTTP the step route of a return gives the provider its step name and passes an absolute redirect on, an invalid name or token is a 404 that stores nothing`(): Unit = http { port, client ->
+        var seen: PaymentInboundRequest? = null
+
+        fake.onInbound = {
+            seen = it
+
+            ok(reply = HttpReply.redirect("https://basket.gateway.example/auth?x=1").also { r -> r.headers = r.headers + ("Set-Cookie" to "sid=1") })
+        }
+
+        val step = client.get(port, "localhost", "/api/market/payments/fake/return/$token/step/basket?basket=b-1").send().coAwait()
+
+        assertEquals(303, step.statusCode())
+        assertEquals("https://basket.gateway.example/auth?x=1", step.getHeader("Location"), "the provider's own absolute redirect is passed through")
+        assertNull(step.getHeader("Set-Cookie"), "a step hop cannot set state on the site's origin either")
+        assertEquals(InboundKind.RETURN, seen!!.http.kind)
+        assertEquals(ReturnOutcome.STEP, seen!!.outcome)
+        assertEquals("basket", seen!!.step)
+        assertEquals(1L, seen!!.attempt!!.id)
+        assertEquals("basket=b-1", seen!!.http.rawQuery)
+        assertEquals("step:basket", only().subChannel)
+        assertEquals(PaymentEventStatus.PROCESSED, only().status)
+
+        // the outcome route of the same token is not the step route: an outcome that is not one is a 404, "step" without a name too
+        val before = rows().size
+
+        seen = null
+
+        for (path in listOf(
+            "/api/market/payments/fake/return/$token/step", "/api/market/payments/fake/return/$token/step/Bad_Name", "/api/market/payments/fake/return/$token/step/UPPER",
+            "/api/market/payments/fake/return/$token/step/${"a".repeat(33)}", "/api/market/payments/fake/return/$token/step/a.b",
+            "/api/market/payments/FAKE/return/$token/step/basket", "/api/market/payments/fake/return/short/step/basket", "/api/market/payments/fake/return/${"A".repeat(40)}/step/basket"
+        )) {
+            assertEquals(404, client.get(port, "localhost", path).send().coAwait().statusCode(), path)
+        }
+
+        assertEquals(404, client.get(port, "localhost", "/api/market/payments/fake/return/${"f".repeat(40)}/step/basket").send().coAwait().statusCode(), "a token nobody holds")
+
+        attempts.add(2, providerId = "other")
+
+        assertEquals(404, client.get(port, "localhost", "/api/market/payments/fake/return/${"%040x".format(2L)}/step/basket").send().coAwait().statusCode(), "the token of another provider's attempt")
+        assertNull(seen, "no provider code ran for any of them")
+        assertEquals(before, rows().size, "nothing was stored by any of them")
+
+        // whatever else a provider answers on a step hop, the browser lands on the order page, never on a relative or a non-redirect reply
+        fake.onInbound = { ok(reply = HttpReply.redirect("/relative/path")) }
+
+        val relative = client.get(port, "localhost", "/api/market/payments/fake/return/$token/step/basket").send().coAwait()
+
+        assertEquals(303, relative.statusCode())
+        assertEquals("https://shop.example/store/order/ORDER000000000000001", relative.getHeader("Location"))
+
+        fake.onInbound = { ok(reply = HttpReply.text("not a redirect")) }
+
+        assertEquals("https://shop.example/store/order/ORDER000000000000001", client.get(port, "localhost", "/api/market/payments/fake/return/$token/step/basket").send().coAwait().getHeader("Location"))
+
+        // and the outcome route next to it still answers its own 303 with the hint, never the provider's redirect
+        fake.onInbound = { ok(reply = HttpReply.redirect("https://evil.example/x")) }
+
+        val success = client.get(port, "localhost", "/api/market/payments/fake/return/$token/success").send().coAwait()
+
+        assertEquals(303, success.statusCode())
+        assertEquals("https://shop.example/store/order/ORDER000000000000001?return=success", success.getHeader("Location"))
     }
 
     // ======================================================================================== settled rows are redacted

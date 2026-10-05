@@ -62,7 +62,8 @@ class MailDisabled : Error(409)
 
 class MailNotApplicable : Error(409)
 
-class InvoiceNotIssuable : Error(409)
+/** [reason]: `NOT_PAID`, `EXTERNAL_PRICING`, `ZERO_TOTAL`, `TOTAL_MISMATCH`, ... (12 section 9.3). */
+class InvoiceNotIssuable(reason: String? = null) : Error(409, extras = extrasOf("reason" to reason))
 
 // ---- 429 (the bodies never say which subject triggered them, 11 section 18)
 

@@ -57,9 +57,23 @@ internal object InboundRouteSupport {
     val CHANNEL = Regex("^[a-z0-9-]{1,32}$")
     val TOKEN = Regex("^[0-9a-f]{40}$")
 
+    /** The two return routes, written once: [PaymentReturnAPI] registers them and the route glue tests mount them. */
+    const val RETURN_STEP_PATH = "/api/market/payments/:providerId/return/:attemptToken/step/:name"
+    const val RETURN_OUTCOME_PATH = "/api/market/payments/:providerId/return/:attemptToken/:outcome"
+
     private val OUTCOMES = mapOf("success" to ReturnOutcome.SUCCESS, "cancel" to ReturnOutcome.CANCEL, "pending" to ReturnOutcome.PENDING, "result" to ReturnOutcome.RESULT)
 
     fun outcomeOf(name: String?): ReturnOutcome? = OUTCOMES[name]
+
+    /**
+     * The call of a request on either return route: the `step/:name` route is the `STEP` outcome, the other one reads `:outcome`. `null` (404, nothing
+     * touched) for an outcome market does not know or any path parameter that is not of the documented shape.
+     */
+    fun returnCallOf(context: RoutingContext, remoteIp: (RoutingContext) -> String = { ClientIpResolver.resolve(it).ip.orEmpty() }): InboundCall? {
+        val outcome = if (context.pathParam("name") != null) ReturnOutcome.STEP else outcomeOf(context.pathParam("outcome")) ?: return null
+
+        return callOf(context, InboundKind.RETURN, outcome, remoteIp)
+    }
 
     /**
      * The call of [context], or `null` when a path parameter is not of the documented shape (404 without touching anything). [remoteIp] is the
@@ -157,14 +171,12 @@ class PaymentNotifyAPI(private val plugin: MarketPlugin) : MarketInboundApi() {
 @Endpoint
 class PaymentReturnAPI(private val plugin: MarketPlugin) : MarketInboundApi() {
     override val paths = listOf(
-        Path("/api/market/payments/:providerId/return/:attemptToken/step/:name", RouteType.ROUTE),
-        Path("/api/market/payments/:providerId/return/:attemptToken/:outcome", RouteType.ROUTE)
+        Path(InboundRouteSupport.RETURN_STEP_PATH, RouteType.ROUTE),
+        Path(InboundRouteSupport.RETURN_OUTCOME_PATH, RouteType.ROUTE)
     )
 
     override suspend fun handleMarket(context: RoutingContext): Result? {
-        val name = context.pathParam("name")
-        val outcome = if (name != null) ReturnOutcome.STEP else (InboundRouteSupport.outcomeOf(context.pathParam("outcome")) ?: return InboundRouteSupport.notFound(context).let { null })
-        val call = InboundRouteSupport.callOf(context, InboundKind.RETURN, outcome) ?: return InboundRouteSupport.notFound(context).let { null }
+        val call = InboundRouteSupport.returnCallOf(context) ?: return InboundRouteSupport.notFound(context).let { null }
 
         InboundRouteSupport.send(context, inboundDispatcher(plugin).handle(call))
 
