@@ -3,6 +3,7 @@ package com.panomc.plugins.market.service
 import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.config.MarketConfig
+import com.panomc.plugins.market.core.abuse.ActionGuard
 import com.panomc.plugins.market.core.catalog.BundleItemDraft
 import com.panomc.plugins.market.core.catalog.FieldDraft
 import com.panomc.plugins.market.core.catalog.ImageChange
@@ -39,6 +40,8 @@ import com.panomc.plugins.market.error.InvalidCategoryMove
 import com.panomc.plugins.market.error.InvalidProduct
 import com.panomc.plugins.market.error.ReservedSlug
 import com.panomc.plugins.market.error.SlugAlreadyExists
+import com.panomc.plugins.market.routes.panel.product.ProductActionCheck
+import com.panomc.plugins.market.routes.panel.product.ProductActionRules
 import com.panomc.plugins.market.util.HtmlSanitizer
 import com.panomc.plugins.market.util.MarketStatus
 import com.panomc.plugins.market.util.SlugUtil
@@ -69,7 +72,9 @@ class CatalogService(
     private val bundleItems: MarketBundleItemDao,
     private val providerMeta: MarketProductProviderMetaDao,
     private val categories: MarketCategoryDao,
-    private val comparisons: MarketComparisonDao
+    private val comparisons: MarketComparisonDao,
+    /** Action validation and the privilege rule of a product save (MK-104). The default is the fail-closed `ProductActionRules()`: no server, no webhook secret, no caller. */
+    private val actionCheck: ProductActionCheck = ProductActionRules()
 ) {
     class SaveResult(
         val id: Long,
@@ -80,7 +85,9 @@ class CatalogService(
         /** Image file names no row points at any more; delete them after the commit. */
         val orphanedFiles: List<String>,
         /** Changed scalar columns of an update for the activity log (money as decimals); empty on create. */
-        val changes: Map<String, Any?> = emptyMap()
+        val changes: Map<String, Any?> = emptyMap(),
+        /** Webhook secrets created by this save (`actionId -> secret`): shown once, never readable again (11 section 8.2). */
+        val generatedSecrets: Map<String, String> = emptyMap()
     )
 
     class DeleteResult(val soft: Boolean, val orphanedFiles: List<String>)
@@ -100,13 +107,13 @@ class CatalogService(
 
     // ----- create ------------------------------------------------------------------------------------------------
 
-    suspend fun create(input: ProductInput): SaveResult = db.tx { conn -> save(conn, null, input) }
+    suspend fun create(input: ProductInput, actionCaller: ActionGuard.Caller? = null): SaveResult = db.tx { conn -> save(conn, null, input, actionCaller) }
 
     // ----- update ------------------------------------------------------------------------------------------------
 
-    suspend fun update(id: Long, input: ProductInput): SaveResult = db.tx { conn -> save(conn, id, input) }
+    suspend fun update(id: Long, input: ProductInput, actionCaller: ActionGuard.Caller? = null): SaveResult = db.tx { conn -> save(conn, id, input, actionCaller) }
 
-    private suspend fun save(conn: SqlClient, id: Long?, input: ProductInput): SaveResult {
+    private suspend fun save(conn: SqlClient, id: Long?, input: ProductInput, actionCaller: ActionGuard.Caller?): SaveResult {
         val now = clock.now()
         val create = id == null
         // The row lock is the first statement: saves, deletes and stock changes of one product serialise, so a partial
@@ -157,6 +164,19 @@ class CatalogService(
 
         if (errors.isNotEmpty()) throw InvalidProduct(errors)
 
+        // 08 section 2.2 and 11 section 14.4: the strict action rules, then the privilege rule, against the stored row that the lock above holds
+        val checked = input.actions?.let { submitted ->
+            val fieldRules: Map<String, Boolean> =
+                input.fields?.associate { it.fieldKey to it.usableInCommands } ?: base?.let { b -> fields.getByProductId(b.id, conn).associate { it.fieldKey to it.usableInCommands } }.orEmpty()
+
+            actionCheck.onSave(
+                conn,
+                ProductActionCheck.Request(
+                    base?.actions, base?.serverChoices, submitted, product.billingMode, product.maxQuantityPerOrder, product.serverChoices, fieldRules, actionCaller
+                )
+            )
+        }
+
         val owner = products.getBySlug(slug, conn)
         if (owner != null && owner.id != base?.id) throw SlugAlreadyExists()
 
@@ -169,7 +189,7 @@ class CatalogService(
         }
         if (base?.imageFileName != null && productImage != base.imageFileName) orphans.add(base.imageFileName)
 
-        val toStore = withImage(product, productImage)
+        val toStore = withImage(product, productImage, checked?.json ?: product.actions)
 
         val productId: Long = if (base == null) {
             try {
@@ -203,7 +223,7 @@ class CatalogService(
         val warnings = mutableListOf<String>()
         if (product.physical && !products.hasSellableShippingMethod(conn)) warnings.add("NO_SHIPPING_METHOD")
 
-        return SaveResult(productId, slug, product.name, warnings, orphans, if (base == null) emptyMap() else changes(base, toStore))
+        return SaveResult(productId, slug, product.name, warnings, orphans, if (base == null) emptyMap() else changes(base, toStore), checked?.generatedSecrets.orEmpty())
     }
 
     private fun changes(before: MarketProduct, after: MarketProduct): Map<String, Any?> {
@@ -225,12 +245,12 @@ class CatalogService(
         return changes
     }
 
-    private fun withImage(p: MarketProduct, imageFileName: String?): MarketProduct = MarketProduct(
+    private fun withImage(p: MarketProduct, imageFileName: String?, actions: String? = p.actions): MarketProduct = MarketProduct(
         id = p.id, slug = p.slug, name = p.name, description = p.description, categoryId = p.categoryId, price = p.price,
         creditPrice = p.creditPrice, stock = p.stock, requiredProducts = p.requiredProducts, requireOnlyOne = p.requireOnlyOne,
         requiredPermission = p.requiredPermission, status = p.status, featured = p.featured, durationType = p.durationType,
         durationStart = p.durationStart, durationExpiry = p.durationExpiry, priority = p.priority, icon = p.icon,
-        imageFileName = imageFileName, actions = p.actions, kind = p.kind, shortDescription = p.shortDescription,
+        imageFileName = imageFileName, actions = actions, kind = p.kind, shortDescription = p.shortDescription,
         compareAtPrice = p.compareAtPrice, vatPercent = p.vatPercent, physical = p.physical, sku = p.sku,
         weightGrams = p.weightGrams, lengthMm = p.lengthMm, widthMm = p.widthMm, heightMm = p.heightMm, hsCode = p.hsCode,
         originCountry = p.originCountry, billingMode = p.billingMode, periodUnit = p.periodUnit, periodCount = p.periodCount,
@@ -651,8 +671,11 @@ class CatalogService(
      * ids), bundle rows and provider meta. Actions get fresh ids (`a1`, `a2`, ...), so the copy counts as new for
      * `ActionGuard`. Counters (`soldCount`) start at 0. One transaction.
      */
-    suspend fun clone(id: Long, nameSuffix: String, copyImage: (String) -> String? = { null }): CloneResult = db.tx { conn ->
+    suspend fun clone(id: Long, nameSuffix: String, actionCaller: ActionGuard.Caller? = null, copyImage: (String) -> String? = { null }): CloneResult = db.tx { conn ->
         val original = products.getByIdForUpdate(id, conn)?.takeIf { it.deletedAt == null } ?: throw NotFound()
+
+        // the copy counts as new: whoever clones needs the privilege for every action of the source (11 section 14.4)
+        actionCheck.onClone(conn, original.actions, original.serverChoices, actionCaller)
         val now = clock.now()
 
         var copyNumber = 1

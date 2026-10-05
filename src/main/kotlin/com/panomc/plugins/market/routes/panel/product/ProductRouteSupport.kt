@@ -16,6 +16,8 @@ import com.panomc.plugins.market.db.dao.MarketProductProviderMetaDao
 import com.panomc.plugins.market.db.dao.MarketProductVariantDao
 import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
+import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
+import com.panomc.plugins.market.service.platform.PlatformServerRoster
 import com.panomc.plugins.market.service.CatalogService
 import com.panomc.plugins.market.util.ImageUtil
 import io.vertx.ext.web.FileUpload
@@ -42,7 +44,14 @@ internal fun catalogService(plugin: MarketPlugin): CatalogService {
         bundleItems = context.getBean(MarketBundleItemDao::class.java),
         providerMeta = context.getBean(MarketProductProviderMetaDao::class.java),
         categories = context.getBean(MarketCategoryDao::class.java),
-        comparisons = context.getBean(MarketComparisonDao::class.java)
+        comparisons = context.getBean(MarketComparisonDao::class.java),
+        // MK-104: the action rules of 08 section 2.2 and the privilege rule of 11 section 14.4 run inside every save
+        actionCheck = ProductActionRules(
+            roster = PlatformServerRoster({ databaseManager }) { context.getBean(com.panomc.platform.server.ServerManager::class.java) },
+            cipher = paymentWiring(plugin).cipher,
+            allowPrivateWebhookTargets = { currentConfig(plugin).allowPrivateWebhookTargets },
+            hosted = { com.panomc.platform.hosted.HostedEnvConfig.current.isHosted }
+        )
     )
 }
 
@@ -150,3 +159,10 @@ internal fun deleteFile(plugin: MarketPlugin, fileName: String) {
 
 /** `context.pathParam("id")` as a positive integer id (a `1.5` or `abc` is a 400, never a 500). */
 internal fun RoutingContext.productId(): Long = com.panomc.plugins.market.routes.base.parseId(pathParam("id"))
+
+/** `{id, slug, warnings}` of a create, plus `webhookSecrets` (`actionId -> secret`) when the save created webhook secrets: shown once (11 section 8.2). */
+internal fun CatalogService.SaveResult.response(): Map<String, Any?> =
+    mapOf("id" to id, "slug" to slug, "warnings" to warnings) + secretsResponse()
+
+internal fun CatalogService.SaveResult.secretsResponse(): Map<String, Any?> =
+    if (generatedSecrets.isEmpty()) emptyMap() else mapOf("webhookSecrets" to generatedSecrets)
