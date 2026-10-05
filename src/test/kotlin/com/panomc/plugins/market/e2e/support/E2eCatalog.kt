@@ -72,7 +72,8 @@ class E2eCatalog(private val admin: E2eClient, private val db: E2eDb) {
         coupon("ONCE", JsonObject().put("name", "Once").put("discount", 50).put("unit", "PERCENT").put("redeemLimit", 3).put("customerRedeemLimit", 1))
         coupon("FULL", JsonObject().put("name", "Full").put("discount", 100).put("unit", "PERCENT"))
         creatorCode("STREAMER", JsonObject().put("creator", "streamer").put("discount", 5).put("unit", "PERCENT").put("commissionPercent", 10))
-        gift("GIFT1", JsonObject().put("type", "PRODUCT").put("productId", products["VIP"]).put("redeemLimit", 1))
+        // 17 section 5.6 names the code GIFT1; MK-113 refuses a gift code shorter than AbuseLimits.MIN_GIFT_CODE_LENGTH (8), so the seed uses GIFT0001
+        gift("GIFT0001", JsonObject().put("type", "PRODUCT").put("productId", products["VIP"]).put("redeemLimit", 1))
 
         return this
     }

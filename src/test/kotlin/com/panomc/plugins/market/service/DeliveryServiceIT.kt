@@ -1279,6 +1279,39 @@ class DeliveryServiceIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a partial refund with an explicit REVOKE command cancels the revoke of what was never delivered and still delivers the kept units (D22)`(): Unit = runBlocking {
+        val u = steve()
+
+        d.roster.granted = listOf(7L)
+
+        val grant = ProductAction(id = "c1", type = DeliveryActionType.COMMAND, commands = listOf("give {username} diamond {quantity}"))
+        val revoke = ProductAction(id = "r1", type = DeliveryActionType.COMMAND, phase = DeliveryPhase.REVOKE, commands = listOf("take {username} diamond {quantity}"))
+        val placed = d.place(user = u, actions = listOf(grant, revoke), quantity = 5)
+        val item = placed.items[0]
+
+        d.pay(placed)
+
+        val plan = partialRevoke(placed, mapOf(item.id to (0..1)))
+
+        assertEquals(1, plan.cancelled)
+        assertEquals(1, plan.inserted.size)
+        assertEquals(1, plan.replanned.size)
+
+        val undo = d.rows(placed.order.id).single { it.phase == DeliveryPhase.REVOKE }
+
+        assertEquals("take Steve diamond 2", JsonObject(undo.payload).getJsonArray("commands").getString(0))
+
+        // nothing of the grant was ever delivered: the sweep cancels the take-back, the kept grant (3 units) stays live
+        assertEquals(1, d.service.classify())
+        assertEquals(DeliveryStatus.CANCELLED, d.row(undo.id).status)
+        assertEquals(DeliveryError.NOTHING_TO_REVOKE, d.row(undo.id).lastErrorCode)
+
+        val live = d.rows(placed.order.id).filter { it.phase == DeliveryPhase.GRANT && it.status == DeliveryStatus.PENDING }.single()
+
+        assertEquals("give Steve diamond 3", JsonObject(live.payload).getJsonArray("commands").getString(0))
+    }
+
+    @Test
     fun `a refund of one bundle names the range on the bundle line only and cancels exactly the scaled units of the children`(): Unit = runBlocking {
         val u = steve()
 
