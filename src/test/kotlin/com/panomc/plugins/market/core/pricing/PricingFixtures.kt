@@ -5,6 +5,7 @@ import com.panomc.plugins.market.config.MultiCurrencyFallback
 import com.panomc.plugins.market.core.money.Conversions
 import com.panomc.plugins.market.db.model.PaymentFeeMode
 import com.panomc.plugins.market.db.model.UpgradeMode
+import com.panomc.plugins.market.spi.common.Money
 import com.panomc.plugins.market.spi.payment.PriceAuthority
 import com.panomc.plugins.market.util.CouponScope
 import com.panomc.plugins.market.util.DiscountScope
@@ -157,13 +158,19 @@ object PricingFixtures {
 
     fun method(
         id: String, feePercent: Long = 0, feeFixed: Long = 0, authority: PriceAuthority = PriceAuthority.MARKET,
-        mixedCredit: Boolean = true
+        mixedCredit: Boolean = true, feeMode: PaymentFeeMode? = null, minAmount: Long? = null, maxAmount: Long? = null,
+        adminCurrencies: Set<String>? = null, providerCurrencies: Set<String>? = null, providerMin: Money? = null,
+        providerMax: Money? = null, physicalGoods: Boolean = false
     ) = MethodInput(
-        id = id, feeMode = if (feePercent > 0 || feeFixed > 0) PaymentFeeMode.BUYER else PaymentFeeMode.NONE,
-        feePercent = feePercent, feeFixed = feeFixed, minAmount = null, maxAmount = null, adminCurrencies = null,
-        providerCurrencies = null, providerMin = null, providerMax = null, mixedCredit = mixedCredit,
-        priceAuthority = authority, physicalGoods = false
+        id = id, feeMode = feeMode ?: if (feePercent > 0 || feeFixed > 0) PaymentFeeMode.BUYER else PaymentFeeMode.NONE,
+        feePercent = feePercent, feeFixed = feeFixed, minAmount = minAmount, maxAmount = maxAmount, adminCurrencies = adminCurrencies,
+        providerCurrencies = providerCurrencies, providerMin = providerMin, providerMax = providerMax, mixedCredit = mixedCredit,
+        priceAuthority = authority, physicalGoods = physicalGoods
     )
+
+    /** The `GATEWAY_ADDS_TAX` and `GATEWAY_CATALOG` methods of rows 67 and 68. */
+    val METHOD_ADDS_TAX = method("tax", authority = PriceAuthority.GATEWAY_ADDS_TAX, mixedCredit = false)
+    val METHOD_CATALOG = method("catalog", authority = PriceAuthority.GATEWAY_CATALOG, mixedCredit = false)
 
     fun buyer(
         tiers: List<OwnedTier> = emptyList(), balance: Long = 0, loggedIn: Boolean = true, userId: Long? = 1,
@@ -182,11 +189,12 @@ object PricingFixtures {
         mode: PricingMode = PricingMode.MARKET,
         payWithCredits: Boolean = false,
         override: Long? = null,
-        now: Long = NOW
+        now: Long = NOW,
+        renewal: RenewalCharge? = null
     ) = PricingInput(
         config = config, now = now, profile = profile, requestedCurrency = currency, lines = lines.toList(), buyer = buyer,
         discounts = discounts, coupon = coupon, creatorCode = creatorCode, pricingMode = mode,
-        payWithCredits = payWithCredits, priceOverride = override
+        payWithCredits = payWithCredits, priceOverride = override, renewal = renewal
     )
 
     fun price(
@@ -200,11 +208,46 @@ object PricingFixtures {
         buyer: BuyerContext = buyer(),
         mode: PricingMode = PricingMode.MARKET,
         override: Long? = null,
-        now: Long = NOW
+        now: Long = NOW,
+        payWithCredits: Boolean = false,
+        renewal: RenewalCharge? = null
     ): ItemsResult = PricingEngine.priceItems(
         input(*lines, config = config, discounts = discounts, coupon = coupon, creatorCode = creatorCode, profile = profile,
-            currency = currency, buyer = buyer, mode = mode, override = override, now = now)
+            currency = currency, buyer = buyer, mode = mode, override = override, now = now, payWithCredits = payWithCredits,
+            renewal = renewal)
     )
+
+    /**
+     * Stages A to C: `priceItems`, then `finalize` with [shipping] (a price in the order currency, price basis) and the
+     * tender. [method] defaults to none; the pricing mode follows the method like a caller would do it.
+     */
+    fun full(
+        vararg lines: LineInput,
+        config: PricingConfig = config(),
+        discounts: List<DiscountInput> = emptyList(),
+        coupon: CouponInput? = null,
+        creatorCode: CreatorCodeInput? = null,
+        profile: PricingProfile = PricingProfile.STOREFRONT,
+        currency: String? = null,
+        buyer: BuyerContext = buyer(),
+        mode: PricingMode? = null,
+        payWithCredits: Boolean = false,
+        override: Long? = null,
+        now: Long = NOW,
+        renewal: RenewalCharge? = null,
+        shipping: Long? = null,
+        shippingVatBp: Long? = null,
+        useCredits: Long? = null,
+        method: MethodInput? = null,
+        strict: Boolean = false
+    ): PriceBreakdown {
+        val items = price(
+            *lines, config = config, discounts = discounts, coupon = coupon, creatorCode = creatorCode, profile = profile,
+            currency = currency, buyer = buyer, mode = mode ?: method?.pricingMode ?: PricingMode.MARKET, override = override,
+            now = now, payWithCredits = payWithCredits, renewal = renewal
+        )
+        return PricingEngine.finalize(items, shipping?.let { ShippingCharge(it, shippingVatBp) }, TenderInput(useCredits, method, strict))
+    }
 
     fun owned(entitlementId: Long, tierProduct: Product, pricePaid: Long) =
         OwnedTier(entitlementId, tierProduct.tier!!.categoryId, tierProduct.tier!!.tierRank, pricePaid)

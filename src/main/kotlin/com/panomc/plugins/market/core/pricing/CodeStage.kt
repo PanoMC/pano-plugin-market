@@ -12,7 +12,11 @@ internal class CodeResult(
     val coupon: CodeOutcome?,
     val creatorCode: CodeOutcome?,
     val couponShares: List<Long>,
-    val creatorShares: List<Long>
+    val creatorShares: List<Long>,
+    /** Indices of the lines the coupon was spread over (empty when it was refused), for the replay of the credit run. */
+    val couponLines: List<Int> = emptyList(),
+    /** Indices of the lines the creator code was spread over (empty when it was refused or gave attribution only). */
+    val creatorLines: List<Int> = emptyList()
 ) {
     val couponDiscount: Long = couponShares.fold(0L) { a, b -> Math.addExact(a, b) }
     val creatorDiscount: Long = creatorShares.fold(0L) { a, b -> Math.addExact(a, b) }
@@ -22,6 +26,17 @@ internal class CodeResult(
 
     companion object {
         fun none(lines: Int) = CodeResult(null, null, List(lines) { 0L }, List(lines) { 0L })
+    }
+}
+
+/**
+ * What the credit run decided about the codes (05 section 8.1), replayed by the money run of a full-credit order: the
+ * outcomes (valid or refused, with the reason) and the lines each code was spread over. The money run recomputes the
+ * shares on its own amounts and checks no rule again.
+ */
+internal class CodeReplay(val coupon: CodeOutcome?, val couponLines: List<Int>, val creator: CodeOutcome?, val creatorLines: List<Int>) {
+    companion object {
+        fun of(result: CodeResult) = CodeReplay(result.coupon, result.couponLines, result.creatorCode, result.creatorLines)
     }
 }
 
@@ -49,17 +64,50 @@ internal object CodeStage {
      * the automatic discounts were chosen, so a code that passed every other check is not applied
      * (`CODE_NOT_COMBINABLE`, check 10).
      */
-    fun apply(lines: List<CodeLine>, settings: Settings, suppressed: Boolean): CodeResult {
+    fun apply(lines: List<CodeLine>, settings: Settings, suppressed: Boolean, replay: CodeReplay? = null): CodeResult {
         val couponShares = LongArray(lines.size)
         val creatorShares = LongArray(lines.size)
-        val coupon = settings.coupon?.let { couponOutcome(it, lines, settings, suppressed, couponShares) }
-        val creator = settings.creatorCode?.let { creatorOutcome(it, lines, settings, suppressed, couponShares, creatorShares) }
-        return CodeResult(coupon, creator, couponShares.toList(), creatorShares.toList())
+        val couponLines = ArrayList<Int>()
+        val creatorLines = ArrayList<Int>()
+        val coupon = settings.coupon?.let {
+            if (replay?.coupon != null) replayCoupon(it, replay.coupon, replay.couponLines, lines, settings, couponShares, couponLines)
+            else couponOutcome(it, lines, settings, suppressed, couponShares, couponLines)
+        }
+        val creator = settings.creatorCode?.let {
+            if (replay?.creator != null) replayCreator(it, replay.creator, replay.creatorLines, lines, settings, couponShares, creatorShares, creatorLines)
+            else creatorOutcome(it, lines, settings, suppressed, couponShares, creatorShares, creatorLines)
+        }
+        return CodeResult(coupon, creator, couponShares.toList(), creatorShares.toList(), couponLines, creatorLines)
+    }
+
+    /** The coupon as the credit run decided it: a refused coupon stays refused, a valid one is spread over the same lines on this run's amounts. */
+    private fun replayCoupon(
+        c: CouponInput, decided: CodeOutcome, eligible: List<Int>, lines: List<CodeLine>, s: Settings, shares: LongArray, used: MutableList<Int>
+    ): CodeOutcome {
+        if (!decided.valid) return CodeOutcome(decided.id, decided.code, false, decided.reason, 0L)
+        val parts = split(c.unit, c.discount, eligible.map { lines[it].amount }, s.unit)
+        eligible.forEachIndexed { k, index -> shares[index] = parts[k] }
+        used += eligible
+        return CodeOutcome(decided.id, decided.code, true, null, sum(parts))
+    }
+
+    /** The creator code as the credit run decided it; an attribution-only code (no line, a reason or no discount) stays so. */
+    private fun replayCreator(
+        c: CreatorCodeInput, decided: CodeOutcome, eligible: List<Int>, lines: List<CodeLine>, s: Settings,
+        couponShares: LongArray, shares: LongArray, used: MutableList<Int>
+    ): CodeOutcome {
+        if (!decided.valid || eligible.isEmpty()) return CodeOutcome(decided.id, decided.code, decided.valid, decided.reason, 0L)
+        val parts = split(c.unit, c.discount, eligible.map { lines[it].amount - couponShares[it] }, s.unit)
+        eligible.forEachIndexed { k, index -> shares[index] = parts[k] }
+        used += eligible
+        return CodeOutcome(decided.id, decided.code, true, null, sum(parts))
     }
 
     // ---------------------------------------------------------------- coupon
 
-    private fun couponOutcome(c: CouponInput, lines: List<CodeLine>, s: Settings, suppressed: Boolean, shares: LongArray): CodeOutcome {
+    private fun couponOutcome(
+        c: CouponInput, lines: List<CodeLine>, s: Settings, suppressed: Boolean, shares: LongArray, used: MutableList<Int>
+    ): CodeOutcome {
         val id = if (c.found) c.id else null
         fun refused(reason: PricingCode) = CodeOutcome(id, c.code, false, reason, 0L)
 
@@ -80,6 +128,7 @@ internal object CodeStage {
 
         val parts = split(c.unit, c.discount, eligible.map { lines[it].amount }, s.unit)
         eligible.forEachIndexed { k, index -> shares[index] = parts[k] }
+        used += eligible
         return CodeOutcome(id, c.code, true, null, sum(parts))
     }
 
@@ -98,7 +147,8 @@ internal object CodeStage {
     // ---------------------------------------------------------------- creator code
 
     private fun creatorOutcome(
-        c: CreatorCodeInput, lines: List<CodeLine>, s: Settings, suppressed: Boolean, couponShares: LongArray, shares: LongArray
+        c: CreatorCodeInput, lines: List<CodeLine>, s: Settings, suppressed: Boolean, couponShares: LongArray, shares: LongArray,
+        used: MutableList<Int>
     ): CodeOutcome {
         val id = if (c.found) c.id else null
         fun refused(reason: PricingCode) = CodeOutcome(id, c.code, false, reason, 0L)
@@ -121,6 +171,7 @@ internal object CodeStage {
 
         val parts = split(c.unit, c.discount, eligible.map { lines[it].amount - couponShares[it] }, s.unit)
         eligible.forEachIndexed { k, index -> shares[index] = parts[k] }
+        used += eligible
         return CodeOutcome(id, c.code, true, null, sum(parts))
     }
 

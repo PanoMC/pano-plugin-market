@@ -33,12 +33,16 @@ import com.panomc.plugins.market.core.pricing.PricingFixtures.T2
 import com.panomc.plugins.market.core.pricing.PricingFixtures.T3
 import com.panomc.plugins.market.core.pricing.PricingFixtures.config
 import com.panomc.plugins.market.core.pricing.PricingFixtures.discount
+import com.panomc.plugins.market.core.pricing.PricingFixtures.full
 import com.panomc.plugins.market.core.pricing.PricingFixtures.line
 import com.panomc.plugins.market.core.pricing.PricingFixtures.owned
 import com.panomc.plugins.market.core.pricing.PricingFixtures.price
 import com.panomc.plugins.market.core.pricing.PricingFixtures.topUp
 import com.panomc.plugins.market.db.model.OrderItemKind
+import com.panomc.plugins.market.db.model.PaymentFeeMode
 import com.panomc.plugins.market.db.model.UpgradeMode
+import com.panomc.plugins.market.spi.common.Money
+import com.panomc.plugins.market.spi.payment.PriceAuthority
 import com.panomc.plugins.market.util.CouponScope
 import com.panomc.plugins.market.util.DiscountScope
 import com.panomc.plugins.market.util.DiscountUnit
@@ -692,12 +696,15 @@ class PricingEngineTest {
 
     @Test
     fun `row 71 a panel price override leaves no automatic discount and no upgrade to A2`() {
+        // what A2 decides: no winner, no redemption row, no upgrade link or deduction. The override itself (what the lines
+        // cost, discountTotal 49.97 for P1 + 3 x P2 at 80.00) is stage A4: PricingProfileTest `row 71 ...`
         val buyer = PricingFixtures.buyer(listOf(owned(501, T1, 5000)))
         val r = price(line(P1), line(P2, 3), line(T2), discounts = listOf(D1), profile = PricingProfile.PANEL, override = 8000, buyer = buyer)
-        assertEquals(0L, r.discountTotal)
         assertEquals(0L, r.upgradeDiscount)
         assertNull(r.key("L22").upgradeFromEntitlementId)
-        assertEquals(r.subtotal, r.itemsAmount)
+        assertTrue(r.lines.all { it.discountId == null && it.upgradeAmount == 0L })
+        assertTrue(r.discountRedemptions.isEmpty())
+        assertEquals(8000L, r.itemsTotal)
     }
 
     @Test
@@ -2042,7 +2049,7 @@ class PricingEngineTest {
             requestedCurrency = base.requestedCurrency, lines = lines, buyer = buyer, discounts = base.discounts,
             coupon = if (storefront && rnd.nextInt(10) < 6) randomCoupon(rnd) else null,
             creatorCode = if (storefront && rnd.nextInt(10) < 5) randomCreatorCode(rnd) else null,
-            pricingMode = base.pricingMode, payWithCredits = false, priceOverride = if (storefront) null else base.priceOverride
+            pricingMode = base.pricingMode, payWithCredits = false, priceOverride = null
         )
     }
 
@@ -2154,11 +2161,1065 @@ class PricingEngineTest {
             1 -> PricingMode.EXTERNAL_TAX
             else -> PricingMode.MARKET
         }
-        val override = if (profile == PricingProfile.PANEL && rnd.nextInt(5) == 0) rnd.nextLong(0, 100_000) else null
+        // the panel's price override replaces the line figures that these loops prove exact (unitPrice x quantity): it has its own seeded loop in PricingProfileTest
+        val override: Long? = null
         return PricingFixtures.input(
             *lines.toTypedArray(), config = cfg, discounts = discounts, profile = profile, currency = currency,
             buyer = PricingFixtures.buyer(owned), mode = pricingMode, override = override
         )
+    }
+
+    // ================================================================ stages B and C: shipping, tender, fee, totals (05 sections 8 to 10)
+
+    private fun PriceBreakdown.key(key: String): PricedLine = lines.single { it.lineKey == key }
+
+    private fun PriceBreakdown.codes(): List<PricingCode> = messages.map { it.code }
+
+    private val creditsOnlyProduct = Product(40, "Credits only", 0, 4000, listOf(2))
+
+    @Test
+    fun `row 37 a variant price with an inclusive shipping charge`() {
+        val r = full(line(P4, variantId = 2, basePrice = 27500), shipping = 2990)
+        assertEquals(27500L, r.key("L4v2").lineTotal)
+        assertEquals(2990L, r.shippingTotal)
+        assertEquals(498L, r.shippingVat) // 29.90 x 20 / 120 = 4.983
+        assertEquals(2000L, r.shippingVatPercent)
+        assertEquals(30490L, r.total)
+        assertEquals(5081L, r.vatTotal) // 45.83 + 4.98
+        assertEquals(30490L, r.gatewayAmount)
+        assertTrue(r.items.requiresShipping)
+    }
+
+    @Test
+    fun `row 38 a variant that inherits the price with an exclusive shipping charge`() {
+        val r = full(line(P4, variantId = 1), shipping = 2990, config = config(includeVat = false))
+        assertEquals(30000L, r.key("L4v1").lineTotal)
+        assertEquals(3588L, r.shippingTotal) // 29.90 + 5.98
+        assertEquals(598L, r.shippingVat)
+        assertEquals(33588L, r.total)
+        assertEquals(5598L, r.vatTotal)
+        assertEquals(25000L, r.subtotal)
+    }
+
+    @Test
+    fun `row 39 free shipping is a charge of zero and adds nothing`() {
+        val r = full(line(P4, variantId = 2, basePrice = 27500), shipping = 0)
+        assertEquals(0L, r.shippingTotal)
+        assertEquals(0L, r.shippingVat)
+        assertEquals(27500L, r.total)
+    }
+
+    @Test
+    fun `shipping uses its own VAT rate and is priced only for a cart with a physical line`() {
+        val r = full(line(P4, variantId = 2, basePrice = 27500), shipping = 1100, shippingVatBp = 1000)
+        assertEquals(1000L, r.shippingVatPercent)
+        assertEquals(100L, r.shippingVat) // 11.00 x 10 / 110
+        // a digital cart takes no shipping whatever the caller passes
+        val digital = full(line(P1), shipping = 5000)
+        assertEquals(0L, digital.shippingTotal)
+        assertEquals(10000L, digital.total)
+        // a physical cart without a charge cannot be checked out and says nothing else
+        val missing = full(line(P4, variantId = 2, basePrice = 27500))
+        assertTrue(missing.shippingMissing)
+        assertFalse(missing.canCheckout)
+        assertEquals(27500L, missing.total)
+    }
+
+    @Test
+    fun `the shipping price is rounded to the quantum and bounded`() {
+        val whole = full(line(P4, variantId = 2, basePrice = 27500), shipping = 2950, config = config(removeCents = true))
+        assertEquals(3000L, whole.shippingTotal) // 29.50 rounds half up to 30
+        assertEquals(PricingError.INVALID_INPUT, refused { full(line(P4, variantId = 2), shipping = -1) }.error)
+        assertEquals(PricingError.INVALID_INPUT, refused { full(line(P4, variantId = 2), shipping = PricingLimits.MAX_AMOUNT + 1) }.error)
+    }
+
+    @Test
+    fun `row 43 the gateway fee is a percentage plus a fixed part of what the gateway collects`() {
+        val r = full(line(P1), method = PricingFixtures.METHOD_F)
+        assertEquals(320L, r.paymentFee)
+        assertEquals(10320L, r.total)
+        assertEquals(10320L, r.gatewayAmount)
+        assertEquals(53L, r.tender.paymentFeeVatAmount) // 3.20 x 20 / 120 = 0.533
+        assertEquals(1720L, r.vatTotal) // 16.67 + 0.53
+        assertEquals("F", r.paymentMethodId)
+        assertEquals(10000L, r.tender.preFee)
+    }
+
+    @Test
+    fun `row 44 the fee rounds half up`() {
+        val r = full(line(P2, 3), method = PricingFixtures.METHOD_G)
+        assertEquals(105L, r.paymentFee) // 1.04895
+        assertEquals(3102L, r.total)
+        assertEquals(518L, r.vatTotal) // 5.00 + 0.18
+    }
+
+    @Test
+    fun `row 45 the fee is taken only on the part the gateway collects`() {
+        val r = full(line(P1), method = PricingFixtures.METHOD_F, buyer = PricingFixtures.buyer(balance = 3000), useCredits = MixedPayment.MAX)
+        assertEquals(3000L, r.creditAmount)
+        assertEquals(3000L, r.creditValue)
+        assertEquals(233L, r.paymentFee) // 2.9 % of 70.00 + 0.30
+        assertEquals(10233L, r.total)
+        assertEquals(7233L, r.gatewayAmount)
+        assertEquals(3000L, r.credits!!.applied)
+    }
+
+    @Test
+    fun `row 46 a mixed payment converts credits at the credit value`() {
+        val r = full(
+            line(P1), config = config(creditValue = 10), buyer = PricingFixtures.buyer(balance = 25000), useCredits = 10000,
+            method = PricingFixtures.method("plain")
+        )
+        assertEquals(10000L, r.creditAmount)
+        assertEquals(1000L, r.creditValue) // 100 credits x 0.10
+        assertEquals(9000L, r.gatewayAmount)
+        assertEquals(25000L, r.credits!!.maxApplicable)
+    }
+
+    @Test
+    fun `row 47 a mixed payment never covers everything and leaves what the gateway needs`() {
+        val rich = PricingFixtures.buyer(balance = 50000)
+        val r = full(line(P1), method = PricingFixtures.METHOD_F, buyer = rich, useCredits = MixedPayment.MAX)
+        assertEquals(9999L, r.credits!!.maxApplicable)
+        assertEquals(9999L, r.creditAmount)
+        assertEquals(9999L, r.creditValue)
+        assertEquals(30L, r.paymentFee) // 2.9 % of 0.01 rounds to 0, plus the fixed 0.30
+        assertEquals(10030L, r.total)
+        assertEquals(31L, r.gatewayAmount)
+        assertEquals("F", r.paymentMethodId) // full coverage needs payWithCredits
+        // the provider's own minimum is kept for the gateway
+        val withMinimum = PricingFixtures.method("F", 290, 30, providerMin = Money(500, "TRY"))
+        val m = full(line(P1), method = withMinimum, buyer = rich, useCredits = MixedPayment.MAX)
+        assertEquals(9500L, m.creditValue)
+        assertTrue(m.gatewayAmount >= 500L)
+    }
+
+    @Test
+    fun `row 47b a number above the maximum is clamped by the quote and refused at checkout`() {
+        val rich = PricingFixtures.buyer(balance = 50000)
+        val quote = full(line(P1), method = PricingFixtures.METHOD_F, buyer = rich, useCredits = 15000)
+        assertEquals(9999L, quote.creditAmount)
+        assertTrue(PricingCode.CREDITS_REDUCED in quote.codes())
+        assertTrue(quote.canCheckout) // a warning only
+        val checkout = full(line(P1), method = PricingFixtures.METHOD_F, buyer = rich, useCredits = 15000, strict = true)
+        assertEquals(0L, checkout.creditAmount)
+        assertEquals(0L, checkout.creditValue)
+        assertTrue(PricingCode.INSUFFICIENT_CREDITS in checkout.codes())
+        assertFalse(checkout.canCheckout)
+        assertEquals(9999L, checkout.credits!!.maxApplicable) // the caller answers {balance, maxApplicable}
+        assertEquals(50000L, checkout.credits!!.balance)
+        // the exact maximum is accepted at checkout, MAX is not a checkout value
+        assertEquals(9999L, full(line(P1), method = PricingFixtures.METHOD_F, buyer = rich, useCredits = 9999, strict = true).creditAmount)
+        assertEquals(PricingError.INVALID_INPUT, refused { full(line(P1), buyer = rich, useCredits = MixedPayment.MAX, strict = true) }.error)
+    }
+
+    @Test
+    fun `a provider minimum between two quanta is rounded up so the gateway keeps at least that much in whole units`() {
+        // removeCents: the quantum is 1.00; the provider wants 5.50, so the gateway keeps 6.00 and the credits cover 94.00
+        val cfg = config(removeCents = true)
+        val rich = PricingFixtures.buyer(balance = 50_000)
+        val odd = PricingFixtures.method("odd", providerMin = Money(550, "TRY"))
+        val r = full(line(P1), config = cfg, method = odd, buyer = rich, useCredits = MixedPayment.MAX)
+        assertEquals(9400L, r.credits!!.maxApplicable)
+        assertEquals(9400L, r.creditValue)
+        assertEquals(600L, r.gatewayAmount)
+        assertEquals(0L, r.gatewayAmount % 100)
+        assertNull(r.tender.unavailable)
+        // 5.00 is a whole quantum and stays 5.00
+        val whole = full(line(P1), config = cfg, method = PricingFixtures.method("whole", providerMin = Money(500, "TRY")), buyer = rich, useCredits = MixedPayment.MAX)
+        assertEquals(500L, whole.gatewayAmount)
+    }
+
+    @Test
+    fun `row 48 mixed payment that is switched off is ignored on the quote and refused at checkout`() {
+        val buyer = PricingFixtures.buyer(balance = 5000)
+        val quote = full(line(P1), config = config(mixed = false), buyer = buyer, useCredits = 5000)
+        assertEquals(0L, quote.creditAmount)
+        assertEquals(10000L, quote.gatewayAmount)
+        assertTrue(PricingCode.MIXED_CREDIT_NOT_SUPPORTED in quote.codes())
+        assertEquals(MessageLevel.WARNING, quote.messages.single { it.code == PricingCode.MIXED_CREDIT_NOT_SUPPORTED }.level)
+        assertEquals(0L, quote.credits!!.maxApplicable)
+        val checkout = full(line(P1), config = config(mixed = false), buyer = buyer, useCredits = 5000, strict = true)
+        assertEquals(PricingCode.MIXED_CREDIT_NOT_SUPPORTED, checkout.tender.unavailable)
+        assertFalse(checkout.canCheckout)
+    }
+
+    @Test
+    fun `mixed payment applies only where every rule of 07 section 6 2 holds`() {
+        val funded = PricingFixtures.buyer(balance = 5000)
+        fun mixed(
+            vararg lines: LineInput, config: PricingConfig = config(), buyer: BuyerContext = funded, profile: PricingProfile = PricingProfile.STOREFRONT,
+            method: MethodInput? = PricingFixtures.method("plain"), mode: PricingMode = PricingMode.MARKET
+        ) = full(*lines, config = config, buyer = buyer, profile = profile, useCredits = 1000, method = method, mode = mode)
+        assertEquals(1000L, mixed(line(P1)).creditAmount)
+        // M1: credits off, mixed off, onlyAcceptCredits
+        val off = config().let { c ->
+            PricingConfig(c.baseCurrency, c.currencyMode, c.additionalCurrencies, c.multiCurrencyFallback, c.rates, c.vatBp, c.pricesIncludeVat,
+                c.removeCents, c.minimumOrderAmount, c.combineDiscountsAndCoupons, false, false, c.creditValue, true, c.cashbackBp)
+        }
+        assertEquals(0L, mixed(line(P1), config = off).creditAmount)
+        assertNull(mixed(line(P1), config = off).credits) // Quote.credits is null while credits are off
+        // M2: a guest
+        assertEquals(0L, mixed(line(P1), buyer = PricingFixtures.buyer(loggedIn = false, userId = null, balance = 0)).creditAmount)
+        // M3: the gateway sets the price
+        assertEquals(0L, mixed(line(P1), method = PricingFixtures.METHOD_ADDS_TAX, mode = PricingMode.EXTERNAL_TAX).creditAmount)
+        // M4: a credit purchase, a subscription, a profile other than the storefront
+        assertEquals(0L, mixed(line(P6)).creditAmount)
+        assertEquals(0L, mixed(topUp(10000)).creditAmount)
+        assertEquals(0L, mixed(line(P9)).creditAmount)
+        assertEquals(0L, mixed(line(P1), profile = PricingProfile.PANEL).creditAmount)
+        // M5: the selected method cannot be paid in part with credits
+        assertEquals(0L, mixed(line(P1), method = PricingFixtures.method("nomix", mixedCredit = false)).creditAmount)
+        // no method chosen yet: assumed capable
+        assertEquals(1000L, mixed(line(P1), method = null).creditAmount)
+        // M6: nothing to spend is clamped, not "unsupported"
+        val broke = mixed(line(P1), buyer = PricingFixtures.buyer(balance = 0))
+        assertEquals(0L, broke.creditAmount)
+        assertTrue(PricingCode.CREDITS_REDUCED in broke.codes())
+    }
+
+    @Test
+    fun `a mixed payment that cannot be rounded to any value spends nothing and a zero request spends nothing`() {
+        val tiny = config(creditValue = 1) // 0.0001 per credit: 0.01 credit is worth nothing
+        val r = full(line(P1), config = tiny, buyer = PricingFixtures.buyer(balance = 1), useCredits = 1, method = PricingFixtures.method("plain"))
+        assertEquals(0L, r.creditAmount)
+        assertEquals(0L, r.creditValue)
+        val zero = full(line(P1), buyer = PricingFixtures.buyer(balance = 5000), useCredits = 0)
+        assertEquals(0L, zero.creditAmount)
+        assertEquals(5000L, zero.credits!!.balance)
+        assertEquals(5000L, zero.credits!!.maxApplicable)
+        assertTrue(refused { full(line(P1), buyer = PricingFixtures.buyer(balance = 5000), useCredits = -1) }.error == PricingError.INVALID_INPUT)
+    }
+
+    @Test
+    fun `mixed payment in a zero decimal currency leaves whole units for the gateway`() {
+        val cfg = config(mode = CurrencyMode.MULTI, creditValue = 100)
+        val r = full(
+            line(P1), config = cfg, currency = "JPY", buyer = PricingFixtures.buyer(balance = 100_000_000),
+            useCredits = MixedPayment.MAX, method = PricingFixtures.method("plain")
+        )
+        assertEquals("JPY", r.currency)
+        assertEquals(0L, r.creditValue % 100)
+        assertEquals(0L, r.gatewayAmount % 100)
+        assertTrue(r.gatewayAmount >= 100L)
+        assertEquals(r.total, r.gatewayAmount + r.creditValue)
+    }
+
+    @Test
+    fun `row 49 paying the whole order in credits charges the credit price and records the money value`() {
+        val r = full(line(P1), line(P2, 3), payWithCredits = true, buyer = PricingFixtures.buyer(balance = 20000))
+        assertEquals(13000L, r.credits!!.creditTotal) // 100.00 + 3 x 10.00
+        assertEquals(13000L, r.creditAmount)
+        assertEquals(12997L, r.total) // the money run: 100.00 + 3 x 9.99
+        assertEquals(12997L, r.creditValue)
+        assertEquals(0L, r.gatewayAmount)
+        assertEquals(0L, r.paymentFee)
+        assertEquals("credits", r.paymentMethodId)
+        assertEquals(13000L, r.credits!!.applied)
+        assertEquals(12997L, r.credits!!.appliedValue)
+        assertEquals(10000L, r.key("L1").creditUnitPrice)
+        assertTrue(r.canCheckout)
+        // the credits method id is equivalent
+        val byMethod = PricingEngine.finalize(
+            price(line(P1), line(P2, 3), payWithCredits = true, buyer = PricingFixtures.buyer(balance = 20000)),
+            null, TenderInput(null, PricingFixtures.method("credits"))
+        )
+        assertEquals(13000L, byMethod.creditAmount)
+    }
+
+    @Test
+    fun `row 50 the credit run takes its own discounts`() {
+        val r = full(line(P1), line(P2, 3), payWithCredits = true, discounts = listOf(PricingFixtures.D1), buyer = PricingFixtures.buyer(balance = 20000))
+        assertEquals(9000L, r.items.credit!!.lines.single { it.lineKey == "L1" }.lineTotal)
+        assertEquals(2700L, r.items.credit!!.lines.single { it.lineKey == "L2" }.lineTotal) // 3 x 9.00
+        assertEquals(11700L, r.creditAmount) // 90.00 + 27.00
+        assertEquals(11697L, r.total) // the money run: 90.00 + 3 x 8.99
+        assertEquals(900L, r.key("L2").creditUnitPrice)
+    }
+
+    @Test
+    fun `row 51 a balance below the credit total says so and charges nothing`() {
+        val r = full(line(P1), line(P2, 3), payWithCredits = true, buyer = PricingFixtures.buyer(balance = 10000))
+        assertTrue(PricingCode.INSUFFICIENT_CREDITS in r.codes())
+        assertFalse(r.canCheckout)
+        assertEquals(0L, r.creditAmount)
+        assertEquals(13000L, r.credits!!.creditTotal) // what it would cost
+        assertEquals("credits", r.paymentMethodId)
+    }
+
+    @Test
+    fun `row 52 a line without a credit price cannot be paid in credits`() {
+        val r = full(line(P3), payWithCredits = true, buyer = PricingFixtures.buyer(balance = 99999))
+        assertEquals(listOf(PricingCode.NOT_PAYABLE_WITH_CREDITS), r.key("L3").errors)
+        assertFalse(r.credits!!.payableInCredits)
+        assertFalse(r.canCheckout)
+        assertEquals(PricingCode.NOT_PAYABLE_WITH_CREDITS, r.tender.unavailable)
+        assertEquals(0L, r.creditAmount)
+        // without asking for credits the same cart is a normal money cart and is not payable-in-credits only as information
+        val money = full(line(P3))
+        assertTrue(money.canCheckout)
+        assertFalse(money.credits!!.payableInCredits)
+    }
+
+    @Test
+    fun `row 53 a product priced in credits only is never free in a money quote`() {
+        val money = full(line(creditsOnlyProduct))
+        assertEquals(listOf(PricingCode.CREDITS_ONLY), money.key("L40").errors)
+        assertFalse(money.canCheckout)
+        val credits = full(line(creditsOnlyProduct), payWithCredits = true, buyer = PricingFixtures.buyer(balance = 5000))
+        assertEquals(4000L, credits.credits!!.creditTotal)
+        assertEquals(0L, credits.total)
+        assertEquals(0L, credits.creditValue)
+        assertEquals(4000L, credits.creditAmount)
+        assertEquals("credits", credits.paymentMethodId)
+        assertTrue(credits.canCheckout)
+        // a free product (no credit price either) stays free
+        val free = full(line(Product(41, "Free", 0, 0, listOf(2))))
+        assertTrue(free.canCheckout)
+        assertEquals("free", free.paymentMethodId)
+    }
+
+    @Test
+    fun `row 54 a coupon takes the product and leaves the credit pack, a pack alone is not applicable`() {
+        val r = full(line(P1), line(P6), coupon = K25)
+        assertEquals(2500L, r.couponDiscount)
+        assertEquals(17500L, r.total)
+        val alone = full(line(P6), coupon = K25)
+        assertEquals(PricingCode.COUPON_NOT_APPLICABLE, alone.items.coupon!!.reason)
+        assertEquals(10000L, alone.total)
+        assertFalse(alone.canCheckout)
+    }
+
+    @Test
+    fun `row 55 a credit pack cannot be bought with credits, whole or in part`() {
+        val buyer = PricingFixtures.buyer(balance = 99999)
+        val mixed = full(line(P6), buyer = buyer, useCredits = MixedPayment.MAX)
+        assertEquals(0L, mixed.creditAmount)
+        assertTrue(PricingCode.MIXED_CREDIT_NOT_SUPPORTED in mixed.codes())
+        val whole = full(line(P6), buyer = buyer, payWithCredits = true)
+        assertEquals(listOf(PricingCode.NOT_PAYABLE_WITH_CREDITS), whole.key("L6").errors)
+        assertFalse(whole.credits!!.payableInCredits)
+        // the pack next to a product spoils the credit payment of the product too: the cart is not payable in credits
+        val both = full(line(P1), line(P6), buyer = buyer, payWithCredits = true)
+        assertEquals(emptyList<PricingCode>(), both.key("L1").errors)
+        assertEquals(listOf(PricingCode.NOT_PAYABLE_WITH_CREDITS), both.key("L6").errors)
+        assertFalse(both.canCheckout)
+        // a top-up line is a credit purchase as well
+        assertEquals(listOf(PricingCode.NOT_PAYABLE_WITH_CREDITS), full(topUp(10000), buyer = buyer, payWithCredits = true).key("topup").errors)
+    }
+
+    @Test
+    fun `row 56 the minimum order amount looks at the merchandise after discounts and only where a gateway is paid`() {
+        val cfg = config(minimumOrder = 5000)
+        val below = full(line(P2, 3), config = cfg)
+        assertTrue(PricingCode.MINIMUM_ORDER_AMOUNT_NOT_REACHED in below.codes())
+        assertFalse(below.canCheckout)
+        assertTrue(PricingCode.MINIMUM_ORDER_AMOUNT_NOT_REACHED in full(line(P3), config = cfg).codes()) // 49.90
+        assertFalse(PricingCode.MINIMUM_ORDER_AMOUNT_NOT_REACHED in full(line(P1), coupon = K25, config = cfg).codes()) // 75.00 after the coupon
+        assertFalse(PricingCode.MINIMUM_ORDER_AMOUNT_NOT_REACHED in full(line(P1), coupon = KF500, config = cfg).codes()) // free
+        // 49.90 + a fee is still below: the fee and the shipping do not count as merchandise
+        assertTrue(PricingCode.MINIMUM_ORDER_AMOUNT_NOT_REACHED in full(line(P3), config = cfg, method = PricingFixtures.METHOD_F).codes())
+        // a full-credit order, the panel and a free-amount top-up are exempt
+        assertFalse(PricingCode.MINIMUM_ORDER_AMOUNT_NOT_REACHED in
+            full(line(P2, 3), config = cfg, payWithCredits = true, buyer = PricingFixtures.buyer(balance = 99999)).codes())
+        assertFalse(PricingCode.MINIMUM_ORDER_AMOUNT_NOT_REACHED in full(line(P2, 3), config = cfg, profile = PricingProfile.PANEL).codes())
+        assertFalse(PricingCode.MINIMUM_ORDER_AMOUNT_NOT_REACHED in full(topUp(1000), config = config(minimumOrder = 5000, creditValue = 100)).codes())
+        // exactly the minimum passes
+        assertFalse(PricingCode.MINIMUM_ORDER_AMOUNT_NOT_REACHED in full(line(P1), config = config(minimumOrder = 10000)).codes())
+        assertTrue(PricingCode.MINIMUM_ORDER_AMOUNT_NOT_REACHED in full(line(P1), config = config(minimumOrder = 10001)).codes())
+    }
+
+    @Test
+    fun `row 57 the admin window and the provider limits decide whether a method is available`() {
+        val cheap = PricingFixtures.price(line(P8))
+        val tender = TenderInput(null, null)
+        fun reason(items: ItemsResult, m: MethodInput): PricingCode? =
+            PricingEngine.evaluateMethods(items, null, tender, listOf(m)).single().unavailableReason
+        assertEquals(PricingCode.AMOUNT_BELOW_MINIMUM, reason(cheap, PricingFixtures.method("a", minAmount = 1000)))
+        assertEquals(PricingCode.AMOUNT_ABOVE_MAXIMUM, reason(PricingFixtures.price(line(P1)), PricingFixtures.method("b", maxAmount = 5000)))
+        assertNull(reason(PricingFixtures.price(line(P1)), PricingFixtures.method("c", minAmount = 10000, maxAmount = 10000)))
+        // the window is the cart total before the fee and before the credits
+        val rich = PricingFixtures.price(line(P1), buyer = PricingFixtures.buyer(balance = 9000))
+        val credits = TenderInput(9000, null)
+        val windowed = PricingFixtures.method("d", feePercent = 290, minAmount = 10000)
+        assertNull(PricingEngine.evaluateMethods(rich, null, credits, listOf(windowed)).single().unavailableReason)
+    }
+
+    @Test
+    fun `the provider limits look at the gateway amount including the fee, in the order currency`() {
+        val items = PricingFixtures.price(line(P1))
+        val tender = TenderInput(null, null)
+        fun eval(m: MethodInput) = PricingEngine.evaluateMethods(items, null, tender, listOf(m)).single()
+        // 100.00 + 3.20 fee: a ceiling of 103.00 is exceeded only because of the fee
+        val withFee = PricingFixtures.method("F", 290, 30, providerMax = Money(10300, "TRY"))
+        assertEquals(PricingCode.AMOUNT_ABOVE_MAXIMUM, eval(withFee).unavailableReason)
+        assertEquals(10320L, eval(withFee).gatewayAmount)
+        assertEquals(320L, eval(withFee).feeAmount)
+        assertNull(eval(PricingFixtures.method("F", 290, 30, providerMax = Money(10320, "TRY"))).unavailableReason)
+        assertEquals(PricingCode.AMOUNT_BELOW_MINIMUM, eval(PricingFixtures.method("m", providerMin = Money(10001, "TRY"))).unavailableReason)
+        // a limit in a third currency goes through the base: 2.00 USD is 80.00 TRY at 0.025
+        assertNull(eval(PricingFixtures.method("usd", providerMin = Money(200, "USD"))).unavailableReason)
+        assertEquals(PricingCode.AMOUNT_BELOW_MINIMUM, eval(PricingFixtures.method("usd", providerMin = Money(300, "USD"))).unavailableReason) // 120.00 TRY
+        // a limit in a currency without a rate is skipped, not guessed
+        assertNull(eval(PricingFixtures.method("gbp", providerMin = Money(99999, "GBP"))).unavailableReason)
+        // a limit in the order currency of a foreign order is direct
+        val usdItems = PricingFixtures.price(line(P1), config = config(mode = CurrencyMode.MULTI), currency = "USD")
+        assertEquals(PricingCode.AMOUNT_ABOVE_MAXIMUM,
+            PricingEngine.evaluateMethods(usdItems, null, tender, listOf(PricingFixtures.method("u", providerMax = Money(298, "USD")))).single().unavailableReason)
+    }
+
+    @Test
+    fun `the method a tender names must be able to take the amount, the goods and the currency`() {
+        // the admin window is the cart total before the fee
+        val low = full(line(P8), method = PricingFixtures.method("a", minAmount = 1000))
+        assertEquals(PricingCode.AMOUNT_BELOW_MINIMUM, low.tender.unavailable)
+        assertFalse(low.canCheckout)
+        assertEquals(PricingCode.AMOUNT_ABOVE_MAXIMUM, full(line(P1), method = PricingFixtures.method("b", maxAmount = 5000)).tender.unavailable)
+        // the provider's ceiling counts the fee: 100.00 + 3.20
+        assertEquals(PricingCode.AMOUNT_ABOVE_MAXIMUM, full(line(P1), method = PricingFixtures.method("F", 290, 30, providerMax = Money(10300, "TRY"))).tender.unavailable)
+        val fits = full(line(P1), method = PricingFixtures.method("F", 290, 30, providerMax = Money(10320, "TRY")))
+        assertNull(fits.tender.unavailable)
+        assertTrue(fits.canCheckout)
+        // goods that ship need a method that ships them
+        val tshirt = line(P4, variantId = 2, basePrice = 27500)
+        assertEquals(PricingCode.PHYSICAL_NOT_SUPPORTED, full(tshirt, shipping = 0, method = PricingFixtures.method("digital")).tender.unavailable)
+        assertTrue(full(tshirt, shipping = 0, method = PricingFixtures.method("post", physicalGoods = true)).canCheckout)
+        // a currency the method does not know
+        assertEquals(PricingCode.CURRENCY_NOT_SUPPORTED, full(line(P1), method = PricingFixtures.method("eur", providerCurrencies = setOf("EUR"))).tender.unavailable)
+        assertEquals(PricingCode.CURRENCY_NOT_SUPPORTED, full(line(P1), method = PricingFixtures.method("eur", adminCurrencies = setOf("EUR"))).tender.unavailable)
+        // a mixed order is checked on what the gateway is left with: 0.31 against a minimum of 5.00
+        val rich = PricingFixtures.buyer(balance = 50000)
+        val big = PricingFixtures.method("big", providerMin = Money(500, "TRY"))
+        assertEquals(500L, full(line(P1), method = big, buyer = rich, useCredits = MixedPayment.MAX).gatewayAmount) // the minimum keeps its share out of the credits
+        // a free order and a full-credit order ignore the method's limits
+        val free = full(line(P1), coupon = KF500, method = PricingFixtures.method("min", providerMin = Money(99_999, "TRY")))
+        assertNull(free.tender.unavailable)
+        assertEquals("free", free.paymentMethodId)
+        assertNull(full(line(P1), payWithCredits = true, buyer = rich, method = PricingFixtures.method("credits")).tender.unavailable)
+        // the credit rules of the tender come before the limits
+        val noMix = full(
+            line(P1), config = config(mixed = false), buyer = rich, useCredits = 5000, strict = true,
+            method = PricingFixtures.method("a", minAmount = 99_999_999)
+        )
+        assertEquals(PricingCode.MIXED_CREDIT_NOT_SUPPORTED, noMix.tender.unavailable)
+        // no method chosen: nothing to refuse
+        assertNull(full(line(P8)).tender.unavailable)
+    }
+
+    @Test
+    fun `the checks of a method run in the order of 05 section 9 5`() {
+        val items = PricingFixtures.price(line(P4, variantId = 2, basePrice = 27500))
+        val tender = TenderInput(5000, null)
+        val all = PricingFixtures.method(
+            "x", mixedCredit = false, minAmount = 99_999_999, adminCurrencies = setOf("EUR"), providerCurrencies = setOf("TRY"), physicalGoods = false
+        )
+        fun reason(m: MethodInput) = PricingEngine.evaluateMethods(items, ShippingCharge(0, null), tender, listOf(m)).single().unavailableReason
+        assertEquals(PricingCode.CURRENCY_NOT_SUPPORTED, reason(all))
+        val noCurrency = PricingFixtures.method("x", mixedCredit = false, minAmount = 99_999_999, physicalGoods = false)
+        assertEquals(PricingCode.PHYSICAL_NOT_SUPPORTED, reason(noCurrency))
+        val physical = PricingFixtures.method("x", mixedCredit = false, minAmount = 99_999_999, physicalGoods = true)
+        assertEquals(PricingCode.MIXED_CREDIT_NOT_SUPPORTED, reason(physical))
+        val mixedOk = PricingFixtures.method("x", minAmount = 99_999_999, physicalGoods = true)
+        assertEquals(PricingCode.AMOUNT_BELOW_MINIMUM, reason(mixedOk))
+        // a method that prices differently never ships goods, even when it says it can
+        val catalog = PricingFixtures.method("x", authority = PriceAuthority.GATEWAY_CATALOG, physicalGoods = true)
+        assertEquals(PricingCode.PHYSICAL_NOT_SUPPORTED, reason(catalog))
+        assertEquals(PricingMode.EXTERNAL, PricingEngine.evaluateMethods(items, null, tender, listOf(catalog)).single().pricing)
+    }
+
+    @Test
+    fun `a method that prices differently is listed with no fee and no credits`() {
+        val items = PricingFixtures.price(line(P1), buyer = PricingFixtures.buyer(balance = 5000))
+        val feeCatalog = PricingFixtures.method("cat", 290, 30, authority = PriceAuthority.GATEWAY_CATALOG, mixedCredit = true)
+        val e = PricingEngine.evaluateMethods(items, null, TenderInput(1000, null), listOf(feeCatalog)).single()
+        assertEquals(0L, e.feeAmount)
+        assertEquals(10000L, e.gatewayAmount)
+    }
+
+    @Test
+    fun `with onlyAcceptCredits a product cart has no method to list and a credit purchase keeps its methods`() {
+        val cfg = config(onlyCredits = true)
+        val products = PricingFixtures.price(line(P1), config = cfg)
+        assertTrue(PricingEngine.evaluateMethods(products, null, TenderInput(null, null), listOf(PricingFixtures.METHOD_F)).isEmpty())
+        val pack = PricingFixtures.price(line(P6), config = cfg)
+        assertEquals(1, PricingEngine.evaluateMethods(pack, null, TenderInput(null, null), listOf(PricingFixtures.METHOD_F)).size)
+    }
+
+    @Test
+    fun `onlyAcceptCredits turns a product cart into a full-credit quote and keeps credit purchases on the gateway`() {
+        val cfg = config(onlyCredits = true)
+        val buyer = PricingFixtures.buyer(balance = 20000)
+        val products = full(line(P1), config = cfg, buyer = buyer)
+        assertTrue(products.items.payWithCredits)
+        assertEquals(10000L, products.creditAmount)
+        assertEquals("credits", products.paymentMethodId)
+        // credit purchases are unaffected by the mode
+        val pack = full(line(P6), config = cfg, buyer = buyer, method = PricingFixtures.METHOD_F)
+        assertFalse(pack.items.payWithCredits)
+        assertEquals(10000L, pack.total - pack.paymentFee)
+        // the credits of such a store are the whole order, not a part: a request for a few is not a mixed payment
+        val partial = full(line(P1), config = cfg, buyer = buyer, useCredits = 1000)
+        assertEquals(10000L, partial.creditAmount)
+        // a gateway chosen for a product cart is refused and the quote stays the full-credit one
+        val gateway = full(line(P1), config = cfg, buyer = buyer, method = PricingFixtures.METHOD_F)
+        assertEquals(PricingCode.CREDITS_REQUIRED, gateway.tender.unavailable)
+        assertEquals(10000L, gateway.creditAmount)
+        assertEquals(0L, gateway.paymentFee)
+        assertFalse(gateway.canCheckout)
+        // a pack and a product in one cart: the product has no money price
+        val mixedCart = full(line(P1), line(P6), config = cfg, buyer = buyer)
+        assertEquals(listOf(PricingCode.CREDITS_ONLY), mixedCart.key("L1").errors)
+        assertFalse(mixedCart.canCheckout)
+        // a free product is free as always
+        assertEquals("free", full(line(Product(41, "Free", 0, 0, listOf(2))), config = cfg, buyer = buyer).paymentMethodId)
+    }
+
+    @Test
+    fun `row 59 DISPLAY mode converts each shown figure on its own and charges the base total`() {
+        val cfg = config(mode = CurrencyMode.DISPLAY)
+        val one = full(line(P1), config = cfg, currency = "USD")
+        assertEquals(10000L, one.total)
+        assertEquals(DisplayBlock("USD", BigDecimal("0.025"), 250L, 250L, 250L), one.display)
+        val three = full(line(P2, 3), config = cfg, currency = "USD")
+        assertEquals(75L, three.display!!.total) // 29.97 x 0.025 = 0.74925
+        assertEquals(2997L, three.total)
+        assertNull(full(line(P1), config = cfg).display)
+    }
+
+    @Test
+    fun `row 68 an external catalogue price carries no fee and is an estimate`() {
+        val catalog = PricingFixtures.method("cat", 290, 30, authority = PriceAuthority.GATEWAY_CATALOG, mixedCredit = false)
+        val r = full(line(P1), discounts = listOf(PricingFixtures.D1), coupon = K25, method = catalog)
+        assertEquals(0L, r.discountTotal)
+        assertEquals(PricingCode.EXTERNAL_PRICING, r.items.coupon!!.reason)
+        assertEquals(10000L, r.total) // an estimate
+        assertEquals(0L, r.paymentFee)
+        assertTrue(r.messages.contains(PricingMessage(PricingCode.EXTERNAL_PRICING, MessageLevel.INFO)))
+        assertEquals("cat", r.paymentMethodId)
+    }
+
+    @Test
+    fun `row 67 when the gateway adds the tax the order carries no VAT and no fee`() {
+        val r = full(line(P1), method = PricingFixtures.METHOD_ADDS_TAX)
+        assertEquals(8333L, r.total)
+        assertEquals(0L, r.vatTotal)
+        assertEquals(0L, r.paymentFee)
+        assertEquals(0L, r.key("L1").vatPercent)
+    }
+
+    @Test
+    fun `rows 8 16 and 34 an order worth nothing goes to the free method`() {
+        assertEquals("free", full(line(P2, 2), discounts = listOf(PricingFixtures.D2)).paymentMethodId)
+        assertEquals("free", full(line(P1), coupon = KF500).paymentMethodId)
+        val upgrade = full(line(T3), discounts = listOf(PricingFixtures.D6), buyer = PricingFixtures.buyer(listOf(owned(502, T2, 15000))))
+        assertEquals(0L, upgrade.total)
+        assertEquals("free", upgrade.paymentMethodId)
+        // the client's method is ignored for a free order, there is no gateway amount and no fee
+        val ignored = full(line(P1), coupon = KF500, method = PricingFixtures.METHOD_F)
+        assertEquals("free", ignored.paymentMethodId)
+        assertEquals(0L, ignored.paymentFee)
+        assertEquals(0L, ignored.gatewayAmount)
+        assertTrue(ignored.canCheckout)
+    }
+
+    @Test
+    fun `no method chosen leaves the method open while a gateway amount is due`() {
+        val r = full(line(P1))
+        assertNull(r.paymentMethodId)
+        assertEquals(10000L, r.gatewayAmount)
+        assertEquals(0L, r.paymentFee)
+    }
+
+    @Test
+    fun `no fee for the credits free and manual providers, for a fee mode of none, or a zero remainder`() {
+        for (id in listOf("credits", "free", "manual")) {
+            val m = PricingFixtures.method(id, 290, 30)
+            val r = if (id == "credits") {
+                full(line(P1), payWithCredits = true, method = m, buyer = PricingFixtures.buyer(balance = 20000))
+            } else {
+                full(line(P1), method = m)
+            }
+            assertEquals(0L, r.paymentFee, id)
+        }
+        assertEquals(0L, full(line(P1), method = PricingFixtures.method("none", 290, 30, feeMode = PaymentFeeMode.NONE)).paymentFee)
+        assertEquals(0L, full(line(P1), coupon = KF500, method = PricingFixtures.METHOD_F).paymentFee)
+    }
+
+    @Test
+    fun `a fee of 100 percent or more and a stored fee outside its range never fail a quote`() {
+        val huge = PricingFixtures.method("h", 50_000, Long.MAX_VALUE / 8)
+        val r = full(line(P1), method = huge)
+        assertEquals(10000L + PricingLimits.MAX_AMOUNT, r.paymentFee) // 100 % clamped, fixed part clamped to the bound
+        assertEquals(r.total, r.gatewayAmount)
+        assertEquals(0L, full(line(P1), method = PricingFixtures.method("n", -5, -5, feeMode = PaymentFeeMode.BUYER)).paymentFee)
+    }
+
+    @Test
+    fun `the fee is quantised in a zero decimal currency and with removeCents`() {
+        val cfg = config(mode = CurrencyMode.MULTI)
+        val jpy = full(line(P1), config = cfg, currency = "JPY", method = PricingFixtures.METHOD_F)
+        assertEquals(0L, jpy.paymentFee % 100)
+        assertEquals(0L, jpy.total % 100)
+        val whole = full(line(P2, 3), config = config(removeCents = true), method = PricingFixtures.METHOD_G)
+        assertEquals(0L, whole.paymentFee % 100)
+    }
+
+    @Test
+    fun `row 72 a subscription takes no promotion and may be paid with credits`() {
+        val r = full(line(P9), discounts = listOf(PricingFixtures.D1), coupon = K25)
+        assertEquals(3000L, r.total)
+        assertEquals(PricingCode.COUPON_NOT_APPLICABLE, r.items.coupon!!.reason)
+    }
+
+    @Test
+    fun `row 76 a subscription with a credit price is payable in full with credits`() {
+        val r = full(line(P9), payWithCredits = true, buyer = PricingFixtures.buyer(balance = 5000))
+        assertEquals(3000L, r.credits!!.creditTotal)
+        assertEquals(3000L, r.creditAmount)
+        assertEquals("credits", r.paymentMethodId)
+        assertTrue(r.canCheckout)
+    }
+
+    @Test
+    fun `row 79 a free amount top-up has no minimum order amount and no promotion`() {
+        val r = full(topUp(25000), config = config(creditValue = 10, minimumOrder = 5000), discounts = listOf(PricingFixtures.D1), coupon = K25)
+        assertEquals(2500L, r.total)
+        assertEquals(PricingCode.COUPON_NOT_APPLICABLE, r.items.coupon!!.reason)
+        assertFalse(PricingCode.MINIMUM_ORDER_AMOUNT_NOT_REACHED in r.codes())
+        assertEquals(2500L, r.gatewayAmount)
+    }
+
+    @Test
+    fun `row 80 the shipping of a full-credit order is converted at the credit value and rounded up`() {
+        val tshirt = Product(14, "T-shirt for credits", 25000, 25000, listOf(3), physical = true)
+        val r = full(line(tshirt), payWithCredits = true, config = config(creditValue = 30), shipping = 2990, buyer = PricingFixtures.buyer(balance = 99999))
+        assertEquals(9967L, r.credits!!.shippingCredits) // 29.90 / 0.30 = 99.666...
+        assertEquals(34967L, r.credits!!.creditTotal) // 250.00 + 99.67
+        assertEquals(34967L, r.creditAmount)
+        assertEquals(27990L, r.total) // the money run: 250.00 + 29.90
+        assertEquals(r.total, r.creditValue)
+        assertEquals(0L, r.gatewayAmount)
+        // exactly at the balance passes, one hundredth below does not
+        assertTrue(full(line(tshirt), payWithCredits = true, config = config(creditValue = 30), shipping = 2990, buyer = PricingFixtures.buyer(balance = 34967)).canCheckout)
+        assertFalse(full(line(tshirt), payWithCredits = true, config = config(creditValue = 30), shipping = 2990, buyer = PricingFixtures.buyer(balance = 34966)).canCheckout)
+        // no shipping, no shipping credits
+        assertEquals(0L, full(line(P1), payWithCredits = true, buyer = PricingFixtures.buyer(balance = 99999)).credits!!.shippingCredits)
+    }
+
+    @Test
+    fun `the credit run decides and the money run replays the decision`() {
+        // a FIXED 15.00 discount against a 25 % coupon: with money prices (100.00) the coupon is better, with credit prices (30.00) the discount is
+        val dual = Product(42, "Dual", 10000, 3000, listOf(1))
+        val fixed = discount(8, 1500, DiscountUnit.FIXED)
+        val cfg = config(combine = false)
+        val buyer = PricingFixtures.buyer(balance = 99999)
+
+        val money = full(line(dual), discounts = listOf(fixed), coupon = K25, config = cfg, buyer = buyer)
+        assertEquals(7500L, money.total) // S2: the coupon
+        assertTrue(money.items.coupon!!.valid)
+        assertEquals(0L, money.discountTotal)
+
+        val credits = full(line(dual), discounts = listOf(fixed), coupon = K25, config = cfg, buyer = buyer, payWithCredits = true)
+        assertEquals(1500L, credits.creditAmount) // S1 in credits: 30.00 - 15.00
+        assertEquals(1500L, credits.key("L42").creditUnitPrice)
+        assertEquals(8500L, credits.total) // the money run replays S1: the discount, not the coupon
+        assertEquals(1500L, credits.discountTotal)
+        assertEquals(PricingCode.CODE_NOT_COMBINABLE, credits.items.coupon!!.reason)
+        assertFalse(credits.items.coupon!!.valid)
+        assertEquals(8500L, credits.creditValue)
+        assertEquals(listOf(DiscountRedemption(8, 1500)), credits.items.discountRedemptions)
+        assertEquals(1500L, credits.items.credit!!.lines.single().lineTotal)
+    }
+
+    @Test
+    fun `a coupon of the credit run is spread over the lines of the credit run on the money amounts`() {
+        val buyer = PricingFixtures.buyer(balance = 99999)
+        val r = full(line(P1), line(P2, 3), coupon = K25, payWithCredits = true, buyer = buyer)
+        // credits: 100.00 -> 25.00 off, 3 x 10.00 -> 7.50 off
+        assertEquals(10000L + 3000L - 2500L - 750L, r.creditAmount)
+        assertTrue(r.items.credit!!.coupon!!.valid)
+        assertEquals(3250L, r.items.credit!!.coupon!!.discount)
+        // money: 25.00 and 7.49 (0.25 x 29.97 = 7.4925 -> 7.49)
+        assertEquals(2500L, r.key("L1").couponShare)
+        assertEquals(749L, r.key("L2").couponShare)
+        assertEquals(9748L, r.total)
+        // a refused coupon is refused in both runs
+        val bad = full(line(P1), coupon = coupon(9, "NOPE", 2500, found = false), payWithCredits = true, buyer = buyer)
+        assertFalse(bad.canCheckout)
+        assertEquals(PricingCode.CODE_NOT_FOUND, bad.items.coupon!!.reason)
+        assertEquals(PricingCode.CODE_NOT_FOUND, bad.items.credit!!.coupon!!.reason)
+    }
+
+    @Test
+    fun `the upgrade deduction of a full-credit order is converted at the credit value`() {
+        val silver = Product(52, "Silver for credits", 12000, 6000, listOf(10), tier = TierInfo(10, 2, UpgradeMode.DIFFERENCE))
+        val cfg = config(creditValue = 200) // 2.00 TRY per credit: the owned 50.00 TRY are 25.00 credits
+        val r = full(
+            line(silver), payWithCredits = true, config = cfg,
+            buyer = PricingFixtures.buyer(listOf(owned(701, T1, 5000)), balance = 99999)
+        )
+        assertEquals(3500L, r.creditAmount) // 60.00 - 25.00 credits
+        assertEquals(3500L, r.key("L52").creditUnitPrice)
+        assertEquals(701L, r.key("L52").upgradeFromEntitlementId)
+        assertEquals(7000L, r.total) // the money run: 120.00 - 50.00 TRY
+        assertEquals(5000L, r.key("L52").upgradeAmount)
+        // the deduction can never be more than the credit price
+        val rich = config(creditValue = 50) // the owned 50.00 TRY are 100.00 credits, the product costs 60.00
+        val capped = full(
+            line(silver), payWithCredits = true, config = rich,
+            buyer = PricingFixtures.buyer(listOf(owned(701, T1, 5000)), balance = 99999)
+        )
+        assertEquals(0L, capped.creditAmount)
+    }
+
+    @Test
+    fun `finalize refuses a combination the caller must not make`() {
+        val buyer = PricingFixtures.buyer(balance = 99999)
+        fun bad(block: () -> Unit) = assertEquals(PricingError.INVALID_INPUT, refused(block).error)
+        // the method prices differently from the items
+        bad { PricingEngine.finalize(PricingFixtures.price(line(P1)), null, TenderInput(null, PricingFixtures.METHOD_CATALOG)) }
+        // credits without payWithCredits in priceItems, and payWithCredits with a gateway method
+        bad { PricingEngine.finalize(PricingFixtures.price(line(P1)), null, TenderInput(null, PricingFixtures.method("credits"))) }
+        bad { PricingEngine.finalize(PricingFixtures.price(line(P1), buyer = buyer, payWithCredits = true), null, TenderInput(null, PricingFixtures.METHOD_F)) }
+        // an in-game purchase is always paid with credits
+        bad { PricingEngine.finalize(PricingFixtures.price(line(P1), profile = PricingProfile.INGAME, buyer = buyer), null, TenderInput(null, null)) }
+        // a renewal needs its frozen charge to be finalized
+        bad { PricingEngine.finalize(PricingFixtures.price(line(P9), profile = PricingProfile.RENEWAL), null, TenderInput(null, null)) }
+        // the whole order in credits belongs to the storefront and the game
+        bad { PricingFixtures.price(line(P1), profile = PricingProfile.PANEL, payWithCredits = true) }
+        // a mixed order can never be larger than its total (a caller that hands in a corrupt balance)
+        bad { PricingFixtures.price(line(P1), buyer = PricingFixtures.buyer(balance = -1)) }
+    }
+
+    @Test
+    fun `the totals of a result add up`() {
+        val r = full(
+            line(P1), line(P4, variantId = 2, basePrice = 27500), shipping = 2990, method = PricingFixtures.METHOD_F,
+            buyer = PricingFixtures.buyer(balance = 4000), useCredits = 4000
+        )
+        assertEquals(r.items.itemsTotal + r.shippingTotal + r.paymentFee, r.total)
+        assertEquals(r.gatewayAmount + r.creditValue, r.total)
+        assertEquals(r.items.itemsVat + r.shippingVat + r.tender.paymentFeeVatAmount, r.vatTotal)
+        assertEquals(r.items.discountTotal + r.items.couponDiscount + r.items.creatorDiscount + r.items.upgradeDiscount, r.snapshotDiscount)
+    }
+
+    @Test
+    fun `a finalize that overflows is AMOUNT_OVERFLOW and never wraps`() {
+        // 90 lines of 10^17 fit a Long (9 x 10^18), a fee of 100 % on top does not
+        val lines = (1..90).map { line(P1, PricingLimits.MAX_QUANTITY, key = "L$it", basePrice = PricingLimits.MAX_AMOUNT) }
+        val items = PricingFixtures.price(*lines.toTypedArray())
+        assertEquals(9_000_000_000_000_000_000L, items.itemsTotal)
+        val fee = PricingFixtures.method("f", 10_000, 0)
+        assertEquals(PricingError.AMOUNT_OVERFLOW, refused { PricingEngine.finalize(items, null, TenderInput(null, fee)) }.error)
+        // without the fee it is exact
+        assertEquals(9_000_000_000_000_000_000L, PricingEngine.finalize(items, null, TenderInput(null, null)).total)
+    }
+
+    // ---------------------------------------------------------------- creator earning and cashback (05 section 10)
+
+    @Test
+    fun `row 26 a creator code earns its commission on the net amount of the product lines`() {
+        val r = full(line(P1), creatorCode = CR5)
+        assertEquals(500L, r.creatorDiscount)
+        assertEquals(9500L, r.total)
+        assertEquals(1583L, r.vatTotal)
+        val e = OrderValues.creatorEarning(r, CR5.commissionBp)
+        assertEquals(7917L, e.baseAmount) // 95.00 - 15.83
+        assertEquals(792L, e.amount) // 10 % of 79.17 = 7.917
+    }
+
+    @Test
+    fun `row 29 without combining a creator code keeps the attribution and earns on what was paid`() {
+        val r = full(line(P1), discounts = listOf(PricingFixtures.D5), creatorCode = CR5, config = config(combine = false))
+        assertEquals(6000L, r.total)
+        assertEquals(0L, r.creatorDiscount)
+        assertTrue(r.items.creatorCode!!.valid)
+        assertEquals(PricingCode.CODE_NOT_COMBINABLE, r.items.creatorCode!!.reason)
+        val e = OrderValues.creatorEarning(r, CR5.commissionBp)
+        assertEquals(5000L, e.baseAmount)
+        assertEquals(500L, e.amount)
+    }
+
+    @Test
+    fun `creator earning leaves out the shipping the fee and the credit purchases and follows a full-credit order`() {
+        val r = full(line(P1), line(P6), line(P4, variantId = 2, basePrice = 27500), shipping = 2990, method = PricingFixtures.METHOD_F)
+        // P1 100.00 and the T-shirt 275.00 earn; the pack, the shipping and the fee do not
+        val e = OrderValues.creatorEarning(r, 1000)
+        assertEquals(8333L + 22917L, e.baseAmount) // 83.33 + 229.17
+        assertEquals(3125L, e.amount)
+        // a full-credit order earns on the credits' money value
+        val credit = full(line(P1), line(P2, 3), payWithCredits = true, buyer = PricingFixtures.buyer(balance = 99999), config = config(creditValue = 50))
+        val ce = OrderValues.creatorEarning(credit, 1000)
+        assertEquals(6500L, ce.baseAmount) // 130.00 credits x 0.50
+        assertEquals(650L, ce.amount)
+    }
+
+    @Test
+    fun `row 74 cashback is paid on the gateway part of the merchandise only`() {
+        val r = full(
+            line(P1), method = PricingFixtures.METHOD_F, buyer = PricingFixtures.buyer(balance = 3000), useCredits = MixedPayment.MAX,
+            config = config(cashbackBp = 500)
+        )
+        assertEquals(350L, OrderValues.cashback(r)) // gatewayShare 0.70: floor(70.00 x 5 %) = 3.50 credits
+        val cheap = full(line(P2), config = config(cashbackBp = 333))
+        assertEquals(33L, OrderValues.cashback(cheap)) // floor(0.3326) = 0.33
+        // nothing on credit tender, on a credit purchase, on shipping, with no percentage
+        val paid = full(line(P1), payWithCredits = true, buyer = PricingFixtures.buyer(balance = 99999), config = config(cashbackBp = 500))
+        assertEquals(0L, OrderValues.cashback(paid))
+        assertEquals(0L, OrderValues.cashback(full(line(P6), config = config(cashbackBp = 500))))
+        assertEquals(0L, OrderValues.cashback(full(line(P1), config = config(cashbackBp = 0))))
+        val shipped = full(line(P4, variantId = 2, basePrice = 27500), shipping = 2990, config = config(cashbackBp = 1000))
+        assertEquals(2750L, OrderValues.cashback(shipped)) // 10 % of 275.00, not of the 29.90 shipping
+        // a foreign order currency converts through the rate: 2.99 USD at 1 TRY per credit is 119.60 credits
+        val usd = full(line(P1), currency = "USD", config = config(mode = CurrencyMode.MULTI, cashbackBp = 10_000))
+        assertEquals(11960L, OrderValues.cashback(usd))
+    }
+
+    // ---------------------------------------------------------------- the seeded property loop of stages B and C
+
+    private class TenderCase(val input: PricingInput, val shipping: ShippingCharge?)
+
+    private val loopGateways: List<MethodInput> = listOf(
+        PricingFixtures.METHOD_F,
+        PricingFixtures.METHOD_G,
+        PricingFixtures.method("plain"),
+        PricingFixtures.method("nomix", 100, 10, mixedCredit = false, physicalGoods = true),
+        PricingFixtures.method("ship", 150, 0, physicalGoods = true),
+        PricingFixtures.method("bounded", 200, 0, providerMin = Money(700, "TRY"), providerMax = Money(2_000_000, "TRY"), physicalGoods = true),
+        PricingFixtures.method("usdlimits", 0, 25, providerMin = Money(500, "USD"), providerMax = Money(60_000, "USD"), physicalGoods = true),
+        PricingFixtures.method("window", minAmount = 500, maxAmount = 3_000_000, physicalGoods = true),
+        PricingFixtures.method("narrow", providerCurrencies = setOf("TRY", "USD"), adminCurrencies = setOf("TRY", "USD", "JPY"), physicalGoods = true),
+        PricingFixtures.method("fixedfee", 0, 125, physicalGoods = true),
+        PricingFixtures.method("manual", 290, 30, physicalGoods = true),
+        PricingFixtures.method("free", 290, 30),
+        // limits that most carts trip: a high minimum, a low ceiling, a currency list that never contains the store's
+        PricingFixtures.method("tiny", 0, 10, providerMin = Money(500_000, "TRY"), physicalGoods = true),
+        PricingFixtures.method("cap", 100, 0, providerMax = Money(20_000, "TRY"), physicalGoods = true),
+        PricingFixtures.method("eur", providerCurrencies = setOf("EUR"), physicalGoods = true)
+    )
+
+    private val loopPool: List<Product> = listOf(
+        P1, P2, P3, P4, P5, P5M, P6, P8, P9, creditsOnlyProduct, T1, T2, T3,
+        Product(14, "T-shirt for credits", 25000, 25000, listOf(3), physical = true),
+        Product(43, "Crate", 4500, 3000, listOf(2))
+    )
+
+    private fun PricingConfig.withCredits(enabled: Boolean) = PricingConfig(
+        baseCurrency, currencyMode, additionalCurrencies, multiCurrencyFallback, rates, vatBp, pricesIncludeVat, removeCents,
+        minimumOrderAmount, combineDiscountsAndCoupons, enabled, onlyAcceptCredits, creditValue, allowMixedCreditPayment, cashbackBp
+    )
+
+    private fun randomTenderCase(rnd: Random): TenderCase {
+        val roll = rnd.nextInt(100)
+        val profile = when {
+            roll < 62 -> PricingProfile.STOREFRONT
+            roll < 72 -> PricingProfile.PANEL
+            roll < 78 -> PricingProfile.GIFT_CODE
+            roll < 90 -> PricingProfile.INGAME
+            else -> PricingProfile.RENEWAL
+        }
+        val mode = CurrencyMode.values()[rnd.nextInt(3)]
+        val onlyCredits = rnd.nextInt(16) == 0
+        var cfg = config(
+            mode = mode,
+            removeCents = rnd.nextInt(5) == 0,
+            includeVat = rnd.nextBoolean(),
+            vatBp = listOf(2000L, 1000L, 0L, 1800L, 10_000L)[rnd.nextInt(5)],
+            minimumOrder = if (rnd.nextInt(3) == 0) rnd.nextLong(0, 30_000) else 0L,
+            combine = rnd.nextInt(3) != 0,
+            creditValue = listOf(100L, 10L, 30L, 250L, 1L, 7L)[rnd.nextInt(6)],
+            mixed = rnd.nextInt(8) != 0,
+            onlyCredits = onlyCredits,
+            cashbackBp = rnd.nextLong(0, 1500)
+        )
+        if (!onlyCredits && rnd.nextInt(12) == 0) cfg = cfg.withCredits(false)
+        val currency = when (mode) {
+            CurrencyMode.MULTI -> listOf(null, "USD", "JPY")[rnd.nextInt(3)]
+            CurrencyMode.DISPLAY -> listOf(null, "USD")[rnd.nextInt(2)]
+            else -> null
+        }
+        val oq = if (currency == "JPY" || cfg.removeCents) 100L else 1L
+
+        val lines: List<LineInput>
+        var renewal: RenewalCharge? = null
+        when {
+            profile == PricingProfile.RENEWAL -> {
+                lines = listOf(line(P9))
+                val price = rnd.nextLong(1, 2000) * 100
+                renewal = RenewalCharge(price, rnd.nextLong(0, price / 400 + 1) * 100)
+            }
+            profile == PricingProfile.STOREFRONT && rnd.nextInt(16) == 0 -> lines = listOf(topUp(rnd.nextLong(100, 1_000_000)))
+            else -> lines = (1..1 + rnd.nextInt(4)).map { i ->
+                val p = loopPool[rnd.nextInt(loopPool.size)]
+                val variant = if (p === P4) rnd.nextLong(0, 3) else 0L
+                line(p, if (p.tier != null) 1 else 1 + rnd.nextInt(3), variantId = variant, key = "k$i", basePrice = if (variant == 2L) 27500 else p.price)
+            }
+        }
+        val storefront = profile == PricingProfile.STOREFRONT
+        val discounts = if (profile == PricingProfile.GIFT_CODE || profile == PricingProfile.RENEWAL) emptyList()
+        else listOf(D1, D2, D3, D4, D5, D6, D7).filter { rnd.nextInt(6) == 0 }
+        val coupon = if (storefront && rnd.nextInt(10) < 3) listOf(K25, KF20, KF500, K50P2, KMIN)[rnd.nextInt(5)] else null
+        val creator = if (storefront && rnd.nextInt(5) == 0) CR5 else null
+        val loggedIn = rnd.nextInt(10) != 0
+        val owned = if (rnd.nextInt(10) == 0) listOf(owned(501, T1, rnd.nextLong(0, 20_000))) else emptyList()
+        val balance = when (rnd.nextInt(4)) {
+            0 -> 0L
+            1 -> rnd.nextLong(0, 50_000)
+            2 -> rnd.nextLong(0, 5_000_000)
+            else -> rnd.nextLong(0, 1_000_000_000_000L / 10)
+        }
+        val buyer = PricingFixtures.buyer(owned, balance = balance, loggedIn = loggedIn, userId = if (loggedIn) 1L else null)
+        val pricingMode = if (!storefront) PricingMode.MARKET else when (rnd.nextInt(100)) {
+            in 0..5 -> PricingMode.EXTERNAL_TAX
+            in 6..11 -> PricingMode.EXTERNAL
+            else -> PricingMode.MARKET
+        }
+        val payWithCredits = profile == PricingProfile.INGAME || (storefront && rnd.nextInt(4) == 0)
+        val shipping = if (rnd.nextInt(100) < 55) ShippingCharge(rnd.nextLong(0, 400_000), if (rnd.nextInt(3) == 0) rnd.nextLong(0, 3000) else null) else null
+        check(oq > 0)
+        val input = PricingFixtures.input(
+            *lines.toTypedArray(), config = cfg, discounts = discounts, coupon = coupon, creatorCode = creator, profile = profile,
+            currency = currency, buyer = buyer, mode = pricingMode, payWithCredits = payWithCredits, renewal = renewal
+        )
+        return TenderCase(input, shipping)
+    }
+
+    @Test
+    fun `property loop over 10000 seeded orders, stages B and C agree with an independent oracle and add up`() {
+        val rnd = Random(20261011)
+        val seen = java.util.TreeMap<String, Int>()
+        fun hit(branch: String) = seen.merge(branch, 1) { a, b -> a + b }
+        val creditsMethod = PricingFixtures.method("credits")
+        repeat(10_000) { n ->
+            val case = randomTenderCase(rnd)
+            val input = case.input
+            val items = PricingEngine.priceItems(input)
+            val where = "case #$n ${input.profile} ${input.pricingMode} credits=${input.payWithCredits} balance=${input.buyer.creditBalance}"
+
+            val method: MethodInput? = when {
+                items.payWithCredits && !items.creditsForced -> if (rnd.nextBoolean()) null else creditsMethod
+                input.pricingMode == PricingMode.EXTERNAL -> listOf(null, PricingFixtures.METHOD_CATALOG)[rnd.nextInt(2)]
+                input.pricingMode == PricingMode.EXTERNAL_TAX -> listOf(null, PricingFixtures.METHOD_ADDS_TAX)[rnd.nextInt(2)]
+                items.payWithCredits -> if (rnd.nextInt(4) == 0) creditsMethod else loopGateways[rnd.nextInt(loopGateways.size)]
+                rnd.nextInt(8) == 0 -> null
+                else -> loopGateways[rnd.nextInt(loopGateways.size)]
+            }
+            val strict = rnd.nextInt(3) == 0
+            val useCredits: Long? = when (rnd.nextInt(6)) {
+                0 -> null
+                1 -> 0L
+                2 -> if (strict) rnd.nextLong(1, 100_000) else MixedPayment.MAX
+                3 -> rnd.nextLong(1, 100_000)
+                4 -> rnd.nextLong(1, 5_000_000)
+                else -> if (strict) rnd.nextLong(1, 1_000) else MixedPayment.MAX
+            }
+            val tender = TenderInput(useCredits, method, strict)
+            val r = PricingEngine.finalize(items, case.shipping, tender)
+            val e = TenderOracle.expect(input, items, case.shipping, tender)
+            val t = r.tender
+            val oq = items.conversions.oq
+
+            // the engine against the oracle, field by field
+            assertEquals(e.shippingTotal, r.shippingTotal, "$where shippingTotal")
+            assertEquals(e.shippingVat, r.shippingVat, "$where shippingVat")
+            assertEquals(e.preFee, t.preFee, "$where preFee")
+            assertEquals(e.creditAmount, t.creditAmount, "$where creditAmount")
+            assertEquals(e.creditValue, t.creditValue, "$where creditValue")
+            assertEquals(e.paymentFee, t.paymentFee, "$where paymentFee")
+            assertEquals(e.feeVat, t.paymentFeeVatAmount, "$where fee VAT")
+            assertEquals(e.total, t.total, "$where total")
+            assertEquals(e.vatTotal, t.vatTotal, "$where vatTotal")
+            assertEquals(e.gatewayAmount, t.gatewayAmount, "$where gatewayAmount")
+            assertEquals(e.methodId, t.paymentMethodId, "$where method")
+            assertEquals(e.unavailable, t.unavailable, "$where unavailable")
+            assertEquals(e.messages, t.messages.map { it.code }, "$where messages")
+            if (e.creditsBlock) {
+                val c = t.credits!!
+                assertEquals(if (input.buyer.loggedIn) input.buyer.creditBalance else 0L, c.balance, "$where balance")
+                assertEquals(e.payable, c.payableInCredits, "$where payable")
+                assertEquals(e.creditTotal, c.creditTotal, "$where creditTotal")
+                assertEquals(e.shippingCredits, c.shippingCredits, "$where shippingCredits")
+                assertEquals(e.maxApplicable, c.maxApplicable, "$where maxApplicable")
+                assertEquals(e.creditAmount, c.applied, "$where applied")
+                assertEquals(e.creditValue, c.appliedValue, "$where appliedValue")
+            } else {
+                assertNull(t.credits, "$where credits are off")
+            }
+
+            // the invariants of 01 section 5.1 and 05 section 7, stated without the oracle
+            var lineSum = 0L
+            var vatSum = 0L
+            for (l in r.lines) {
+                lineSum += l.lineTotal
+                vatSum += l.vatAmount
+            }
+            assertEquals(lineSum + r.shippingTotal + r.paymentFee, r.total, "$where total = sum of lines + shipping + fee")
+            assertEquals(r.gatewayAmount + r.creditValue, r.total, "$where gateway + credit value = total")
+            assertEquals(vatSum + r.shippingVat + t.paymentFeeVatAmount, r.vatTotal, "$where vat parts")
+            assertTrue(r.gatewayAmount >= 0 && r.creditValue >= 0 && r.creditAmount >= 0 && r.paymentFee >= 0 && r.shippingTotal >= 0, where)
+            assertTrue(r.creditValue <= t.preFee, "$where credits never pay the fee")
+            for (v in listOf(r.total, r.paymentFee, r.shippingTotal, r.gatewayAmount, r.creditValue, r.vatTotal)) assertEquals(0L, v % oq, "$where quantum $oq of $v")
+            if (!items.payWithCredits && r.creditAmount > 0L) {
+                assertTrue(t.preFee - r.creditValue >= oq && r.gatewayAmount > 0L, "$where a mixed order leaves the gateway something")
+                hit("mixed order leaves a remainder")
+            }
+            if (items.payWithCredits) {
+                assertEquals(0L, r.paymentFee, "$where no fee on a credit order")
+                if (r.creditAmount > 0L) assertEquals(0L, r.gatewayAmount, "$where no gateway on a full-credit order")
+            }
+            when (input.profile) {
+                PricingProfile.GIFT_CODE -> {
+                    assertEquals(0L, r.total, where)
+                    assertEquals("free", r.paymentMethodId, where)
+                    assertEquals(r.subtotal, r.discountTotal, "$where a gift is a full discount")
+                    assertEquals(0L, r.vatTotal, where)
+                }
+                PricingProfile.RENEWAL -> assertEquals(input.renewal!!.price, r.total, "$where a renewal charges the frozen price")
+                else -> {}
+            }
+
+            // property 7 of 05 section 17: no credits, no method, no fee => items + shipping
+            if (!items.payWithCredits) {
+                val bare = PricingEngine.finalize(items, case.shipping, TenderInput(null, null))
+                assertEquals(items.itemsTotal + bare.shippingTotal + (input.renewal?.paymentFee ?: 0L), bare.total, "$where bare total")
+                assertEquals(0L, bare.creditAmount, where)
+                assertEquals(0L, bare.creditValue, where)
+            }
+            // determinism
+            assertEquals(r, PricingEngine.finalize(items, case.shipping, tender), "$where determinism")
+
+            // the list of methods and the chosen method are the same arithmetic
+            if (!items.payWithCredits && input.pricingMode == PricingMode.MARKET && !(input.config.onlyAcceptCredits && input.config.creditsEnabled)) {
+                for (g in loopGateways) {
+                    val alone = PricingEngine.finalize(items, case.shipping, TenderInput(null, g))
+                    val listed = PricingEngine.evaluateMethods(items, case.shipping, TenderInput(null, null), listOf(g))
+                    assertEquals(1, listed.size, where)
+                    assertEquals(alone.paymentFee, listed[0].feeAmount, "$where ${g.id} fee")
+                    assertEquals(alone.gatewayAmount, listed[0].gatewayAmount, "$where ${g.id} gateway")
+                    if (alone.gatewayAmount > 0L) {
+                        assertEquals(alone.tender.unavailable, listed[0].unavailableReason, "$where ${g.id} reason")
+                        assertEquals(alone.tender.unavailable == null, listed[0].available, "$where ${g.id} available")
+                    }
+                }
+                hit("method list agrees with the tender")
+            }
+
+            for (b in e.branches) hit(b)
+            hit("profile ${input.profile}")
+            if (input.pricingMode != PricingMode.MARKET) hit("pricing mode ${input.pricingMode}")
+            if (items.creditsForced) hit("credits forced by the store")
+            if (r.canCheckout) hit("can checkout")
+        }
+        println("TENDER-LOOP branches=$seen")
+        val required = listOf(
+            "shipping charged", "full credit", "credits refused: balance", "credits refused: not payable", "mixed applied", "mixed clamped",
+            "mixed rejected", "mixed not supported", "fee", "free order", "minimum order", "mixed order leaves a remainder",
+            "method refused: AMOUNT_BELOW_MINIMUM", "method refused: AMOUNT_ABOVE_MAXIMUM", "method refused: PHYSICAL_NOT_SUPPORTED",
+            "method refused: CURRENCY_NOT_SUPPORTED", "method list agrees with the tender", "credits forced by the store", "can checkout",
+            "profile STOREFRONT", "profile PANEL", "profile GIFT_CODE", "profile INGAME", "profile RENEWAL",
+            "pricing mode EXTERNAL", "pricing mode EXTERNAL_TAX"
+        )
+        for (branch in required) assertTrue((seen[branch] ?: 0) >= 100, "the loop barely exercised '$branch': ${seen[branch]}")
     }
 
     private fun stripCommentsAndStrings(source: String): String {
