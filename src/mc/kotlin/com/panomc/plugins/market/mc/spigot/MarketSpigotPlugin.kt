@@ -17,6 +17,7 @@ import com.panomc.plugins.market.mc.spigot.gui.StoreMenu
 import com.panomc.plugins.market.mc.spigot.gui.menuChat
 import com.panomc.plugins.market.mc.spigot.placeholder.PlaceholderCache
 import com.panomc.plugins.market.mc.spigot.placeholder.PlaceholderHook
+import com.panomc.plugins.market.mc.spigot.vault.VaultBridge
 import com.panomc.plugins.pano.core.helper.PanoPluginMain
 import java.util.concurrent.atomic.AtomicBoolean
 import org.bukkit.Bukkit
@@ -32,7 +33,7 @@ import org.bukkit.plugin.java.JavaPlugin
  * Main class on Spigot / Paper / Folia (19 section 4). Obtains the Pano core through the `Pano` plugin, opens the
  * state under `plugins/PanoMarket/`, starts the sync loop and the connection monitor and feeds the authenticated
  * joins into the engine, then adds the optional in-game features of MC-05 (commands, broadcast, join notifications; the
- * chest GUI and the placeholders of MC-06; Vault follows in MC-07).
+ * chest GUI and the placeholders of MC-06) and the Vault bridge of MC-07 (CONVERT / PROVIDER).
  */
 class MarketSpigotPlugin : JavaPlugin(), Listener {
     private val tracker = PresenceTracker()
@@ -42,6 +43,7 @@ class MarketSpigotPlugin : JavaPlugin(), Listener {
     private var host: SpigotFeatureHost? = null
     private var commands: SpigotCommands? = null
     private var gameLink: CoreGameLink? = null
+    private var vault: VaultBridge? = null
     private var menu: StoreMenu? = null
     private var menuView: BukkitMenuView? = null
     private var placeholders: PlaceholderHook? = null
@@ -86,13 +88,17 @@ class MarketSpigotPlugin : JavaPlugin(), Listener {
                 onPresent = { name ->
                     component?.playerPresent(name)
                     features?.onPlayerPresent(name)
+                    vault?.onPlayerPresent(name)
                 },
                 onProblem = { log.warn(it) }
             )
             rules = presenceRules
+            val vaultBridge = VaultBridge(this, f, link, scheduler, tracker, featureHost, dataFolder.toPath(), description.version, log)
+            vault = vaultBridge
             val platform = SpigotMcPlatform(
                 this, scheduler, tracker, log, flavor,
                 neverJoinedUuid = { name -> panoMain.getNeverJoinedPlayerUniqueId(name) },
+                vaultProbe = vaultBridge::vaultAvailable,
                 placeholderProbe = { placeholdersOn.get() }
             )
             val c = MarketComponent(
@@ -115,6 +121,7 @@ class MarketSpigotPlugin : JavaPlugin(), Listener {
             installGui(f, scheduler, link, log)
             installPlaceholders(f, link, log)
             commands = SpigotCommands(this, f, featureHost, log).also { it.register() }
+            vaultBridge.start()
             c.start()
             log.info("Market component enabled on $flavor (version ${description.version}).")
         } catch (t: Throwable) {
@@ -162,6 +169,8 @@ class MarketSpigotPlugin : JavaPlugin(), Listener {
         placeholdersOn.set(false)
         commands?.unregister()
         commands = null
+        vault?.stop()
+        vault = null
         component?.stop()
         component = null
         gameLink?.close()
