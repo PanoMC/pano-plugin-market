@@ -28,7 +28,11 @@ class SchemaVerifierIT : MarketDbTestBase() {
         "pano_market_product_field" to ("uq_product_key" to listOf("productId", "fieldKey")),
         "pano_market_bundle_item" to ("uq_bundle_child" to listOf("bundleProductId", "productId", "variantId")),
         "pano_market_product_provider_meta" to ("uq_product_variant_provider" to listOf("productId", "variantId", "providerId")),
-        "pano_market_currency_rate" to ("uq_currency" to listOf("currency"))
+        "pano_market_currency_rate" to ("uq_currency" to listOf("currency")),
+        // scheme version 4 (01 sections 3.5 and 8)
+        "pano_market_redemption" to ("uq_kind_ref_order" to listOf("kind", "refId", "orderId")),
+        "pano_market_creator_earning" to ("uq_order_code" to listOf("orderId", "creatorCodeId")),
+        "pano_market_creator_payout" to ("uq_idem" to listOf("idempotencyKey"))
     )
 
     private suspend fun rebuild() {

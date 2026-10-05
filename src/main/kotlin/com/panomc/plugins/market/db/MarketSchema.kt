@@ -111,6 +111,10 @@ object MarketSchema {
             columns += Column(name, "VARCHAR($length)", nullable, default?.let { "'$it'" })
         }
 
+        fun char(name: String, length: Int) {
+            columns += Column(name, "CHAR($length)")
+        }
+
         fun text(name: String, nullable: Boolean = true) {
             columns += Column(name, "MEDIUMTEXT", nullable)
         }
@@ -225,6 +229,12 @@ object MarketSchema {
         str("status", 16, "ACTIVE")
         timestamps()
         unique("unique_code", "code")
+        // Scheme version 4 (01 section 3.2).
+        added {
+            text("categoryIds")
+            bigint("deletedAt", nullable = true)
+            int("legacyUsedCount", default = 0)
+        }
     }
 
     val CREATOR_CODE = table("market_creator_code", "Market creator codes table.") {
@@ -242,6 +252,14 @@ object MarketSchema {
         str("status", 16, "ACTIVE")
         timestamps()
         unique("unique_code", "code")
+        // Scheme version 4 (01 section 3.3).
+        added {
+            bigint("creatorUserId", nullable = true)
+            bigint("paidOut", default = 0)
+            bigint("deletedAt", nullable = true)
+            int("legacyUsedCount", default = 0)
+            key("idx_creatorUser", "creatorUserId")
+        }
     }
 
     val DISCOUNT = table("market_discount", "Market automatic discounts table.") {
@@ -259,6 +277,12 @@ object MarketSchema {
         int("usedCount", default = 0)
         str("status", 16, "ACTIVE")
         timestamps()
+        // Scheme version 4 (01 section 3.1).
+        added {
+            flag("showBadge", 1)
+            bigint("deletedAt", nullable = true)
+            int("legacyUsedCount", default = 0)
+        }
     }
 
     val GIFT = table("market_gift", "Market gift codes table.") {
@@ -273,6 +297,15 @@ object MarketSchema {
         bigint("expiryDate", nullable = true)
         timestamps()
         unique("unique_code", "code")
+        // Scheme version 4 (01 section 3.4). redeemLimit / customerRedeemLimit default to 1 in the column itself: an
+        // existing row gets 1 from the default, there is no backfill statement (NULL is a legitimate value).
+        added {
+            str("name", 255, "")
+            int("redeemLimit", nullable = true, default = 1)
+            int("customerRedeemLimit", nullable = true, default = 1)
+            int("usedCount", default = 0)
+            bigint("deletedAt", nullable = true)
+        }
     }
 
     val ORDER = table("market_order", "Market order table.") {
@@ -464,10 +497,72 @@ object MarketSchema {
         unique("uq_currency", "currency")
     }
 
+    // --- scheme version 4: promotions (01 sections 3.5 and 8) ---------------------------------------------------
+
+    val REDEMPTION = table("market_redemption", "Market code and discount redemption table.") {
+        id()
+        str("kind", 24)
+        bigint("refId")
+        str("code", 64, nullable = true)
+        bigint("orderId")
+        bigint("userId", nullable = true)
+        str("buyerKey", 80)
+        str("email", 255, nullable = true)
+        str("recipientKey", 80, "")
+        bigint("amount", default = 0)
+        str("currency", 8)
+        str("state", 16, "HELD")
+        timestamps()
+        unique("uq_kind_ref_order", "kind", "refId", "orderId")
+        key("idx_limit", "kind", "refId", "buyerKey", "state")
+        key("idx_limit_recipient", "kind", "refId", "recipientKey", "state")
+        key("idx_order", "orderId")
+    }
+
+    val CREATOR_EARNING = table("market_creator_earning", "Market creator commission earning table.") {
+        id()
+        bigint("creatorCodeId")
+        bigint("creatorUserId", nullable = true)
+        bigint("orderId")
+        bigint("baseAmount")
+        bigint("commissionPercent")
+        bigint("amount")
+        str("currency", 8)
+        str("state", 16, "PENDING")
+        bigint("availableAt", nullable = true)
+        bigint("reversedAmount", default = 0)
+        bigint("payoutId", nullable = true)
+        timestamps()
+        unique("uq_order_code", "orderId", "creatorCodeId")
+        key("idx_code_state", "creatorCodeId", "state")
+        key("idx_available", "state", "availableAt")
+    }
+
+    val CREATOR_PAYOUT = table("market_creator_payout", "Market creator payout table.") {
+        id()
+        bigint("creatorCodeId")
+        bigint("creatorUserId", nullable = true)
+        bigint("amount")
+        str("currency", 8)
+        str("method", 16)
+        str("state", 16, "PENDING")
+        bigint("creditTxId", nullable = true)
+        text("actions")
+        str("note", 255, nullable = true)
+        bigint("paidBy", nullable = true)
+        bigint("paidAt", nullable = true)
+        str("idempotencyKey", 64)
+        char("idempotencyHash", 64)
+        timestamps()
+        key("idx_code", "creatorCodeId")
+        unique("uq_idem", "idempotencyKey")
+    }
+
     /** Every table the plugin owns, in creation order. Later migration slices append their tables here. */
     val tables: List<Table> = listOf(
         CATEGORY, COMPARISON, COUPON, CREATOR_CODE, DISCOUNT, GIFT, ORDER, ORDER_ITEM, PAYMENT_METHOD, PRODUCT,
-        PRODUCT_VARIANT, PRODUCT_PRICE, PRODUCT_FIELD, BUNDLE_ITEM, PRODUCT_PROVIDER_META, CURRENCY_RATE
+        PRODUCT_VARIANT, PRODUCT_PRICE, PRODUCT_FIELD, BUNDLE_ITEM, PRODUCT_PROVIDER_META, CURRENCY_RATE,
+        REDEMPTION, CREATOR_EARNING, CREATOR_PAYOUT
     )
 
     /** The table declared under [name] (without prefix), or an error naming it. */

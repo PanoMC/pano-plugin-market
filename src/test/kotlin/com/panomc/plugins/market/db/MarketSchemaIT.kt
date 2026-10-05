@@ -4,6 +4,8 @@ import com.panomc.plugins.market.db.impl.MarketBundleItemDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCategoryDaoImpl
 import com.panomc.plugins.market.db.impl.MarketComparisonDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCouponDaoImpl
+import com.panomc.plugins.market.db.impl.MarketCreatorEarningDaoImpl
+import com.panomc.plugins.market.db.impl.MarketCreatorPayoutDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCreatorCodeDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCurrencyRateDaoImpl
 import com.panomc.plugins.market.db.impl.MarketDiscountDaoImpl
@@ -16,6 +18,7 @@ import com.panomc.plugins.market.db.impl.MarketProductFieldDaoImpl
 import com.panomc.plugins.market.db.impl.MarketProductPriceDaoImpl
 import com.panomc.plugins.market.db.impl.MarketProductProviderMetaDaoImpl
 import com.panomc.plugins.market.db.impl.MarketProductVariantDaoImpl
+import com.panomc.plugins.market.db.impl.MarketRedemptionDaoImpl
 import com.panomc.plugins.market.db.model.MarketCoupon
 import com.panomc.plugins.market.db.model.MarketCreatorCode
 import com.panomc.plugins.market.db.model.MarketDiscount
@@ -45,7 +48,9 @@ class MarketSchemaIT : MarketDbTestBase() {
         "category", "comparison", "coupon", "creator_code", "discount", "gift", "order", "order_item",
         "payment_method", "product",
         // scheme version 3 (MK-023)
-        "product_variant", "product_price", "product_field", "bundle_item", "product_provider_meta", "currency_rate"
+        "product_variant", "product_price", "product_field", "bundle_item", "product_provider_meta", "currency_rate",
+        // scheme version 4 (MK-024)
+        "redemption", "creator_earning", "creator_payout"
     ).map { "pano_market_$it" }.sorted()
 
     /** Drops every table and runs `ensure` again: the way a test that damaged the schema puts it back. */
@@ -57,7 +62,7 @@ class MarketSchemaIT : MarketDbTestBase() {
     // --- ensure ------------------------------------------------------------------------------------------------
 
     @Test
-    fun `ensure on an empty database creates the sixteen tables`(): Unit = runBlocking {
+    fun `ensure on an empty database creates the nineteen tables`(): Unit = runBlocking {
         MarketTestDb.dropAllTables(pool)
         val report = MarketSchema.ensure(pool, prefix)
         assertTrue(report.clean, report.ddlErrors.toString())
@@ -75,7 +80,7 @@ class MarketSchemaIT : MarketDbTestBase() {
         val after = SchemaSnapshot.take(pool)
         assertTrue(first.clean && second.clean)
         assertEquals(before, after)
-        assertTrue(before.columns.isNotEmpty() && before.keys.isNotEmpty() && before.tables.size == 16)
+        assertTrue(before.columns.isNotEmpty() && before.keys.isNotEmpty() && before.tables.size == 19)
     }
 
     @Test
@@ -99,7 +104,7 @@ class MarketSchemaIT : MarketDbTestBase() {
 
             val expected = SchemaSnapshot.take(pool)
             val actual = SchemaSnapshot.take(referencePool)
-            assertEquals(16, expected.tables.size)
+            assertEquals(19, expected.tables.size)
             assertEquals(expected.tables, actual.tables)
             assertEquals(expected.columns, actual.columns)
             assertEquals(expected.keys, actual.keys)
@@ -157,11 +162,13 @@ class MarketSchemaIT : MarketDbTestBase() {
         { c -> MarketPaymentMethodDaoImpl().init(c) }, { c -> MarketProductDaoImpl().init(c) },
         { c -> MarketProductVariantDaoImpl().init(c) }, { c -> MarketProductPriceDaoImpl().init(c) },
         { c -> MarketProductFieldDaoImpl().init(c) }, { c -> MarketBundleItemDaoImpl().init(c) },
-        { c -> MarketProductProviderMetaDaoImpl().init(c) }, { c -> MarketCurrencyRateDaoImpl().init(c) }
+        { c -> MarketProductProviderMetaDaoImpl().init(c) }, { c -> MarketCurrencyRateDaoImpl().init(c) },
+        { c -> MarketRedemptionDaoImpl().init(c) }, { c -> MarketCreatorEarningDaoImpl().init(c) },
+        { c -> MarketCreatorPayoutDaoImpl().init(c) }
     )
 
     @Test
-    fun `the sixteen Dao init calls create the same schema as ensure`(): Unit = runBlocking {
+    fun `the nineteen Dao init calls create the same schema as ensure`(): Unit = runBlocking {
         MarketTestDb.dropAllTables(pool)
         allDaoInits().forEach { it(pool) }
         allDaoInits().forEach { it(pool) } // twice: idempotent
