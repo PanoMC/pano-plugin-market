@@ -17,7 +17,8 @@
     "coupons": "Поиск купонов...",
     "creator-codes": "Поиск игрока или кода...",
     "payment-methods": "Поиск способов оплаты...",
-    "orders": "Поиск заказов..."
+    "orders": "Поиск заказов...",
+    "credit-accounts": "Поиск игрока..."
   },
   "pages": {
     "orders": {
@@ -882,6 +883,55 @@
         "INVALID": "Введите корректную цель (сумма больше 0 или целое число от 1).",
         "BEFORE_START": "Окончание должно быть позже начала."
       }
+    },
+    "credits": {
+      "title": "Кредиты",
+      "grant-credits": "Начислить кредиты",
+      "grant": "Начислить",
+      "revoke": "Списать",
+      "view-ledger": "Открыть журнал",
+      "account-count": "Счетов: {count}",
+      "transaction-count": "Операций: {count}",
+      "disabled-title": "Кредиты отключены",
+      "disabled-body": "Игроки сейчас не могут платить кредитами. Баланс по-прежнему можно начислять и списывать.",
+      "disabled-link": "Открыть настройки кредитов",
+      "tab": {
+        "accounts": "Счета",
+        "transactions": "Операции"
+      },
+      "totals": {
+        "issued": "Выдано",
+        "spent": "Потрачено",
+        "held": "В резерве",
+        "revoked": "Списано",
+        "external": "Экономика сервера",
+        "outstanding": "Остаток"
+      },
+      "table": {
+        "player": "Игрок",
+        "balance": "Баланс",
+        "value": "Стоимость",
+        "date": "Дата",
+        "type": "Тип",
+        "amount": "Сумма",
+        "shortfall": "Недостача",
+        "order": "Заказ",
+        "by": "Кем",
+        "note": "Заметка"
+      },
+      "filter": {
+        "types": "Типы ({count})",
+        "user-id": "ID игрока",
+        "order-id": "ID заказа"
+      }
+    },
+    "credit-account": {
+      "title": "Журнал кредитов",
+      "entry-count": "Записей: {count}",
+      "player-id": "Игрок #{id}",
+      "table": {
+        "balance-after": "Баланс после"
+      }
     }
   },
   "common": {
@@ -1429,6 +1479,30 @@
       "show-on-store": "Показывать в магазине",
       "toast-created": "Цель создана.",
       "toast-updated": "Цель обновлена."
+    },
+    "credit-adjust": {
+      "title-grant": "Начислить кредиты",
+      "title-revoke": "Списать кредиты",
+      "submit-grant": "Начислить кредиты",
+      "submit-revoke": "Списать кредиты",
+      "username": "Имя игрока",
+      "amount": "Сумма",
+      "note": "Причина",
+      "note-help": "Видна в журнале и игроку. От 3 до 255 символов.",
+      "balance": "Баланс: {balance}",
+      "unknown-player": "Игрока с таким именем нет.",
+      "toast-granted": "Кредиты начислены.",
+      "toast-revoked": "Кредиты списаны.",
+      "toast-shortfall": "Удалось списать только {taken}. На балансе не хватало {shortfall}.",
+      "toast-nothing": "Списывать нечего: баланс пуст.",
+      "error": {
+        "amount-REQUIRED": "Введите сумму.",
+        "amount-INVALID": "Введите сумму больше 0 не более чем с двумя знаками после запятой.",
+        "amount-TOO_LARGE": "Сумма не может превышать 1 000 000.",
+        "note-REQUIRED": "Укажите причину.",
+        "note-TOO_SHORT": "Причина должна содержать не менее 3 символов.",
+        "note-TOO_LONG": "Причина не может быть длиннее 255 символов."
+      }
     }
   },
   "settings": {
@@ -2093,6 +2167,23 @@
       "ONE_TIME": "Разовая",
       "WEEKLY": "Еженедельно",
       "MONTHLY": "Ежемесячно"
+    },
+    "credit-tx": {
+      "TOPUP": "Пополнение",
+      "GRANT": "Ручное начисление",
+      "REVOKE": "Ручное списание",
+      "HOLD": "Резерв под заказ",
+      "CAPTURE": "Потрачено на заказ",
+      "RELEASE": "Резерв снят",
+      "REFUND": "Возврат",
+      "CASHBACK": "Кэшбэк",
+      "CASHBACK_REVERSAL": "Отмена кэшбэка",
+      "GIFT": "Подарочный код",
+      "ACTION": "Действие товара",
+      "ACTION_REVERSAL": "Отмена действия",
+      "CREATOR_PAYOUT": "Выплата автору",
+      "EXTERNAL_IN": "Ввод с сервера",
+      "EXTERNAL_OUT": "Вывод на сервер"
     }
   },
   "alerts": {

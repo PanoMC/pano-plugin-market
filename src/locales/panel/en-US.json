@@ -17,7 +17,8 @@
     "coupons": "Search coupons...",
     "creator-codes": "Search player or code...",
     "payment-methods": "Search methods...",
-    "orders": "Search orders..."
+    "orders": "Search orders...",
+    "credit-accounts": "Search player..."
   },
   "pages": {
     "orders": {
@@ -882,6 +883,55 @@
         "INVALID": "Enter a valid target (money above 0, or a whole number of at least 1).",
         "BEFORE_START": "The end must be after the start."
       }
+    },
+    "credits": {
+      "title": "Credits",
+      "grant-credits": "Grant Credits",
+      "grant": "Grant",
+      "revoke": "Revoke",
+      "view-ledger": "View Ledger",
+      "account-count": "{count} Accounts",
+      "transaction-count": "{count} Transactions",
+      "disabled-title": "Credits Are Disabled",
+      "disabled-body": "Players cannot pay with credits right now. You can still grant and revoke balances.",
+      "disabled-link": "Open credit settings",
+      "tab": {
+        "accounts": "Accounts",
+        "transactions": "Transactions"
+      },
+      "totals": {
+        "issued": "Issued",
+        "spent": "Spent",
+        "held": "Held",
+        "revoked": "Revoked",
+        "external": "Server economy",
+        "outstanding": "Outstanding"
+      },
+      "table": {
+        "player": "Player",
+        "balance": "Balance",
+        "value": "Value",
+        "date": "Date",
+        "type": "Type",
+        "amount": "Amount",
+        "shortfall": "Shortfall",
+        "order": "Order",
+        "by": "By",
+        "note": "Note"
+      },
+      "filter": {
+        "types": "Types ({count})",
+        "user-id": "Player ID",
+        "order-id": "Order ID"
+      }
+    },
+    "credit-account": {
+      "title": "Credit Ledger",
+      "entry-count": "{count} Entries",
+      "player-id": "Player #{id}",
+      "table": {
+        "balance-after": "Balance After"
+      }
     }
   },
   "common": {
@@ -1429,6 +1479,30 @@
       "show-on-store": "Show On Store",
       "toast-created": "Goal created.",
       "toast-updated": "Goal updated."
+    },
+    "credit-adjust": {
+      "title-grant": "Grant Credits",
+      "title-revoke": "Revoke Credits",
+      "submit-grant": "Grant Credits",
+      "submit-revoke": "Revoke Credits",
+      "username": "Player username",
+      "amount": "Amount",
+      "note": "Reason",
+      "note-help": "Shown in the ledger and to the player. 3 to 255 characters.",
+      "balance": "Balance: {balance}",
+      "unknown-player": "No player with this username.",
+      "toast-granted": "Credits granted.",
+      "toast-revoked": "Credits revoked.",
+      "toast-shortfall": "Only {taken} could be revoked. {shortfall} was missing from the balance.",
+      "toast-nothing": "Nothing could be revoked: the balance is empty.",
+      "error": {
+        "amount-REQUIRED": "Enter an amount.",
+        "amount-INVALID": "Enter an amount above 0 with at most two decimals.",
+        "amount-TOO_LARGE": "The amount cannot be above 1,000,000.",
+        "note-REQUIRED": "Enter a reason.",
+        "note-TOO_SHORT": "The reason needs at least 3 characters.",
+        "note-TOO_LONG": "The reason can be at most 255 characters."
+      }
     }
   },
   "settings": {
@@ -2093,6 +2167,23 @@
       "ONE_TIME": "One Time",
       "WEEKLY": "Weekly",
       "MONTHLY": "Monthly"
+    },
+    "credit-tx": {
+      "TOPUP": "Top-up",
+      "GRANT": "Manual grant",
+      "REVOKE": "Manual revoke",
+      "HOLD": "Held for order",
+      "CAPTURE": "Spent on order",
+      "RELEASE": "Hold released",
+      "REFUND": "Refund",
+      "CASHBACK": "Cashback",
+      "CASHBACK_REVERSAL": "Cashback reversal",
+      "GIFT": "Gift code",
+      "ACTION": "Product action",
+      "ACTION_REVERSAL": "Action reversal",
+      "CREATOR_PAYOUT": "Creator payout",
+      "EXTERNAL_IN": "Server deposit",
+      "EXTERNAL_OUT": "Server withdrawal"
     }
   },
   "alerts": {

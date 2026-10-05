@@ -17,7 +17,8 @@
     "coupons": "Kupon ara...",
     "creator-codes": "Oyuncu veya kod ara...",
     "payment-methods": "Yöntem ara...",
-    "orders": "Sipariş ara..."
+    "orders": "Sipariş ara...",
+    "credit-accounts": "Oyuncu ara..."
   },
   "pages": {
     "orders": {
@@ -882,6 +883,55 @@
         "INVALID": "Geçerli bir hedef girin (0 üzeri tutar veya en az 1 tam sayı).",
         "BEFORE_START": "Bitiş, başlangıçtan sonra olmalıdır."
       }
+    },
+    "credits": {
+      "title": "Krediler",
+      "grant-credits": "Kredi Ekle",
+      "grant": "Ekle",
+      "revoke": "Düş",
+      "view-ledger": "Defteri Gör",
+      "account-count": "{count} Hesap",
+      "transaction-count": "{count} İşlem",
+      "disabled-title": "Krediler Kapalı",
+      "disabled-body": "Oyuncular şu an kredi ile ödeme yapamaz. Bakiye ekleyip düşebilirsiniz.",
+      "disabled-link": "Kredi ayarlarını aç",
+      "tab": {
+        "accounts": "Hesaplar",
+        "transactions": "İşlemler"
+      },
+      "totals": {
+        "issued": "Verilen",
+        "spent": "Harcanan",
+        "held": "Ayrılan",
+        "revoked": "Geri alınan",
+        "external": "Sunucu ekonomisi",
+        "outstanding": "Kalan"
+      },
+      "table": {
+        "player": "Oyuncu",
+        "balance": "Bakiye",
+        "value": "Değer",
+        "date": "Tarih",
+        "type": "Tür",
+        "amount": "Tutar",
+        "shortfall": "Eksik",
+        "order": "Sipariş",
+        "by": "İşlemi Yapan",
+        "note": "Not"
+      },
+      "filter": {
+        "types": "Türler ({count})",
+        "user-id": "Oyuncu ID",
+        "order-id": "Sipariş ID"
+      }
+    },
+    "credit-account": {
+      "title": "Kredi Defteri",
+      "entry-count": "{count} Kayıt",
+      "player-id": "Oyuncu #{id}",
+      "table": {
+        "balance-after": "Sonraki Bakiye"
+      }
     }
   },
   "common": {
@@ -1429,6 +1479,30 @@
       "show-on-store": "Mağazada Göster",
       "toast-created": "Hedef oluşturuldu.",
       "toast-updated": "Hedef güncellendi."
+    },
+    "credit-adjust": {
+      "title-grant": "Kredi Ekle",
+      "title-revoke": "Kredi Düş",
+      "submit-grant": "Kredi Ekle",
+      "submit-revoke": "Kredi Düş",
+      "username": "Oyuncu kullanıcı adı",
+      "amount": "Tutar",
+      "note": "Gerekçe",
+      "note-help": "Defterde ve oyuncuya gösterilir. 3 ile 255 karakter.",
+      "balance": "Bakiye: {balance}",
+      "unknown-player": "Bu kullanıcı adına sahip oyuncu yok.",
+      "toast-granted": "Kredi eklendi.",
+      "toast-revoked": "Kredi düşüldü.",
+      "toast-shortfall": "Yalnızca {taken} düşülebildi. Bakiyede {shortfall} eksikti.",
+      "toast-nothing": "Düşülecek bir şey yok: bakiye boş.",
+      "error": {
+        "amount-REQUIRED": "Bir tutar girin.",
+        "amount-INVALID": "0'dan büyük, en fazla iki ondalıklı bir tutar girin.",
+        "amount-TOO_LARGE": "Tutar 1.000.000'dan büyük olamaz.",
+        "note-REQUIRED": "Bir gerekçe girin.",
+        "note-TOO_SHORT": "Gerekçe en az 3 karakter olmalı.",
+        "note-TOO_LONG": "Gerekçe en fazla 255 karakter olabilir."
+      }
     }
   },
   "settings": {
@@ -2093,6 +2167,23 @@
       "ONE_TIME": "Tek Seferlik",
       "WEEKLY": "Haftalık",
       "MONTHLY": "Aylık"
+    },
+    "credit-tx": {
+      "TOPUP": "Yükleme",
+      "GRANT": "Manuel ekleme",
+      "REVOKE": "Manuel düşme",
+      "HOLD": "Sipariş için ayrıldı",
+      "CAPTURE": "Siparişte harcandı",
+      "RELEASE": "Ayrılan bakiye serbest",
+      "REFUND": "İade",
+      "CASHBACK": "Nakit iade",
+      "CASHBACK_REVERSAL": "Nakit iade geri alma",
+      "GIFT": "Hediye kodu",
+      "ACTION": "Ürün eylemi",
+      "ACTION_REVERSAL": "Eylem geri alma",
+      "CREATOR_PAYOUT": "İçerik üretici ödemesi",
+      "EXTERNAL_IN": "Sunucudan yükleme",
+      "EXTERNAL_OUT": "Sunucuya çekme"
     }
   },
   "alerts": {
