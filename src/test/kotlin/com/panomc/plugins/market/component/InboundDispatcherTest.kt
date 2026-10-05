@@ -20,6 +20,8 @@ import com.panomc.plugins.market.routes.api.payment.InboundDispatcher
 import com.panomc.plugins.market.routes.api.payment.InboundEventKey
 import com.panomc.plugins.market.routes.api.payment.InboundEventStore
 import com.panomc.plugins.market.routes.api.payment.InboundProviders
+import com.panomc.plugins.market.routes.api.payment.InboundRouteSupport
+import com.panomc.plugins.market.routes.api.payment.MarketInboundApi
 import com.panomc.plugins.market.routes.api.payment.PaymentEventApplier
 import com.panomc.plugins.market.routes.api.payment.PaymentEventSink
 import com.panomc.plugins.market.routes.api.payment.ProviderAccess
@@ -50,6 +52,15 @@ import com.panomc.plugins.market.support.FakePaymentProvider
 import com.panomc.plugins.market.support.SeqIds
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.Vertx
+import io.vertx.core.buffer.Buffer
+import io.vertx.ext.web.Router
+import io.vertx.ext.web.client.WebClient
+import io.vertx.ext.web.client.WebClientOptions
+import io.vertx.ext.web.multipart.MultipartForm
+import io.vertx.kotlin.coroutines.coAwait
+import io.vertx.kotlin.coroutines.dispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -1122,6 +1133,148 @@ class InboundDispatcherTest {
         withTimeout(10_000) { listOf(one, two).awaitAll() }
 
         assertEquals(listOf("PENDING", "PROCESSING"), statuses, "the second call was handed the attempt as it was after the first one, not the one it read before waiting")
+    }
+
+    // ==================================================================================================== over real HTTP
+
+    /** The routes' glue on a real Vert.x server: the base class's body handler, `InboundRouteSupport.callOf` and `send`, the dispatcher behind fakes. */
+    private fun httpRouter(): Router {
+        val api = object : MarketInboundApi() {
+            override val paths = emptyList<com.panomc.platform.model.Path>()
+
+            override suspend fun handleMarket(context: io.vertx.ext.web.RoutingContext): com.panomc.platform.model.Result? = null
+        }
+        val router = Router.router(vertx)
+
+        fun mount(path: String, kind: InboundKind, outcome: (io.vertx.ext.web.RoutingContext) -> ReturnOutcome? = { null }) {
+            router.route(path).handler(api.bodyHandler()).handler { context ->
+                CoroutineScope(vertx.dispatcher()).launch {
+                    try {
+                        val call = InboundRouteSupport.callOf(context, kind, outcome(context)) { "203.0.113.9" }
+
+                        if (call == null) InboundRouteSupport.notFound(context) else InboundRouteSupport.send(context, dispatcher.handle(call))
+                    } catch (t: Throwable) {
+                        context.fail(t) // a failure of the glue must never leave the client waiting
+                    }
+                }
+            }
+        }
+
+        mount("/api/market/payments/:providerId/webhook", InboundKind.WEBHOOK)
+        mount("/api/market/payments/:providerId/webhook/:channel", InboundKind.WEBHOOK)
+        mount("/api/market/payments/:providerId/notify/:attemptToken", InboundKind.NOTIFY)
+        mount("/api/market/payments/:providerId/return/:attemptToken/:outcome", InboundKind.RETURN) { InboundRouteSupport.outcomeOf(it.pathParam("outcome")) }
+
+        return router
+    }
+
+    private fun <T> http(block: suspend (port: Int, client: WebClient) -> T): T = runBlocking {
+        val server = vertx.createHttpServer().requestHandler(httpRouter()).listen(0).coAwait()
+        val client = WebClient.create(vertx, WebClientOptions().setFollowRedirects(false))
+
+        try {
+            block(server.actualPort(), client)
+        } finally {
+            client.close()
+            server.close().coAwait()
+        }
+    }
+
+    @Test
+    fun `over HTTP the provider gets the exact bytes, lower-case header names, the raw and the decoded query, and its reply goes back verbatim`(): Unit = http { port, client ->
+        val body = byteArrayOf(0x7b, 0x22, 0xc3.toByte(), 0xa9.toByte(), 0x22, 0x3a, 0x31, 0x7d, 0xff.toByte(), 0x00) // not valid UTF-8
+        var seen: PaymentInboundRequest? = null
+
+        fake.onInbound = {
+            seen = it
+
+            ok(reply = HttpReply(202, "application/json", "{\"received\":true}".toByteArray()).also { r -> r.headers = mapOf("X-Gateway-Ack" to "1", "Set-Cookie" to "sid=1") })
+        }
+
+        val response = client.post(port, "localhost", "/api/market/payments/fake/webhook/orders?a=1&b=%C3%A9")
+            .putHeader("X-Signature", "t=1,v1=abc").putHeader("Content-Type", "application/octet-stream").sendBuffer(Buffer.buffer(body)).coAwait()
+        val request = seen!!.http
+
+        assertEquals(202, response.statusCode())
+        assertEquals("{\"received\":true}", response.bodyAsString())
+        assertEquals("1", response.getHeader("X-Gateway-Ack"))
+        assertNull(response.getHeader("Set-Cookie"), "a provider cannot set state on the site's origin")
+        assertEquals("no-store", response.getHeader("Cache-Control"))
+        assertTrue(body.contentEquals(request.body), "exact bytes, also when they are not text")
+        assertEquals("abc", request.header("x-signature")!!.substringAfter("v1="))
+        assertTrue(request.headers.keys.all { it == it.lowercase() }, request.headers.keys.toString())
+        assertEquals("a=1&b=%C3%A9", request.rawQuery)
+        assertEquals(mapOf("a" to listOf("1"), "b" to listOf("é")), request.query)
+        assertEquals("orders", request.channel)
+        assertEquals("POST", request.method)
+        assertEquals("203.0.113.9", request.remoteIp)
+
+        val row = only()
+
+        assertEquals("orders", row.subChannel)
+        assertEquals(PaymentEventStatus.PROCESSED, row.status)
+        assertEquals("[binary ${body.size} bytes]", row.body, "a settled binary body is not kept")
+    }
+
+    @Test
+    fun `over HTTP a body of exactly 1 MB is accepted, one byte more is answered 413 before any provider code, a multipart form arrives as attributes`(): Unit = http { port, client ->
+        var seen: PaymentInboundRequest? = null
+
+        fake.onInbound = { seen = it; ok() }
+
+        val limit = 1_048_576 // 02 section 7.1, written out so that a change of the constant is a change of the contract
+        val exact = client.post(port, "localhost", "/api/market/payments/fake/webhook").sendBuffer(Buffer.buffer(ByteArray(limit) { 'x'.code.toByte() })).coAwait()
+
+        assertEquals(200, exact.statusCode())
+        assertEquals(limit, seen!!.http.body.size)
+
+        seen = null
+
+        val over = client.post(port, "localhost", "/api/market/payments/fake/webhook").sendBuffer(Buffer.buffer(ByteArray(limit + 1) { 'x'.code.toByte() })).coAwait()
+
+        assertEquals(413, over.statusCode())
+        assertNull(seen, "an over-limit body never reaches the provider")
+        assertEquals(1, rows().size, "and is not stored")
+
+        val form = MultipartForm.create().attribute("status", "ok").attribute("ref", "a").attribute("ref", "b")
+        val multipart = client.post(port, "localhost", "/api/market/payments/fake/webhook").sendMultipartForm(form).coAwait()
+
+        assertEquals(200, multipart.statusCode())
+        assertEquals(0, seen!!.http.body.size, "a multipart body is not buffered")
+        assertEquals(mapOf("status" to listOf("ok"), "ref" to listOf("a", "b")), seen!!.http.form())
+    }
+
+    @Test
+    fun `over HTTP a notification finds its attempt by the token, a return answers a 303 to the order page, a malformed path is a 404 that stores nothing`(): Unit = http { port, client ->
+        var seen: PaymentInboundRequest? = null
+
+        fake.onInbound = { seen = it; ok(reply = HttpReply.text("pong")) }
+
+        val notify = client.get(port, "localhost", "/api/market/payments/fake/notify/$token?uid=1&sig=abc").send().coAwait()
+
+        assertEquals(200, notify.statusCode())
+        assertEquals("pong", notify.bodyAsString())
+        assertEquals(1L, seen!!.attempt!!.id)
+        assertEquals("GET", seen!!.http.method)
+        assertEquals(0, seen!!.http.body.size, "an empty-body GET pingback")
+        assertEquals("uid=1&sig=abc", seen!!.http.rawQuery)
+
+        val back = client.get(port, "localhost", "/api/market/payments/fake/return/$token/pending").send().coAwait()
+
+        assertEquals(303, back.statusCode())
+        assertEquals("https://shop.example/store/order/ORDER000000000000001?return=pending", back.getHeader("Location"))
+
+        val before = rows().size
+
+        for (path in listOf(
+            "/api/market/payments/FAKE/notify/$token", "/api/market/payments/fake/notify/short", "/api/market/payments/fake/notify/${"A".repeat(40)}",
+            "/api/market/payments/fake/return/$token/unknown", "/api/market/payments/f/notify/$token", "/api/market/payments/fake/webhook/Bad_Channel"
+        )) {
+            assertEquals(404, client.get(port, "localhost", path).send().coAwait().statusCode(), path)
+        }
+
+        assertEquals(404, client.get(port, "localhost", "/api/market/payments/fake/notify/${"f".repeat(40)}").send().coAwait().statusCode(), "a token nobody holds")
+        assertEquals(before, rows().size, "nothing was stored by any of them")
     }
 
     // ======================================================================================== settled rows are redacted
