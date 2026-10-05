@@ -59,6 +59,10 @@
     "UPDATED_MARKET_SETTINGS": "<b>{username}</b> обновил настройки маркета.",
     "UPDATED_MARKET_PAYMENT_METHOD": "<b>{username}</b> обновил способ оплаты \"{name}\".",
     "REVEALED_MARKET_PAYMENT_SECRET": "<b>{username}</b> раскрыл секретные ключи способа оплаты \"{name}\".",
+    "FAILED_MARKET_SECRET_REVEAL": "<b>{username}</b> ввёл неверный пароль при раскрытии секретных ключей \"{name}\".",
+    "TOGGLED_MARKET_PAYMENT_METHOD": "<b>{username}</b> изменил состояние способа оплаты \"{name}\".",
+    "SORTED_MARKET_PAYMENT_METHODS": "<b>{username}</b> изменил порядок способов оплаты.",
+    "RAN_MARKET_PROVIDER_ACTION": "<b>{username}</b> запустил действие \"{action}\" способа оплаты \"{name}\".",
     "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> изменил статус заказа <b>#{orderId}</b> на \"{status}\".",
     "UPDATED_MARKET_ORDER_EXCHANGE_RATE": "<b>{username}</b> обновил обменный курс заказа <b>#{orderId}</b> на <b>{exchangeRate}</b>.",
     "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> обновил обменный курс маркета до <b>{exchangeRate}</b>."

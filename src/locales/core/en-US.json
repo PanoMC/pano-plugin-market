@@ -59,6 +59,10 @@
     "UPDATED_MARKET_SETTINGS": "<b>{username}</b> updated the market settings.",
     "UPDATED_MARKET_PAYMENT_METHOD": "<b>{username}</b> updated the \"{name}\" payment method.",
     "REVEALED_MARKET_PAYMENT_SECRET": "<b>{username}</b> revealed the secrets of the \"{name}\" payment method.",
+    "FAILED_MARKET_SECRET_REVEAL": "<b>{username}</b> entered a wrong password while revealing the secrets of \"{name}\".",
+    "TOGGLED_MARKET_PAYMENT_METHOD": "<b>{username}</b> changed the enabled state of the \"{name}\" payment method.",
+    "SORTED_MARKET_PAYMENT_METHODS": "<b>{username}</b> changed the order of the payment methods.",
+    "RAN_MARKET_PROVIDER_ACTION": "<b>{username}</b> ran the \"{action}\" action of the \"{name}\" payment method.",
     "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> changed the status of order <b>#{orderId}</b> to \"{status}\".",
     "UPDATED_MARKET_ORDER_EXCHANGE_RATE": "<b>{username}</b> updated the exchange rate of order <b>#{orderId}</b> to <b>{exchangeRate}</b>.",
     "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> refreshed the market exchange rate to <b>{exchangeRate}</b>."
