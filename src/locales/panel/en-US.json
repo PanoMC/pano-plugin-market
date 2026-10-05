@@ -466,7 +466,8 @@
       "toast-delete-success": "Gift deleted successfully.",
       "toast-delete-error": "An error occurred while deleting the gift.",
       "toast-load-error": "An error occurred while loading gifts.",
-      "delete-title": "Delete Gift"
+      "delete-title": "Delete Gift",
+      "redemptions": "Redemptions"
     },
     "discounts": {
       "title": "Discounts",

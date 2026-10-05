@@ -466,7 +466,8 @@
       "toast-delete-success": "Подарок успешно удалён.",
       "toast-delete-error": "Произошла ошибка при удалении подарка.",
       "toast-load-error": "Произошла ошибка при загрузке подарков.",
-      "delete-title": "Удалить подарок"
+      "delete-title": "Удалить подарок",
+      "redemptions": "Использования"
     },
     "discounts": {
       "title": "Скидки",

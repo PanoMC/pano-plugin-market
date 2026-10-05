@@ -103,19 +103,20 @@
   import { _ } from '../../../i18n';
   import CopyButton from '../CopyButton.svelte';
   import StatusBadge from '../StatusBadge.svelte';
-  import { shipmentActions } from './actions.js';
+  import { shipmentRowItems } from './actions.js';
   import CardMenu from './CardMenu.svelte';
   import ControlDropdown from './ControlDropdown.svelte';
   import { isHttpUrl } from './model.js';
   import { shipmentLabelPath } from './requests.js';
   import { can } from '../../utils/permissions.js';
 
-  // onCreate() opens CreateShipmentModal (external.js; null = not wired, no menu); onTrack / onRetry /
-  // onCancel(shipment) are run by the page.
+  // onCreate() opens CreateShipmentModal (external.js; null = not wired, no menu); onView(shipment)
+  // opens ShipmentModal (null = no View item); onTrack / onRetry / onCancel(shipment) are run by the page.
   let {
     detail,
     user = null,
     onCreate = null,
+    onView = null,
     onTrack = () => {},
     onRetry = () => {},
     onCancel = () => {},
@@ -138,7 +139,14 @@
   );
 
   function menu(shipment) {
-    return shipmentActions(shipment, user).map((id) => {
+    return shipmentRowItems(shipment, user, Boolean(onView)).map((id) => {
+      if (id === 'view')
+        return {
+          key: id,
+          label: $_('pages.shipments.actions.view'),
+          icon: 'fa-eye',
+          onclick: () => onView(shipment),
+        };
       if (id === 'label' || id === 'generic-label')
         return {
           key: id,

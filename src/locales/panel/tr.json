@@ -466,7 +466,8 @@
       "toast-delete-success": "Hediye başarıyla silindi.",
       "toast-delete-error": "Hediye silinirken bir hata oluştu.",
       "toast-load-error": "Hediyeler yüklenirken bir hata oluştu.",
-      "delete-title": "Hediyeyi Sil"
+      "delete-title": "Hediyeyi Sil",
+      "redemptions": "Kullanımlar"
     },
     "discounts": {
       "title": "İndirimler",

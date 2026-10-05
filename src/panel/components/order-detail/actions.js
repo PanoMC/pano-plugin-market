@@ -234,6 +234,11 @@ export function shipmentActions(shipment, user) {
   return out;
 }
 
+/** Shipments card row menu: `view` (ShipmentModal; read-only for OV, edits inside need OM) leads when wired. */
+export function shipmentRowItems(shipment, user, canView = false) {
+  return [...(canView ? ['view'] : []), ...shipmentActions(shipment, user)];
+}
+
 /** Invoice links carry billing data: OM or PAY only (13 §6). */
 export const canSeeInvoices = (user) => can(user, 'OM', 'PAY');
 

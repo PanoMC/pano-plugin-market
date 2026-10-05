@@ -85,3 +85,17 @@ describe('siblingMove', () => {
     expect(siblingMove(null, 2, 'up')).toBeNull();
   });
 });
+
+import { giftRedemptionTarget } from './category-gift.js';
+import { redemptionsPath } from './discounts.js';
+
+describe('giftRedemptionTarget', () => {
+  test('opens the redemptions of the gift row through the gifts endpoint', () => {
+    const target = giftRedemptionTarget({ id: 7, code: 'GIFT-7', name: 'x' });
+    expect(target).toEqual({ kind: 'gifts', id: 7, code: 'GIFT-7' });
+    expect(redemptionsPath(target.kind, target.id)).toBe('/gifts/7/redemptions');
+  });
+  test('missing code falls back to an empty title value', () => {
+    expect(giftRedemptionTarget({ id: 1 }).code).toBe('');
+  });
+});

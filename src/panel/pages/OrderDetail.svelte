@@ -88,6 +88,7 @@
             onCreate={EXTERNAL_MODALS.createShipment
               ? () => externalRefs.createShipment?.open()
               : null}
+            onView={(shipment) => shipmentModal?.open(shipment.id)}
             onTrack={trackShipment}
             onRetry={retryShipment}
             onCancel={cancelShipment} />
@@ -136,6 +137,12 @@
   onDone={done}
   onStale={() => refresh()} />
 <PaymentEventsModal bind:this={paymentEvents} />
+<ShipmentModal
+  bind:this={shipmentModal}
+  {user}
+  onDone={done}
+  onStale={() => refresh()}
+  onRelease={releaseShipment} />
 <ConfirmModal bind:this={confirmModal} />
 
 {#each Object.entries(EXTERNAL_MODALS) as [id, Component] (id)}
@@ -212,8 +219,10 @@
     shipmentRetryRequest,
     shipmentTrackRequest,
   } from '../components/order-detail/requests.js';
+  import { releaseRequest } from '../utils/shipments.js';
   import { createAnchorScroller } from '../components/order-detail/scroll.js';
   import { anyModalOpen, fetchPath, send } from '../components/order-detail/send.js';
+  import ShipmentModal from '../components/modals/ShipmentModal.svelte';
   import DisputeModal from '../components/modals/DisputeModal.svelte';
   import OrderStatusModal from '../components/modals/OrderStatusModal.svelte';
   import RerunDeliveryModal from '../components/modals/RerunDeliveryModal.svelte';
@@ -236,6 +245,7 @@
   let rerunModal = $state(null);
   let resendModal = $state(null);
   let paymentEvents = $state(null);
+  let shipmentModal = $state(null);
   let confirmModal = $state(null);
   let externalRefs = $state({});
 
@@ -472,6 +482,18 @@
 
   function retryShipment(shipment) {
     return mutate(shipmentRetryRequest(shipment.id), 'pages.order-detail.toast.shipment-retried');
+  }
+
+  // ShipmentModal hid itself before calling: the same "Release Items" confirmation as the Shipments page.
+  function releaseShipment(shipment) {
+    ask({
+      icon: 'fa-solid fa-box-open',
+      title: $_('pages.shipments.release.title'),
+      description: $_('pages.shipments.release.description'),
+      confirmLabel: $_('pages.shipments.actions.release'),
+      request: releaseRequest(shipment.id),
+      success: 'pages.shipments.toast.released',
+    });
   }
 
   function cancelShipment(shipment) {

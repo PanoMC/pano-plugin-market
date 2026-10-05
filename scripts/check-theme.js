@@ -1,6 +1,6 @@
 // Theme static checks of 14 §20.2. Usage: check-theme.js [--strict] [--root dir]
-// Rules 1 (style= allow-list) and 3 (exactly the three {@html} files) describe the finished
-// storefront; they only warn while the legacy theme files exist and fail under --strict.
+// Rules 1 (style= allow-list) and 3 (exactly the three {@html} files) are enforced like every other
+// rule: a violation fails the run, with or without --strict.
 import path from 'node:path';
 import {
   LANGS,
@@ -51,9 +51,7 @@ for (const file of files) {
     for (const tag of parseTags(markup)) {
       const html = /^[a-z]/.test(tag.name) && !tag.name.includes(':') && !tag.name.includes('.');
       if (/(?:^|\s)style\s*=/.test(tag.attrs) && !STYLE_ATTR_FILES.includes(baseName(file)))
-        add('1', tag.index, `style= attribute outside ${STYLE_ATTR_FILES.join(' / ')}`, {
-          pending: true,
-        });
+        add('1', tag.index, `style= attribute outside ${STYLE_ATTR_FILES.join(' / ')}`);
       if (html && /(?:^|\s)on:[\w-]+/.test(tag.attrs))
         add('2', tag.index, `on: directive on <${tag.name}>`);
       if (tag.name === 'slot') add('2', tag.index, '<slot>');
@@ -77,7 +75,7 @@ for (const file of files) {
     for (const sink of htmlSinks(markup)) {
       htmlSeen.add(baseName(file));
       if (!HTML_FILES.includes(baseName(file)))
-        add('3', sink.index, `{@html} outside ${HTML_FILES.join(' / ')}`, { pending: true });
+        add('3', sink.index, `{@html} outside ${HTML_FILES.join(' / ')}`);
     }
     code = scripts.map((s) => s.code).join('\n');
   } else {
@@ -97,6 +95,13 @@ for (const file of files) {
   for (const { key, index } of usedKeys(source))
     if (key.startsWith('theme.') && !theme.has(key))
       add('5', index, `$_('${key}') missing in src/locales/theme/en-US.json`);
+}
+
+// 3b. "exactly" the three files: each allow-listed file that exists must really use {@html}
+for (const file of files) {
+  const base = baseName(file);
+  if (file.endsWith('.svelte') && HTML_FILES.includes(base) && !htmlSeen.has(base))
+    report.add('3', rel(file, root), 0, `${base} is allow-listed for {@html} but has none`);
 }
 
 // 5a. identical key sets

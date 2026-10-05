@@ -13,6 +13,7 @@ import {
   paymentActions,
   refundActions,
   shipmentActions,
+  shipmentRowItems,
   showInvoicesCard,
   withAvailable,
 } from './actions.js';
@@ -250,5 +251,22 @@ describe('row actions', () => {
     expect(showInvoicesCard({ invoices: [] }, { invoiceEnabled: true }, om)).toBe(true);
     expect(showInvoicesCard({ invoices: [{ id: 1 }] }, { invoiceEnabled: false }, om)).toBe(true);
     expect(showInvoicesCard({ invoices: [] }, { invoiceEnabled: true }, viewer)).toBe(false);
+  });
+});
+
+describe('shipmentRowItems', () => {
+  const shipment = { status: 'IN_TRANSIT', labelFile: 'a.pdf' };
+
+  test('View leads when wired, for a view-only user too', () => {
+    expect(shipmentRowItems(shipment, viewer, true)).toEqual(['view']);
+    expect(shipmentRowItems(shipment, om, true)).toEqual([
+      'view',
+      ...shipmentActions(shipment, om),
+    ]);
+  });
+
+  test('without a ShipmentModal the menu is the plain action list', () => {
+    expect(shipmentRowItems(shipment, om)).toEqual(shipmentActions(shipment, om));
+    expect(shipmentRowItems(shipment, viewer)).toEqual([]);
   });
 });

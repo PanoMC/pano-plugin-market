@@ -81,3 +81,8 @@ export function siblingMove(tree, id, dir) {
   }
   return null;
 }
+
+/** Target of the Gifts "Redemptions" row action: RedemptionsModal.open() options (GET /gifts/:id/redemptions). */
+export function giftRedemptionTarget(gift) {
+  return { kind: 'gifts', id: gift?.id, code: gift?.code ?? '' };
+}

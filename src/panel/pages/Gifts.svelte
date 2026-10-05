@@ -63,9 +63,10 @@
   import { _, showSuccessToast, showErrorToast } from '../../i18n';
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import CreateGiftModal from '../components/modals/CreateGiftModal.svelte';
+  import RedemptionsModal from '../components/modals/RedemptionsModal.svelte';
   import { sectionsFor } from '../navigation.js';
   import { call, errorKey, marketPath } from '../utils/api.js';
-  import { usedCell } from '../utils/category-gift.js';
+  import { giftRedemptionTarget, usedCell } from '../utils/category-gift.js';
   import { currentLocale } from '../utils/locale.js';
 
   let { data } = $props();
@@ -84,6 +85,7 @@
 
   let isSearching = $state(false);
   let confirmModal = $state(null);
+  let redemptionsModal = $state(null);
   const user = $derived($page.data?.user);
 
   let isEditModal = $state(false);
@@ -92,6 +94,10 @@
   function openCreateModal() {
     isEditModal = false;
     selectedGift = null;
+  }
+
+  function openRedemptions(gift) {
+    redemptionsModal?.open(giftRedemptionTarget(gift));
   }
 
   function openEditModal(gift) {
@@ -240,6 +246,10 @@
                       <span class="fas fa-ellipsis-v"></span>
                     </button>
                     <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                      <button type="button" class="dropdown-item" onclick={() => openRedemptions(gift)}>
+                        <i class="fas fa-receipt me-2"></i>
+                        {$_('pages.gifts.redemptions')}
+                      </button>
                       <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createGiftModal" onclick={() => openEditModal(gift)}>
                         <i class="fas fa-pen me-2"></i>
                         {$_('common.edit')}
@@ -304,4 +314,5 @@
 </MarketLayout>
 
 <ConfirmModal bind:this={confirmModal} />
+<RedemptionsModal bind:this={redemptionsModal} />
 <CreateGiftModal isEdit={isEditModal} gift={selectedGift} onSaved={refreshData} />
