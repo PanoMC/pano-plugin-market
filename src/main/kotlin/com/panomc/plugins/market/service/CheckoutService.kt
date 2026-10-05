@@ -1,11 +1,15 @@
 package com.panomc.plugins.market.service
 
 import com.panomc.platform.error.BadRequest
+import com.panomc.platform.error.NotLoggedIn
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.cart.CartLimits
 import com.panomc.plugins.market.core.cart.CartLine
 import com.panomc.plugins.market.core.cart.CartLineKey
 import com.panomc.plugins.market.core.cart.CartMerger
+import com.panomc.plugins.market.core.abuse.IpRange
+import com.panomc.plugins.market.core.order.BillingSnapshot
+import com.panomc.plugins.market.core.order.ItemSnapshot
 import com.panomc.plugins.market.core.order.LineCode
 import com.panomc.plugins.market.core.order.LineRules
 import com.panomc.plugins.market.core.order.LineVerdict
@@ -14,10 +18,14 @@ import com.panomc.plugins.market.core.order.ProductUsage
 import com.panomc.plugins.market.core.order.RecipientResolver
 import com.panomc.plugins.market.core.order.RequiredBuyerFields
 import com.panomc.plugins.market.core.order.RuleChild
+import com.panomc.plugins.market.core.order.OrderTimings
 import com.panomc.plugins.market.core.order.RuleContext
 import com.panomc.plugins.market.core.order.RuleField
 import com.panomc.plugins.market.core.order.RuleLine
 import com.panomc.plugins.market.core.order.RuleProduct
+import com.panomc.plugins.market.core.order.RuleResult
+import com.panomc.plugins.market.core.order.SnapshotProduct
+import com.panomc.plugins.market.core.order.TimingConfig
 import com.panomc.plugins.market.core.order.RuleTier
 import com.panomc.plugins.market.core.order.RuleVariant
 import com.panomc.plugins.market.core.order.BuyerValidator
@@ -27,6 +35,7 @@ import com.panomc.plugins.market.core.pricing.CouponInput
 import com.panomc.plugins.market.core.pricing.CreatorCodeInput
 import com.panomc.plugins.market.core.pricing.CurrencyPriceResolver
 import com.panomc.plugins.market.core.pricing.DiscountInput
+import com.panomc.plugins.market.core.pricing.ItemsResult
 import com.panomc.plugins.market.core.pricing.LineInput
 import com.panomc.plugins.market.core.pricing.LineKind
 import com.panomc.plugins.market.core.pricing.MethodEvaluation
@@ -36,6 +45,7 @@ import com.panomc.plugins.market.core.pricing.OwnedTier
 import com.panomc.plugins.market.core.pricing.PriceBreakdown
 import com.panomc.plugins.market.core.pricing.PricedLine
 import com.panomc.plugins.market.core.pricing.PricingEngine
+import com.panomc.plugins.market.core.pricing.PricingCode
 import com.panomc.plugins.market.core.pricing.PricingError
 import com.panomc.plugins.market.core.pricing.PricingException
 import com.panomc.plugins.market.core.pricing.PricingInput
@@ -59,24 +69,60 @@ import com.panomc.plugins.market.db.dao.MarketCurrencyRateDao
 import com.panomc.plugins.market.db.dao.MarketDiscountDao
 import com.panomc.plugins.market.db.dao.MarketEntitlementDao
 import com.panomc.plugins.market.db.dao.MarketOrderDao
+import com.panomc.plugins.market.db.dao.MarketPaymentDao
 import com.panomc.plugins.market.db.dao.MarketPaymentMethodDao
 import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.dao.MarketProductFieldDao
+import com.panomc.plugins.market.db.dao.MarketProductProviderMetaDao
 import com.panomc.plugins.market.db.dao.MarketProductPriceDao
 import com.panomc.plugins.market.db.dao.MarketProductVariantDao
 import com.panomc.plugins.market.db.dao.MarketRedemptionDao
 import com.panomc.plugins.market.db.dao.MarketSubscriptionDao
 import com.panomc.plugins.market.db.model.BillingMode
+import com.panomc.plugins.market.db.model.MarketCart
 import com.panomc.plugins.market.db.model.MarketCategory
+import com.panomc.plugins.market.db.model.MarketOrder
+import com.panomc.plugins.market.db.model.MarketOrderItem
+import com.panomc.plugins.market.db.model.MarketPayment
 import com.panomc.plugins.market.db.model.MarketPaymentMethod
 import com.panomc.plugins.market.db.model.MarketProduct
 import com.panomc.plugins.market.db.model.MarketProductField
 import com.panomc.plugins.market.db.model.MarketProductVariant
+import com.panomc.plugins.market.db.model.OrderItemKind
+import com.panomc.plugins.market.db.model.OrderSource
+import com.panomc.plugins.market.db.model.PaymentStatus
 import com.panomc.plugins.market.db.model.PeriodUnit
+import com.panomc.plugins.market.db.model.PricingMode as DbPricingMode
 import com.panomc.plugins.market.db.model.ProductKind
 import com.panomc.plugins.market.db.model.RedemptionKind
+import com.panomc.plugins.market.db.model.ReservationState
+import com.panomc.plugins.market.db.model.ShippingStatus
 import com.panomc.plugins.market.db.model.SubscriptionStatus
+import com.panomc.plugins.market.db.tx.Locks
+import com.panomc.plugins.market.db.tx.MarketDb
+import com.panomc.plugins.market.error.BuyerBlocked
+import com.panomc.plugins.market.error.BuyerInfoRequired
+import com.panomc.plugins.market.error.CooldownActive
+import com.panomc.plugins.market.error.EmptyCart
+import com.panomc.plugins.market.error.IdempotencyConflict
+import com.panomc.plugins.market.error.InsufficientCredits
 import com.panomc.plugins.market.error.InvalidCart
+import com.panomc.plugins.market.error.InvalidCoupon
+import com.panomc.plugins.market.error.InvalidCreatorCode
+import com.panomc.plugins.market.error.InvalidCreditAmount
+import com.panomc.plugins.market.error.InvalidRecipient
+import com.panomc.plugins.market.error.LegalAcceptanceRequired
+import com.panomc.plugins.market.error.MinimumOrderAmountNotReached
+import com.panomc.plugins.market.error.OutOfStock
+import com.panomc.plugins.market.error.PaymentMethodUnavailable
+import com.panomc.plugins.market.error.PaymentProviderError
+import com.panomc.plugins.market.error.PriceChanged
+import com.panomc.plugins.market.error.ProductRequirementNotMet
+import com.panomc.plugins.market.error.PurchaseLimitReached
+import com.panomc.plugins.market.error.ShippingAddressRequired
+import com.panomc.plugins.market.error.ShippingUnavailable
+import com.panomc.plugins.market.error.SubscriptionMustBeAlone
+import com.panomc.plugins.market.error.TooManyRequests
 import com.panomc.plugins.market.provider.ProviderLookup
 import com.panomc.plugins.market.provider.SecretCipher
 import com.panomc.plugins.market.provider.SettingsCodec
@@ -84,6 +130,7 @@ import com.panomc.plugins.market.service.platform.DirectoryUser
 import com.panomc.plugins.market.service.platform.ServerDirectory
 import com.panomc.plugins.market.service.platform.UserDirectory
 import com.panomc.plugins.market.spi.common.Money
+import com.panomc.plugins.market.spi.common.ProviderErrorCode
 import com.panomc.plugins.market.spi.common.ProviderSettings
 import com.panomc.plugins.market.spi.common.TestModeSupport
 import com.panomc.plugins.market.spi.payment.BuyerInfo
@@ -97,9 +144,15 @@ import com.panomc.plugins.market.spi.payment.SubscriptionPlan
 import com.panomc.plugins.market.util.CouponScope
 import com.panomc.plugins.market.util.DiscountUnit
 import com.panomc.plugins.market.util.MarketStatus
+import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.json.JsonArray
+import com.panomc.platform.util.RateLimiter
 import io.vertx.core.json.JsonObject
 import io.vertx.sqlclient.SqlClient
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import org.slf4j.LoggerFactory
+import java.math.BigDecimal
 import java.security.MessageDigest
 import java.util.Locale
 
@@ -113,7 +166,15 @@ class ShippingQuote(
     /** `ShippingOption[]` of 04 section 2. */
     val options: List<JsonObject> = emptyList(),
     val methodId: Long? = null,
-    val messages: List<QuoteMessage> = emptyList()
+    val messages: List<QuoteMessage> = emptyList(),
+    /** What checkout freezes on the order (06 section 5.2 A6, 01 section 5.1): the validated address, the method name, the quote snapshot and the parcel weight. */
+    val address: JsonObject? = null,
+    val methodName: String? = null,
+    val snapshot: JsonObject? = null,
+    val weightGrams: Int? = null,
+    /** Why checkout refuses: the address paths of `SHIPPING_ADDRESS_REQUIRED` and the `reason` of `SHIPPING_UNAVAILABLE` (`NO_ZONE`, `NO_METHOD`, `METHOD_REQUIRED`, `METHOD_NOT_OFFERED`). */
+    val fields: List<String> = emptyList(),
+    val reason: String? = null
 )
 
 /** The shipping seam of the quote (MK-132 implements it with the rate engine). */
@@ -146,6 +207,69 @@ fun interface BuyerBlocks {
         val NONE = BuyerBlocks { _, _, _, _, _, _ -> false }
     }
 }
+
+/** `POST /api/market/checkout` after parsing (04 section 3): the `CartInput`, the consent total and the legal acceptance. */
+class CheckoutRequest(
+    val input: QuoteInput,
+    /** `expectedTotal` x 100: the total of the quote the buyer confirmed; `null` = the buyer did not state one. */
+    val expectedTotal: Long?,
+    val acceptLegal: Boolean,
+    val legalTextId: Long?,
+    val hideFromBroadcast: Boolean,
+    /** The `Idempotency-Key` header, already checked against `^[A-Za-z0-9_-]{16,64}$`. */
+    val idempotencyKey: String,
+    /** `RequestFingerprint.hash` of the whole body. */
+    val bodyHash: String
+)
+
+/** The answer of a checkout: the order (owner view), its access token (returned only here) and the payment start. */
+class CheckoutResult(val order: JsonObject, val orderToken: String, val payment: JsonObject?) {
+    fun toMap(): Map<String, Any?> = mapOf("order" to order, "orderToken" to orderToken, "payment" to payment)
+}
+
+/** A payment start that failed; [code] is a `ProviderErrorCode` name (never the gateway's own text). */
+class PaymentStartFailed(val code: String, cause: Throwable? = null) : RuntimeException(code, cause)
+
+/**
+ * Phase C of checkout (06 section 9.2): starts the `CREATED` attempt the order transaction wrote. `PaymentService`
+ * (MK-076) implements it; [NONE] does nothing, so the order page takes over (`payment: null`) and a free or credits order
+ * waits for the reconcile job. Never called inside a database transaction.
+ */
+interface PaymentStarter {
+    /** The `PaymentStart` JSON for the buyer, `null` = none yet. Throws [PaymentStartFailed] when the provider failed. */
+    suspend fun start(order: MarketOrder, attempt: MarketPayment, sqlClient: SqlClient): JsonObject?
+
+    /** The stored start result of [attempt] as `PaymentStart` JSON (a replay of the request), `null` when it has none. */
+    suspend fun served(attempt: MarketPayment, sqlClient: SqlClient): JsonObject?
+
+    companion object {
+        val NONE: PaymentStarter = object : PaymentStarter {
+            override suspend fun start(order: MarketOrder, attempt: MarketPayment, sqlClient: SqlClient): JsonObject? = null
+
+            override suspend fun served(attempt: MarketPayment, sqlClient: SqlClient): JsonObject? = null
+        }
+    }
+}
+
+/**
+ * What `checkout` needs on top of what the quote needs, kept apart so a quote-only service is built without it. [replayWaitMs] /
+ * [replayPollMs]: how long a replay waits for the first request to finish starting the payment (06 section 5.1: 5 s, polled every 500 ms).
+ */
+class CheckoutDeps(
+    val db: MarketDb,
+    val locks: Locks,
+    val reservations: ReservationService,
+    val redemptions: RedemptionService,
+    val orders: OrderService,
+    val payments: MarketPaymentDao,
+    val providerMeta: MarketProductProviderMetaDao? = null,
+    val starter: PaymentStarter = PaymentStarter.NONE,
+    val replayWaitMs: Long = 5_000,
+    val replayPollMs: Long = 500
+)
+
+/** The priced cart changed between phase A and the order transaction (06 section 5.3 B5): phase A and B run again once. Internal. */
+class QuoteChanged(why: String) : RuntimeException(why)
 
 /**
  * Phase A of checkout (06 sections 3 and 5.2), MK-072: validates a cart and prices it without taking a lock or writing a
@@ -186,12 +310,24 @@ class CheckoutService(
     private val users: UserDirectory,
     private val servers: ServerDirectory,
     private val blocks: BuyerBlocks = BuyerBlocks.NONE,
-    private val shipping: ShippingQuoter = ShippingQuoter.NONE
+    private val shipping: ShippingQuoter = ShippingQuoter.NONE,
+    /** The wiring of [checkout]; `null` for a service that only quotes. */
+    private val checkout: CheckoutDeps? = null
 ) {
     // ------------------------------------------------------------------------------------------------------ quote
 
     /** `POST /api/market/checkout/quote` (04 section 3). */
-    suspend fun quote(input: QuoteInput, caller: QuoteCaller, sqlClient: SqlClient): Quote {
+    suspend fun quote(input: QuoteInput, caller: QuoteCaller, sqlClient: SqlClient): Quote =
+        assess(input, caller, sqlClient, strict = false, frozen = null).quote
+
+    /**
+     * Phase A of 06 section 5.2 as a value: everything the quote says plus the internal facts checkout needs to write the
+     * order (the catalog rows, the priced lines, the resolved recipient, the selected payment method). [strict] is checkout
+     * (a credit amount above what can be applied is refused, 06 section 6.6) and [frozen] is phase B inside the order
+     * transaction: the payment method and the shipping option of phase A are reused, no provider, carrier or block
+     * list call is made while the locks are held (06 section 13.1 rule 1).
+     */
+    private suspend fun assess(input: QuoteInput, caller: QuoteCaller, sqlClient: SqlClient, strict: Boolean, frozen: Frozen?): Assessment {
         val c = config()
         val now = clock.now()
         val locale = input.locale?.trim()?.takeIf { it.isNotEmpty() }?.take(16) ?: DEFAULT_LOCALE
@@ -301,7 +437,7 @@ class CheckoutService(
         )
 
         // ---- payment methods and the selected one
-        val candidates = loadCandidates(c, sqlClient)
+        val candidates = if (frozen != null) listOfNotNull(frozen.selected) else loadCandidates(c, sqlClient)
         val selectedId = input.paymentMethodId?.trim()?.takeIf { it.isNotEmpty() }
         val payWithCredits = topUp == null && (input.payWithCredits || selectedId == MethodInput.CREDITS)
         val selected = if (payWithCredits || selectedId == null) null else candidates.firstOrNull { it.id == selectedId }
@@ -353,7 +489,7 @@ class CheckoutService(
         if (items.requiresShipping) {
             val physical = items.lines.filter { l -> l.physicalLine(catalog) }
 
-            shippingQuote = shipping.quote(
+            shippingQuote = frozen?.shipping ?: shipping.quote(
                 ShippingRequest(
                     items.currency, items.itemsBasisBase, items.physicalBasisBase, physical, input.shippingAddress,
                     input.shippingAddressId ?: cart?.shippingAddressId, input.shippingMethodId ?: cart?.shippingMethodId, caller.userId
@@ -371,7 +507,7 @@ class CheckoutService(
         }
 
         // ---- tender: credits, selected method, fee, totals
-        val tender = TenderInput(input.useCredits.takeIf { !payWithCredits && topUp == null }?.let { creditsOf(it) }, selected?.input, strict = false)
+        val tender = TenderInput(input.useCredits.takeIf { !payWithCredits && topUp == null }?.let { creditsOf(it) }, selected?.input, strict = strict)
         val breakdown = try {
             PricingEngine.finalize(items, shippingQuote.charge, tender)
         } catch (e: PricingException) {
@@ -379,7 +515,7 @@ class CheckoutService(
 
             throw e
         }
-        val evaluations = if (topUp != null && topUpMessage != null) {
+        val evaluations = if (frozen != null || (topUp != null && topUpMessage != null)) {
             emptyList()
         } else {
             PricingEngine.evaluateMethods(items, shippingQuote.charge, tender, candidates.map { it.input })
@@ -403,7 +539,7 @@ class CheckoutService(
         if (chosen != null && !chosen.available) messages += QuoteMessage(chosen.unavailableReason ?: PAYMENT_METHOD_UNAVAILABLE, LineRules.ERROR)
 
         // ---- blocked buyer (the quote stays usable, checkout refuses)
-        if (blocks.blocked(payerName, recipient?.username, orderEmail, caller.clientIp, caller.userId, sqlClient)) {
+        if (frozen == null && blocks.blocked(payerName, recipient?.username, orderEmail, caller.clientIp, caller.userId, sqlClient)) {
             messages += QuoteMessage(BUYER_BLOCKED, LineRules.WARNING)
         }
 
@@ -414,7 +550,8 @@ class CheckoutService(
         for (m in breakdown.messages) messages += QuoteMessage(m.code.name, m.level.name.lowercase(Locale.ROOT), m.lineKey)
 
         // ---- the legal text
-        val legalText = legal.activeFor(locale, sqlClient)?.let { QuoteLegal(c.legalTextRequired, it.id, it.version, it.title) }
+        val legalView = if (frozen == null) legal.activeFor(locale, sqlClient) else null
+        val legalText = legalView?.let { QuoteLegal(c.legalTextRequired, it.id, it.version, it.title) }
 
         // ---- the lines of the answer
         val quoteLines = quoteLines(rules.lines, lines, breakdown, catalog)
@@ -429,7 +566,7 @@ class CheckoutService(
             breakdown.canCheckout &&
             (chosen == null || chosen.available)
 
-        return Quote(
+        val quote = Quote(
             currency = items.currency,
             baseCurrency = items.baseCurrency,
             displayCurrency = items.display?.currency,
@@ -461,7 +598,600 @@ class CheckoutService(
             messages = distinct,
             canCheckout = canCheckout
         )
+
+        return Assessment(
+            quote = quote, c = c, locale = locale, lines = lines, cart = cart, usedServerCart = topUp == null && input.items == null && caller.userId != null,
+            catalog = catalog, rules = rules, recipient = recipient, payerName = payerName, payerKey = payerKey, orderEmail = orderEmail,
+            items = items, breakdown = breakdown, selected = selected, chosen = chosen, selectedId = selectedId, shipping = shippingQuote,
+            topUp = topUp, topUpReason = topUp?.let { topUpProblem(it, c) }, payWithCredits = payWithCredits, legal = legalView,
+            requiredFields = requiredFields, messages = distinct, now = now, candidates = candidates
+        )
     }
+
+    // -------------------------------------------------------------------------------------------------- checkout
+
+    private class Payer(val key: String, val name: String, val email: String?, val userId: Long?)
+
+    /** What phase A verified once and phase B reuses: the validated billing snapshot and the legal text the buyer accepted. */
+    private class Verified(val billing: JsonObject?, val legal: LegalTextService.LegalView?)
+
+    /**
+     * `POST /api/market/checkout` (06 sections 4 and 5, 04 section 3). The route has done steps 1 and 2 (store switch, schema,
+     * header, CSRF); this is step 3 on: the payer, rate limit L1 (IP before the replay lookup, buyer after it), the idempotency
+     * replay, the block list, phase A (validation and pricing without a lock), phase B (one `MarketDb.tx`: the locks of
+     * 00 section 8.3, the price again under them, the reservation, the inserts) and phase C (the payment start, outside any
+     * transaction).
+     *
+     * A price that moved between A and B runs both again once; a second change is `PRICE_CHANGED` with the fresh quote.
+     */
+    suspend fun checkout(request: CheckoutRequest, caller: QuoteCaller, sqlClient: SqlClient): CheckoutResult {
+        val deps = checkout ?: throw IllegalStateException("this CheckoutService was built without the checkout wiring")
+        val c = config()
+        val input = request.input
+        val payer = resolvePayer(input, caller, c, sqlClient)
+
+        limitIp(caller, c)
+
+        orders.getByBuyerAndIdempotencyKey(payer.key, request.idempotencyKey, sqlClient)?.let { return replay(it, request, deps, sqlClient) }
+
+        limitBuyer(payer.key, c)
+
+        if (blocks.blocked(payer.name, input.recipientUsername, payer.email, caller.clientIp, caller.userId, sqlClient)) throw BuyerBlocked()
+
+        precheck(input, caller, c)
+
+        var attempts = 0
+        var placed: CreatedOrder? = null
+
+        while (placed == null) {
+            attempts++
+
+            val plan = phaseA(request, caller, sqlClient)
+            val verified = verify(plan, request, caller)
+
+            try {
+                placed = phaseB(request, caller, payer, plan, verified, deps)
+            } catch (e: IdempotentReplay) {
+                return replay(e.order, request, deps, sqlClient)
+            } catch (e: QuoteChanged) {
+                // the second change in a row is the buyer's to confirm: the fresh quote goes back with 409 PRICE_CHANGED
+                if (attempts >= 2) throw PriceChanged(assess(input, caller, sqlClient, strict = false, frozen = null).quote.toJson())
+            }
+        }
+
+        return finish(checkNotNull(placed), deps, sqlClient)
+    }
+
+    /** Step 3: who pays. A logged-in caller's `guest` object is ignored (06 section 6.1); a guest needs the setting and a valid name and e-mail. */
+    private suspend fun resolvePayer(input: QuoteInput, caller: QuoteCaller, c: MarketConfig, sqlClient: SqlClient): Payer {
+        if (caller.userId != null) {
+            val name = users.usernameOf(caller.userId, sqlClient) ?: throw NotLoggedIn()
+            val email = BuyerValidator.orderEmailOfAccount(users.emailOf(caller.userId, sqlClient), input.billingInfo?.getString("email"))
+                ?: throw BuyerInfoRequired(listOf(BuyerValidator.FIELD_ORDER_EMAIL))
+
+            return Payer("u:${caller.userId}", name, email, caller.userId)
+        }
+
+        if (!c.allowGuestCheckout) throw NotLoggedIn()
+
+        return when (val result = BuyerValidator.validateGuest(input.guest?.username, input.guest?.email)) {
+            is BuyerValidator.GuestResult.Valid -> Payer(result.guest.buyerKey, result.guest.username, result.guest.email, null)
+            is BuyerValidator.GuestResult.Invalid -> throw BuyerInfoRequired(result.fields)
+        }
+    }
+
+    /** Step 7 before the cart is read: the credit inputs that contradict each other or need an account, and the free-amount top-up. */
+    private fun precheck(input: QuoteInput, caller: QuoteCaller, c: MarketConfig) {
+        val topUp = input.creditTopUp
+        val method = input.paymentMethodId?.trim()?.takeIf { it.isNotEmpty() }
+        val payAll = input.payWithCredits || method == MethodInput.CREDITS
+        val mixed = (input.useCredits as? UseCredits.Amount)?.credits?.let { it > 0 } == true
+
+        if (payAll && (mixed || (input.payWithCredits && method != null && method != MethodInput.CREDITS))) throw BadRequest()
+
+        if (!caller.loggedIn && (payAll || mixed || topUp != null)) throw NotLoggedIn()
+
+        if ((payAll || mixed) && !c.creditsEnabled) throw PaymentMethodUnavailable("CREDITS_DISABLED")
+
+        if (topUp != null) {
+            if (!input.items.isNullOrEmpty()) throw BadRequest()
+
+            topUpProblem(topUp, c)?.let { throw InvalidCreditAmount(it, c.creditTopUpMin, c.creditTopUpMax) }
+        }
+    }
+
+    // ----- phase A
+
+    private suspend fun phaseA(request: CheckoutRequest, caller: QuoteCaller, sqlClient: SqlClient): Assessment {
+        val a = assess(request.input, caller, sqlClient, strict = true, frozen = null)
+
+        if (a.topUp == null && a.lines.isEmpty()) throw EmptyCart()
+
+        return a
+    }
+
+    /** The A1 to A12 table of 06 section 5.2 in its order; throws the first failure. Phase B runs it again on the locked rows. */
+    private fun failOn(a: Assessment, request: CheckoutRequest, caller: QuoteCaller, frozen: Boolean) {
+        val messages = a.messages
+
+        // A1
+        if (messages.any { it.code == INVALID_RECIPIENT }) throw InvalidRecipient()
+
+        if (!frozen && messages.any { it.code == BUYER_BLOCKED }) throw BuyerBlocked()
+
+        // A2, A3
+        if (messages.any { it.code == LineCode.SUBSCRIPTION_MUST_BE_ALONE }) throw SubscriptionMustBeAlone()
+
+        if (!caller.loggedIn && a.quote.lines.any { LineCode.LOGIN_REQUIRED in it.errors }) throw NotLoggedIn()
+
+        // A4: line rules. A `MAX_QUANTITY` that is only about stock (the cap per order is not exceeded) or that comes with a limit code is the
+        // 409 of 06 section 7.1 / 6.4, not an `INVALID_CART` entry
+        val lineErrors = a.quote.lines.filter { l -> badRequestCodes(a, l).isNotEmpty() }.associate { it.lineKey to it.errors }
+
+        if (lineErrors.isNotEmpty()) throw InvalidCart(lineErrors)
+
+        // A5
+        a.items.coupon?.let { if (!it.valid) throw InvalidCoupon((it.reason ?: PricingCode.CODE_NOT_FOUND).name) }
+        a.items.creatorCode?.let { if (!it.valid) throw InvalidCreatorCode((it.reason ?: PricingCode.CODE_NOT_FOUND).name) }
+
+        // A6
+        val shipping = messages.firstOrNull { it.code in SHIPPING_CODES }
+
+        if (a.items.requiresShipping && (shipping != null || a.shipping.charge == null)) {
+            when (shipping?.code) {
+                SHIPPING_UNAVAILABLE -> throw ShippingUnavailable(a.shipping.reason ?: "NO_METHOD")
+                SHIPPING_METHOD_REQUIRED -> throw ShippingUnavailable("METHOD_REQUIRED")
+                else -> throw ShippingAddressRequired(a.shipping.fields.ifEmpty { listOf("shippingAddress") })
+            }
+        }
+
+        // A7
+        val tender = a.breakdown.tender
+
+        if (a.breakdown.messages.any { it.code == PricingCode.INSUFFICIENT_CREDITS }) {
+            val credits = a.breakdown.credits
+
+            throw InsufficientCredits(money(credits?.balance ?: 0L), if (a.payWithCredits) null else money(credits?.maxApplicable ?: 0L))
+        }
+
+        tender.unavailable?.let {
+            if (it == PricingCode.LOGIN_REQUIRED) throw NotLoggedIn()
+
+            if (it in CREDIT_UNAVAILABLE) throw PaymentMethodUnavailable(it.name)
+        }
+
+        // A8: skipped when the gateway has nothing to collect
+        val methodId = a.breakdown.paymentMethodId
+
+        if (methodId != MethodInput.FREE && methodId != MethodInput.CREDITS) {
+            when {
+                a.selectedId == null -> throw PaymentMethodUnavailable(METHOD_REQUIRED)
+                a.selected == null -> throw PaymentMethodUnavailable(METHOD_NOT_OFFERED)
+            }
+
+            a.chosen?.let { if (!it.available) throw PaymentMethodUnavailable(it.unavailableReason ?: METHOD_NOT_OFFERED) }
+            tender.unavailable?.let { throw PaymentMethodUnavailable(it.name) }
+        }
+
+        // A9
+        if (a.breakdown.messages.any { it.code == PricingCode.MINIMUM_ORDER_AMOUNT_NOT_REACHED }) {
+            throw MinimumOrderAmountNotReached(money(a.items.conversions.toOrder(a.items.terms.minimumOrderAmount)))
+        }
+
+        // A12 (advisory in phase A, authoritative in B7 and B8): the 409 codes
+        for (verdict in a.rules.lines) {
+            for (detail in verdict.details) {
+                when (detail.code) {
+                    LineCode.REQUIREMENT_NOT_MET -> throw ProductRequirementNotMet(detail.productId)
+                    LineCode.PURCHASE_LIMIT_REACHED -> throw PurchaseLimitReached(detail.productId, detail.limit ?: 0)
+                    LineCode.COOLDOWN_ACTIVE -> throw CooldownActive(detail.productId, detail.retryAfterSeconds ?: 0)
+                }
+            }
+        }
+
+        val outOfStock = a.rules.lines.filter { LineCode.OUT_OF_STOCK in it.errors || stockShort(a, it) }.map { it.lineKey }
+
+        if (outOfStock.isNotEmpty()) throw OutOfStock(outOfStock)
+    }
+
+    /** The codes of a quote line that make checkout answer 400 `INVALID_CART` (everything but the 409 codes, the login code and a stock-only `MAX_QUANTITY`). */
+    private fun badRequestCodes(a: Assessment, line: QuoteLine): List<String> {
+        val verdict = a.rules.lines.firstOrNull { it.lineKey == line.lineKey }
+        val conflict = line.errors.any { it in STOCK_AND_LIMIT_CODES }
+
+        return line.errors.filter { code ->
+            when {
+                code in STOCK_AND_LIMIT_CODES || code == LineCode.LOGIN_REQUIRED -> false
+                code == LineCode.MAX_QUANTITY -> !conflict && !(verdict != null && stockShort(a, verdict))
+                else -> true
+            }
+        }
+    }
+
+    /** `MAX_QUANTITY` although the per-order cap of the line is not exceeded: the stock (or the allowance) is what is short. */
+    private fun stockShort(a: Assessment, verdict: LineVerdict): Boolean {
+        if (LineCode.MAX_QUANTITY !in verdict.errors) return false
+
+        val line = a.lines.firstOrNull { it.lineKey == verdict.lineKey } ?: return false
+        val product = a.catalog.products[line.productId] ?: return false
+        val cap = when {
+            product.billingMode == BillingMode.SUBSCRIPTION -> 1
+            product.billingMode == BillingMode.TIMED || a.catalog.tierOf(product) != null -> minOf(product.maxQuantityPerOrder ?: Int.MAX_VALUE, 1)
+            else -> product.maxQuantityPerOrder?.let { maxOf(0, it) } ?: Int.MAX_VALUE
+        }
+
+        return line.quantity <= cap
+    }
+
+    /**
+     * A10 and A11, once, in phase A: the legal acceptance (06 section 8.1) and the billing info with the fields a provider requires
+     * (06 section 8.2). Run after the checks that precede them in the table, so the first failing rule wins.
+     */
+    private fun verify(a: Assessment, request: CheckoutRequest, caller: QuoteCaller): Verified {
+        failOn(a, request, caller, frozen = false)
+
+        // A10: a required text that exists must be the one accepted; a required text that does not exist never stops a sale
+        val legalView = if (a.c.legalTextRequired) a.legal else null
+
+        if (legalView != null && (!request.acceptLegal || request.legalTextId != legalView.id)) throw LegalAcceptanceRequired(legalView.id)
+
+        // A11
+        val have = buildSet {
+            if (a.orderEmail != null) add(BuyerValidator.FIELD_ORDER_EMAIL)
+            if (a.items.requiresShipping && a.shipping.charge != null) add("shippingAddress")
+        }
+        val billing = when (val r = BillingSnapshot.check(request.input.billingInfo, a.c.billingInfoMode, a.requiredFields, have)) {
+            is BillingSnapshot.Result.Invalid -> throw BuyerInfoRequired(r.fields)
+            is BillingSnapshot.Result.Valid -> r.json
+        }
+
+        // PT-12: the buyer confirmed a total; a different one is theirs to confirm again
+        request.expectedTotal?.let { if (it != a.breakdown.total) throw PriceChanged(a.quote.toJson()) }
+
+        return Verified(billing, legalView)
+    }
+
+    // ----- phase B
+
+    private fun usesOf(a: Assessment): List<CodeUse> {
+        val currency = a.items.currency
+        val out = ArrayList<CodeUse>()
+
+        a.items.coupon?.takeIf { it.valid && it.id != null }?.let { out += CodeUse(RedemptionKind.COUPON, it.id!!, it.code, a.items.couponDiscount, currency) }
+        a.items.creatorCode?.takeIf { it.valid && it.id != null }?.let { out += CodeUse(RedemptionKind.CREATOR_CODE, it.id!!, it.code, a.items.creatorDiscount, currency) }
+        a.items.discountRedemptions.forEach { out += CodeUse(RedemptionKind.DISCOUNT, it.discountId, null, it.amount, currency) }
+
+        return out
+    }
+
+    /** Cart products, bundle children, in ascending order (B4). The product rows are what serialises two checkouts of one product. */
+    private fun productIdsOf(a: Assessment): List<Long> {
+        val ids = sortedSetOf<Long>()
+
+        a.items.lines.forEach { l -> l.productId?.let { ids += it } }
+
+        return ids.toList()
+    }
+
+    private fun variantIdsOf(a: Assessment): List<Long> {
+        val ids = sortedSetOf<Long>()
+
+        a.items.lines.forEach { l -> if (l.variantId != 0L) ids += l.variantId }
+
+        return ids.toList()
+    }
+
+    private suspend fun phaseB(request: CheckoutRequest, caller: QuoteCaller, payer: Payer, plan: Assessment, verified: Verified, deps: CheckoutDeps): CreatedOrder {
+        val frozen = Frozen(plan.selected, plan.shipping)
+        val planUses = usesOf(plan)
+        val products = productIdsOf(plan)
+        val variants = variantIdsOf(plan)
+
+        return deps.db.tx { conn ->
+            // B1 to B4: cart, codes, discounts, products, variants, in the global order
+            if (plan.usedServerCart && caller.userId != null) deps.locks.cart(conn, caller.userId)
+
+            deps.redemptions.lockFor(conn, planUses)
+            deps.locks.products(conn, products)
+            deps.locks.variants(conn, variants)
+
+            // the first request of the same key may have committed while this one waited for the locks: that is a replay, not a conflict
+            orders.getByBuyerAndIdempotencyKey(payer.key, request.idempotencyKey, conn)?.let { throw IdempotentReplay(it) }
+
+            // B5 to B7: the whole price and every rule again, on rows nobody can change now
+            val a = assess(request.input, caller, conn, strict = true, frozen = frozen)
+
+            if (a.topUp == null && a.lines.isEmpty()) throw QuoteChanged("the cart is empty")
+
+            failOn(a, request, caller, frozen = true)
+            ensureUnchanged(plan, a)
+
+            // B8, B9: stock, then codes and discounts, by conditional statements
+            val uses = usesOf(a)
+            val built = itemsOf(a, deps, conn)
+            val customer = CustomerKeys(caller.userId, payer.key, a.orderEmail, a.recipient?.key.orEmpty(), recipientKeysOf(a.recipient))
+            val reservation = try {
+                deps.reservations.reserve(conn, built.demands, uses, customer)
+            } catch (e: DiscountUnavailable) {
+                throw QuoteChanged("discount ${e.discountId} is exhausted")
+            }
+
+            // B10, B11
+            deps.orders.create(conn, draftOf(a, request, caller, payer, verified, built.items, reservation, uses, customer))
+        }
+    }
+
+    /**
+     * B5: the price under the locks must be the price of phase A, line for line; anything else is a changed quote. A total that
+     * equals the plan's also equals the `expectedTotal` the plan was verified against (PT-12), so the consent needs no check of its own here.
+     */
+    private fun ensureUnchanged(plan: Assessment, a: Assessment) {
+        fun same(condition: Boolean, what: String) {
+            if (!condition) throw QuoteChanged(what)
+        }
+
+        same(plan.lines.associate { it.lineKey to it.quantity } == a.lines.associate { it.lineKey to it.quantity }, "lines")
+        same(plan.recipient?.key == a.recipient?.key, "recipient")
+        same(plan.items.discountRedemptions.map { it.discountId }.toSet() == a.items.discountRedemptions.map { it.discountId }.toSet(), "discounts")
+        same(usesOf(plan).map { it.kind to it.refId }.toSet() == usesOf(a).map { it.kind to it.refId }.toSet(), "codes")
+        same(plan.breakdown.total == a.breakdown.total, "total")
+        same(plan.breakdown.gatewayAmount == a.breakdown.gatewayAmount && plan.breakdown.creditAmount == a.breakdown.creditAmount, "tender")
+        same(plan.breakdown.paymentMethodId == a.breakdown.paymentMethodId, "method")
+    }
+
+    private class BuiltItems(val items: List<DraftItem>, val demands: List<StockDemand>)
+
+    /** The order items (bundle line first, its children after it) and the stock each of them needs (06 section 7.1). */
+    private suspend fun itemsOf(a: Assessment, deps: CheckoutDeps, conn: SqlClient): BuiltItems {
+        val meta = HashMap<Long, JsonObject>()
+
+        deps.providerMeta?.let { dao ->
+            for (id in productIdsOf(a)) {
+                val rows = dao.getByProductId(id, conn)
+                val product = JsonObject()
+
+                // the product level first, then the variant level on top
+                for (row in rows.sortedBy { it.variantId }) {
+                    val obj = runCatching { JsonObject(row.meta) }.getOrNull() ?: continue
+                    val existing = product.getJsonObject(row.providerId) ?: JsonObject().also { product.put(row.providerId, it) }
+
+                    existing.mergeIn(obj)
+                }
+
+                meta[id] = product
+            }
+        }
+
+        val items = ArrayList<DraftItem>()
+        val demands = ArrayList<StockDemand>()
+        val children = a.items.lines.filter { it.parentLineKey != null }.groupBy { it.parentLineKey!! }
+
+        for (line in a.items.lines.filter { it.parentLineKey == null }) {
+            val product = line.productId?.let { a.catalog.products[it] }
+
+            items += draftItem(a, line, null, meta)
+
+            if (product != null) {
+                demands += StockDemand(line.lineKey, line.lineKey, product.id, line.variantId.takeIf { it != 0L }, line.quantity)
+            }
+
+            for (child in children[line.lineKey].orEmpty()) {
+                items += draftItem(a, child, line.lineKey, meta)
+                child.productId?.let { demands += StockDemand(line.lineKey, child.lineKey, it, child.variantId.takeIf { v -> v != 0L }, child.quantity) }
+            }
+        }
+
+        return BuiltItems(items, demands)
+    }
+
+    private fun draftItem(a: Assessment, l: PricedLine, parentKey: String?, meta: Map<Long, JsonObject>): DraftItem {
+        val product = l.productId?.let { a.catalog.products[it] }
+        val variant = if (l.variantId != 0L) a.catalog.variants[l.variantId] else null
+        val verdict = a.rules.lines.firstOrNull { it.lineKey == l.lineKey }
+        val topUp = l.kind == OrderItemKind.CREDIT_TOPUP
+        val granted = when {
+            topUp -> l.creditAmount
+            product?.kind == ProductKind.CREDIT_PACK -> product.creditAmount?.let { Math.multiplyExact(it, l.quantity.toLong()) }
+            else -> null
+        }
+        val name = if (topUp) "${topUpAmount(l.creditAmount)} ${a.c.creditName.ifBlank { "credits" }}" else product?.name.orEmpty()
+        val physical = product?.physical == true && l.kind != OrderItemKind.BUNDLE
+        val snapshot = if (topUp || product == null) {
+            ItemSnapshot.topUp()
+        } else {
+            ItemSnapshot.of(
+                SnapshotProduct(
+                    slug = product.slug, imageFileName = variant?.imageFileName ?: product.imageFileName, kind = product.kind.name,
+                    billingMode = product.billingMode.name, periodUnit = product.periodUnit?.name, periodCount = variant?.periodCount ?: product.periodCount,
+                    physical = physical, weightGrams = variant?.weightGrams ?: product.weightGrams, lengthMm = product.lengthMm, widthMm = product.widthMm,
+                    heightMm = product.heightMm, hsCode = product.hsCode, originCountry = product.originCountry,
+                    tierCategoryId = a.catalog.tierOf(product)?.categoryId, tierRank = a.catalog.tierOf(product)?.rank, actions = product.actions,
+                    variantAttributes = variant?.attributes, providerMeta = meta[product.id] ?: JsonObject()
+                )
+            )
+        }
+        val fieldValues = verdict?.fieldValues?.takeIf { it.isNotEmpty() }?.let { JsonObject(LinkedHashMap(it)).encode() }
+        val creditOrder = a.breakdown.paymentMethodId == MethodInput.CREDITS
+        val now = clock.now()
+
+        return DraftItem(l.lineKey, parentKey, product?.billingMode == BillingMode.SUBSCRIPTION && l.kind != OrderItemKind.BUNDLE_CHILD) { orderId, parentItemId, stockReserved ->
+            MarketOrderItem(
+                orderId = orderId, productId = l.productId, productName = name, quantity = l.quantity, unitPrice = l.unitPrice,
+                kind = l.kind, parentItemId = parentItemId, variantId = l.variantId.takeIf { it != 0L }, variantName = variant?.name,
+                sku = variant?.sku ?: product?.sku, listUnitPrice = l.listUnitPrice, discountAmount = l.discountAmount, upgradeAmount = l.upgradeAmount,
+                couponAmount = l.couponAmount, vatPercent = l.vatPercent, vatAmount = l.vatAmount, lineTotal = l.lineTotal,
+                creditUnitPrice = if (creditOrder && l.kind != OrderItemKind.BUNDLE_CHILD) l.creditUnitPrice else null, creditAmount = granted,
+                fieldValues = fieldValues, targetServerId = verdict?.targetServerId, snapshot = snapshot.encode(), physical = physical,
+                stockReserved = stockReserved, upgradeFromEntitlementId = l.upgradeFromEntitlementId, createdAt = now, updatedAt = now
+            )
+        }
+    }
+
+    private fun topUpAmount(credits: Long): String = BigDecimal.valueOf(credits).movePointLeft(2).stripTrailingZeros().toPlainString()
+
+    private fun draftOf(
+        a: Assessment,
+        request: CheckoutRequest,
+        caller: QuoteCaller,
+        payer: Payer,
+        verified: Verified,
+        items: List<DraftItem>,
+        reservation: Reservation,
+        uses: List<CodeUse>,
+        customer: CustomerKeys
+    ): OrderDraft {
+        val b = a.breakdown
+        val methodId = checkNotNull(b.paymentMethodId) { "an order without a payment method" }
+        val recipient = checkNotNull(a.recipient) { "an order without a recipient" }
+        val now = clock.now()
+        val timings = TimingConfig(a.c.orderExpiryMinutes, a.c.bankTransferExpiryHours)
+        val windowMinutes = a.selected?.caps?.paymentWindowMinutes
+        val window = OrderTimings.providerWindowMs(methodId, windowMinutes, timings)
+        val label = labelOf(a, methodId)
+        val testMode = a.c.testMode || a.selected?.testMode == true
+        val coupon = a.items.coupon?.takeIf { it.valid }
+        val creator = a.items.creatorCode?.takeIf { it.valid }
+
+        check(b.gatewayAmount + b.creditValue == b.total) { "gateway ${b.gatewayAmount} + credit value ${b.creditValue} != total ${b.total}" }
+
+        val build = { publicId: String, accessToken: String ->
+            MarketOrder(
+                userId = caller.userId, playerUsername = payer.name, totalPrice = b.total, currency = a.items.currency, paymentMethodId = methodId,
+                paymentLabel = label, status = OrderStatus.PENDING, createdAt = now, updatedAt = now, publicId = publicId, accessToken = accessToken,
+                source = OrderSource.STOREFRONT, buyerKey = payer.key, idempotencyKey = request.idempotencyKey, idempotencyHash = request.bodyHash,
+                email = a.orderEmail?.lowercase(Locale.ROOT), locale = a.locale, clientIp = caller.clientIp, userAgent = caller.userAgent?.take(255),
+                recipientUsername = recipient.username, recipientUserId = recipient.userId, recipientKey = recipient.key, isGift = recipient.isGift,
+                giftMessage = if (recipient.isGift) recipient.giftMessage else null, hideFromBroadcast = request.hideFromBroadcast,
+                reservationState = ReservationState.HELD,
+                expiresAt = OrderTimings.orderExpiresAtOnCreate(now, methodId, windowMinutes, timings),
+                baseCurrency = a.items.baseCurrency, fxRate = a.items.fxRate, displayCurrency = a.items.display?.currency, displayRate = a.items.display?.rate,
+                pricingMode = DbPricingMode.valueOf(a.items.pricingMode.name), pricesIncludeVat = a.items.pricesIncludeVat, subtotal = b.subtotal,
+                discountTotal = b.discountTotal, couponDiscount = b.couponDiscount, creatorDiscount = b.creatorDiscount, upgradeDiscount = b.upgradeDiscount,
+                shippingTotal = b.shippingTotal, shippingVatPercent = b.shippingVatPercent, shippingVatAmount = b.shippingVat, paymentFee = b.paymentFee,
+                paymentFeeVatPercent = b.tender.paymentFeeVatPercent, paymentFeeVatAmount = b.tender.paymentFeeVatAmount, vatTotal = b.vatTotal,
+                creditAmount = b.creditAmount, creditValue = b.creditValue, gatewayAmount = b.gatewayAmount, couponId = coupon?.id, creatorCodeId = creator?.id,
+                couponCode = coupon?.code, creatorCode = creator?.code, testMode = testMode, requiresShipping = a.items.requiresShipping,
+                shippingStatus = if (a.items.requiresShipping) ShippingStatus.PENDING else ShippingStatus.NOT_REQUIRED,
+                shippingAddress = if (a.items.requiresShipping) (a.shipping.address ?: request.input.shippingAddress)?.encode() else null,
+                shippingMethodId = if (a.items.requiresShipping) a.shipping.methodId else null,
+                shippingMethodName = if (a.items.requiresShipping) a.shipping.methodName else null,
+                shippingQuote = if (a.items.requiresShipping) a.shipping.snapshot?.encode() else null,
+                shippingWeightGrams = if (a.items.requiresShipping) a.shipping.weightGrams else null,
+                billingInfo = verified.billing?.encode(), legalTextId = verified.legal?.id, legalAcceptedAt = verified.legal?.let { now }
+            )
+        }
+
+        return OrderDraft(
+            order = build, items = items, reservation = reservation, uses = uses, customer = customer,
+            attempt = AttemptDraft(
+                providerId = methodId, methodLabel = label, expiresAt = OrderTimings.attemptExpiresAt(now, window, OrderTimings.hardCap(now, window)),
+                testMode = testMode, clientIp = caller.clientIp, userAgent = caller.userAgent?.take(255)
+            ),
+            clearCartOfUser = if (a.usedServerCart) caller.userId else null,
+            actorUserId = caller.userId
+        )
+    }
+
+    /** `paymentLabel`: the method's own label, else the provider's name in the order locale (`credits` / `free` have none of their own). */
+    private fun labelOf(a: Assessment, methodId: String): String {
+        val selected = a.selected
+
+        if (selected != null) return selected.row.customLabel?.takeIf { it.isNotBlank() } ?: selected.provider.descriptor.displayName.resolve(a.locale)
+
+        return lookup.payment(methodId)?.provider?.descriptor?.displayName?.resolve(a.locale) ?: methodId
+    }
+
+    // ----- phase C and the answer
+
+    private suspend fun finish(created: CreatedOrder, deps: CheckoutDeps, sqlClient: SqlClient): CheckoutResult {
+        val token = checkNotNull(created.order.accessToken)
+        val start = try {
+            deps.starter.start(created.order, created.attempt, sqlClient)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            val code = (e as? PaymentStartFailed)?.code ?: ProviderErrorCode.INTERNAL.name
+
+            logger.warn("the payment of order {} could not be started: {}", created.order.id, code)
+
+            throw PaymentProviderError(code, deps.orders.ownerView(orders.getById(created.order.id, sqlClient) ?: created.order, sqlClient), token)
+        }
+        val order = orders.getById(created.order.id, sqlClient) ?: created.order
+
+        return CheckoutResult(deps.orders.ownerView(order, sqlClient, start), token, start ?: completedStart(order))
+    }
+
+    private fun completedStart(order: MarketOrder): JsonObject? = if (order.status == OrderStatus.COMPLETED) JsonObject().put("kind", "COMPLETED") else null
+
+    /**
+     * A request that was already placed (06 section 5.1): another body for the key is `IDEMPOTENCY_CONFLICT`; the same body gets the order
+     * as it is now: the stored start of the newest attempt when it is `PENDING` / `PROCESSING`, a wait of up to
+     * [CheckoutDeps.replayWaitMs] while it is still `CREATED` (the first request is talking to the gateway; then `payment: null`), a
+     * 502 with the order when it `FAILED`, `{kind: COMPLETED}` for a completed order.
+     */
+    private suspend fun replay(existing: MarketOrder, request: CheckoutRequest, deps: CheckoutDeps, sqlClient: SqlClient): CheckoutResult {
+        if (existing.idempotencyHash != request.bodyHash) throw IdempotencyConflict()
+
+        var order = existing
+        var attempt = deps.payments.getByOrderId(order.id, sqlClient).lastOrNull()
+        var polls = 0L
+        val maxPolls = if (deps.replayPollMs <= 0) 0 else deps.replayWaitMs / deps.replayPollMs
+
+        while (attempt != null && attempt.status == PaymentStatus.CREATED && order.status == OrderStatus.PENDING && polls < maxPolls) {
+            delay(deps.replayPollMs)
+
+            polls++
+            order = orders.getById(order.id, sqlClient) ?: order
+            attempt = deps.payments.getByOrderId(order.id, sqlClient).lastOrNull()
+        }
+
+        val token = checkNotNull(order.accessToken)
+
+        if (attempt != null && attempt.status == PaymentStatus.FAILED) {
+            throw PaymentProviderError(attempt.failureCode ?: ProviderErrorCode.INTERNAL.name, deps.orders.ownerView(order, sqlClient), token)
+        }
+
+        val start = if (order.status == OrderStatus.COMPLETED) {
+            completedStart(order)
+        } else if (attempt != null && (attempt.status == PaymentStatus.PENDING || attempt.status == PaymentStatus.PROCESSING)) {
+            deps.starter.served(attempt, sqlClient)
+        } else {
+            null
+        }
+
+        return CheckoutResult(deps.orders.ownerView(order, sqlClient, start), token, start)
+    }
+
+    // ----- rate limit L1 (11 section 11): IP before the replay lookup, buyer after it
+
+    private class Limiters(val perMinute: Int, val ip: RateLimiter, val buyer: RateLimiter)
+
+    @Volatile
+    private var limiters: Limiters? = null
+
+    private fun limitersFor(c: MarketConfig): Limiters? {
+        val perMinute = c.checkoutRateLimitPerMinute
+
+        if (perMinute <= 0) return null
+
+        return limiters?.takeIf { it.perMinute == perMinute }
+            ?: Limiters(perMinute, RateLimiter(perMinute, 60_000L / perMinute), RateLimiter(perMinute, 60_000L / perMinute)).also { limiters = it }
+    }
+
+    private fun limitIp(caller: QuoteCaller, c: MarketConfig) {
+        val l = limitersFor(c) ?: return
+        val bucket = IpRange.bucketKey(caller.clientIp) ?: return
+
+        if (!l.ip.tryAcquire("ip:$bucket")) throw TooManyRequests(retryAfterSeconds(l.perMinute))
+    }
+
+    private fun limitBuyer(buyerKey: String, c: MarketConfig) {
+        val l = limitersFor(c) ?: return
+
+        if (!l.buyer.tryAcquire("b:$buyerKey")) throw TooManyRequests(retryAfterSeconds(l.perMinute))
+    }
+
+    private fun retryAfterSeconds(perMinute: Int): Long = maxOf(1L, Math.ceil(60.0 / perMinute).toLong())
 
     // ---------------------------------------------------------------------------------------------------- the cart
 
@@ -860,6 +1590,39 @@ class CheckoutService(
 
     // ----------------------------------------------------------------------------------------- payment methods
 
+    /** What phase B keeps from phase A: no provider, carrier or block-list call happens inside the order transaction. */
+    private class Frozen(val selected: Candidate?, val shipping: ShippingQuote)
+
+    /** The quote and every internal fact checkout needs to write the order. */
+    private class Assessment(
+        val quote: Quote,
+        val c: MarketConfig,
+        val locale: String,
+        val lines: List<CartLine>,
+        val cart: MarketCart?,
+        val usedServerCart: Boolean,
+        val catalog: Catalog,
+        val rules: RuleResult,
+        val recipient: RecipientResolver.Recipient?,
+        val payerName: String?,
+        val payerKey: String,
+        val orderEmail: String?,
+        val items: ItemsResult,
+        val breakdown: PriceBreakdown,
+        val selected: Candidate?,
+        val chosen: PaymentMethodOption?,
+        val selectedId: String?,
+        val shipping: ShippingQuote,
+        val topUp: TopUpRequest?,
+        val topUpReason: String?,
+        val payWithCredits: Boolean,
+        val legal: LegalTextService.LegalView?,
+        val requiredFields: List<String>,
+        val messages: List<QuoteMessage>,
+        val now: Long,
+        val candidates: List<Candidate>
+    )
+
     private class Candidate(
         val id: String,
         val provider: PaymentProvider,
@@ -1087,6 +1850,22 @@ class CheckoutService(
         const val BUYER_BLOCKED = "BUYER_BLOCKED"
         const val SHIPPING_ADDRESS_REQUIRED = "SHIPPING_ADDRESS_REQUIRED"
         const val SHIPPING_UNAVAILABLE = "SHIPPING_UNAVAILABLE"
+        const val SHIPPING_ADDRESS_INVALID = "SHIPPING_ADDRESS_INVALID"
+        const val SHIPPING_METHOD_REQUIRED = "SHIPPING_METHOD_REQUIRED"
+        const val METHOD_REQUIRED = "METHOD_REQUIRED"
+        const val METHOD_NOT_OFFERED = "METHOD_NOT_OFFERED"
+
+        private val logger = LoggerFactory.getLogger(CheckoutService::class.java)
+
+        /** Line codes that are 409 errors of their own at checkout (06 section 6.3, last row), not `INVALID_CART` entries. */
+        private val STOCK_AND_LIMIT_CODES = setOf(LineCode.OUT_OF_STOCK, LineCode.PURCHASE_LIMIT_REACHED, LineCode.COOLDOWN_ACTIVE, LineCode.REQUIREMENT_NOT_MET)
+        private val SHIPPING_CODES = setOf(SHIPPING_ADDRESS_REQUIRED, SHIPPING_ADDRESS_INVALID, SHIPPING_UNAVAILABLE, SHIPPING_METHOD_REQUIRED)
+
+        /** A7: refusals of the credit tender (the others of `TenderBreakdown.unavailable` are the amount checks of the gateway, A8). */
+        private val CREDIT_UNAVAILABLE = setOf(
+            PricingCode.CREDITS_DISABLED, PricingCode.EXTERNAL_PRICING, PricingCode.NOT_PAYABLE_WITH_CREDITS,
+            PricingCode.MIXED_CREDIT_NOT_SUPPORTED, PricingCode.CREDITS_REQUIRED
+        )
 
         private val LIVE_SUBSCRIPTIONS = setOf(SubscriptionStatus.PENDING, SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE, SubscriptionStatus.PAUSED)
 
