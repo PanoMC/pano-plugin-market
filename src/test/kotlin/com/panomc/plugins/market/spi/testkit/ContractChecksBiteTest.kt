@@ -23,6 +23,7 @@ import com.panomc.plugins.market.spi.shipping.ShippingInboundResult
 import com.panomc.plugins.market.spi.shipping.ShippingProvider
 import com.panomc.plugins.market.spi.shipping.TrackingEvent
 import com.panomc.plugins.market.spi.shipping.TrackingUpdate
+import com.panomc.plugins.market.spi.common.InboundKind
 import com.panomc.plugins.market.spi.common.InboundRequest
 import com.panomc.plugins.market.spi.common.Money
 import io.vertx.core.json.JsonObject
@@ -153,6 +154,57 @@ class ContractChecksBiteTest {
         })::checkGarbageInboundIsRejectedOrIgnored)
     }
 
+    private fun acceptingOnReturn(vararg events: PaymentEvent) = pay({
+        object : ExamplePaymentProvider() {
+            override suspend fun handleInbound(ctx: PaymentContext, request: PaymentInboundRequest): InboundResult =
+                if (request.http.kind == com.panomc.plugins.market.spi.common.InboundKind.RETURN) InboundResult.accepted(HttpReply.text("OK"), events.toList())
+                else super.handleInbound(ctx, request)
+        }
+    })
+
+    @Test
+    fun `a payment provider that accepts any money or state event on a garbage RETURN fails the garbage check`() {
+        val ref = PaymentTarget.Reference("ABCDEFGHJKMNPQRSTVWX")
+        fails(acceptingOnReturn(PaymentEvent.Cancelled(ref))::checkGarbageInboundIsRejectedOrIgnored)
+        fails(acceptingOnReturn(PaymentEvent.Expired(ref))::checkGarbageInboundIsRejectedOrIgnored)
+        fails(acceptingOnReturn(PaymentEvent.Failed(ref, "declined", null))::checkGarbageInboundIsRejectedOrIgnored)
+        fails(acceptingOnReturn(PaymentEvent.RefundUpdated(ref, com.panomc.plugins.market.spi.payment.RefundState.SUCCEEDED, Money(100, "EUR")))::checkGarbageInboundIsRejectedOrIgnored)
+        fails(acceptingOnReturn(PaymentEvent.DisputeUpdated(ref, com.panomc.plugins.market.spi.payment.DisputeState.LOST))::checkGarbageInboundIsRejectedOrIgnored)
+        fails(acceptingOnReturn(PaymentEvent.SubscriptionPaymentFailed("sub_1"))::checkGarbageInboundIsRejectedOrIgnored)
+        // A trigger-style pending answer stays allowed.
+        passes(acceptingOnReturn(PaymentEvent.Pending(ref, PendingReason.AWAITING_BUYER))::checkGarbageInboundIsRejectedOrIgnored)
+    }
+
+    @Test
+    fun `a payment provider that reads a form parameter unguarded fails the garbage check on a malformed percent escape`() {
+        fails(pay({
+            object : ExamplePaymentProvider() {
+                override suspend fun handleInbound(ctx: PaymentContext, request: PaymentInboundRequest): InboundResult {
+                    request.http.formParam("hash")
+                    return super.handleInbound(ctx, request)
+                }
+            }
+        })::checkGarbageInboundIsRejectedOrIgnored)
+        passes(pay({
+            object : ExamplePaymentProvider() {
+                override suspend fun handleInbound(ctx: PaymentContext, request: PaymentInboundRequest): InboundResult {
+                    runCatching { request.http.formParam("hash") }
+                    return super.handleInbound(ctx, request)
+                }
+            }
+        })::checkGarbageInboundIsRejectedOrIgnored)
+    }
+
+    @Test
+    fun `the garbage set carries malformed percent escapes, invalid utf-8, a GET query and multipart attributes`() {
+        val all = InboundKind.entries.flatMap { Garbage.requests(it) }
+        assertTrue(all.any { it.method == "POST" && it.bodyAsString().contains("hash=%ZZ") })
+        assertTrue(all.any { it.rawQuery == "hash=%ZZ" })
+        assertTrue(all.any { it.formAttributes != null })
+        assertTrue(all.any { it.body.contentEquals(byteArrayOf(0x61, 0x3d, 0xC3.toByte(), 0x28, 0x26, 0x25)) })
+        assertThrows<IllegalArgumentException> { all.first { it.bodyAsString().contains("hash=%ZZ") }.form() }
+    }
+
     @Test
     fun `a payment provider that fails with anything but CONFIGURATION on empty settings fails the empty settings check`() {
         passes(pay({ ExamplePaymentProvider() })::checkEmptySettingsOnlyConfigurationErrors)
@@ -269,6 +321,26 @@ class ContractChecksBiteTest {
     }
 
     @Test
+    fun `a shipping provider that reads a form parameter unguarded fails the garbage check`() {
+        fails(ship({
+            object : ExampleShippingProvider() {
+                override suspend fun handleInbound(ctx: ShippingContext, request: InboundRequest): ShippingInboundResult {
+                    request.formParam("hash")
+                    return super.handleInbound(ctx, request)
+                }
+            }
+        })::checkGarbageInboundIsRejectedOrIgnored)
+        passes(ship({
+            object : ExampleShippingProvider() {
+                override suspend fun handleInbound(ctx: ShippingContext, request: InboundRequest): ShippingInboundResult {
+                    runCatching { request.formParam("hash") }
+                    return super.handleInbound(ctx, request)
+                }
+            }
+        })::checkGarbageInboundIsRejectedOrIgnored)
+    }
+
+    @Test
     fun `shipping garbage and empty settings checks`() {
         passes(ship({ ExampleShippingProvider() })::checkGarbageInboundIsRejectedOrIgnored)
         passes(ship({ ExampleShippingProvider() })::checkEmptySettingsOnlyConfigurationErrors)
@@ -338,6 +410,16 @@ class ContractChecksBiteTest {
             object : ExampleShippingProvider() {
                 override suspend fun handleInbound(ctx: ShippingContext, request: InboundRequest): ShippingInboundResult =
                     super.handleInbound(ctx, request).also { if (it.updates.isNotEmpty()) it.eventKey = "TN1" }
+            }
+        })::checkIdenticalUnsignedBodiesWithDifferentStatesBothApply)
+        // A state-derived key ("number:state") differs between the two deliveries but still makes market drop a later
+        // repeat of a state as DUPLICATE (IN_TRANSIT -> EXCEPTION -> IN_TRANSIT loses the third update): must fail too.
+        fails(ship({
+            object : ExampleShippingProvider() {
+                override suspend fun handleInbound(ctx: ShippingContext, request: InboundRequest): ShippingInboundResult =
+                    super.handleInbound(ctx, request).also {
+                        if (it.updates.isNotEmpty()) it.eventKey = "TN1:" + it.updates.first().events.first().status.name
+                    }
             }
         })::checkIdenticalUnsignedBodiesWithDifferentStatesBothApply)
     }

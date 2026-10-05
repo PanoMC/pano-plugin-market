@@ -17,6 +17,7 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -186,9 +187,8 @@ abstract class ShippingContractChecks : AutoCloseable {
         val second = handle(provider, scenario.context, scenario.request)
         assertTrue(first.updates.isNotEmpty() && second.updates.isNotEmpty(), "both deliveries must produce updates")
         assertNotEquals(statuses(first.updates), statuses(second.updates), "two identical bodies with different fetched states gave the same state change")
-        if (first.eventKey != null || second.eventKey != null) {
-            assertNotEquals(first.eventKey, second.eventKey, "eventKey of an unsigned webhook must follow the fetched state, not the body")
-        }
+        assertNull(first.eventKey, "an unsigned trigger webhook must not set eventKey (03 section 6): the body is identical for every state, so no key can identify a delivery")
+        assertNull(second.eventKey, "an unsigned trigger webhook must not set eventKey (03 section 6): the body is identical for every state, so no key can identify a delivery")
     }
 
     fun checkFailedCreateKeepsCarrierReference() {

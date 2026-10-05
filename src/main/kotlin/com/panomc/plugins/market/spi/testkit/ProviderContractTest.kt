@@ -52,12 +52,21 @@ object Garbage {
             "application/json" to "{\"type\":\"__contract_test_unknown__\",\"data\":{\"object\":null}}".toByteArray(),
             "application/x-www-form-urlencoded" to "a=1&a=2&&=&b".toByteArray(),
             "application/x-www-form-urlencoded" to "status=success&hash=&amount=-1&order_id=%00".toByteArray(),
+            // Malformed percent escapes (a truncated "%" and "%ZZ") are the most likely hostile input of every form-encoded
+            // gateway: InboundRequest.form() throws on them, so a provider has to survive that (02 section 14.1, 10 rule 8).
+            "application/x-www-form-urlencoded" to "status=success&hash=%ZZ&amount=%".toByteArray(),
+            // Invalid UTF-8 (0xC3 0x28) followed by a bare "&%".
+            "application/x-www-form-urlencoded" to byteArrayOf(0x61, 0x3d, 0xC3.toByte(), 0x28, 0x26, 0x25),
+            "multipart/form-data; boundary=x" to "--x\r\nContent-Disposition: form-data; name=\"hash\"\r\n\r\n%ZZ\r\n--x".toByteArray(),
             "text/xml" to "<?xml version=\"1.0\"?><a><b/>".toByteArray(),
             "application/octet-stream" to bytes(4096),
             "text/plain" to ByteArray(256 * 1024) { 'A'.code.toByte() },
             "application/json" to "😀 {\"emoji\":true}".toByteArray(Charsets.UTF_8)
         )
     }
+
+    /** The multipart / attribute variant: the host hands the parsed fields over in [InboundRequest.formAttributes]. */
+    private val multipartAttributes = mapOf("hash" to listOf("%ZZ", ""), "" to listOf("%"), "amount" to listOf("-1"))
 
     fun requests(kind: InboundKind): List<InboundRequest> = bodies.flatMapIndexed { i, (contentType, body) ->
         val headers = HashMap<String, List<String>>()
@@ -75,7 +84,17 @@ object Garbage {
                 kind = kind, channel = "default", method = "GET", rawQuery = "status=ok&hash=zz&token=", headers = headers.filterKeys { it == "content-type" },
                 query = mapOf("status" to listOf("ok"), "hash" to listOf("zz"), "token" to listOf("")), contentType = contentType, body = ByteArray(0),
                 remoteIp = "203.0.113.9", receivedAt = TestContexts.START_MS
-            )
+            ),
+            // A GET whose query carries a malformed percent escape, as the buyer's browser could send it.
+            InboundRequest(
+                kind = kind, channel = "default", method = "GET", rawQuery = "hash=%ZZ", headers = headers.filterKeys { it == "content-type" },
+                query = mapOf("hash" to listOf("%ZZ")), contentType = contentType, body = ByteArray(0),
+                remoteIp = "203.0.113.9", receivedAt = TestContexts.START_MS
+            ),
+            InboundRequest(
+                kind = kind, channel = "default", method = "POST", rawQuery = null, query = emptyMap(), headers = headers,
+                contentType = contentType, body = body, remoteIp = "203.0.113.9", receivedAt = TestContexts.START_MS
+            ).also { it.formAttributes = multipartAttributes }
         )
     }
 }
@@ -206,7 +225,12 @@ abstract class PaymentContractChecks : AutoCloseable {
             }
             assertTrue(result.reply.status in 100..599)
             if (kind == InboundKind.RETURN) {
-                assertTrue(result.events.none { it is PaymentEvent.Succeeded }, "a garbage RETURN produced a Succeeded event")
+                // The buyer can forge a browser return at will: it must be rejected or ignored like any other garbage; only a
+                // trigger-style "pending" answer is tolerated (02 section 14.1, 7.3 step 6 applies every event of a verified result).
+                assertTrue(
+                    !result.verified || result.events.all { it is PaymentEvent.Pending },
+                    "a garbage RETURN produced ${result.events.map { it.javaClass.simpleName }}"
+                )
             } else {
                 assertTrue(result.events.isEmpty(), "garbage ${req.kind} (${req.body.size} bytes, ${req.contentType}) produced ${result.events.size} event(s)")
             }

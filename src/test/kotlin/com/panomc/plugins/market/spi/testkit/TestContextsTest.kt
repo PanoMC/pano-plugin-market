@@ -203,7 +203,7 @@ class TestContextsTest {
     fun `garbage covers every inbound kind with empty, binary, oversized and misleading bodies`() {
         for (kind in com.panomc.plugins.market.spi.common.InboundKind.entries) {
             val requests = Garbage.requests(kind)
-            assertEquals(Garbage.bodies.size * 2, requests.size)
+            assertEquals(Garbage.bodies.size * 4, requests.size)
             assertTrue(requests.all { it.kind == kind })
             assertTrue(requests.any { it.body.isEmpty() && it.method == "POST" })
             assertTrue(requests.any { it.body.size >= 256 * 1024 })

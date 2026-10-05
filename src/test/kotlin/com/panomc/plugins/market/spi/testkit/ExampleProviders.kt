@@ -153,8 +153,8 @@ open class ExampleShippingProvider : ShippingProvider {
         val status = ShipmentStatus.valueOf(fetched)
         return ShippingInboundResult.accepted(
             com.panomc.plugins.market.spi.common.HttpReply.text("OK"),
-            listOf(TrackingUpdate(ShipmentTarget.TrackingNumber(number), listOf(TrackingEvent(status, ctx.now())))),
-            eventKey = "$number:$fetched"
+            // A trigger webhook: no eventKey (03 section 6), the same body is sent for every state.
+            listOf(TrackingUpdate(ShipmentTarget.TrackingNumber(number), listOf(TrackingEvent(status, ctx.now()))))
         )
     }
 
