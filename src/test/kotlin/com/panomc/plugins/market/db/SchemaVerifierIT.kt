@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test
  */
 class SchemaVerifierIT : MarketDbTestBase() {
     /** The unique indexes of the existing tables (00 section 8.1 and the scheme-version-2 install). */
-    private val uniqueIndexes = mapOf(
+    private val uniqueIndexes = listOf(
         "pano_market_coupon" to ("unique_code" to listOf("code")),
         "pano_market_creator_code" to ("unique_code" to listOf("code")),
         "pano_market_gift" to ("unique_code" to listOf("code")),
@@ -37,7 +37,17 @@ class SchemaVerifierIT : MarketDbTestBase() {
         "pano_market_cart" to ("uq_user" to listOf("userId")),
         "pano_market_cart_item" to ("uq_cart_line" to listOf("cartId", "lineKey")),
         "pano_market_invoice" to ("uq_series_seq" to listOf("series", "sequence")),
-        "pano_market_sequence" to ("uq_name" to listOf("name"))
+        "pano_market_sequence" to ("uq_name" to listOf("name")),
+        // scheme version 6 (01 sections 6.2 to 6.6, 00 section 8.1)
+        "pano_market_payment" to ("uq_reference" to listOf("reference")),
+        "pano_market_payment" to ("uq_token" to listOf("token")),
+        "pano_market_payment" to ("uq_provider_txn" to listOf("providerId", "gatewayTransactionId")),
+        "pano_market_refund" to ("uq_idem" to listOf("idempotencyKey")),
+        "pano_market_refund" to ("uq_provider_refund" to listOf("providerId", "gatewayRefundId")),
+        "pano_market_refund_item" to ("uq_refund_item" to listOf("refundId", "orderItemId")),
+        "pano_market_payment_event" to ("uq_event" to listOf("providerId", "direction", "eventKey")),
+        "pano_market_dispute" to ("uq_provider_dispute" to listOf("providerId", "gatewayDisputeId")),
+        "pano_market_provider_state" to ("uq_kind_provider_key" to listOf("kind", "providerId", "stateKey"))
     )
 
     private suspend fun rebuild() {

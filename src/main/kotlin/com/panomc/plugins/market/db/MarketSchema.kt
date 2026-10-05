@@ -138,6 +138,11 @@ object MarketSchema {
             columns += Column(name, "TINYINT(1)", default = default.toString())
         }
 
+        /** A nullable `BOOL` without a default: `NULL` = "not stated". */
+        fun flagOrNull(name: String) {
+            columns += Column(name, "TINYINT(1)", nullable = true)
+        }
+
         fun double(name: String, nullable: Boolean = true) {
             columns += Column(name, "DOUBLE", nullable)
         }
@@ -461,6 +466,23 @@ object MarketSchema {
         text("settings")
         timestamps()
         unique("unique_method_id", "methodId")
+        // Scheme version 6 (01 section 6.1): provider configuration beyond the settings JSON.
+        added {
+            int("position", default = 0)
+            str("customLabel", 255, nullable = true)
+            str("customDescription", 512, nullable = true)
+            str("feeMode", 24, "NONE")
+            bigint("feePercent", default = 0)
+            bigint("feeFixed", default = 0)
+            bigint("minAmount", nullable = true)
+            bigint("maxAmount", nullable = true)
+            text("currencies")
+            flag("testMode", 0)
+            bigint("lastInboundAt", nullable = true)
+            str("lastError", 512, nullable = true)
+            bigint("lastErrorAt", nullable = true)
+            bigint("settingsUpdatedAt", nullable = true)
+        }
     }
 
     val PRODUCT = table("market_product", "Market product table.") {
@@ -823,13 +845,180 @@ object MarketSchema {
         unique("uq_order_type_refund", "orderId", "type", "refundId")
     }
 
+    // --- scheme version 6: payments (01 sections 6.2 to 6.6) ----------------------------------------------------
+
+    val PAYMENT = table("market_payment", "Market payment attempt table.") {
+        id()
+        bigint("orderId")
+        bigint("subscriptionId", nullable = true)
+        str("providerId", 64)
+        str("methodLabel", 255, "")
+        str("status", 24, "CREATED")
+        str("reference", 24)
+        char("token", 40)
+        bigint("amount")
+        str("currency", 8)
+        bigint("feeAmount", default = 0)
+        bigint("creditAmount", default = 0)
+        bigint("creditValue", default = 0)
+        bigint("orderTotal", default = 0)
+        str("startKind", 16, nullable = true)
+        text("startPayload") // ENC
+        str("gatewayTransactionId", 191, nullable = true)
+        text("gatewayRefs")
+        text("providerData") // ENC
+        bigint("paidAmount", nullable = true)
+        str("paidCurrency", 8, nullable = true)
+        bigint("gatewayFee", nullable = true)
+        bigint("netAmount", nullable = true)
+        str("settlementCurrency", 16, nullable = true)
+        str("settlementAmount", 64, nullable = true)
+        int("installments", nullable = true)
+        str("methodDetail", 128, nullable = true)
+        flag("testMode", 0)
+        flag("duplicate", 0)
+        bigint("refundedAmount", default = 0)
+        str("failureCode", 64, nullable = true)
+        str("failureMessage", 512, nullable = true)
+        str("adminMessage", 512, nullable = true)
+        str("clientIp", 45, nullable = true)
+        str("userAgent", 255, nullable = true)
+        bigint("startedAt", nullable = true)
+        bigint("paidAt", nullable = true)
+        bigint("expiresAt", nullable = true)
+        bigint("closedAt", nullable = true)
+        bigint("nextQueryAt", nullable = true)
+        int("queryCount", default = 0)
+        bigint("lastQueriedAt", nullable = true)
+        timestamps()
+        unique("uq_reference", "reference")
+        unique("uq_token", "token")
+        unique("uq_provider_txn", "providerId", "gatewayTransactionId")
+        key("idx_order", "orderId")
+        key("idx_reconcile", "status", "nextQueryAt")
+        key("idx_subscription", "subscriptionId")
+    }
+
+    val PAYMENT_EVENT = table("market_payment_event", "Market raw provider traffic table.") {
+        id()
+        str("providerId", 64)
+        str("direction", 24)
+        str("channel", 16)
+        str("subChannel", 64, nullable = true)
+        str("eventKey", 128)
+        char("requestHash", 64, nullable = true)
+        bigint("paymentId", nullable = true)
+        bigint("orderId", nullable = true)
+        bigint("refundId", nullable = true)
+        bigint("subscriptionId", nullable = true)
+        str("method", 8, nullable = true)
+        str("url", 1024, nullable = true)
+        text("headers")
+        text("body")
+        str("remoteIp", 45, nullable = true)
+        flagOrNull("verified")
+        str("eventTypes", 255, nullable = true)
+        str("status", 24, "RECEIVED")
+        int("attempts", default = 0)
+        int("duplicateCount", default = 0)
+        bigint("nextAttemptAt", nullable = true)
+        int("responseStatus", nullable = true)
+        str("error", 512, nullable = true)
+        int("durationMs", nullable = true)
+        bigint("processedAt", nullable = true)
+        timestamps()
+        unique("uq_event", "providerId", "direction", "eventKey")
+        key("idx_request", "requestHash")
+        key("idx_payment", "paymentId")
+        key("idx_order", "orderId")
+        key("idx_status", "status", "createdAt")
+        key("idx_retry", "status", "nextAttemptAt")
+    }
+
+    val REFUND = table("market_refund", "Market refund table.") {
+        id()
+        bigint("orderId")
+        bigint("paymentId", nullable = true)
+        str("providerId", 64, nullable = true)
+        str("status", 24, "REQUESTED")
+        str("origin", 24)
+        str("idempotencyKey", 64)
+        char("idempotencyHash", 64, nullable = true)
+        bigint("amount")
+        bigint("gatewayAmount", default = 0)
+        bigint("gatewayRefundedAmount", nullable = true)
+        bigint("creditAmount", default = 0)
+        bigint("creditValue", default = 0)
+        str("currency", 8)
+        str("reason", 255, nullable = true)
+        str("gatewayRefundId", 191, nullable = true)
+        str("buyerActionUrl", 1024, nullable = true)
+        flag("revoke", 1)
+        flag("revokeFirst", 0)
+        flagOrNull("cascadeUpgrade")
+        flag("restock", 0)
+        bigint("creditTxId", nullable = true)
+        bigint("initiatedBy", nullable = true)
+        str("failureCode", 64, nullable = true)
+        str("failureMessage", 512, nullable = true)
+        bigint("nextQueryAt", nullable = true)
+        int("queryCount", default = 0)
+        bigint("completedAt", nullable = true)
+        timestamps()
+        unique("uq_idem", "idempotencyKey")
+        unique("uq_provider_refund", "providerId", "gatewayRefundId")
+        key("idx_order", "orderId")
+        key("idx_reconcile", "status", "nextQueryAt")
+    }
+
+    val REFUND_ITEM = table("market_refund_item", "Market refund line table.") {
+        id()
+        bigint("refundId")
+        bigint("orderItemId")
+        int("quantity", default = 0)
+        bigint("amount")
+        timestamps()
+        unique("uq_refund_item", "refundId", "orderItemId")
+    }
+
+    val DISPUTE = table("market_dispute", "Market dispute table.") {
+        id()
+        bigint("orderId")
+        bigint("paymentId", nullable = true)
+        str("providerId", 64, nullable = true)
+        str("gatewayDisputeId", 191, nullable = true)
+        str("status", 24, "OPEN")
+        str("origin", 24)
+        bigint("amount")
+        str("currency", 8)
+        str("reason", 255, nullable = true)
+        bigint("openedAt")
+        bigint("resolvedAt", nullable = true)
+        bigint("createdBy", nullable = true)
+        timestamps()
+        unique("uq_provider_dispute", "providerId", "gatewayDisputeId")
+        key("idx_order", "orderId")
+    }
+
+    val PROVIDER_STATE = table("market_provider_state", "Market provider key value state table.") {
+        id()
+        str("kind", 24)
+        str("providerId", 64)
+        str("stateKey", 191)
+        text("value", nullable = false) // ENC
+        bigint("expiresAt", nullable = true)
+        timestamps()
+        unique("uq_kind_provider_key", "kind", "providerId", "stateKey")
+    }
+
     /** Every table the plugin owns, in creation order. Later migration slices append their tables here. */
     val tables: List<Table> = listOf(
         CATEGORY, COMPARISON, COUPON, CREATOR_CODE, DISCOUNT, GIFT, ORDER, ORDER_ITEM, PAYMENT_METHOD, PRODUCT,
         PRODUCT_VARIANT, PRODUCT_PRICE, PRODUCT_FIELD, BUNDLE_ITEM, PRODUCT_PROVIDER_META, CURRENCY_RATE,
         REDEMPTION, CREATOR_EARNING, CREATOR_PAYOUT,
         ORDER_EVENT, LEGAL_TEXT, SEQUENCE,
-        ENTITLEMENT, ADDRESS, CART, CART_ITEM, INVOICE
+        ENTITLEMENT, ADDRESS, CART, CART_ITEM, INVOICE,
+        PAYMENT, PAYMENT_EVENT, REFUND, REFUND_ITEM, DISPUTE, PROVIDER_STATE
     )
 
     /** The table declared under [name] (without prefix), or an error naming it. */

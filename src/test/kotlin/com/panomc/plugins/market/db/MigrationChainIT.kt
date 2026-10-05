@@ -4,6 +4,7 @@ import com.panomc.platform.db.DatabaseMigration
 import com.panomc.plugins.market.db.migration.MarketMigration2to3
 import com.panomc.plugins.market.db.migration.MarketMigration3to4
 import com.panomc.plugins.market.db.migration.MarketMigration4to5
+import com.panomc.plugins.market.db.migration.MarketMigration5to6
 import com.panomc.plugins.market.support.MarketMigrationTestBase
 import com.panomc.plugins.market.support.MarketTestDb
 import io.vertx.kotlin.coroutines.coAwait
@@ -18,10 +19,10 @@ import org.junit.jupiter.api.Test
  * The migration chain from the frozen scheme-version-2 install (17 section 11.3 `MigrationChainIT`, 01 section 14.1
  * rule 6): the resulting schema equals the schema of a fresh `ensure()` (table, column, type, default and index
  * sets), the seed rows are unchanged in their existing columns, and a step is idempotent and survives being
- * interrupted half-way. Each later migration slice appends its step to [chain]; `2 -> 3`, `3 -> 4` and `4 -> 5` (orders) are in.
+ * interrupted half-way. Each later migration slice appends its step to [chain]; `2 -> 3`, `3 -> 4`, `4 -> 5` (orders) and `5 -> 6` (payments) are in.
  */
 class MigrationChainIT : MarketMigrationTestBase() {
-    private val chain: List<() -> DatabaseMigration> = listOf({ MarketMigration2to3() }, { MarketMigration3to4() }, { MarketMigration4to5() })
+    private val chain: List<() -> DatabaseMigration> = listOf({ MarketMigration2to3() }, { MarketMigration3to4() }, { MarketMigration4to5() }, { MarketMigration5to6() })
 
     private suspend fun runChain(client: SqlClient = pool) {
         for (step in chain) step().migrate(client)
@@ -77,7 +78,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         runChain()
         val migrated = SchemaSnapshot.take(pool)
         val fresh = freshSchema()
-        assertEquals(27, migrated.tables.size)
+        assertEquals(33, migrated.tables.size)
         assertEquals(fresh.tables, migrated.tables)
         assertEquals(fresh.columns, migrated.columns)
         assertEquals(fresh.keys, migrated.keys)
@@ -172,6 +173,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
             MarketMigration2to3().migrate(pool) // does not throw
             MarketMigration3to4().migrate(pool)
             MarketMigration4to5().migrate(pool)
+            MarketMigration5to6().migrate(pool)
 
             val findings = SchemaVerifier.verify(pool, prefix).findings
             assertEquals(listOf("pano_market_product_variant"), findings.map { it.target })
@@ -185,6 +187,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
             MarketMigration2to3().migrate(closed) // a dead connection does not throw either
             MarketMigration3to4().migrate(closed)
             MarketMigration4to5().migrate(closed)
+            MarketMigration5to6().migrate(closed)
         } finally {
             sql("DROP VIEW IF EXISTS `pano_market_product_variant`")
         }
@@ -322,6 +325,65 @@ class MigrationChainIT : MarketMigrationTestBase() {
             MarketMigration4to5().migrate(pool)
             assertEquals(expected, SchemaSnapshot.take(pool), "interrupted after $stopAfter handlers")
             MarketMigration4to5().migrate(pool)
+            assertEquals(expected, SchemaSnapshot.take(pool))
+            assertTrue(SchemaVerifier.verify(pool, prefix).ok)
+        }
+    }
+
+    @Test
+    fun `the step declares 5 to 6 with one handler per statement and no data statement`() {
+        val migration = MarketMigration5to6()
+        assertEquals(5, migration.from)
+        assertEquals(6, migration.to)
+        assertTrue(migration.isMigratable(5) && !migration.isMigratable(4))
+        // payment method: 14 columns; CREATE payment, payment_event, refund, refund_item, dispute, provider_state
+        assertEquals(14 + 6, migration.handlers.size)
+        assertEquals(14, MarketSchema.PAYMENT_METHOD.alters.size)
+        assertTrue(MarketSchema.PAYMENT_METHOD.alters.all { it.contains("ADD COLUMN IF NOT EXISTS") })
+        assertTrue(MarketSchema.PAYMENT_METHOD.alters.none { it.trim().startsWith("UPDATE", ignoreCase = true) || it.trim().startsWith("INSERT", ignoreCase = true) })
+    }
+
+    @Test
+    fun `step 5 to 6 adds the payment method columns with their defaults and keeps the seeded rows`(): Unit = runBlocking {
+        MarketMigration2to3().migrate(pool)
+        MarketMigration3to4().migrate(pool)
+        MarketMigration4to5().migrate(pool)
+        val columns = columnsOfCurrentTables()
+        val before = dump(columns)
+        val rows = before.getValue("pano_market_payment_method").size
+
+        MarketMigration5to6().migrate(pool)
+
+        assertEquals(before, dump(columns)) // existing columns of every existing row unchanged
+        assertEquals(
+            rows.toLong(),
+            count(
+                "market_payment_method",
+                "`position` = 0 AND `customLabel` IS NULL AND `customDescription` IS NULL AND `feeMode` = 'NONE' AND `feePercent` = 0 AND `feeFixed` = 0 " +
+                    "AND `minAmount` IS NULL AND `maxAmount` IS NULL AND `currencies` IS NULL AND `testMode` = 0 AND `lastInboundAt` IS NULL " +
+                    "AND `lastError` IS NULL AND `lastErrorAt` IS NULL AND `settingsUpdatedAt` IS NULL"
+            )
+        )
+        for (t in listOf("payment", "payment_event", "refund", "refund_item", "dispute", "provider_state")) assertEquals(0L, count("market_$t"), t)
+        assertEquals(emptyList<SchemaVerifier.Finding>(), SchemaVerifier.verify(pool, prefix).findings)
+    }
+
+    @Test
+    fun `step 5 to 6 survives an interruption and runs twice`(): Unit = runBlocking {
+        runChain()
+        val expected = SchemaSnapshot.take(pool)
+        val total = MarketMigration5to6().handlers.size
+        for (stopAfter in listOf(total / 2, 1, total - 1)) {
+            resetState()
+            MarketMigration2to3().migrate(pool)
+            MarketMigration3to4().migrate(pool)
+            MarketMigration4to5().migrate(pool)
+            for (handler in MarketMigration5to6().handlers.take(stopAfter)) handler(pool)
+            assertTrue(SchemaSnapshot.take(pool) != expected, "interrupted after $stopAfter handlers is partial")
+            assertTrue(MarketSchema.ensure(pool, prefix).clean)
+            MarketMigration5to6().migrate(pool)
+            assertEquals(expected, SchemaSnapshot.take(pool), "interrupted after $stopAfter handlers")
+            MarketMigration5to6().migrate(pool)
             assertEquals(expected, SchemaSnapshot.take(pool))
             assertTrue(SchemaVerifier.verify(pool, prefix).ok)
         }

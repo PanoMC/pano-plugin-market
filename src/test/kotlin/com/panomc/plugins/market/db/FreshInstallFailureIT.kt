@@ -113,11 +113,11 @@ class FreshInstallFailureIT : MarketDbTestBase() {
         assertEquals(MarketRuntime.State.DEGRADED, first.finalState)
         assertFalse(MarketRuntime.isReady)
 
-        // steps 6 to 8 still ran and the other twenty-six tables exist
+        // steps 6 to 8 still ran and the other thirty-two tables exist
         assertEquals(1, calls.secrets.get())
         assertEquals(1, calls.seeds.get())
         assertEquals(1, calls.scheduler.get())
-        assertEquals(26, MarketTestDb.marketTables(pool).size)
+        assertEquals(32, MarketTestDb.marketTables(pool).size)
 
         val health = MarketRuntime.health()
         assertEquals(MarketRuntime.State.DEGRADED, health.state)
@@ -131,7 +131,7 @@ class FreshInstallFailureIT : MarketDbTestBase() {
         assertEquals(MarketRuntime.State.READY, MarketRuntime.state)
         assertTrue(MarketRuntime.isReady)
         assertTrue(MarketRuntime.health().problems.isEmpty())
-        assertEquals(27, MarketTestDb.marketTables(pool).size)
+        assertEquals(33, MarketTestDb.marketTables(pool).size)
         assertTrue(SchemaVerifier.verify(pool, prefix).ok)
     }
 
@@ -184,7 +184,7 @@ class FreshInstallFailureIT : MarketDbTestBase() {
         )
         // ensure() creates the schema although initialize() failed: the plugin is usable
         assertEquals(MarketRuntime.State.READY, runner.run())
-        assertEquals(27, MarketTestDb.marketTables(pool).size)
+        assertEquals(33, MarketTestDb.marketTables(pool).size)
         assertEquals(1, calls.seeds.get())
         assertEquals(1, calls.scheduler.get())
         val errors = MarketRuntime.health().bootstrapErrors
