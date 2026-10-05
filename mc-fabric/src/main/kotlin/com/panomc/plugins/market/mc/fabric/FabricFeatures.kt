@@ -80,11 +80,18 @@ class FabricFeatureHost(private val server: () -> MinecraftServer?, private val 
     }
 }
 
+/** What the origin of a command stack is, decided by [FabricSender.classify]. */
+internal enum class SenderKind { PLAYER, CONSOLE, UNSUPPORTED }
+
 /**
- * Someone who typed a command. The console is a POSITIVE test (the source is the server itself, read from the private
- * `CommandSourceStack.source`); a command block, RCON or an entity that is no player is [supported] = false and refused
- * (19 section 7.4) -- a name such as "Server" proves nothing, a command block can be given it. If a Minecraft release hides
- * the field, nothing is the console any more (fail closed), players keep working.
+ * Someone who typed a command. BOTH identities are POSITIVE tests on the stack's ORIGINAL command source (the private
+ * `CommandSourceStack.source`, which `/execute as|at|positioned ...` never replaces, unlike the stack's entity and
+ * position): a player is accepted only when that source is the player's own `commandSource()` AND the stack's entity is
+ * that player; the console only when the source is the server itself and there is no entity. A command block, a datapack
+ * function, RCON and every `/execute as <someone else> run ...` therefore end up [supported] = false and are refused
+ * (19 section 7.4) -- a name such as "Server" proves nothing, a command block can be given it, and `execute as <online
+ * admin>` must not lend the admin's permissions and identity to whoever typed it. If a Minecraft release hides the field,
+ * nothing is accepted any more (fail closed).
  */
 class FabricSender(
     private val source: CommandSourceStack,
@@ -93,15 +100,35 @@ class FabricSender(
     private val host: FabricFeatureHost,
     private val console: Logger
 ) : McSender {
-    private val player: ServerPlayer? = try {
+    private val candidate: ServerPlayer? = try {
         source.player
     } catch (_: Exception) {
         null
     }
 
-    override val isConsole: Boolean = player == null && source.entity == null && sourceIsServer(source, server)
+    private val kind: SenderKind = classify(
+        stackSource = stackSource(source),
+        entity = try {
+            source.entity
+        } catch (_: Exception) {
+            null
+        },
+        player = candidate,
+        playerCommandSource = try {
+            candidate?.commandSource()
+        } catch (_: Exception) {
+            null
+        } catch (_: LinkageError) {
+            null
+        },
+        server = server
+    )
 
-    val supported: Boolean get() = player != null || isConsole
+    private val player: ServerPlayer? = if (kind == SenderKind.PLAYER) candidate else null
+
+    override val isConsole: Boolean = kind == SenderKind.CONSOLE
+
+    val supported: Boolean get() = kind != SenderKind.UNSUPPORTED
 
     override val name: String get() = player?.let { FabricFeatureHost.playerName(it) } ?: "CONSOLE"
     override val uuid: String? get() = player?.uuid?.toString()
@@ -138,13 +165,25 @@ class FabricSender(
             null
         }
 
-        internal fun sourceIsServer(source: CommandSourceStack, server: MinecraftServer?): Boolean {
-            if (server == null) return false
-            return try {
-                sourceField?.get(source) === server
-            } catch (_: Exception) {
-                false
+        /** The stack's original command source, or null when the field cannot be read (fail closed). */
+        internal fun stackSource(source: CommandSourceStack): Any? = try {
+            sourceField?.get(source)
+        } catch (_: Exception) {
+            null
+        }
+
+        /**
+         * The decision, free of Minecraft types so it is unit tested: [stackSource] is the stack's original command source,
+         * [entity] its entity (replaced by `/execute as`), [player] the entity as a player (null when it is none) and
+         * [playerCommandSource] that player's own command source.
+         */
+        internal fun classify(stackSource: Any?, entity: Any?, player: Any?, playerCommandSource: Any?, server: Any?): SenderKind {
+            if (stackSource == null) return SenderKind.UNSUPPORTED
+            if (player != null) {
+                return if (entity === player && playerCommandSource != null && stackSource === playerCommandSource) SenderKind.PLAYER
+                else SenderKind.UNSUPPORTED
             }
+            return if (entity == null && server != null && stackSource === server) SenderKind.CONSOLE else SenderKind.UNSUPPORTED
         }
     }
 }

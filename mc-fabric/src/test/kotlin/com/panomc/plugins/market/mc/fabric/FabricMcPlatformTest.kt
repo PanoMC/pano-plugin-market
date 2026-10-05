@@ -67,10 +67,13 @@ class FabricMcPlatformTest {
     }
 
     @Test
-    fun `a command that reported nothing is not confirmed and therefore a failure`() {
-        val r = platform { ConsoleOutcome.Ran(0, 0) }.dispatchConsole("say hi")
-        assertFalse(r.ok)
-        assertTrue(r.error!!.contains("not confirmed"), r.error)
+    fun `a command that ran and reported nothing is done - a void function must not be retried into a double delivery`() {
+        val r = platform { ConsoleOutcome.Ran(0, 0) }.dispatchConsole("function shop:kit")
+        assertTrue(r.ok, r.error)
+        assertTrue(platform { ConsoleOutcome.Ran(0, 0) }.dispatchConsole("execute as Absent run function shop:kit").ok)
+        assertTrue(platform { ConsoleOutcome.Ran(3, 0) }.dispatchConsole("function shop:kit").ok)
+        assertFalse(platform { ConsoleOutcome.Ran(1, 2) }.dispatchConsole("function shop:kit").ok)
+        assertFalse(platform { ConsoleOutcome.NotRun("unknown") }.dispatchConsole("function shop:kit").ok)
     }
 
     @Test
