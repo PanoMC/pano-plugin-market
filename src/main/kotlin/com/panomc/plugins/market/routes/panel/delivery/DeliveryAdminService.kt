@@ -10,6 +10,7 @@ import com.panomc.plugins.market.core.delivery.DeliveryPlanner
 import com.panomc.plugins.market.core.delivery.DeliveryTransition
 import com.panomc.plugins.market.core.delivery.FulfillmentCalculator
 import com.panomc.plugins.market.core.delivery.PlannedDelivery
+import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.db.dao.MarketDeliveryDao
 import com.panomc.plugins.market.db.dao.MarketEntitlementDao
@@ -21,7 +22,6 @@ import com.panomc.plugins.market.db.model.DeliveryStatus
 import com.panomc.plugins.market.db.model.DeliveryTransport
 import com.panomc.plugins.market.db.model.EntitlementStatus
 import com.panomc.plugins.market.db.model.MarketDelivery
-import com.panomc.plugins.market.db.model.MarketEntitlement
 import com.panomc.plugins.market.db.model.MarketOrderEvent
 import com.panomc.plugins.market.db.model.MarketOrderItem
 import com.panomc.plugins.market.db.model.OrderActorType
@@ -34,8 +34,8 @@ import com.panomc.plugins.market.db.tx.txRestartingOnOrderChange
 import com.panomc.plugins.market.error.DeliveryNotCancellable
 import com.panomc.plugins.market.error.DeliveryNotRetryable
 import com.panomc.plugins.market.error.InvalidOrderTransition
-import com.panomc.plugins.market.error.InvalidState
 import com.panomc.plugins.market.service.DeliveryService
+import com.panomc.plugins.market.service.EntitlementService
 import com.panomc.plugins.market.service.platform.ServerRoster
 import com.panomc.plugins.market.util.OrderStatus
 import com.panomc.plugins.market.util.Paging
@@ -63,7 +63,9 @@ class DeliveryAdminService(
     private val orderEvents: MarketOrderEventDao,
     private val deliveries: MarketDeliveryDao,
     private val entitlements: MarketEntitlementDao,
-    private val roster: ServerRoster
+    private val roster: ServerRoster,
+    /** The end flow of the entitlements (MK-107); the default is built from [entitlements] because a revoke never reads the settings. */
+    private val entitlementService: EntitlementService = EntitlementService(clock, { MarketConfig() }, entitlements)
 ) {
     private fun table(name: String) = "`${deliveries.prefix()}$name`"
 
@@ -348,8 +350,9 @@ class DeliveryAdminService(
 
     /**
      * `POST /orders/:id/revoke`: the end flow of 08 section 11.1 for [itemIds] (default every line) and every not-yet-revoked unit; no money moves.
-     * Answers the number of `REVOKE` rows planned. An item whose entitlement is `UPGRADED`, or a timed item whose owner has another live entitlement
-     * of the same product (the chain pull-forward and coverage rules, MK-107), is refused with 409 `INVALID_STATE` instead of being revoked halfway.
+     * Answers the number of `REVOKE` rows planned. The entitlements and the rows go through [EntitlementService.revoke] (MK-107): the entitlement of a line whose
+     * units are all revoked becomes `REVOKED` (`ADMIN`; an `UPGRADED` one too), the later links of a timed chain are pulled forward and an owner who is still
+     * covered by another link keeps the permission with a corrected expiry instead of losing it (08 section 11.1).
      */
     suspend fun revoke(orderId: Long, itemIds: List<Long>?, actorUserId: Long): Int =
         db.txRestartingOnOrderChange { conn ->
@@ -389,16 +392,11 @@ class DeliveryAdminService(
 
                 if (targets.isEmpty()) return@forOrder 0
 
-                guardEntitlements(conn, targets)
-
                 val now = clock.now()
-                val plan = deliveryService.planRevoke(conn, locked.order, lines, units, before, DeliveryError.ORDER_REVOKED, emptyMap(), group)
-
-                for (item in targets) {
-                    for (e in entitlements.getByOrderItemId(item.id, conn)) {
-                        if (e.status == EntitlementStatus.ACTIVE) entitlements.end(e.id, EntitlementStatus.REVOKED, "ADMIN", now, conn)
-                    }
-                }
+                val ids = targets.map { it.id }.toSet()
+                // the children of a bundle line follow it: the end flow scales the range of the bundle line to them
+                val named = targets.filter { it.parentItemId == null || it.parentItemId !in ids }.associate { it.id to units.getValue(it.id) as IntRange? }
+                val plan = entitlementService.revoke(conn, deliveryService, locked.order, locked.items, named, "ADMIN", DeliveryError.ORDER_REVOKED, before, group).plan
 
                 deliveryService.refreshFulfillment(conn, orderId)
 
@@ -434,21 +432,6 @@ class DeliveryAdminService(
 
         return out
     }
-
-    private suspend fun guardEntitlements(conn: SqlClient, targets: List<MarketOrderItem>) {
-        for (item in targets) {
-            val timed = runCatching { JsonObject(item.snapshot ?: "{}").getString("billingMode") }.getOrNull().let { it == "TIMED" || it == "SUBSCRIPTION" }
-
-            for (e in entitlements.getByOrderItemId(item.id, conn)) {
-                if (e.status == EntitlementStatus.UPGRADED) throw InvalidState("UPGRADED")
-
-                if (timed && e.status == EntitlementStatus.ACTIVE && othersLive(conn, e)) throw InvalidState("ENTITLEMENT_CHAIN")
-            }
-        }
-    }
-
-    private suspend fun othersLive(conn: SqlClient, e: MarketEntitlement): Boolean =
-        entitlements.getByOwnerAndProduct(e.ownerKey, e.productId, conn).any { it.id != e.id && it.variantId == e.variantId && it.status == EntitlementStatus.ACTIVE }
 
     // ===== list (08 section 14.5, 04 section 7) ==========================================================================
 

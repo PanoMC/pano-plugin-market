@@ -14,7 +14,6 @@ import com.panomc.plugins.market.db.model.OrderEventType
 import com.panomc.plugins.market.error.DeliveryNotCancellable
 import com.panomc.plugins.market.error.DeliveryNotRetryable
 import com.panomc.plugins.market.error.InvalidOrderTransition
-import com.panomc.plugins.market.error.InvalidState
 import com.panomc.plugins.market.routes.panel.delivery.DeliveryAdminService
 import com.panomc.plugins.market.routes.panel.delivery.DeliveryAdminService.Selector
 import com.panomc.plugins.market.support.MarketTestDb
@@ -48,7 +47,7 @@ class DeliveryAdminIT : MarketDaoITBase() {
     fun wire() {
         w = TestWiring(pool)
         d = DeliveryWorld(w)
-        admin = DeliveryAdminService(w.db, d.locks, w.clock, d.service, w.orders, w.orderEvents, w.deliveries, w.entitlements, d.roster)
+        admin = DeliveryAdminService(w.db, d.locks, w.clock, d.service, w.orders, w.orderEvents, w.deliveries, w.entitlements, d.roster, d.entitlementService)
     }
 
     private fun credit(id: String, credits: Long, phase: DeliveryPhase = DeliveryPhase.GRANT) = ProductAction(id = id, type = DeliveryActionType.CREDIT, phase = phase, credit = credits)
@@ -801,37 +800,85 @@ class DeliveryAdminIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `a revoke of an unknown line is 404 and of an upgraded entitlement is 409, and neither writes anything`(): Unit = runBlocking {
+    fun `a revoke of an unknown line is 404 and writes nothing, an upgraded entitlement is ended as REVOKED (MK-107)`(): Unit = runBlocking {
         val u = steve()
         val placed = confirmedCredit(u)
         val item = placed.items[0].id
 
         assertThrows(NotFound::class.java) { runBlocking { admin.revoke(placed.order.id, listOf(999999), 1) } }
+        assertEquals(1, d.rows(placed.order.id).size)
 
         val e = w.entitlements.getByOrderItemId(item, pool).single()
 
-        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_entitlement` SET `status` = 'UPGRADED' WHERE `id` = ?", e.id)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_entitlement` SET `status` = 'UPGRADED', `replacedById` = 4242 WHERE `id` = ?", e.id)
 
-        assertThrows(InvalidState::class.java) { runBlocking { admin.revoke(placed.order.id, null, 1) } }
-        assertEquals(1, d.rows(placed.order.id).size)
+        assertEquals(1, admin.revoke(placed.order.id, null, 1))
 
-        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_entitlement` SET `status` = 'ACTIVE' WHERE `id` = ?", e.id)
+        val ended = w.entitlements.getByOrderItemId(item, pool).single()
+
+        assertEquals(EntitlementStatus.REVOKED, ended.status)
+        assertEquals("ADMIN", ended.endReason)
+        assertEquals(4242L, ended.replacedById, "the link to the successor stays")
     }
 
     @Test
-    fun `a timed item whose owner holds another live entitlement of the product is refused until the chain rules of MK-107 exist`(): Unit = runBlocking {
+    fun `a revoke of a timed link whose owner is still covered by another one corrects the node instead of removing it (MK-107)`(): Unit = runBlocking {
         val u = steve()
         val actions = listOf(permission("p1", "group.vip"))
         val first = d.place(user = u, actions = actions, billing = "TIMED", periodUnit = "DAY", periodCount = 30)
-        val second = d.place(user = u, actions = actions, billing = "TIMED", periodUnit = "DAY", periodCount = 30, product = first.product)
+        val t0 = w.clock.now()
 
         d.pay(first)
+        d.runInline()
+        w.clock.advance(10 * 86_400_000L)
+
+        val second = d.place(user = u, actions = actions, billing = "TIMED", periodUnit = "DAY", periodCount = 30, product = first.product)
+
         d.pay(second)
+        d.runInline()
 
         assertEquals(2, MarketTestDb.count(pool, "market_entitlement", "`status` = 'ACTIVE'"))
-        assertThrows(InvalidState::class.java) { runBlocking { admin.revoke(first.order.id, null, 1) } }
+        assertEquals(t0 + 60 * 86_400_000L, d.permissionStore.of(u.id).single().expiresAt)
+
+        // the running first link is revoked: no REVOKE row for the rank, the second link moves forward by the 20 days that were left
+        assertEquals(1, admin.revoke(first.order.id, null, 1), "one row planned: the EXTEND that corrects the node expiry, no REVOKE of the rank")
+        assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(first.items[0].id, pool).single().status)
+
+        val e2 = w.entitlements.getByOrderItemId(second.items[0].id, pool).single()
+
+        assertEquals(t0 + 10 * 86_400_000L, e2.startsAt)
+        assertEquals(t0 + 40 * 86_400_000L, e2.expiresAt)
         assertEquals(0, d.rows(first.order.id).count { it.phase == DeliveryPhase.REVOKE })
-        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(first.items[0].id, pool).single().status)
+
+        d.runInline()
+        assertEquals(t0 + 40 * 86_400_000L, d.permissionStore.of(u.id).single().expiresAt)
+    }
+
+    @Test
+    fun `a child revoked alone and then the whole bundle order does not revoke the child twice and debits the credits once (MK-107 review)`(): Unit = runBlocking {
+        val u = steve()
+        val placed = d.placeBundle(u, listOf(credit("p1", 100)), listOf(DeliveryWorld.ChildLine(listOf(credit("c1", 40)))))
+        val child = placed.items[1].id
+
+        d.pay(placed)
+        d.runInline()
+        assertEquals(140L, w.fixtures.creditBalance(u))
+
+        assertEquals(1, admin.revoke(placed.order.id, listOf(child), 1))
+        d.runInline()
+        assertEquals(100L, w.fixtures.creditBalance(u))
+
+        val childRevokes = d.rows(placed.order.id).filter { it.phase == DeliveryPhase.REVOKE && it.orderItemId == child }.map { it.idempotencyKey }
+
+        assertEquals(1, childRevokes.size)
+
+        // the whole order: only the bundle line is left to revoke, the child keeps its single REVOKE row
+        assertEquals(1, admin.revoke(placed.order.id, null, 1))
+        d.runInline()
+
+        assertEquals(childRevokes, d.rows(placed.order.id).filter { it.phase == DeliveryPhase.REVOKE && it.orderItemId == child }.map { it.idempotencyKey })
+        assertEquals(1, d.rows(placed.order.id).count { it.phase == DeliveryPhase.REVOKE && it.orderItemId == placed.items[0].id })
+        assertEquals(0L, w.fixtures.creditBalance(u), "100 + 40 granted, each taken back exactly once")
     }
 
     // ===== list (14.5) ===================================================================================================
