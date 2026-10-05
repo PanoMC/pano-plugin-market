@@ -1065,6 +1065,10 @@ class CheckoutService(
         }
         val fieldValues = verdict?.fieldValues?.takeIf { it.isNotEmpty() }?.let { JsonObject(LinkedHashMap(it)).encode() }
         val creditOrder = a.breakdown.paymentMethodId == MethodInput.CREDITS
+        val creditUnitPrice = creditUnitPriceOf(l, creditOrder)
+        // the credit run's line total net of the code shares, so that a later switch to credits charges the quoted amount (see CreditRunSnapshot)
+        val creditLine = creditUnitPrice?.let { a.breakdown.items.credit?.lines?.firstOrNull { it.lineKey == l.lineKey } }
+        val storedSnapshot = CreditRunSnapshot.with(snapshot, creditLine?.lineTotal).encode()
         val now = clock.now()
 
         return DraftItem(l.lineKey, parentKey, product?.billingMode == BillingMode.SUBSCRIPTION && l.kind != OrderItemKind.BUNDLE_CHILD) { orderId, parentItemId, stockReserved ->
@@ -1073,8 +1077,8 @@ class CheckoutService(
                 kind = l.kind, parentItemId = parentItemId, variantId = l.variantId.takeIf { it != 0L }, variantName = variant?.name,
                 sku = variant?.sku ?: product?.sku, listUnitPrice = l.listUnitPrice, discountAmount = l.discountAmount, upgradeAmount = l.upgradeAmount,
                 couponAmount = l.couponAmount, vatPercent = l.vatPercent, vatAmount = l.vatAmount, lineTotal = l.lineTotal,
-                creditUnitPrice = creditUnitPriceOf(l, creditOrder), creditAmount = granted,
-                fieldValues = fieldValues, targetServerId = verdict?.targetServerId, snapshot = snapshot.encode(), physical = physical,
+                creditUnitPrice = creditUnitPrice, creditAmount = granted,
+                fieldValues = fieldValues, targetServerId = verdict?.targetServerId, snapshot = storedSnapshot, physical = physical,
                 stockReserved = stockReserved, upgradeFromEntitlementId = l.upgradeFromEntitlementId, createdAt = now, updatedAt = now
             )
         }

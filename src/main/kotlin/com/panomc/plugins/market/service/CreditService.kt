@@ -1,6 +1,10 @@
 package com.panomc.plugins.market.service
 
 import com.panomc.plugins.market.core.credit.CreditPolicy
+import com.panomc.plugins.market.core.credit.CreditPricing
+import com.panomc.plugins.market.core.money.Conversions
+import com.panomc.plugins.market.core.pricing.MethodInput
+import com.panomc.plugins.market.core.pricing.Tender
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.db.dao.MarketCreditAccountDao
 import com.panomc.plugins.market.db.dao.MarketCreditEntryDao
@@ -11,10 +15,13 @@ import com.panomc.plugins.market.db.model.MarketCreditAccount
 import com.panomc.plugins.market.db.model.MarketCreditEntry
 import com.panomc.plugins.market.db.model.MarketCreditTx
 import com.panomc.plugins.market.db.model.MarketOrder
+import com.panomc.plugins.market.db.model.MarketOrderItem
+import com.panomc.plugins.market.db.model.OrderItemKind
 import com.panomc.plugins.market.db.tx.LockedOrder
 import com.panomc.plugins.market.error.InsufficientCredits
 import com.panomc.plugins.market.spi.payment.ReviewReason
 import com.panomc.plugins.market.util.MoneyUtil
+import io.vertx.core.json.JsonObject
 import io.vertx.sqlclient.SqlClient
 import io.vertx.sqlclient.SqlConnection
 import org.slf4j.LoggerFactory
@@ -492,5 +499,64 @@ class CreditHoldGuard(private val credits: CreditService) : PaidGuard {
 
     companion object {
         const val NOTE = "credit hold mismatch"
+    }
+}
+
+/**
+ * What an order item remembers of the credit run (05 section 8.1) so that `POST /orders/:publicId/pay` can switch a pending order to `credits` later
+ * and charge what the buyer was quoted: the credit run's line total, **net of the coupon and creator-code shares**, written next to the product facts
+ * of `market_order_item.snapshot` under [KEY] (credits x 100, one figure for the whole line, bundle children excluded). `creditUnitPrice` alone cannot
+ * give it: it is the unit price before the code shares, and the shares are decided in credits by the credit run, not derivable from the money columns
+ * (a percentage code rounds differently in each unit; a fixed amount converts at the credit value).
+ */
+internal object CreditRunSnapshot {
+    const val KEY = "creditLineTotal"
+
+    /** The `snapshot` JSON of an item with the credit run's [lineTotal] added; [snapshot] is returned as is when there is none. */
+    fun with(snapshot: JsonObject, lineTotal: Long?): JsonObject = if (lineTotal == null) snapshot else snapshot.put(KEY, lineTotal)
+
+    /** The stored credit line total of [snapshot] (a JSON text), or null when the item has none. */
+    fun read(snapshot: String?): Long? {
+        if (snapshot.isNullOrBlank()) return null
+
+        val value = runCatching { JsonObject(snapshot).getValue(KEY) }.getOrNull()
+
+        return (value as? Number)?.toLong()?.takeIf { it >= 0 }
+    }
+
+    /**
+     * What the items of [order] cost in credits when it is paid entirely in credits: the credit run's `itemsTotal` of 05 section 8.1, net of the coupon
+     * and creator-code shares, which is what `FrozenOrder.creditItemsTotal` means (the tender adds the shipping). Null when the order cannot be paid in
+     * credits (a line is not sold for credits).
+     *
+     * - An order that is already on `credits` keeps the credit part it froze at O1 (06 section 9.3 step 2, 07 section 5 / D-O9: a retry changes nothing
+     *   and posts nothing): `creditAmount` less the shipping the tender adds back, so that the re-tender yields exactly `creditAmount` again whatever the
+     *   codes took off.
+     * - Any other order is priced from the credit run it was written with: the stored line total of each root item, so that a switch to credits holds the
+     *   amount the buyer was quoted, with the same winning discounts and codes (07 section 6.4). A line without it (written by something other than
+     *   checkout) falls back to the closed form of [CreditPricing] over the money columns, which equals the credit run up to its per-line rounding:
+     *   `creditUnitPrice` is already after the automatic discount and the upgrade (05 section 8.1), so the money list total handed to the ratio is the one
+     *   after both, and only the code share is left to take off.
+     */
+    fun itemsTotal(order: MarketOrder, items: List<MarketOrderItem>, conversions: Conversions): Long? {
+        if (order.paymentMethodId == MethodInput.CREDITS && order.creditAmount > 0) {
+            return Math.subtractExact(order.creditAmount, Tender.shippingCredits(conversions, order.shippingTotal))
+        }
+
+        val roots = items.filter { it.kind != OrderItemKind.BUNDLE_CHILD }
+
+        if (roots.isEmpty() || roots.any { it.creditUnitPrice == null }) return null
+
+        return roots.fold(0L) { total, item ->
+            val line = read(item.snapshot) ?: CreditPricing.lineCredits(
+                CreditPricing.Line(
+                    kind = item.kind, creditUnitPrice = item.creditUnitPrice!!, quantity = item.quantity,
+                    listTotal = maxOf(0L, Math.subtractExact(Math.subtractExact(Math.multiplyExact(item.listUnitPrice, item.quantity.toLong()), item.discountAmount), item.upgradeAmount)),
+                    couponAmount = item.couponAmount
+                )
+            )
+
+            Math.addExact(total, line)
+        }
     }
 }
