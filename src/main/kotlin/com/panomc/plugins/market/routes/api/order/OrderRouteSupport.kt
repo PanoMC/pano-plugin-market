@@ -119,7 +119,7 @@ internal fun creditService(plugin: MarketPlugin): CreditService {
 }
 
 private fun buildCreditService(plugin: MarketPlugin): CreditService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
 
     return CreditService(
         SystemClock, context.getBean(MarketCreditAccountDao::class.java), context.getBean(MarketCreditTxDao::class.java), context.getBean(MarketCreditEntryDao::class.java)

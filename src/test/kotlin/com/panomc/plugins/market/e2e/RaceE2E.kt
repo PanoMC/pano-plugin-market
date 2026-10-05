@@ -31,27 +31,51 @@ class RaceE2E : E2eTestBase() {
 
             gateway.setStatus(reference, "paid")
 
-            val answers = gateway.sendWebhook("payment.succeeded", data, id = event, copies = 2, concurrent = true)
+            // the two copies are the same signed bytes, posted by two warmed clients released together (17 section 8.4): the spread of the starts
+            // is measured, so a delivery that did not overlap fails the harness check of E2eRace.rounds instead of passing as "concurrent"
+            val body = gateway.eventBody("payment.succeeded", data, event)
+            val signature = checkNotNull(gateway.signatureHeader(body, FakePayGateway.Signature.VALID))
+            val hooks = (1..2).map { E2eClient(baseUrl, "webhook$it") }
+            val round = E2eRace.round(
+                2,
+                setup = { i -> hooks[i].also { it.warm() } },
+                action = { hook -> hook.request("POST", "/api/market/payments/fake/webhook", body, mapOf("X-Fake-Signature" to signature), csrf = false, cookiesOn = false) }
+            )
+            val answers = round.values()
 
-            assertEquals(listOf(200, 200), answers.map { it.statusCode() }, "both deliveries are answered 200")
+            assertEquals(listOf(200, 200), answers.map { it.status }, "both deliveries are answered 200")
             awaitOrder(publicId, "COMPLETED")
             assertEquals("SUCCEEDED", attemptStatus(reference))
             assertEquals(1L, orderEvents(publicId, "PAYMENT_SUCCEEDED"), "one PAYMENT_SUCCEEDED timeline row")
             val orderId = orderRow(publicId).getLong("id")
             assertEquals(1L, db.count("market_order_event", "`orderId` = ? AND `toStatus` = 'COMPLETED'", orderId), "one transition to COMPLETED (O2)")
 
-            val rows = db.sql("SELECT `status`, `duplicateCount`, `verified` FROM `pano_market_payment_event` WHERE `providerId` = 'fake' AND `eventKey` = ?", "e:$event")
-            assertEquals(1, rows.size, "the event key holds one row (uq_event)")
-            assertEquals("PROCESSED", rows[0].getString("status"))
-            assertEquals(1, rows[0].getInteger("duplicateCount"), "the second delivery is counted on the row that holds the key")
-            assertEquals(1, rows[0].getInteger("verified"))
+            // 02 section 7.3 step 5: one row PROCESSED holds the provider key (uq_event) and counts the second copy, the second copy is settled on its own
+            // `r:<uuid>` row as DUPLICATE. Both rows carry the request hash of the identical body (the duplicate has no payment / order: it applied nothing).
+            val holder = db.sql("SELECT `status`, `duplicateCount`, `verified`, `requestHash` FROM `pano_market_payment_event` WHERE `providerId` = 'fake' AND `eventKey` = ?", "e:$event")
+            assertEquals(1, holder.size, "the event key holds one row (uq_event)")
+            assertEquals("PROCESSED", holder[0].getString("status"))
+            assertEquals(1, holder[0].getInteger("duplicateCount"), "the second delivery is counted on the row that holds the key")
+            assertEquals(1, holder[0].getInteger("verified"))
 
-            // one set of side effects: no delivery, mail or webhook row exists twice for this order
-            for (table in listOf("market_delivery", "market_mail_outbox", "market_webhook_delivery")) {
-                if (tableExists(table)) assertEquals(0L, duplicates(table, orderId), "no duplicated rows in $table")
-            }
+            val hash = holder[0].getString("requestHash")
+            assertEquals(
+                2L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ?", hash),
+                "every inbound request is stored: two rows for the two copies"
+            )
+            assertEquals(
+                1L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ? AND `status` = 'DUPLICATE' AND `verified` = 1 AND `eventKey` LIKE 'r:%'", hash),
+                "the other copy is settled DUPLICATE on its own row"
+            )
+            assertEquals(
+                0L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ? AND `status` NOT IN ('PROCESSED', 'DUPLICATE')", hash),
+                "no copy is left RECEIVED / FAILED (applied twice or retried forever)"
+            )
 
-            E2eRace.Round<Unit>(emptyList(), 0) // the two deliveries are fired together by the gateway helper; nothing else to measure
+            // one set of side effects
+            assertSingleSetOfSideEffects(orderId)
+
+            round
         }
     }
 
@@ -114,15 +138,24 @@ class RaceE2E : E2eTestBase() {
 
     private fun reserved(productId: Long): Long = db.long("SELECT COALESCE(SUM(`stockReserved`), 0) FROM `pano_market_order_item` WHERE `productId` = ?", productId) ?: 0L
 
-    private fun tableExists(table: String): Boolean =
-        db.long("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?", "pano_$table") == 1L
+    /**
+     * 17 section 9.4 R-01 "one set of deliveries / mail / webhook": per order no business key appears twice. The expected row count is exact: the
+     * delivery, mail and webhook subsystems write nothing for a VIP purchase until their slices (MK-10x, MK-11x) land, and a table that starts
+     * filling must fail here so the slice that fills it states its expected set (and the cardinality check below then bites on it).
+     */
+    private fun assertSingleSetOfSideEffects(orderId: Long) {
+        val sideEffects = mapOf(
+            "market_delivery" to Triple("orderId", "`orderItemId`, `actionId`, `unitIndex`, `phase`, `attemptGroup`", 0L),
+            "market_mail_outbox" to Triple("orderId", "`kind`, `recipient`", 0L),
+            "market_webhook_delivery" to Triple("orderId", "`endpointId`, `event`", 0L)
+        )
 
-    /** Rows of [table] that name [orderId] more than once with the same business key. */
-    private fun duplicates(table: String, orderId: Long): Long {
-        val columns = db.sql("SELECT column_name AS c FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ?", "pano_$table").map { it.getString("c") }
-        val key = listOf("idempotencyKey", "dedupeKey", "eventKey", "key").firstOrNull { it in columns } ?: return 0L
-        val order = if ("orderId" in columns) "`orderId`" else return 0L
+        for ((table, spec) in sideEffects) {
+            val (column, key, expected) = spec
+            val row = db.sql("SELECT COUNT(*) AS n, COUNT(DISTINCT $key) AS d FROM `pano_$table` WHERE `$column` = ?", orderId).first()
 
-        return db.sql("SELECT COUNT(*) AS n FROM (SELECT `$key` FROM `pano_$table` WHERE $order = ? GROUP BY `$key` HAVING COUNT(*) > 1) d", orderId).first().getLong("n")
+            assertEquals(expected, row.getLong("n"), "rows of $table for the order (nothing writes them yet)")
+            assertEquals(row.getLong("n"), row.getLong("d"), "no business key of $table exists twice for the order")
+        }
     }
 }
