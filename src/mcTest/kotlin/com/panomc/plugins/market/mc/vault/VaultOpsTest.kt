@@ -1,10 +1,13 @@
 package com.panomc.plugins.market.mc.vault
 
+import com.panomc.plugins.market.mc.core.platform.SingleThreadScheduler
 import com.panomc.plugins.market.mc.core.store.AppendSink
 import com.panomc.plugins.market.mc.core.store.FileAppendSink
 import com.panomc.plugins.market.mc.core.support.TestClock
 import com.panomc.plugins.market.mc.core.support.TestLog
 import com.panomc.plugins.market.mc.core.wire.EconomyOp
+import com.panomc.plugins.market.mc.core.wire.MarketEconomyRequest
+import com.panomc.plugins.market.mc.core.wire.PlayerRef
 import com.panomc.plugins.market.mc.spigot.vault.ConvertOutcome
 import com.panomc.plugins.market.mc.spigot.vault.EconomyClient
 import com.panomc.plugins.market.mc.spigot.vault.Notice
@@ -17,12 +20,17 @@ import com.panomc.plugins.market.mc.spigot.vault.VaultOps
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.math.BigDecimal
 import java.nio.file.Path
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * The money paths of the Vault bridge against a fake Pano ledger (one transaction per operationId, like Pano) and a fake
@@ -708,6 +716,278 @@ class VaultOpsTest {
         assertEquals(1, base.size)
         assertTrue(link.requests.any { it.operationId == base.single() + ":undo" })
         assertNotNull(link.requests.first().operationId)
+    }
+
+    // ---- review fixes: a payment of unknown outcome is never resolved by guessing -----------------------------------------------
+
+    private fun limitedFiles(limit: AtomicInteger): (Path) -> AppendSink = { p -> CountingFileSink(FileAppendSink(p), limit) }
+
+    /** The server dies and starts again over the same journal directory. */
+    private fun restart(): VaultOps {
+        ops.stop()
+        return newOps(VaultJournal(dir.resolve("vault"), log, clock::now)).also { it.start() }
+    }
+
+    /** The ERROR lines the start writes for an entry it found in a started phase (not the close-failure line, which only mentions the word). */
+    private fun interruptedErrors(vararg fragments: String) =
+        log.lines.filter { it.startsWith("ERROR") && it.contains("was interrupted while") && it.contains("closed as INTERRUPTED") && fragments.all { f -> it.contains(f) } }
+
+    @Test
+    fun `convert to server - a payout that was paid but whose close could not be written is never undone after a restart`() {
+        ledger.account("Steve", "50")
+        eco.set("Steve", "0")
+        val limit = AtomicInteger(2) // the intent and the payout-started record, then the disk is full
+        sinkFactory = limitedFiles(limit)
+        start()
+        var out: ConvertOutcome? = null
+        ops.convertToServer(steve, 10.0, 25.0) { out = it }
+        assertEquals(ConvertOutcome.Done(40.0), out)
+        val id = link.requests.single().operationId
+        assertEquals("25", eco.balance("Steve").plain(), "the player was paid")
+        assertTrue(log.has("but the journal could not record it"))
+
+        val second = restart()
+        settle(second)
+
+        assertEquals(1, link.requests.size, "the restart asked Pano nothing: no second WITHDRAW and no :undo")
+        assertTrue(link.requests.none { it.operationId.endsWith(":undo") })
+        assertEquals(1, eco.calls.count { it.startsWith("deposit") }, "the server economy was paid once and never again")
+        assertEquals("40", credits(), "the player keeps the money and the credits are not given back")
+        assertEquals("25", eco.balance("Steve").plain())
+        assertTrue(second.openEntries().isEmpty())
+        assertEquals(1, interruptedErrors(id, " of Steve ", "paying out 25.0 server money against 10.0 credits").size, log.lines.toString())
+        assertTrue(reloadedJournal().isEmpty(), "closed as INTERRUPTED, not retried at the next start either")
+    }
+
+    @Test
+    fun `convert to credits - a refund that was paid but whose close could not be written is never paid twice after a restart`() {
+        eco.set("Nobody", "100")
+        val limit = AtomicInteger(3) // the intent, refund-pending and refund-started, then the disk is full
+        sinkFactory = limitedFiles(limit)
+        start()
+        var out: ConvertOutcome? = null
+        ops.convertToCredits(player("Nobody"), 30.0, 15.0) { out = it }
+        assertEquals(ConvertOutcome.Refused("NO_ACCOUNT", null, true), out)
+        assertEquals("100", eco.balance("Nobody").plain(), "the money is back")
+        val id = link.requests.single().operationId
+
+        val second = restart()
+        settle(second)
+
+        assertEquals(1, link.requests.size, "nothing was asked of Pano again")
+        assertEquals(1, eco.calls.count { it.startsWith("deposit") }, "the refund was paid once")
+        assertEquals("100", eco.balance("Nobody").plain(), "not 130")
+        assertTrue(second.openEntries().isEmpty())
+        assertEquals(1, interruptedErrors(id, " of Nobody ", "refunding 30.0 server money against 15.0 credits").size, log.lines.toString())
+        assertTrue(reloadedJournal().isEmpty())
+    }
+
+    @Test
+    fun `convert to server - a payout whose started record cannot be written is not paid and the credits are given back`() {
+        ledger.account("Steve", "50")
+        eco.set("Steve", "0")
+        val limit = AtomicInteger(1) // only the intent reaches the disk
+        sinkFactory = limitedFiles(limit)
+        start()
+        var out: ConvertOutcome? = null
+        ops.convertToServer(steve, 10.0, 25.0) { out = it }
+        assertTrue(out is ConvertOutcome.PayoutFailed && (out as ConvertOutcome.PayoutFailed).restored, out.toString())
+        assertTrue(eco.calls.isEmpty(), "nothing was paid without its record")
+        assertEquals("50", credits())
+        assertTrue(link.requests.last().operationId.endsWith(":undo"))
+
+        limit.set(-1)
+        val second = restart()
+        settle(second)
+        assertTrue(eco.calls.isEmpty(), "the restart pays nothing either")
+        assertEquals("50", credits())
+        assertTrue(second.openEntries().isEmpty())
+    }
+
+    @Test
+    fun `convert to credits - a refund whose started record cannot be written is not paid until the record can be written`() {
+        eco.set("Nobody", "100")
+        val limit = AtomicInteger(2) // the intent and refund-pending; refund-started cannot be written
+        sinkFactory = limitedFiles(limit)
+        start()
+        var out: ConvertOutcome? = null
+        ops.convertToCredits(player("Nobody"), 30.0, 15.0) { out = it }
+        assertEquals(ConvertOutcome.Refused("NO_ACCOUNT", null, false), out)
+        assertEquals("70", eco.balance("Nobody").plain())
+        assertEquals(0, eco.calls.count { it.startsWith("deposit") }, "no refund without its record")
+        assertEquals(1, ops.openEntries().size)
+
+        limit.set(-1)
+        settle()
+        assertEquals("100", eco.balance("Nobody").plain())
+        assertEquals(1, eco.calls.count { it.startsWith("deposit") }, "paid back exactly once")
+        assertTrue(reloadedJournal().isEmpty())
+    }
+
+    @Test
+    fun `an entry found in a started phase after a crash is closed as INTERRUPTED with an error, never undone or refunded`() {
+        ledger.account("Steve", "40")
+        eco.set("Steve", "25")
+        val j = VaultJournal(dir.resolve("vault"), log, clock::now)
+        j.load()
+        j.write(VaultEntry("pay-1", OpKind.CONVERT_TO_SERVER, "Steve", null, 10.0, 25.0, OpPhase.PAYOUT_STARTED, 1, 1))
+        j.write(VaultEntry("ref-1", OpKind.CONVERT_TO_CREDITS, "Alex", null, 15.0, 30.0, OpPhase.REFUND_STARTED, 1, 1, 0, null, "NO_ACCOUNT"))
+        j.close()
+        start()
+        settle()
+        scheduler.advance(120_000)
+        assertTrue(link.requests.isEmpty(), "nothing was asked of Pano")
+        assertTrue(eco.calls.isEmpty(), "nothing was paid")
+        assertTrue(ops.openEntries().isEmpty())
+        assertEquals(1, interruptedErrors("pay-1", " of Steve ", "paying out 25.0 server money against 10.0 credits").size, log.lines.toString())
+        assertEquals(1, interruptedErrors("ref-1", " of Alex ", "refunding 30.0 server money against 15.0 credits").size, log.lines.toString())
+        assertTrue(reloadedJournal().isEmpty())
+    }
+
+    @Test
+    fun `entries in a pending phase are still resolved automatically at start - the payment provably never began`() {
+        ledger.account("Steve", "50")
+        eco.set("Steve", "0")
+        eco.set("Nobody", "70")
+        // the ledger applied the WITHDRAW of a conversion whose payout never started, then the server died
+        ledger.apply(MarketEconomyRequest("1.4.0", 1, "pay-1", EconomyOp.WITHDRAW, PlayerRef("Steve"), 10.0, "convert to server"))
+        assertEquals("40", credits())
+        val j = VaultJournal(dir.resolve("vault"), log, clock::now)
+        j.load()
+        j.write(VaultEntry("pay-1", OpKind.CONVERT_TO_SERVER, "Steve", null, 10.0, 25.0, OpPhase.LEDGER_PENDING, 1, 1))
+        j.write(VaultEntry("ref-1", OpKind.CONVERT_TO_CREDITS, "Nobody", null, 15.0, 30.0, OpPhase.REFUND_PENDING, 1, 1, 0, null, "NO_ACCOUNT"))
+        j.close()
+        start()
+        settle()
+        assertEquals("50", credits(), "the unpaid conversion was undone")
+        assertTrue(eco.calls.none { it.contains("Steve") }, "and Steve was never paid")
+        assertEquals("100", eco.balance("Nobody").plain(), "the pending refund was paid back")
+        assertEquals(1, eco.calls.count { it.startsWith("deposit Nobody") })
+        assertTrue(ops.openEntries().isEmpty())
+        assertTrue(interruptedErrors().isEmpty())
+    }
+
+    // ---- review fixes: the hand-over between a timed-out caller and a late answer is two-sided ------------------------------------
+
+    private fun waitUntil(ms: Long = 5_000, cond: () -> Boolean): Boolean {
+        val end = System.nanoTime() + ms * 1_000_000
+        while (System.nanoTime() < end) {
+            if (cond()) return true
+            Thread.sleep(10)
+        }
+        return cond()
+    }
+
+    /** Ops on a real engine thread (the request leaves from it, like in the bridge) whose second journal append can be held. */
+    private fun stallingOps(blocker: Blocker, engine: SingleThreadScheduler) = VaultOps(
+        EconomyClient(link, "1.4.0", log),
+        VaultJournal(dir.resolve("vault"), log, clock::now, { p -> BlockingFileSink(FileAppendSink(p), blocker) }),
+        engine, clock, log, mainThread,
+        economy = { eco }, retryBaseMs = 1_000, retryMaxMs = 8_000
+    ).also { it.start() }
+
+    @Test
+    fun `PROVIDER a success whose close stalls longer than the caller waits is reported as failed and undone`() {
+        ledger.account("Steve", "100")
+        val blocker = Blocker(blockAt = 2) // append 1 = the intent, append 2 = the CLOSED record of the success
+        val engine = SingleThreadScheduler("test-vault-engine", log)
+        val o = stallingOps(blocker, engine)
+        try {
+            val began = System.nanoTime()
+            val out = o.providerTransfer(true, steve, 10.0, 100)
+            val tookMs = (System.nanoTime() - began) / 1_000_000
+            assertEquals(ProviderOutcome.Unknown, out, "the plugin that called was told FAILURE")
+            assertTrue(tookMs < 4_000, "and it did not wait for the disk ($tookMs ms)")
+            assertTrue(blocker.reached.await(5, TimeUnit.SECONDS), "the close was in progress")
+            assertEquals("90", credits(), "Pano did apply it")
+
+            blocker.release.countDown() // the disk comes back
+
+            assertTrue(waitUntil { link.requests.any { it.operationId.endsWith(":undo") } && o.openEntries().isEmpty() }, "the compensation is posted: ${link.requests.map { it.operationId }}")
+            assertEquals("100", credits(), "the ledger is back at its start")
+            assertEquals(EconomyOp.DEPOSIT, link.requests.last().op)
+            assertTrue(reloadedJournal().isEmpty())
+        } finally {
+            blocker.release.countDown()
+            o.stop()
+            engine.shutdown(1_000)
+        }
+    }
+
+    @Test
+    fun `PROVIDER an interrupted caller gives up at once and a success that follows is undone`() {
+        ledger.account("Steve", "100")
+        val blocker = Blocker(blockAt = 2)
+        val engine = SingleThreadScheduler("test-vault-engine", log)
+        val o = stallingOps(blocker, engine)
+        val result = AtomicReference<ProviderOutcome>()
+        val caller = Thread { result.set(o.providerTransfer(true, steve, 10.0, 30_000)) }
+        try {
+            caller.start()
+            assertTrue(blocker.reached.await(5, TimeUnit.SECONDS), "the answer is being recorded")
+            caller.interrupt()
+            caller.join(3_000)
+            assertFalse(caller.isAlive, "the interrupted caller returned promptly")
+            assertEquals(ProviderOutcome.Unknown, result.get())
+
+            blocker.release.countDown()
+
+            assertTrue(waitUntil { link.requests.any { it.operationId.endsWith(":undo") } && o.openEntries().isEmpty() }, "the compensation is posted")
+            assertEquals("100", credits())
+        } finally {
+            blocker.release.countDown()
+            o.stop()
+            engine.shutdown(1_000)
+        }
+    }
+
+    @Test
+    fun `PROVIDER a close that stalls but finishes while the caller still waits is a success and never undone`() {
+        ledger.account("Steve", "100")
+        val blocker = Blocker(blockAt = 2)
+        val engine = SingleThreadScheduler("test-vault-engine", log)
+        val o = stallingOps(blocker, engine)
+        val releaser = Thread {
+            blocker.reached.await()
+            Thread.sleep(300)
+            blocker.release.countDown()
+        }
+        try {
+            releaser.start()
+            assertEquals(ProviderOutcome.Success(90.0), o.providerTransfer(true, steve, 10.0, 100))
+            assertTrue(waitUntil { o.openEntries().isEmpty() })
+            scheduler.advance(60_000)
+            assertEquals(1, link.requests.size, "no compensation for a success the caller saw")
+            assertEquals("90", credits())
+        } finally {
+            blocker.release.countDown()
+            o.stop()
+            engine.shutdown(1_000)
+        }
+    }
+
+    @Test
+    fun `openEntries never throws while entries come and go on another thread`() {
+        ledger.account("Steve", "1000000")
+        sinkFactory = { MemorySink() }
+        start()
+        val stop = AtomicBoolean(false)
+        val failure = AtomicReference<Throwable>()
+        val reader = Thread {
+            try {
+                while (!stop.get()) ops.openEntries()
+            } catch (t: Throwable) {
+                failure.set(t)
+            }
+        }
+        reader.start()
+        try {
+            repeat(5_000) { ops.providerTransfer(false, steve, 1.0, 500) }
+        } finally {
+            stop.set(true)
+            reader.join(5_000)
+        }
+        assertNull(failure.get(), "the status read must never fail: ${failure.get()}")
     }
 
     // ---- conservation under random failures ----------------------------------------------------------------------------------

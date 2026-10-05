@@ -92,6 +92,13 @@ enum class Notice { DEPOSIT_ARRIVED, CONVERSION_UNDONE, MONEY_REFUNDED, MONEY_RE
  *    posted with `<id>:undo` (also retried until answered); a money -> credits deposit whose money is already taken is
  *    finished when applied and refunded to the server economy only when Pano explicitly refused it.
  *
+ * 3. **A payment that cannot be undone is never guessed at.** The two payments into the server economy (the payout of
+ *    credits -> money and the refund of a refused money -> credits) are not idempotent: a restart that cannot tell
+ *    whether one happened must not repeat or compensate it. So the journal holds [OpPhase.PAYOUT_STARTED] /
+ *    [OpPhase.REFUND_STARTED], written durably immediately before the economy is called (no record, no payment); an
+ *    entry found in such a phase at start is reported at ERROR and closed as `INTERRUPTED`, never undone or retried.
+ *    `LEDGER_PENDING` / `REFUND_PENDING` mean the payment provably never began and keep their automatic handling.
+ *
  * All state changes go through [lock]; no network call, Vault call or disk write of the caller's thread happens under it
  * except the journal append itself.
  */
@@ -119,9 +126,26 @@ class VaultOps(
     fun start() {
         stopped = false
         for (e in journal.load()) {
+            if (e.phase == OpPhase.PAYOUT_STARTED || e.phase == OpPhase.REFUND_STARTED) {
+                interrupted(e)
+                continue
+            }
             open[e.id] = e
             log.warn("Vault: resuming ${e.kind} ${e.id} of ${e.username} (${e.phase}, ${e.credits} credits).")
             scheduleResolve(e.id, 1_000)
+        }
+    }
+
+    /**
+     * A payment into the server economy was under way when the server died: it may or may not have been made, and neither
+     * repeating nor compensating it can be right in both cases. It is reported for the admin and closed.
+     */
+    private fun interrupted(e: VaultEntry) {
+        val what = if (e.phase == OpPhase.PAYOUT_STARTED) "paying out" else "refunding"
+        log.error("Vault: ${e.kind} ${e.id} of ${e.username} was interrupted while ${what} ${e.money} server money against ${e.credits} credits (${e.phase}). Whether the money arrived is UNKNOWN, so it is neither undone nor retried and the entry is closed as INTERRUPTED. Check the player's server balance and the credit ledger transaction with reference ${e.id}.")
+        val closedEntry = e.copy(phase = OpPhase.CLOSED, closedReason = "INTERRUPTED", lastCode = e.phase.name, updatedAt = clock.now())
+        if (!synchronized(lock) { journal.write(closedEntry) }) {
+            log.warn("Vault: the INTERRUPTED record of ${e.id} could not be written; it is reported again at the next start.")
         }
     }
 
@@ -133,7 +157,7 @@ class VaultOps(
     }
 
     /** Entries whose outcome is still being resolved (for status output and tests). */
-    fun openEntries(): List<VaultEntry> = open.values.toList()
+    fun openEntries(): List<VaultEntry> = ArrayList(open.values) // not toList(): that reads size, then first(), and the map can empty in between
 
     // ---- PROVIDER: one Vault call, at most [timeoutMs] on the calling thread --------------------------------------------
 
@@ -156,18 +180,16 @@ class VaultOps(
                 if (state.compareAndSet(WAITING, ANSWERED)) gate.complete(ProviderOutcome.JournalFailed)
                 return@execute
             }
-            client.send(kind.ledgerOp, player, credits, entry.id, reasonOf(kind)) { answer -> onProviderAnswer(entry.id, answer, state, gate) }
+            client.send(kind.ledgerOp, player, credits, entry.id, reasonOf(kind)) { answer -> onProviderAnswer(entry, answer, state, gate) }
         }
 
         return try {
             gate.get(timeoutMs, TimeUnit.MILLISECONDS)
         } catch (_: TimeoutException) {
-            // Nobody has answered within the budget. When the caller wins this race it reports FAILURE and the entry (if the
-            // request already went out) is resolved by the late answer; when the answer won it is already in the gate.
-            if (state.compareAndSet(WAITING, ABANDONED)) ProviderOutcome.Unknown else awaitSettled(gate)
+            giveUp(state, gate, SETTLE_WAIT_MS)
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
-            if (state.compareAndSet(WAITING, ABANDONED)) ProviderOutcome.Unknown else awaitSettled(gate)
+            giveUp(state, gate, 0) // the interrupt flag makes any further wait throw at once: hand over right away
         } catch (e: ExecutionException) {
             log.error("Vault: a PROVIDER operation failed unexpectedly: ${e.cause?.message}", e.cause)
             state.compareAndSet(WAITING, ABANDONED)
@@ -175,14 +197,32 @@ class VaultOps(
         }
     }
 
-    private fun awaitSettled(gate: CompletableFuture<ProviderOutcome>): ProviderOutcome =
-        try {
-            gate.get(1_000, TimeUnit.MILLISECONDS)
-        } catch (_: Exception) {
-            ProviderOutcome.Unknown
+    /**
+     * The caller's side of the hand-over. Who tells the Vault caller what is decided by two swaps on [state]:
+     * - `WAITING -> ABANDONED` (here): nobody had answered; the caller reports FAILURE and the late answer compensates.
+     * - `ANSWERED -> SETTLED` (the answer, after its record is durable): the caller learns the outcome from [gate].
+     * An answer that wins the race for the gate is being recorded (an fsync that can stall); the caller gives it
+     * [patientMs] and then swaps `ANSWERED -> ABANDONED`. Whoever loses a swap knows the other side owns the outcome: an
+     * answer that finds the caller gone posts the compensation itself, so FAILURE is never reported for an applied
+     * operation that is then left uncompensated.
+     */
+    private fun giveUp(state: AtomicInteger, gate: CompletableFuture<ProviderOutcome>, patientMs: Long): ProviderOutcome {
+        if (state.compareAndSet(WAITING, ABANDONED)) return ProviderOutcome.Unknown
+        if (patientMs > 0) {
+            try {
+                return gate.get(patientMs, TimeUnit.MILLISECONDS)
+            } catch (_: TimeoutException) {
+            } catch (_: ExecutionException) {
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
         }
+        if (state.compareAndSet(ANSWERED, ABANDONED)) return ProviderOutcome.Unknown
+        return gate.join() // the answer settled in between: its outcome is about to be (or is) in the gate
+    }
 
-    private fun onProviderAnswer(id: String, answer: EconomyAnswer, state: AtomicInteger, gate: CompletableFuture<ProviderOutcome>) {
+    private fun onProviderAnswer(entry: VaultEntry, answer: EconomyAnswer, state: AtomicInteger, gate: CompletableFuture<ProviderOutcome>) {
+        val id = entry.id
         if (answer is EconomyAnswer.Unknown) {
             // No usable answer: whoever waits is told "unknown" (= FAILURE), the entry stays open and is re-sent.
             if (state.compareAndSet(WAITING, ABANDONED)) gate.complete(ProviderOutcome.Unknown)
@@ -198,7 +238,14 @@ class VaultOps(
         when (answer) {
             is EconomyAnswer.Ok -> {
                 if (closeDurably(id, "APPLIED")) {
-                    gate.complete(ProviderOutcome.Success(answer.balance))
+                    if (state.compareAndSet(ANSWERED, SETTLED)) {
+                        gate.complete(ProviderOutcome.Success(answer.balance))
+                    } else {
+                        // The caller ran out of patience while the record was being written and reported FAILURE: the
+                        // operation is applied, so it is re-opened and compensated like any other late success.
+                        log.warn("Vault: ${entry.kind} $id of ${entry.username} (${entry.credits} credits) was applied while its record was being written and the caller had already been told it failed; posting ${entry.undoId}.")
+                        reopenForUndo(entry, "CALLER_GAVE_UP")
+                    }
                 } else {
                     // The record cannot be closed on disk: after a restart it would look unresolved and be undone although the
                     // caller was told "success". So the caller is told "failed" and the operation is undone now.
@@ -209,14 +256,24 @@ class VaultOps(
             }
             is EconomyAnswer.Refused -> {
                 close(id, "REFUSED", answer.code)
-                gate.complete(ProviderOutcome.Refused(answer.code, answer.balance))
+                if (state.compareAndSet(ANSWERED, SETTLED)) gate.complete(ProviderOutcome.Refused(answer.code, answer.balance))
             }
             is EconomyAnswer.Transient -> {
                 close(id, "NOT_APPLIED", answer.reason)
-                gate.complete(ProviderOutcome.Transient(answer.reason))
+                if (state.compareAndSet(ANSWERED, SETTLED)) gate.complete(ProviderOutcome.Transient(answer.reason))
             }
             EconomyAnswer.Unknown -> Unit
         }
+    }
+
+    /** Re-opens an entry that was closed as applied although the caller was told it failed, and posts its compensation. */
+    private fun reopenForUndo(entry: VaultEntry, code: String) {
+        val next = entry.copy(phase = OpPhase.UNDO_PENDING, lastCode = code, updatedAt = clock.now())
+        if (!persistNew(next, durableRequired = false)) {
+            log.error("Vault: the journal could not record the compensation owed for ${entry.id} of ${entry.username} (${entry.credits} credits). It is posted from memory only; if the server stops before it is answered, audit this reference in the Pano admin panel.")
+        }
+        if (!client.connected()) return scheduleResolve(entry.id, retryBaseMs)
+        sendUndo(entry.id, null)
     }
 
     // ---- CONVERT: credits -> server money -------------------------------------------------------------------------------
@@ -258,6 +315,12 @@ class VaultOps(
     /** On the server thread: pay the player; when that fails the credits are given back (`:undo`). */
     private fun payout(id: String, balance: Double?, done: (ConvertOutcome) -> Unit) {
         val e = open[id] ?: return done(ConvertOutcome.Unknown)
+        if (e.phase != OpPhase.LEDGER_PENDING) return done(ConvertOutcome.Unknown) // somebody else owns this entry now
+        // No record, no payment: after a crash an entry in PAYOUT_STARTED is reported, never undone, because the money may be paid.
+        if (!advanceDurably(id, OpPhase.PAYOUT_STARTED)) {
+            log.error("Vault: the journal could not record that the payout of ${e.money} to ${e.username} is starting, so it was NOT paid; giving the ${e.credits} credits back (reference ${e.id}).")
+            return startUndo(id, "PAYOUT_FAILED") { restored -> done(ConvertOutcome.PayoutFailed("the journal could not record the payout", restored)) }
+        }
         val result = try {
             economy()?.deposit(ref(e), e.money ?: 0.0) ?: ServerResult(false, "no server economy")
         } catch (t: Throwable) {
@@ -337,7 +400,7 @@ class VaultOps(
         if (stopped) return
         val e = open[id] ?: return
         when (e.phase) {
-            OpPhase.CLOSED -> Unit
+            OpPhase.CLOSED, OpPhase.PAYOUT_STARTED, OpPhase.REFUND_STARTED -> Unit
             OpPhase.REFUND_PENDING -> refund(id, null)
             OpPhase.LEDGER_PENDING -> {
                 if (!client.connected()) return scheduleResolve(id, nextDelay(e))
@@ -432,30 +495,7 @@ class VaultOps(
     /** Gives the player's server money back (money -> credits refused by Pano). On the server thread. [done] hears whether it worked. */
     private fun refund(id: String, done: ((Boolean) -> Unit)?) {
         hop(
-            {
-                val e = open[id]
-                if (e == null || e.phase != OpPhase.REFUND_PENDING) {
-                    done?.invoke(e == null)
-                } else {
-                    val result = try {
-                        economy()?.deposit(ref(e), e.money ?: 0.0) ?: ServerResult(false, "no server economy")
-                    } catch (t: Throwable) {
-                        if (t is VirtualMachineError) throw t
-                        ServerResult(false, t.message ?: t.javaClass.simpleName)
-                    }
-                    if (result.ok) {
-                        close(id, "REFUNDED", e.lastCode)
-                        if (done == null) notifier(e, Notice.MONEY_REFUNDED, e.lastCode) else done(true)
-                    } else {
-                        val first = refundFailed(id, e, result.error)
-                        if (done == null) {
-                            if (first) notifier(e, Notice.MONEY_REFUND_STUCK, e.lastCode)
-                        } else {
-                            done(false)
-                        }
-                    }
-                }
-            },
+            { refundOnServerThread(id, done) },
             {
                 open[id]?.let { refundFailed(id, it, "the server thread was not available") }
                 done?.invoke(false)
@@ -463,10 +503,39 @@ class VaultOps(
         )
     }
 
+    private fun refundOnServerThread(id: String, done: ((Boolean) -> Unit)?) {
+        val e = open[id]
+        if (e == null || e.phase != OpPhase.REFUND_PENDING) return run { done?.invoke(e == null) }
+        // No record, no payment: after a crash an entry in REFUND_STARTED is reported, never refunded again, because the money may be back.
+        val result = if (advanceDurably(id, OpPhase.REFUND_STARTED)) {
+            try {
+                economy()?.deposit(ref(e), e.money ?: 0.0) ?: ServerResult(false, "no server economy")
+            } catch (t: Throwable) {
+                if (t is VirtualMachineError) throw t
+                ServerResult(false, t.message ?: t.javaClass.simpleName)
+            }
+        } else {
+            log.error("Vault: the journal could not record that the refund of ${e.money} to ${e.username} is starting, so it was NOT paid; it is retried (reference ${e.id}).")
+            ServerResult(false, "the journal could not record the refund")
+        }
+        if (result.ok) {
+            close(id, "REFUNDED", e.lastCode)
+            if (done == null) notifier(e, Notice.MONEY_REFUNDED, e.lastCode) else done(true)
+        } else {
+            val first = refundFailed(id, e, result.error)
+            if (done == null) {
+                if (first) notifier(e, Notice.MONEY_REFUND_STUCK, e.lastCode)
+            } else {
+                done(false)
+            }
+        }
+    }
+
     /** Counts a failed refund and retries later. Returns `true` for the first failure of this refund (the player is told once). */
     private fun refundFailed(id: String, e: VaultEntry, error: String?): Boolean {
         val count = refundFailures.merge(id, 1) { a, b -> a + b } ?: 1
-        val n = update(id) { it.copy(attempts = it.attempts + 1) } ?: return false
+        // Back to REFUND_PENDING (a failed payment provably paid nothing): a crash from here on retries it.
+        val n = update(id) { it.copy(phase = OpPhase.REFUND_PENDING, attempts = it.attempts + 1) } ?: return false
         if (count == 1 || count % 10 == 0) {
             log.error("Vault: ${e.money} of ${e.username}'s server money could not be given back after Pano refused the deposit ${e.id} (${e.lastCode}): $error. Retrying; reference ${e.id}.")
         }
@@ -519,12 +588,26 @@ class VaultOps(
         }
     }
 
+    /**
+     * Moves an entry to [phase] and reports `true` only when the journal made that durable (an fsync). When it did not, the
+     * entry keeps its previous phase in memory too, and the caller must not do whatever the phase announces.
+     */
+    private fun advanceDurably(id: String, phase: OpPhase): Boolean {
+        synchronized(lock) {
+            val cur = open[id] ?: return false
+            val next = cur.copy(phase = phase, updatedAt = clock.now())
+            if (!journal.write(next)) return false
+            open[id] = next
+            return true
+        }
+    }
+
     /** Closes an entry. A close that cannot be written leaves a stale open record on disk: that is logged, the operation itself is done. */
     private fun close(id: String, reason: String, code: String?) {
         val e = open[id]
         if (!closeDurably(id, reason, code) && e != null) {
             synchronized(lock) { open.remove(id) }
-            log.error("Vault: ${e.kind} $id of ${e.username} is finished ($reason) but the journal could not record it. After a restart it is checked against Pano again (same ids, nothing is posted twice); if a compensation or refund shows up for it, audit it by this reference.")
+            log.error("Vault: ${e.kind} $id of ${e.username} is finished ($reason) but the journal could not record it. After a restart it is resolved from the last record that did reach the disk: an entry whose payment into the server economy had started is reported as INTERRUPTED and neither undone nor retried, any other is checked against Pano again (same ids, nothing is posted twice). Audit it by this reference.")
         }
         timers.remove(id)?.cancel()
         refundFailures.remove(id)
@@ -549,5 +632,9 @@ class VaultOps(
         const val WAITING = 0
         const val ANSWERED = 1
         const val ABANDONED = 2
+        const val SETTLED = 3
+
+        /** How long a caller whose budget ran out still waits for an answer that already won the race and is being recorded. */
+        const val SETTLE_WAIT_MS = 1_000L
     }
 }
