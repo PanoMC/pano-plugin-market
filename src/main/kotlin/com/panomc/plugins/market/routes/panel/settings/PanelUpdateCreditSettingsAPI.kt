@@ -8,23 +8,28 @@ import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.log.UpdatedMarketSettingsLog
-import com.panomc.plugins.market.permission.ManageMarketPermission
+import com.panomc.plugins.market.config.ConfigScope
+import com.panomc.plugins.market.config.SettingsRequest
+import com.panomc.plugins.market.permission.MarketNode
+import com.panomc.plugins.market.routes.base.MarketPanelApi
+import com.panomc.plugins.market.routes.panel.credit.applyCreditSettings
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
 import io.vertx.ext.web.validation.builder.Bodies
 import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
-import io.vertx.json.schema.common.dsl.Schemas.*
 
 /**
- * Admin endpoint: persists the credit-related settings. Separate path from the general settings
- * endpoint (matches the UI), but writes into the same config file via the same merge-save.
+ * Admin endpoint (`SET`, 07 section 14.2): persists the credit settings through the key table of `MarketConfigKeys` and the credit bounds of
+ * `applyCreditSettings` (400 `INVALID_SETTINGS {fieldErrors}`, nothing applied on any error). Same merge-save as the general settings endpoint.
  */
 @Endpoint
 class PanelUpdateCreditSettingsAPI(
     private val plugin: MarketPlugin
-) : PanelApi() {
+) : MarketPanelApi() {
+    override val nodes: Set<MarketNode> = setOf(MarketNode.SETTINGS)
+
     override val paths = listOf(Path("/api/panel/market/settings/credits", RouteType.POST))
 
     private val authProvider by lazy {
@@ -42,28 +47,17 @@ class PanelUpdateCreditSettingsAPI(
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository)
-            .body(
-                Bodies.json(
-                    objectSchema()
-                        .optionalProperty("creditsEnabled", booleanSchema())
-                        .optionalProperty("creditName", stringSchema())
-                        .optionalProperty("cashbackPercent", numberSchema())
-                        .optionalProperty("onlyAcceptCredits", booleanSchema())
-                        .allowAdditionalProperties(false)
-                )
-            )
+            .body(Bodies.json(SettingsRequest.schema(ConfigScope.CREDIT)))
             .build()
 
-    override suspend fun handle(context: RoutingContext): Result {
-        authProvider.requirePermission(ManageMarketPermission(), context)
-
+    override suspend fun handleAuthorized(context: RoutingContext): Result {
         val body = context.body().asJsonObject()
         // Defence-in-depth: `version` drives config migrations and must never be settable through the
         // API. The schema already rejects unknown keys, but strip it explicitly in case it is ever
         // added as a declared property.
         body.remove("version")
 
-        val merged = JsonObject.mapFrom(configManager.config).mergeIn(body)
+        val merged = applyCreditSettings(body, JsonObject.mapFrom(configManager.config))
         configManager.saveConfig(merged)
 
         val sqlClient = getSqlClient()
