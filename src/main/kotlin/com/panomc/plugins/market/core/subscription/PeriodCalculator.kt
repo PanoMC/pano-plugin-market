@@ -80,20 +80,37 @@ class PeriodCalculator(val zone: ZoneId, val unit: PeriodUnit, val count: Int) {
     }
 
     /**
+     * The end of a period that starts at [start]: `nextBoundary(anchor, start)`, except that a start which is off the
+     * grid and lies less than half an interval before that boundary skips it and ends at the boundary after it.
+     *
+     * A start is off the grid for a `GATEWAY` row (09 section 4.4 step 4 stores the gateway's own period while the
+     * anchor is `paidAt`) and for one period after the store time zone changed (09 section 15 item 13: the same anchor
+     * instant yields shifted boundaries). Without the rule such a start would buy the sliver up to the next grid
+     * point for a full price, the renewal would be over at once and step C would expire a paying subscriber. On-grid
+     * starts are a whole interval before the next boundary and are never affected.
+     */
+    private fun endAfter(anchor: Long, start: Long): Long {
+        val next = nextBoundary(anchor, start)
+        return if (next - start < nominalMs / 2) nextBoundary(anchor, next) else next
+    }
+
+    /**
      * The period of a renewal that market itself creates (`MERCHANT`, `MANUAL`), with `E = currentPeriodEnd`
      * (09 section 5): normally `[E, nextBoundary(anchor, E))`; when at least one whole period was missed
      * (`now >= nextBoundary(anchor, E)`) the grid period that contains [now]. A renewal paid late inside the grace
      * period keeps `start = E` because the caller passes the same `E` and a `now` that is still inside the period.
+     * An `E` that is off the grid (see [endAfter]) never yields a period shorter than half an interval.
      */
     fun renewalPeriod(anchor: Long, currentPeriodEnd: Long, now: Long): BillingPeriod {
-        val next = nextBoundary(anchor, currentPeriodEnd)
+        val next = endAfter(anchor, currentPeriodEnd)
         if (now < next) return BillingPeriod(currentPeriodEnd, next)
         return BillingPeriod(previousBoundary(anchor, now), nextBoundary(anchor, now))
     }
 
     /**
      * The period of a `GATEWAY` renewal: the event's values; a missing value falls back to the "normal" row of
-     * [renewalPeriod] and an end that is not after the start is replaced by the computed one (09 section 5).
+     * [renewalPeriod] and an end that is not after the start is replaced by the computed one (09 section 5). The
+     * computed end of an off-grid start follows [endAfter].
      */
     fun gatewayRenewalPeriod(
         anchor: Long,
@@ -104,7 +121,7 @@ class PeriodCalculator(val zone: ZoneId, val unit: PeriodUnit, val count: Int) {
     ): BillingPeriod {
         val computed = renewalPeriod(anchor, currentPeriodEnd, now)
         val start = eventStart ?: computed.start
-        val end = if (eventEnd != null && eventEnd > start) eventEnd else nextBoundary(anchor, start)
+        val end = if (eventEnd != null && eventEnd > start) eventEnd else endAfter(anchor, start)
         return BillingPeriod(start, end)
     }
 
