@@ -113,7 +113,16 @@ object BillingSnapshot {
 
         if (raw != null) {
             for (key in NAME_KEYS) {
-                val value = clean(raw.getValue(key)) ?: continue
+                val sent = raw.getValue(key) ?: continue
+
+                // an object or an array is no value: it must not satisfy a required path as an empty string
+                if (!scalar(sent)) {
+                    invalid += PREFIX + key
+
+                    continue
+                }
+
+                val value = cleanText(sent) ?: continue
 
                 val normalised = if (key == "country") value.uppercase(Locale.ROOT) else value
 
@@ -123,7 +132,7 @@ object BillingSnapshot {
             val sentType = raw.getValue("type")
 
             if (sentType != null) {
-                val text = clean(sentType)?.uppercase(Locale.ROOT)
+                val text = cleanText(sentType)?.uppercase(Locale.ROOT)
 
                 if (text == "INDIVIDUAL" || text == "COMPANY") type = text else invalid += PREFIX + "type"
             }
@@ -153,7 +162,7 @@ object BillingSnapshot {
 
             if (key == "type") continue // defaults to INDIVIDUAL
 
-            if (cleaned[key] == null && path !in invalid) missing += path
+            if (cleaned[key].isNullOrEmpty() && path !in invalid) missing += path
         }
 
         val fields = (missing + invalid).toList()
@@ -178,12 +187,18 @@ object BillingSnapshot {
         return Result.Valid(json)
     }
 
-    private fun clean(value: Any?): String? {
+    private fun scalar(value: Any?): Boolean = value is String || value is Number || value is Boolean
+
+    /**
+     * A request value as the text this class stores: control characters removed, trimmed; `null` for an absent, blank or non-scalar
+     * value (an object or an array is never text). The route's `type` and `country` checks read the same text, so the fields a
+     * request requires and the snapshot that is stored cannot disagree about a padded `"COMPANY "`.
+     */
+    fun cleanText(value: Any?): String? {
         val text = when (value) {
-            null -> return null
             is String -> value
             is Number, is Boolean -> value.toString()
-            else -> return ""
+            else -> return null
         }
 
         return text.filterNot { Character.isISOControl(it) }.trim().ifEmpty { null }
