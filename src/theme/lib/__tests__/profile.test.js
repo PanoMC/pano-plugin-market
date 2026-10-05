@@ -761,7 +761,12 @@ describe('registerTheme: profile items', () => {
     const pano = fakeHost(['profile-nav']);
     registerTheme(pano);
     const profile = pano.calls.pages.filter((p) => p.path.startsWith('/profile/'));
-    expect(profile.map((p) => p.path)).toEqual(['/profile/purchases', '/profile/credits']);
+    expect(profile.map((p) => p.path)).toEqual([
+      '/profile/purchases',
+      '/profile/credits',
+      '/profile/subscriptions',
+      '/profile/creator',
+    ]);
     expect(profile.every((p) => p.systemLayout === 'ProfileLayout')).toBe(true);
     expect(profile.every((p) => typeof p.component.load === 'function')).toBe(true);
   });

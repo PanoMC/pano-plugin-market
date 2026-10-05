@@ -428,6 +428,15 @@
         "EXPIRED": "Истёк",
         "CHARGEBACK": "Оспаривание платежа",
         "FAILED": "Не удался"
+      },
+      "subscription": {
+        "ACTIVE": "Активна",
+        "PAST_DUE": "Платёж просрочен",
+        "PAUSED": "Приостановлена",
+        "PENDING": "Ожидает",
+        "CANCELLED": "Отменена",
+        "EXPIRED": "Истекла",
+        "COMPLETED": "Завершена"
       }
     },
     "profile": {
@@ -499,6 +508,66 @@
           "CREATOR_PAYOUT": "Выплата автору",
           "EXTERNAL_IN": "С игрового сервера",
           "EXTERNAL_OUT": "На игровой сервер"
+        }
+      },
+      "subscriptions": {
+        "title": "Подписки",
+        "past-due": "Последний платёж не прошёл. Обновите способ оплаты или оплатите продление, чтобы сохранить подписку.",
+        "ends-on": "Заканчивается {date}. Продлеваться не будет.",
+        "renews-on": "Продлевается {date}",
+        "method": "Способ оплаты",
+        "renewal-order": "Оплатить продление",
+        "update-method": "Обновить способ оплаты",
+        "manage": "Управлять у платёжного провайдера",
+        "keep": "Сохранить подписку",
+        "cancel": "Отменить подписку",
+        "cancel-title": "Отменить эту подписку?",
+        "cancel-confirm": "Подписка будет действовать до {date} и после этого не продлится.",
+        "cancel-yes": "Отменить подписку",
+        "cancel-keep": "Оставить",
+        "empty": "У вас нет подписок."
+      },
+      "creator": {
+        "title": "Автор",
+        "earned": "Заработано",
+        "paid-out": "Выплачено",
+        "available": "Доступно",
+        "codes-title": "Ваши коды",
+        "col-code": "Код",
+        "col-discount": "Скидка",
+        "col-commission": "Комиссия",
+        "col-uses": "Использований",
+        "col-status": "Статус",
+        "copy-code": "Скопировать код",
+        "percent": "{value}%",
+        "codes-empty": "У вас пока нет кодов автора.",
+        "earnings-title": "Начисления",
+        "col-order": "Заказ",
+        "col-amount": "Сумма",
+        "col-state": "Статус",
+        "col-date": "Дата",
+        "earnings-empty": "Начислений пока нет.",
+        "payouts-title": "Выплаты",
+        "state": {
+          "PENDING": "Ожидает",
+          "AVAILABLE": "Доступно",
+          "PAID": "Выплачено",
+          "REVERSED": "Отменено"
+        },
+        "payout-state": {
+          "PENDING": "Ожидает",
+          "PAID": "Выплачено",
+          "FAILED": "Ошибка",
+          "CANCELLED": "Отменена"
+        },
+        "code-status": {
+          "ACTIVE": "Активен",
+          "INACTIVE": "Неактивен"
+        },
+        "method": {
+          "CREDIT": "Кредиты магазина",
+          "ACTION": "Награда в игре",
+          "MANUAL": "Ручная выплата"
         }
       }
     }

@@ -428,6 +428,15 @@
         "EXPIRED": "Expired",
         "CHARGEBACK": "Chargeback",
         "FAILED": "Failed"
+      },
+      "subscription": {
+        "ACTIVE": "Active",
+        "PAST_DUE": "Payment overdue",
+        "PAUSED": "Paused",
+        "PENDING": "Pending",
+        "CANCELLED": "Cancelled",
+        "EXPIRED": "Expired",
+        "COMPLETED": "Completed"
       }
     },
     "profile": {
@@ -499,6 +508,66 @@
           "CREATOR_PAYOUT": "Creator payout",
           "EXTERNAL_IN": "From the game server",
           "EXTERNAL_OUT": "To the game server"
+        }
+      },
+      "subscriptions": {
+        "title": "Subscriptions",
+        "past-due": "The last payment failed. Update your payment method or pay the renewal to keep your subscription.",
+        "ends-on": "Ends on {date}. It will not renew.",
+        "renews-on": "Renews on {date}",
+        "method": "Payment method",
+        "renewal-order": "Pay the renewal",
+        "update-method": "Update payment method",
+        "manage": "Manage at the payment provider",
+        "keep": "Keep subscription",
+        "cancel": "Cancel subscription",
+        "cancel-title": "Cancel this subscription?",
+        "cancel-confirm": "Your subscription stays active until {date} and will not renew after that.",
+        "cancel-yes": "Cancel subscription",
+        "cancel-keep": "Keep it",
+        "empty": "You have no subscriptions."
+      },
+      "creator": {
+        "title": "Creator",
+        "earned": "Earned",
+        "paid-out": "Paid out",
+        "available": "Available",
+        "codes-title": "Your codes",
+        "col-code": "Code",
+        "col-discount": "Discount",
+        "col-commission": "Commission",
+        "col-uses": "Uses",
+        "col-status": "Status",
+        "copy-code": "Copy code",
+        "percent": "{value}%",
+        "codes-empty": "You have no creator codes.",
+        "earnings-title": "Earnings",
+        "col-order": "Order",
+        "col-amount": "Amount",
+        "col-state": "Status",
+        "col-date": "Date",
+        "earnings-empty": "No earnings yet.",
+        "payouts-title": "Payouts",
+        "state": {
+          "PENDING": "Pending",
+          "AVAILABLE": "Available",
+          "PAID": "Paid out",
+          "REVERSED": "Reversed"
+        },
+        "payout-state": {
+          "PENDING": "Pending",
+          "PAID": "Paid",
+          "FAILED": "Failed",
+          "CANCELLED": "Cancelled"
+        },
+        "code-status": {
+          "ACTIVE": "Active",
+          "INACTIVE": "Inactive"
+        },
+        "method": {
+          "CREDIT": "Store credits",
+          "ACTION": "In-game reward",
+          "MANUAL": "Manual payout"
         }
       }
     }

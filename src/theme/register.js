@@ -56,6 +56,18 @@ export function registerTheme(pano) {
     systemLayout: 'ProfileLayout',
   });
 
+  pano.ui.page.register({
+    path: '/profile/subscriptions',
+    component: viewComponent(() => import('./pages/profile/SubscriptionsPage.svelte')),
+    systemLayout: 'ProfileLayout',
+  });
+
+  pano.ui.page.register({
+    path: '/profile/creator',
+    component: viewComponent(() => import('./pages/profile/CreatorPage.svelte')),
+    systemLayout: 'ProfileLayout',
+  });
+
   // 6. Navigation link in the theme
   pano.ui.nav.site.editNavLinks((navigationItems) => {
     navigationItems.push({

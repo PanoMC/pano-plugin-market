@@ -46,6 +46,8 @@ describe('registerTheme cart items', () => {
       '/store/checkout',
       '/profile/purchases',
       '/profile/credits',
+      '/profile/subscriptions',
+      '/profile/creator',
     ]);
     // nav-cart, cart-offcanvas, profile-dropdown and profile-nav are each skipped with one warning
     expect(seen).toHaveLength(4);

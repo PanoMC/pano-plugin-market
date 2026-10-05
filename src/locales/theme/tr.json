@@ -428,6 +428,15 @@
         "EXPIRED": "Süresi doldu",
         "CHARGEBACK": "Ödeme itirazı",
         "FAILED": "Başarısız"
+      },
+      "subscription": {
+        "ACTIVE": "Aktif",
+        "PAST_DUE": "Ödeme gecikti",
+        "PAUSED": "Duraklatıldı",
+        "PENDING": "Beklemede",
+        "CANCELLED": "İptal edildi",
+        "EXPIRED": "Süresi doldu",
+        "COMPLETED": "Tamamlandı"
       }
     },
     "profile": {
@@ -499,6 +508,66 @@
           "CREATOR_PAYOUT": "İçerik üretici ödemesi",
           "EXTERNAL_IN": "Oyun sunucusundan",
           "EXTERNAL_OUT": "Oyun sunucusuna"
+        }
+      },
+      "subscriptions": {
+        "title": "Abonelikler",
+        "past-due": "Son ödeme başarısız oldu. Aboneliğinizi korumak için ödeme yönteminizi güncelleyin veya yenileme ödemesini yapın.",
+        "ends-on": "{date} tarihinde sona erecek. Yenilenmeyecek.",
+        "renews-on": "{date} tarihinde yenilenir",
+        "method": "Ödeme yöntemi",
+        "renewal-order": "Yenilemeyi öde",
+        "update-method": "Ödeme yöntemini güncelle",
+        "manage": "Ödeme sağlayıcısında yönet",
+        "keep": "Aboneliği sürdür",
+        "cancel": "Aboneliği iptal et",
+        "cancel-title": "Bu abonelik iptal edilsin mi?",
+        "cancel-confirm": "Aboneliğiniz {date} tarihine kadar aktif kalır ve sonrasında yenilenmez.",
+        "cancel-yes": "Aboneliği iptal et",
+        "cancel-keep": "Vazgeç",
+        "empty": "Hiç aboneliğiniz yok."
+      },
+      "creator": {
+        "title": "İçerik üretici",
+        "earned": "Kazanılan",
+        "paid-out": "Ödenen",
+        "available": "Çekilebilir",
+        "codes-title": "Kodlarınız",
+        "col-code": "Kod",
+        "col-discount": "İndirim",
+        "col-commission": "Komisyon",
+        "col-uses": "Kullanım",
+        "col-status": "Durum",
+        "copy-code": "Kodu kopyala",
+        "percent": "%{value}",
+        "codes-empty": "Henüz içerik üretici kodunuz yok.",
+        "earnings-title": "Kazançlar",
+        "col-order": "Sipariş",
+        "col-amount": "Tutar",
+        "col-state": "Durum",
+        "col-date": "Tarih",
+        "earnings-empty": "Henüz kazanç yok.",
+        "payouts-title": "Ödemeler",
+        "state": {
+          "PENDING": "Beklemede",
+          "AVAILABLE": "Çekilebilir",
+          "PAID": "Ödendi",
+          "REVERSED": "İade edildi"
+        },
+        "payout-state": {
+          "PENDING": "Beklemede",
+          "PAID": "Ödendi",
+          "FAILED": "Başarısız",
+          "CANCELLED": "İptal edildi"
+        },
+        "code-status": {
+          "ACTIVE": "Aktif",
+          "INACTIVE": "Pasif"
+        },
+        "method": {
+          "CREDIT": "Mağaza kredisi",
+          "ACTION": "Oyun içi ödül",
+          "MANUAL": "Manuel ödeme"
         }
       }
     }
