@@ -392,6 +392,31 @@ class DeliveryService(
         )
 
     /**
+     * The rows the planner makes for [phase] from the snapshots of [items] as attempt group [attemptGroup], over the whole line of every item and
+     * with the item's existing rows as the planner's `priorRows`: the panel re-run of 08 section 14.1 (MK-104). Nothing is written: the caller
+     * drops what its rules skip and hands the rest to [insertPlanned]. The caller holds the order lock.
+     */
+    suspend fun planAgain(conn: SqlConnection, order: MarketOrder, items: List<MarketOrderItem>, phase: DeliveryPhase, attemptGroup: Int): List<PlannedDelivery> {
+        if (order.fulfillmentBy == FulfillmentBy.GATEWAY) return emptyList()
+
+        val ents = items.associate { it.id to entitlements.getByOrderItemId(it.id, conn).firstOrNull() }
+        val env = environment(conn, order, items, ents)
+        val planItems = items.map { item ->
+            val base = env.items.getValue(item.id)
+
+            PlanItem(
+                id = base.id, kind = base.kind, parentItemId = base.parentItemId, productId = base.productId, productName = base.productName,
+                productSlug = base.productSlug, productSku = base.productSku, variantId = base.variantId, variantName = base.variantName,
+                variantSku = base.variantSku, variantAttributes = base.variantAttributes, fields = base.fields, quantity = base.quantity,
+                lineTotal = base.lineTotal, targetServerId = base.targetServerId, serverChoices = base.serverChoices, actions = base.actions,
+                entitlement = base.entitlement, priorRows = deliveries.getByOrderItemId(item.id, conn).map { it.toRow() }
+            )
+        }
+
+        return DeliveryPlanner.plan(PlanRequest(env.order, planItems, phase, env.servers, env.settings, clock.now(), attemptGroup))
+    }
+
+    /**
      * Inserts [planned] rows with `INSERT IGNORE` semantics (the unique key `uq_idem`), writes one `DELIVERY_FAILED` timeline row for every row that
      * is born `FAILED`, and recomputes the fulfilment of the orders touched. Answers the ids of the rows that were new.
      */

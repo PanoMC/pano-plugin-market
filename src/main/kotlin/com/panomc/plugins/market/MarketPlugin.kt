@@ -4,11 +4,14 @@ import com.panomc.platform.api.PanoPlugin
 import com.panomc.platform.api.PluginDatabaseManager
 import com.panomc.platform.api.config.PluginConfigManager
 import com.panomc.platform.db.DatabaseManager
+import com.panomc.platform.server.ServerManager
 import com.panomc.platform.setup.SetupManager
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.db.MarketTables
+import com.panomc.plugins.market.event.server.MarketSyncEvent
 import com.panomc.plugins.market.job.MarketJobs
 import com.panomc.plugins.market.job.MarketScheduler
+import com.panomc.plugins.market.routes.panel.server.mcSyncService
 import com.panomc.plugins.market.runtime.MarketBootstrap
 import com.panomc.plugins.market.runtime.MarketRuntime
 import com.panomc.plugins.market.service.ExchangeRateService
@@ -66,9 +69,15 @@ class MarketPlugin : PanoPlugin() {
     @Volatile
     private var jobScheduler: MarketScheduler? = null
 
+    // The server event MARKET_SYNC (08 section 8.1): registered at start, removed at stop / disable.
+    @Volatile
+    private var syncEvent: MarketSyncEvent? = null
+
     override suspend fun onStart() {
         logger.info("Starting...")
         isRunning = true
+
+        registerServerEvents()
 
         MarketRuntime.probeHostCapabilities(MarketPlugin::class.java.classLoader)
 
@@ -88,6 +97,33 @@ class MarketPlugin : PanoPlugin() {
 
             startExchangeRateScheduler(configManager, exchangeRateService)
             startJobScheduler()
+        }
+    }
+
+    /**
+     * Registers `MARKET_SYNC` with the platform's `ServerManager` (08 section 8.1; idempotent: an earlier registration of this plugin instance is removed first, the
+     * manager keeps a plain list). The event answers `MARKET_NOT_READY` until the store is READY, so registering before the bootstrap is safe. Never fails the start:
+     * without it the Minecraft component only sees no answer and keeps waiting.
+     */
+    private fun registerServerEvents() {
+        try {
+            val manager = applicationContext.getBean(ServerManager::class.java)
+            val event = syncEvent ?: MarketSyncEvent({ mcSyncService(this) }).also { syncEvent = it }
+
+            manager.unregisterEvent(event)
+            manager.registerEvent(event)
+        } catch (e: Exception) {
+            logger.warn("The MARKET_SYNC server event could not be registered, Minecraft deliveries wait until the plugin is restarted", e)
+        }
+    }
+
+    private fun unregisterServerEvents() {
+        val event = syncEvent ?: return
+
+        try {
+            applicationContext.getBean(ServerManager::class.java).unregisterEvent(event)
+        } catch (e: Exception) {
+            logger.warn("The MARKET_SYNC server event could not be unregistered", e)
         }
     }
 
@@ -211,6 +247,7 @@ class MarketPlugin : PanoPlugin() {
     override suspend fun onStop() {
         isRunning = false
         MarketRuntime.stopped()
+        unregisterServerEvents()
         stopExchangeRateScheduler()
         stopJobScheduler()
     }
@@ -218,6 +255,7 @@ class MarketPlugin : PanoPlugin() {
     override suspend fun onDisable() {
         isRunning = false
         MarketRuntime.stopped()
+        unregisterServerEvents()
         stopExchangeRateScheduler()
         isInitialized = false
     }

@@ -65,7 +65,7 @@ class PanelUpdateProductAPI(private val plugin: MarketPlugin) : MarketPanelApi()
             // A `stock` value in the form is read but never written: `CatalogService.update` keeps the stored counter.
             val input = ProductRequestParser.parse(data, stored.productImage, stored.variantImages)
 
-            catalog.update(id, input)
+            catalog.update(id, input, RoutingCaller(plugin, context))
         } catch (e: Throwable) {
             uploads.discard()
 
@@ -83,6 +83,6 @@ class PanelUpdateProductAPI(private val plugin: MarketPlugin) : MarketPanelApi()
             sqlClient
         )
 
-        return Successful(mapOf("warnings" to saved.warnings))
+        return Successful(mapOf("warnings" to saved.warnings) + saved.secretsResponse())
     }
 }
