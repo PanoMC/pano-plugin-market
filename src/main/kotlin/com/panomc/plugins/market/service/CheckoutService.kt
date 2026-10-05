@@ -53,6 +53,9 @@ import com.panomc.plugins.market.core.pricing.PricingInput
 import com.panomc.plugins.market.core.pricing.PricingMode
 import com.panomc.plugins.market.core.pricing.PricingProfile
 import com.panomc.plugins.market.core.pricing.ShippingCharge
+import com.panomc.plugins.market.core.money.Conversions
+import com.panomc.plugins.market.core.shipping.ShippableLine
+import com.panomc.plugins.market.core.shipping.ShippableLines
 import com.panomc.plugins.market.core.pricing.TenderInput
 import com.panomc.plugins.market.core.pricing.TierInfo
 import com.panomc.plugins.market.core.subscription.ModeOffer
@@ -199,7 +202,20 @@ class ShippingRequest(
     val shippingAddress: JsonObject?,
     val shippingAddressId: Long?,
     val shippingMethodId: Long?,
-    val userId: Long?
+    val userId: Long?,
+    /** `physicalBasis` of the priced items: the physical lines after every discount, price basis, order currency (the free threshold compares with it). */
+    val physicalBasis: Long = 0,
+    val conversions: Conversions? = null,
+    /** `showVatInPrice`: the admin typed the rates and thresholds with VAT included. */
+    val pricesIncludeVat: Boolean = true,
+    /** The store's VAT in basis points (what a method without its own rate uses). */
+    val configVatBp: Long = 0,
+    /** The order e-mail: the default `email` of a shipping address. */
+    val orderEmail: String? = null,
+    /** Checkout (never auto-selects a method, reuses the displayed carrier price, 10 section 6.2) instead of the quote. */
+    val checkout: Boolean = false,
+    /** The physical lines after bundle expansion (10 section 2.2); `null` when a physical product has no usable weight (nothing can be priced). */
+    val shippable: List<ShippableLine>? = null
 )
 
 /** The block list seam (MK-151): is this buyer refused? `true` = blocked (the quote warns, checkout answers 403). */
@@ -502,7 +518,9 @@ class CheckoutService(
             shippingQuote = frozen?.shipping ?: shipping.quote(
                 ShippingRequest(
                     items.currency, items.itemsBasisBase, items.physicalBasisBase, physical, input.shippingAddress,
-                    input.shippingAddressId ?: cart?.shippingAddressId, input.shippingMethodId ?: cart?.shippingMethodId, caller.userId
+                    input.shippingAddressId ?: cart?.shippingAddressId, input.shippingMethodId ?: cart?.shippingMethodId, caller.userId,
+                    physicalBasis = items.physicalBasis, conversions = items.conversions, pricesIncludeVat = items.pricesIncludeVat,
+                    configVatBp = items.terms.vatBp, orderEmail = orderEmail, checkout = strict, shippable = shippableLines(items.lines, catalog)
                 ),
                 sqlClient
             )
@@ -1536,6 +1554,53 @@ class CheckoutService(
             commissionBp = row.commissionPercent, creatorUserId = creator?.id, startDate = row.startDate, expiryDate = row.expiryDate,
             redeemLimit = row.redeemLimit, usedCount = row.usedCount, creatorEmail = creator?.let { users.emailOf(it.id, sqlClient) }
         )
+    }
+
+    /**
+     * The physical lines after bundle expansion (10 section 2.2): a physical product line as it is, a bundle as its physical children with
+     * the bundle's `lineTotal` shared over their units. `null` when a physical product has no usable weight: such a cart is never priced
+     * (the quote says there is no method), it is not shipped as if it weighed nothing.
+     */
+    private fun shippableLines(lines: List<PricedLine>, catalog: Catalog): List<ShippableLine>? {
+        val out = ArrayList<ShippableLine>()
+        val childrenOf = lines.filter { it.parentLineKey != null }.groupBy { it.parentLineKey!! }
+
+        fun shippable(l: PricedLine, product: MarketProduct, value: Long): ShippableLine? {
+            val variant = if (l.variantId != 0L) catalog.variants[l.variantId] else null
+            val weight = variant?.weightGrams ?: product.weightGrams
+
+            if (weight == null || weight <= 0 || l.quantity <= 0 || value < 0) return null
+
+            return ShippableLine(
+                orderItemId = null, productId = product.id, variantId = l.variantId, name = product.name, sku = variant?.sku ?: product.sku,
+                quantity = l.quantity, unitWeightGrams = weight, lengthMm = product.lengthMm, widthMm = product.widthMm, heightMm = product.heightMm,
+                lineValue = value, hsCode = product.hsCode, originCountry = product.originCountry
+            )
+        }
+
+        for (l in lines) {
+            if (l.excluded || l.parentLineKey != null) continue
+
+            val product = l.productId?.let { catalog.products[it] } ?: continue
+
+            when (l.kind) {
+                OrderItemKind.PRODUCT -> if (product.physical) out += shippable(l, product, l.lineTotal) ?: return null
+
+                OrderItemKind.BUNDLE -> {
+                    val children = childrenOf[l.lineKey].orEmpty().filter { c -> c.productId?.let { catalog.products[it]?.physical } == true }
+
+                    if (children.isNotEmpty()) {
+                        val values = ShippableLines.splitBundleValue(l.lineTotal, children.map { it.quantity })
+
+                        children.forEachIndexed { i, c -> out += shippable(c, catalog.products.getValue(c.productId!!), values[i]) ?: return null }
+                    }
+                }
+
+                else -> Unit
+            }
+        }
+
+        return out
     }
 
     private fun PricedLine.physicalLine(catalog: Catalog): Boolean {

@@ -67,6 +67,12 @@ object ResultCode {
     const val DISABLED_LOCALLY = "DISABLED_LOCALLY"
     const val LUCKPERMS_MISSING = "LUCKPERMS_MISSING"
     const val INTERRUPTED = "INTERRUPTED"
+
+    /** A delivery the component cannot act on (blank player, unknown kind, no command, a CR / LF in a command). */
+    const val INVALID_PAYLOAD = "INVALID_PAYLOAD"
+
+    /** LuckPerms refused or threw while applying a `PERMISSION` delivery (Pano keeps the code in `lastError`, 08 section 18). */
+    const val PERMISSION_ERROR = "PERMISSION_ERROR"
 }
 
 /** `kind` of a delivery. */

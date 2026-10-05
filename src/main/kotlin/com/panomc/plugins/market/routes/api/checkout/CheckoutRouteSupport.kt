@@ -36,6 +36,7 @@ import com.panomc.plugins.market.permission.MarketPermissions
 import com.panomc.plugins.market.routes.api.order.orderService
 import com.panomc.plugins.market.routes.api.order.paymentService
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
+import com.panomc.plugins.market.routes.panel.shipping.shippingService
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.routes.user.cart.cartService
@@ -115,6 +116,7 @@ internal fun checkoutService(plugin: MarketPlugin, withCheckout: Boolean = false
         legal = legalTextService(plugin),
         users = PlatformUserDirectory(databaseManager),
         servers = PlatformServerDirectory(databaseManager),
+        shipping = shippingService(plugin),
         checkout = deps
     )
 }
