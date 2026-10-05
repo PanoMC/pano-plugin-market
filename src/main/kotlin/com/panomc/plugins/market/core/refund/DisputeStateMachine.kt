@@ -46,7 +46,10 @@ sealed interface DisputeEffect {
     /** Panel alert; [code] is `DISPUTE_INQUIRY` or `DISPUTE_ON_UNPAID_ORDER`. */
     data class PanelAlert(val code: String) : DisputeEffect
 
-    /** O11 (21 section 5.2 step 4): refunds of the order in `REQUESTED` are cancelled (`RefundEvent.ChargebackOpened`). */
+    /**
+     * O11 (21 section 5.2 step 4): refunds of the order that were not sent are cancelled: the service feeds `RefundEvent.ChargebackOpened`
+     * to each row, which cancels a `REQUESTED` row that waits (`revokeFirst`) or whose outcome is unknown and leaves one whose call is running.
+     */
     data object CancelUnsentRefunds : DisputeEffect
 
     /** O12 (21 section 5.3): the block rows created by this order's chargeback are removed (11 section 10). */
