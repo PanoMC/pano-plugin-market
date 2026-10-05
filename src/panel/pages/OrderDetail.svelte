@@ -212,6 +212,7 @@
     shipmentRetryRequest,
     shipmentTrackRequest,
   } from '../components/order-detail/requests.js';
+  import { createAnchorScroller } from '../components/order-detail/scroll.js';
   import { anyModalOpen, fetchPath, send } from '../components/order-detail/send.js';
   import DisputeModal from '../components/modals/DisputeModal.svelte';
   import OrderStatusModal from '../components/modals/OrderStatusModal.svelte';
@@ -520,9 +521,11 @@
   });
 
   // `/market/orders/detail/<id>#deliveries` (the orders list "Re-run Delivery" link).
+  // Once only: `detail` is re-assigned on every refresh and must not pull the viewport back.
+  const scrollToDeliveries = createAnchorScroller('deliveries', (id) =>
+    document.getElementById(id),
+  );
   $effect(() => {
-    if (detail && window.location.hash === '#deliveries') {
-      document.getElementById('deliveries')?.scrollIntoView();
-    }
+    scrollToDeliveries(window.location.hash, !!detail);
   });
 </script>
