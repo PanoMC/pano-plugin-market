@@ -2101,6 +2101,10 @@ internal class CheckoutHarness(val w: TestWiring, private val vertx: Vertx) {
     @Volatile
     var shippingResult: ShippingQuote? = null
 
+    /** The real quoter (MK-132): when set it answers instead of the scripted [shippingResult]. */
+    @Volatile
+    var shipper: ShippingQuoter? = null
+
     @Volatile
     var ledgerAvailable: Boolean = true
 
@@ -2172,10 +2176,11 @@ internal class CheckoutHarness(val w: TestWiring, private val vertx: Vertx) {
         val creditName: String = "",
         val checkoutRateLimitPerMinute: Int = 0,
         val currencyMode: CurrencyMode = CurrencyMode.SINGLE,
-        val additionalCurrencies: List<String> = emptyList()
+        val additionalCurrencies: List<String> = emptyList(),
+        val showVatInPrice: Boolean = true
     ) {
         fun toConfig() = MarketConfig(
-            currency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", allowGuestCheckout = allowGuestCheckout,
+            currency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = showVatInPrice, creditValue = 1.0, storeTimeZone = "UTC", allowGuestCheckout = allowGuestCheckout,
             allowGiftPurchase = allowGiftPurchase, minimumOrderAmount = minimumOrderAmount, creditsEnabled = creditsEnabled, allowMixedCreditPayment = allowMixedCreditPayment,
             onlyAcceptCredits = onlyAcceptCredits, testMode = testMode, billingInfoMode = billingInfoMode, legalTextRequired = legalTextRequired,
             creditTopUpEnabled = creditTopUpEnabled, creditTopUpFreeAmount = creditTopUpFreeAmount, creditTopUpMin = creditTopUpMin, creditTopUpMax = creditTopUpMax,
@@ -2225,7 +2230,7 @@ internal class CheckoutHarness(val w: TestWiring, private val vertx: Vertx) {
         contexts = PaymentContexts { provider, settings, testMode -> TestContexts.payment(provider.id, settings, vertx, testMode) },
         legal = legal, users = directory, servers = ServerDirectory { _, _ -> emptySet() },
         blocks = BuyerBlocks { payer, recipient, email, ip, userId, _ -> blocked(payer, recipient, email, ip, userId) },
-        shipping = ShippingQuoter { _, _ -> shippingResult ?: ShippingQuote(null) },
+        shipping = ShippingQuoter { request, sql -> shipper?.quote(request, sql) ?: shippingResult ?: ShippingQuote(null) },
         checkout = deps
     )
 

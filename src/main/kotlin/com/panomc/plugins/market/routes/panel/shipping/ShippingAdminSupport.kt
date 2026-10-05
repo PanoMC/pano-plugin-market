@@ -22,6 +22,10 @@ import com.panomc.plugins.market.provider.StoredProviderSettings
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.routes.panel.settings.payment.siteInfoOf
 import com.panomc.plugins.market.service.ShippingAdminService
+import com.panomc.plugins.market.service.ShippingService
+import com.panomc.plugins.market.spi.common.SiteInfo
+import com.panomc.plugins.market.db.dao.MarketAddressDao
+import com.panomc.plugins.market.db.dao.MarketCurrencyRateDao
 import com.panomc.plugins.market.service.ShippingContexts
 import com.panomc.plugins.market.spi.common.ProviderContext
 import com.panomc.plugins.market.spi.common.ProviderSettings
@@ -58,6 +62,9 @@ private class SettingsShippingContext(private val base: ProviderContext, token: 
 @Volatile
 private var cached: Pair<MarketPlugin, ShippingAdminService>? = null
 
+@Volatile
+private var cachedQuoter: Pair<MarketPlugin, ShippingService>? = null
+
 private object ShippingAdminServiceHolder
 
 /** The service of the panel routes, built once per plugin instance from the Spring beans. */
@@ -69,7 +76,21 @@ internal fun shippingAdminService(plugin: MarketPlugin): ShippingAdminService {
     }
 }
 
-private fun buildService(plugin: MarketPlugin): ShippingAdminService {
+/**
+ * The shipping quoter of checkout (MK-132), one per plugin instance: its quote cache and circuit breaker live in memory, and the
+ * admin service clears the cache of a carrier whose settings were saved.
+ */
+internal fun shippingService(plugin: MarketPlugin): ShippingService {
+    cachedQuoter?.takeIf { it.first === plugin }?.let { return it.second }
+
+    return synchronized(ShippingAdminServiceHolder) {
+        cachedQuoter?.takeIf { it.first === plugin }?.second ?: buildQuoter(plugin).also { cachedQuoter = plugin to it }
+    }
+}
+
+private class Wiring(val db: MarketDb, val cipher: SecretCipher, val contexts: ShippingContexts, val site: () -> SiteInfo)
+
+private fun wiringOf(plugin: MarketPlugin): Wiring {
     val context = plugin.applicationContext
     val databaseManager by lazy { context.getBean(DatabaseManager::class.java) }
     val db = MarketDb({ databaseManager.getSqlClient() as Pool }, SystemClock)
@@ -92,8 +113,33 @@ private fun buildService(plugin: MarketPlugin): ShippingAdminService {
         SettingsShippingContext(ProviderContextImpl(provider.id, settings, testMode, http, vertx, log, state, site(), SystemClock), null)
     }
 
+    return Wiring(db, cipher, contexts, site)
+}
+
+private fun buildQuoter(plugin: MarketPlugin): ShippingService {
+    val context = plugin.applicationContext
+    val wiring = wiringOf(plugin)
+
+    return ShippingService(
+        clock = SystemClock,
+        zones = context.getBean(MarketShippingZoneDao::class.java),
+        methods = context.getBean(MarketShippingMethodDao::class.java),
+        rates = context.getBean(MarketShippingRateDao::class.java),
+        carriers = context.getBean(MarketShippingCarrierDao::class.java),
+        currencyRates = context.getBean(MarketCurrencyRateDao::class.java),
+        addresses = context.getBean(MarketAddressDao::class.java),
+        lookup = providerLookup(plugin),
+        cipher = wiring.cipher,
+        contexts = wiring.contexts
+    )
+}
+
+private fun buildService(plugin: MarketPlugin): ShippingAdminService {
+    val context = plugin.applicationContext
+    val wiring = wiringOf(plugin)
+
     return ShippingAdminService(
-        db = db,
+        db = wiring.db,
         clock = SystemClock,
         zones = context.getBean(MarketShippingZoneDao::class.java),
         methods = context.getBean(MarketShippingMethodDao::class.java),
@@ -101,8 +147,9 @@ private fun buildService(plugin: MarketPlugin): ShippingAdminService {
         carriers = context.getBean(MarketShippingCarrierDao::class.java),
         throttles = context.getBean(MarketThrottleDao::class.java),
         lookup = providerLookup(plugin),
-        cipher = cipher,
-        contexts = contexts,
-        site = site
+        cipher = wiring.cipher,
+        contexts = wiring.contexts,
+        site = wiring.site,
+        onQuoteCacheInvalidate = { providerId -> shippingService(plugin).invalidate(providerId) }
     )
 }

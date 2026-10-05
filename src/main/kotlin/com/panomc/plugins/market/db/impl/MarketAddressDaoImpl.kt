@@ -77,6 +77,62 @@ class MarketAddressDaoImpl : MarketAddressDao() {
             .coAwait()
             .rowCount() > 0
 
+    override suspend fun update(address: MarketAddress, sqlClient: SqlClient): Boolean {
+        val query =
+            "UPDATE `${prefix() + tableName}` SET `label` = ?, `isDefault` = ?, `firstName` = ?, `lastName` = ?, `company` = ?, `phone` = ?, `email` = ?, `country` = ?, `state` = ?, `city` = ?, `district` = ?, `neighborhood` = ?, `line1` = ?, `line2` = ?, `postalCode` = ?, `identityNumber` = ?, `type` = ?, `taxOffice` = ?, `taxNumber` = ?, `updatedAt` = ? WHERE `id` = ?"
+        val values = Tuple.tuple()
+            .addValue(address.label)
+            .addValue(if (address.isDefault) 1 else 0)
+            .addValue(address.firstName)
+            .addValue(address.lastName)
+            .addValue(address.company)
+            .addValue(address.phone)
+            .addValue(address.email)
+            .addValue(address.country)
+            .addValue(address.state)
+            .addValue(address.city)
+            .addValue(address.district)
+            .addValue(address.neighborhood)
+            .addValue(address.line1)
+            .addValue(address.line2)
+            .addValue(address.postalCode)
+            .addValue(address.identityNumber)
+            .addValue(address.type)
+            .addValue(address.taxOffice)
+            .addValue(address.taxNumber)
+            .addValue(address.updatedAt)
+            .addValue(address.id)
+
+        // MySQL reports 0 affected rows for an UPDATE that changes nothing: the row is judged by a read, not by the count
+        sqlClient.preparedQuery(query).execute(values).coAwait()
+
+        return getById(address.id, sqlClient) != null
+    }
+
+    override suspend fun countByUserId(userId: Long, sqlClient: SqlClient): Int =
+        sqlClient
+            .preparedQuery("SELECT COUNT(*) AS `n` FROM `${prefix() + tableName}` WHERE `userId` = ?")
+            .execute(Tuple.of(userId))
+            .coAwait()
+            .first()
+            .getInteger("n")
+
+    override suspend fun clearDefault(userId: Long, keepId: Long, now: Long, sqlClient: SqlClient): Int =
+        sqlClient
+            .preparedQuery("UPDATE `${prefix() + tableName}` SET `isDefault` = 0, `updatedAt` = ? WHERE `userId` = ? AND `isDefault` = 1 AND `id` <> ?")
+            .execute(Tuple.of(now, userId, keepId))
+            .coAwait()
+            .rowCount()
+
+    override suspend fun markDefault(userId: Long, id: Long, now: Long, sqlClient: SqlClient): Boolean {
+        sqlClient
+            .preparedQuery("UPDATE `${prefix() + tableName}` SET `isDefault` = 1, `updatedAt` = ? WHERE `id` = ? AND `userId` = ?")
+            .execute(Tuple.of(now, id, userId))
+            .coAwait()
+
+        return getById(id, sqlClient)?.userId == userId
+    }
+
     override suspend fun uninstall(sqlClient: SqlClient) {
         sqlClient
             .query("DROP TABLE IF EXISTS `${prefix() + tableName}`")
