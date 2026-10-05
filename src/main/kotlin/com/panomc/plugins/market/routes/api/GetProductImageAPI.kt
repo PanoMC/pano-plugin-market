@@ -10,7 +10,6 @@ import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.dao.MarketProductVariantDao
 import com.panomc.plugins.market.routes.base.MarketApi
 import com.panomc.plugins.market.util.ImageUtil
-import com.panomc.plugins.market.util.MarketStatus
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
 import io.vertx.ext.web.validation.builder.Parameters.optionalParam
@@ -53,13 +52,10 @@ class GetProductImageAPI(
         val parameters = getParameters(context)
         val fileName = parameters.pathParameter("fileName").string
 
-        val sqlClient = databaseManager.getSqlClient()
-        val ownProduct = marketProductDao.getByImageFileName(fileName, sqlClient)
-        val variant = if (ownProduct == null) marketProductVariantDao.getByImageFileName(fileName, sqlClient) else null
-        val product = ownProduct ?: variant?.let { marketProductDao.getById(it.productId, sqlClient) }
-        val storedName = if (ownProduct != null) ownProduct.imageFileName else variant?.imageFileName
+        val storedName = ProductImageResolver(marketProductDao, marketProductVariantDao)
+            .resolve(fileName, databaseManager.getSqlClient())
 
-        if (product == null || storedName == null || !visible(product.status, product.deletedAt)) {
+        if (storedName == null) {
             context.response().setStatusCode(404).end()
             return null
         }
@@ -82,7 +78,7 @@ class GetProductImageAPI(
 
         val response = context.response()
 
-        if (matches(context.request().getHeader("If-None-Match"), etag)) {
+        if (ProductImageResolver.etagMatches(context.request().getHeader("If-None-Match"), etag)) {
             response.putHeader("ETag", etag)
             response.putHeader("Cache-Control", "public, max-age=$CACHE_TTL_SECONDS, immutable")
             response.setStatusCode(304).end()
@@ -101,16 +97,6 @@ class GetProductImageAPI(
         }
 
         return null
-    }
-
-    private fun visible(status: MarketStatus, deletedAt: Long?): Boolean =
-        deletedAt == null && status != MarketStatus.INACTIVE && status != MarketStatus.ARCHIVED
-
-    /** `If-None-Match` as a list of (optionally weak) validators, or `*`. */
-    private fun matches(header: String?, etag: String): Boolean {
-        if (header.isNullOrBlank()) return false
-
-        return header.split(',').map { it.trim().removePrefix("W/") }.any { it == "*" || it == etag }
     }
 
     private fun getThumbnailFile(fileName: String): File {
