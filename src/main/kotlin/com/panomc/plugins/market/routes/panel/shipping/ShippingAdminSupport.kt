@@ -21,6 +21,7 @@ import com.panomc.plugins.market.provider.SecretCipher
 import com.panomc.plugins.market.provider.StoredProviderSettings
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.routes.panel.settings.payment.siteInfoOf
+import com.panomc.plugins.market.routes.panel.shipment.fulfilmentDeps
 import com.panomc.plugins.market.service.ShippingAdminService
 import com.panomc.plugins.market.service.ShippingService
 import com.panomc.plugins.market.spi.common.SiteInfo
@@ -130,7 +131,8 @@ private fun buildQuoter(plugin: MarketPlugin): ShippingService {
         addresses = context.getBean(MarketAddressDao::class.java),
         lookup = providerLookup(plugin),
         cipher = wiring.cipher,
-        contexts = wiring.contexts
+        contexts = wiring.contexts,
+        fulfilment = fulfilmentDeps(plugin)
     )
 }
 
