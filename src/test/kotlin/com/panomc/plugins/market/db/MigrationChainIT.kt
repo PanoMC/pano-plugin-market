@@ -5,6 +5,7 @@ import com.panomc.plugins.market.db.migration.MarketMigration2to3
 import com.panomc.plugins.market.db.migration.MarketMigration3to4
 import com.panomc.plugins.market.db.migration.MarketMigration4to5
 import com.panomc.plugins.market.db.migration.MarketMigration5to6
+import com.panomc.plugins.market.db.migration.MarketMigration6to7
 import com.panomc.plugins.market.support.MarketMigrationTestBase
 import com.panomc.plugins.market.support.MarketTestDb
 import io.vertx.kotlin.coroutines.coAwait
@@ -19,10 +20,10 @@ import org.junit.jupiter.api.Test
  * The migration chain from the frozen scheme-version-2 install (17 section 11.3 `MigrationChainIT`, 01 section 14.1
  * rule 6): the resulting schema equals the schema of a fresh `ensure()` (table, column, type, default and index
  * sets), the seed rows are unchanged in their existing columns, and a step is idempotent and survives being
- * interrupted half-way. Each later migration slice appends its step to [chain]; `2 -> 3`, `3 -> 4`, `4 -> 5` (orders) and `5 -> 6` (payments) are in.
+ * interrupted half-way. Each later migration slice appends its step to [chain]; `2 -> 3`, `3 -> 4`, `4 -> 5` (orders) and `5 -> 6` (payments) and `6 -> 7` (credits) are in.
  */
 class MigrationChainIT : MarketMigrationTestBase() {
-    private val chain: List<() -> DatabaseMigration> = listOf({ MarketMigration2to3() }, { MarketMigration3to4() }, { MarketMigration4to5() }, { MarketMigration5to6() })
+    private val chain: List<() -> DatabaseMigration> = listOf({ MarketMigration2to3() }, { MarketMigration3to4() }, { MarketMigration4to5() }, { MarketMigration5to6() }, { MarketMigration6to7() })
 
     private suspend fun runChain(client: SqlClient = pool) {
         for (step in chain) step().migrate(client)
@@ -78,7 +79,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         runChain()
         val migrated = SchemaSnapshot.take(pool)
         val fresh = freshSchema()
-        assertEquals(33, migrated.tables.size)
+        assertEquals(36, migrated.tables.size)
         assertEquals(fresh.tables, migrated.tables)
         assertEquals(fresh.columns, migrated.columns)
         assertEquals(fresh.keys, migrated.keys)
@@ -174,6 +175,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
             MarketMigration3to4().migrate(pool)
             MarketMigration4to5().migrate(pool)
             MarketMigration5to6().migrate(pool)
+            MarketMigration6to7().migrate(pool)
 
             val findings = SchemaVerifier.verify(pool, prefix).findings
             assertEquals(listOf("pano_market_product_variant"), findings.map { it.target })
@@ -188,6 +190,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
             MarketMigration3to4().migrate(closed)
             MarketMigration4to5().migrate(closed)
             MarketMigration5to6().migrate(closed)
+            MarketMigration6to7().migrate(closed)
         } finally {
             sql("DROP VIEW IF EXISTS `pano_market_product_variant`")
         }
@@ -365,7 +368,11 @@ class MigrationChainIT : MarketMigrationTestBase() {
             )
         )
         for (t in listOf("payment", "payment_event", "refund", "refund_item", "dispute", "provider_state")) assertEquals(0L, count("market_$t"), t)
-        assertEquals(emptyList<SchemaVerifier.Finding>(), SchemaVerifier.verify(pool, prefix).findings)
+        // the credit ledger of scheme version 7 does not exist yet: it is all the verifier misses
+        assertEquals(
+            listOf("pano_market_credit_account", "pano_market_credit_entry", "pano_market_credit_tx"),
+            SchemaVerifier.verify(pool, prefix).findings.map { it.target }.sorted()
+        )
     }
 
     @Test
@@ -387,5 +394,91 @@ class MigrationChainIT : MarketMigrationTestBase() {
             assertEquals(expected, SchemaSnapshot.take(pool))
             assertTrue(SchemaVerifier.verify(pool, prefix).ok)
         }
+    }
+
+    private suspend fun systemAccounts(): List<String> =
+        sql("SELECT `systemKey` FROM `pano_market_credit_account` WHERE `type` = 'SYSTEM' ORDER BY `id`").map { it.getString("systemKey") }
+
+    @Test
+    fun `the step declares 6 to 7 with the three tables and the seed as one handler each`() {
+        val migration = MarketMigration6to7()
+        assertEquals(6, migration.from)
+        assertEquals(7, migration.to)
+        assertTrue(migration.isMigratable(6) && !migration.isMigratable(5))
+        // CREATE credit_account, credit_tx, credit_entry + the INSERT IGNORE of the system accounts
+        assertEquals(3 + 1, migration.handlers.size)
+        assertEquals(listOf("ISSUANCE", "SPENT", "HOLD", "REVOKED", "EXTERNAL"), MarketSchema.CREDIT_SYSTEM_KEYS)
+        val statements = MarketMigration6to7.statements().map { it("pano_") }
+        assertTrue(statements.take(3).all { it.startsWith("CREATE TABLE IF NOT EXISTS") })
+        assertTrue(statements.last().startsWith("INSERT IGNORE INTO `pano_market_credit_account`"))
+    }
+
+    @Test
+    fun `step 6 to 7 creates the ledger tables and seeds the five system accounts, twice leaves five rows`(): Unit = runBlocking {
+        MarketMigration2to3().migrate(pool)
+        MarketMigration3to4().migrate(pool)
+        MarketMigration4to5().migrate(pool)
+        MarketMigration5to6().migrate(pool)
+        val columns = columnsOfCurrentTables()
+        val before = dump(columns)
+
+        MarketMigration6to7().migrate(pool)
+
+        assertEquals(before, dump(columns)) // existing tables untouched
+        assertEquals(listOf("ISSUANCE", "SPENT", "HOLD", "REVOKED", "EXTERNAL"), systemAccounts())
+        assertEquals(5L, count("market_credit_account"))
+        assertEquals(5L, count("market_credit_account", "`type` = 'SYSTEM' AND `userId` IS NULL AND `balance` = 0"))
+        assertEquals(0L, count("market_credit_tx"))
+        assertEquals(0L, count("market_credit_entry"))
+        val seeded = dump(columnsOfCurrentTables()).getValue("pano_market_credit_account")
+
+        MarketMigration6to7().migrate(pool)
+        assertEquals(5L, count("market_credit_account"))
+        assertEquals(seeded, dump(columnsOfCurrentTables()).getValue("pano_market_credit_account"))
+        assertEquals(emptyList<SchemaVerifier.Finding>(), SchemaVerifier.verify(pool, prefix).findings)
+    }
+
+    @Test
+    fun `step 6 to 7 restores a deleted system account and survives an interruption`(): Unit = runBlocking {
+        runChain()
+        val expected = SchemaSnapshot.take(pool)
+        sql("DELETE FROM `pano_market_credit_account` WHERE `systemKey` = 'HOLD'")
+        assertEquals(4L, count("market_credit_account"))
+        MarketMigration6to7().migrate(pool)
+        assertEquals(5L, count("market_credit_account"))
+
+        val total = MarketMigration6to7().handlers.size
+        for (stopAfter in listOf(total / 2, 1, total - 1)) {
+            resetState()
+            MarketMigration2to3().migrate(pool)
+            MarketMigration3to4().migrate(pool)
+            MarketMigration4to5().migrate(pool)
+            MarketMigration5to6().migrate(pool)
+            for (handler in MarketMigration6to7().handlers.take(stopAfter)) handler(pool)
+            if (stopAfter < total - 1) {
+                assertTrue(SchemaSnapshot.take(pool) != expected, "interrupted after $stopAfter handlers is a partial schema")
+            } else {
+                // all three tables exist, only the seed is missing
+                assertEquals(expected, SchemaSnapshot.take(pool))
+                assertEquals(0L, count("market_credit_account"), "interrupted before the seed")
+            }
+            assertTrue(MarketSchema.ensure(pool, prefix).clean)
+            MarketMigration6to7().migrate(pool)
+            assertEquals(expected, SchemaSnapshot.take(pool), "interrupted after $stopAfter handlers")
+            assertEquals(5L, count("market_credit_account"), "interrupted after $stopAfter handlers")
+            assertTrue(SchemaVerifier.verify(pool, prefix).ok)
+        }
+    }
+
+    @Test
+    fun `ensure seeds the system accounts of a fresh install once and restores a deleted one`(): Unit = runBlocking {
+        MarketTestDb.dropAllTables(pool)
+        assertTrue(MarketSchema.ensure(pool, prefix).clean)
+        assertEquals(listOf("ISSUANCE", "SPENT", "HOLD", "REVOKED", "EXTERNAL"), systemAccounts())
+        assertTrue(MarketSchema.ensure(pool, prefix).clean)
+        assertEquals(5L, count("market_credit_account"))
+        sql("DELETE FROM `pano_market_credit_account` WHERE `systemKey` = 'EXTERNAL'")
+        assertTrue(MarketSchema.ensure(pool, prefix).clean)
+        assertEquals(5L, count("market_credit_account"))
     }
 }

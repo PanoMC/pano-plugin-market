@@ -1011,6 +1011,66 @@ object MarketSchema {
         unique("uq_kind_provider_key", "kind", "providerId", "stateKey")
     }
 
+    // --- scheme version 7: the credit ledger (01 section 7) -------------------------------------------------------
+
+    /** `market_credit_account.type`. */
+    const val CREDIT_ACCOUNT_USER = "USER"
+    const val CREDIT_ACCOUNT_SYSTEM = "SYSTEM"
+
+    /** The five system credit accounts, in the order they are seeded (01 section 7.1). */
+    val CREDIT_SYSTEM_KEYS: List<String> = listOf("ISSUANCE", "SPENT", "HOLD", "REVOKED", "EXTERNAL")
+
+    val CREDIT_ACCOUNT = table("market_credit_account", "Market credit account table.") {
+        id()
+        str("type", 16)
+        bigint("userId", nullable = true)
+        str("systemKey", 32, nullable = true)
+        bigint("balance", default = 0)
+        timestamps()
+        unique("uq_user", "userId")
+        unique("uq_system", "systemKey")
+    }
+
+    val CREDIT_TX = table("market_credit_tx", "Market credit transaction table.") {
+        id()
+        str("type", 24)
+        str("idempotencyKey", 128)
+        bigint("userId", nullable = true)
+        bigint("amount")
+        bigint("shortfall", default = 0)
+        bigint("orderId", nullable = true)
+        bigint("refundId", nullable = true)
+        bigint("deliveryId", nullable = true)
+        bigint("actorUserId", nullable = true)
+        str("note", 255, nullable = true)
+        timestamps()
+        unique("uq_idem", "idempotencyKey")
+        key("idx_user", "userId", "id")
+        key("idx_order", "orderId")
+        key("idx_type", "type", "id")
+    }
+
+    val CREDIT_ENTRY = table("market_credit_entry", "Market credit ledger entry table.") {
+        id()
+        bigint("txId")
+        bigint("accountId")
+        bigint("amount")
+        bigint("balanceAfter")
+        timestamps()
+        key("idx_account", "accountId", "id")
+        key("idx_tx", "txId")
+    }
+
+    /**
+     * The statement that seeds the five system credit accounts (01 section 7.1): one `INSERT IGNORE`, so a second run
+     * (or a second caller: `Dao.init`, the migration, [ensure]) leaves five rows, and a row an admin deleted by hand is
+     * restored. Ids 1 to 5 on a fresh table, in the order of [CREDIT_SYSTEM_KEYS].
+     */
+    fun seedCreditSystemAccountsSql(prefix: String, now: Long = System.currentTimeMillis()): String {
+        val rows = CREDIT_SYSTEM_KEYS.joinToString(", ") { key -> "('$CREDIT_ACCOUNT_SYSTEM', '$key', 0, $now, $now)" }
+        return "INSERT IGNORE INTO `${CREDIT_ACCOUNT.physicalName(prefix)}` (`type`, `systemKey`, `balance`, `createdAt`, `updatedAt`) VALUES $rows"
+    }
+
     /** Every table the plugin owns, in creation order. Later migration slices append their tables here. */
     val tables: List<Table> = listOf(
         CATEGORY, COMPARISON, COUPON, CREATOR_CODE, DISCOUNT, GIFT, ORDER, ORDER_ITEM, PAYMENT_METHOD, PRODUCT,
@@ -1018,7 +1078,8 @@ object MarketSchema {
         REDEMPTION, CREATOR_EARNING, CREATOR_PAYOUT,
         ORDER_EVENT, LEGAL_TEXT, SEQUENCE,
         ENTITLEMENT, ADDRESS, CART, CART_ITEM, INVOICE,
-        PAYMENT, PAYMENT_EVENT, REFUND, REFUND_ITEM, DISPUTE, PROVIDER_STATE
+        PAYMENT, PAYMENT_EVENT, REFUND, REFUND_ITEM, DISPUTE, PROVIDER_STATE,
+        CREDIT_ACCOUNT, CREDIT_TX, CREDIT_ENTRY
     )
 
     /** The table declared under [name] (without prefix), or an error naming it. */
@@ -1200,6 +1261,19 @@ object MarketSchema {
         return errors
     }
 
+    /**
+     * Seeds the five system credit accounts through [client] ([seedCreditSystemAccountsSql]), swallowing and logging an
+     * error like [installTable]. Returns the error messages, empty when the statement succeeded.
+     */
+    suspend fun seedCreditSystemAccounts(client: SqlClient, prefix: String): List<String> =
+        try {
+            client.query(seedCreditSystemAccountsSql(prefix)).execute().coAwait()
+            emptyList()
+        } catch (e: Exception) {
+            logger.error("Market system credit account seed failed for {}: {}", CREDIT_ACCOUNT.physicalName(prefix), e.message)
+            listOf("${CREDIT_ACCOUNT.physicalName(prefix)} seed: ${e.message}")
+        }
+
     // --- ensure -------------------------------------------------------------------------------------------------
 
     /** What [ensure] did: the DDL and fixup errors it swallowed, the fixups it skipped and the ones that ran. */
@@ -1229,7 +1303,12 @@ object MarketSchema {
         markerTable: String = ONE_SHOT_MARKER_TABLE
     ): EnsureReport {
         val ddlErrors = ArrayList<String>()
-        for (table in tables) ddlErrors += installTable(pool, table, prefix)
+        for (table in tables) {
+            val errors = installTable(pool, table, prefix)
+            ddlErrors += errors
+            // the system accounts are restored on every start (a deleted row comes back); a table that failed to create has no seed to report
+            if (table === CREDIT_ACCOUNT && errors.isEmpty()) ddlErrors += seedCreditSystemAccounts(pool, prefix)
+        }
 
         val errors = ArrayList<String>()
         val run = ArrayList<String>()

@@ -47,7 +47,10 @@ class SchemaVerifierIT : MarketDbTestBase() {
         "pano_market_refund_item" to ("uq_refund_item" to listOf("refundId", "orderItemId")),
         "pano_market_payment_event" to ("uq_event" to listOf("providerId", "direction", "eventKey")),
         "pano_market_dispute" to ("uq_provider_dispute" to listOf("providerId", "gatewayDisputeId")),
-        "pano_market_provider_state" to ("uq_kind_provider_key" to listOf("kind", "providerId", "stateKey"))
+        "pano_market_provider_state" to ("uq_kind_provider_key" to listOf("kind", "providerId", "stateKey")),
+        "pano_market_credit_account" to ("uq_user" to listOf("userId")),
+        "pano_market_credit_account" to ("uq_system" to listOf("systemKey")),
+        "pano_market_credit_tx" to ("uq_idem" to listOf("idempotencyKey"))
     )
 
     private suspend fun rebuild() {

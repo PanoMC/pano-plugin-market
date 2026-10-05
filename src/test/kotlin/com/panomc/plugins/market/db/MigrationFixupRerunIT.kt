@@ -7,6 +7,7 @@ import com.panomc.plugins.market.db.migration.MarketMigration2to3
 import com.panomc.plugins.market.db.migration.MarketMigration3to4
 import com.panomc.plugins.market.db.migration.MarketMigration4to5
 import com.panomc.plugins.market.db.migration.MarketMigration5to6
+import com.panomc.plugins.market.db.migration.MarketMigration6to7
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.db.model.MarketOrderItem
 import com.panomc.plugins.market.db.model.OrderSource
@@ -33,6 +34,7 @@ class MigrationFixupRerunIT : MarketMigrationTestBase() {
         MarketMigration3to4().migrate(pool)
         MarketMigration4to5().migrate(pool)
         MarketMigration5to6().migrate(pool)
+        MarketMigration6to7().migrate(pool)
     }
 
     private suspend fun ensure(ids: Ids = SeqIds()) =

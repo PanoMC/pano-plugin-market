@@ -7,6 +7,9 @@ import com.panomc.plugins.market.db.impl.MarketCouponDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCreatorEarningDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCreatorPayoutDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCreatorCodeDaoImpl
+import com.panomc.plugins.market.db.impl.MarketCreditAccountDaoImpl
+import com.panomc.plugins.market.db.impl.MarketCreditEntryDaoImpl
+import com.panomc.plugins.market.db.impl.MarketCreditTxDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCurrencyRateDaoImpl
 import com.panomc.plugins.market.db.impl.MarketDiscountDaoImpl
 import com.panomc.plugins.market.db.impl.MarketGiftDaoImpl
@@ -70,7 +73,9 @@ class MarketSchemaIT : MarketDbTestBase() {
         // scheme version 5 (MK-026)
         "entitlement", "address", "cart", "cart_item", "invoice",
         // scheme version 6 (MK-027)
-        "payment", "payment_event", "refund", "refund_item", "dispute", "provider_state"
+        "payment", "payment_event", "refund", "refund_item", "dispute", "provider_state",
+        // scheme version 7 (MK-028)
+        "credit_account", "credit_tx", "credit_entry"
     ).map { "pano_market_$it" }.sorted()
 
     /** Drops every table and runs `ensure` again: the way a test that damaged the schema puts it back. */
@@ -82,7 +87,7 @@ class MarketSchemaIT : MarketDbTestBase() {
     // --- ensure ------------------------------------------------------------------------------------------------
 
     @Test
-    fun `ensure on an empty database creates the thirty-three tables`(): Unit = runBlocking {
+    fun `ensure on an empty database creates the thirty-six tables`(): Unit = runBlocking {
         MarketTestDb.dropAllTables(pool)
         val report = MarketSchema.ensure(pool, prefix)
         assertTrue(report.clean, report.ddlErrors.toString())
@@ -100,7 +105,7 @@ class MarketSchemaIT : MarketDbTestBase() {
         val after = SchemaSnapshot.take(pool)
         assertTrue(first.clean && second.clean)
         assertEquals(before, after)
-        assertTrue(before.columns.isNotEmpty() && before.keys.isNotEmpty() && before.tables.size == 33)
+        assertTrue(before.columns.isNotEmpty() && before.keys.isNotEmpty() && before.tables.size == 36)
     }
 
     @Test
@@ -124,7 +129,7 @@ class MarketSchemaIT : MarketDbTestBase() {
 
             val expected = SchemaSnapshot.take(pool)
             val actual = SchemaSnapshot.take(referencePool)
-            assertEquals(33, expected.tables.size)
+            assertEquals(36, expected.tables.size)
             assertEquals(expected.tables, actual.tables)
             assertEquals(expected.columns, actual.columns)
             assertEquals(expected.keys, actual.keys)
@@ -192,11 +197,12 @@ class MarketSchemaIT : MarketDbTestBase() {
         { c -> MarketInvoiceDaoImpl().init(c) },
         { c -> MarketPaymentDaoImpl().init(c) }, { c -> MarketPaymentEventDaoImpl().init(c) },
         { c -> MarketRefundDaoImpl().init(c) }, { c -> MarketRefundItemDaoImpl().init(c) },
-        { c -> MarketDisputeDaoImpl().init(c) }, { c -> MarketProviderStateDaoImpl().init(c) }
+        { c -> MarketDisputeDaoImpl().init(c) }, { c -> MarketProviderStateDaoImpl().init(c) },
+        { c -> MarketCreditAccountDaoImpl().init(c) }, { c -> MarketCreditTxDaoImpl().init(c) }, { c -> MarketCreditEntryDaoImpl().init(c) }
     )
 
     @Test
-    fun `the thirty-three Dao init calls create the same schema as ensure`(): Unit = runBlocking {
+    fun `the thirty-six Dao init calls create the same schema as ensure`(): Unit = runBlocking {
         MarketTestDb.dropAllTables(pool)
         allDaoInits().forEach { it(pool) }
         allDaoInits().forEach { it(pool) } // twice: idempotent
