@@ -1323,6 +1323,142 @@ object MarketSchema {
         timestamps()
     }
 
+    // --- scheme version 10 part b: shipping (01 section 11) ---
+
+    val SHIPPING_ZONE = table("market_shipping_zone", "Market shipping zone table.") {
+        id()
+        str("name", 128)
+        text("countries", nullable = false) // JSON
+        text("regions") // JSON
+        text("postalPatterns") // JSON
+        int("position", default = 0)
+        str("status", 16, "ACTIVE")
+        timestamps()
+    }
+
+    val SHIPPING_METHOD = table("market_shipping_method", "Market shipping method table.") {
+        id()
+        str("name", 128)
+        str("description", 512, nullable = true)
+        str("providerId", 64, "manual")
+        str("serviceCode", 128, nullable = true)
+        str("rateSource", 24, "RULES")
+        bigint("freeShippingThreshold", nullable = true)
+        bigint("handlingFee", default = 0)
+        bigint("vatPercent", nullable = true)
+        int("minDeliveryDays", nullable = true)
+        int("maxDeliveryDays", nullable = true)
+        int("maxWeightGrams", nullable = true)
+        str("carrierName", 128, nullable = true)
+        str("trackingUrlTemplate", 512, nullable = true)
+        text("settings") // JSON
+        int("position", default = 0)
+        str("status", 16, "ACTIVE")
+        bigint("deletedAt", nullable = true)
+        timestamps()
+    }
+
+    val SHIPPING_RATE = table("market_shipping_rate", "Market shipping rate table.") {
+        id()
+        bigint("methodId")
+        bigint("zoneId")
+        str("basis", 24)
+        bigint("rangeFrom", default = 0)
+        bigint("rangeTo", nullable = true)
+        bigint("price")
+        bigint("perUnitPrice", default = 0)
+        int("position", default = 0)
+        timestamps()
+        key("idx_method_zone", "methodId", "zoneId", "position")
+    }
+
+    val SHIPPING_CARRIER = table("market_shipping_carrier", "Market shipping carrier table.") {
+        id()
+        str("providerId", 64)
+        flag("enabled", 0)
+        text("settings") // ENC
+        flag("testMode", 0)
+        char("webhookToken", 40)
+        bigint("lastInboundAt", nullable = true)
+        str("lastError", 512, nullable = true)
+        bigint("lastErrorAt", nullable = true)
+        timestamps()
+        unique("uq_provider", "providerId")
+    }
+
+    val SHIPMENT = table("market_shipment", "Market shipment table.") {
+        id()
+        bigint("orderId")
+        bigint("methodId", nullable = true)
+        str("providerId", 64)
+        str("serviceCode", 128, nullable = true)
+        str("status", 24, "CREATED")
+        str("entryMode", 24, "CARRIER")
+        str("merchantReference", 64)
+        str("carrierReference", 191, nullable = true)
+        str("trackingNumber", 128, nullable = true)
+        str("trackingUrl", 1024, nullable = true)
+        str("carrierName", 128, nullable = true)
+        str("labelFile", 255, nullable = true)
+        str("labelFormat", 8, nullable = true)
+        text("documents") // JSON
+        str("rateRef", 255, nullable = true)
+        bigint("cost", nullable = true)
+        str("costCurrency", 8, nullable = true)
+        int("weightGrams", nullable = true)
+        text("packages") // JSON
+        bigint("estimatedDeliveryAt", nullable = true)
+        str("note", 512, nullable = true)
+        str("lastErrorCode", 32, nullable = true)
+        str("lastError", 512, nullable = true)
+        bigint("claimedUntil", nullable = true)
+        flag("itemsReleased", 0)
+        flag("stale", 0)
+        text("fromAddress", nullable = false) // JSON
+        text("toAddress", nullable = false) // JSON
+        bigint("codAmount", nullable = true)
+        text("providerData") // ENC
+        flag("testMode", 0)
+        bigint("nextPollAt", nullable = true)
+        int("pollCount", default = 0)
+        bigint("lastPolledAt", nullable = true)
+        bigint("shippedAt", nullable = true)
+        bigint("deliveredAt", nullable = true)
+        bigint("cancelledAt", nullable = true)
+        bigint("trackingMailSentAt", nullable = true)
+        bigint("createdBy", nullable = true)
+        timestamps()
+        unique("uq_merchantRef", "merchantReference")
+        key("idx_order", "orderId")
+        key("idx_poll", "status", "nextPollAt")
+        key("idx_carrierRef", "providerId", "carrierReference")
+        key("idx_tracking", "trackingNumber")
+    }
+
+    val SHIPMENT_ITEM = table("market_shipment_item", "Market shipment item table.") {
+        id()
+        bigint("shipmentId")
+        bigint("orderItemId")
+        int("quantity")
+        timestamps()
+        unique("uq_shipment_item", "shipmentId", "orderItemId")
+    }
+
+    val SHIPMENT_EVENT = table("market_shipment_event", "Market shipment event table.") {
+        id()
+        bigint("shipmentId")
+        str("status", 24)
+        str("rawStatus", 128, nullable = true)
+        str("description", 512, nullable = true)
+        str("location", 255, nullable = true)
+        bigint("occurredAt")
+        str("source", 16)
+        str("dedupeKey", 128)
+        timestamps()
+        unique("uq_shipment_event", "shipmentId", "dedupeKey")
+        key("idx_shipment", "shipmentId", "occurredAt")
+    }
+
     /** Every table the plugin owns, in creation order. Later migration slices append their tables here. */
     val tables: List<Table> = listOf(
         CATEGORY, COMPARISON, COUPON, CREATOR_CODE, DISCOUNT, GIFT, ORDER, ORDER_ITEM, PAYMENT_METHOD, PRODUCT,
@@ -1333,7 +1469,8 @@ object MarketSchema {
         PAYMENT, PAYMENT_EVENT, REFUND, REFUND_ITEM, DISPUTE, PROVIDER_STATE,
         CREDIT_ACCOUNT, CREDIT_TX, CREDIT_ENTRY,
         DELIVERY, SERVER_STATE, WEBHOOK_ENDPOINT, WEBHOOK_DELIVERY, MAIL_OUTBOX,
-        SUBSCRIPTION, SUBSCRIPTION_RENEWAL, BLOCK, THROTTLE, GOAL
+        SUBSCRIPTION, SUBSCRIPTION_RENEWAL, BLOCK, THROTTLE, GOAL,
+        SHIPPING_ZONE, SHIPPING_METHOD, SHIPPING_RATE, SHIPPING_CARRIER, SHIPMENT, SHIPMENT_ITEM, SHIPMENT_EVENT
     )
 
     /** The table declared under [name] (without prefix), or an error naming it. */

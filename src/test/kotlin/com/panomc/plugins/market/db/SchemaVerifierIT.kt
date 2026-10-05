@@ -58,7 +58,12 @@ class SchemaVerifierIT : MarketDbTestBase() {
         "pano_market_subscription" to ("uq_provider_sub" to listOf("providerId", "gatewaySubscriptionId")),
         "pano_market_subscription_renewal" to ("uq_sub_period" to listOf("subscriptionId", "periodIndex")),
         "pano_market_block" to ("uq_type_value" to listOf("type", "value")),
-        "pano_market_throttle" to ("uq_scope_subject" to listOf("scope", "subject"))
+        "pano_market_throttle" to ("uq_scope_subject" to listOf("scope", "subject")),
+        // scheme version 10 part b (01 section 11)
+        "pano_market_shipping_carrier" to ("uq_provider" to listOf("providerId")),
+        "pano_market_shipment" to ("uq_merchantRef" to listOf("merchantReference")),
+        "pano_market_shipment_item" to ("uq_shipment_item" to listOf("shipmentId", "orderItemId")),
+        "pano_market_shipment_event" to ("uq_shipment_event" to listOf("shipmentId", "dedupeKey"))
     )
 
     private suspend fun rebuild() {

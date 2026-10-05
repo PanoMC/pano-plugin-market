@@ -82,7 +82,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         runChain()
         val migrated = SchemaSnapshot.take(pool)
         val fresh = freshSchema()
-        assertEquals(46, migrated.tables.size)
+        assertEquals(53, migrated.tables.size)
         assertEquals(fresh.tables, migrated.tables)
         assertEquals(fresh.columns, migrated.columns)
         assertEquals(fresh.keys, migrated.keys)
@@ -405,7 +405,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         }
     }
 
-    private val step9Tables = listOf("subscription", "subscription_renewal", "block", "throttle", "goal").map { "pano_market_$it" }.toSet()
+    private val step9Tables = listOf("subscription", "subscription_renewal", "block", "throttle", "goal", "shipping_zone", "shipping_method", "shipping_rate", "shipping_carrier", "shipment", "shipment_item", "shipment_event").map { "pano_market_$it" }.toSet()
 
     private val step8Tables = listOf("delivery", "server_state", "webhook_endpoint", "webhook_delivery", "mail_outbox").map { "pano_market_$it" }.toSet()
 
@@ -560,7 +560,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         assertEquals(9, second.from)
         assertEquals(10, second.to)
         assertTrue(second.isMigratable(9) && !second.isMigratable(8))
-        assertEquals(3, second.handlers.size)
+        assertEquals(10, second.handlers.size)
         val statements = MarketMigration8to9.statements() + MarketMigration9to10.statements()
         assertTrue(statements.map { it("pano_") }.all { it.startsWith("CREATE TABLE IF NOT EXISTS") })
         assertEquals(10, chain.last()().to)
@@ -579,7 +579,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         assertEquals(before, dump(columns))
         val after = columnsOfCurrentTables()
         assertTrue(step9Tables.all { it in after.keys })
-        for (t in listOf("subscription", "subscription_renewal", "block", "throttle", "goal")) assertEquals(0L, count("market_$t"), t)
+        for (t in listOf("subscription", "subscription_renewal", "block", "throttle", "goal", "shipping_zone", "shipping_method", "shipping_rate", "shipping_carrier", "shipment", "shipment_item", "shipment_event")) assertEquals(0L, count("market_$t"), t)
         val schema = SchemaSnapshot.take(pool)
         MarketMigration8to9().migrate(pool)
         MarketMigration9to10().migrate(pool)
@@ -592,7 +592,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
     fun `steps 8 to 9 and 9 to 10 interrupted after any number of handlers are completed by the full steps`(): Unit = runBlocking {
         runChain()
         val expected = SchemaSnapshot.take(pool)
-        for ((step, stops) in listOf<Pair<() -> DatabaseMigration, List<Int>>>({ MarketMigration8to9() } to listOf(1), { MarketMigration9to10() } to listOf(1, 2))) {
+        for ((step, stops) in listOf<Pair<() -> DatabaseMigration, List<Int>>>({ MarketMigration8to9() } to listOf(1), { MarketMigration9to10() } to listOf(1, 2, 5, 7, 9))) {
             for (stopAfter in stops) {
                 resetState()
                 for (s in chain.take(6)) s().migrate(pool)
