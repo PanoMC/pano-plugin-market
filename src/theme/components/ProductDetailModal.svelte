@@ -80,9 +80,8 @@
 <script>
   import { onMount } from 'svelte';
   import { base, browser } from '@panomc/sdk/svelte';
-  import { _, showSuccessToast } from '../../i18n';
-  import { pluginId } from '../../i18n';
-  import { addToCart } from '../utils/cart';
+  import { _ } from '../../i18n';
+  import { cart } from '../stores/cart.js';
   import { formatPrice } from '../utils/format';
 
   let { product = null, settings = {}, categoryName = null, onclose } = $props();
@@ -121,7 +120,7 @@
 
   function add() {
     if (!product || product.stock === 0) return;
-    addToCart(product.id, 1, product.stock);
-    showSuccessToast(`plugins.${pluginId}.theme.store.added-to-cart`);
+    // the cart store shows the "added" toast itself
+    cart.add({ productId: product.id, quantity: 1 }, product);
   }
 </script>

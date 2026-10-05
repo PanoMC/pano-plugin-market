@@ -54,6 +54,10 @@
       "WEEK": "{count, plural, one {# week} other {# weeks}}",
       "MONTH": "{count, plural, one {# month} other {# months}}",
       "YEAR": "{count, plural, one {# year} other {# years}}"
+    },
+    "cart": {
+      "merge-dropped": "Some items of your browser cart are no longer available and were not added to your account cart.",
+      "too-many-lines": "The cart is full. Remove an item before adding another one."
     }
   }
 }

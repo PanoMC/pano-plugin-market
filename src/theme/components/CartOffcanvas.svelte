@@ -20,7 +20,7 @@
       </div>
     {:else}
       <ul class="list-group list-group-flush mb-3">
-        {#each resolvedItems as line (line.product.id)}
+        {#each resolvedItems as line (line.key)}
           <li class="list-group-item px-0 d-flex align-items-center gap-2">
             <div
               class="bg-body-tertiary rounded overflow-hidden flex-shrink-0 d-flex align-items-center justify-content-center"
@@ -45,7 +45,7 @@
                 type="button"
                 class="btn btn-outline-secondary"
                 aria-label={$_('theme.store.cart.decrease')}
-                onclick={() => setQuantity(line.product.id, line.quantity - 1)}>
+                onclick={() => cart.setQuantity(line.key, line.quantity - 1)}>
                 <i class="fa-solid fa-minus"></i>
               </button>
               <span class="input-group-text flex-grow-1 justify-content-center bg-body">{line.quantity}</span>
@@ -55,8 +55,8 @@
                 aria-label={$_('theme.store.cart.increase')}
                 disabled={line.product.stock != null && line.quantity >= line.product.stock}
                 onclick={() =>
-                  setQuantity(
-                    line.product.id,
+                  cart.setQuantity(
+                    line.key,
                     line.product.stock != null
                       ? Math.min(line.quantity + 1, line.product.stock)
                       : line.quantity + 1
@@ -68,7 +68,7 @@
               type="button"
               class="btn btn-sm btn-link text-danger"
               aria-label={$_('theme.store.cart.remove')}
-              onclick={() => removeFromCart(line.product.id)}>
+              onclick={() => cart.remove(line.key)}>
               <i class="fa-solid fa-trash"></i>
             </button>
           </li>
@@ -89,7 +89,7 @@
         <button
           type="button"
           class="btn btn-link btn-sm text-danger w-100 mt-1"
-          onclick={clearCart}>
+          onclick={() => cart.clear()}>
           {$_('theme.store.cart.clear')}
         </button>
       </div>
@@ -102,7 +102,8 @@
   import { base } from '@panomc/sdk/svelte';
   import { NoContent } from '@panomc/sdk/components/theme';
   import { _ } from '../../i18n';
-  import { cart, setQuantity, removeFromCart, clearCart } from '../utils/cart';
+  import { cart } from '../stores/cart.js';
+  import { lineKey } from '../lib/lineKey.js';
   import { formatPrice } from '../utils/format';
 
   let { productMap = {}, settings = {} } = $props();
@@ -132,8 +133,12 @@
   // Resolve cart lines against the known products; drop items whose product is no
   // longer visible (e.g. removed since it was added).
   let resolvedItems = $derived(
-    $cart
-      .map((item) => ({ product: productMap[item.productId], quantity: item.quantity }))
+    $cart.lines
+      .map((item) => ({
+        key: lineKey(item),
+        product: productMap[item.productId],
+        quantity: item.quantity,
+      }))
       .filter((line) => line.product)
   );
 

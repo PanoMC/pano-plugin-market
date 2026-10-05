@@ -191,11 +191,12 @@
 </script>
 
 <script>
-  import { untrack } from 'svelte';
+  import { getContext, untrack } from 'svelte';
   import { browser } from '@panomc/sdk/svelte';
   import { NoContent } from '@panomc/sdk/components/theme';
   import { _ } from '../../i18n';
-  import { cart } from '../utils/cart';
+  import { cart } from '../stores/cart.js';
+  import { bindSession } from '../stores/session.js';
   import CategorySidebar from '../components/CategorySidebar.svelte';
   import ProductCard from '../components/ProductCard.svelte';
   import ProductDetailModal from '../components/ProductDetailModal.svelte';
@@ -203,6 +204,8 @@
   import CartOffcanvas from '../components/CartOffcanvas.svelte';
 
   let { data } = $props();
+
+  bindSession(getContext('session'));
 
   let settings = $derived(data.settings);
   let categories = $derived(data.categories);
@@ -224,15 +227,6 @@
     if (next !== lastInitialCategory) {
       lastInitialCategory = next;
       selectedCategory = next;
-    }
-  });
-
-  // Purge persisted cart lines whose product no longer exists (removed/deactivated/
-  // expired since it was added). Skipped when the product list is empty so a failed
-  // load (fallback data) cannot wipe a valid cart. Effects only run after mount.
-  $effect(() => {
-    if (products.length) {
-      cart.update((items) => items.filter((item) => productMap[item.productId]));
     }
   });
 
@@ -278,11 +272,8 @@
     comparisons.filter((c) => (c.productIds || []).some((id) => id != null && productMap[id]))
   );
 
-  // Count only lines that resolve to a visible product, mirroring CartOffcanvas,
-  // so the badge never disagrees with the opened cart.
-  let cartCount = $derived(
-    $cart.reduce((sum, item) => (productMap[item.productId] ? sum + item.quantity : sum), 0)
-  );
+  // Lines of products that are gone stay in the cart and are reported by the quote.
+  let cartCount = $derived($cart.count);
 
   function onCategorySelect(detail) {
     selectedCategory = detail.id;

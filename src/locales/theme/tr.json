@@ -54,6 +54,10 @@
       "WEEK": "{count} hafta",
       "MONTH": "{count} ay",
       "YEAR": "{count} yıl"
+    },
+    "cart": {
+      "merge-dropped": "Tarayıcı sepetindeki bazı ürünler artık mevcut değil ve hesap sepetine eklenmedi.",
+      "too-many-lines": "Sepet dolu. Başka bir ürün eklemeden önce bir ürünü kaldırın."
     }
   }
 }
