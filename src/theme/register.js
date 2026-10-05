@@ -22,10 +22,16 @@ export function registerTheme(pano) {
     component: viewComponent(() => import('./pages/StorePage.svelte')),
   });
 
-  // 4. Product page; the pattern loses against the exact routes (/store/checkout) of the later slices
+  // 4. Product page; the pattern loses against the exact routes (/store/checkout)
   pano.ui.page.register({
     path: '/store/[slug]',
     component: viewComponent(() => import('./pages/ProductPage.svelte')),
+  });
+
+  // 5. Checkout; registered as an exact path, it wins over the /store/[slug] pattern
+  pano.ui.page.register({
+    path: '/store/checkout',
+    component: viewComponent(() => import('./pages/CheckoutPage.svelte')),
   });
 
   // 6. Navigation link in the theme

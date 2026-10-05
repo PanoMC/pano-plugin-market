@@ -36,7 +36,11 @@ describe('registerTheme cart items', () => {
     const pano = fakePano({ withCart: false });
     registerTheme(pano);
     console.warn = warn;
-    expect(pano.calls.pages.map((p) => p.path)).toEqual(['/store', '/store/[slug]']);
+    expect(pano.calls.pages.map((p) => p.path)).toEqual([
+      '/store',
+      '/store/[slug]',
+      '/store/checkout',
+    ]);
     expect(seen).toHaveLength(2);
   });
 });
