@@ -132,7 +132,12 @@ class Placed(val order: MarketOrder, val items: List<MarketOrderItem>, val produ
  * The delivery engine on the real object graph of a T2 test (17 section 5.3): real DAOs, `CreditService`, `DeliveryService`, `EntitlementService`; the
  * platform seams (S9) are memory: users from `TestUsers`, permission nodes in [permissionStore], servers in [roster].
  */
-internal class DeliveryWorld(val w: TestWiring, maxAttempts: Int = 5) {
+internal class DeliveryWorld(
+    val w: TestWiring,
+    maxAttempts: Int = 5,
+    webhookDeliveries: com.panomc.plugins.market.db.dao.MarketWebhookDeliveryDao? = null,
+    discordLabels: com.panomc.plugins.market.core.webhook.DiscordLabelSource? = null
+) {
     val permissionStore = FakePermissions()
     val playerAccounts = FakePlayerAccounts(w.users)
     val roster = FakeRoster()
@@ -160,7 +165,7 @@ internal class DeliveryWorld(val w: TestWiring, maxAttempts: Int = 5) {
 
     val service = DeliveryService(
         w.db, locks, w.clock, w.ids, { w.config }, w.orders, w.orderItems, w.orderEvents, w.deliveries, w.entitlements, w.creditAccounts, w.products, w.fields,
-        roster, directory, playerAccounts, credits, permissionService, Random(7)
+        roster, directory, playerAccounts, credits, permissionService, Random(7), webhookDeliveries, discordLabels
     )
     val effects = DeliveryEffects(entitlementService, service, w.orders, ForeignEffects { _, _, _ -> })
 
