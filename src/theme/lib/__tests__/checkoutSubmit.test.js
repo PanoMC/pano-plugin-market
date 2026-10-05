@@ -6,6 +6,8 @@ import {
   buildSubmitBody,
   failurePlan,
   prepareSubmit,
+  quoteHeld,
+  quoteHoldAfter,
   saveOrderToken,
   submitCheckout,
   successPlan,
@@ -195,6 +197,7 @@ describe('one Idempotency-Key per unchanged body', () => {
       config: {},
       accepted: false,
       hide: false,
+      fresh: true,
     };
 
     const lost = await submitCheckout(args);
@@ -227,6 +230,7 @@ describe('one Idempotency-Key per unchanged body', () => {
       config: {},
       accepted: false,
       hide: false,
+      fresh: true,
     };
 
     await submitCheckout({ ...base, quote: quote({ total: 10 }) });
@@ -246,6 +250,7 @@ describe('one Idempotency-Key per unchanged body', () => {
       draftStore: store,
       quoteBody: {},
       quote: quote(),
+      fresh: true,
     });
 
     expect(result.ok).toBe(false);
@@ -258,8 +263,118 @@ describe('one Idempotency-Key per unchanged body', () => {
       draftStore: store,
       quoteBody: {},
       quote: quote(),
+      fresh: true,
     });
     expect(odd).toMatchObject({ ok: false, code: 'NETWORK' });
+  });
+
+  test('a quote that is not fresh never becomes a body: nothing is sent, nothing is stored', async () => {
+    const store = draftStore();
+    const calls = [];
+    const base = {
+      call: async (...args) => {
+        calls.push(args);
+        return ok();
+      },
+      draftStore: store,
+      // the buyer lowered the mixed credits to 2, the re-quote failed: the quote still says 10 were applied
+      quoteBody: {
+        items: [{ productId: 1, quantity: 1 }],
+        useCredits: 2,
+        paymentMethodId: 'stripe',
+      },
+      quote: quote({ credits: { enabled: true, applied: 10, maxApplicable: 40 } }),
+      config: {},
+    };
+
+    for (const fresh of [undefined, false, 'yes', null]) {
+      const out = await submitCheckout({ ...base, fresh });
+
+      expect(out).toMatchObject({ ok: false, code: 'STALE_QUOTE', body: null, key: null });
+    }
+
+    expect(calls).toHaveLength(0);
+    expect(store.get()).toEqual({ idempotencyKey: null, bodyHash: null });
+
+    // a fresh quote of the same input builds the body from its own applied credits
+    const sent = await submitCheckout({ ...base, fresh: true });
+    expect(sent.ok).toBe(true);
+    expect(calls[0][2].body.useCredits).toBe(10);
+  });
+
+  test('NETWORK then retry replays the identical body and key with no quote call in between', async () => {
+    const store = draftStore();
+    const calls = [];
+    const call = async (method, path, options) => {
+      calls.push({ method, path, options });
+      return calls.length === 1 ? { ok: false, code: 'NETWORK' } : ok();
+    };
+    const args = {
+      call,
+      draftStore: store,
+      quoteBody: {
+        items: [{ productId: 1, quantity: 1 }],
+        useCredits: 5,
+        paymentMethodId: 'stripe',
+      },
+      quote: quote({ credits: { enabled: true, applied: 5, maxApplicable: 40 } }),
+      config: {},
+      accepted: false,
+      hide: false,
+      fresh: true,
+    };
+    const signature = 'sig-a';
+
+    const lost = await submitCheckout(args);
+    const plan = failurePlan({
+      res: lost,
+      draft: store.get(),
+      context: { origin: 'https://shop.test', base: '' },
+    });
+
+    expect(plan.keyPatch).toEqual({});
+    // the page holds the quote: the effect that follows the return to IDLE asks nothing for this input
+    const hold = quoteHoldAfter(plan.action, signature);
+    expect(quoteHeld(hold, signature)).toBe(true);
+
+    const replay = await submitCheckout(args);
+
+    expect(replay.ok).toBe(true);
+    expect(calls.every((c) => c.path === CHECKOUT_PATH)).toBe(true);
+    expect(calls).toHaveLength(2);
+    expect(calls[1].options.body).toEqual(calls[0].options.body);
+    expect(calls[1].options.headers[IDEMPOTENCY_HEADER]).toBe(
+      calls[0].options.headers[IDEMPOTENCY_HEADER],
+    );
+  });
+});
+
+describe('quote hold after a failed submit', () => {
+  const action = (code) => failurePlan({ res: { ok: false, code }, draft: {}, context: {} }).action;
+
+  test.each(['NETWORK', 'STORE_BUSY', 'TOO_MANY_REQUESTS', 'INVALID_CSRF_TOKEN'])(
+    '%s keeps the key, so the quote is held for that input',
+    (code) => {
+      expect(quoteHoldAfter(action(code), 'sig')).toBe('sig');
+    },
+  );
+
+  test.each([
+    'PRICE_CHANGED',
+    'INVALID_CART',
+    'OUT_OF_STOCK',
+    'IDEMPOTENCY_CONFLICT',
+    'SOMETHING_NEW',
+  ])('%s drops the key and is not held', (code) => {
+    expect(quoteHoldAfter(action(code), 'sig')).toBeNull();
+  });
+
+  test('a hold only suppresses the input it was set for; any change releases it', () => {
+    expect(quoteHeld('sig', 'sig')).toBe(true);
+    expect(quoteHeld('sig', 'sig-2')).toBe(false);
+    expect(quoteHeld(null, 'sig')).toBe(false);
+    expect(quoteHeld('', '')).toBe(false);
+    expect(quoteHoldAfter(action('NETWORK'), null)).toBeNull();
   });
 });
 

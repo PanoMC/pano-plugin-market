@@ -296,6 +296,8 @@
     wireAddress,
   } from '../lib/checkoutModel.js';
   import {
+    quoteHeld,
+    quoteHoldAfter,
     saveOrderToken,
     submitCheckout,
     successPlan,
@@ -306,6 +308,7 @@
     LEGAL_CHECK_ID,
     legalChanged,
     placeOrderState,
+    quoteIsFresh,
     restoredCreditsPatch,
     selectedMethod,
     selectMethodPatch,
@@ -341,6 +344,11 @@
   let mounted = $state(false);
   let cartReady = $state(false);
   let quote = $state(null);
+  // the signature of the input the shown quote was requested for (a stale quote never places an order)
+  let quoteSig = $state(null);
+  // set after a failed submit that keeps its idempotency key: the quote is not asked again for that input, so the
+  // retry replays the same body (14 §10.9). Plain on purpose: only the quote effect reads it.
+  let quoteHold = null;
   let runnerState = $state({ status: 'IDLE', code: null, retryAfter: 0 });
   let rateUntil = $state(0);
   // imposed by the error mapping of the submit: DISABLED | BLOCKED | LOGIN_REQUIRED | EMPTY
@@ -461,7 +469,14 @@
     draft.payWithCredits ? null : selectedMethod(quote, draft.paymentMethodId),
   );
   const codesAreHidden = $derived(codesHidden({ topup, method: chosenMethod }));
-  const place = $derived(placeOrderState({ pageState, quote, draft }));
+  const quoteFresh = $derived(
+    quoteIsFresh({
+      status: runnerState.status,
+      quoteSignature: quoteSig,
+      currentSignature: quoteSignature,
+    }),
+  );
+  const place = $derived(placeOrderState({ pageState, quote, draft, quoteFresh }));
   // a guest without the right to check out never needs a quote
   const quoting = $derived(
     mounted &&
@@ -479,12 +494,13 @@
       runnerState = state;
       if (state.status === 'RATE_LIMITED') rateUntil = Date.now() + state.retryAfter * 1000;
     },
-    onQuote: (next) => takeQuote(next),
+    onQuote: (next, signature) => takeQuote(next, signature),
   });
 
   /** A quote (from the runner, or the fresh one of PRICE_CHANGED) becomes the shown one: the rules of 14 §10.5. */
-  function takeQuote(next) {
+  function takeQuote(next, signature = quoteSignature) {
     quote = next;
+    quoteSig = signature;
 
     const before = checkoutDraft.get();
     // the credit choice stays valid (it is never switched on here), then the payment / shipping selection
@@ -545,7 +561,12 @@
     const body = quoteBody;
     const signature = quoteSignature;
 
-    untrack(() => runner.request(body, signature));
+    untrack(() => {
+      if (quoteHeld(quoteHold, signature)) return;
+
+      quoteHold = null;
+      runner.request(body, signature);
+    });
   });
 
   // saved addresses: fetched once the order needs shipping (logged-in buyers only)
@@ -828,6 +849,9 @@
     const checked = await validateAndFocus();
     if (!checked.valid) return;
 
+    // the quote may have changed while the validation focused a field
+    if (place.disabled || rateLocked) return;
+
     if (config.legal?.required === true && !legalAccepted) {
       legalInvalid = true;
       focusId(LEGAL_CHECK_ID);
@@ -846,6 +870,7 @@
       config,
       accepted: legalAccepted,
       hide: hideFromBroadcast,
+      fresh: quoteFresh,
     });
 
     if (unmounted) return;
@@ -885,7 +910,9 @@
       return;
     }
 
-    // back to editing: the quote effect asks for a fresh quote as soon as the page is idle again
+    // back to editing: the quote effect asks for a fresh quote as soon as the page is idle again, except after an
+    // outcome that keeps the key: the shown quote and the body stay as they were, so pressing again replays
+    quoteHold = quoteHoldAfter(action, quoteSig);
     submit = 'IDLE';
 
     const alert = (where, extra = {}) =>

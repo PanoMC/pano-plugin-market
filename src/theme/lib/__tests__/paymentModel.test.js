@@ -14,6 +14,7 @@ import {
   restoredCreditsPatch,
   pickerView,
   placeOrderState,
+  quoteIsFresh,
   safeColor,
   safeHttpUrl,
   safeIcon,
@@ -399,7 +400,9 @@ describe('placeOrderState', () => {
   const draft = (over = {}) => ({ paymentMethodId: 'stripe', payWithCredits: false, ...over });
 
   test('enabled with a method and a payable quote; the amount is the server gatewayAmount', () => {
-    expect(placeOrderState({ pageState: 'READY', quote: quote(), draft: draft() })).toEqual({
+    expect(
+      placeOrderState({ pageState: 'READY', quote: quote(), draft: draft(), quoteFresh: true }),
+    ).toEqual({
       disabled: false,
       mode: 'PAY',
       amount: 25,
@@ -410,6 +413,7 @@ describe('placeOrderState', () => {
     expect(
       placeOrderState({
         pageState: 'READY',
+        quoteFresh: true,
         quote: quote({ gatewayAmount: 0 }),
         draft: draft({ paymentMethodId: null }),
       }),
@@ -419,21 +423,29 @@ describe('placeOrderState', () => {
   test.each(['QUOTING', 'SUBMITTING', 'LEAVING', 'BLOCKED', 'INIT', 'EMPTY'])(
     'disabled in page state %s',
     (pageState) => {
-      expect(placeOrderState({ pageState, quote: quote(), draft: draft() }).disabled).toBe(true);
+      expect(
+        placeOrderState({ pageState, quote: quote(), draft: draft(), quoteFresh: true }).disabled,
+      ).toBe(true);
     },
   );
 
   test('disabled without a quote, without canCheckout and without a method while something is left to pay', () => {
-    expect(placeOrderState({ pageState: 'READY', quote: null, draft: draft() }).disabled).toBe(
-      true,
-    );
     expect(
-      placeOrderState({ pageState: 'READY', quote: quote({ canCheckout: false }), draft: draft() })
+      placeOrderState({ pageState: 'READY', quote: null, draft: draft(), quoteFresh: true })
         .disabled,
     ).toBe(true);
     expect(
       placeOrderState({
         pageState: 'READY',
+        quote: quote({ canCheckout: false }),
+        draft: draft(),
+        quoteFresh: true,
+      }).disabled,
+    ).toBe(true);
+    expect(
+      placeOrderState({
+        pageState: 'READY',
+        quoteFresh: true,
         quote: quote(),
         draft: draft({ paymentMethodId: null }),
       }).disabled,
@@ -444,10 +456,54 @@ describe('placeOrderState', () => {
     expect(
       placeOrderState({
         pageState: 'READY',
+        quoteFresh: true,
         quote: quote({ gatewayAmount: 0 }),
         draft: draft({ paymentMethodId: null, payWithCredits: true }),
       }).disabled,
     ).toBe(false);
+  });
+
+  test('disabled while the quote is not fresh, whatever the page state says', () => {
+    const base = { pageState: 'READY', quote: quote(), draft: draft() };
+
+    expect(placeOrderState({ ...base, quoteFresh: true }).disabled).toBe(false);
+    expect(placeOrderState({ ...base, quoteFresh: false }).disabled).toBe(true);
+    expect(placeOrderState(base).disabled).toBe(true); // absent = stale
+    expect(placeOrderState({ ...base, quoteFresh: 'true' }).disabled).toBe(true);
+  });
+
+  test.each(['ERROR', 'RATE_LIMITED', 'QUOTING', 'DISABLED'])(
+    'runner %s with an earlier quote on screen: the page is READY but the button is disabled',
+    (status) => {
+      const current = 'sig-a';
+      const fresh = quoteIsFresh({
+        status,
+        quoteSignature: current,
+        currentSignature: current,
+      });
+
+      expect(fresh).toBe(false);
+      expect(
+        placeOrderState({ pageState: 'READY', quote: quote(), draft: draft(), quoteFresh: fresh })
+          .disabled,
+      ).toBe(true);
+    },
+  );
+
+  test('a quote for an older input is stale even when the runner is idle again', () => {
+    expect(
+      quoteIsFresh({ status: 'IDLE', quoteSignature: 'sig-a', currentSignature: 'sig-b' }),
+    ).toBe(false);
+    expect(quoteIsFresh({ status: 'IDLE', quoteSignature: null, currentSignature: 'sig-b' })).toBe(
+      false,
+    );
+    expect(quoteIsFresh({ status: 'IDLE', quoteSignature: '', currentSignature: '' })).toBe(false);
+  });
+
+  test('an idle runner and the signature the quote was asked for is fresh', () => {
+    expect(
+      quoteIsFresh({ status: 'IDLE', quoteSignature: 'sig-a', currentSignature: 'sig-a' }),
+    ).toBe(true);
   });
 });
 

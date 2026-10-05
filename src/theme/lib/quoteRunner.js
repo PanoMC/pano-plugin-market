@@ -10,7 +10,8 @@ const DISABLED_CODES = ['STORE_DISABLED', 'STORE_UNAVAILABLE'];
 
 /**
  * `onState({ status, quote?, code?, retryAfter? })` with status IDLE | QUOTING | RATE_LIMITED | ERROR | DISABLED;
- * `onQuote(quote)` after every applied quote (the caller applies the selection rules there).
+ * `onQuote(quote, signature)` after every applied quote (the caller applies the selection rules there);
+ * `signature` is the one the quote was requested with, so the caller knows which input the answer belongs to.
  */
 export function createQuoteRunner(overrides = {}) {
   const d = {
@@ -27,6 +28,7 @@ export function createQuoteRunner(overrides = {}) {
   let retryTimer = null;
   let lastSig = null;
   let lastBody = null;
+  let askedSig = null;
 
   function clearTimers() {
     if (timer !== null) d.clearTimer(timer);
@@ -35,7 +37,7 @@ export function createQuoteRunner(overrides = {}) {
     retryTimer = null;
   }
 
-  async function run(body, mine) {
+  async function run(body, mine, sig) {
     timer = null;
 
     let res;
@@ -49,7 +51,7 @@ export function createQuoteRunner(overrides = {}) {
 
     if (res?.ok && res.quote && typeof res.quote === 'object') {
       d.onState({ status: 'IDLE', quote: res.quote, code: null });
-      d.onQuote(res.quote);
+      d.onQuote(res.quote, sig);
       return;
     }
 
@@ -65,7 +67,7 @@ export function createQuoteRunner(overrides = {}) {
       d.onState({ status: 'RATE_LIMITED', code, retryAfter: wait });
       retryTimer = d.setTimer(() => {
         retryTimer = null;
-        if (mine === seq) schedule(body, 0);
+        if (mine === seq) schedule(body, 0, sig);
       }, wait * 1000);
     } else {
       lastSig = null; // the same input may be asked again (Retry)
@@ -73,12 +75,12 @@ export function createQuoteRunner(overrides = {}) {
     }
   }
 
-  function schedule(body, delay) {
+  function schedule(body, delay, sig) {
     clearTimers();
     const mine = ++seq;
 
     d.onState({ status: 'QUOTING' });
-    timer = d.setTimer(() => run(body, mine), delay);
+    timer = d.setTimer(() => run(body, mine, sig), delay);
   }
 
   /** Asks for a quote of `body` unless `sig` (its signature) is the one asked last. */
@@ -88,12 +90,13 @@ export function createQuoteRunner(overrides = {}) {
     const delay = quoteDelay(lastBody, body);
     lastSig = sig;
     lastBody = body;
-    schedule(body, delay);
+    askedSig = sig;
+    schedule(body, delay, sig);
   }
 
   /** "Retry": asks again for the last body at once. */
   function retry() {
-    if (lastBody) schedule(lastBody, 0);
+    if (lastBody) schedule(lastBody, 0, askedSig);
   }
 
   /** The page unmounted: pending timers and answers are dropped. */
@@ -102,6 +105,7 @@ export function createQuoteRunner(overrides = {}) {
     clearTimers();
     lastSig = null;
     lastBody = null;
+    askedSig = null;
   }
 
   return { request, retry, stop };

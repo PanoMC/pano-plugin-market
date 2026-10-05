@@ -215,11 +215,26 @@ export const selectCreditsPatch = () => ({
 // ---- place order ----------------------------------------------------------------------------------------------
 
 /**
+ * True while the shown quote answers the current input: the runner is idle (no request in flight, no failed or
+ * rate-limited one) and the quote was produced for the signature the page has now. A button pressed on anything
+ * else would send the credits and total of an older answer (14 §10.6: place-order is disabled after a failed quote).
+ */
+export function quoteIsFresh({ status, quoteSignature, currentSignature }) {
+  return (
+    status === 'IDLE' &&
+    typeof quoteSignature === 'string' &&
+    quoteSignature !== '' &&
+    quoteSignature === currentSignature
+  );
+}
+
+/**
  * `{ disabled, mode, amount }` of the place-order button. `mode` PAY / COMPLETE (`gatewayAmount === 0`); `amount`
  * is the server's `gatewayAmount` (never computed here). Disabled while QUOTING / SUBMITTING / not READY, without
- * a quote, when `!quote.canCheckout`, or without a method while something is left to pay.
+ * a quote, when the quote is not fresh (`quoteFresh`, see `quoteIsFresh`; required, absent means stale), when
+ * `!quote.canCheckout`, or without a method while something is left to pay.
  */
-export function placeOrderState({ pageState, quote, draft }) {
+export function placeOrderState({ pageState, quote, draft, quoteFresh = false }) {
   const amount = Number(quote?.gatewayAmount);
   const complete = Number.isFinite(amount) && amount === 0;
   const needsMethod = !complete && draft?.payWithCredits !== true;
@@ -227,6 +242,7 @@ export function placeOrderState({ pageState, quote, draft }) {
   const disabled =
     pageState !== 'READY' ||
     !quote ||
+    quoteFresh !== true ||
     quote.canCheckout !== true ||
     (needsMethod && !draft?.paymentMethodId);
 

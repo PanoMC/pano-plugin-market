@@ -64,7 +64,8 @@ export function prepareSubmit({ draft, body, randomBytes }) {
 
 /**
  * POSTs the checkout. `draftStore` = `{ get(), patch(p) }` (the checkout draft); the key and hash are written
- * to it before the request, so a lost answer is retried with the same key. Resolves to `{ ok: true, order,
+ * to it before the request, so a lost answer is retried with the same key. `fresh` (see `quoteIsFresh`) must be
+ * true: with a stale quote nothing is sent and the answer is `{ ok: false, code: 'STALE_QUOTE' }`. Resolves to `{ ok: true, order,
  * orderToken, payment, body, key }` or `{ ok: false, code, ...extras, body, key }` (never throws).
  */
 export async function submitCheckout({
@@ -76,7 +77,11 @@ export async function submitCheckout({
   accepted,
   hide,
   randomBytes,
+  fresh = false,
 }) {
+  // the body is built from the quote (credits applied, expected total): never from an answer that is not current
+  if (fresh !== true) return { ok: false, code: 'STALE_QUOTE', body: null, key: null };
+
   const body = buildSubmitBody({ quoteBody, quote, config, accepted, hide });
   const prepared = prepareSubmit({ draft: draftStore.get(), body, randomBytes });
   const key = prepared.headers[IDEMPOTENCY_HEADER];
@@ -170,6 +175,18 @@ export function failurePlan({ res, topup = null, loggedIn = false, draft, contex
 
   return { action, keyPatch, success: null };
 }
+
+/**
+ * The quote signature to hold after a failed submit: the outcomes that keep the idempotency key (`keepKey`: NETWORK,
+ * STORE_BUSY, TOO_MANY_REQUESTS, INVALID_CSRF_TOKEN, ...) must be replayed with the same body, so the page neither
+ * asks for a new quote nor lets the shown one change until an input changes (14 §10.9). `null` = no hold.
+ */
+export const quoteHoldAfter = (action, signature) =>
+  action?.keepKey === true && typeof signature === 'string' ? signature : null;
+
+/** True while the quote request for `signature` is suppressed by a hold. */
+export const quoteHeld = (hold, signature) =>
+  typeof hold === 'string' && hold !== '' && hold === signature;
 
 /** Stable text of a submitted body (what the hash is made of): handy in tests and logs. */
 export const submitBodyText = (body) => canonicalJson(body);

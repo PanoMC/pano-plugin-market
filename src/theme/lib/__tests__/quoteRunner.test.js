@@ -7,6 +7,7 @@ function harness(answers) {
   const calls = [];
   const states = [];
   const quotes = [];
+  const sigs = [];
   const gates = [];
 
   const runner = createQuoteRunner({
@@ -21,7 +22,10 @@ function harness(answers) {
     },
     clearTimer: (id) => timers.delete(id),
     onState: (s) => states.push(s),
-    onQuote: (q) => quotes.push(q),
+    onQuote: (q, sig) => {
+      quotes.push(q);
+      sigs.push(sig);
+    },
   });
 
   const fire = async () => {
@@ -31,7 +35,7 @@ function harness(answers) {
     await new Promise((r) => setTimeout(r, 0));
   };
 
-  return { runner, timers, calls, states, quotes, fire, gates };
+  return { runner, timers, calls, states, quotes, sigs, fire, gates };
 }
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -212,5 +216,24 @@ describe('createQuoteRunner', () => {
     h.runner.request({ n: 2 }, '2');
     h.runner.stop();
     expect(h.timers.size).toBe(0);
+  });
+
+  test('onQuote carries the signature the quote was requested with, also after a retry', async () => {
+    const h = harness([
+      { ok: false, code: 'NETWORK' },
+      { ok: true, quote: { total: 5 } },
+    ]);
+
+    h.runner.request({ a: 1 }, 'sig-a');
+    await h.fire();
+    await tick();
+    expect(h.states.at(-1).status).toBe('ERROR');
+
+    h.runner.retry();
+    await h.fire();
+    await tick();
+
+    expect(h.quotes).toEqual([{ total: 5 }]);
+    expect(h.sigs).toEqual(['sig-a']);
   });
 });
