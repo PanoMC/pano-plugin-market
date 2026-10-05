@@ -426,6 +426,39 @@ class PaymentReconcileJobIT : MarketDaoITBase() {
         assertEquals(PaymentStatus.SUCCEEDED, attempt(order.id).status)
     }
 
+    @Test
+    fun `a status poll of the order page inside the in-flight window does not hide a timed-out CREATED attempt from the job`(): Unit = runBlocking {
+        queryable()
+        fx.paymentMethod("fake")
+        fake.onQuery = { PaymentQueryResult.unknown() }
+
+        val order = orderOf(buy(fx.product(price = 1000)))
+
+        // the start timed out: CREATED, no slot, the buyer lands on the order page
+        sql("UPDATE `pano_market_payment` SET `status` = 'CREATED', `startPayload` = NULL, `nextQueryAt` = NULL, `failureCode` = 'TIMEOUT' WHERE `orderId` = ?", order.id)
+        sql("UPDATE `pano_market_payment` SET `createdAt` = ? WHERE `orderId` = ?", w.clock.now() - 60_000L, order.id)
+
+        ph.payments.status(ph.order(order.id), owner = true, sqlClient = pool)
+
+        val polled = attempt(order.id)
+
+        assertEquals(1, polled.queryCount, "the poll asked the gateway")
+        assertNotNull(polled.lastQueriedAt)
+        assertNull(polled.nextQueryAt, "a poll never schedules the job's slot")
+        assertEquals(PaymentStatus.CREATED, polled.status)
+
+        // still inside the window of the start call: nothing for the job yet
+        assertEquals(0, job.runOnce())
+
+        // the window is over, the gateway took the money and reports it now; no webhook ever arrives
+        w.clock.advance(OrderTimings.CREATED_IN_FLIGHT_MS)
+        fake.onQuery = { paid(it) }
+
+        assertEquals(1, job.runOnce(), "the poll did not take the attempt out of the job's sight")
+        assertEquals(OrderStatus.COMPLETED, ph.order(order.id).status)
+        assertEquals(PaymentStatus.SUCCEEDED, attempt(order.id).status)
+    }
+
     // ======================================================================================== re-drive of the built-ins
 
     @Test

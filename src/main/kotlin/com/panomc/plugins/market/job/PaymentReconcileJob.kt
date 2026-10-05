@@ -137,7 +137,7 @@ class PaymentReconcileJob(
             "SELECT `id`, `orderId` FROM ${table("market_payment")} WHERE `providerId` NOT IN (?, ?) AND (" +
                 "(`status` IN ('PENDING', 'PROCESSING') AND `nextQueryAt` IS NOT NULL AND `nextQueryAt` <= ?) OR " +
                 "(`status` = 'CREATED' AND ((`nextQueryAt` IS NOT NULL AND `nextQueryAt` <= ?) OR " +
-                "(`nextQueryAt` IS NULL AND `lastQueriedAt` IS NULL AND `createdAt` <= ?)))) " +
+                "(`nextQueryAt` IS NULL AND `createdAt` <= ? AND (`lastQueriedAt` IS NULL OR `lastQueriedAt` < `createdAt` + ${OrderTimings.CREATED_IN_FLIGHT_MS}))))) " +
                 "ORDER BY COALESCE(`nextQueryAt`, `createdAt`), `id` LIMIT ?"
         ).execute(Tuple.of(OrderTimings.FREE_PROVIDER, OrderTimings.CREDITS_PROVIDER, now, now, now - OrderTimings.CREATED_IN_FLIGHT_MS, batch)).coAwait()
         var handled = 0
@@ -199,7 +199,7 @@ class PaymentReconcileJob(
     private fun due(a: MarketPayment, now: Long): Boolean = when (a.status) {
         PaymentStatus.PENDING, PaymentStatus.PROCESSING -> a.nextQueryAt != null && a.nextQueryAt <= now
         PaymentStatus.CREATED ->
-            (a.nextQueryAt != null && a.nextQueryAt <= now) || (a.nextQueryAt == null && a.lastQueriedAt == null && a.createdAt <= now - OrderTimings.CREATED_IN_FLIGHT_MS)
+            (a.nextQueryAt != null && a.nextQueryAt <= now) || (a.nextQueryAt == null && a.createdAt <= now - OrderTimings.CREATED_IN_FLIGHT_MS && (a.lastQueriedAt == null || a.lastQueriedAt < a.createdAt + OrderTimings.CREATED_IN_FLIGHT_MS))
         else -> false
     }
 
