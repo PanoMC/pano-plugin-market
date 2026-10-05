@@ -2,6 +2,7 @@ package com.panomc.plugins.market.job
 
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.service.DeliveryService
+import com.panomc.plugins.market.service.McSyncService
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 
@@ -11,20 +12,27 @@ import org.slf4j.LoggerFactory
  * was created), applies D22 to undo rows whose predecessors never took effect.
  *
  * Restart-safe: all state is in the rows, so a lost tick changes only latency. Safe to run twice at once: the claim is a conditional update, so two
- * workers that select the same row execute it once (the one that loses sees `null` from [DeliveryService.execute] and moves on). Not here:
- * the server rows (`MARKET_SYNC`, D7 - D11, D14, D20; MK-103) and the `WEBHOOK` executor (MK-106 adds its type to [DeliveryService.INLINE_TYPES]).
+ * workers that select the same row execute it once (the one that loses sees `null` from [DeliveryService.execute] and moves on).
+ *
+ * The server rows are driven by the Minecraft component's own `MARKET_SYNC` requests (D8 - D13, D15, MK-103); the two job steps that belong to them are
+ * [McSyncService.classify] (D7, D20, with the 30 s cadence of `classify`) and [McSyncService.expireWaits] (D14, every [EXPIRE_WAITS_EVERY_MS]); both run only when
+ * [servers] is given. Not here: the `WEBHOOK` executor (MK-106 adds its type to [DeliveryService.INLINE_TYPES]).
  *
  * One step failing never hides the others: every step runs, the first failure is rethrown at the end for the scheduler to log and count.
  */
 class DeliveryJob(
     private val service: DeliveryService,
     private val clock: Clock,
-    private val batch: Int = DeliveryService.INLINE_BATCH
+    private val batch: Int = DeliveryService.INLINE_BATCH,
+    private val servers: McSyncService? = null
 ) {
     private val createdAt = clock.now()
 
     @Volatile
     private var lastClassifyAt: Long? = null
+
+    @Volatile
+    private var lastExpireWaitsAt: Long? = null
 
     /** Rows handled by this call (promoted, executed, recovered, re-asserted, classified). */
     suspend fun runOnce(): Int {
@@ -48,7 +56,13 @@ class DeliveryJob(
         step("recover") { service.recoverStaleClaims(batch) }
         step("reassert") { service.reassertDue(batch) }
 
-        if (classifyDue()) step("classify") { service.classify() }
+        if (classifyDue()) {
+            step("classify") { service.classify() }
+
+            servers?.let { step("classify-servers") { it.classify() } }
+        }
+
+        if (servers != null && expireWaitsDue()) step("expire-waits") { servers.expireWaits() }
 
         failure?.let { throw it }
 
@@ -86,9 +100,23 @@ class DeliveryJob(
         return true
     }
 
+    private fun expireWaitsDue(): Boolean {
+        val now = clock.now()
+        val last = lastExpireWaitsAt
+
+        if (last != null && now - last < EXPIRE_WAITS_EVERY_MS) return false
+
+        lastExpireWaitsAt = now
+
+        return true
+    }
+
     companion object {
         const val CLASSIFY_EVERY_MS = 30_000L
         const val CLASSIFY_FIRST_MS = 60_000L
+
+        /** D14 for server rows: `DeliveryJob.expireWaits` runs every 60 s (08 section 17). */
+        const val EXPIRE_WAITS_EVERY_MS = 60_000L
 
         private val logger = LoggerFactory.getLogger(DeliveryJob::class.java)
     }
