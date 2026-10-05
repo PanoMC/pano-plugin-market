@@ -9,7 +9,9 @@ import java.util.regex.Pattern
  *
  * 1. [checkGrammar] on save: length <= 255, compiles, no back-reference, no look-around / inline flag / atomic
  *    group (`(?` other than `(?:`), no `\Q`, and no quantified group (`* + {`) whose body contains a quantifier
- *    (`* + {`) or an alternation (`|`): `(a+)+$`, `(a|aa)+$` and `(.*a){20}` are rejected.
+ *    (`* + {`) or an alternation (`|`): `(a+)+$`, `(a|aa)+$` and `(.*a){20}` are rejected; a counted repetition
+ *    above 1000; a quantifier on a zero-width atom (`^ $ \b \B \G \A \z \Z`) or on a group that can only match empty
+ *    (`(?:^^){2000000000}` would loop without ever reading a char, so the step budget would not stop it).
  * 2. [test] on use: anchored full match, input <= [MAX_INPUT] chars, and the input `CharSequence` throws after
  *    [STEP_BUDGET] `charAt` calls, so a hostile pattern that slipped through (or was stored earlier) cannot burn CPU.
  */
@@ -29,7 +31,11 @@ object SafeRegex {
         } catch (e: Exception) {
             return "pattern does not compile"
         }
-        return scan(pattern)
+        return try {
+            scan(pattern)
+        } catch (e: Exception) {
+            "pattern refused"
+        }
     }
 
     fun isSafe(pattern: String): Boolean = checkGrammar(pattern) == null
@@ -76,15 +82,39 @@ object SafeRegex {
         override fun toString(): String = text.toString()
     }
 
-    private class Group(var hasQuantifier: Boolean = false, var hasAlternation: Boolean = false)
+    /** Largest counted repetition (`{n}`, `{n,}`, `{n,m}`) a stored pattern may use; input is at most [MAX_INPUT]. */
+    private const val MAX_REPEAT = 1000
+
+    private class Group(
+        var hasQuantifier: Boolean = false,
+        var hasAlternation: Boolean = false,
+        /** True while every atom seen in the body is zero-width (or the body is empty). */
+        var allZeroWidth: Boolean = true
+    )
 
     private fun isQuantifierStart(c: Char) = c == '*' || c == '+' || c == '{'
 
-    /** Walks the pattern text once, tracking groups; the pattern already compiles. */
+    /** Index of the last char of a class opener at [i]: `[`, `[^`, and the literal `]` Java allows right after them. */
+    private fun classOpenerEnd(p: String, i: Int): Int {
+        var j = i
+        if (p.getOrNull(j + 1) == '^') j++
+        if (p.getOrNull(j + 1) == ']') j++
+        return j
+    }
+
+    /** Walks the pattern text once, tracking groups; the pattern already compiles. Never throws. */
     private fun scan(p: String): String? {
         val stack = ArrayList<Group>()
         var i = 0
         var classDepth = 0
+        // the atom completed last is zero-width (`^ $ \b \B \G \A \z \Z`, or a group whose body is)
+        var prevZero = false
+
+        fun atom(zero: Boolean) {
+            prevZero = zero
+            if (!zero) stack.lastOrNull()?.allZeroWidth = false
+        }
+
         while (i < p.length) {
             val c = p[i]
             if (c == '\\') {
@@ -92,24 +122,35 @@ object SafeRegex {
                 if (n in '1'..'9') return "back-references are not allowed"
                 if (n == 'k') return "named back-references are not allowed"
                 if (n == 'Q' || n == 'E') return "quoted sections are not allowed"
+                if (n == 'c') {
+                    // `\cX` takes the next char as its operand, whatever it is (`\c[` does not open a class)
+                    if (i + 3 > p.length) return "dangling escape"
+                    i += 3
+                    if (classDepth == 0) atom(false)
+                    continue
+                }
                 i += 2
-                if ((n == 'p' || n == 'P' || n == 'x' || n == 'N') && p.getOrNull(i) == '{') {
+                if ((n == 'p' || n == 'P' || n == 'x' || n == 'N' || n == 'b') && p.getOrNull(i) == '{') {
                     val end = p.indexOf('}', i)
                     if (end < 0) return "unterminated escape"
                     i = end + 1
                 }
+                if (classDepth == 0) atom(n == 'b' || n == 'B' || n == 'G' || n == 'A' || n == 'z' || n == 'Z')
                 continue
             }
             if (classDepth > 0) {
-                if (c == '[') classDepth++ else if (c == ']') classDepth--
+                if (c == '[') {
+                    classDepth++
+                    i = classOpenerEnd(p, i)
+                } else if (c == ']') classDepth--
                 i++
                 continue
             }
             when (c) {
                 '[' -> {
                     classDepth = 1
-                    // `[]` and `[^]` forms: a leading `]` is a literal in Java only after `^`-less open; skip it
-                    if (p.getOrNull(i + 1) == '^') i++
+                    i = classOpenerEnd(p, i)
+                    atom(false)
                 }
                 '(' -> {
                     if (p.getOrNull(i + 1) == '?') {
@@ -117,8 +158,10 @@ object SafeRegex {
                         i += 2
                     }
                     stack.add(Group())
+                    prevZero = false
                 }
                 ')' -> {
+                    if (stack.isEmpty()) return "unbalanced group"
                     val g = stack.removeAt(stack.size - 1)
                     val next = p.getOrNull(i + 1)
                     if (next != null && isQuantifierStart(next) && (g.hasQuantifier || g.hasAlternation)) {
@@ -128,9 +171,30 @@ object SafeRegex {
                         it.hasQuantifier = it.hasQuantifier || g.hasQuantifier
                         it.hasAlternation = it.hasAlternation || g.hasAlternation
                     }
+                    atom(g.allZeroWidth)
                 }
-                '|' -> stack.lastOrNull()?.hasAlternation = true
-                '*', '+', '{' -> stack.lastOrNull()?.hasQuantifier = true
+                '|' -> {
+                    stack.lastOrNull()?.hasAlternation = true
+                    prevZero = false
+                }
+                '*', '+', '?', '{' -> {
+                    if (prevZero) return "a quantifier must not follow a zero-width atom or an empty group"
+                    if (c != '?') stack.lastOrNull()?.hasQuantifier = true
+                    if (c == '{') {
+                        val end = p.indexOf('}', i)
+                        if (end < 0) return "unterminated repetition"
+                        val bounds = p.substring(i + 1, end).split(',', limit = 2)
+                        for (b in bounds) {
+                            if (b.isEmpty()) continue
+                            val v = b.toLongOrNull() ?: return "malformed repetition"
+                            if (v > MAX_REPEAT) return "a repetition count must not exceed $MAX_REPEAT"
+                        }
+                        i = end
+                    }
+                    prevZero = false
+                }
+                '^', '$' -> atom(true)
+                else -> atom(false)
             }
             i++
         }

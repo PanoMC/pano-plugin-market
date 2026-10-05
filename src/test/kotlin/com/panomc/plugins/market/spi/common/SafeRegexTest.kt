@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.util.regex.Pattern
 
 class SafeRegexTest {
     @Test
@@ -102,6 +103,62 @@ class SafeRegexTest {
             val tookMs = (System.nanoTime() - started) / 1_000_000
             assertEquals(Verdict.INVALID, v, p)
             assertTrue(tookMs < 100, "$p took $tookMs ms")
+        }
+    }
+
+    @Test
+    fun `zero-width repetition cannot burn CPU outside the step budget`() {
+        val bombs = listOf(
+            "(?:^^){2000000000}a", "(^){2000000000}a", "^{2000000000}a", "(?:^^)*a", "(?:)+a", "()*a", "\\b+a",
+            "(?:\\b|^)+a", "(?:(?:^)(?:$))*a", "\\G{5}a", "a{1001}", "a{1,1001}", "a{1001,}", "[ab]{99999}"
+        )
+        for (p in bombs) {
+            assertNotNull(SafeRegex.checkGrammar(p), p)
+            val started = System.nanoTime()
+            assertEquals(Verdict.INVALID, SafeRegex.test(p, "a"), p)
+            val tookMs = (System.nanoTime() - started) / 1_000_000
+            assertTrue(tookMs < 100, "$p took $tookMs ms")
+        }
+        // bounded counts and anchors around real atoms stay valid
+        for (p in listOf("a{1000}", "a{0,1000}", "^a{2}$", "(?:^a)", "(a|^)b", "^(?:ab){2}$", "\\bword\\b", "(?:^|-)a")) {
+            assertNull(SafeRegex.checkGrammar(p), p)
+        }
+    }
+
+    @Test
+    fun `a leading close bracket in a class is a literal and never desyncs the scanner`() {
+        for (p in listOf("[])]", "[^])]", "[]a]+", "[]]", "[a[]b]]", "[^]]+x")) {
+            Pattern.compile(p) // Java accepts them
+            assertNull(SafeRegex.checkGrammar(p), p)
+            assertTrue(SafeRegex.isSafe(p), p)
+        }
+        assertTrue(SafeRegex.matches("[])]", ")"))
+        assertTrue(SafeRegex.matches("[])]", "]"))
+        assertFalse(SafeRegex.matches("[])]", "a"))
+        assertTrue(SafeRegex.matches("[]a]+", "a]a"))
+        assertEquals(Verdict.NO_MATCH, SafeRegex.test("[^])]", ")"))
+        // a quantifier hidden behind such a class is still seen
+        assertNotNull(SafeRegex.checkGrammar("([])]+)+"))
+    }
+
+    @Test
+    fun `a control escape consumes its operand so it cannot hide the rest of the pattern`() {
+        for (p in listOf("\\c[?(a+)+$", "\\c[?(.*a){20}", "\\c[(a|aa)+$", "\\c((a+)+$")) {
+            Pattern.compile(p) // Java accepts them
+            assertNotNull(SafeRegex.checkGrammar(p), p)
+            assertEquals(Verdict.INVALID, SafeRegex.test(p, "a"), p)
+        }
+        assertNull(SafeRegex.checkGrammar("\\c[a+"))
+        assertNull(SafeRegex.checkGrammar("[\\c]]+"))
+    }
+
+    @Test
+    fun `an unbalanced pattern is refused instead of throwing`() {
+        // `)` alone does not compile in Java; the scanner must also be safe if it is ever reached
+        for (p in listOf(")", "a)", "(a))", "[", "(", "\\")) {
+            assertNotNull(SafeRegex.checkGrammar(p), p)
+            assertEquals(Verdict.INVALID, SafeRegex.test(p, "a"), p)
+            assertFalse(SafeRegex.matches(p, "a"), p)
         }
     }
 }
