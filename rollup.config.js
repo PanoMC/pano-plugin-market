@@ -147,6 +147,38 @@ function sideStubPlugin() {
   };
 }
 
+// Lane-scoped check builds only: the panel pages of 13 §2.3 are written by several slices, so
+// register.js may import a page that does not exist yet. In a check build such a page is replaced by
+// an empty stub (listed on stderr). MARKET_STRICT=1 and the real full build never stub: a missing page
+// fails the build there (final gate).
+const panelRegister = path.resolve('src/panel/register.js');
+const missingStubIds = new Set();
+function missingPageStubPlugin() {
+  const prefix = '\0pano-missing-page:';
+  return {
+    name: 'pano-missing-page-stub',
+    resolveId(source, importer) {
+      if (!side || process.env.MARKET_STRICT === '1' || !importer) return null;
+      if (path.resolve(importer) !== panelRegister || !source.startsWith('./')) return null;
+      const file = path.resolve(path.dirname(importer), source);
+      if (fs.existsSync(file)) return null;
+      missingStubIds.add(path.relative(process.cwd(), file));
+      return prefix + source;
+    },
+    load(id) {
+      if (!id.startsWith(prefix)) return null;
+      return 'export default function MissingPage() {}\n';
+    },
+    buildEnd() {
+      if (missingStubIds.size)
+        console.warn(
+          `[pano] check build: ${missingStubIds.size} page file(s) not written yet, stubbed: ` +
+            [...missingStubIds].sort().join(', '),
+        );
+    },
+  };
+}
+
 const baseConfig = {
   input: 'pano:entry',
   output: {
@@ -159,6 +191,7 @@ const baseConfig = {
   plugins: [
     entryFacadePlugin(),
     sideStubPlugin(),
+    missingPageStubPlugin(),
     del({
       targets: [`${outRoot}/*`], // Always clean the output folder of this build
       runOnce: true, // Run only once
