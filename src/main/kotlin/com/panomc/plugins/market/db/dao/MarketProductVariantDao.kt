@@ -14,6 +14,15 @@ abstract class MarketProductVariantDao : MarketDao<MarketProductVariant>(MarketP
     abstract suspend fun setStock(id: Long, stock: Int?, sqlClient: SqlClient)
 
     /**
+     * Atomic `stock = stock + delta` guarded by `stock IS NOT NULL AND stock + delta BETWEEN 0 AND MAX_STOCK`: `true`
+     * when the row changed, `false` when the variant is unlimited, missing, or the result would leave the range.
+     */
+    abstract suspend fun adjustStock(id: Long, delta: Int, sqlClient: SqlClient): Boolean
+
+    /** Hard delete of one row (a variant nothing references). */
+    abstract suspend fun deleteById(id: Long, sqlClient: SqlClient)
+
+    /**
      * Guarded decrement: `true` when [quantity] was taken, `false` when the stock is lower (nothing changes). An
      * unlimited variant (`stock IS NULL`) is never reserved here and also answers `false`: the caller checks for
      * `null` first.
