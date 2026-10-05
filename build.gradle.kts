@@ -221,6 +221,11 @@ dependencies {
     // compiled against the API only, the plugin that runs the contract brings its own JUnit (02 section 9).
     compileOnly("org.junit.jupiter:junit-jupiter-api:5.13.3")
 
+    // Invoice PDFs (12 section 8.1, MK-144): bundled and relocated by shadowJar (relocate block below). easytable declares
+    // pdfbox 3.0.2; the higher 3.0.8 wins conflict resolution, the explicit coordinates make that visible. No BouncyCastle.
+    implementation("org.apache.pdfbox:pdfbox:3.0.8")
+    implementation("com.github.vandeseer:easytable:1.0.2")
+
     // Same JUnit setup as the host (see Pano/build.gradle.kts).
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.13.3")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.13.3")
@@ -406,6 +411,20 @@ tasks {
                 it.moduleGroup == "io.netty" || it.moduleGroup == "org.slf4j"
             }
         }
+
+        // PDF stack (12 section 8.1): relocated so a payment or shipping plugin that brings its own PDFBox cannot clash with
+        // market's (payment plugins see market classes through the dependency class loader). Shadow rewrites resource paths
+        // too (org/apache/pdfbox/resources/... becomes the shaded path); ShadedInvoiceRendererTest proves that on the built jar.
+        relocate("org.apache.pdfbox", "com.panomc.plugins.market.shaded.org.apache.pdfbox")
+        relocate("org.apache.fontbox", "com.panomc.plugins.market.shaded.org.apache.fontbox")
+        relocate("org.apache.commons.logging", "com.panomc.plugins.market.shaded.org.apache.commons.logging")
+        relocate("org.vandeseer.easytable", "com.panomc.plugins.market.shaded.org.vandeseer.easytable")
+
+        // Resources the renderer can never read (16 section 6.2 size budget): market only writes PDFs with embedded subset fonts, so the
+        // predefined CJK CMaps of FontBox (1.2 MB, they exist to read other people's PDFs; Identity-H / -V stay) and the Liberation fallback
+        // fonts of PDFBox (market installs a font mapper that never looks at fonts it did not embed) are dead weight.
+        exclude { it.relativePath.pathString.startsWith("org/apache/fontbox/cmap/") && !it.name.endsWith(".class") && !it.name.startsWith("Identity-") }
+        exclude { it.relativePath.pathString.startsWith("org/apache/pdfbox/resources/ttf/") }
     }
 
     register("copyJar") {
@@ -569,7 +588,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 // Tiers (17 section 2/3.2): `test` = T0 + T1 (no database, no instance); `dbTest` = T2 (real MariaDB, tag "db");
 // `e2eTest` = T4 (tag "e2e"). The test JVM is JDK 21 like the host; main classes are Java 11 bytecode.
 tasks.named<Test>("test") {
-    useJUnitPlatform { excludeTags("db", "e2e") }
+    useJUnitPlatform { excludeTags("db", "e2e", "shaded") }
     // ApiJarTest (B-22) inspects the thin API jar, so a plain `test` builds it first.
     dependsOn(apiJar)
     systemProperty("market.apiJar", layout.buildDirectory.file("api/$pluginId-api-$version.jar").get().asFile.absolutePath)
@@ -630,6 +649,22 @@ tasks.register<Test>("mcTest") {
     outputs.upToDateWhen { false }
     outputs.cacheIf { false }
 }
+// T-PDF-5 (12 section 12): the invoice renderer run from the BUILT shadowJar in a fresh class loader, so relocated classes and
+// relocated resource paths are exercised for real. Part of `check`, never of `test` (it needs the jar).
+val shadedTest by tasks.registering(Test::class) {
+    group = "verification"
+    description = "T-PDF-5: renders an invoice with the shaded PDF stack of the built market jar."
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform { includeTags("shaded") }
+    maxParallelForks = 1
+    dependsOn(tasks.shadowJar)
+    systemProperty("market.jar", tasks.shadowJar.get().archiveFile.get().asFile.absolutePath)
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+}
+tasks.named("check") { dependsOn(shadedTest) }
+
 tasks.withType<Test>().configureEach {
     javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
     testLogging {
@@ -696,8 +731,19 @@ val verifyJar by tasks.registering {
             if (File(marketSrc, "spi").walkTopDown().any { it.isFile }) {
                 require(names.any { it.startsWith("com/panomc/plugins/market/spi/") }) { "SPI missing from the jar" }
             }
-            require(names.none { it.startsWith("org/apache/pdfbox/") }) {
-                "PDFBox must be relocated under com/panomc/plugins/market/shaded"
+            // MP-J06 (16 section 6.2): the store takes 10 MB; PDFBox + fonts are shaded in, so size is checked on every build.
+            require(jar.length() <= 9_500_000L) { "market jar is ${jar.length()} bytes (limit 9 500 000, 16 section 6.2)" }
+            // PDF stack (12 section 8.1): only under the shaded prefix, never at its original path.
+            val unshaded = names.filter { n ->
+                n.startsWith("org/apache/pdfbox/") || n.startsWith("org/apache/fontbox/") ||
+                    n.startsWith("org/apache/commons/logging/") || n.startsWith("org/vandeseer/")
+            }
+            require(unshaded.isEmpty()) {
+                "PDFBox, FontBox, commons-logging and easytable must be relocated under com/panomc/plugins/market/shaded: ${unshaded.take(5)}"
+            }
+            require(names.any { it.startsWith("com/panomc/plugins/market/shaded/org/apache/pdfbox/") }) { "shaded PDFBox is missing from the jar" }
+            require("fonts/NotoSans-Regular.ttf" in names && "fonts/NotoSans-Bold.ttf" in names && "fonts/OFL.txt" in names) {
+                "the Noto Sans fonts and OFL.txt must be in the jar"
             }
             // Java 11 bytecode (00 section 10): class major version of every market class must be <= 55
             // (mc.velocity is Java 17, 19 section 2).

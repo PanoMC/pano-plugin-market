@@ -29,10 +29,13 @@ import com.panomc.plugins.market.routes.api.OrderAccess
 import com.panomc.plugins.market.routes.api.OrderAccessResult
 import com.panomc.plugins.market.routes.api.checkout.quoteCaller
 import com.panomc.plugins.market.routes.api.payment.attemptContexts
+import com.panomc.plugins.market.routes.panel.invoice.invoiceService
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.routes.user.cart.cartService
+import com.panomc.plugins.market.service.ForeignEffects
+import com.panomc.plugins.market.service.InvoiceEffects
 import com.panomc.plugins.market.service.OrderService
 import com.panomc.plugins.market.service.OutboundHttp
 import com.panomc.plugins.market.service.PayCaller
@@ -116,6 +119,9 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
         context.getBean(MarketPaymentDao::class.java), redemptions, { conn, userId -> cart.clearAfterCheckout(conn, userId) },
         reservations = ReservationService(clock, locks, redemptions, orderDao),
         webhooks = PaidWebhooks { conn, orderId -> webhooks.emitOrderPaid(conn, orderId) },
+        // O2 / O4 issue the invoice inside the transition (12 section 6.1, MK-144 wires what MK-143 built); the effects of the slices that
+        // have not landed still go to PENDING_SLICES
+        foreign = InvoiceEffects(invoiceService(plugin), orderDao, ForeignEffects.PENDING_SLICES),
         rates = { sqlClient -> rates.getAll(sqlClient).filter { it.rate.signum() > 0 }.associate { it.currency to it.rate } },
         statsCurrency = { currentConfig(plugin).statsCurrency.name }
     )
