@@ -9,10 +9,16 @@ import com.panomc.plugins.market.db.model.MarketPaymentEvent
 import com.panomc.plugins.market.db.model.OrderEventType
 import com.panomc.plugins.market.db.model.PaymentEventStatus
 import com.panomc.plugins.market.db.model.PaymentStatus
+import com.panomc.plugins.market.db.model.ProviderStateKind
 import com.panomc.plugins.market.db.model.ReservationState
 import com.panomc.plugins.market.job.InboundEventRetryJob
 import com.panomc.plugins.market.job.MarketJobs
 import com.panomc.plugins.market.job.MarketScheduler
+import com.panomc.plugins.market.provider.ProviderAvailability
+import com.panomc.plugins.market.provider.ProviderKind
+import com.panomc.plugins.market.provider.ProviderLookup
+import com.panomc.plugins.market.provider.ProviderState
+import com.panomc.plugins.market.provider.ProviderStateStoreImpl
 import com.panomc.plugins.market.routes.api.payment.AttemptLocks
 import com.panomc.plugins.market.routes.api.payment.AttemptLookup
 import com.panomc.plugins.market.routes.api.payment.AttemptPageResult
@@ -32,6 +38,7 @@ import com.panomc.plugins.market.runtime.MarketRuntime
 import com.panomc.plugins.market.spi.common.HttpReply
 import com.panomc.plugins.market.spi.common.InboundKind
 import com.panomc.plugins.market.spi.common.Money
+import com.panomc.plugins.market.spi.common.ProviderSettings
 import com.panomc.plugins.market.spi.common.settingsSchema
 import com.panomc.plugins.market.spi.payment.InboundResult
 import com.panomc.plugins.market.spi.payment.PaymentAttemptView
@@ -86,6 +93,17 @@ private class FlakyAttempts(private val delegate: InboundAttempts) : InboundAtte
 /** The fake provider with a secret setting, so that the redactor of a settled row has something to remove. */
 private class SecretFake(private val fake: FakePaymentProvider) : PaymentProvider by fake {
     override fun settingsSchema() = settingsSchema { secret("apiKey") { label = com.panomc.plugins.market.spi.common.LocalizedText.of("API key") } }
+}
+
+/** A provider whose `capabilities` throws (a plugin bug, a half-finished configuration): market must still hand it the request, with the strict money policy. */
+private class ThrowingCapabilities(private val fake: FakePaymentProvider) : PaymentProvider by fake {
+    override fun capabilities(settings: ProviderSettings): PaymentCapabilities = throw IllegalStateException("capabilities needs a complete configuration")
+}
+
+/** The registry as it reports a plugin that is installed but cannot be used: the id is not registered, yet its state is not `MISSING`. */
+private class StateOverrideLookup(private val delegate: ProviderLookup, private val availability: Map<String, ProviderAvailability>) : ProviderLookup by delegate {
+    override fun state(kind: ProviderKind, id: String): ProviderState =
+        availability[id]?.let { ProviderState(it, detail = "reported by the test") } ?: delegate.state(kind, id)
 }
 
 /** A provider that reads its own attempts through `ctx.payments` and takes the attempt lock again inside `handleInbound`. */
@@ -153,11 +171,14 @@ class PaymentEventIT : MarketDaoITBase() {
     private val h get() = ph.h
     private val fake get() = ph.fake
 
-    private fun dispatcherOver(over: InboundAttempts, timeoutMs: Long = 5_000L): InboundDispatcher {
+    /** [lookup] and [stateValues] are what `buildDispatcher` passes the real `RegistryInboundProviders` in production (the registry and the provider state). */
+    private fun dispatcherOver(
+        over: InboundAttempts, timeoutMs: Long = 5_000L, lookup: ProviderLookup = ph.lookup, stateValues: suspend (String) -> Set<String> = { emptySet() }
+    ): InboundDispatcher {
         val contexts = PaymentContexts { provider, settings, testMode ->
             AttemptPaymentContext(TestContexts.payment(provider.id, settings, vertx, testMode), AttemptLookup(provider.id, w.payments, w.orders, ph.cipher) { pool }, locks)
         }
-        val providers = RegistryInboundProviders(ph.lookup, w.paymentMethods, ph.cipher, contexts, { h.config.toConfig() }, { pool })
+        val providers = RegistryInboundProviders(lookup, w.paymentMethods, ph.cipher, contexts, { h.config.toConfig() }, { pool }, stateValues)
 
         return InboundDispatcher(
             store, over, providers, PaymentEventApplier(over) { event, attempt, ctx -> sink.apply(event, attempt, ctx) }, locks, w.clock, w.ids, { "https://shop.example" },
@@ -180,10 +201,14 @@ class PaymentEventIT : MarketDaoITBase() {
 
     private fun call(
         kind: InboundKind = InboundKind.WEBHOOK, attempt: MarketPayment? = null, body: String = "{}", headers: Map<String, List<String>> = mapOf("content-type" to listOf("application/json")),
-        outcome: ReturnOutcome = ReturnOutcome.SUCCESS, query: String? = null, method: String = "POST"
+        outcome: ReturnOutcome = ReturnOutcome.SUCCESS, query: String? = null, method: String = "POST", provider: String = "fake", token: String? = attempt?.token
     ) = InboundCall(
-        kind, "fake", "default", if (kind == InboundKind.WEBHOOK) null else attempt!!.token, if (kind == InboundKind.RETURN) outcome else null, null, method,
-        "/api/market/payments/fake/" + if (kind == InboundKind.WEBHOOK) "webhook" else "notify/${attempt!!.token}", query,
+        kind, provider, "default", if (kind == InboundKind.WEBHOOK) null else token!!, if (kind == InboundKind.RETURN) outcome else null, null, method,
+        "/api/market/payments/$provider/" + when (kind) {
+            InboundKind.WEBHOOK -> "webhook"
+            InboundKind.NOTIFY -> "notify/$token"
+            InboundKind.RETURN -> "return/$token/${outcome.name.lowercase()}"
+        }, query,
         query?.split('&')?.filter { it.isNotEmpty() }?.associate { it.substringBefore('=') to listOf(it.substringAfter('=', "")) } ?: emptyMap(), headers, headers["content-type"]?.firstOrNull(),
         body.toByteArray(), null, "203.0.113.9", w.clock.now()
     )
@@ -746,6 +771,207 @@ class PaymentEventIT : MarketDaoITBase() {
         dispatcher.handle(call(InboundKind.NOTIFY, attempt))
 
         assertEquals(w.clock.now(), w.paymentMethods.getByMethodId("fake", pool)!!.lastInboundAt)
+    }
+
+    // ============================================================ the production resolver (RegistryInboundProviders)
+
+    @Test
+    fun `a provider that is gone but has a method row keeps a webhook and a notification as DEFERRED with a 503 and a return as DEFERRED with a 303, the replay completes the order once it is back`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val (order, attempt) = pending()
+        val webhookBody = "{\"id\":\"evt_gone\",\"via\":\"webhook\"}"
+        val notifyBody = "{\"id\":\"evt_gone\",\"via\":\"notify\"}"
+
+        fake.onInbound = { ok(listOf(paid(attempt)), "evt_gone") }
+        ph.lookup.remove("fake")
+
+        assertEquals(503, dispatcher.handle(call(body = webhookBody)).status)
+        assertEquals(503, dispatcher.handle(call(InboundKind.NOTIFY, attempt, body = notifyBody)).status)
+
+        val back = dispatcher.handle(call(InboundKind.RETURN, attempt, outcome = ReturnOutcome.PENDING))
+
+        assertEquals(303, back.status)
+        assertEquals("https://shop.example/store/order/${order.publicId}?return=pending", back.headers["Location"])
+        assertTrue(fake.calls(FakePaymentProvider.Op.INBOUND).isEmpty(), "a provider that is not registered is never run")
+        orderIs(order, OrderStatus.PENDING)
+
+        val kept = events()
+
+        assertEquals(3, kept.size)
+        assertTrue(kept.all { it.status == PaymentEventStatus.DEFERRED && it.attempts == 0 && it.eventKey.startsWith("r:") }, kept.map { it.status to it.attempts }.toString())
+        assertEquals(listOf(webhookBody, notifyBody, "{}"), kept.map { it.body }, "kept verbatim")
+        assertTrue(kept.all { it.headers!!.contains("content-type") })
+        assertEquals(listOf(null, attempt.id, attempt.id), kept.map { it.paymentId })
+        assertEquals(listOf(null, order.id, order.id), kept.map { it.orderId })
+
+        // a replay while the provider is still gone leaves the row where it was: nothing is lost and nothing runs
+        val early = dispatcher.replay(kept[0].id)
+
+        assertTrue(early is ReplayResult.Done, "$early")
+        assertEquals(PaymentEventStatus.DEFERRED, events()[0].status)
+        assertTrue(fake.calls(FakePaymentProvider.Op.INBOUND).isEmpty())
+        orderIs(order, OrderStatus.PENDING)
+
+        ph.lookup.add(ph.continuable)
+
+        for (row in kept) assertTrue(dispatcher.replay(row.id) is ReplayResult.Done, "row ${row.id}")
+
+        val done = events()
+
+        assertEquals(listOf(PaymentEventStatus.PROCESSED, PaymentEventStatus.DUPLICATE, PaymentEventStatus.DUPLICATE), done.map { it.status })
+        assertEquals("e:evt_gone", done[0].eventKey)
+        assertEquals(2, done[0].duplicateCount)
+        assertEquals(3, fake.calls(FakePaymentProvider.Op.INBOUND).size, "each replay ran the provider once")
+        orderIs(order, OrderStatus.COMPLETED)
+        assertEquals(1, completionsOf(order.id))
+        assertEquals(1, timeline(order.id, OrderEventType.PAYMENT_SUCCEEDED))
+    }
+
+    @Test
+    fun `a provider id nobody registered, without a method row or an attempt behind the token, is a 404 and stores nothing, however big the body`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val (_, attempt) = pending()
+        val big = "x".repeat(200_000)
+
+        fake.onInbound = { ok() }
+
+        for (id in listOf("ghost", "ghost-2", "g".repeat(32))) {
+            assertEquals(404, dispatcher.handle(call(provider = id, body = big)).status, "$id webhook")
+            assertEquals(404, dispatcher.handle(call(InboundKind.NOTIFY, provider = id, token = "f".repeat(40), body = big)).status, "$id notify with a token nobody holds")
+            assertEquals(404, dispatcher.handle(call(InboundKind.RETURN, provider = id, token = "e".repeat(40))).status, "$id return with a token nobody holds")
+            assertEquals(404, dispatcher.handle(call(InboundKind.NOTIFY, attempt, provider = id)).status, "$id notify with the token of an attempt of fake")
+        }
+
+        assertEquals(0L, count("market_payment_event"), "not one row, in any direction: an arbitrary provider id fills nothing")
+        assertTrue(fake.calls(FakePaymentProvider.Op.INBOUND).isEmpty())
+    }
+
+    @Test
+    fun `a plugin that is installed but incompatible, shadowed or invalid is unavailable and not unknown, DEFERRED with a 503, while a MISSING id without a row stays a 404`(): Unit = runBlocking {
+        val states = mapOf("old-gw" to ProviderAvailability.INCOMPATIBLE, "twin-gw" to ProviderAvailability.SHADOWED, "bad-gw" to ProviderAvailability.INVALID)
+
+        dispatcher = dispatcherOver(attempts, lookup = StateOverrideLookup(ph.lookup, states))
+
+        for (id in states.keys) assertEquals(503, dispatcher.handle(call(provider = id, body = "{\"for\":\"$id\"}")).status, id)
+
+        val kept = events()
+
+        assertEquals(states.keys.toList(), kept.map { it.providerId })
+        assertTrue(kept.all { it.status == PaymentEventStatus.DEFERRED && it.attempts == 0 }, kept.map { it.status }.toString())
+        assertEquals(states.keys.map { "{\"for\":\"$it\"}" }, kept.map { it.body })
+
+        assertEquals(404, dispatcher.handle(call(provider = "never-heard-of")).status)
+        assertEquals(3, events().size, "the unknown id stored nothing")
+    }
+
+    @Test
+    fun `a provider that is gone together with its method row, a notification or a return with the token of its attempt is DEFERRED, never a 404, a webhook proves nothing and is a 404`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val (order, attempt) = pending()
+
+        fake.onInbound = { ok(listOf(paid(attempt)), "evt_orphan") }
+        ph.lookup.remove("fake")
+        sql("DELETE FROM `pano_market_payment_method` WHERE `methodId` = 'fake'")
+
+        assertEquals(404, dispatcher.handle(call()).status, "a webhook carries nothing that says the provider is known")
+        assertEquals(0L, count("market_payment_event"))
+        assertEquals(503, dispatcher.handle(call(InboundKind.NOTIFY, attempt)).status)
+        assertEquals(303, dispatcher.handle(call(InboundKind.RETURN, attempt)).status)
+
+        val kept = events()
+
+        assertEquals(2, kept.size)
+        assertTrue(kept.all { it.status == PaymentEventStatus.DEFERRED && it.paymentId == attempt.id && it.attempts == 0 }, kept.map { it.status }.toString())
+        assertEquals(listOf("NOTIFY", "RETURN"), kept.map { it.channel })
+        orderIs(order, OrderStatus.PENDING)
+
+        ph.lookup.add(ph.continuable)
+
+        assertTrue(dispatcher.replay(kept[0].id) is ReplayResult.Done)
+        orderIs(order, OrderStatus.COMPLETED)
+        assertEquals(PaymentEventStatus.PROCESSED, events()[0].status)
+    }
+
+    @Test
+    fun `a provider whose capabilities throws still gets the request and the strict money policy applies, an overpaid success is a review OVERPAID and an exact one completes`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val (over, overAttempt) = pending()
+        val (exact, exactAttempt) = pending()
+
+        // a provider that would have allowed an overpayment is not asked: nothing is known about one that cannot describe itself
+        fake.caps = PaymentCapabilities().also { it.buyerMayPayMore = true }
+        ph.lookup.add(ThrowingCapabilities(fake))
+        fake.onInbound = { ok(listOf(paid(overAttempt, amount = overAttempt.amount + 500)), "evt_caps_over") }
+
+        assertEquals(200, dispatcher.handle(call()).status)
+        assertEquals(1, fake.calls(FakePaymentProvider.Op.INBOUND).size, "handleInbound ran although capabilities threw")
+        assertEquals(OrderStatus.REVIEW, ph.order(over.id).status)
+        assertEquals("OVERPAID", ph.order(over.id).reviewReason)
+        assertEquals(PaymentEventStatus.PROCESSED, events().single().status)
+
+        fake.onInbound = { ok(listOf(paid(exactAttempt)), "evt_caps_exact") }
+
+        assertEquals(200, dispatcher.handle(call()).status)
+        orderIs(exact, OrderStatus.COMPLETED)
+        assertEquals(2, fake.calls(FakePaymentProvider.Op.INBOUND).size)
+        assertTrue(events().all { it.status == PaymentEventStatus.PROCESSED })
+    }
+
+    @Test
+    fun `the values of the provider's stored state are redacted from the error and the settled row like its secret settings`(): Unit = runBlocking {
+        val token = "oauth-state-token-0123456789"
+
+        fun stateOf(id: String) = ProviderStateStoreImpl(ProviderStateKind.PAYMENT, id, w.providerState, ph.db, ph.cipher, w.clock)
+
+        stateOf("fake").put("accessToken", token)
+
+        dispatcher = dispatcherOver(attempts, stateValues = { id -> stateOf(id).values() })
+        fx.paymentMethod("fake")
+
+        val (order, attempt) = pending()
+        val headers = mapOf("content-type" to listOf("application/json"), "x-note" to listOf("see $token"))
+        val body = "{\"echo\":\"$token\"}"
+
+        fake.onInbound = { throw IllegalStateException("down: $token") }
+
+        assertEquals(500, dispatcher.handle(call(body = body, headers = headers, query = "echo=$token")).status)
+
+        val failed = events().single()
+
+        assertEquals(body, failed.body, "a failed row is verbatim: it is re-run from it")
+        assertTrue(failed.headers!!.contains(token))
+        assertFalse(failed.error!!.contains(token), "the error text is redacted with the state values: ${failed.error}")
+        assertFalse(failed.url!!.contains(token), "the stored address is too: ${failed.url}")
+
+        w.clock.advance(2 * 60_000)
+        fake.onInbound = { ok(listOf(paid(attempt)), "evt_state") }
+        assertEquals(1, InboundEventRetryJob(dispatcher, store, w.clock).runOnce())
+
+        val settled = events().single()
+
+        assertEquals(PaymentEventStatus.PROCESSED, settled.status)
+        assertFalse(settled.body!!.contains(token), settled.body)
+        assertTrue(settled.body!!.contains("[REDACTED]"), settled.body)
+        assertFalse(settled.headers!!.contains(token), settled.headers)
+        orderIs(order, OrderStatus.COMPLETED)
+    }
+
+    @Test
+    fun `a provider state that cannot be read does not stop the request`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val (order, attempt) = pending()
+
+        dispatcher = dispatcherOver(attempts, stateValues = { throw java.sql.SQLException("the state table is unavailable") })
+        fake.onInbound = { ok(listOf(paid(attempt)), "evt_nostate") }
+
+        assertEquals(200, dispatcher.handle(call()).status)
+        orderIs(order, OrderStatus.COMPLETED)
+        assertEquals(PaymentEventStatus.PROCESSED, events().single().status)
     }
 
     // ====================================================================================== the event store itself
