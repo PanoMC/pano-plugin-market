@@ -45,11 +45,22 @@ internal object DiscountStage {
          * Line keys that may claim an owned entitlement (see [upgradeClaimants]): any other tier line of the cart
          * records no upgrade link and gets no deduction, so one owned entitlement finances at most one line.
          */
-        val upgradeClaimants: Set<String>
+        val upgradeClaimants: Set<String>,
+        /**
+         * Replay of the credit run (05 section 8.1): line key to the id of the discount that won there (null = none). The
+         * money run of a full-credit order takes exactly these winners and recomputes their amounts without checking
+         * the candidate rules again. Null = decide by the rules.
+         */
+        val forcedWinners: Map<String, Long?>? = null
     ) {
         /** The same run with the automatic discounts switched off (scenario S2 of 05 section 6.4; upgrades still apply). */
         fun withoutDiscounts() = Settings(
-            unit, now, subtotal, discounts, false, fullGift, upgradeLink, upgradeDeduction, recipientTiers, upgradeClaimants
+            unit, now, subtotal, discounts, false, fullGift, upgradeLink, upgradeDeduction, recipientTiers, upgradeClaimants, forcedWinners
+        )
+
+        /** The same run with the winners of the credit run replayed. */
+        fun replaying(winners: Map<String, Long?>) = Settings(
+            unit, now, subtotal, discounts, discountsEnabled, fullGift, upgradeLink, upgradeDeduction, recipientTiers, upgradeClaimants, winners
         )
     }
 
@@ -77,7 +88,11 @@ internal object DiscountStage {
 
         if (s.fullGift) return DiscountOutcome(null, list, 0L, null)
 
-        val winner = if (s.discountsEnabled && eligibleForDiscounts(line)) bestDiscount(listed, s) else null
+        val winner = when {
+            !s.discountsEnabled || !eligibleForDiscounts(line) -> null
+            s.forcedWinners != null -> forcedDiscount(listed, s)
+            else -> bestDiscount(listed, s)
+        }
         val unitDiscount = winner?.second ?: 0L
         val upgrade = upgrade(line, list - unitDiscount, s)
         return DiscountOutcome(winner?.first?.id, unitDiscount, upgrade.first, upgrade.second)
@@ -106,20 +121,38 @@ internal object DiscountStage {
         return best?.let { it to bestAmount }
     }
 
+    /**
+     * The winner the credit run chose for this line, priced in this run's unit: its candidate rules are not checked again
+     * (they were decided on the credit amounts), only its amount is recomputed. A winner that takes nothing here is none.
+     */
+    private fun forcedDiscount(listed: ListedLine, s: Settings): Pair<DiscountInput, Long>? {
+        val id = s.forcedWinners!![listed.line.lineKey] ?: return null
+        val d = s.discounts.firstOrNull { it.id == id } ?: return null
+        val amount = amountOf(d, listed, s)
+        return if (amount > 0L) d to amount else null
+    }
+
     /** The per-unit amount of [d] on the line, or null when [d] is no candidate (05 section 5.1 rules 1 to 4). */
     private fun candidateAmount(d: DiscountInput, listed: ListedLine, s: Settings): Long? {
+        if (!isCandidate(d, listed, s)) return null
+        return amountOf(d, listed, s)
+    }
+
+    private fun isCandidate(d: DiscountInput, listed: ListedLine, s: Settings): Boolean {
         val line = listed.line
-        if (d.startDate != null && s.now < d.startDate) return null
-        if (d.expiryDate != null && s.now >= d.expiryDate) return null
-        if (d.usageLimit != null && d.usedCount >= d.usageLimit) return null
+        if (d.startDate != null && s.now < d.startDate) return false
+        if (d.expiryDate != null && s.now >= d.expiryDate) return false
+        if (d.usageLimit != null && d.usedCount >= d.usageLimit) return false
         val inScope = when (d.scope) {
             DiscountScope.ALL -> line.kind == LineKind.PRODUCT || line.kind == LineKind.BUNDLE
             DiscountScope.PRODUCTS -> line.productId != null && line.productId in d.productIds
             DiscountScope.CATEGORIES -> line.kind != LineKind.CREDIT_PACK && line.categoryPath.any { it in d.categoryIds }
         }
-        if (!inScope) return null
-        if (d.minPaymentAmount != null && s.subtotal < s.unit.fromBase(clampAmount(d.minPaymentAmount))) return null
+        if (!inScope) return false
+        return !(d.minPaymentAmount != null && s.subtotal < s.unit.fromBase(clampAmount(d.minPaymentAmount)))
+    }
 
+    private fun amountOf(d: DiscountInput, listed: ListedLine, s: Settings): Long {
         val list = listed.listUnitPrice
         return when (d.unit) {
             DiscountUnit.PERCENT -> Rounding.pctQ(list, clampBp(d.value), s.unit.quantum)
