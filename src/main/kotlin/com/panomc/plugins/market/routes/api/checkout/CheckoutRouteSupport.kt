@@ -33,6 +33,8 @@ import com.panomc.plugins.market.db.tx.Locks
 import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.permission.MarketPermissions
+import com.panomc.plugins.market.routes.api.order.orderService
+import com.panomc.plugins.market.routes.api.order.paymentService
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.shipping.shippingService
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
@@ -119,7 +121,11 @@ internal fun checkoutService(plugin: MarketPlugin, withCheckout: Boolean = false
     )
 }
 
-/** The pieces of `CheckoutService.checkout` on the plugin's beans. The credit hold and the pending subscription are refused until their services exist. */
+/**
+ * The pieces of `CheckoutService.checkout` on the plugin's beans. The order service and the payment starter are the ones of the order routes
+ * (`orderService`, `paymentService`: MK-076), so the first attempt of a checkout is started, and a free or credits order completed, by the real
+ * payment service. The credit hold and the pending subscription are refused until their services exist.
+ */
 private fun checkoutDeps(plugin: MarketPlugin, databaseManager: () -> DatabaseManager): CheckoutDeps {
     val context = plugin.applicationContext
     val clock = SystemClock
@@ -128,19 +134,16 @@ private fun checkoutDeps(plugin: MarketPlugin, databaseManager: () -> DatabaseMa
     val locks = Locks(orderDao, context.getBean(MarketOrderItemDao::class.java), redemptionDao, context.getBean(MarketCreditAccountDao::class.java))
     val redemptions = RedemptionService(clock, locks, redemptionDao)
     val paymentDao = context.getBean(MarketPaymentDao::class.java)
-    val cart = cartService(plugin)
 
     return CheckoutDeps(
         db = MarketDb({ databaseManager().getSqlClient() as Pool }, clock),
         locks = locks,
         reservations = ReservationService(clock, locks, redemptions, orderDao),
         redemptions = redemptions,
-        orders = OrderService(
-            clock, SecureIds(), orderDao, context.getBean(MarketOrderItemDao::class.java), context.getBean(MarketOrderEventDao::class.java), paymentDao,
-            redemptions, { conn, userId -> cart.clearAfterCheckout(conn, userId) }
-        ),
+        orders = orderService(plugin),
         payments = paymentDao,
-        providerMeta = context.getBean(MarketProductProviderMetaDao::class.java)
+        providerMeta = context.getBean(MarketProductProviderMetaDao::class.java),
+        starter = paymentService(plugin)
     )
 }
 
