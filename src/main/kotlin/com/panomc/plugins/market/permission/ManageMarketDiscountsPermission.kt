@@ -3,6 +3,6 @@ package com.panomc.plugins.market.permission
 import com.panomc.platform.annotation.PermissionDefinition
 import com.panomc.platform.auth.PanelPermission
 
-/** The umbrella: grants every market node below, so existing roles keep full access (04 section 9). */
+/** Discounts, coupons, creator codes (not payouts), gifts, redemption lists (04 section 9). */
 @PermissionDefinition
-class ManageMarketPermission : PanelPermission("fa-store")
+class ManageMarketDiscountsPermission : PanelPermission("fa-tags")

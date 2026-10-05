@@ -3,6 +3,34 @@
     "MANAGE_MARKET": {
       "title": "Marketi Yönet",
       "description": "Market kategorilerini, ürünleri, karşılaştırmaları, hediyeleri, indirimleri, kuponları, yaratıcı kodlarını, siparişleri ve ayarları yönetebilir."
+    },
+    "MANAGE_MARKET_CATALOG": {
+      "title": "Market Kataloğunu Yönet",
+      "description": "Market kategorilerini, ürünleri, varyantları, paketleri, karşılaştırmaları, hedefleri ve stoku yönetebilir."
+    },
+    "VIEW_MARKET_ORDERS": {
+      "title": "Market Siparişlerini Görüntüle",
+      "description": "Market siparişlerini, teslimatları, kargoları, abonelikleri ve ödeme olaylarını görüntüleyebilir ve siparişleri dışa aktarabilir. Hiçbir şeyi değiştiremez."
+    },
+    "MANAGE_MARKET_ORDERS": {
+      "title": "Market Teslimatını Yönet",
+      "description": "Teslimatları yeniden çalıştırabilir veya iptal edebilir, satın alımları geri alabilir, kargoları yönetebilir, sipariş e-postalarını yeniden gönderebilir, sipariş notlarını düzenleyebilir ve engel listesini yönetebilir."
+    },
+    "MANAGE_MARKET_PAYMENTS": {
+      "title": "Market Ödemelerini Yönet",
+      "description": "Para hareketi yaratan her şeyi yapabilir: iadeler, siparişi ödendi olarak işaretleme, incelemeler, itirazlar, manuel siparişler, krediler, yaratıcı ödemeleri ve abonelik tahsilatları."
+    },
+    "MANAGE_MARKET_DISCOUNTS": {
+      "title": "Market İndirimlerini Yönet",
+      "description": "İndirimleri, kuponları, yaratıcı kodlarını, hediyeleri ve kullanım listelerini yönetebilir."
+    },
+    "MANAGE_MARKET_SETTINGS": {
+      "title": "Market Ayarlarını Yönet",
+      "description": "Market ayarlarını, para birimlerini, yasal metinleri, ödeme sağlayıcılarını ve anahtarlarını, kargo kurulumunu, webhook'ları ve sağlık sayfasını yönetebilir."
+    },
+    "VIEW_MARKET_STATS": {
+      "title": "Market İstatistiklerini Görüntüle",
+      "description": "Market istatistik sayfasını görüntüleyebilir."
     }
   },
   "activity-logs": {

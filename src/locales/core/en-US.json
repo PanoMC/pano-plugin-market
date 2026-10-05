@@ -3,6 +3,34 @@
     "MANAGE_MARKET": {
       "title": "Manage Market",
       "description": "Can manage market categories, products, comparisons, gifts, discounts, coupons, creator codes, orders and settings."
+    },
+    "MANAGE_MARKET_CATALOG": {
+      "title": "Manage Market Catalog",
+      "description": "Can manage market categories, products, variants, bundles, comparisons, goals and stock."
+    },
+    "VIEW_MARKET_ORDERS": {
+      "title": "View Market Orders",
+      "description": "Can view market orders, deliveries, shipments, subscriptions and payment events, and export orders. Cannot change anything."
+    },
+    "MANAGE_MARKET_ORDERS": {
+      "title": "Manage Market Fulfilment",
+      "description": "Can re-run or cancel deliveries, revoke purchases, manage shipments, resend order mails, edit order notes and manage the block list."
+    },
+    "MANAGE_MARKET_PAYMENTS": {
+      "title": "Manage Market Payments",
+      "description": "Can do everything that moves money: refunds, marking orders paid, reviews, disputes, manual orders, credits, creator payouts and subscription charges."
+    },
+    "MANAGE_MARKET_DISCOUNTS": {
+      "title": "Manage Market Discounts",
+      "description": "Can manage discounts, coupons, creator codes, gifts and redemption lists."
+    },
+    "MANAGE_MARKET_SETTINGS": {
+      "title": "Manage Market Settings",
+      "description": "Can manage market settings, currencies, legal texts, payment providers and their keys, shipping setup, webhooks and the health page."
+    },
+    "VIEW_MARKET_STATS": {
+      "title": "View Market Stats",
+      "description": "Can view the market statistics page."
     }
   },
   "activity-logs": {

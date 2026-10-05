@@ -3,6 +3,6 @@ package com.panomc.plugins.market.permission
 import com.panomc.platform.annotation.PermissionDefinition
 import com.panomc.platform.auth.PanelPermission
 
-/** The umbrella: grants every market node below, so existing roles keep full access (04 section 9). */
+/** Categories, products, variants, bundles, comparisons, goals, stock (04 section 9). */
 @PermissionDefinition
-class ManageMarketPermission : PanelPermission("fa-store")
+class ManageMarketCatalogPermission : PanelPermission("fa-boxes-stacked")

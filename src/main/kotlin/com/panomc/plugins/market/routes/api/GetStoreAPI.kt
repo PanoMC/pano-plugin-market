@@ -12,6 +12,7 @@ import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.model.MarketCategory
 import com.panomc.plugins.market.db.model.MarketProduct
+import com.panomc.plugins.market.routes.base.MarketApi
 import com.panomc.plugins.market.util.HtmlSanitizer
 import com.panomc.plugins.market.util.MarketStatus
 import com.panomc.plugins.market.util.MoneyUtil
@@ -34,7 +35,7 @@ class GetStoreAPI(
     private val marketCategoryDao: MarketCategoryDao,
     private val marketComparisonDao: MarketComparisonDao,
     private val marketOrderItemDao: MarketOrderItemDao
-) : Api() {
+) : MarketApi() {
     override val paths = listOf(Path("/api/market/store", RouteType.GET))
 
     private val databaseManager: DatabaseManager by lazy {
@@ -53,7 +54,7 @@ class GetStoreAPI(
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository).build()
 
-    override suspend fun handle(context: RoutingContext): Result {
+    override suspend fun handleMarket(context: RoutingContext): Result {
         val config = configManager.config
         val sqlClient = databaseManager.getSqlClient()
         val now = System.currentTimeMillis()
