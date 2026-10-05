@@ -93,6 +93,21 @@
               </div>
             {/if}
 
+            {#if !editableRegions && keptRegions}
+              <div class="alert alert-info d-flex align-items-start mb-0" role="status">
+                <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
+                <div>
+                  <b>{$_('modals.shipping-zone.regions-kept-title')}</b>
+                  <div>{$_('modals.shipping-zone.regions-kept')}</div>
+                </div>
+              </div>
+              {#if shown.regions}
+                <div class="invalid-feedback d-block mt-0">
+                  {$_(`modals.shipping-zone.errors.${shown.regions}`)}
+                </div>
+              {/if}
+            {/if}
+
             {#if editableRegions}
               <div>
                 <div class="mb-1">{$_('modals.shipping-zone.regions')}</div>
@@ -170,6 +185,7 @@
     MAX_STATES,
     blankZoneForm,
     buildZoneBody,
+    hasHiddenRegions,
     isPostalPattern,
     isStateName,
     regionsEditable,
@@ -203,6 +219,7 @@
     );
   });
   const editableRegions = $derived(regionsEditable(form));
+  const keptRegions = $derived(hasHiddenRegions(form));
   const clientErrors = $derived(validateZone(form, { zones, id: zone?.id ?? null }));
   const shown = $derived({ ...(submitted ? clientErrors : {}), ...serverErrors });
 

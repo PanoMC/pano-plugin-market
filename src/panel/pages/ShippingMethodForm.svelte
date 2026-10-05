@@ -138,7 +138,7 @@
                     role="group"
                     aria-label={$_('pages.shipping-method.rate-source')}>
                     {#each RATE_SOURCES as source (source)}
-                      {@const allowed = rateSourceAllowed(source, provider)}
+                      {@const allowed = sourceAllowed(source)}
                       <input
                         type="radio"
                         class="btn-check"
@@ -647,7 +647,9 @@
     methodServerErrors,
     methodToForm,
     nextRowFrom,
+    keepsStoredSource,
     providerOptions,
+    rangeQuantum,
     rateErrorMap,
     rateSourceAllowed,
     rowCount,
@@ -708,8 +710,21 @@
       ? [...list, { code: stored, name: stored }]
       : list;
   });
-  const fieldErrors = $derived(validateMethod(form, { provider }));
-  const check = $derived(validateBlocks(blocks, { zones, rateSource: form.rateSource }));
+  // The rate source and provider the method was loaded with: while that provider is unavailable the
+  // stored source stays selectable and saveable (10 §5.1), only choosing a carrier source newly is blocked.
+  const storedRateSource = $derived(data.method?.rateSource ?? null);
+  const storedProviderId = $derived(data.method ? data.method.providerId || MANUAL_PROVIDER : null);
+  const sourceAllowed = (source) =>
+    rateSourceAllowed(source, provider) ||
+    (!manual &&
+      keepsStoredSource(source, provider, storedRateSource, {
+        providerId: form.providerId,
+        storedProviderId,
+      }));
+  const fieldErrors = $derived(
+    validateMethod(form, { provider, storedRateSource, storedProviderId }),
+  );
+  const check = $derived(validateBlocks(blocks, { zones, rateSource: form.rateSource, exponent }));
   const shown = $derived({ ...(submitted ? fieldErrors : {}), ...serverErrors.fields });
   const freeZones = $derived(zones.filter((z) => !blocks.some((b) => b.zoneId === z.id)));
   const rowTotal = $derived(rowCount(blocks));
@@ -832,7 +847,11 @@
   }
 
   function addRow(block) {
-    block.rows.push(blankRow(block.basis, { rangeFrom: nextRowFrom($state.snapshot(block.rows)) }));
+    block.rows.push(
+      blankRow(block.basis, {
+        rangeFrom: nextRowFrom($state.snapshot(block.rows), rangeQuantum(block.basis, exponent)),
+      }),
+    );
   }
 
   const removeRow = (block, index) => {

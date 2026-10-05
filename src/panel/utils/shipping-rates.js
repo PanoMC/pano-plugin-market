@@ -13,6 +13,9 @@ export const MAX_ZONE_NAME = 128;
 export const MAX_POSTAL_PATTERNS = 200;
 export const MAX_STATES = 100;
 export const MAX_STATE_LENGTH = 64;
+/** Limits of the server for the states of one country (10 §4.2): used while the region editor is hidden. */
+export const MAX_SERVER_STATES = 200;
+export const MAX_SERVER_STATE_LENGTH = 100;
 /** Regions are edited per country only while at most this many countries are selected (13 §19.1). */
 export const MAX_REGION_COUNTRIES = 5;
 export const COUNTRIES_PREVIEW = 5;
@@ -64,23 +67,44 @@ export function withBasis(block, basis) {
   return { ...block, basis, rows: [blankRow(basis, { price })] };
 }
 
-/** Start of a row appended below the sorted rows: the `rangeTo` of the last one, null while it is open. */
-export function nextRowFrom(rows) {
+/**
+ * Smallest step between two typeable range values: 1 gram / 1 unit, or one minor unit of the currency
+ * (`10^-exponent`) for AMOUNT. Ranges are inclusive on both ends (10 §5.1, RateEngine `rangeFrom <= m <= rangeTo`),
+ * so the next row of a band ending at `to` starts at `to + quantum`.
+ */
+export function rangeQuantum(basis, exponent = 2) {
+  if (basis !== 'AMOUNT') return 1;
+  const digits = Number.isInteger(exponent) && exponent >= 0 ? exponent : 2;
+  return Number(`1e-${digits}`);
+}
+
+/** Decimals of a quantum (1 -> 0, 0.01 -> 2), used to keep `to + quantum` free of float noise. */
+const quantumDecimals = (quantum) => Math.max(0, Math.round(-Math.log10(quantum)));
+
+/**
+ * Start of a row appended below the sorted rows: the `rangeTo` of the last one plus one quantum (the
+ * ranges are inclusive, so the same value would overlap), null while it is open.
+ */
+export function nextRowFrom(rows, quantum = 1) {
   const closed = rows.filter((r) => isNum(r.rangeFrom));
   if (closed.length === 0) return 0;
   const last = [...closed].sort((a, b) => a.rangeFrom - b.rangeFrom).at(-1);
-  return isNum(last.rangeTo) ? last.rangeTo : null;
+  if (!isNum(last.rangeTo)) return null;
+  return Number((last.rangeTo + quantum).toFixed(quantumDecimals(quantum)));
 }
 
 /**
- * Validation of ONE zone's rows (half-open intervals `[from, to)`, 13 §19.2). Row values are Number,
- * null (empty) or NaN (unparsable text). Returns `{ ok, errors, warnings }`:
+ * Validation of ONE zone's rows. Ranges are INCLUSIVE on both ends, like the server (10 §5.1 RATE_OVERLAP,
+ * 10 §5.2 `rangeFrom <= m <= rangeTo`). Row values are Number, null (empty) or NaN (unparsable text).
+ * `quantum` is the smallest step of the range unit (`rangeQuantum`). Returns `{ ok, errors, warnings }`:
  *  - `errors`: `{ row, field, code }` (`row` null = the whole block). Codes: `NO_ROWS`, `FLAT_SINGLE`,
- *    `REQUIRED`, `INVALID`, `NEGATIVE`, `RANGE_ORDER` (`to <= from`), `OVERLAP`, `OPEN_NOT_LAST`.
- *  - `warnings`: `{ row, next, code: 'GAP', from, to }` for a gap between two sorted rows (allowed).
- * Touching ranges (`to == next.from`) are accepted.
+ *    `REQUIRED`, `INVALID`, `NEGATIVE`, `RANGE_ORDER` (`to < from`; `to == from` is a single-value band),
+ *    `OVERLAP` (a row starts at or below the previous `to`, a shared boundary included), `OPEN_NOT_LAST`.
+ *  - `warnings`: `{ row, next, code: 'GAP', from, to }` when more than one quantum separates the `to` of a
+ *    row from the `from` of the next sorted one (allowed: nothing is offered in between).
+ * Adjacent ranges (`to + quantum == next.from`) are accepted.
  */
-export function validateRates(rows, basis) {
+export function validateRates(rows, basis, quantum = 1) {
   const errors = [];
   const warnings = [];
   const list = Array.isArray(rows) ? rows : [];
@@ -124,7 +148,7 @@ export function validateRates(rows, basis) {
       to = money(row, 'rangeTo', { required: false });
       toValid = to !== null;
     }
-    if (from !== null && toValid && to !== null && to <= from)
+    if (from !== null && toValid && to !== null && to < from)
       errors.push({ row: row.index, field: 'rangeTo', code: 'RANGE_ORDER' });
     else if (from !== null && toValid) ranged.push({ index: row.index, from, to });
   }
@@ -134,8 +158,8 @@ export function validateRates(rows, basis) {
     const a = sorted[i];
     const b = sorted[i + 1];
     if (a.to === null) errors.push({ row: a.index, field: 'rangeTo', code: 'OPEN_NOT_LAST' });
-    else if (a.to > b.from) errors.push({ row: b.index, field: 'rangeFrom', code: 'OVERLAP' });
-    else if (a.to < b.from)
+    else if (a.to >= b.from) errors.push({ row: b.index, field: 'rangeFrom', code: 'OVERLAP' });
+    else if (b.from - a.to > quantum * 1.5)
       warnings.push({ row: a.index, next: b.index, code: 'GAP', from: a.to, to: b.from });
   }
 
@@ -155,10 +179,11 @@ export function rateErrorMap(result) {
 /**
  * Validates every block of a method: `{ ok, general, byZone }`. `general` is `RATES_REQUIRED` when a rule
  * based source has no zone at all, `DUPLICATE_ZONE` when a zone appears twice, `UNKNOWN_ZONE` for a zone
- * that is not in `zones`, `TOO_MANY` over 200 rows in total. `CARRIER` methods carry no rule rows:
+ * that is not in `zones`, `TOO_MANY` over 200 rows in total. `exponent` = decimals of the base currency
+ * (the quantum of AMOUNT ranges). `CARRIER` methods carry no rule rows:
  * their blocks are the zone ticks (`carrierBlocks`) and only the zone checks apply.
  */
-export function validateBlocks(blocks, { zones = [], rateSource = 'RULES' } = {}) {
+export function validateBlocks(blocks, { zones = [], rateSource = 'RULES', exponent = 2 } = {}) {
   const byZone = {};
   let general = null;
   const list = Array.isArray(blocks) ? blocks : [];
@@ -177,7 +202,7 @@ export function validateBlocks(blocks, { zones = [], rateSource = 'RULES' } = {}
     seen.add(block.zoneId);
     if (known.size > 0 && !known.has(block.zoneId)) general ??= 'UNKNOWN_ZONE';
     if (rateSource === 'CARRIER') continue;
-    const result = validateRates(block.rows, block.basis);
+    const result = validateRates(block.rows, block.basis, rangeQuantum(block.basis, exponent));
     byZone[block.zoneId] = result;
     if (!result.ok) ok = false;
   }
@@ -356,7 +381,12 @@ export function zoneToForm(zone) {
   };
 }
 
-/** The region editor is offered only for 1 .. 5 selected countries and never with "Everywhere Else". */
+/**
+ * The region editor is offered only for 1 .. 5 selected countries and never with "Everywhere Else". This
+ * only decides whether the editor is SHOWN: the stored regions of a zone are sent whenever the zone has
+ * countries (`buildZoneBody`), otherwise saving a zone of 6+ countries would silently drop its state
+ * restrictions and change which zone matches a buyer.
+ */
 export const regionsEditable = (form) =>
   !form.everywhere && form.countries.length >= 1 && form.countries.length <= MAX_REGION_COUNTRIES;
 
@@ -374,14 +404,25 @@ export function validateZone(form, { zones = [], id = null } = {}) {
     if (zones.some((z) => z.id !== id && isEverywhere(z))) errors.countries = 'EVERYWHERE_EXISTS';
   } else if (form.countries.length === 0) errors.countries = 'COUNTRY_REQUIRED';
 
-  if (regionsEditable(form))
+  // Regions are validated whenever they are sent (every selected country). While the editor is hidden
+  // (more than 5 countries) the stored states cannot be fixed by hand, so the server limits apply
+  // (200 states of 1 .. 100 characters, 10 §4.2) instead of the stricter editor limits.
+  if (!form.everywhere) {
+    const editable = regionsEditable(form);
+    const maxStates = editable ? MAX_STATES : MAX_SERVER_STATES;
+    const maxLength = editable ? MAX_STATE_LENGTH : MAX_SERVER_STATE_LENGTH;
     for (const country of form.countries) {
       const states = form.regions[country] ?? [];
-      if (states.length > MAX_STATES || states.some((s) => !isStateName(s))) {
-        errors.regions = states.length > MAX_STATES ? 'TOO_MANY' : 'INVALID';
+      const bad = (s) => {
+        const length = String(s ?? '').trim().length;
+        return length < 1 || length > maxLength;
+      };
+      if (states.length > maxStates || states.some(bad)) {
+        errors.regions = states.length > maxStates ? 'TOO_MANY' : 'INVALID';
         break;
       }
     }
+  }
 
   const patterns = form.postalPatterns ?? [];
   if (patterns.length > MAX_POSTAL_PATTERNS) errors.postalPatterns = 'TOO_MANY';
@@ -390,11 +431,20 @@ export function validateZone(form, { zones = [], id = null } = {}) {
   return errors;
 }
 
-/** Request body of POST / PUT `/shipping/zones`. */
+/**
+ * True when the region editor is hidden (more than 5 countries) but some selected country still has stored
+ * states: they are kept on save and the modal says so with a read-only note.
+ */
+export const hasHiddenRegions = (form) =>
+  !form.everywhere &&
+  !regionsEditable(form) &&
+  form.countries.some((country) => (form.regions[country] ?? []).length > 0);
+
+/** Request body of POST / PUT `/shipping/zones`. Regions follow the selected countries, not the editor. */
 export function buildZoneBody(form) {
   const countries = form.everywhere ? ['*'] : [...new Set(form.countries)];
   const regions = [];
-  if (regionsEditable(form))
+  if (!form.everywhere)
     for (const country of countries) {
       const states = (form.regions[country] ?? [])
         .map((s) => String(s).trim())
@@ -559,11 +609,39 @@ function numberError(value, { min = 0, max = Infinity, exclusiveMin = false } = 
 export const parseDays = (value) => parseInteger(value, { min: 0, max: MAX_DELIVERY_DAYS });
 export const parseWeight = (value) => parseInteger(value, { min: 1, max: MAX_WEIGHT_GRAMS });
 
+/** A provider row that is missing from the list or whose plugin is stopped / incompatible (10 §5.1). */
+export const providerGone = (provider) =>
+  provider === null ||
+  provider === undefined ||
+  provider.state === 'UNAVAILABLE' ||
+  provider.state === 'INCOMPATIBLE';
+
+/**
+ * The stored rate source stays valid while its provider is gone: "provider unavailable => accepted as
+ * stored, method is simply not offered" (10 §5.1). Only CHOOSING a carrier source newly is blocked.
+ */
+export function keepsStoredSource(
+  source,
+  provider,
+  storedRateSource = null,
+  { providerId = null, storedProviderId = null } = {},
+) {
+  if (storedRateSource === null || source !== storedRateSource) return false;
+  // a provider chosen anew is not "stored": only the provider the method was saved with counts
+  if (storedProviderId !== null && providerId !== storedProviderId) return false;
+  return providerGone(provider);
+}
+
 /**
  * Client validation of the method fields (not the rates): `{ field: code }`. `provider` = the carrier row of
- * `form.providerId` (null when unknown).
+ * `form.providerId` (null when unknown). `storedRateSource` = the rate source the method was loaded with
+ * (null for a new method) and `storedProviderId` its provider: while that provider is unavailable the stored
+ * value is accepted as stored.
  */
-export function validateMethod(form, { provider = null } = {}) {
+export function validateMethod(
+  form,
+  { provider = null, storedRateSource = null, storedProviderId = null } = {},
+) {
   const errors = {};
   const manual = form.providerId === MANUAL_PROVIDER;
   const name = String(form.name ?? '').trim();
@@ -573,7 +651,16 @@ export function validateMethod(form, { provider = null } = {}) {
     errors.description = 'TOO_LONG';
   if (!present(form.providerId)) errors.providerId = 'REQUIRED';
   if (!RATE_SOURCES.includes(form.rateSource)) errors.rateSource = 'INVALID';
-  else if (!rateSourceAllowed(form.rateSource, manual ? findManualStub() : provider))
+  else if (
+    !rateSourceAllowed(form.rateSource, manual ? findManualStub() : provider) &&
+    !(
+      !manual &&
+      keepsStoredSource(form.rateSource, provider, storedRateSource, {
+        providerId: form.providerId,
+        storedProviderId,
+      })
+    )
+  )
     errors.rateSource = 'CARRIER_QUOTE_UNSUPPORTED';
   if (!manual && String(form.serviceCode ?? '').length > MAX_SERVICE_CODE)
     errors.serviceCode = 'TOO_LONG';

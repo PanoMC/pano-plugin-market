@@ -13,6 +13,8 @@ import {
   carrierBehavior,
   carrierBlocks,
   countrySummary,
+  hasHiddenRegions,
+  keepsStoredSource,
   isPostalPattern,
   isTrackingTemplate,
   methodServerErrors,
@@ -20,6 +22,7 @@ import {
   nextRowFrom,
   onlyManualCarrier,
   providerOptions,
+  rangeQuantum,
   rateErrorMap,
   rateSourceAllowed,
   regionsEditable,
@@ -45,8 +48,8 @@ const row = (rangeFrom, rangeTo, price = 5, perUnitPrice = 0) => ({
 const codes = (result) => result.errors.map((e) => e.code);
 
 describe('validateRates (test 24)', () => {
-  test('non overlapping ranges with a gap between them are valid', () => {
-    const result = validateRates([row(0, 1000), row(1000, 2000), row(2000, null)], 'WEIGHT');
+  test('adjacent ranges (to + quantum == next.from) are valid and carry no warning', () => {
+    const result = validateRates([row(0, 999), row(1000, 1999), row(2000, null)], 'WEIGHT');
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
     expect(result.warnings).toEqual([]);
@@ -68,14 +71,41 @@ describe('validateRates (test 24)', () => {
     expect(codes(validateRates([row(0, 100), row(0, 200)], 'QUANTITY'))).toEqual(['OVERLAP']);
   });
 
-  test('touching ranges (to == next.from) are accepted', () => {
+  test('a shared boundary value is an overlap (the server ranges are inclusive on both ends)', () => {
     const result = validateRates([row(0, 1000), row(1000, 2000)], 'WEIGHT');
-    expect(result.ok).toBe(true);
-    expect(result.warnings).toEqual([]);
+    expect(result.ok).toBe(false);
+    expect(result.errors).toEqual([{ row: 1, field: 'rangeFrom', code: 'OVERLAP' }]);
+    expect(codes(validateRates([row(0, 1000), row(1000, null)], 'QUANTITY'))).toEqual(['OVERLAP']);
   });
 
-  test('touching ranges typed out of order are accepted too', () => {
-    expect(validateRates([row(1000, 2000), row(0, 1000)], 'AMOUNT').ok).toBe(true);
+  test('adjacent ranges typed out of order are accepted too', () => {
+    expect(validateRates([row(1000, 2000), row(0, 999)], 'QUANTITY').ok).toBe(true);
+  });
+
+  test('AMOUNT ranges step by one minor unit of the currency', () => {
+    const q = rangeQuantum('AMOUNT', 2);
+    expect(q).toBe(0.01);
+    const ok = validateRates([row(0, 99.99), row(100, null)], 'AMOUNT', q);
+    expect(ok.ok).toBe(true);
+    expect(ok.warnings).toEqual([]);
+    expect(validateRates([row(0, 100), row(100, null)], 'AMOUNT', q).errors).toEqual([
+      { row: 1, field: 'rangeFrom', code: 'OVERLAP' },
+    ]);
+    // 0.1 + 0.2 style float noise must not read as a gap
+    expect(validateRates([row(0, 0.3), row(0.31, null)], 'AMOUNT', q).warnings).toEqual([]);
+    // a zero-decimal currency steps by 1, a three-decimal one by 0.001
+    expect(rangeQuantum('AMOUNT', 0)).toBe(1);
+    expect(rangeQuantum('AMOUNT', 3)).toBe(0.001);
+    expect(
+      validateRates([row(0, 99), row(100, null)], 'AMOUNT', rangeQuantum('AMOUNT', 0)).ok,
+    ).toBe(true);
+    expect(rangeQuantum('WEIGHT', 2)).toBe(1);
+    expect(rangeQuantum('QUANTITY')).toBe(1);
+  });
+
+  test('a single-value band (rangeTo == rangeFrom) is accepted like the server does', () => {
+    expect(validateRates([row(1000, 1000)], 'WEIGHT').ok).toBe(true);
+    expect(validateRates([row(1000, 1000), row(1001, null)], 'WEIGHT').ok).toBe(true);
   });
 
   test('a gap is reported as a warning, not an error', () => {
@@ -83,6 +113,8 @@ describe('validateRates (test 24)', () => {
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
     expect(result.warnings).toEqual([{ row: 0, next: 1, code: 'GAP', from: 1000, to: 2000 }]);
+    // one missing unit is already a gap (1000 is covered, 1001 is not)
+    expect(validateRates([row(0, 1000), row(1002, null)], 'WEIGHT').warnings).toHaveLength(1);
   });
 
   test('an open row that is not the last one is rejected', () => {
@@ -92,11 +124,11 @@ describe('validateRates (test 24)', () => {
   });
 
   test('an open last row is fine', () => {
-    expect(validateRates([row(0, 1000), row(1000, null)], 'WEIGHT').ok).toBe(true);
+    expect(validateRates([row(0, 999), row(1000, null)], 'WEIGHT').ok).toBe(true);
   });
 
-  test('rangeTo <= rangeFrom is rejected', () => {
-    expect(validateRates([row(1000, 1000)], 'WEIGHT').errors).toEqual([
+  test('rangeTo < rangeFrom is rejected', () => {
+    expect(validateRates([row(1000, 999)], 'WEIGHT').errors).toEqual([
       { row: 0, field: 'rangeTo', code: 'RANGE_ORDER' },
     ]);
     expect(codes(validateRates([row(1000, 500)], 'WEIGHT'))).toEqual(['RANGE_ORDER']);
@@ -199,11 +231,38 @@ describe('rate blocks', () => {
     });
   });
 
-  test('the next row starts where the last one ends', () => {
+  test('the next row starts one quantum after the last one ends (inclusive ranges)', () => {
     expect(nextRowFrom([])).toBe(0);
-    expect(nextRowFrom([row(0, 1000), row(1000, 2500)])).toBe(2500);
-    expect(nextRowFrom([row(1000, 2500), row(0, 1000)])).toBe(2500);
+    expect(nextRowFrom([row(0, 999), row(1000, 2500)])).toBe(2501);
+    expect(nextRowFrom([row(1000, 2500), row(0, 999)])).toBe(2501);
     expect(nextRowFrom([row(0, null)])).toBeNull();
+    expect(nextRowFrom([row(0, 99.99)], 0.01)).toBe(100);
+    expect(nextRowFrom([row(0, 0.29)], 0.01)).toBe(0.3);
+  });
+
+  test('the rows the editor builds by "Add Row" are accepted without edits', () => {
+    for (const [basis, quantum] of [
+      ['WEIGHT', 1],
+      ['QUANTITY', 1],
+      ['AMOUNT', 0.01],
+    ]) {
+      const rows = [{ ...row(0, 500), price: 3 }];
+      rows.push({ ...row(nextRowFrom(rows, quantum), 1500), price: 4 });
+      rows.push({ ...row(nextRowFrom(rows, quantum), null), price: 5 });
+      const result = validateRates(rows, basis, quantum);
+      expect(result.ok).toBe(true);
+      expect(result.warnings).toEqual([]);
+    }
+  });
+
+  test('validateBlocks derives the quantum from the basis and the currency exponent', () => {
+    const zones = [{ id: 1 }];
+    const amount = (rows) => ({ zoneId: 1, basis: 'AMOUNT', rows });
+    const check = (rows, exponent) => validateBlocks([amount(rows)], { zones, exponent }).byZone[1];
+    expect(check([row(0, 99.99), row(100, null)], 2).warnings).toEqual([]);
+    expect(check([row(0, 99), row(100, null)], 0).warnings).toEqual([]);
+    expect(check([row(0, 99), row(100, null)], 2).warnings).toHaveLength(1);
+    expect(check([row(0, 100), row(100, null)], 2).ok).toBe(false);
   });
 
   test('validateBlocks: rule sources need at least one zone, CARRIER needs a ticked zone', () => {
@@ -443,9 +502,60 @@ describe('zones', () => {
     });
   });
 
-  test('regions are dropped from the body when the region editor is hidden', () => {
+  test('stored regions survive while the region editor is hidden (more than five countries)', () => {
     const six = ['A1', 'B1', 'C1', 'D1', 'E1', 'F1'];
-    expect(buildZoneBody(form({ countries: six, regions: { A1: ['s'] } })).regions).toEqual([]);
+    const hidden = form({ countries: six, regions: { A1: ['s'], F1: [' t '], B1: [] } });
+    expect(regionsEditable(hidden)).toBe(false);
+    expect(buildZoneBody(hidden).regions).toEqual([
+      { country: 'A1', states: ['s'] },
+      { country: 'F1', states: ['t'] },
+    ]);
+    expect(hasHiddenRegions(hidden)).toBe(true);
+    expect(hasHiddenRegions(form({ countries: six, regions: { A1: [] } }))).toBe(false);
+    expect(hasHiddenRegions(form({ regions: { TR: ['x'] } }))).toBe(false);
+    expect(
+      hasHiddenRegions(form({ everywhere: true, countries: [], regions: { A1: ['s'] } })),
+    ).toBe(false);
+  });
+
+  test('regions go away only for de-selected countries and Everywhere Else', () => {
+    const six = ['A1', 'B1', 'C1', 'D1', 'E1', 'F1'];
+    const regions = { A1: ['s'], Z9: ['gone'] };
+    // Z9 is not selected any more
+    expect(buildZoneBody(form({ countries: six, regions })).regions).toEqual([
+      { country: 'A1', states: ['s'] },
+    ]);
+    // growing from five to six countries keeps the states typed for the first five
+    expect(buildZoneBody(form({ countries: six.slice(0, 5), regions })).regions).toEqual([
+      { country: 'A1', states: ['s'] },
+    ]);
+    expect(buildZoneBody(form({ everywhere: true, countries: six, regions })).regions).toEqual([]);
+  });
+
+  test('regions are validated whenever they are sent, with the server limits while hidden', () => {
+    const six = ['A1', 'B1', 'C1', 'D1', 'E1', 'F1'];
+    const tooLong = (n) => ({ A1: ['x'.repeat(n)] });
+    // editor shown: 64 characters
+    expect(validateZone(form({ countries: ['A1'], regions: tooLong(65) }), { zones }).regions).toBe(
+      'INVALID',
+    );
+    // editor hidden: stored states of 65 .. 100 characters stay saveable, 101 is a server error
+    expect(validateZone(form({ countries: six, regions: tooLong(65) }), { zones }).regions).toBe(
+      undefined,
+    );
+    expect(validateZone(form({ countries: six, regions: tooLong(101) }), { zones }).regions).toBe(
+      'INVALID',
+    );
+    expect(
+      validateZone(
+        form({ countries: six, regions: { A1: Array.from({ length: 201 }, (_, i) => `s${i}`) } }),
+        { zones },
+      ).regions,
+    ).toBe('TOO_MANY');
+    expect(
+      validateZone(form({ everywhere: true, countries: [], regions: tooLong(500) }), { zones })
+        .regions,
+    ).toBeUndefined();
   });
 
   test('a stored zone becomes a form and back', () => {
@@ -624,11 +734,76 @@ describe('methods', () => {
         provider: carriers[1],
       }),
     ).toEqual({});
+    // a carrier source chosen anew with a provider that is not in the list is refused
     expect(
       validateMethod(form({ providerId: 'yurtici', rateSource: 'CARRIER' }), { provider: null })
         .rateSource,
     ).toBe('CARRIER_QUOTE_UNSUPPORTED');
     expect(validateMethod(form({ rateSource: 'WHATEVER' })).rateSource).toBe('INVALID');
+  });
+
+  test('a stored carrier source stays saveable while its provider is unavailable (10 §5.1)', () => {
+    const stored = { storedRateSource: 'CARRIER', storedProviderId: 'yurtici' };
+    const method = form({ providerId: 'yurtici', rateSource: 'CARRIER' });
+    const gone = [
+      null,
+      { id: 'yurtici', state: 'UNAVAILABLE', config: { enabled: true } },
+      { id: 'yurtici', state: 'INCOMPATIBLE' },
+    ];
+    for (const provider of gone) {
+      expect(validateMethod(method, { provider, ...stored })).toEqual({});
+      expect(
+        validateMethod(
+          { ...method, rateSource: 'CARRIER_WITH_FALLBACK' },
+          {
+            provider,
+            storedRateSource: 'CARRIER_WITH_FALLBACK',
+            storedProviderId: 'yurtici',
+          },
+        ),
+      ).toEqual({});
+      // not stored: choosing the source newly is still refused
+      expect(validateMethod(method, { provider }).rateSource).toBe('CARRIER_QUOTE_UNSUPPORTED');
+      expect(validateMethod(method, { provider, storedRateSource: 'RULES' }).rateSource).toBe(
+        'CARRIER_QUOTE_UNSUPPORTED',
+      );
+    }
+    // a live provider that cannot quote is refused even when the value was stored
+    expect(validateMethod(method, { provider: carriers[3], ...stored }).rateSource).toBe(
+      'CARRIER_QUOTE_UNSUPPORTED',
+    );
+    expect(
+      validateMethod(method, {
+        provider: { id: 'yurtici', state: 'ACTIVE', capabilities: {} },
+        ...stored,
+      }).rateSource,
+    ).toBe('CARRIER_QUOTE_UNSUPPORTED');
+    // another provider chosen anew does not inherit the stored allowance
+    expect(
+      validateMethod(form({ providerId: 'other', rateSource: 'CARRIER' }), {
+        provider: null,
+        ...stored,
+      }).rateSource,
+    ).toBe('CARRIER_QUOTE_UNSUPPORTED');
+    // the manual provider never keeps a carrier source
+    expect(
+      validateMethod(form({ providerId: 'manual', rateSource: 'CARRIER' }), {
+        provider: null,
+        storedRateSource: 'CARRIER',
+        storedProviderId: 'manual',
+      }).rateSource,
+    ).toBe('CARRIER_QUOTE_UNSUPPORTED');
+  });
+
+  test('keepsStoredSource only applies to the stored value of a missing or unavailable provider', () => {
+    expect(keepsStoredSource('CARRIER', null, 'CARRIER')).toBe(true);
+    expect(keepsStoredSource('CARRIER', null, null)).toBe(false);
+    expect(keepsStoredSource('CARRIER', null, 'RULES')).toBe(false);
+    expect(keepsStoredSource('CARRIER', carriers[1], 'CARRIER')).toBe(false);
+    expect(keepsStoredSource('CARRIER', carriers[2], 'CARRIER')).toBe(true);
+    expect(
+      keepsStoredSource('CARRIER', null, 'CARRIER', { providerId: 'a', storedProviderId: 'b' }),
+    ).toBe(false);
   });
 
   test('choosing another provider clears the service and drops an unsupported rate source', () => {
