@@ -64,7 +64,7 @@ object ShippingPriceCalculator {
      * A free option has gross 0 and vat 0 and waives the handling fee. Otherwise the raw rate (inclusive of VAT as
      * [RawRate.includesTax] says) and the handling fee (as [pricesIncludeVat] says) are split at the method's VAT
      * rate (`vatBp`, else [configVatBp]) and added. When the order quantum is above 1 (zero-decimal currency or
-     * removed cents) the gross is rounded **up** to that quantum and the VAT recomputed as inclusive on it.
+     * removed cents) the gross is rounded **up** to that quantum and the VAT recomputed as inclusive on it, at that quantum (always, even when aligned).
      */
     fun compute(
         terms: ShippingTerms,
@@ -91,9 +91,10 @@ object ShippingPriceCalculator {
         var vat = Math.addExact(first.vat, second.vat)
         val q = conversions.oq
 
-        if (q > 1 && gross % q != 0L) {
+        if (q > 1) {
+            // Always recomputed on the quantum: an already aligned gross can still carry a quantum-1 VAT (05 section 9.1).
             gross = Math.multiplyExact(Math.floorDiv(gross + q - 1, q), q)
-            vat = Rounding.vatInside(gross, bp, 1)
+            vat = Rounding.vatInside(gross, bp, q)
         }
 
         return ShippingCharge(gross, vat, bp, false, carrierPart, handlingPart, raw.source)

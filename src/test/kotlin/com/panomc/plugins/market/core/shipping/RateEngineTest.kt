@@ -261,14 +261,39 @@ class RateEngineTest {
 
         val r = compute(rule(123_456, true, "JPY"), c = c, t = t)        // 1234.56 yen
         assertEquals(123_500, r.gross)
-        assertEquals(20_583, r.vat)                               // inside 1235 at 20 %, half up: 205.83 -> 20 583 (x100 scale)
+        assertEquals(20_600, r.vat)                               // inside 1235 at 20 % = 205.83 -> 206 yen, on the quantum
 
         val exact = compute(rule(120_000, true, "JPY"), c = c, t = t)
         assertEquals(120_000, exact.gross)
         assertEquals(20_000, exact.vat)
 
+        // aligned gross whose quantum-1 vat (4 545) is not aligned: 500 yen inside 10 % = 45.45 -> 45 yen
+        val aligned = compute(rule(50_000, true, "JPY"), ShippingTerms(null, 0, 1000), c = c, t = t)
+        assertEquals(50_000, aligned.gross)
+        assertEquals(4_500, aligned.vat)
+
         val removed = compute(rule(10_050, true, "EUR"), c = conv("EUR", "EUR", "1", removeCents = true), t = table("EUR", "EUR"))
         assertEquals(10_100, removed.gross)                       // removeCents is a quantum of 100 too
+    }
+
+    @Test
+    fun `vat is a multiple of the order quantum for every zero decimal gross`() {
+        val c = conv("JPY", "JPY", "1")
+        val t = table("JPY", "JPY", "1")
+        var seed = 20261007L
+
+        repeat(2_000) {
+            seed = (seed * 6364136223846793005L + 1442695040888963407L)
+            val amount = Math.floorMod(seed ushr 8, 1_000_000L)
+            val fee = Math.floorMod(seed ushr 28, 50_000L)
+            val inc = seed % 2 == 0L
+            val bp = Math.floorMod(seed ushr 40, 10_001L)
+            val r = compute(RawRate(amount, "JPY", inc, RateSource.CARRIER), ShippingTerms(null, fee, bp), includesVat = !inc, c = c, t = t)
+
+            assertEquals(0L, r.gross % 100)
+            assertEquals(0L, r.vat % 100)
+            assertTrue(r.vat in 0..r.gross)
+        }
     }
 
     @Test
