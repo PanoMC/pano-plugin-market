@@ -1,0 +1,9 @@
+name: PanoMarket
+main: com.panomc.plugins.market.mc.bungee.MarketBungeePlugin
+version: ${version}
+author: Pano MC
+description: In-game component of the Pano Market plugin. Delivers purchases and runs the store commands on the proxy.
+depends:
+  - Pano
+softDepends:
+  - LuckPerms

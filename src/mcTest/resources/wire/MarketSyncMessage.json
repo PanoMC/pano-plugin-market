@@ -1,0 +1,68 @@
+{
+  "accepted": true,
+  "marketVersion": "1.4.0",
+  "acked": [
+    "812:a1:4:0:GRANT:0"
+  ],
+  "deliveries": [
+    {
+      "key": "813:a2:4:0:GRANT:0",
+      "id": 9001,
+      "kind": "COMMAND",
+      "phase": "GRANT",
+      "player": {
+        "username": "Steve",
+        "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5"
+      },
+      "requiresOnline": true,
+      "expiresAt": 1790600000000,
+      "issuer": "market:order-813",
+      "commands": [
+        "give Steve diamond 3",
+        "say thanks {uuid}"
+      ],
+      "display": {
+        "productName": "Diamonds",
+        "orderPublicId": "ord-813",
+        "gift": true,
+        "from": "Alex"
+      }
+    },
+    {
+      "key": "815:a3:4:0:GRANT:0",
+      "id": 9002,
+      "kind": "PERMISSION",
+      "phase": "GRANT",
+      "player": {
+        "username": "Alex"
+      },
+      "requiresOnline": false,
+      "issuer": "market:order-815",
+      "commands": [],
+      "permission": {
+        "op": "ADD",
+        "nodes": [
+          "group.vip",
+          "essentials.fly"
+        ],
+        "expiresAt": 1793000000000
+      },
+      "display": {
+        "productName": "VIP",
+        "orderPublicId": "ord-815",
+        "gift": false
+      }
+    }
+  ],
+  "cancel": [
+    "790:a1:4:0:GRANT:0"
+  ],
+  "broadcasts": [
+    {
+      "id": 5512,
+      "text": "\u00a7aSteve \u00a77bought \u00a7fDiamonds"
+    }
+  ],
+  "configHash": "9f2c0a",
+  "pollAfterMs": 0
+}

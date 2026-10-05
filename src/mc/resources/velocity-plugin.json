@@ -1,0 +1,15 @@
+{
+  "id": "panomarket",
+  "name": "PanoMarket",
+  "version": "${version}",
+  "main": "com.panomc.plugins.market.mc.velocity.MarketVelocityPlugin",
+  "description": "In-game component of the Pano Market plugin: delivers purchases and runs the store commands on the proxy.",
+  "authors": [
+    "Pano"
+  ],
+  "url": "https://panomc.com",
+  "dependencies": [
+    { "id": "pano", "optional": false },
+    { "id": "luckperms", "optional": true }
+  ]
+}

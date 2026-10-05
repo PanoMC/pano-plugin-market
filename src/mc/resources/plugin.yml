@@ -1,0 +1,10 @@
+name: PanoMarket
+main: com.panomc.plugins.market.mc.spigot.MarketSpigotPlugin
+version: ${version}
+author: Pano MC
+description: In-game component of the Pano Market plugin. Delivers purchases, runs the store commands and the credit features.
+website: https://panomc.com
+api-version: '1.13'
+folia-supported: true
+depend: [ Pano ]
+softdepend: [ LuckPerms, Vault, PlaceholderAPI, AuthMe, FastLogin, PremiumLogin ]

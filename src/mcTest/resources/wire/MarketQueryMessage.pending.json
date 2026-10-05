@@ -1,0 +1,17 @@
+{
+  "accepted": true,
+  "data": {
+    "deliveriesQueued": 2,
+    "gifts": [
+      {
+        "from": "Alex",
+        "productName": "VIP",
+        "orderPublicId": "ord-815"
+      },
+      {
+        "productName": "Cape",
+        "orderPublicId": "ord-816"
+      }
+    ]
+  }
+}

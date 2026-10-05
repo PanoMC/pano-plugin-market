@@ -1,0 +1,43 @@
+{
+  "accepted": true,
+  "data": {
+    "categories": [
+      {
+        "id": 1,
+        "name": "Ranks",
+        "icon": "crown"
+      },
+      {
+        "id": 2,
+        "name": "Items"
+      }
+    ],
+    "products": [
+      {
+        "id": 10,
+        "name": "Diamonds",
+        "shortDescription": "Shiny",
+        "creditPrice": 50.0,
+        "price": 4.99,
+        "currency": "USD",
+        "stockLeft": 7,
+        "icon": "diamond",
+        "purchasable": {
+          "ok": true
+        },
+        "needsWeb": false
+      },
+      {
+        "id": 11,
+        "name": "Cape",
+        "purchasable": {
+          "ok": false,
+          "reason": "COOLDOWN_ACTIVE"
+        },
+        "needsWeb": true
+      }
+    ],
+    "page": 1,
+    "totalPage": 3
+  }
+}

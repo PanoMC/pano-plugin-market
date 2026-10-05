@@ -1,0 +1,49 @@
+{
+  "event": "MARKET_SYNC",
+  "eventId": "0b8c0f4e-6f0a-4a39-9d52-3c1d2a7e5b10",
+  "componentVersion": "1.4.0",
+  "protocol": 1,
+  "platform": "PAPER",
+  "luckPerms": true,
+  "vault": false,
+  "placeholderApi": true,
+  "queued": 3,
+  "capacity": 20,
+  "configHash": "9f2c0a",
+  "results": [
+    {
+      "key": "812:a1:4:0:GRANT:0",
+      "status": "DONE",
+      "executedAt": 1790000000000,
+      "commands": [
+        {
+          "index": 0,
+          "ok": true
+        }
+      ]
+    },
+    {
+      "key": "813:a1:4:0:GRANT:0",
+      "status": "FAILED",
+      "code": "COMMAND_ERROR",
+      "message": "1 of 2 commands failed",
+      "executedAt": 1790000001000,
+      "commands": [
+        {
+          "index": 0,
+          "ok": true
+        },
+        {
+          "index": 1,
+          "ok": false,
+          "error": "Unknown command"
+        }
+      ]
+    },
+    {
+      "key": "814:a1:4:0:GRANT:0",
+      "status": "QUEUED",
+      "commands": []
+    }
+  ]
+}

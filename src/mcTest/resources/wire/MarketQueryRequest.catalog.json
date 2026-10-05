@@ -1,0 +1,12 @@
+{
+  "event": "MARKET_QUERY",
+  "eventId": "0b8c0f4e-6f0a-4a39-9d52-3c1d2a7e5b10",
+  "componentVersion": "1.4.0",
+  "protocol": 1,
+  "type": "CATALOG",
+  "player": {
+    "username": "Steve",
+    "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5"
+  },
+  "page": 2
+}

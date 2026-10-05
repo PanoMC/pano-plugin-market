@@ -1,0 +1,12 @@
+{
+  "event": "MARKET_ECONOMY",
+  "eventId": "0b8c0f4e-6f0a-4a39-9d52-3c1d2a7e5b10",
+  "componentVersion": "1.4.0",
+  "protocol": 1,
+  "operationId": "4d2a9c1e-0000-4000-8000-000000000006",
+  "op": "BALANCE",
+  "player": {
+    "username": "Steve",
+    "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5"
+  }
+}
