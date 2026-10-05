@@ -119,24 +119,44 @@ val mcVelocity: SourceSet by sourceSets.creating
 val mcTest: SourceSet by sourceSets.creating
 
 // pano-mc-plugin Core (pano-core-<version>.jar), resolved like the platform artifact (15 section 2.1): an explicit jar
-// (-PpanoCoreJar / PANO_CORE_JAR) wins, then -- in an embedded (bootstrap) dev build only -- the Core jar built in the
-// umbrella checkout (<umbrella>/pano-mc-plugin/Core/build/libs), then the Ivy pattern on the pano-mc-plugin release asset.
+// (-PpanoCoreJar / PANO_CORE_JAR) wins, then the Core jar built in the umbrella checkout
+// (<umbrella>/pano-mc-plugin/Core/build/libs, found by walking up from the project directory, so an embedded build, a
+// standalone checkout and a stream worktree all find it without any flag), then the Ivy pattern on the pano-mc-plugin
+// release asset as the last resort.
 fun findUmbrellaCoreJar(): File? {
-    var dir: File? = rootProject.projectDir
-    repeat(4) {
-        val libs = File(dir ?: return null, "pano-mc-plugin/Core/build/libs")
-        val jar = libs.listFiles { f -> f.isFile && f.name.startsWith("pano-core-") && f.name.endsWith(".jar") }
-            ?.maxByOrNull { it.lastModified() }
-        if (jar != null) return jar
-        dir = dir?.parentFile
+    val starts = listOf(projectDir, rootProject.projectDir).distinct()
+    for (start in starts) {
+        var dir: File? = start
+        for (i in 0 until 7) {
+            val libs = File(dir ?: break, "pano-mc-plugin/Core/build/libs")
+            val jar = libs.listFiles { f -> f.isFile && f.name.startsWith("pano-core-") && f.name.endsWith(".jar") }
+                ?.maxByOrNull { it.lastModified() }
+            if (jar != null) return jar
+            dir = dir?.parentFile
+        }
     }
     return null
 }
 
 val resolvedCoreJar: File? = when {
     !panoCoreJar.isNullOrBlank() -> File(panoCoreJar)
-    bootstrap -> findUmbrellaCoreJar()
-    else -> null
+    else -> findUmbrellaCoreJar()
+}
+
+// The release that panoMcVersion pins has to carry the pano-core asset. 1.0.0-alpha.66 does not (the asset is attached
+// by a later release, REL-03); resolving it through Ivy can only fail, so say so instead of a bare 404.
+val coreReleasesWithoutAsset = setOf("1.0.0-alpha.66")
+val checkCoreSource by tasks.registering {
+    val usesIvy = resolvedCoreJar == null
+    val pin = panoMcVersion
+    doLast {
+        if (usesIvy && pin in coreReleasesWithoutAsset) {
+            throw GradleException(
+                "pano-core $pin has no release asset and no local Core jar was found: build it in pano-mc-plugin " +
+                    "(./gradlew :Core:build) or pass -PpanoCoreJar=<path to pano-core-*.jar> (or PANO_CORE_JAR)."
+            )
+        }
+    }
 }
 
 if (resolvedCoreJar == null) {
@@ -289,6 +309,7 @@ fun configureMcJvm(set: SourceSet, jdk: Int, release11: Boolean) {
 configureMcJvm(mc, 11, true)
 configureMcJvm(mcVelocity, 17, false)
 configureMcJvm(mcTest, 17, false)
+tasks.named("compileMcKotlin") { dependsOn(checkCoreSource) }
 
 // Descriptors at the jar root get the plugin version (same mechanism as pano-plugin-premium-login).
 tasks.named<ProcessResources>("processMcResources") {
