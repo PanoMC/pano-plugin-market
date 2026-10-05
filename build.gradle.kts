@@ -387,6 +387,10 @@ val dbTest by tasks.registering(Test::class) {
     classpath = sourceSets.test.get().runtimeClasspath
     useJUnitPlatform { includeTags("db") }
     maxParallelForks = 1
+    // The gate lives in doFirst and in the TEST-SUMMARY listener; the database is not a task input, so a green run
+    // must never be replayed as UP-TO-DATE or FROM-CACHE (17 section 3.2).
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
     doFirst {
         require(!System.getenv("PANO_IT_MARIADB").isNullOrBlank()) {
             "dbTest needs PANO_IT_MARIADB=host:port and PANO_IT_MARIADB_PASSWORD"
@@ -401,6 +405,8 @@ val e2eTest by tasks.registering(Test::class) {
     classpath = sourceSets.test.get().runtimeClasspath
     useJUnitPlatform { includeTags("e2e") }
     maxParallelForks = 1
+    outputs.upToDateWhen { false } // same reason as dbTest: the instance and the database are not task inputs
+    outputs.cacheIf { false }
     dependsOn("fakeProviderJar")
     systemProperty("market.e2e.fakeJar", layout.buildDirectory.file("fake/pano-plugin-market-fake-$version.jar").get().asFile.absolutePath)
     doFirst {
