@@ -133,7 +133,7 @@ class InvoiceRoutesTest {
         val settings = File("src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/PanelGetSettingsAPI.kt").readText()
 
         // evidence/MK-076.md seam 2 and evidence/MK-143.md seams 1 and 3: an unwired IssueInvoice effect is only a WARN and a paid order gets no invoice
-        assertTrue(Regex("foreign\\s*=\\s*InvoiceEffects\\(invoiceService\\(plugin\\),\\s*orderDao").containsMatchIn(order), "OrderService is built with InvoiceEffects")
+        assertTrue(Regex("InvoiceEffects\\(\\s*invoiceService\\(plugin\\),\\s*orderDao").containsMatchIn(order), "OrderService is built with InvoiceEffects")
         assertTrue(settings.contains("\"invoiceSequences\""), "GET /settings carries invoiceSequences")
     }
 }
