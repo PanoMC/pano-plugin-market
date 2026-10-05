@@ -44,7 +44,8 @@ abstract class E2eTestBase {
 
     // --- actors --------------------------------------------------------------------------------------------------------
 
-    protected fun buyer(): E2eBuyer = session.newBuyer(tag)
+    /** A registered buyer; [canPay] puts it into the `e2e-payer` group (the PAY node: test-mode methods usable), `false` leaves an ordinary user. */
+    protected fun buyer(canPay: Boolean = true): E2eBuyer = session.newBuyer(tag, canPay)
 
     /** A visitor with no session (a guest checkout, a public read). */
     protected fun visitor(label: String = "visitor"): E2eClient = E2eClient(baseUrl, label)

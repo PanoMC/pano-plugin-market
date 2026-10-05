@@ -3,6 +3,7 @@ package com.panomc.plugins.market.e2e.support
 import com.panomc.plugins.market.support.Await
 import com.panomc.plugins.market.support.FakePayGateway
 import com.panomc.plugins.market.support.InvariantChecker
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicInteger
@@ -21,6 +22,7 @@ class E2eSession private constructor(val env: E2eEnv) {
     val catalog = E2eCatalog(admin, db)
 
     private val buyerSeq = AtomicInteger()
+    private val permissionLock = Any()
     private val runTag = System.currentTimeMillis().toString(36).takeLast(4)
 
     /**
@@ -38,10 +40,11 @@ class E2eSession private constructor(val env: E2eEnv) {
         admin.multipart("PUT", "/api/panel/settings", mapOf("requireEmailVerification" to "false")).ok()
 
         // 2b. 06 section 6.7 "Test mode": a method in test mode is usable only by a session holding SET, PAY or the umbrella node, and never by a guest.
-        // The instance runs in test mode (the fake provider is ineligible otherwise, 17 section 6.1), so every buyer would be refused with TEST_MODE.
-        // The harness therefore gives the `default` permission group the PAY node (the isolated instance only): registered buyers can pay through
-        // the fake provider, guests still cannot (CheckoutE2E asserts that refusal).
-        grantPayNodeToDefaultGroup()
+        // The instance runs in test mode (the fake provider is ineligible otherwise, 17 section 6.1), so a buyer without the node is refused with
+        // TEST_MODE. The harness keeps the `default` group untouched (every registered user of the instance is in it) and gives the PAY node to a
+        // dedicated group, `e2e-payer`, that a buyer joins on request: `newBuyer(tag, canPay = true)` (the default) adds it, `canPay = false` leaves a
+        // buyer who is refused (CheckoutE2E asserts that refusal, and guests are refused as well).
+        prepareTestModePayerGroup()
 
         // 3. market settings (17 section 8.2 step 3)
         admin.post(
@@ -76,20 +79,51 @@ class E2eSession private constructor(val env: E2eEnv) {
         catalog.seed()
     }
 
-    private fun grantPayNodeToDefaultGroup() {
+    /**
+     * Creates the group [PAYER_GROUP] holding [PAY_NODE] and, for an instance database kept from an earlier run of this harness (`--keep`), takes the
+     * PAY node away from `default` again. The snapshot route replaces the whole permission grid, so the current snapshot is read and written back.
+     */
+    private fun prepareTestModePayerGroup(): Unit = synchronized(permissionLock) {
         val snapshot = admin.get("/api/panel/permission/snapshot").ok().obj()
-        val nodes = snapshot.getJsonArray("nodes") ?: io.vertx.core.json.JsonArray()
-        val group = snapshot.getJsonArray("groups").map { it as JsonObject }.first { it.getString("name") == "default" }
-        val already = nodes.map { it as JsonObject }.any { it.getString("holderName") == "default" && it.getString("node") == PAY_NODE && it.getBoolean("active", true) }
+        val groups = snapshot.getJsonArray("groups") ?: JsonArray()
+        val nodes = (snapshot.getJsonArray("nodes") ?: JsonArray()).map { it as JsonObject }.toMutableList()
 
-        if (already) return
+        val leftover = nodes.removeAll { it.getString("holderType") == "GROUP" && it.getString("holderName") == "default" && it.getString("node") == PAY_NODE }
+        val hasGroup = groups.map { it as JsonObject }.any { it.getString("name") == PAYER_GROUP }
+        val hasNode = nodes.any { it.getString("holderType") == "GROUP" && it.getString("holderName") == PAYER_GROUP && it.getString("node") == PAY_NODE && it.getBoolean("active", true) }
 
-        nodes.add(JsonObject().put("holderType", "GROUP").put("holderId", group.getLong("id")).put("holderName", "default").put("node", PAY_NODE).put("active", true).put("context", JsonObject()))
-        admin.post("/api/panel/permission/snapshot", JsonObject().put("groups", snapshot.getJsonArray("groups")).put("tracks", snapshot.getJsonArray("tracks") ?: io.vertx.core.json.JsonArray()).put("nodes", nodes)).ok()
+        if (!leftover && hasGroup && hasNode) return
+
+        if (!hasGroup) groups.add(JsonObject().put("name", PAYER_GROUP).put("displayName", PAYER_GROUP))
+        if (!hasNode) nodes.add(JsonObject().put("holderType", "GROUP").put("holderId", -1).put("holderName", PAYER_GROUP).put("node", PAY_NODE).put("active", true).put("context", JsonObject()))
+        saveSnapshot(snapshot, groups, nodes)
     }
 
-    /** A buyer of its own: `POST /api/auth/register` (the session comes with the answer), named `e2e<tag>_<n>` (at most 16 characters). */
-    fun newBuyer(tag: String): E2eBuyer {
+    /** Puts [userId] into [PAYER_GROUP] (the group node `group.e2e-payer` of the user, read-modify-write of the whole snapshot under a lock). */
+    private fun addToPayerGroup(userId: Long): Unit = synchronized(permissionLock) {
+        val snapshot = admin.get("/api/panel/permission/snapshot").ok().obj()
+        val nodes = (snapshot.getJsonArray("nodes") ?: JsonArray()).map { it as JsonObject }.toMutableList()
+        val membership = "group.$PAYER_GROUP"
+
+        if (nodes.any { it.getString("holderType") == "USER" && it.getLong("holderId") == userId && it.getString("node") == membership }) return
+
+        nodes.add(JsonObject().put("holderType", "USER").put("holderId", userId).put("node", membership).put("active", true).put("context", JsonObject()))
+        saveSnapshot(snapshot, snapshot.getJsonArray("groups") ?: JsonArray(), nodes)
+    }
+
+    private fun saveSnapshot(snapshot: JsonObject, groups: JsonArray, nodes: List<JsonObject>) {
+        admin.post(
+            "/api/panel/permission/snapshot",
+            JsonObject().put("groups", groups).put("tracks", snapshot.getJsonArray("tracks") ?: JsonArray()).put("nodes", JsonArray(nodes))
+        ).ok()
+    }
+
+    /**
+     * A buyer of its own: `POST /api/auth/register` (the session comes with the answer), named `e2e<tag>_<n>` (at most 16 characters). With [canPay]
+     * the buyer is put into the `e2e-payer` group, so the test-mode fake provider is usable (06 section 6.7); without it the buyer is an ordinary
+     * registered user whom a test-mode method refuses with `TEST_MODE`.
+     */
+    fun newBuyer(tag: String, canPay: Boolean = true): E2eBuyer {
         val n = buyerSeq.incrementAndGet()
         val username = "e2e${tag.take(4)}${runTag}_$n".take(16)
         val client = E2eClient(env.url, username)
@@ -99,6 +133,7 @@ class E2eSession private constructor(val env: E2eEnv) {
         client.csrfToken = answer.json?.getString("csrfToken") ?: error("register answered without a session (requireEmailVerification still on?)")
         client.username = username
         client.userId = db.long("SELECT `id` FROM `pano_user` WHERE `username` = ?", username)
+        if (canPay) addToPayerGroup(client.userId ?: error("no user id for $username"))
         return E2eBuyer(client, username)
     }
 
@@ -133,6 +168,8 @@ class E2eSession private constructor(val env: E2eEnv) {
     companion object {
         const val PASSWORD = "E2e-Buyer-Passw0rd!"
         /** `ManageMarketPaymentsPermission` as the platform names a plugin panel permission: `pano.plugin.<plugin id>.<key with dots>`. */
+        /** The group that holds [PAY_NODE]; a buyer is in it only when the scenario asks for a paying buyer. */
+        const val PAYER_GROUP = "e2e-payer"
         const val PAY_NODE = "pano.plugin.pano-plugin-market.manage.market.payments"
 
         @Volatile

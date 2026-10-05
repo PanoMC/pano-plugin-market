@@ -72,6 +72,21 @@ class CheckoutE2E : E2eTestBase() {
     }
 
     @Test
+    fun `P-02c registered buyer without the PAY node is refused in test mode`() {
+        val vip = catalog.fresh("VIP")
+        val plain = buyer(canPay = false)
+
+        val refused = checkout(plain.client, cart(line(vip.id)))
+        assertEquals(400, refused.status)
+        assertEquals("PAYMENT_METHOD_UNAVAILABLE", refused.error)
+        assertEquals("TEST_MODE", refused.json!!.getString("reason"))
+        assertEquals(0L, db.count("market_order", "`userId` = ?", plain.userId), "the refused checkout created no order")
+
+        // a buyer of the paying group buys the same product: the refusal was the missing node, nothing else
+        checkout(buyer().client, cart(line(vip.id))).ok()
+    }
+
+    @Test
     fun `P-03 guest checkout disabled`() {
         val vip = catalog.fresh("VIP")
 

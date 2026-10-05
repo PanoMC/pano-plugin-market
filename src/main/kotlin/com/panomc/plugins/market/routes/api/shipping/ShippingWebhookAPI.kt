@@ -4,6 +4,7 @@ import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.model.Path
 import com.panomc.platform.model.Result
 import com.panomc.platform.model.RouteType
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.shipping.TrackingSource
 import com.panomc.plugins.market.core.time.Backoff
@@ -436,7 +437,7 @@ private var cachedShippingDispatcher: Pair<MarketPlugin, ShippingInboundDispatch
 internal fun shippingInboundDispatcher(plugin: MarketPlugin): ShippingInboundDispatcher {
     cachedShippingDispatcher?.takeIf { it.first === plugin }?.let { return it.second }
 
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager = { context.getBean(com.panomc.platform.db.DatabaseManager::class.java) }
     val built = ShippingInboundDispatcher(
         inboundEventStore(plugin), context.getBean(MarketShippingCarrierDao::class.java), shippingService(plugin), { databaseManager().getSqlClient() }, SystemClock, SecureIds()
