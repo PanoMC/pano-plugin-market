@@ -153,6 +153,21 @@ fun interface PurchaseLimitCheck {
     }
 }
 
+/** What decides the fate of the money of a duplicate payment (00 section 7.2): the `autoRefundDuplicatePayments` switch and the refund support of the provider. */
+class DuplicateRefundRule(val autoRefund: Boolean, val providerCanRefund: Boolean)
+
+/**
+ * The [DuplicateRefundRule] of a payment provider, for the duplicates an accepted review finds (the payment service asks the same two questions for a
+ * duplicate that arrives on a paid order). [ALERT_ONLY] (the default of an `OrderService`) never requests a refund: the timeline note and the panel alert say so.
+ */
+fun interface DuplicateRefundPolicy {
+    suspend fun rule(conn: SqlConnection, providerId: String): DuplicateRefundRule
+
+    companion object {
+        val ALERT_ONLY = DuplicateRefundPolicy { _, _ -> DuplicateRefundRule(autoRefund = false, providerCanRefund = false) }
+    }
+}
+
 /**
  * [PurchaseLimitCheck] on `limitPerPlayer`: what the recipient holds or has on hold ([MarketOrderDao.usageByProduct]; the released order itself is
  * not counted) plus this order's own units must stay within the limit of every product that has one. A `TIMED` product the recipient already owns
@@ -302,7 +317,9 @@ class OrderService(
      * Where a system refund (`origin = SYSTEM`: rejected review with money received, duplicate payment) is requested; `null` for a service that has
      * no refund table behind it: a review rejection with `refund = true` then fails (and rolls back), a duplicate payment only raises the alert.
      */
-    private val refunds: MarketRefundDao? = null
+    private val refunds: MarketRefundDao? = null,
+    /** How the second paying attempt of an accepted review is treated (refund or alert); the default only alerts. */
+    private val duplicates: DuplicateRefundPolicy = DuplicateRefundPolicy.ALERT_ONLY
 ) {
     private fun table(name: String) = "`${orders.prefix()}$name`"
 
@@ -554,7 +571,11 @@ class OrderService(
                 is OrderEffect.StampPaid -> {
                     stampPaid(conn, order, effect)
 
-                    if (event is OrderEvent.ReviewAccepted) settleReviewedAttempt(conn, order, now)
+                    if (event is OrderEvent.ReviewAccepted) {
+                        // every other attempt that brought money is a second payment of a paid order from here on: flagged first, so the order's own attempt can be settled
+                        flagOtherPayingAttempts(conn, order, now, after)
+                        settleReviewedAttempt(conn, order, now)
+                    }
                 }
 
                 is OrderEffect.ClearExpiry -> updateOrder(conn, order.id, linkedMapOf("expiresAt" to null))
@@ -606,8 +627,9 @@ class OrderService(
 
                     check(reservationsOrThrow().reReserve(conn, locked, effect.force)) { "order ${order.id} was not RELEASED when its re-reserve ran" }
 
-                    // the hold went back with the stock (06 section 7.3): it is placed again before anything is captured
-                    if (order.creditAmount > 0) {
+                    // the hold went back with the stock (06 section 7.3): it is placed again before anything is captured. An AMOUNT_MISMATCH accept
+                    // re-tenders to the paid attempt's credit part (RewriteTender holds exactly that), so the superseded part is never held
+                    if (order.creditAmount > 0 && decision.effects.none { it is OrderEffect.RewriteTender }) {
                         settlement.rehold(conn, order, order.creditAmount)
 
                         creditsHeld = true
@@ -658,9 +680,15 @@ class OrderService(
         val attempt = checkNotNull(payments.getById(attemptId, conn)) { "order ${order.id}: paid attempt $attemptId is gone" }
         var holding = held
 
-        if (attempt.creditAmount != order.creditAmount) {
-            if (held) settlement.retender(conn, order, attempt.creditAmount)
-            else if (attempt.creditAmount > 0) settlement.rehold(conn, order, attempt.creditAmount)
+        if (held) {
+            if (attempt.creditAmount != order.creditAmount) {
+                settlement.retender(conn, order, attempt.creditAmount)
+
+                holding = attempt.creditAmount > 0
+            }
+        } else {
+            // nothing is held (a released order, or an order without a credit part): the paid attempt's part is held fresh, also when it equals the order's old part
+            if (attempt.creditAmount > 0) settlement.rehold(conn, order, attempt.creditAmount)
 
             holding = attempt.creditAmount > 0
         }
@@ -689,6 +717,35 @@ class OrderService(
     }
 
     private class Tender(val order: MarketOrder, val creditsHeld: Boolean)
+
+    /**
+     * O4 with several paying attempts (00 section 7.2): while the order sat in `REVIEW` every attempt that brought money was recorded on it. The
+     * accept makes the order's own attempt (`paymentId`) the payment of the order; each other attempt with money (`SUCCEEDED` or `REVIEW`) is a second
+     * paid attempt on a paid order from now on: flagged `duplicate = 1` and handled like any duplicate (a `SYSTEM` refund request, or a timeline note
+     * and a panel alert). The order's `paidAmount` is then the own attempt's money, not the sum.
+     */
+    private suspend fun flagOtherPayingAttempts(conn: SqlConnection, order: MarketOrder, now: Long, after: MutableList<AfterCommit>) {
+        val ownId = order.paymentId ?: return
+        val own = payments.getById(ownId, conn) ?: return
+        val others = payments.getByOrderId(order.id, conn).filter {
+            it.id != ownId && (it.paidAmount ?: 0L) > 0 && !it.duplicate && (it.status == PaymentStatus.SUCCEEDED || it.status == PaymentStatus.REVIEW)
+        }
+
+        if (others.isEmpty()) return
+
+        for (other in others) {
+            val rows = conn.preparedQuery("UPDATE ${table("market_payment")} SET `duplicate` = 1, `updatedAt` = ? WHERE `id` = ? AND `duplicate` = 0")
+                .execute(Tuple.of(now, other.id)).coAwait().rowCount()
+
+            if (rows != 1) continue
+
+            val rule = duplicates.rule(conn, other.providerId)
+
+            onDuplicatePayment(conn, order.id, other.id, rule.autoRefund, rule.providerCanRefund, after)
+        }
+
+        if ((own.paidAmount ?: 0L) > 0) updateOrder(conn, order.id, linkedMapOf("paidAmount" to own.paidAmount))
+    }
 
     /**
      * O4: the human accepted the money of the attempt that went to `REVIEW` (underpaid, overpaid, wrong currency, ...) as the payment of the order, so

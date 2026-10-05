@@ -140,7 +140,8 @@ class OrderReviewIT : MarketDaoITBase() {
             rates = { sqlClient -> w.currencyRates.getAll(sqlClient).filter { it.rate.signum() > 0 }.associate { it.currency to it.rate } },
             statsCurrency = { ph.statsCurrency },
             limits = ProductPurchaseLimits(w.orders, w.products, w.entitlements, w.clock),
-            refunds = if (withRefundTable) w.refunds else null
+            refunds = if (withRefundTable) w.refunds else null,
+            duplicates = DuplicateRefundPolicy { conn, providerId -> payments.duplicateRefundRule(conn, providerId) }
         )
         payments = PaymentService(
             db = ph.db, locks = ph.locks, clock = w.clock, ids = w.ids, config = { config() }, orders = w.orders, orderItems = w.orderItems, orderEvents = w.orderEvents,
@@ -773,6 +774,89 @@ class OrderReviewIT : MarketDaoITBase() {
         assertTrue(ph.ledger.captures.contains(order.id))
     }
 
+    /**
+     * A released AMOUNT_MISMATCH review: the buyer raised the credit part to 8 000 through /pay, the order expired (the hold went back), the old attempt
+     * (credit part [oldCredits]) is paid late, and the buyer spends credits elsewhere until the balance is below the new part but not below the old one.
+     */
+    private suspend fun releasedMismatch(oldCredits: Long): Triple<TestUser, MarketOrder, MarketPayment> {
+        h.config = h.config.copy(allowMixedCreditPayment = true)
+
+        val (alex, caller) = user("Alex", credit = 10_000)
+
+        fx.paymentMethod("fake")
+
+        val product = fx.product(price = 10_000, stock = 5)
+
+        if (oldCredits > 0) buy(product, "fake", 1, caller, "useCredits" to oldCredits / 100) else buy(product, "fake", 1, caller)
+
+        val first = ph.order(sql("SELECT `id` FROM `pano_market_order`").single().getLong("id"))
+        val old = attempts(first.id).single()
+
+        assertEquals(oldCredits, first.creditAmount)
+        assertEquals(oldCredits, old.creditAmount)
+
+        pay(first, credits = 8_000)
+
+        val raised = order(first.id)
+
+        assertEquals(8_000, raised.creditAmount, "the buyer raised the credit part")
+        assertEquals(2_000, fx.creditBalance(alex), "the larger part is on hold")
+
+        expire(first.id)
+
+        assertEquals(10_000, fx.creditBalance(alex), "the expiry released the hold")
+
+        succeed(first.id, old)
+
+        val review = order(first.id)
+
+        assertEquals(OrderStatus.REVIEW, review.status)
+        assertEquals("AMOUNT_MISMATCH", review.reviewReason)
+        assertEquals(ReservationState.RELEASED, review.reservationState)
+        assertEquals(old.id, review.paymentId)
+
+        // the credits are spent elsewhere: 3 000 are left, more than the old attempt needs, less than the superseded 8 000
+        spend(fx.product(price = 7_000, creditPrice = 7_000, stock = 5), caller)
+
+        assertEquals(3_000, fx.creditBalance(alex))
+
+        return Triple(alex, review, old)
+    }
+
+    @Test
+    fun `a released AMOUNT_MISMATCH accept holds exactly the paid attempt's credit part, not the superseded one`(): Unit = runBlocking {
+        val (alex, review, old) = releasedMismatch(oldCredits = 2_000)
+
+        accept(review.id)
+
+        val done = order(review.id)
+
+        assertEquals(OrderStatus.COMPLETED, done.status)
+        assertEquals(2_000, done.creditAmount)
+        assertEquals(old.amount, done.gatewayAmount)
+        assertEquals(ReservationState.COMMITTED, done.reservationState)
+        assertEquals(listOf(review.id to 2_000L), settlement.reholds, "the credits were held once, for the paid attempt's part only")
+        assertEquals(1, ph.ledger.captures.count { it == review.id }, "and captured once (the other capture is the credit purchase of the set-up)")
+        assertEquals(1_000, fx.creditBalance(alex), "3 000 minus the 2 000 the paid attempt committed to")
+        assertEquals(1, timeline(review.id).count { it.message == OrderService.TENDER_REWRITTEN_NOTE })
+    }
+
+    @Test
+    fun `a released AMOUNT_MISMATCH whose paid attempt has no credit part is accepted without any credit hold`(): Unit = runBlocking {
+        val (alex, review, old) = releasedMismatch(oldCredits = 0)
+
+        accept(review.id)
+
+        val done = order(review.id)
+
+        assertEquals(OrderStatus.COMPLETED, done.status)
+        assertEquals(0, done.creditAmount)
+        assertEquals(old.amount, done.gatewayAmount)
+        assertTrue(settlement.reholds.isEmpty(), "no credit part, no hold")
+        assertTrue(ph.ledger.captures.none { it == review.id })
+        assertEquals(3_000, fx.creditBalance(alex), "the buyer's balance is untouched")
+    }
+
     // ============================================================================== F-14 duplicate payment
 
     private suspend fun duplicatePair(): Triple<MarketOrder, MarketPayment, MarketPayment> {
@@ -868,6 +952,122 @@ class OrderReviewIT : MarketDaoITBase() {
 
         assertEquals(1, refunds(order.id).size)
         assertEquals(1, timeline(order.id).count { it.type == OrderEventType.REFUND_REQUESTED })
+    }
+
+    // ============================================================ several paying attempts on one review
+
+    /** An order in review whose own attempt (the first to bring money) was underpaid, with a second attempt that brought [secondPaid] (`null` = its full amount). */
+    private suspend fun twoPayingAttempts(secondPaid: Long?): Triple<MarketOrder, MarketPayment, MarketPayment> {
+        fx.paymentMethod("fake")
+
+        val order = orderOf(buy(fx.product(price = 1000, stock = 5)))
+        val first = attempts(order.id).single()
+
+        pay(order)
+
+        val second = attempts(order.id).last()
+
+        succeed(order.id, second, 999)
+        succeed(order.id, first, secondPaid ?: first.amount)
+
+        val review = order(order.id)
+
+        assertEquals(OrderStatus.REVIEW, review.status)
+        assertEquals(second.id, review.paymentId, "the first attempt that brought money is the order's own")
+        assertEquals(999 + (secondPaid ?: first.amount), review.paidAmount, "the review recorded both amounts")
+
+        return Triple(review, second, first)
+    }
+
+    @Test
+    fun `accepting a review with two paying attempts flags the other one duplicate, refunds it and keeps only the own attempt's money`(): Unit = runBlocking {
+        fake.caps = fake.caps.also { it.refund = RefundSupport.PARTIAL }
+
+        val (review, own, other) = twoPayingAttempts(secondPaid = null)
+
+        assertEquals(PaymentStatus.SUCCEEDED, attempts(review.id).first { it.id == other.id }.status)
+
+        accept(review.id)
+
+        val done = order(review.id)
+        val rows = attempts(review.id)
+
+        assertEquals(OrderStatus.COMPLETED, done.status)
+        assertEquals(own.id, done.paymentId)
+        assertEquals(999, done.paidAmount, "the accepted attempt's money, not the sum")
+        assertEquals(PaymentStatus.SUCCEEDED, rows.first { it.id == own.id }.status, "the order's own attempt is settled")
+        assertFalse(rows.first { it.id == own.id }.duplicate)
+        assertTrue(rows.first { it.id == other.id }.duplicate)
+
+        val refund = refunds(review.id).single()
+
+        assertEquals(RefundOrigin.SYSTEM, refund.origin)
+        assertEquals(RefundStatus.REQUESTED, refund.status)
+        assertEquals(other.id, refund.paymentId)
+        assertEquals(other.amount, refund.amount)
+        assertEquals("sys:dup:${other.id}", refund.idempotencyKey)
+        assertEquals(OrderService.REASON_DUPLICATE_PAYMENT, refund.reason)
+        assertEquals(1, timeline(review.id).count { it.type == OrderEventType.REFUND_REQUESTED })
+        assertEquals(0, done.refundedTotal)
+        assertEquals(1, ph.effects.of(review.id).count { it == "IssueInvoice" }, "side effects once")
+    }
+
+    @Test
+    fun `accepting a review with two paying attempts and the refund switch off alerts the panel instead of refunding the other attempt`(): Unit = runBlocking {
+        autoRefund = false
+        fake.caps = fake.caps.also { it.refund = RefundSupport.PARTIAL }
+
+        val (review, own, other) = twoPayingAttempts(secondPaid = null)
+        val alertsBefore = ph.alerts.count { it.first == review.id }
+
+        accept(review.id)
+
+        val done = order(review.id)
+
+        assertEquals(OrderStatus.COMPLETED, done.status)
+        assertEquals(own.id, done.paymentId)
+        assertEquals(999, done.paidAmount)
+        assertTrue(refunds(review.id).isEmpty())
+        assertTrue(attempts(review.id).first { it.id == other.id }.duplicate)
+
+        val note = timeline(review.id).single { it.message == OrderService.DUPLICATE_PAYMENT_ALERT }
+        val data = JsonObject(note.data!!)
+
+        assertEquals(other.id, data.getLong("paymentId"))
+        assertEquals("AUTO_REFUND_OFF", data.getString("why"))
+        assertEquals(alertsBefore + 1, ph.alerts.count { it.first == review.id }, "one more panel alert for the duplicate")
+    }
+
+    @Test
+    fun `accepting a review whose other paying attempt is itself in review flags and refunds it too`(): Unit = runBlocking {
+        fake.caps = fake.caps.also { it.refund = RefundSupport.PARTIAL }
+
+        val (review, own, other) = twoPayingAttempts(secondPaid = 500)
+
+        assertEquals(PaymentStatus.REVIEW, attempts(review.id).first { it.id == other.id }.status)
+
+        accept(review.id)
+
+        val done = order(review.id)
+
+        assertEquals(OrderStatus.COMPLETED, done.status)
+        assertEquals(own.id, done.paymentId)
+        assertEquals(999, done.paidAmount)
+        assertEquals(PaymentStatus.SUCCEEDED, attempts(review.id).first { it.id == own.id }.status)
+        assertTrue(attempts(review.id).first { it.id == other.id }.duplicate)
+        assertEquals(500, refunds(review.id).single().amount)
+    }
+
+    @Test
+    fun `rejecting a review with two paying attempts still refunds both`(): Unit = runBlocking {
+        fake.caps = fake.caps.also { it.refund = RefundSupport.PARTIAL }
+
+        val (review, _, _) = twoPayingAttempts(secondPaid = null)
+
+        reject(review.id, refund = true)
+
+        assertEquals(setOf(999L, 1000L), refunds(review.id).map { it.amount }.toSet())
+        assertEquals(OrderStatus.CANCELLED, order(review.id).status)
     }
 
     // ============================================================ PUT /orders/:id/status on the state machine

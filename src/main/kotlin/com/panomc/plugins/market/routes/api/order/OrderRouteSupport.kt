@@ -34,6 +34,7 @@ import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.routes.user.cart.cartService
+import com.panomc.plugins.market.service.DuplicateRefundPolicy
 import com.panomc.plugins.market.service.OrderService
 import com.panomc.plugins.market.service.OutboundHttp
 import com.panomc.plugins.market.service.PayCaller
@@ -112,6 +113,7 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
     val cart = cartService(plugin)
     val rates = context.getBean(MarketCurrencyRateDao::class.java)
     val webhooks by lazy { webhookService(plugin) }
+    val payments by lazy { paymentService(plugin) }
 
     return OrderService(
         clock, SecureIds(), orderDao, context.getBean(MarketOrderItemDao::class.java), context.getBean(MarketOrderEventDao::class.java),
@@ -122,7 +124,9 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
         statsCurrency = { currentConfig(plugin).statsCurrency.name },
         // MK-079: the re-reserve of an accepted late payment checks `limitPerPlayer`; a rejected review and a duplicate payment request their refund
         limits = ProductPurchaseLimits(orderDao, context.getBean(MarketProductDao::class.java), context.getBean(MarketEntitlementDao::class.java), clock),
-        refunds = context.getBean(MarketRefundDao::class.java)
+        refunds = context.getBean(MarketRefundDao::class.java),
+        // the duplicates an accepted review finds are judged by the same two questions as a duplicate that arrives on a paid order
+        duplicates = DuplicateRefundPolicy { conn, providerId -> payments.duplicateRefundRule(conn, providerId) }
     )
 }
 
