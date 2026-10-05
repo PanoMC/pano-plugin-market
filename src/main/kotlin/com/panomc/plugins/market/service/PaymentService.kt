@@ -400,6 +400,32 @@ class PaymentService(
     override suspend fun start(order: MarketOrder, attempt: MarketPayment, sqlClient: SqlClient): JsonObject? =
         startAttempt(order.id, attempt.id, emptyList(), sqlClient)
 
+    /**
+     * O2 of an order whose first attempt settles without a gateway (`free`, MK-113 gift redemption: 21 section 6 step 4) on the caller's transaction: the
+     * attempt moves `CREATED` -> `SUCCEEDED` and the order machine runs O2 (entitlements, deliveries, credit grant) under the `COMMIT` lock set, so a failure rolls
+     * the caller's rows back with it. No provider call is made (the built-in answers `Completed(Succeeded(0))` by definition, 02 section 12); anything else
+     * returns `null` and the caller starts the attempt after its commit as every checkout does. The returned step runs after the caller's commit.
+     */
+    override suspend fun completeZeroIn(conn: SqlConnection, order: MarketOrder, attempt: MarketPayment): (suspend (SqlClient) -> Unit)? {
+        if (attempt.providerId != OrderTimings.FREE_PROVIDER || attempt.amount != 0L || attempt.creditAmount != 0L) return null
+
+        val resolved = resolve(attempt.providerId, conn) ?: return null
+        val event = PaymentEvent.Succeeded(PaymentTarget.Attempt(attempt.id), Money(0, attempt.currency))
+        val after = ArrayList<AfterCommit>()
+
+        locks.forOrder(conn, order.id, OrderLockScope.COMMIT, cashback = config().cashbackPercent > 0) {
+            locks.children(conn, order.id, OrderChild.PAYMENT)
+
+            val now = clock.now()
+            val facts = AttemptFacts.of(event, cipher).let { f -> AttemptFacts(f.gatewayTransactionId, f.gatewayRefs, f.providerData, startKind = "COMPLETED", startedAt = now) }
+            val applied = applyIn(conn, it, attempt.id, PaymentEventMapper.attemptEvent(event)!!, facts, resolved.policy, OrderActor.SYSTEM, after)
+
+            check(applied.orderStatus == OrderStatus.COMPLETED) { "the free order ${order.id} did not complete: ${applied.orderStatus}" }
+        }
+
+        return { client -> runAfter(after, client) }
+    }
+
     /** The stored start of [attempt] as `PaymentStart` JSON (a replay of the request, the order page), `null` when it has none. */
     override suspend fun served(attempt: MarketPayment, sqlClient: SqlClient): JsonObject? = servedStart(attempt)
 

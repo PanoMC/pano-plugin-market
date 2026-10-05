@@ -3,6 +3,7 @@ package com.panomc.plugins.market.service
 import com.panomc.platform.error.NotLoggedIn
 import com.panomc.platform.model.Error
 import com.panomc.plugins.market.db.MarketDaoITBase
+import com.panomc.plugins.market.db.model.CreditTxType
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.db.model.MarketProduct
 import com.panomc.plugins.market.db.model.OrderItemKind
@@ -39,11 +40,13 @@ import java.util.concurrent.CopyOnWriteArrayList
  * written, the per-customer and the global limit (two users on a limit-1 code: one order, R-20 twin), the random pick, the code guard seam and the
  * redemption lists. The global invariants (I1 to I22, I6 and I7 among them) are checked after every test by the base class.
  *
- * The credit grant itself (the `GIFT` ledger posting of O2) is the effect `CreditGrantingLines` of `MK-092`; the foreign-effects stand-in of the payment
- * harness records that the effect was asked for.
+ * The orders run on the production composition of the credit slices ([CreditHarness]: the real ledger and `CreditEffects`), so the `GIFT` posting of O2
+ * (07 section 10: key `orderitem:<itemId>:gift`, to the redeemer) is asserted on the ledger itself, for a credit gift and for a product gift whose product is
+ * a credit pack. O2 runs in the transaction of the redemption (21 section 6 step 4): a failure in it leaves the code unused.
  */
 class RedemptionServiceIT : MarketDaoITBase() {
     private lateinit var w: TestWiring
+    private lateinit var c: CreditHarness
     private lateinit var ph: PaymentHarness
     private lateinit var redeemer: GiftRedeemService
     private lateinit var guard: ScriptedGuard
@@ -58,12 +61,23 @@ class RedemptionServiceIT : MarketDaoITBase() {
     fun freshState() {
         runBlocking { resetState() }
         w = TestWiring(pool)
-        ph = PaymentHarness(w, vertx)
+        // the production composition of the order transitions: the real credit ledger and CreditEffects (the GIFT posting of O2), the recorder only behind them
+        c = CreditHarness(w, vertx)
+        ph = c.ph
         guard = ScriptedGuard()
 
         val redemptions = RedemptionService(w.clock, ph.locks, w.redemptions)
 
-        redeemer = GiftRedeemService(ph.h.service, redemptions, { w.pool }, w.clock, { guard })
+        redeemer = GiftRedeemService(c.service, redemptions, { w.pool }, w.clock, { guard })
+    }
+
+    /** The credit ledger is self-consistent after every scenario, as in the credit tests (D-O19). */
+    override suspend fun assertInvariants() {
+        super.assertInvariants()
+
+        val result = c.reconciler().run(full = true)
+
+        assertTrue(result.ok, "the credit reconciler found ${result.problems}")
     }
 
     private val fx get() = w.fixtures
@@ -201,7 +215,7 @@ class RedemptionServiceIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `a credit gift is one CREDIT_TOPUP item with the credits of the gift and no price, no hold and no stock`(): Unit = runBlocking {
+    fun `a credit gift is one CREDIT_TOPUP item and O2 posts exactly one GIFT transaction to the redeemer, a replayed O2 posts nothing more`(): Unit = runBlocking {
         val gift = fx.gift("CREDITS-50", GiftType.CREDIT, creditAmount = 5000, redeemLimit = 2)
         val (alex, caller) = user("Alex")
 
@@ -221,8 +235,84 @@ class RedemptionServiceIT : MarketDaoITBase() {
         assertEquals(1, usedCount(gift.id))
         assertEquals(RedemptionState.APPLIED, w.redemptions.getByOrderId(order.id, pool).single().state)
         assertEquals(alex.id, order.recipientUserId)
-        assertTrue("CreditGrantingLines" in ph.effects.of(order.id), "O2 asks for the GIFT posting: ${ph.effects.of(order.id)}")
         assertEquals(0, count("market_credit_tx", "`type` = 'HOLD'"), "no credit hold")
+
+        assertGiftPosted(order, item.id, 5000, alex.id)
+
+        // a replayed O2 (the effect run again on the paid order) finds the transaction under its key and writes nothing
+        val items = w.orderItems.getByOrderIds(listOf(order.id), pool)
+
+        ph.db.tx { conn -> c.credits.creditOrderItems(w.orders.getById(order.id, conn)!!, items, conn) }
+
+        assertGiftPosted(order, item.id, 5000, alex.id)
+    }
+
+    /** 07 section 10: one `GIFT` transaction of [amount] for the item, key `orderitem:<itemId>:gift`, and the redeemer's balance is exactly that amount (starting from 0). */
+    private suspend fun assertGiftPosted(order: MarketOrder, itemId: Long, amount: Long, userId: Long) {
+        val txs = c.ledger(order.id)
+        val gifts = txs.filter { it.type == CreditTxType.GIFT }
+
+        assertEquals(1, gifts.size, "exactly one GIFT transaction: ${txs.map { it.type to it.idempotencyKey }}")
+        assertEquals("orderitem:$itemId:gift", gifts.single().idempotencyKey)
+        assertEquals(amount, gifts.single().amount)
+        assertEquals(userId, gifts.single().userId)
+        assertEquals(1, txs.size, "nothing else was posted for the order: ${txs.map { it.type }}")
+        assertEquals(amount, w.creditAccounts.getByUserId(userId, pool)!!.balance, "the balance of the redeemer rose by the gift")
+    }
+
+    @Test
+    fun `a product gift whose product is a credit pack posts the GIFT of the pack to the redeemer`(): Unit = runBlocking {
+        val pack = fx.product("pack-gift", price = 500, columns = mapOf("kind" to "CREDIT_PACK", "creditAmount" to 25000))
+        val gift = fx.gift("PACK-GIFT", GiftType.PRODUCT, productId = pack.id, redeemLimit = 1)
+        val (alex, caller) = user("Alex")
+
+        val order = orderOf(redeem("PACK-GIFT", caller))
+        val item = w.orderItems.getByOrderIds(listOf(order.id), pool).single()
+
+        assertEquals(OrderStatus.COMPLETED, order.status)
+        assertEquals(OrderSource.GIFT_CODE, order.source)
+        assertEquals(0, order.totalPrice)
+        assertEquals(25000, item.creditAmount)
+        assertEquals(1, usedCount(gift.id))
+        assertGiftPosted(order, item.id, 25000, alex.id)
+
+        ph.db.tx { conn -> c.credits.creditOrderItems(w.orders.getById(order.id, conn)!!, listOf(item), conn) }
+
+        assertGiftPosted(order, item.id, 25000, alex.id)
+    }
+
+    @Test
+    fun `a failure in O2 rolls the order, the redemption and the counter back, and the code can be redeemed right away`(): Unit = runBlocking {
+        val gift = fx.gift("FAILS-ONCE", GiftType.CREDIT, creditAmount = 5000, redeemLimit = 1)
+        val vip = fx.product("vip-fail", price = 1000, stock = 3)
+        val product = fx.gift("FAILS-PRODUCT", GiftType.PRODUCT, productId = vip.id, redeemLimit = 1)
+        val (alex, caller) = user("Alex")
+
+        c.zeroCompletionFault = IllegalStateException("O2 failed")
+
+        for (code in listOf("FAILS-ONCE", "FAILS-PRODUCT")) {
+            assertThrows(IllegalStateException::class.java) { runBlocking { redeem(code, caller) } }
+        }
+
+        assertEquals(0, usedCount(gift.id) + usedCount(product.id), "the counters went back with the transaction")
+        assertEquals(0, count("market_order"), "no pending order is left behind")
+        assertEquals(0, count("market_redemption"), "no HELD redemption is left behind")
+        assertEquals(0, count("market_payment"), "no attempt")
+        assertEquals(0, count("market_credit_tx"), "nothing credited")
+        assertEquals(3, stockOf(vip), "the stock reservation went back")
+
+        c.zeroCompletionFault = null
+
+        // the retry of the same account succeeds at once: a limit-1 code was not consumed by the failed attempt
+        val credit = orderOf(redeem("FAILS-ONCE", caller))
+        val item = w.orderItems.getByOrderIds(listOf(credit.id), pool).single()
+
+        assertEquals(OrderStatus.COMPLETED, credit.status)
+        assertEquals(1, usedCount(gift.id))
+        assertGiftPosted(credit, item.id, 5000, alex.id)
+        assertEquals(OrderStatus.COMPLETED, orderOf(redeem("FAILS-PRODUCT", caller)).status)
+        assertEquals(1, usedCount(product.id))
+        assertEquals(2, stockOf(vip))
     }
 
     @Test
