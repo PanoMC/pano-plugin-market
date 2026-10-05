@@ -1,5 +1,11 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.core.order.OrderActor
+import com.panomc.plugins.market.core.order.OrderEffect
+import com.panomc.plugins.market.core.order.OrderEvent
+import com.panomc.plugins.market.core.order.OrderState
+import com.panomc.plugins.market.core.order.OrderStateMachine
+import com.panomc.plugins.market.core.order.OrderTransition
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.core.time.Ids
 import com.panomc.plugins.market.db.dao.MarketOrderDao
@@ -14,9 +20,13 @@ import com.panomc.plugins.market.db.model.OrderActorType
 import com.panomc.plugins.market.db.model.OrderEventType
 import com.panomc.plugins.market.db.model.OrderSource
 import com.panomc.plugins.market.db.model.PaymentStatus
+import com.panomc.plugins.market.db.model.ReservationState
+import com.panomc.plugins.market.db.tx.LockedOrder
+import com.panomc.plugins.market.db.tx.OrderChangedException
 import com.panomc.plugins.market.error.CreditsDisabled
 import com.panomc.plugins.market.error.PaymentMethodUnavailable
 import com.panomc.plugins.market.util.MoneyUtil
+import com.panomc.plugins.market.spi.payment.ReviewReason
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -24,6 +34,9 @@ import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.sqlclient.SqlClient
 import io.vertx.sqlclient.SqlConnection
 import io.vertx.sqlclient.Tuple
+import org.slf4j.LoggerFactory
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 /**
  * The credit hold of an order (06 section 5.3 B10, 07 section 5): `HOLD` posted for the payer under the key
@@ -51,6 +64,84 @@ fun interface PendingSubscriptions {
         val UNAVAILABLE = PendingSubscriptions { _, _, _ -> throw PaymentMethodUnavailable("RECURRING_NOT_SUPPORTED") }
     }
 }
+
+/**
+ * The ledger operations of an order after O1 (07 sections 5 and 6.4): capture of the outstanding `HOLD` at O2 / O4 (C3), release at
+ * O5 to O8 (C4), a new credit part at `/pay` (C2: release the old part when it was above 0, then hold the new one). All run inside the
+ * transition's transaction, under the account locks of `Locks.forOrder`, and throw when they cannot post: the transition then rolls
+ * back, so an order is never completed without its capture and never closed without its release. `CreditService` (MK-091)
+ * implements it; until then [UNAVAILABLE] refuses (409 `CREDITS_DISABLED`) and nothing is posted. It is only called for an order whose
+ * credit part is above 0 (or, for [retender], whose part changes), so orders without credits never meet it.
+ */
+interface CreditSettlement {
+    /** O2 / O4: `CAPTURE` of the outstanding hold of [order]. */
+    suspend fun capture(conn: SqlConnection, order: MarketOrder)
+
+    /** O5 to O8: `RELEASE` of the outstanding hold of [order]. */
+    suspend fun release(conn: SqlConnection, order: MarketOrder)
+
+    /** `/pay`: the credit part of [order] becomes [newCredits] (`RELEASE(old)` then `HOLD(new)`); [order] still carries the old part. */
+    suspend fun retender(conn: SqlConnection, order: MarketOrder, newCredits: Long)
+
+    companion object {
+        val UNAVAILABLE: CreditSettlement = object : CreditSettlement {
+            override suspend fun capture(conn: SqlConnection, order: MarketOrder) = throw CreditsDisabled()
+
+            override suspend fun release(conn: SqlConnection, order: MarketOrder) = throw CreditsDisabled()
+
+            override suspend fun retender(conn: SqlConnection, order: MarketOrder, newCredits: Long) = throw CreditsDisabled()
+        }
+    }
+}
+
+/**
+ * The effects of O2 / O4 / O5 to O8 that belong to other slices (06 section 11, the bracketed names): entitlements, deliveries, creator
+ * earning, cashback, credit-granting lines, subscriptions, invoice, mail outbox, goal progress, shipping. Each is a service call in the
+ * transition's transaction that only writes rows. [apply] is called for every such effect in the order the state machine lists them;
+ * an implementation skips the ones the order has nothing for. [PENDING_SLICES] is what runs until those slices land: it logs every effect
+ * it was asked for and did nothing (see the open seams in `evidence/MK-076.md`).
+ */
+fun interface ForeignEffects {
+    suspend fun apply(conn: SqlConnection, locked: LockedOrder, effect: OrderEffect)
+
+    companion object {
+        private val logger = LoggerFactory.getLogger(ForeignEffects::class.java)
+
+        val PENDING_SLICES = ForeignEffects { _, locked, effect ->
+            logger.warn("order {}: {} has no handler yet (its slice is not wired)", locked.order.id, effect::class.simpleName)
+        }
+    }
+}
+
+/** The store webhook `order.paid` of O2 / O4 (08 section 15): a row per listening endpoint, written inside the transition. */
+fun interface PaidWebhooks {
+    suspend fun orderPaid(conn: SqlConnection, orderId: Long)
+
+    companion object {
+        val NONE = PaidWebhooks { _, _ -> }
+    }
+}
+
+/** What runs after the transition's transaction committed: nothing here may take part in it, and none of it may fail the transition. */
+sealed interface AfterCommit {
+    /** `cancelPayment` at the gateway for attempts the transition closed (providers with `cancelPending`), best effort. */
+    class CancelAtGateway(val attempts: List<MarketPayment>) : AfterCommit
+
+    /** A panel alert: an order is waiting for a human (`reason` is the `reviewReason` it was opened with). */
+    class PanelAlert(val orderId: Long, val reason: String?) : AfterCommit
+}
+
+/** The answer of [OrderService.transition]: what the state machine decided and what must run after the commit. */
+class TransitionResult(val decision: OrderTransition, val from: OrderStatus, val after: List<AfterCommit>) {
+    /** The order moved to [to]. */
+    val moved: Boolean get() = decision is OrderTransition.Move
+
+    val to: OrderStatus get() = (decision as? OrderTransition.Move)?.to ?: from
+}
+
+/** An effect that is owned by a slice that has not landed: the transition stops (and rolls back) instead of skipping it. */
+class EffectNotOwnedYet(val effect: OrderEffect, val owner: String) :
+    IllegalStateException("${effect::class.simpleName} is applied by $owner, which is not wired yet")
 
 /**
  * One order item before the order exists: [build] makes the row once the ids are known. A bundle line comes first and its
@@ -117,7 +208,16 @@ class OrderService(
     private val redemptions: RedemptionService,
     private val cartClear: suspend (SqlClient, Long) -> Boolean,
     private val credits: CreditHolds = CreditHolds.UNAVAILABLE,
-    private val subscriptions: PendingSubscriptions = PendingSubscriptions.UNAVAILABLE
+    private val subscriptions: PendingSubscriptions = PendingSubscriptions.UNAVAILABLE,
+    /** The reservation operations of [transition] (commit, release); `null` for a service that only creates orders and shows them. */
+    private val reservations: ReservationService? = null,
+    private val settlement: CreditSettlement = CreditSettlement.UNAVAILABLE,
+    private val foreign: ForeignEffects = ForeignEffects.PENDING_SLICES,
+    private val webhooks: PaidWebhooks = PaidWebhooks.NONE,
+    /** `market_currency_rate` as `currency -> units per 1 base unit` (the table of the pricing code), for the frozen `exchangeRate`. */
+    private val rates: suspend (SqlClient) -> Map<String, BigDecimal> = { emptyMap() },
+    /** The stats currency of the store settings: `exchangeRate` is stats units per 1 order-currency unit. */
+    private val statsCurrency: () -> String = { "" }
 ) {
     private fun table(name: String) = "`${orders.prefix()}$name`"
 
@@ -166,7 +266,7 @@ class OrderService(
 
         draft.clearCartOfUser?.let { cartClear(conn, it) }
 
-        val attempt = insertAttempt(conn, order, draft.attempt)
+        val attempt = addAttempt(conn, order, draft.attempt)
 
         return CreatedOrder(orders.getById(orderId, conn)!!, rows, attempt)
     }
@@ -189,7 +289,12 @@ class OrderService(
         }
     }
 
-    private suspend fun insertAttempt(conn: SqlConnection, order: MarketOrder, draft: AttemptDraft): MarketPayment {
+    /**
+     * A new attempt in state `CREATED` (06 section 9.2): the tender snapshot of [order] as it is now, a fresh reference and token, the
+     * `PAYMENT_STARTED` event. Used by the order transaction of checkout and by `/pay`. [extra] is merged into the event `data` (the old and
+     * new credit part of a re-tender).
+     */
+    suspend fun addAttempt(conn: SqlConnection, order: MarketOrder, draft: AttemptDraft, extra: JsonObject? = null): MarketPayment {
         val now = clock.now()
         var tries = 0
 
@@ -210,7 +315,8 @@ class OrderService(
                 orderEvents.add(
                     MarketOrderEvent(
                         orderId = order.id, type = OrderEventType.PAYMENT_STARTED, actorType = OrderActorType.BUYER, actorUserId = order.userId,
-                        data = JsonObject().put("providerId", draft.providerId).put("paymentId", id).encode(), createdAt = now, updatedAt = now
+                        data = JsonObject().put("providerId", draft.providerId).put("paymentId", id).also { event -> extra?.let { event.mergeIn(it) } }.encode(),
+                        createdAt = now, updatedAt = now
                     ),
                     conn
                 )
@@ -229,12 +335,15 @@ class OrderService(
      * with its stored start, the buyer's own data. [start] is the `PaymentStart` of the newest attempt when it is known.
      * Shipments, the payment method list of a retry and delivery states arrive with their slices (the keys are present, empty).
      */
-    suspend fun ownerView(order: MarketOrder, sqlClient: SqlClient, start: JsonObject? = null): JsonObject {
+    suspend fun ownerView(order: MarketOrder, sqlClient: SqlClient, start: JsonObject? = null, retry: RetryView? = null): JsonObject {
         val items = orderItems.getByOrderIds(listOf(order.id), sqlClient).filter { it.kind != com.panomc.plugins.market.db.model.OrderItemKind.BUNDLE_CHILD }
         val attempts = payments.getByOrderId(order.id, sqlClient)
         val newest = attempts.lastOrNull()
         val processing = attempts.any { it.status == PaymentStatus.PROCESSING }
         val pending = order.status == OrderStatus.PENDING
+        // 06 section 10.2: PENDING, inside the window, no attempt PROCESSING / REVIEW / SUCCEEDED (the hard cap is the payment service's: [retry])
+        val blocked = attempts.any { it.status == PaymentStatus.PROCESSING || it.status == PaymentStatus.REVIEW || it.status == PaymentStatus.SUCCEEDED }
+        val canRetry = retry?.canRetry ?: (pending && !blocked && (order.expiresAt == null || clock.now() < order.expiresAt))
 
         return JsonObject()
             .put("publicId", order.publicId)
@@ -279,8 +388,241 @@ class OrderService(
             .put("email", order.email)
             .put("invoiceAvailable", order.invoiceId != null)
             .put("canCancel", pending && order.source != OrderSource.RENEWAL && !processing)
-            .put("canRetryPayment", pending && !processing)
+            .put("canRetryPayment", canRetry)
             .put("refundPending", false)
+            .also { view ->
+                if (canRetry && retry != null) {
+                    view.put("paymentMethods", retry.methods)
+                    view.put("credits", retry.credits)
+                }
+            }
+    }
+
+    /** The data a retry needs (04 section 2 `OrderView.paymentMethods` / `credits`), present only when the order can be paid again. */
+    class RetryView(val canRetry: Boolean, val methods: JsonArray = JsonArray(), val credits: JsonObject? = null)
+
+    // ----- transitions (06 section 11) --------------------------------------------------------------------------------
+
+    /**
+     * Applies [event] to the order [locked] holds (06 section 11): the pure machine decides ([OrderStateMachine.decide]), a `Move` is
+     * the conditional `UPDATE ... WHERE id = ? AND status = ?` (zero rows can only mean the lock protocol was broken: the use case
+     * restarts through [OrderChangedException]), one `STATUS_CHANGED` timeline row, then the effects in the order the machine lists them.
+     * The caller holds the locks of its scope (`Locks.forOrder`: `COMMIT` for O2 / O3 / O9, `RELEASE` for O6 / O7 / O8) and the payment
+     * rows of the order; everything here runs on its connection and only writes rows. The returned [TransitionResult.after] runs after
+     * the commit.
+     *
+     * The effects of the review decisions (O4 / O5) and of refunds and disputes (O10 to O12) belong to the slices that own those
+     * flows and stop the transition with [EffectNotOwnedYet]; the effects of other slices go through [ForeignEffects].
+     */
+    suspend fun transition(conn: SqlConnection, locked: LockedOrder, event: OrderEvent, actorUserId: Long? = null, message: String? = null): TransitionResult {
+        val order = orders.getById(locked.order.id, conn) ?: throw OrderChangedException(locked.order.id, "the row is gone")
+        val attempts = payments.getByOrderId(order.id, conn)
+        val state = OrderState(
+            status = order.status,
+            reservationState = order.reservationState,
+            expiresAt = order.expiresAt,
+            hasProcessingAttempt = attempts.any { it.status == PaymentStatus.PROCESSING },
+            paidAmount = order.paidAmount,
+            statusBeforeDispute = order.statusBeforeDispute,
+            reviewReason = order.reviewReason?.let { name -> ReviewReason.entries.firstOrNull { it.name == name } }
+        )
+        val decision = OrderStateMachine.decide(state, event)
+
+        if (decision !is OrderTransition.Move) return TransitionResult(decision, order.status, emptyList())
+
+        val now = clock.now()
+        val changed = conn.preparedQuery("UPDATE ${table("market_order")} SET `status` = ?, `updatedAt` = GREATEST(?, `updatedAt` + 1) WHERE `id` = ? AND `status` = ?")
+            .execute(Tuple.of(decision.to.name, now, order.id, order.status.name)).coAwait().rowCount()
+
+        if (changed != 1) throw OrderChangedException(order.id, "the status moved under the lock")
+
+        orderEvents.add(
+            MarketOrderEvent(
+                orderId = order.id, type = OrderEventType.STATUS_CHANGED, fromStatus = order.status.name, toStatus = decision.to.name,
+                actorType = actorTypeOf(event), actorUserId = actorUserId, message = message, createdAt = now, updatedAt = now
+            ),
+            conn
+        )
+
+        val after = ArrayList<AfterCommit>()
+        var reviewReason: String? = order.reviewReason
+        val closed = ArrayList<MarketPayment>()
+
+        for (effect in decision.effects) {
+            when (effect) {
+                is OrderEffect.CommitReservation -> reservationsOrThrow().commit(conn, locked)
+
+                // the redemptions turn APPLIED inside the reservation commit
+                is OrderEffect.ApplyRedemptions -> Unit
+
+                is OrderEffect.CaptureCreditHold -> if (order.creditAmount > 0) settlement.capture(conn, order)
+
+                is OrderEffect.StampPaid -> stampPaid(conn, order, effect)
+
+                is OrderEffect.ClearExpiry -> updateOrder(conn, order.id, linkedMapOf("expiresAt" to null))
+
+                is OrderEffect.CancelOpenAttempts -> closed += closeOpenAttempts(conn, order.id, PaymentStatus.CANCELLED)
+
+                is OrderEffect.QueueWebhook ->
+                    if (effect.event == OrderStateMachine.WEBHOOK_PAID) webhooks.orderPaid(conn, order.id) else foreign.apply(conn, locked, effect)
+
+                is OrderEffect.SetReviewReason -> {
+                    reviewReason = effect.reason.name
+
+                    updateOrder(conn, order.id, linkedMapOf("reviewReason" to effect.reason.name))
+
+                    orderEvents.add(
+                        MarketOrderEvent(
+                            orderId = order.id, type = OrderEventType.REVIEW_OPENED, actorType = actorTypeOf(event),
+                            data = JsonObject().put("reason", effect.reason.name).put("attemptId", attemptOf(event)).encode(), createdAt = now, updatedAt = now
+                        ),
+                        conn
+                    )
+                }
+
+                is OrderEffect.RecordPayment -> {
+                    val attempt = effect.attemptId?.let { payments.getById(it, conn) }
+
+                    if (attempt != null) updateOrder(conn, order.id, linkedMapOf("paymentId" to attempt.id, "paidAmount" to (attempt.paidAmount ?: 0L)))
+                }
+
+                is OrderEffect.PanelAlert -> after += AfterCommit.PanelAlert(order.id, reviewReason)
+
+                is OrderEffect.ReleaseReservation -> {
+                    // `release` is idempotent on the reservation state; the credit hold goes back only when the stock did (06 section 7.3)
+                    if (reservationsOrThrow().release(conn, locked) && order.creditAmount > 0) settlement.release(conn, order)
+                }
+
+                is OrderEffect.CloseOpenAttempts -> closed += closeOpenAttempts(conn, order.id, effect.to)
+
+                is OrderEffect.CancelAtGatewayAfterCommit -> Unit
+
+                is OrderEffect.SubscriptionOnClosedUnpaid -> if (order.subscriptionId != null) foreign.apply(conn, locked, effect)
+
+                is OrderEffect.AccrueCreatorEarning, is OrderEffect.GrantCashback, is OrderEffect.CreditGrantingLines, is OrderEffect.GrantEntitlements,
+                is OrderEffect.QueueGrantDeliveries, is OrderEffect.SubscriptionOnOrderPaid, is OrderEffect.IssueInvoice, is OrderEffect.QueueMail,
+                is OrderEffect.AdvanceGoalProgress, is OrderEffect.StartShipping -> foreign.apply(conn, locked, effect)
+
+                is OrderEffect.ReReserve, is OrderEffect.RewriteTender, is OrderEffect.RecordForceOverride, is OrderEffect.CreateRefundForPaidAmount ->
+                    throw EffectNotOwnedYet(effect, "MK-079")
+
+                is OrderEffect.ReserveStockAndLimits, is OrderEffect.HoldCredits, is OrderEffect.SetExpiresAt ->
+                    throw IllegalStateException("${effect::class.simpleName} belongs to order creation, not to a transition")
+
+                is OrderEffect.RevokeDeliveries, is OrderEffect.RestockItems, is OrderEffect.ReverseCreatorEarning, is OrderEffect.ReverseCashback,
+                is OrderEffect.ClawbackGrantedCredits, is OrderEffect.ReturnCreditsToLedger, is OrderEffect.IssueCreditNote,
+                is OrderEffect.SubscriptionOnOrderRefunded, is OrderEffect.SubscriptionOnOrderChargeback, is OrderEffect.SaveStatusBeforeDispute,
+                is OrderEffect.BlockBuyer, is OrderEffect.RunChargebackActions -> throw EffectNotOwnedYet(effect, "the refund and dispute slices")
+            }
+        }
+
+        // the gateway cancel of what this transition closed: every attempt it set to a closed state, once
+        if (closed.isNotEmpty()) after += AfterCommit.CancelAtGateway(closed.distinctBy { it.id })
+
+        return TransitionResult(decision, order.status, after)
+    }
+
+    private fun attemptOf(event: OrderEvent): Long? = when (event) {
+        is OrderEvent.NeedsReview -> event.attemptId
+        is OrderEvent.LatePayment -> event.attemptId
+        else -> null
+    }
+
+    private fun reservationsOrThrow(): ReservationService =
+        checkNotNull(reservations) { "this OrderService was built without the reservation service: it cannot move an order" }
+
+    private fun actorTypeOf(event: OrderEvent): OrderActorType = when (event) {
+        is OrderEvent.Paid -> actor(event.actor)
+        is OrderEvent.NeedsReview -> actor(event.actor)
+        is OrderEvent.Cancel -> actor(event.actor)
+        is OrderEvent.Fail -> actor(event.actor)
+        is OrderEvent.Expire, is OrderEvent.Create -> OrderActorType.SYSTEM
+        is OrderEvent.LatePayment -> OrderActorType.GATEWAY
+        is OrderEvent.ReviewAccepted, is OrderEvent.ReviewRejected -> OrderActorType.ADMIN
+        is OrderEvent.RefundSucceeded, is OrderEvent.DisputeOpened, is OrderEvent.DisputeWon -> OrderActorType.GATEWAY
+    }
+
+    private fun actor(actor: OrderActor): OrderActorType = OrderActorType.valueOf(actor.name)
+
+    /** O2: `paymentId`, `paidAt = now`, `paidAmount`, the paying attempt's `testMode`, the frozen `exchangeRate` (06 section 11). */
+    private suspend fun stampPaid(conn: SqlConnection, order: MarketOrder, effect: OrderEffect.StampPaid) {
+        val attempt = effect.attemptId?.let { payments.getById(it, conn) }
+        val sets = linkedMapOf<String, Any?>("paidAt" to clock.now())
+
+        if (attempt != null) sets["paymentId"] = attempt.id
+        if (!effect.keepPaidAmount) sets["paidAmount"] = attempt?.paidAmount ?: order.gatewayAmount
+        if (attempt != null) sets["testMode"] = attempt.testMode
+
+        statsRate(conn, order)?.let { sets["exchangeRate"] = it }
+
+        updateOrder(conn, order.id, sets)
+    }
+
+    /**
+     * Stats currency units per 1 order-currency unit, from the rate table the order was priced with (units per 1 base unit); `1.0`
+     * when the order is already in the stats currency, `null` when the table cannot say (the stats queries then fall back to the
+     * current view rate). The live provider fetch of `ExchangeRateService` is a network call and cannot run in this transaction.
+     */
+    private suspend fun statsRate(conn: SqlClient, order: MarketOrder): Double? {
+        val stats = statsCurrency().trim().uppercase()
+
+        if (stats.isEmpty()) return null
+        if (order.currency.equals(stats, ignoreCase = true)) return 1.0
+
+        val table = rates(conn)
+
+        fun perBase(currency: String): BigDecimal? = if (currency.equals(order.baseCurrency, ignoreCase = true)) BigDecimal.ONE else table[currency.uppercase()]
+
+        val toStats = perBase(stats) ?: return null
+        val toOrder = perBase(order.currency) ?: return null
+
+        if (toOrder.signum() <= 0) return null
+
+        return toStats.divide(toOrder, 10, RoundingMode.HALF_UP).toDouble()
+    }
+
+    /**
+     * Sets every attempt of [orderId] that is still `CREATED`, `PENDING` or `PROCESSING` to [to] (the conditional update checks the
+     * status it read), clears its stored start and stamps `closedAt`; one timeline row each. Returns the attempts as they were.
+     */
+    suspend fun closeOpenAttempts(conn: SqlConnection, orderId: Long, to: PaymentStatus, exceptAttemptId: Long? = null): List<MarketPayment> {
+        val now = clock.now()
+        val open = payments.getByOrderId(orderId, conn).filter { it.id != exceptAttemptId && it.status in OPEN_ATTEMPT }
+        val closed = ArrayList<MarketPayment>()
+
+        for (attempt in open) {
+            val rows = conn.preparedQuery(
+                "UPDATE ${table("market_payment")} SET `status` = ?, `closedAt` = ?, `startPayload` = NULL, `updatedAt` = ? WHERE `id` = ? AND `status` = ?"
+            ).execute(Tuple.of(to.name, now, now, attempt.id, attempt.status.name)).coAwait().rowCount()
+
+            if (rows != 1) continue
+
+            closed += attempt
+
+            orderEvents.add(
+                MarketOrderEvent(
+                    orderId = orderId, type = if (to == PaymentStatus.CANCELLED) OrderEventType.PAYMENT_CANCELLED else OrderEventType.PAYMENT_FAILED,
+                    actorType = OrderActorType.SYSTEM, data = JsonObject().put("paymentId", attempt.id).put("status", to.name).encode(), createdAt = now, updatedAt = now
+                ),
+                conn
+            )
+        }
+
+        return closed
+    }
+
+    /** `/pay`: the ledger moves the credit part of [order] to [newCredits] (07 section 6.4, C2); throws when it cannot, which rolls the whole re-tender back. */
+    suspend fun retenderCredits(conn: SqlConnection, order: MarketOrder, newCredits: Long) = settlement.retender(conn, order, newCredits)
+
+    /** `UPDATE market_order SET <sets>, updatedAt = GREATEST(now, updatedAt + 1) WHERE id = ?`: every write to the order grows its version (06 section 13.2). The keys are column names written by this module. */
+    suspend fun updateOrder(conn: SqlClient, orderId: Long, sets: Map<String, Any?>) {
+        val columns = sets.keys.joinToString(", ") { "`$it` = ?" }
+        val values = ArrayList<Any?>(sets.values)
+
+        values += clock.now()
+        values += orderId
+
+        conn.preparedQuery("UPDATE ${table("market_order")} SET $columns, `updatedAt` = GREATEST(?, `updatedAt` + 1) WHERE `id` = ?").execute(Tuple.from(values)).coAwait()
     }
 
     private fun itemView(item: MarketOrderItem): JsonObject {
@@ -312,5 +654,6 @@ class OrderService(
         /** 160 bits: the access token of an order and the notify / return token of an attempt are 40 hex characters. */
         const val ACCESS_TOKEN_BYTES = 20
         private const val MAX_ID_TRIES = 3
+        private val OPEN_ATTEMPT = setOf(PaymentStatus.CREATED, PaymentStatus.PENDING, PaymentStatus.PROCESSING)
     }
 }
