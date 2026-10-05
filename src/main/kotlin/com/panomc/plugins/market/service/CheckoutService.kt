@@ -30,6 +30,7 @@ import com.panomc.plugins.market.core.order.TimingConfig
 import com.panomc.plugins.market.core.order.RuleTier
 import com.panomc.plugins.market.core.order.RuleVariant
 import com.panomc.plugins.market.core.order.BuyerValidator
+import com.panomc.plugins.market.core.credit.CreditPricing
 import com.panomc.plugins.market.core.pricing.BuyerContext
 import com.panomc.plugins.market.core.pricing.BundleChild
 import com.panomc.plugins.market.core.pricing.CouponInput
@@ -1071,11 +1072,23 @@ class CheckoutService(
                 kind = l.kind, parentItemId = parentItemId, variantId = l.variantId.takeIf { it != 0L }, variantName = variant?.name,
                 sku = variant?.sku ?: product?.sku, listUnitPrice = l.listUnitPrice, discountAmount = l.discountAmount, upgradeAmount = l.upgradeAmount,
                 couponAmount = l.couponAmount, vatPercent = l.vatPercent, vatAmount = l.vatAmount, lineTotal = l.lineTotal,
-                creditUnitPrice = if (creditOrder && l.kind != OrderItemKind.BUNDLE_CHILD) l.creditUnitPrice else null, creditAmount = granted,
+                creditUnitPrice = creditUnitPriceOf(l, creditOrder), creditAmount = granted,
                 fieldValues = fieldValues, targetServerId = verdict?.targetServerId, snapshot = snapshot.encode(), physical = physical,
                 stockReserved = stockReserved, upgradeFromEntitlementId = l.upgradeFromEntitlementId, createdAt = now, updatedAt = now
             )
         }
+    }
+
+    /**
+     * The `creditUnitPrice` snapshot of an item (07 section 4): the effective credit unit price at purchase of every `PRODUCT` / `BUNDLE` line a buyer
+     * could pay with credits, whatever tender the order used now, so that `POST .../pay` can switch a pending order to `credits` later (06 section 9.3, the
+     * credit run of 05 section 8.1 needs it). A line that is not sold for credits (a priced line with credit price 0, a credit pack, a top-up) and a bundle
+     * child carry `NULL`, which is what makes such an order not payable in credits. A full-credit order stores it for every line, as before.
+     */
+    private fun creditUnitPriceOf(l: PricedLine, creditOrder: Boolean): Long? = when {
+        l.kind == OrderItemKind.BUNDLE_CHILD || l.kind == OrderItemKind.CREDIT_TOPUP -> null
+        creditOrder || CreditPricing.sellableForCredits(l.creditUnitPrice, l.listUnitPrice) -> l.creditUnitPrice
+        else -> null
     }
 
     private fun topUpAmount(credits: Long): String = BigDecimal.valueOf(credits).movePointLeft(2).stripTrailingZeros().toPlainString()

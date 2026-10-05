@@ -11,6 +11,8 @@ import com.panomc.plugins.market.core.time.SystemClock
 import com.panomc.plugins.market.core.webhook.StoreInfo
 import com.panomc.plugins.market.core.webhook.TargetPolicy
 import com.panomc.plugins.market.db.dao.MarketCreditAccountDao
+import com.panomc.plugins.market.db.dao.MarketCreditEntryDao
+import com.panomc.plugins.market.db.dao.MarketCreditTxDao
 import com.panomc.plugins.market.db.dao.MarketCurrencyRateDao
 import com.panomc.plugins.market.db.dao.MarketEntitlementDao
 import com.panomc.plugins.market.db.dao.MarketOrderDao
@@ -34,6 +36,8 @@ import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.routes.user.cart.cartService
+import com.panomc.plugins.market.service.CreditHoldGuard
+import com.panomc.plugins.market.service.CreditService
 import com.panomc.plugins.market.service.DuplicateRefundPolicy
 import com.panomc.plugins.market.service.OrderService
 import com.panomc.plugins.market.service.OutboundHttp
@@ -57,6 +61,9 @@ private var cachedPayments: Pair<MarketPlugin, PaymentService>? = null
 
 @Volatile
 private var cachedOrders: Pair<MarketPlugin, OrderService>? = null
+
+@Volatile
+private var cachedCredits: Pair<MarketPlugin, CreditService>? = null
 
 @Volatile
 private var cachedAccess: Pair<MarketPlugin, OrderAccess>? = null
@@ -94,6 +101,26 @@ private fun buildWebhookService(plugin: MarketPlugin): WebhookService {
     )
 }
 
+/**
+ * The credit ledger on the plugin's beans (MK-091): the hold of checkout ([CreditService.checkoutHolds]) and the capture, release, re-tender and re-hold of the
+ * order transitions ([CreditService] is the order service's `CreditSettlement`); one per plugin instance.
+ */
+internal fun creditService(plugin: MarketPlugin): CreditService {
+    cachedCredits?.takeIf { it.first === plugin }?.let { return it.second }
+
+    return synchronized(OrderWiringHolder) {
+        cachedCredits?.takeIf { it.first === plugin }?.second ?: buildCreditService(plugin).also { cachedCredits = plugin to it }
+    }
+}
+
+private fun buildCreditService(plugin: MarketPlugin): CreditService {
+    val context = plugin.applicationContext
+
+    return CreditService(
+        SystemClock, context.getBean(MarketCreditAccountDao::class.java), context.getBean(MarketCreditTxDao::class.java), context.getBean(MarketCreditEntryDao::class.java)
+    )
+}
+
 /** The order service that can create and move orders (reservations, the `order.paid` webhook, the frozen exchange rate); one per plugin instance. */
 internal fun orderService(plugin: MarketPlugin): OrderService {
     cachedOrders?.takeIf { it.first === plugin }?.let { return it.second }
@@ -114,10 +141,13 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
     val rates = context.getBean(MarketCurrencyRateDao::class.java)
     val webhooks by lazy { webhookService(plugin) }
     val payments by lazy { paymentService(plugin) }
+    val credits = creditService(plugin)
 
     return OrderService(
         clock, SecureIds(), orderDao, context.getBean(MarketOrderItemDao::class.java), context.getBean(MarketOrderEventDao::class.java),
         context.getBean(MarketPaymentDao::class.java), redemptions, { conn, userId -> cart.clearAfterCheckout(conn, userId) },
+        // MK-091: the credit hold of O1 and the capture / release / re-tender / re-hold of the transitions are real ledger postings
+        credits = credits.checkoutHolds, settlement = credits,
         reservations = ReservationService(clock, locks, redemptions, orderDao),
         webhooks = PaidWebhooks { conn, orderId -> webhooks.emitOrderPaid(conn, orderId) },
         rates = { sqlClient -> rates.getAll(sqlClient).filter { it.rate.signum() > 0 }.associate { it.currency to it.rate } },
@@ -153,7 +183,9 @@ private fun buildPaymentService(plugin: MarketPlugin): PaymentService {
         methods = context.getBean(MarketPaymentMethodDao::class.java), creditAccounts = context.getBean(MarketCreditAccountDao::class.java),
         currencyRates = context.getBean(MarketCurrencyRateDao::class.java), lookup = providerLookup(plugin), cipher = wiring.cipher, contexts = attemptContexts(plugin),
         orderService = orderService(plugin), site = wiring.site, readClient = { databaseManager().getSqlClient() },
-        products = context.getBean(MarketProductDao::class.java), entitlements = context.getBean(MarketEntitlementDao::class.java)
+        products = context.getBean(MarketProductDao::class.java), entitlements = context.getBean(MarketEntitlementDao::class.java),
+        // MK-091 (07 section 5 C3): an order whose credit part is not backed by its hold in the ledger is never completed by a payment
+        extraPaidGuards = listOf(CreditHoldGuard(creditService(plugin)))
     )
 }
 
