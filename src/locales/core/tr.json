@@ -81,7 +81,9 @@
     "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin durumunu \"{status}\" olarak değiştirdi.",
     "UPDATED_MARKET_ORDER_EXCHANGE_RATE": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin döviz kurunu <b>{exchangeRate}</b> olarak güncelledi.",
     "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> market döviz kurunu <b>{exchangeRate}</b> olarak yeniledi.",
-    "CREATED_MARKET_LEGAL_TEXT": "<b>{username}</b> yasal metnin <b>{version}</b>. sürümünü ({locale}) yayınladı."
+    "CREATED_MARKET_LEGAL_TEXT": "<b>{username}</b> yasal metnin <b>{version}</b>. sürümünü ({locale}) yayınladı.",
+    "UPDATED_MARKET_CURRENCY_RATES": "<b>{username}</b> ek para birimlerinin döviz kurlarını kaydetti ({currencies}).",
+    "REFRESHED_MARKET_CURRENCY_RATES": "<b>{username}</b> ek para birimlerinin döviz kurlarını yeniledi ({currencies})."
   },
   "server-format": {
     "date": "dd.MM.yyyy",

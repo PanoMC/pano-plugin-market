@@ -2,8 +2,10 @@ package com.panomc.plugins.market.db.impl
 
 import com.panomc.platform.annotation.Dao
 import com.panomc.plugins.market.db.MarketSchema
+import com.panomc.plugins.market.db.dao.AutomaticDiscount
 import com.panomc.plugins.market.db.dao.MarketDiscountDao
 import com.panomc.plugins.market.db.model.MarketDiscount
+import com.panomc.plugins.market.util.MarketStatus
 import io.vertx.core.json.JsonArray
 import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.mysqlclient.MySQLClient
@@ -141,5 +143,21 @@ class MarketDiscountDaoImpl : MarketDiscountDao() {
 
     override suspend fun uninstall(sqlClient: SqlClient) {
         sqlClient.query("DROP TABLE IF EXISTS `${prefix() + tableName}`").execute().coAwait()
+    }
+
+    override suspend fun getAutomatic(sqlClient: SqlClient): List<AutomaticDiscount> {
+        val where = "`status` = ? AND `deletedAt` IS NULL"
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE $where ORDER BY `id` ASC")
+            .execute(Tuple.of(MarketStatus.ACTIVE.name))
+            .coAwait()
+        val badged = sqlClient
+            .preparedQuery("SELECT `id` FROM `${prefix() + tableName}` WHERE $where AND `showBadge` = 1")
+            .execute(Tuple.of(MarketStatus.ACTIVE.name))
+            .coAwait()
+            .map { it.getLong(0) }
+            .toSet()
+
+        return rows.toEntities().map { AutomaticDiscount(it, it.id in badged) }
     }
 }

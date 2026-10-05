@@ -3,6 +3,7 @@ package com.panomc.plugins.market.db.impl
 import com.panomc.plugins.market.db.MarketSchema
 import com.panomc.plugins.market.db.dao.MarketProductVariantDao
 import com.panomc.plugins.market.db.model.MarketProductVariant
+import com.panomc.plugins.market.util.MarketStatus
 import com.panomc.platform.annotation.Dao
 import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.mysqlclient.MySQLClient
@@ -199,5 +200,27 @@ class MarketProductVariantDaoImpl : MarketProductVariantDao() {
             .query("DROP TABLE IF EXISTS `${prefix() + tableName}`")
             .execute()
             .coAwait()
+    }
+
+    override suspend fun getAllActive(sqlClient: SqlClient): List<MarketProductVariant> {
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery(
+                "SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `status` = ? AND `deletedAt` IS NULL ORDER BY `productId` ASC, `position` ASC, `id` ASC"
+            )
+            .execute(Tuple.of(MarketStatus.ACTIVE.name))
+            .coAwait()
+
+        return rows.toEntities()
+    }
+
+    override suspend fun getByImageFileName(imageFileName: String, sqlClient: SqlClient): MarketProductVariant? {
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery(
+                "SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `imageFileName` = ? AND `deletedAt` IS NULL LIMIT 1"
+            )
+            .execute(Tuple.of(imageFileName))
+            .coAwait()
+
+        return rows.toEntities().getOrNull(0)
     }
 }

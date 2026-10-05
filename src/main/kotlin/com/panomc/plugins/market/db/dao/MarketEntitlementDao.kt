@@ -18,4 +18,7 @@ abstract class MarketEntitlementDao : MarketDao<MarketEntitlement>(MarketEntitle
 
     /** Ends an entitlement: `true` when the row exists. */
     abstract suspend fun end(id: Long, status: EntitlementStatus, endReason: String, endedAt: Long, sqlClient: SqlClient): Boolean
+
+    /** ACTIVE entitlements of one owner that have not run out at [now] (`expiresAt` null or later), oldest first. */
+    abstract suspend fun getActiveByOwner(ownerKey: String, now: Long, sqlClient: SqlClient): List<MarketEntitlement>
 }

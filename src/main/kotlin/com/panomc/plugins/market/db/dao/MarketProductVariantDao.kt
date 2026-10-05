@@ -46,4 +46,10 @@ abstract class MarketProductVariantDao : MarketDao<MarketProductVariant>(MarketP
 
     /** Hard delete of every row of a product (cleanup after a hard product delete). Returns the rows removed. */
     abstract suspend fun deleteByProductId(productId: Long, sqlClient: SqlClient): Int
+
+    /** Every live (ACTIVE, not soft deleted) variant of every product, ordered `productId`, `position`, `id` (the storefront listing). */
+    abstract suspend fun getAllActive(sqlClient: SqlClient): List<MarketProductVariant>
+
+    /** The live variant that owns [imageFileName]; `null` when none does. */
+    abstract suspend fun getByImageFileName(imageFileName: String, sqlClient: SqlClient): MarketProductVariant?
 }
