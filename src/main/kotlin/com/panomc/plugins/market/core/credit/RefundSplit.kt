@@ -30,6 +30,16 @@ import java.math.BigDecimal
  * answer is [Result.Invalid] (400 `INVALID_REFUND_AMOUNT {max, maxGateway, maxCredit}`). In a zero-decimal currency `A` and
  * both money parts are multiples of 100 ([Order.unit]).
  *
+ * One deviation from `A > 0` (07 section 7.1), the credits that have no money value: an order paid with credits whose money
+ * valuation is 0 (a credits-only product, 05 section 8.1 / 17 row 53: `T = 0`, `CV = 0`, `CA = 40.00`), or whose money is all
+ * back while a rounding remainder of credits is left, has `remG = remCV = 0` and `remCA > 0`. Its credits are the buyer's and
+ * can only come back as a credit-only refund of value 0: `Split(0, 0, 0, creditPart)`. That is accepted when `remG == 0`,
+ * `remCV == 0` and `remCA > 0` (so never for an anonymised order, whose `remCA` is 0, and never for a damaged order that still
+ * has a money remainder on one side), and only as PROPORTIONAL without an `amount` (all `remCA`) or as OVERRIDE with
+ * `creditAmount` in `1..remCA`, no (or 0) `gatewayAmount` and no (or 0) `amount`. An explicit `amount` in PROPORTIONAL mode is a
+ * request for money and stays refused: an item refund of lines that cost 0 money cannot say how many credits it means. The refund
+ * row then has `amount = 0` and `creditAmount > 0` (the caller must accept that).
+ *
  * Defensive reading of a damaged order: a gateway-originated refund that raced a panel refund can book `refundedTotal`
  * above `totalPrice` (07 section 7.2, alert `OVER_REFUND`), which makes a remainder negative. A negative remainder counts as 0
  * and `remT` never exceeds `remG + remCV`, so the answer can only be smaller, never a refund of money that is not there. For a
@@ -85,7 +95,13 @@ object RefundSplit {
         }
     }
 
-    /** What the gateway behind the order's payment can refund (`PaymentCapabilities.refund` and `manual`, 02 section 5). */
+    /**
+     * What the gateway behind the order's payment can refund ([support] is `PaymentCapabilities.refund`, 02 section 5) and the
+     * request's [manual] flag. `manual` means the money was (or is) returned outside the gateway: no provider call is made, so no
+     * capability applies and it lifts every refusal, not only [RefundSupport.NONE] but also a partial gateway part, or any gateway
+     * part after an earlier gateway refund, at a [RefundSupport.FULL_ONLY] provider (21 section 3.2 step 3 and 3.6, 04 section 7
+     * `REFUND_NOT_SUPPORTED (use manual)`; the panel dialog switches `manual` on and resubmits). The limits stay what the gateway took.
+     */
     class GatewayRefund(val support: RefundSupport, val manual: Boolean = false)
 
     /** The split: `amount = gatewayPart + creditValuePart`. */
@@ -138,11 +154,17 @@ object RefundSplit {
      * as given, `creditValuePart = remCV` when it equals `remCA` (else `halfUp(CV x creditPart / CA)` to the unit),
      * `gatewayPart = A - creditValuePart` when `amount` was sent (else 0 and `A = creditValuePart`). Both: parts as given,
      * `creditValuePart` from the credit part, and `amount`, when sent, must equal `gatewayPart + creditValuePart`.
+     *
+     * Capability: a gateway part needs `gateway.support` to allow it, unless `gateway.manual` (then nothing is asked of the gateway);
+     * a null [gateway] is "unknown" and refuses every gateway part. Credits that have no money value left are the one case of a
+     * result with `amount == 0`, see the class comment.
      */
     fun compute(order: Order, request: Request, gateway: GatewayRefund?): Result {
         val rem = remaining(order)
         val limits = rem.limits()
         fun invalid(problem: Problem) = Result.Invalid(limits, problem)
+
+        valueLessCredits(rem, request)?.let { return finish(order, rem, it, gateway, valueLess = true) }
 
         val split = when (request.mode) {
             Mode.PROPORTIONAL -> {
@@ -154,6 +176,25 @@ object RefundSplit {
             Mode.OVERRIDE -> override(order, rem, request) ?: return invalid(overrideProblem(order, rem, request))
         }
         return finish(order, rem, split, gateway)
+    }
+
+    // ---------------------------------------------------------------- credits without money value
+
+    /**
+     * The credit-only refund of value 0 for an order that has credits left and no money on either side (see the class comment),
+     * or null when the state or the request is not that case (the ordinary path then answers, and with `remT == 0` it refuses).
+     */
+    private fun valueLessCredits(r: Remaining, req: Request): Split? {
+        if (r.g != 0L || r.cv != 0L || r.ca <= 0L) return null
+        return when (req.mode) {
+            Mode.PROPORTIONAL -> if (req.amount == null) Split(0L, 0L, 0L, r.ca) else null
+            Mode.OVERRIDE -> {
+                val credits = req.creditAmount ?: return null
+                if (credits < 1L || credits > r.ca) return null
+                if ((req.gatewayAmount ?: 0L) != 0L || (req.amount ?: 0L) != 0L) return null
+                Split(0L, 0L, 0L, credits)
+            }
+        }
     }
 
     // ---------------------------------------------------------------- proportional
@@ -257,11 +298,11 @@ object RefundSplit {
 
     // ---------------------------------------------------------------- constraints, capability, warnings
 
-    private fun finish(o: Order, r: Remaining, s: Split, gateway: GatewayRefund?): Result {
+    private fun finish(o: Order, r: Remaining, s: Split, gateway: GatewayRefund?, valueLess: Boolean = false): Result {
         val limits = r.limits()
-        // the constraints of 07 section 7.1, for every result
+        // the constraints of 07 section 7.1, for every result; a refund of value 0 is only the credits that have no money value ([valueLessCredits])
         val problem = when {
-            s.amount <= 0L -> Problem.AMOUNT_OUT_OF_RANGE
+            s.amount < 0L || (s.amount == 0L && !(valueLess && s.creditPart > 0L)) -> Problem.AMOUNT_OUT_OF_RANGE
             s.amount > r.t -> Problem.AMOUNT_OUT_OF_RANGE
             s.gatewayPart < 0L || s.gatewayPart > r.g -> Problem.GATEWAY_PART_OUT_OF_RANGE
             s.creditValuePart < 0L || s.creditValuePart > r.cv -> Problem.CREDIT_VALUE_PART_OUT_OF_RANGE
@@ -282,12 +323,12 @@ object RefundSplit {
         }
         if (s.gatewayPart == 0L && s.creditPart > 0L && o.gatewayAmount > 0L) warnings += Warning(WarningCode.CREDIT_ONLY_REFUND)
 
-        // 07 section 7.1 "Gateway capability" (02 section 5)
+        // 07 section 7.1 "Gateway capability" (02 section 5); `manual` = no provider call, so it lifts every refusal (21 section 3.2 step 3, 3.6)
         if (s.gatewayPart > 0L) {
             val support = gateway?.support ?: RefundSupport.NONE
             val manual = gateway?.manual == true
-            val refundable = when (support) {
-                RefundSupport.NONE -> manual
+            val refundable = manual || when (support) {
+                RefundSupport.NONE -> false
                 RefundSupport.FULL_ONLY -> s.gatewayPart == o.gatewayAmount && o.refundedGatewayAmount == 0L
                 RefundSupport.PARTIAL, RefundSupport.PER_LINE -> true
             }
