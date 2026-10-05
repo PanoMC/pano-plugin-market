@@ -289,6 +289,125 @@ class VaultBridgeTest {
         assertTrue(link.of(EconomyOp.BALANCE).any { it.player.username == "Steve" })
     }
 
+    // ---- PROVIDER after a restart: the last panel mode is known before MARKET_CONFIG answers ----------------------------------------
+
+    /** A server start: a new component over the same plugin folder whose `MARKET_CONFIG` has not been answered yet. */
+    private fun restartedFeatures(config: String? = null): FeatureRig = FeatureRig(dir.resolve("features-restart-${restarts++}"), configText = config, host = host, log = log)
+
+    private var restarts = 0
+
+    private fun bridgeOn(r: FeatureRig, pollMs: Long = 5_000): VaultBridge =
+        VaultBridge(
+            plugin, r.features, link, MarketScheduler(plugin, folia = false), tracker, host, dir.resolve("features"), "1.4.0", log, clock,
+            engineScheduler = engine, pollMs = pollMs, providerTimeoutMs = 500, retryBaseMs = 1_000,
+            services = { services }, vaultPresent = { vaultOn }
+        ).also { bridges.add(it) }
+
+    private fun runWithPanelMode(mode: String) {
+        setMode(mode)
+        val b = bridge()
+        b.start()
+        b.stop()
+        assertTrue(economyRegs().isEmpty(), "stop unregisters")
+    }
+
+    @Test
+    fun `PROVIDER - after a restart the credits are registered right at start, before any MARKET_CONFIG answer`() {
+        runWithPanelMode("PROVIDER") // the previous run
+        val fresh = restartedFeatures()
+        assertNull(fresh.features.config.remote, "this start has not heard from Pano yet")
+        val b = bridgeOn(fresh)
+        b.start() // what onEnable does: a plugin that looks for the Economy in its own onEnable finds it
+        assertEquals(1, economyRegs().size)
+        assertTrue(b.providerActive())
+        assertEquals(ServicePriority.Highest, economyRegs().single().priority)
+        engine.advance(5_000)
+        engine.advance(5_000)
+        assertEquals(1, economyRegs().size, "the polls before the first answer do not undo it")
+        // writes fail closed while disconnected, reads say "no account / 0" until the balance is loaded
+        val eco = economyRegs().single().provider as Economy
+        link.up = false
+        assertFalse(eco.withdrawPlayer("Steve", 1.0).transactionSuccess())
+        assertEquals(0.0, eco.getBalance("Steve"))
+        assertFalse(eco.has("Steve", 1.0))
+    }
+
+    @Test
+    fun `PROVIDER - the first MARKET_CONFIG that says otherwise unregisters it at the next check and that is remembered`() {
+        runWithPanelMode("PROVIDER")
+        val fresh = restartedFeatures()
+        val b = bridgeOn(fresh)
+        b.start()
+        assertEquals(1, economyRegs().size)
+        fresh.loadConfig(panoConfig(hash = "h-off", settings = MarketMcSettings(mcVaultMode = "OFF")))
+        assertEquals(1, economyRegs().size, "not before the next check")
+        engine.advance(5_000)
+        assertTrue(economyRegs().isEmpty())
+        b.stop()
+        val third = restartedFeatures()
+        bridgeOn(third).start()
+        assertTrue(economyRegs().isEmpty(), "the next start knows it is OFF")
+    }
+
+    @Test
+    fun `PROVIDER - a first MARKET_CONFIG that confirms PROVIDER keeps the registration`() {
+        runWithPanelMode("PROVIDER")
+        val fresh = restartedFeatures()
+        val b = bridgeOn(fresh)
+        b.start()
+        val first = economyRegs().single().provider
+        fresh.loadConfig(panoConfig(hash = "h-provider", settings = MarketMcSettings(mcVaultMode = "PROVIDER")))
+        engine.advance(5_000)
+        assertSame(first, economyRegs().single().provider, "the same registration, not a re-registration")
+    }
+
+    @Test
+    fun `PROVIDER - the local vault switch beats the remembered mode, and a remembered mode never registers without the Vault plugin`() {
+        runWithPanelMode("PROVIDER")
+        val local = restartedFeatures(config = "features:\n  vault: false\n")
+        bridgeOn(local).start()
+        assertTrue(economyRegs().isEmpty())
+        vaultOn = false
+        val b = bridgeOn(restartedFeatures())
+        b.start()
+        engine.advance(5_000)
+        assertTrue(economyRegs().isEmpty())
+        assertFalse(log.has("Vault plugin is not installed"), "nothing was announced by the panel yet, so nothing is complained about")
+        vaultOn = true
+        engine.advance(5_000)
+        assertEquals(1, economyRegs().size, "Vault showed up: registered at the next check")
+    }
+
+    @Test
+    fun `PROVIDER - without a remembered mode nothing is registered until the panel says PROVIDER, and an unreadable mode file means OFF`() {
+        val first = bridgeOn(restartedFeatures())
+        first.start()
+        assertTrue(economyRegs().isEmpty())
+        first.stop()
+        val modeFile = dir.resolve("features").resolve("vault").resolve("mode")
+        Files.createDirectories(modeFile.parent)
+        Files.write(modeFile, byteArrayOf(0, 0, 7, 'P'.code.toByte()))
+        bridgeOn(restartedFeatures()).start()
+        assertTrue(economyRegs().isEmpty())
+    }
+
+    @Test
+    fun `PROVIDER - the remembered mode follows every change of the panel`() {
+        val modeFile = dir.resolve("features").resolve("vault").resolve("mode")
+        val b = bridge()
+        b.start()
+        assertFalse(Files.exists(modeFile), "nothing is remembered before the panel spoke")
+        setMode("PROVIDER")
+        engine.advance(5_000)
+        assertEquals("PROVIDER", String(Files.readAllBytes(modeFile)).trim())
+        setMode("CONVERT")
+        engine.advance(5_000)
+        assertEquals("CONVERT", String(Files.readAllBytes(modeFile)).trim())
+        setMode("OFF")
+        engine.advance(5_000)
+        assertEquals("OFF", String(Files.readAllBytes(modeFile)).trim())
+    }
+
     // ---- CONVERT ---------------------------------------------------------------------------------------------------------------
 
     @Test

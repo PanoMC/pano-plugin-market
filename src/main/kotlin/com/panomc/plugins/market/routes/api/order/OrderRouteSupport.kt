@@ -20,6 +20,7 @@ import com.panomc.plugins.market.db.dao.MarketPaymentDao
 import com.panomc.plugins.market.db.dao.MarketPaymentMethodDao
 import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.dao.MarketRedemptionDao
+import com.panomc.plugins.market.db.dao.MarketRefundDao
 import com.panomc.plugins.market.db.dao.MarketWebhookDeliveryDao
 import com.panomc.plugins.market.db.dao.MarketWebhookEndpointDao
 import com.panomc.plugins.market.db.tx.Locks
@@ -33,11 +34,13 @@ import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.routes.user.cart.cartService
+import com.panomc.plugins.market.service.DuplicateRefundPolicy
 import com.panomc.plugins.market.service.OrderService
 import com.panomc.plugins.market.service.OutboundHttp
 import com.panomc.plugins.market.service.PayCaller
 import com.panomc.plugins.market.service.PaidWebhooks
 import com.panomc.plugins.market.service.PaymentService
+import com.panomc.plugins.market.service.ProductPurchaseLimits
 import com.panomc.plugins.market.service.RedemptionService
 import com.panomc.plugins.market.service.ReservationService
 import com.panomc.plugins.market.service.WebhookSender
@@ -110,6 +113,7 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
     val cart = cartService(plugin)
     val rates = context.getBean(MarketCurrencyRateDao::class.java)
     val webhooks by lazy { webhookService(plugin) }
+    val payments by lazy { paymentService(plugin) }
 
     return OrderService(
         clock, SecureIds(), orderDao, context.getBean(MarketOrderItemDao::class.java), context.getBean(MarketOrderEventDao::class.java),
@@ -117,7 +121,12 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
         reservations = ReservationService(clock, locks, redemptions, orderDao),
         webhooks = PaidWebhooks { conn, orderId -> webhooks.emitOrderPaid(conn, orderId) },
         rates = { sqlClient -> rates.getAll(sqlClient).filter { it.rate.signum() > 0 }.associate { it.currency to it.rate } },
-        statsCurrency = { currentConfig(plugin).statsCurrency.name }
+        statsCurrency = { currentConfig(plugin).statsCurrency.name },
+        // MK-079: the re-reserve of an accepted late payment checks `limitPerPlayer`; a rejected review and a duplicate payment request their refund
+        limits = ProductPurchaseLimits(orderDao, context.getBean(MarketProductDao::class.java), context.getBean(MarketEntitlementDao::class.java), clock),
+        refunds = context.getBean(MarketRefundDao::class.java),
+        // the duplicates an accepted review finds are judged by the same two questions as a duplicate that arrives on a paid order
+        duplicates = DuplicateRefundPolicy { conn, providerId -> payments.duplicateRefundRule(conn, providerId) }
     )
 }
 

@@ -308,6 +308,47 @@ class MemorySink : AppendSink {
     override fun close() = Unit
 }
 
+/**
+ * An [AppendSink] over the real journal file that lets [limit] appends through and then refuses every further one, writing
+ * nothing of it (a disk that filled up). [limit] `-1` = no limit; shared between the sinks a journal opens over time, so the
+ * count survives the journal reopening its file.
+ */
+class CountingFileSink(private val delegate: AppendSink, private val limit: java.util.concurrent.atomic.AtomicInteger) : AppendSink {
+    override fun size() = delegate.size()
+
+    override fun append(bytes: ByteArray) {
+        val left = limit.get()
+        if (left == 0) throw java.io.IOException("disk full")
+        if (left > 0) limit.decrementAndGet()
+        delegate.append(bytes)
+    }
+
+    override fun truncate(size: Long) = delegate.truncate(size)
+    override fun close() = delegate.close()
+}
+
+/** Holds the append number [blockAt] (1 based, over every sink of the journal) until [release] is counted down (a stalled fsync). */
+class Blocker(val blockAt: Int) {
+    val count = java.util.concurrent.atomic.AtomicInteger()
+    val reached = java.util.concurrent.CountDownLatch(1)
+    val release = java.util.concurrent.CountDownLatch(1)
+}
+
+class BlockingFileSink(private val delegate: AppendSink, private val blocker: Blocker) : AppendSink {
+    override fun size() = delegate.size()
+
+    override fun append(bytes: ByteArray) {
+        if (blocker.count.incrementAndGet() == blocker.blockAt) {
+            blocker.reached.countDown()
+            blocker.release.await()
+        }
+        delegate.append(bytes)
+    }
+
+    override fun truncate(size: Long) = delegate.truncate(size)
+    override fun close() = delegate.close()
+}
+
 /** `100`, not `1E+2`: BigDecimal values compared as plain text. */
 fun BigDecimal.plain(): String = stripTrailingZeros().toPlainString()
 
