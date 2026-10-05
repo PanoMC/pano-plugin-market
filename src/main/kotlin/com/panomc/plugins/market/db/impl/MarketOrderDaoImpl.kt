@@ -3,6 +3,7 @@ package com.panomc.plugins.market.db.impl
 import com.panomc.platform.annotation.Dao
 import com.panomc.plugins.market.db.MarketSchema
 import com.panomc.plugins.market.db.dao.MarketOrderDao
+import com.panomc.plugins.market.db.dao.ProductOrderUsage
 import com.panomc.plugins.market.db.dao.isDuplicateKey
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.util.OrderStatus
@@ -241,6 +242,31 @@ class MarketOrderDaoImpl : MarketOrderDao() {
             .preparedQuery(query)
             .execute(Tuple.of(userId))
             .coAwait()
+    }
+
+    override suspend fun usageByProduct(recipientKeys: Collection<String>, productIds: Collection<Long>, sqlClient: SqlClient): Map<Long, ProductOrderUsage> {
+        if (recipientKeys.isEmpty() || productIds.isEmpty()) return emptyMap()
+
+        val keys = recipientKeys.toList()
+        val ids = productIds.toList()
+        val query =
+            "SELECT i.`productId` AS productId, COALESCE(SUM(i.`quantity` - i.`refundedQuantity`), 0) AS used, MAX(o.`createdAt`) AS lastAt" +
+                " FROM `${prefix() + tableName}` o INNER JOIN `$itemTableName` i ON i.`orderId` = o.`id`" +
+                " WHERE o.`recipientKey` IN (${keys.joinToString(", ") { "?" }}) AND i.`productId` IN (${ids.joinToString(", ") { "?" }})" +
+                " AND o.`reservationState` IN ('HELD', 'COMMITTED') AND NOT (o.`reservationState` = 'HELD' AND o.`buyerKey` <> o.`recipientKey`)" +
+                " GROUP BY i.`productId`"
+
+        val values = Tuple.tuple()
+        keys.forEach { values.addValue(it) }
+        ids.forEach { values.addValue(it) }
+
+        val rows: RowSet<Row> = sqlClient.preparedQuery(query).execute(values).coAwait()
+
+        return rows.associate {
+            val productId = it.getLong("productId")
+
+            productId to ProductOrderUsage(productId, it.getLong("used"), it.getLong("lastAt"))
+        }
     }
 
     // Per-order conversion factor: frozen rate if set, otherwise the currency-based fallback
