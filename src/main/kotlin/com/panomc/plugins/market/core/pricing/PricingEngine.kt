@@ -108,7 +108,7 @@ object PricingEngine {
             itemsBasis = Math.addExact(itemsBasis, line.lineBasis)
             itemsTotal = Math.addExact(itemsTotal, line.lineTotal)
             itemsVat = Math.addExact(itemsVat, line.vatAmount)
-            if (l.line.physical && !l.excluded) {
+            if (shippable(l)) {
                 physicalBasis = Math.addExact(physicalBasis, line.lineBasis)
                 requiresShipping = true
             }
@@ -159,6 +159,14 @@ object PricingEngine {
             messages = messages
         )
     }
+
+    /**
+     * A priced line that ships (05 section 9.1, 10 section 2): a physical product, or a bundle with at least one physical
+     * child (the bundle's own flag is forced to 0, so its children carry the physical lines; the whole bundle basis is the
+     * shippable value, 10 section 2.2). A hidden line is not priced and never ships.
+     */
+    private fun shippable(l: ListedLine): Boolean =
+        !l.excluded && (l.line.physical || (l.line.kind == LineKind.BUNDLE && l.line.children.any { it.physical }))
 
     /** One run of A2 and A3: the per-line automatic discount outcomes, what the codes did, and the merchandise left (S1 / S2 of 05 section 6.4). */
     private class Scenario(val outcomes: List<DiscountOutcome>, val codes: CodeResult, val basis: Long)

@@ -24,6 +24,7 @@ import com.panomc.plugins.market.core.pricing.PricingFixtures.P2
 import com.panomc.plugins.market.core.pricing.PricingFixtures.P3
 import com.panomc.plugins.market.core.pricing.PricingFixtures.P4
 import com.panomc.plugins.market.core.pricing.PricingFixtures.P5
+import com.panomc.plugins.market.core.pricing.PricingFixtures.P5M
 import com.panomc.plugins.market.core.pricing.PricingFixtures.P6
 import com.panomc.plugins.market.core.pricing.PricingFixtures.P8
 import com.panomc.plugins.market.core.pricing.PricingFixtures.P9
@@ -749,7 +750,7 @@ class PricingEngineTest {
             { price(line(P1), override = -1, profile = PricingProfile.PANEL) },
             { price(line(T2), buyer = PricingFixtures.buyer(listOf(OwnedTier(1, 10, 1, -1)))) },
             { price(line(P1), config = config(base = "KWD")) },
-            { price(line(P5).let { b -> LineInput(b.lineKey, b.productId, 0, b.kind, 100_000, b.basePrice, b.currencyPrices, 0, null, emptyList(), false, false, null, null, listOf(BundleChild(2, 0, 100_000))) }) }
+            { price(line(P5).let { b -> LineInput(b.lineKey, b.productId, 0, b.kind, 100_000, b.basePrice, b.currencyPrices, 0, null, emptyList(), false, false, null, null, listOf(BundleChild(2, 0, 100_000, false))) }) }
         )
         for ((i, case) in cases.withIndex()) {
             assertEquals(PricingError.INVALID_INPUT, refused(case).error, "case $i")
@@ -997,7 +998,10 @@ class PricingEngineTest {
     fun `row 28 a creator never benefits from their own code`() {
         val own = creatorCode(creatorUserId = 900)
         val cases = listOf(
-            "payer" to PricingFixtures.buyer(userId = 900, recipientUserId = 900),
+            "payer and recipient" to PricingFixtures.buyer(userId = 900, recipientUserId = 900),
+            // the payer clause alone: the recipient is somebody else, so only `creatorUserId == buyer.userId` refuses it
+            "creator pays a gift for somebody else" to PricingFixtures.buyer(userId = 900, recipientUserId = 5),
+            "creator pays, recipient not resolved" to PricingFixtures.buyer(userId = 900, recipientUserId = null),
             "gift to the creator by a guest" to PricingFixtures.buyer(userId = null, loggedIn = false, recipientUserId = 900, email = "guest@example.com"),
             "gift to the creator by another user" to PricingFixtures.buyer(userId = 5, recipientUserId = 900)
         )
@@ -1007,6 +1011,12 @@ class PricingEngineTest {
             assertEquals(10000L, r.itemsTotal, name)
             assertFalse(r.canCheckout, name)
         }
+        // counter-case: somebody else paying for somebody else gets the discount (neither clause matches the creator)
+        val other = price(line(P1), creatorCode = own, buyer = PricingFixtures.buyer(userId = 5, recipientUserId = 6))
+        assertEquals(CodeOutcome(1, "CR", true, null, 500), other.creatorCode)
+        assertEquals(500L, other.creatorDiscount)
+        assertEquals(9500L, other.itemsTotal)
+        assertTrue(other.canCheckout)
         // the order e-mail of the creator's account, written differently
         val byMail = creatorCode(creatorUserId = 900, creatorEmail = " Creator@Example.com ")
         val guest = PricingFixtures.buyer(userId = null, loggedIn = false, recipientUserId = null, email = "creator@EXAMPLE.com")
@@ -1618,6 +1628,61 @@ class PricingEngineTest {
         assertTrue(price(line(P1), line(P4, variantId = 1), coupon = K25).requiresShipping)
     }
 
+    @Test
+    fun `a bundle with a physical child needs shipping and its whole basis is the physical basis, after the coupon`() {
+        // the bundle's own flag is 0 (forced on save); the physical child alone makes it shippable
+        assertFalse(line(P5M).physical)
+        val r = price(line(P5M), coupon = K25)
+        assertEquals(3000L, r.key("L15").couponShare) // 25 % of 120.00
+        assertEquals(9000L, r.key("L15").lineBasis)
+        assertTrue(r.requiresShipping)
+        assertEquals(9000L, r.physicalBasis)
+        assertEquals(r.key("L15").lineBasis, r.physicalBasis)
+        assertEquals(9000L, r.physicalBasisBase)
+        // the children are output lines of their own and never carry a price or a basis
+        assertEquals(listOf(0L, 0L), r.lines.filter { it.kind == OrderItemKind.BUNDLE_CHILD }.map { it.lineBasis })
+        // next to a digital product only the bundle counts, quantity scales its basis
+        val mixed = price(line(P1), line(P5M, 2), coupon = K25)
+        assertTrue(mixed.requiresShipping)
+        assertEquals(mixed.key("L15").lineBasis, mixed.physicalBasis)
+        assertEquals(18000L, mixed.physicalBasis) // 2 x 120.00 - 25 %
+        assertEquals(7500L + 18000L, mixed.itemsBasis)
+        // a bundle priced in a foreign currency: the base-currency figure is converted back from the order currency
+        val multi = config(mode = CurrencyMode.MULTI)
+        val usd = price(line(P5M, basePrice = 12000, currencyPrices = mapOf("USD" to 300)), config = multi, currency = "USD")
+        assertEquals(300L, usd.physicalBasis)
+        assertEquals(12000L, usd.physicalBasisBase)
+    }
+
+    @Test
+    fun `a bundle of digital children needs no shipping and adds nothing to the physical basis`() {
+        val r = price(line(P5), coupon = K25)
+        assertFalse(r.requiresShipping)
+        assertEquals(0L, r.physicalBasis)
+        assertEquals(0L, r.physicalBasisBase)
+        assertEquals(9000L, r.itemsBasis)
+        // a physical product next to it still counts alone
+        val mixed = price(line(P5), line(P4, variantId = 1), coupon = K25)
+        assertTrue(mixed.requiresShipping)
+        assertEquals(mixed.key("L4v1").lineBasis, mixed.physicalBasis)
+        // a bundle with no child at all is not shippable either
+        val empty = Product(16, "Empty bundle", 1000, 0, listOf(4), kind = LineKind.BUNDLE)
+        assertFalse(price(line(empty)).requiresShipping)
+    }
+
+    @Test
+    fun `a bundle with a physical child hidden by the currency fallback needs no shipping`() {
+        val hide = config(mode = CurrencyMode.MULTI, fallback = MultiCurrencyFallback.HIDE)
+        val r = price(line(P1), line(P5M), config = hide, currency = "USD", coupon = K25)
+        assertTrue(r.key("L15").excluded)
+        assertFalse(r.key("L1").excluded)
+        assertFalse(r.requiresShipping)
+        assertEquals(0L, r.physicalBasis)
+        assertEquals(0L, r.physicalBasisBase)
+        // the same cart in the base currency does ship
+        assertTrue(price(line(P1), line(P5M), coupon = K25).requiresShipping)
+    }
+
     // ---------------------------------------------------------------- determinism
 
     @Test
@@ -1824,6 +1889,7 @@ class PricingEngineTest {
             assertEquals(expected.total, BigInteger.valueOf(result.itemsTotal), where)
             assertEquals(expected.vat, BigInteger.valueOf(result.itemsVat), where)
             assertEquals(expected.physicalBasis, BigInteger.valueOf(result.physicalBasis), where)
+            assertEquals(expected.requiresShipping, result.requiresShipping, "$where requiresShipping")
             assertEquals(expected.basisBase, result.itemsBasisBase, where)
             assertEquals(expected.physicalBasisBase, result.physicalBasisBase, where)
 
@@ -1871,6 +1937,10 @@ class PricingEngineTest {
                 if (rate != null) hit("per-product VAT rate")
                 if (rate != null && rate !in 0L..10_000L) hit("VAT rate clamped")
                 if (source.physical && !line.excluded) hit("physical line")
+                if (source.kind == LineKind.BUNDLE && source.children.any { it.physical }) {
+                    hit(if (line.excluded) "hidden bundle with a physical child" else "bundle shipped by a physical child")
+                }
+                if (source.kind == LineKind.BUNDLE && !line.excluded && source.children.none { it.physical }) hit("digital bundle")
             }
 
             // the codes: branch counters (the loop must not be vacuous)
@@ -1888,7 +1958,19 @@ class PricingEngineTest {
             hit(if (input.config.pricesIncludeVat) "VAT inclusive" else "VAT exclusive")
             if (input.config.removeCents) hit("removeCents")
             if (result.currency != result.baseCurrency) hit("foreign order currency")
-            if (input.creatorCode?.let { it.creatorUserId == input.buyer.recipientUserId || it.creatorUserId == input.buyer.userId } == true) hit("creator uses own code")
+            // only the id clauses count, and only where the e-mail clause does not also refuse the code, so every hit
+            // is a case that one clause alone decides (a null creatorUserId never matches a null buyer id)
+            input.creatorCode?.let { c ->
+                val creator = c.creatorUserId
+                val mail = c.creatorEmail?.trim()?.lowercase()
+                val sameMail = !mail.isNullOrEmpty() && mail == input.buyer.email?.trim()?.lowercase()
+                if (creator != null && !sameMail) {
+                    val payer = creator == input.buyer.userId
+                    val recipient = creator == input.buyer.recipientUserId
+                    if (payer && !recipient) hit("own code: payer only")
+                    if (recipient && !payer) hit("own code: recipient only")
+                }
+            }
 
             // combine off: the chosen basis is the cheaper of "automatic discounts only" and "codes only" (property 6)
             if (!input.config.combineDiscountsAndCoupons && (input.coupon != null || input.creatorCode != null)) {
@@ -1916,9 +1998,10 @@ class PricingEngineTest {
             "coupon refused: CODE_MIN_AMOUNT", "coupon refused: CODE_LIMIT_REACHED", "coupon refused: CODE_EXPIRED",
             "coupon refused: CODE_NOT_STARTED", "coupon refused: EXTERNAL_PRICING", "coupon refused: CODE_NOT_COMBINABLE",
             "creator code attribution only: CODE_NOT_COMBINABLE", "FIXED coupon allocated over several lines",
-            "FIXED creator code allocated over several lines", "creator uses own code", "combine off, codes chosen",
+            "FIXED creator code allocated over several lines", "own code: payer only", "own code: recipient only", "combine off, codes chosen",
             "combine off, automatic discount chosen", "combine on, both taken", "VAT inclusive", "VAT exclusive", "EXTERNAL_TAX",
-            "EXTERNAL", "per-product VAT rate", "VAT rate clamped", "physical line", "removeCents", "foreign order currency"
+            "EXTERNAL", "per-product VAT rate", "VAT rate clamped", "physical line", "bundle shipped by a physical child",
+            "hidden bundle with a physical child", "digital bundle", "removeCents", "foreign order currency"
         )) {
             assertTrue((seen[branch] ?: 0) >= 100, "the loop barely exercised '$branch': ${seen[branch]}")
         }
@@ -1946,12 +2029,12 @@ class PricingEngineTest {
             LineInput(
                 lineKey = l.lineKey, productId = l.productId, variantId = l.variantId, kind = l.kind, quantity = l.quantity,
                 basePrice = l.basePrice, currencyPrices = l.currencyPrices, creditPrice = l.creditPrice,
-                vatBp = rates[rnd.nextInt(rates.size)], categoryPath = l.categoryPath, physical = rnd.nextInt(4) == 0,
+                vatBp = rates[rnd.nextInt(rates.size)], categoryPath = l.categoryPath, physical = l.kind != LineKind.BUNDLE && rnd.nextInt(4) == 0,
                 subscription = l.subscription, tier = l.tier, topUpCredits = l.topUpCredits, children = l.children
             )
         }
         val buyer = PricingFixtures.buyer(
-            base.buyer.recipientTiers, userId = 1, recipientUserId = listOf(1L, 1L, 900L, null)[rnd.nextInt(4)],
+            base.buyer.recipientTiers, userId = listOf(1L, 1L, 900L)[rnd.nextInt(3)], recipientUserId = listOf(1L, 1L, 900L, null)[rnd.nextInt(4)],
             email = listOf("buyer@example.com", null, "Buyer@Example.com ")[rnd.nextInt(3)]
         )
         return PricingInput(
@@ -2043,7 +2126,7 @@ class PricingEngineTest {
                 physical = false, subscription = rnd.nextInt(10) == 0,
                 tier = if (tiered) TierInfo(tierPool[rnd.nextInt(2)], 2 + rnd.nextInt(2), if (rnd.nextInt(4) == 0) UpgradeMode.FULL else UpgradeMode.DIFFERENCE) else null,
                 topUpCredits = null,
-                children = if (kind == LineKind.BUNDLE) listOf(BundleChild(100L + i, 0, 1 + rnd.nextInt(5)), BundleChild(200L + i, 0, 1)) else emptyList()
+                children = if (kind == LineKind.BUNDLE) listOf(BundleChild(100L + i, 0, 1 + rnd.nextInt(5), rnd.nextInt(3) == 0), BundleChild(200L + i, 0, 1, rnd.nextInt(3) == 0)) else emptyList()
             )
         }
 

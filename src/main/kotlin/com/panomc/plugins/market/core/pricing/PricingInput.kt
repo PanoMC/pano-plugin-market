@@ -68,8 +68,12 @@ class PricingConfig(
 /** Category tier facts of a product (`market_category.tiered`, `tierRank`, `upgradeMode`; 01 section 2.1). */
 class TierInfo(val categoryId: Long, val tierRank: Int, val upgradeMode: UpgradeMode)
 
-/** One child of a bundle (`market_bundle_item`). */
-class BundleChild(val productId: Long, val variantId: Long, val quantity: Int)
+/**
+ * One child of a bundle (`market_bundle_item`). [physical] is the child product's own `physical` flag: a bundle's flag is
+ * forced to 0 on save (01 section 2.2, 10 section 2.1), so a bundle needs shipping exactly when any of its children does.
+ * It has no default on purpose: a caller that forgets it would price a bundle of physical goods without shipping.
+ */
+class BundleChild(val productId: Long, val variantId: Long, val quantity: Int, val physical: Boolean)
 
 /** An ACTIVE entitlement of the recipient in a tiered category. [pricePaid] is base currency, already net of refunds. */
 class OwnedTier(val entitlementId: Long, val tierCategoryId: Long, val tierRank: Int, val pricePaid: Long)
@@ -91,6 +95,10 @@ class LineInput(
     val vatBp: Long?,
     /** The product's category first, then its ancestors. */
     val categoryPath: List<Long>,
+    /**
+     * `product.physical` of a `PRODUCT` line. For a `BUNDLE` the product's own flag is always 0 (forced on save); the
+     * engine reads [BundleChild.physical] of its [children] instead and treats the bundle as shippable when any child is.
+     */
     val physical: Boolean,
     /** `billingMode == SUBSCRIPTION`. */
     val subscription: Boolean,

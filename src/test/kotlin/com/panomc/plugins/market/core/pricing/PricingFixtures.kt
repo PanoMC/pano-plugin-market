@@ -66,7 +66,11 @@ object PricingFixtures {
     val P3 = Product(3, "Sword", 4990, 0, listOf(2), vatBp = 1000)
     val P4 = Product(4, "T-shirt", 25000, 0, listOf(3), physical = true)
     val P5 = Product(5, "Starter bundle", 12000, 0, listOf(4), kind = LineKind.BUNDLE,
-        children = listOf(BundleChild(2, 0, 3), BundleChild(3, 0, 1)))
+        children = listOf(BundleChild(2, 0, 3, false), BundleChild(3, 0, 1, false)))
+
+    /** A bundle that ships: one digital child and one physical child (the bundle's own `physical` flag is 0, 01 section 2.2). */
+    val P5M = Product(15, "Merch bundle", 12000, 0, listOf(4), kind = LineKind.BUNDLE,
+        children = listOf(BundleChild(2, 0, 3, false), BundleChild(4, 1, 2, true)))
     val P6 = Product(6, "Credit pack", 10000, 0, listOf(5), kind = LineKind.CREDIT_PACK)
     val P8 = Product(8, "Sticker", 5, 0, listOf(6))
     val P9 = Product(9, "Monthly rank", 3000, 3000, listOf(7), subscription = true)

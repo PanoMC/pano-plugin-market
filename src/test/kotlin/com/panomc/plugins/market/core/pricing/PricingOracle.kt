@@ -153,6 +153,7 @@ object PricingOracle {
         val total: BigInteger,
         val vat: BigInteger,
         val physicalBasis: BigInteger,
+        val requiresShipping: Boolean,
         val basisBase: Long,
         val physicalBasisBase: Long
     )
@@ -318,6 +319,7 @@ object PricingOracle {
         var totalSum = BigInteger.ZERO
         var vatSum = BigInteger.ZERO
         var physicalSum = BigInteger.ZERO
+        var ships = false
         val lines = input.lines.indices.map { i ->
             val l = input.lines[i]
             val a2 = s.a2.lines[i]
@@ -337,11 +339,15 @@ object PricingOracle {
             basisSum = basisSum.add(big(line.basis))
             totalSum = totalSum.add(big(line.total))
             vatSum = vatSum.add(big(line.vat))
-            if (l.physical && !a2.excluded) physicalSum = physicalSum.add(big(line.basis))
+            // 10 section 2.1: a bundle's own flag is 0, it ships when any child does (the whole bundle basis is then physical)
+            if (!a2.excluded && (l.physical || (l.kind == LineKind.BUNDLE && l.children.any { it.physical }))) {
+                physicalSum = physicalSum.add(big(line.basis))
+                ships = true
+            }
             line
         }
         return Full(
-            ctx.currency, lines, s.coupon, s.creator, basisSum, totalSum, vatSum, physicalSum,
+            ctx.currency, lines, s.coupon, s.creator, basisSum, totalSum, vatSum, physicalSum, ships,
             ctx.fromOrder(basisSum.longValueExact()), ctx.fromOrder(physicalSum.longValueExact())
         )
     }
