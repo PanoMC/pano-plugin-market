@@ -20,6 +20,8 @@ import com.panomc.plugins.market.db.model.SubscriptionMode
 import com.panomc.plugins.market.db.model.SubscriptionStatus
 import com.panomc.plugins.market.db.model.SubscriptionStatus.*
 import com.panomc.plugins.market.spi.payment.GatewaySubscriptionStatus
+import com.panomc.plugins.market.spi.payment.PaymentCapabilities
+import com.panomc.plugins.market.spi.payment.RecurringSupport
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -225,6 +227,41 @@ class SubscriptionStateMachineTest {
     }
 
     @Test
+    fun `the last retry of the default grace survives the scheduler latency of every attempt`() {
+        // Review fix: a retry is picked up by the 60 s job and fails a little after the instant it was scheduled for.
+        // The candidate is then past the frozen grace end by that delay and must still be the +3 d retry.
+        val latency = 90_000L
+        val firstFailure = now
+        val graceEnds = firstFailure + 3 * day
+        // first decline (S4): grace frozen at +3 d, first retry at +1 d
+        val first = decide(
+            st(ACTIVE, merchant, currentPeriodEnd = firstFailure - hour, nextChargeAt = firstFailure - hour),
+            SubEvent.RenewalFailed(attempts = 1), at = firstFailure
+        ).moved()
+        assertEquals(SetGraceEndsAt(graceEnds), first.one<SetGraceEndsAt>())
+        assertEquals(SetNextChargeAt(firstFailure + day), first.one<SetNextChargeAt>())
+        // second decline 90 s after the retry was due: the next retry is the grace end itself
+        val second = decide(
+            st(PAST_DUE, merchant, graceEndsAt = graceEnds, nextChargeAt = firstFailure + day),
+            SubEvent.RenewalFailed(attempts = 2), at = firstFailure + day + latency
+        ).moved()
+        assertEquals(SubRule.FAILURE_RECORDED, second.step().rule)
+        assertEquals(SetNextChargeAt(graceEnds), second.one<SetNextChargeAt>(), "the documented +3 d retry exists")
+        // third decline 90 s after the grace end: nothing follows
+        val third = decide(
+            st(PAST_DUE, merchant, graceEndsAt = graceEnds, nextChargeAt = graceEnds),
+            SubEvent.RenewalFailed(attempts = 3), at = graceEnds + latency
+        ).moved()
+        assertEquals(SetNextChargeAt(null), third.one<SetNextChargeAt>())
+        // ... and step D, which waits for a retry scheduled at the grace end, expires the row once nothing is scheduled any more
+        assertEquals(
+            "WAITING_FOR_PAYMENT",
+            decide(st(PAST_DUE, merchant, graceEndsAt = graceEnds, nextChargeAt = graceEnds), SubEvent.GraceOver(), at = graceEnds).ignoredReason()
+        )
+        assertEquals(EXPIRED, decide(st(PAST_DUE, merchant, graceEndsAt = graceEnds, nextChargeAt = null), SubEvent.GraceOver(), at = graceEnds + latency).moved().to)
+    }
+
+    @Test
     fun `a final MERCHANT failure clears nextChargeAt, grace keeps running`() {
         val sub = st(ACTIVE, merchant, currentPeriodEnd = now - hour)
         val t = decide(sub, SubEvent.RenewalFailed(final = true, attempts = 1)).moved()
@@ -384,6 +421,35 @@ class SubscriptionStateMachineTest {
             ApplyRenewal(manual, false, false),
             decide(st(PAST_DUE, merchant), SubEvent.RenewalPaid(modeAfter = manual)).moved().one<ApplyRenewal>()
         )
+    }
+
+    @Test
+    fun `the automatic merchant renewal keeps the MERCHANT mode and schedules the next charge`() {
+        // Review fix: chargeRecurring succeeds without a new stored method (FakeProvider); 09 section 16 test 34
+        // "success => period 2, next nextChargeAt". The mode comes from ModeResolver, the schedule from the machine.
+        val merchantCaps = PaymentCapabilities().apply { recurring = RecurringSupport.MERCHANT_INITIATED }
+        val periodEnd = now
+        val sub = st(ACTIVE, merchant, cycleCount = 1, maxCycles = null, currentPeriodEnd = periodEnd, nextChargeAt = periodEnd)
+        val modeAfter = ModeResolver.atRenewal(sub.mode, merchantCaps, hasStoredMethod = false, chargedWithStoredMethod = true)
+        assertEquals(merchant, modeAfter)
+        val t = decide(sub, SubEvent.RenewalPaid(modeAfter = modeAfter)).moved()
+        assertEquals(ApplyRenewal(merchant, scheduleCharge = true, scheduleQuery = false), t.one<ApplyRenewal>(), "next nextChargeAt scheduled")
+        // The downgrade the old resolver produced would have scheduled nothing.
+        val wrong = ModeResolver.atRenewal(sub.mode, merchantCaps, hasStoredMethod = false, chargedWithStoredMethod = false)
+        assertEquals(ApplyRenewal(wrong, scheduleCharge = false, scheduleQuery = false), decide(sub, SubEvent.RenewalPaid(modeAfter = wrong)).moved().one<ApplyRenewal>())
+        // An open finite plan keeps charging; the last period does not.
+        assertEquals(
+            ApplyRenewal(merchant, true, false),
+            decide(sub.copy(cycleCount = 2, maxCycles = 4), SubEvent.RenewalPaid(modeAfter = merchant)).moved().one<ApplyRenewal>()
+        )
+        assertEquals(
+            ApplyRenewal(merchant, false, false),
+            decide(sub.copy(cycleCount = 3, maxCycles = 4), SubEvent.RenewalPaid(modeAfter = merchant)).moved().one<ApplyRenewal>()
+        )
+        // The same renewal on a PAST_DUE row (a retry that succeeded) is S5 and also schedules the next charge.
+        val retried = decide(sub.copy(status = PAST_DUE, graceEndsAt = now + day), SubEvent.RenewalPaid(modeAfter = merchant)).moved()
+        assertEquals(SubRule.S5, retried.step().rule)
+        assertEquals(ApplyRenewal(merchant, true, false), retried.one<ApplyRenewal>())
     }
 
     @Test
@@ -835,6 +901,30 @@ class SubscriptionStateMachineTest {
         assertEquals(SubRule.S10, decide(cancelled, SubEvent.ResumeRequested(providerCanResume = false)).moved().step().rule)
     }
 
+    @Test
+    fun `S10 resume of a GATEWAY row is refused while a remote cancel is queued or failed, otherwise step E would cancel the resumed subscription`() {
+        // Review fix: a PENDING / FAILED queue is not cleared by S10, so step E would call cancelSubscription(atPeriodEnd = false)
+        // on the subscription the buyer just resumed.
+        val gw = cancelled.copy(mode = gateway, gatewaySubscriptionId = "sub_1")
+        for (remote in listOf(RemoteCancelState.PENDING, RemoteCancelState.FAILED, RemoteCancelState.DONE)) {
+            for (canResume in listOf(true, false)) {
+                assertEquals(
+                    SubscriptionStateMachine.SUBSCRIPTION_NOT_RESUMABLE,
+                    decide(gw.copy(remoteCancelState = remote), SubEvent.ResumeRequested(providerCanResume = canResume)).ignoredReason(),
+                    "remote $remote, providerCanResume=$canResume"
+                )
+            }
+        }
+        // Untouched remote state: resumable, and the resume never leaves a queue behind.
+        val ok = decide(gw.copy(remoteCancelState = RemoteCancelState.NONE), SubEvent.ResumeRequested(providerCanResume = true)).moved()
+        assertEquals(SubRule.S10, ok.step().rule)
+        assertFalse(ok.has(QueueRemoteCancel))
+        // MERCHANT / MANUAL rows have no remote cancel state to consult.
+        for (mode in listOf(merchant, manual)) {
+            assertEquals(SubRule.S10, decide(cancelled.copy(mode = mode), SubEvent.ResumeRequested(providerCanResume = false)).moved().step().rule, "$mode")
+        }
+    }
+
     // ================================================================ S11, S12, 09 section 7 table
 
     private val gwActive = st(ACTIVE, gateway, currentPeriodEnd = now + 10 * day, gatewaySubscriptionId = "sub_1")
@@ -939,6 +1029,60 @@ class SubscriptionStateMachineTest {
         // S10 by the gateway does not need the buyer's reason or the resume capability.
         val adminScheduled = scheduled.copy(endReason = SubscriptionEndReason.ADMIN_CANCEL)
         assertEquals(listOf(SubRule.S10), decide(adminScheduled, gw(GatewaySubscriptionStatus.ACTIVE)).moved().rules)
+    }
+
+    @Test
+    fun `gateway ACTIVE never undoes a cancel whose remote cancel is still queued or failed`() {
+        // Review fix: with a PENDING / FAILED queue the gateway was never told to stop, so ACTIVE is its normal state and
+        // not a resume. Every routine SubscriptionUpdated(ACTIVE) used to clear the buyer / admin / block cancel here.
+        val scheduled = gwActive.copy(cancelAtPeriodEnd = true, endReason = SubscriptionEndReason.BUYER_CANCEL, cancelRequestedAt = now - day)
+        for (reason in listOf(SubscriptionEndReason.BUYER_CANCEL, SubscriptionEndReason.ADMIN_CANCEL, SubscriptionEndReason.PAYMENT_FAILED)) {
+            for (remote in listOf(RemoteCancelState.PENDING, RemoteCancelState.FAILED)) {
+                assertEquals(
+                    SubscriptionStateMachine.REMOTE_CANCEL_PENDING,
+                    decide(scheduled.copy(endReason = reason, remoteCancelState = remote), gw(GatewaySubscriptionStatus.ACTIVE)).ignoredReason(),
+                    "$reason / $remote"
+                )
+            }
+        }
+        // The three outcomes for a scheduled cancel, by remote state.
+        assertEquals(listOf(SubRule.S10), decide(scheduled.copy(remoteCancelState = RemoteCancelState.NONE), gw(GatewaySubscriptionStatus.ACTIVE)).moved().rules)
+        assertEquals("NO_CHANGE", decide(scheduled.copy(remoteCancelState = RemoteCancelState.DONE), gw(GatewaySubscriptionStatus.ACTIVE)).ignoredReason())
+        // No cancel scheduled: ACTIVE is a no-op whatever the queue says.
+        for (remote in RemoteCancelState.values()) {
+            assertEquals("NO_CHANGE", decide(gwActive.copy(remoteCancelState = remote), gw(GatewaySubscriptionStatus.ACTIVE)).ignoredReason(), "$remote")
+        }
+    }
+
+    @Test
+    fun `a blocked GATEWAY buyer keeps the scheduled cancel when the gateway then reports ACTIVE`() {
+        val blocked = decide(gwActive, SubEvent.BuyerBlocked).moved()
+        assertEquals(SubRule.S8, blocked.step().rule)
+        assertTrue(blocked.has(SetCancelAtPeriodEnd(true)))
+        assertTrue(blocked.has(QueueRemoteCancel))
+        // The row as the service leaves it: flag set, reason ADMIN_CANCEL, QueueRemoteCancel => remoteCancelState PENDING.
+        val after = gwActive.copy(
+            cancelAtPeriodEnd = true, cancelRequestedAt = now, endReason = SubscriptionEndReason.ADMIN_CANCEL,
+            nextChargeAt = null, remoteCancelState = RemoteCancelState.PENDING
+        )
+        // The gateway keeps billing until step E reaches it: routine ACTIVE events, a poll result, a renewal's status.
+        assertEquals("REMOTE_CANCEL_PENDING", decide(after, gw(GatewaySubscriptionStatus.ACTIVE)).ignoredReason())
+        assertEquals("REMOTE_CANCEL_PENDING", decide(after, gw(GatewaySubscriptionStatus.ACTIVE), at = now + day).ignoredReason())
+        // The block ends the subscription at the period end all the same (step C, S9 with the kept reason).
+        val end = decide(after, SubEvent.PeriodOver(), at = after.currentPeriodEnd!!).moved()
+        assertEquals(SubRule.S9, end.step().rule)
+        assertEquals(SubscriptionEndReason.ADMIN_CANCEL, end.one<EndSubscription>().reason)
+    }
+
+    @Test
+    fun `a renewal after a cancel keeps the flag and a following gateway ACTIVE does not resume it`() {
+        // 09 section 15 item 5: the renewal queues the remote cancel again; the gateway still says ACTIVE until it is told.
+        val scheduled = gwActive.copy(cancelAtPeriodEnd = true, endReason = SubscriptionEndReason.BUYER_CANCEL, cancelRequestedAt = now - day)
+        val renewed = decide(scheduled, SubEvent.RenewalPaid()).moved()
+        assertTrue(renewed.has(QueueRemoteCancel))
+        assertEquals(0, renewed.count<SetCancelAtPeriodEnd>(), "the flag stays")
+        val after = scheduled.copy(remoteCancelState = RemoteCancelState.PENDING)
+        assertEquals("REMOTE_CANCEL_PENDING", decide(after, gw(GatewaySubscriptionStatus.ACTIVE)).ignoredReason())
     }
 
     @Test

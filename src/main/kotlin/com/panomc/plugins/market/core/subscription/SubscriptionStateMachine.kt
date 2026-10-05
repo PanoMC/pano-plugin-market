@@ -475,10 +475,13 @@ object SubscriptionStateMachine {
 
     private fun onResumeRequested(sub: SubState, event: SubEvent.ResumeRequested, now: Long): SubTransition {
         val end = sub.currentPeriodEnd
+        // A GATEWAY row is resumable only while the remote state is untouched (NONE: the gateway scheduled the cancel
+        // and can take it back). DONE is final; PENDING / FAILED mean step E still has to cancel at the gateway, and
+        // S10 would leave that queue in place so the resumed subscription would be cancelled remotely right after.
         val resumable = sub.status == SubscriptionStatus.ACTIVE && sub.cancelAtPeriodEnd &&
                 end != null && now < end &&
                 sub.endReason == SubscriptionEndReason.BUYER_CANCEL &&
-                (sub.mode != SubscriptionMode.GATEWAY || (sub.remoteCancelState != RemoteCancelState.DONE && event.providerCanResume))
+                (sub.mode != SubscriptionMode.GATEWAY || (sub.remoteCancelState == RemoteCancelState.NONE && event.providerCanResume))
         return if (resumable) SubTransition.Apply(listOf(resumeStep(sub))) else ignored(SUBSCRIPTION_NOT_RESUMABLE)
     }
 
@@ -519,9 +522,16 @@ object SubscriptionStateMachine {
     }
 
     private fun gatewayOnActive(sub: SubState, gw: GatewaySubscriptionStatus, now: Long, cfg: SubConfig): SubTransition = when (gw) {
-        GatewaySubscriptionStatus.ACTIVE ->
-            if (sub.cancelAtPeriodEnd && sub.remoteCancelState != RemoteCancelState.DONE) SubTransition.Apply(listOf(resumeStep(sub)))
-            else ignored(NO_CHANGE)
+        // S10 is "gateway ACTIVE after CANCEL_SCHEDULED": the gateway took the scheduled cancel back. It applies only
+        // when nothing is queued. With a PENDING or FAILED remote cancel the gateway was simply never told to stop, so
+        // ACTIVE is its normal state and not a resume; undoing the local cancel there would keep billing the buyer who
+        // cancelled (BuyerBlocked and a renewal after a cancel create exactly this state, 09 sections 10.1 and 15 item 5).
+        GatewaySubscriptionStatus.ACTIVE -> when {
+            !sub.cancelAtPeriodEnd -> ignored(NO_CHANGE)
+            sub.remoteCancelState == RemoteCancelState.NONE -> SubTransition.Apply(listOf(resumeStep(sub)))
+            sub.remoteCancelState == RemoteCancelState.DONE -> ignored(NO_CHANGE)
+            else -> ignored(REMOTE_CANCEL_PENDING)
+        }
 
         GatewaySubscriptionStatus.PAST_DUE ->
             single(SubRule.S4, SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE, pastDueEffects(sub, now, cfg, MAIL_REASON_CHARGE_FAILED, gatewayRecordedFailure()))
