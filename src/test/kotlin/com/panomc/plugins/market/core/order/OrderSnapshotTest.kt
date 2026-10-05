@@ -190,6 +190,83 @@ class OrderSnapshotTest {
     }
 
     @Test
+    fun `an object or an array is no value, it never satisfies a required path as an empty string`() {
+        val address = "\"firstName\":\"Ada\",\"lastName\":\"L\",\"country\":\"TR\",\"line1\":\"Cankaya\""
+
+        // REQUIRED: the city is an array / an object / an array with content
+        for (value in listOf("[]", "{}", "[1]", "{\"a\":1}")) {
+            assertEquals(
+                listOf("billingInfo.city"),
+                invalid(billing(BillingInfoMode.REQUIRED, "{$address,\"city\":$value}", requiredMode)),
+                "city: $value"
+            )
+        }
+
+        // a company that is an object, a provider that needs the identity number outside TR
+        assertEquals(
+            listOf("billingInfo.company"),
+            invalid(billing(BillingInfoMode.REQUIRED, "{\"type\":\"COMPANY\",$address,\"city\":\"Ankara\",\"company\":{},\"taxNumber\":\"123\"}", requiredMode + listOf("billingInfo.company", "billingInfo.taxNumber")))
+        )
+        assertEquals(
+            listOf("billingInfo.identityNumber"),
+            invalid(billing(BillingInfoMode.OFF, "{\"country\":\"DE\",\"identityNumber\":[]}", listOf("billingInfo.identityNumber")))
+        )
+        assertEquals(
+            listOf("billingInfo.company", "billingInfo.city", "billingInfo.identityNumber"),
+            invalid(billing(BillingInfoMode.REQUIRED, "{\"country\":\"DE\",\"city\":[],\"company\":{},\"identityNumber\":[]}", listOf("billingInfo.city", "billingInfo.company", "billingInfo.identityNumber"))),
+            "every offending path is listed once"
+        )
+    }
+
+    @Test
+    fun `an object or an array is invalid for every key of the address, also when nothing requires it`() {
+        for (key in listOf("firstName", "lastName", "company", "phone", "email", "country", "state", "city", "district", "neighborhood", "line1", "line2", "postalCode", "taxOffice", "taxNumber", "identityNumber")) {
+            for (value in listOf("[]", "{}", "[\"x\"]")) {
+                assertEquals(listOf("billingInfo.$key"), invalid(billing(BillingInfoMode.OPTIONAL, "{\"$key\":$value}")), "$key: $value")
+                assertEquals(listOf("billingInfo.$key"), invalid(billing(BillingInfoMode.OFF, "{\"$key\":$value}")), "$key: $value (OFF)")
+            }
+        }
+
+        assertEquals(listOf("billingInfo.type"), invalid(billing(BillingInfoMode.OPTIONAL, "{\"type\":[]}")))
+        assertEquals(listOf("billingInfo.type"), invalid(billing(BillingInfoMode.OPTIONAL, "{\"type\":{\"a\":1}}")))
+    }
+
+    @Test
+    fun `null and blank values are absent, numbers and booleans are text`() {
+        assertNull(valid(billing(BillingInfoMode.OPTIONAL, "{\"city\":null,\"state\":\"  \",\"line2\":\"\"}")))
+        assertEquals(listOf("billingInfo.city"), invalid(billing(BillingInfoMode.REQUIRED, "{\"city\":null}", listOf("billingInfo.city"))))
+        assertEquals("12345", valid(billing(BillingInfoMode.OPTIONAL, "{\"postalCode\":12345}"))!!.getString("postalCode"))
+        assertEquals("true", valid(billing(BillingInfoMode.OPTIONAL, "{\"district\":true}"))!!.getString("district"))
+    }
+
+    @Test
+    fun `cleanText is the text the snapshot stores, so a padded type reads as the type it will be stored as`() {
+        assertEquals("COMPANY", BillingSnapshot.cleanText("COMPANY "))
+        assertEquals("COMPANY", BillingSnapshot.cleanText(" \tCOMPANY\n"))
+        assertEquals("TR", BillingSnapshot.cleanText("T\u0000R "))
+        assertEquals("5", BillingSnapshot.cleanText(5))
+        assertEquals("true", BillingSnapshot.cleanText(true))
+        assertNull(BillingSnapshot.cleanText(null))
+        assertNull(BillingSnapshot.cleanText("  "))
+        assertNull(BillingSnapshot.cleanText("\u0000"))
+        assertNull(BillingSnapshot.cleanText(JsonArray()))
+        assertNull(BillingSnapshot.cleanText(JsonObject()))
+        assertNull(BillingSnapshot.cleanText(listOf("COMPANY")))
+
+        // the stored snapshot of a padded type is COMPANY, and the paths the request required for a company are the ones that check
+        val required = RequiredBuyerFields.of(
+            BillingInfoMode.REQUIRED, emptySet(), BillingSnapshot.cleanText("COMPANY ").equals("COMPANY", ignoreCase = true), BillingSnapshot.cleanText(" tr "), false
+        )
+
+        assertTrue("billingInfo.company" in required && "billingInfo.taxNumber" in required)
+        assertEquals(
+            listOf("billingInfo.company", "billingInfo.taxNumber"),
+            invalid(billing(BillingInfoMode.REQUIRED, "{\"type\":\"COMPANY \",\"firstName\":\"Ada\",\"lastName\":\"L\",\"country\":\"TR\",\"city\":\"Ankara\",\"line1\":\"Cankaya\"}", required))
+        )
+        assertEquals("COMPANY", valid(billing(BillingInfoMode.OPTIONAL, "{\"type\":\"COMPANY \",\"company\":\"Acme\"}"))!!.getString("type"))
+    }
+
+    @Test
     fun `email and shippingAddress paths are satisfied only when the caller vouches for them`() {
         val required = listOf("email", "shippingAddress", "billingInfo.firstName")
 
