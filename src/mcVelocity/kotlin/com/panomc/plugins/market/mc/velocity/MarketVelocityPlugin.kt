@@ -1,6 +1,10 @@
 package com.panomc.plugins.market.mc.velocity
 
 import com.google.inject.Inject
+import com.panomc.plugins.market.mc.core.feature.CoreGameLink
+import com.panomc.plugins.market.mc.core.feature.MarketFeatures
+import com.panomc.plugins.market.mc.core.feature.ResourceFiles
+import com.panomc.plugins.market.mc.core.feature.asControl
 import com.panomc.plugins.market.mc.core.link.CorePanoLink
 import com.panomc.plugins.market.mc.core.link.MarketComponent
 import com.panomc.plugins.market.mc.core.link.PresenceRules
@@ -20,7 +24,7 @@ import java.nio.file.Path
 /**
  * Main class on Velocity (19 section 4, Java 17). Present = connected to a backend (`ServerConnectedEvent`; LimboAuth
  * keeps unauthenticated players in its limbo). State lives in the injected data directory (`plugins/panomarket`,
- * Velocity names it after the plugin id).
+ * Velocity names it after the plugin id). The text commands, broadcasts and join notifications of MC-05 are wired here too.
  */
 class MarketVelocityPlugin @Inject constructor(
     private val server: ProxyServer,
@@ -29,6 +33,9 @@ class MarketVelocityPlugin @Inject constructor(
 ) {
     private val tracker = PresenceTracker()
     private var component: MarketComponent? = null
+    private var features: MarketFeatures? = null
+    private var commands: VelocityCommands? = null
+    private var gameLink: CoreGameLink? = null
 
     @Volatile
     private var rules: PresenceRules? = null
@@ -50,11 +57,26 @@ class MarketVelocityPlugin @Inject constructor(
                 return
             }
             val version = server.pluginManager.fromInstance(this).flatMap { it.description.version }.orElse("unknown")
+            val link = CoreGameLink({ CorePanoLink.managerOf(panoMain) }, log)
+            val f = MarketFeatures.create(
+                dataDirectory, ResourceFiles.reader(MarketVelocityPlugin::class.java.classLoader), VelocityFeatureHost(server), link,
+                { name -> tracker.uuid(name) }, version, log
+            )
+            if (!f.config.local.enabled) {
+                log.info("The Market component is switched off in config.yml (enabled: false).")
+                link.close()
+                return
+            }
+            gameLink = link
+            features = f
             val presenceRules = PresenceRules(
                 tracker,
                 authRequired = { false },
                 isAuthenticated = { true },
-                onPresent = { name -> component?.playerPresent(name) },
+                onPresent = { name ->
+                    component?.playerPresent(name)
+                    features?.onPlayerPresent(name)
+                },
                 onProblem = { log.warn(it) }
             )
             rules = presenceRules
@@ -65,8 +87,13 @@ class MarketVelocityPlugin @Inject constructor(
                 luckPermsInstalled = { server.pluginManager.isLoaded("luckperms") },
                 neverJoinedUuid = { n -> panoMain.getNeverJoinedPlayerUniqueId(n) }
             )
-            val c = MarketComponent(dataDirectory, platform, CorePanoLink { CorePanoLink.managerOf(panoMain) }, log, version)
+            val c = MarketComponent(
+                dataDirectory, platform, CorePanoLink { CorePanoLink.managerOf(panoMain) }, log, version,
+                settings = f.settings, callbacks = f.callbacks
+            )
+            f.attach(c.runtime.asControl())
             component = c
+            commands = VelocityCommands(server, this, f).also { it.register() }
             server.allPlayers.filter { it.currentServer.isPresent }.forEach { presenceRules.onJoin(it.username, it.uniqueId.toString()) }
             c.start()
             log.info("Market component enabled on Velocity (version $version).")
@@ -77,8 +104,13 @@ class MarketVelocityPlugin @Inject constructor(
 
     @Subscribe
     fun onShutdown(@Suppress("UNUSED_PARAMETER") event: ProxyShutdownEvent) {
+        commands?.unregister()
+        commands = null
         component?.stop()
         component = null
+        gameLink?.close()
+        gameLink = null
+        features = null
         tracker.clear()
     }
 

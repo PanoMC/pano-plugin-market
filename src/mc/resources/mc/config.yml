@@ -1,0 +1,39 @@
+# Pano Market - local settings of this game server (or proxy).
+#
+# What the store does in game is decided in the Pano panel (Market > Minecraft): defaults for all servers and an
+# override per server. This file can only switch things OFF on this one machine or change how things look here; it can
+# never switch on something the panel switched off. Local "false" always wins.
+#
+# A mistake in this file (bad indentation, a switch that is not true/false) switches EVERYTHING off and says so in the
+# console, so a switch you turned off is never silently turned on again. Run /panomarket status to see it.
+# Restart the server (or the proxy) after editing.
+
+# false: the Market component does not start at all (no deliveries, no commands).
+enabled: true
+
+# false: every delivery Pano sends is answered "disabled locally" and nothing is executed. Pano shows it in the panel.
+deliveries: true
+
+features:
+  store-command: true        # /store, /store history
+  credits-command: true      # /credits
+  broadcast: true            # purchase announcements in chat
+  join-notifications: true   # "N deliveries were waiting for you", gifts
+  store-menu: true           # /store menu (chest GUI, Spigot / Paper / Folia)
+  admin-commands: true       # /panomarket credits give|take|set, grant, purchases
+  placeholders: true         # PlaceholderAPI expansion
+  vault: true                # Vault bridge (the mode is chosen in the panel)
+  luckperms: true            # permission deliveries through LuckPerms
+
+# Extra languages for the messages (at most 3, like en-US, tr, ru). The first one is the default language of this server.
+# Edit a message by creating lang/<language>.yml next to this file with only the keys you want to change.
+locales: []
+
+# Extra names for the commands (letters, digits, - and _; every name must be unique).
+command-aliases:
+  store: [buy]
+  credits: []
+  panomarket: []
+
+# Rows of the /store menu chest (1 to 6).
+menu-rows: 6
