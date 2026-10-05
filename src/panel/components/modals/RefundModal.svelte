@@ -333,6 +333,7 @@
     amountError,
     buildRefundRequest,
     canOverrideSplit,
+    canSubmitRefund,
     creditUnitValue,
     effectiveMax,
     initialForm,
@@ -341,6 +342,7 @@
     listedWarnings,
     manualForced,
     offeredModes,
+    previewIsCurrent,
     previewPath,
     refundHeaders,
     refundOutcome,
@@ -382,6 +384,8 @@
   const gate = latestWins();
   const idempotency = newIdempotency();
   let lastPath = null;
+  let previewFor = $state(null); // path the shown preview was fetched for
+  let closing = $state(false); // the modal decided to close: nothing may be sent any more
 
   const order = $derived(detail?.order ?? null);
   const allowed = $derived(detail?.allowed ?? null);
@@ -402,13 +406,19 @@
   const creditPart = $derived(Math.round(num(form.credits) * creditUnitValue(order) * 100) / 100);
   const built = $derived(buildRefundRequest(order ?? {}, form, preview, refundable, allowed));
   const errors = $derived(built.error ?? {});
+  const previewCurrent = $derived(
+    order ? previewIsCurrent(previewPath(order.id, form, refundable), previewFor, status) : false,
+  );
   const canSubmit = $derived(
-    status !== 'SUBMITTING' &&
-      status !== 'LOADING' &&
-      preview !== null &&
-      !loadError &&
-      amountMax === null &&
-      built.error === undefined,
+    canSubmitRefund({
+      status,
+      closing,
+      previewCurrent,
+      hasPreview: preview !== null,
+      loadError,
+      amountMax,
+      valid: built.error === undefined,
+    }),
   );
 
   // Marks are shown live for what the admin already typed; an untouched empty field stays quiet.
@@ -442,6 +452,8 @@
     preview = null;
     status = 'LOADING';
     lastPath = null;
+    previewFor = null;
+    closing = false;
     opened = true;
     if (order) loadPreview(previewPath(order.id, form, refundable));
     showModal(modalElement);
@@ -457,6 +469,7 @@
     if (status === 'PREVIEWING' || status === 'LOADING') status = 'READY';
     if (result.ok) {
       preview = result.body;
+      previewFor = path;
       loadError = null;
       amountMax = null;
     } else if (result.error === 'INVALID_REFUND_AMOUNT') {
@@ -532,6 +545,7 @@
     if (outcome.reset) resetIdempotency(idempotency);
     switch (outcome.kind) {
       case 'done':
+        closing = true;
         hideModal(modalElement);
         await onDone(outcome.toast);
         break;
@@ -540,6 +554,7 @@
         invalid = { ...invalid, manual: true };
         break;
       case 'providerError':
+        closing = true;
         toastError($_, result);
         hideModal(modalElement);
         await onStale();
@@ -549,6 +564,7 @@
         invalid = { ...invalid, amount: true };
         break;
       case 'stale':
+        closing = true;
         toastError($_, result);
         hideModal(modalElement);
         await onStale();

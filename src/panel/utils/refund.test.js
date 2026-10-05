@@ -3,6 +3,7 @@ import {
   amountError,
   buildRefundRequest,
   canOverrideSplit,
+  canSubmitRefund,
   effectiveMax,
   initialForm,
   itemsPayload,
@@ -10,6 +11,7 @@ import {
   listedWarnings,
   manualForced,
   offeredModes,
+  previewIsCurrent,
   previewPath,
   refundHeaders,
   refundOutcome,
@@ -398,17 +400,17 @@ describe('idempotent submit (one Idempotency-Key per unchanged body)', () => {
 });
 
 describe('refundOutcome (13 §6.3 step 7)', () => {
-  test('SUCCEEDED toasts success, PENDING / REQUESTED toast pending, both reset the key', () => {
+  test('SUCCEEDED toasts success, PENDING / REQUESTED toast pending, both keep the key', () => {
     expect(refundOutcome({ ok: true, body: { refund: { status: 'SUCCEEDED' } } })).toEqual({
       kind: 'done',
       toast: 'modals.refund.toast-success',
-      reset: true,
+      reset: false,
     });
     for (const status of ['PENDING', 'REQUESTED']) {
       expect(refundOutcome({ ok: true, body: { refund: { status } } })).toEqual({
         kind: 'done',
         toast: 'modals.refund.toast-pending',
-        reset: true,
+        reset: false,
       });
     }
   });
@@ -420,10 +422,10 @@ describe('refundOutcome (13 §6.3 step 7)', () => {
     });
   });
 
-  test('PAYMENT_PROVIDER_ERROR closes (the refund row is FAILED) and resets the key', () => {
+  test('PAYMENT_PROVIDER_ERROR closes (the refund row is FAILED) and keeps the key', () => {
     expect(refundOutcome({ ok: false, error: 'PAYMENT_PROVIDER_ERROR', body: {} })).toEqual({
       kind: 'providerError',
-      reset: true,
+      reset: false,
     });
   });
 
@@ -444,5 +446,72 @@ describe('refundOutcome (13 §6.3 step 7)', () => {
     expect(refundOutcome({ ok: false, error: 'INVALID_ORDER_TRANSITION', body: {} }).kind).toBe(
       'stale',
     );
+  });
+});
+
+describe('submit gate: a preview for the form as it is, nothing sent once closing', () => {
+  const ready = {
+    status: 'READY',
+    closing: false,
+    previewCurrent: true,
+    hasPreview: true,
+    loadError: null,
+    amountMax: null,
+    valid: true,
+  };
+
+  test('previewIsCurrent: a changed amount is not submittable until the preview for its path arrived', () => {
+    const shown = previewPath(7, { mode: 'FULL' }, []);
+    const typed = previewPath(7, { mode: 'AMOUNT', amount: 10 }, []);
+    expect(typed).not.toBe(shown);
+    // FULL preview on screen, the form already switched to the typed amount (debounce / in flight)
+    expect(previewIsCurrent(typed, shown, 'READY')).toBe(false);
+    expect(previewIsCurrent(typed, shown, 'PREVIEWING')).toBe(false);
+    // the preview for that path arrived
+    expect(previewIsCurrent(typed, typed, 'READY')).toBe(true);
+    // still in flight for the same path, or invalid input (no path at all)
+    expect(previewIsCurrent(typed, typed, 'PREVIEWING')).toBe(false);
+    expect(previewIsCurrent(null, null, 'READY')).toBe(false);
+    expect(previewIsCurrent(shown, null, 'READY')).toBe(false);
+    // typing back to the amount that is on screen needs no new preview
+    expect(previewIsCurrent(shown, shown, 'READY')).toBe(true);
+  });
+
+  test('canSubmitRefund is true only for a ready, current, valid, open form', () => {
+    expect(canSubmitRefund(ready)).toBe(true);
+    expect(canSubmitRefund({ ...ready, previewCurrent: false })).toBe(false);
+    expect(canSubmitRefund({ ...ready, hasPreview: false })).toBe(false);
+    expect(canSubmitRefund({ ...ready, valid: false })).toBe(false);
+    expect(canSubmitRefund({ ...ready, loadError: 'NETWORK_ERROR' })).toBe(false);
+    expect(canSubmitRefund({ ...ready, amountMax: 3.5 })).toBe(false);
+    for (const status of ['SUBMITTING', 'LOADING', 'PREVIEWING']) {
+      expect(canSubmitRefund({ ...ready, status })).toBe(false);
+    }
+  });
+
+  test('closing blocks every further submit, also after the status fell back to READY', () => {
+    expect(canSubmitRefund({ ...ready, closing: true })).toBe(false);
+    expect(
+      canSubmitRefund({
+        status: 'READY',
+        closing: true,
+        previewCurrent: true,
+        hasPreview: true,
+        valid: true,
+      }),
+    ).toBe(false);
+  });
+
+  test('an unchanged body keeps its key after success and provider error (late replay is the same refund)', () => {
+    const state = newIdempotency();
+    const body = { amount: 5, revoke: false, restock: false, manual: false };
+    const first = refundHeaders(state, body)['Idempotency-Key'];
+    expect(refundOutcome({ ok: true, body: { refund: { status: 'SUCCEEDED' } } }).reset).toBe(
+      false,
+    );
+    expect(refundOutcome({ ok: false, error: 'PAYMENT_PROVIDER_ERROR', body: {} }).reset).toBe(
+      false,
+    );
+    expect(refundHeaders(state, { ...body })['Idempotency-Key']).toBe(first);
   });
 });

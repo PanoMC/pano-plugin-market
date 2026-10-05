@@ -153,6 +153,42 @@ export function previewPath(orderId, form, refundable = []) {
   return marketPath(base);
 }
 
+/**
+ * True when the preview on screen was fetched for the form as it is now: `previewFor` is the path
+ * the shown preview answered, `path` the one the current form maps to (null = invalid input). False
+ * while a preview is debounced or in flight, so the CTA never confirms a total / split the dialog
+ * did not show (13 §6.3, 07 §7.3).
+ */
+export const previewIsCurrent = (path, previewFor, status) =>
+  path !== null && path !== undefined && path === previewFor && status === 'READY';
+
+/**
+ * Whether the submit button (and the form's Enter key) may send the refund. `closing` is set once
+ * the modal decided to close (success, provider error, stale): from then on nothing is sent, so a
+ * double click during the fade can never start a second refund.
+ */
+export function canSubmitRefund({
+  status,
+  closing = false,
+  previewCurrent = false,
+  hasPreview = false,
+  loadError = null,
+  amountMax = null,
+  valid = false,
+}) {
+  return (
+    !closing &&
+    status !== 'SUBMITTING' &&
+    status !== 'LOADING' &&
+    status !== 'PREVIEWING' &&
+    previewCurrent === true &&
+    hasPreview === true &&
+    !loadError &&
+    amountMax === null &&
+    valid === true
+  );
+}
+
 /** Last request wins: `next()` tags a request, `isCurrent(tag)` is false once a newer one started. */
 export function latestWins() {
   let counter = 0;
@@ -302,8 +338,10 @@ export function refundHeaders(idempotency, body) {
 
 /**
  * What the modal does with the `call()` result of the POST (13 §6.3 step 7). `reset`: start the
- * idempotency state over (a success, or a conflict); a network error keeps it so the retry is safe.
- * kinds: done (toast key), manual, providerError, invalidAmount (max), stale, error.
+ * idempotency state over (a conflict only); a network error keeps it so the retry is safe.
+ * kinds: done (toast key), manual, providerError, invalidAmount (max), stale, error. A success and a
+ * provider error keep the key (the modal closes; a late replay of the same body gets the same refund
+ * back instead of a new one); `open()` starts every session with a fresh key.
  */
 export function refundOutcome(result) {
   if (result.ok) {
@@ -311,14 +349,14 @@ export function refundOutcome(result) {
     return {
       kind: 'done',
       toast: status === 'SUCCEEDED' ? 'modals.refund.toast-success' : 'modals.refund.toast-pending',
-      reset: true,
+      reset: false,
     };
   }
   switch (result.error) {
     case 'REFUND_NOT_SUPPORTED':
       return { kind: 'manual', reset: false };
     case 'PAYMENT_PROVIDER_ERROR':
-      return { kind: 'providerError', reset: true };
+      return { kind: 'providerError', reset: false };
     case 'INVALID_REFUND_AMOUNT':
       return {
         kind: 'invalidAmount',
