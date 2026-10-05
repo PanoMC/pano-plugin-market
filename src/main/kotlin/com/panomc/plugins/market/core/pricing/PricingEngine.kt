@@ -30,6 +30,8 @@ object PricingEngine {
      * Stage C alone on a `PENDING` order (05 section 9.6, `POST /orders/:publicId/pay`): the frozen item and shipping
      * amounts stay, the method, fee and credit part change. Always strict (a number above what can be applied is
      * refused, never clamped). Returns the new tender; [TenderBreakdown.unavailable] says when the order cannot go there.
+     * A full-credit order (`currentMethodId == credits`) never leaves the credits method: any other request is answered with
+     * `CREDITS_REQUIRED` and the credit part as it is (06 section 9.3 step 2).
      */
     fun retender(frozen: FrozenOrder, tender: TenderInput): TenderBreakdown = arithmetic { Tender.retender(frozen, tender) }
 

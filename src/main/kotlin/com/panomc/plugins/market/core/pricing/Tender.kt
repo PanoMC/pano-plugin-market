@@ -93,6 +93,11 @@ internal object Tender {
         if (r.fullCredit) {
             // 05 section 8.1: the credit run is authoritative; the money total is the record value
             when {
+                // a refused switch away from credits (retender): the order stays exactly as it is, the credit part is not re-priced
+                r.keep != null -> {
+                    creditAmount = r.keep.first
+                    creditValue = r.keep.second
+                }
                 !payable -> {
                     unavailable = when {
                         !b.creditsEnabled -> PricingCode.CREDITS_DISABLED
@@ -305,19 +310,25 @@ internal object Tender {
             onlyAcceptCredits = f.onlyAcceptCredits,
             allowMixedCreditPayment = f.allowMixedCreditPayment,
             loggedIn = f.loggedIn,
-            creditBalance = f.creditBalance,
+            // balance plus the order's own hold: a debt (07 section 3.1) can leave it negative, which is nothing to spend
+            creditBalance = maxOf(0L, f.creditBalance),
             mixedCreditCart = f.mixedCreditCart,
             creditItemsTotal = f.creditItemsTotal,
             renewalFee = f.renewalFee,
             noFee = false,
             rates = f.rates
         )
-        // 05 section 9.6: no useCredits keeps the credit part as it is; switching away from a full-credit order drops it
-        val keep = if (tender.useCredits == null && !fullCredit) {
-            if (f.currentMethodId == MethodInput.CREDITS) 0L to 0L else f.creditAmount to f.creditValue
-        } else {
-            null
+        // 06 section 9.3 step 2: a payWithCredits order keeps its provider. The money total of a full-credit order is only the
+        // record value of the credit run (05 section 8.1), not a price a buyer may pay in money: a credits-only product has 0,
+        // a coupon or threshold can have been decided in credits, `onlyAcceptCredits` and an in-game purchase never take money.
+        // Moving it to a gateway would sell the goods for that record value, so the order stays on credits, credit part untouched.
+        if (f.currentMethodId == MethodInput.CREDITS && !fullCredit) {
+            MixedPayment.checkRequest(tender.useCredits, strict = true)
+            val kept = compute(base, TenderRequest(null, null, strict = true, fullCredit = true, keep = f.creditAmount to f.creditValue))
+            return kept.copy(unavailable = PricingCode.CREDITS_REQUIRED)
         }
+        // 05 section 9.6: no useCredits keeps the credit part as it is
+        val keep = if (tender.useCredits == null && !fullCredit) f.creditAmount to f.creditValue else null
         val tb = compute(base, TenderRequest(tender.useCredits, method, strict = true, fullCredit = fullCredit, keep = keep))
         // a method that prices differently would change the item amounts: refused, never re-priced here
         val modeChanged = method != null && !fullCredit && method.pricingMode != f.pricingMode
