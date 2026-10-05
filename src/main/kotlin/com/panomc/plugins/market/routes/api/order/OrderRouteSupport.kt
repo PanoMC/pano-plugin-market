@@ -12,11 +12,13 @@ import com.panomc.plugins.market.core.webhook.StoreInfo
 import com.panomc.plugins.market.core.webhook.TargetPolicy
 import com.panomc.plugins.market.db.dao.MarketCreditAccountDao
 import com.panomc.plugins.market.db.dao.MarketCurrencyRateDao
+import com.panomc.plugins.market.db.dao.MarketEntitlementDao
 import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.db.dao.MarketOrderEventDao
 import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.dao.MarketPaymentDao
 import com.panomc.plugins.market.db.dao.MarketPaymentMethodDao
+import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.dao.MarketRedemptionDao
 import com.panomc.plugins.market.db.dao.MarketWebhookDeliveryDao
 import com.panomc.plugins.market.db.dao.MarketWebhookEndpointDao
@@ -140,7 +142,8 @@ private fun buildPaymentService(plugin: MarketPlugin): PaymentService {
         orderEvents = context.getBean(MarketOrderEventDao::class.java), payments = context.getBean(MarketPaymentDao::class.java),
         methods = context.getBean(MarketPaymentMethodDao::class.java), creditAccounts = context.getBean(MarketCreditAccountDao::class.java),
         currencyRates = context.getBean(MarketCurrencyRateDao::class.java), lookup = providerLookup(plugin), cipher = wiring.cipher, contexts = wiring.contexts,
-        orderService = orderService(plugin), site = wiring.site, readClient = { databaseManager().getSqlClient() }
+        orderService = orderService(plugin), site = wiring.site, readClient = { databaseManager().getSqlClient() },
+        products = context.getBean(MarketProductDao::class.java), entitlements = context.getBean(MarketEntitlementDao::class.java)
     )
 }
 
