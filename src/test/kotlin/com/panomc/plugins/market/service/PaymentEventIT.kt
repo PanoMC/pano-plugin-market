@@ -11,6 +11,8 @@ import com.panomc.plugins.market.db.model.PaymentEventStatus
 import com.panomc.plugins.market.db.model.PaymentStatus
 import com.panomc.plugins.market.db.model.ReservationState
 import com.panomc.plugins.market.job.InboundEventRetryJob
+import com.panomc.plugins.market.job.MarketJobs
+import com.panomc.plugins.market.job.MarketScheduler
 import com.panomc.plugins.market.routes.api.payment.AttemptLocks
 import com.panomc.plugins.market.routes.api.payment.AttemptLookup
 import com.panomc.plugins.market.routes.api.payment.AttemptPageResult
@@ -24,6 +26,7 @@ import com.panomc.plugins.market.routes.api.payment.PaymentEventApplier
 import com.panomc.plugins.market.routes.api.payment.PaymentEventSink
 import com.panomc.plugins.market.routes.api.payment.PaymentInboundAttempts
 import com.panomc.plugins.market.routes.api.payment.RegistryInboundProviders
+import com.panomc.plugins.market.routes.api.payment.Settlement
 import com.panomc.plugins.market.routes.api.payment.ReplayResult
 import com.panomc.plugins.market.runtime.MarketRuntime
 import com.panomc.plugins.market.spi.common.HttpReply
@@ -572,6 +575,30 @@ class PaymentEventIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `the scheduler job of the retry (the seam of MK-078) completes a crashed request on its tick`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val (order, attempt) = pending()
+
+        fake.onInbound = { throw CancellationException("the process died here") }
+        runCatching { dispatcher.handle(call(body = "{\"id\":\"evt_sched\"}")) }
+
+        val scheduler = MarketScheduler(w.clock, listOf(MarketJobs.inboundRetry(InboundEventRetryJob(dispatcher, store, w.clock))))
+
+        assertEquals(0, scheduler.tick(), "the stored request is younger than a minute")
+        assertEquals("inbound-retry", scheduler.stats().single().name)
+        assertEquals(1, scheduler.stats().single().runs)
+
+        w.clock.advance(MarketScheduler.INBOUND_RETRY_MS + 1_000)
+        fake.onInbound = { ok(listOf(paid(attempt)), "evt_sched") }
+
+        assertEquals(1, scheduler.tick())
+        assertEquals(60_000L, MarketScheduler.INBOUND_RETRY_MS, "02 section 7.3 step 7: every 60 s")
+        orderIs(order, OrderStatus.COMPLETED)
+        assertEquals(PaymentEventStatus.PROCESSED, events().single().status)
+    }
+
+    @Test
     fun `a failure of step 6 is FAILED with a schedule, the gateway's redelivery takes the key over and applies the fact`(): Unit = runBlocking {
         fx.paymentMethod("fake")
 
@@ -719,6 +746,93 @@ class PaymentEventIT : MarketDaoITBase() {
         dispatcher.handle(call(InboundKind.NOTIFY, attempt))
 
         assertEquals(w.clock.now(), w.paymentMethods.getByMethodId("fake", pool)!!.lastInboundAt)
+    }
+
+    // ====================================================================================== the event store itself
+
+    @Test
+    fun `the event store has one holder per key, never revives a superseded row, claims a retry once and selects only what is due`(): Unit = runBlocking {
+        val now = w.clock.now()
+
+        fun row(key: String, status: PaymentEventStatus = PaymentEventStatus.RECEIVED, provider: String = "fake", createdAt: Long = now, attempts: Int = 1, nextAttemptAt: Long? = null) =
+            MarketPaymentEvent(providerId = provider, channel = "WEBHOOK", eventKey = key, status = status, attempts = attempts, nextAttemptAt = nextAttemptAt, headers = "{}", body = "{}", createdAt = createdAt, updatedAt = createdAt)
+
+        fun settle(status: PaymentEventStatus) = Settlement(status, true, null, null, null, null, null, 200, null, 1, now, null, now)
+
+        val a = store.insert(row("r:a"))
+        val b = store.insert(row("r:b"))
+        val other = store.insert(row("r:c", provider = "other"))
+
+        // one holder per (provider, key); another provider may use the same key
+        assertTrue(store.claimKey(a, "e:k", now))
+        assertFalse(store.claimKey(b, "e:k", now), "uq_event: the key has one holder")
+        assertTrue(store.claimKey(other, "e:k", now))
+        assertEquals(a, store.byKey("fake", "e:k")!!.id)
+        assertEquals(other, store.byKey("other", "e:k")!!.id)
+        assertNull(store.byKey("fake", "e:none"))
+
+        store.bumpDuplicates(a, now)
+        store.bumpDuplicates(a, now)
+
+        assertEquals(2, store.get(a)!!.duplicateCount)
+
+        // the takeover is one conditional statement: a row that changed since it was read is not taken
+        val read = store.get(a)!!
+
+        assertTrue(store.settle(a, settle(PaymentEventStatus.FAILED)))
+        assertFalse(store.supersede(read, null, null, now), "the row is FAILED now, the read was RECEIVED")
+        assertTrue(store.supersede(store.get(a)!!, "{}", "redacted", now))
+
+        val superseded = store.get(a)!!
+
+        assertEquals(PaymentEventStatus.SUPERSEDED, superseded.status)
+        assertEquals("e:k:$a", superseded.eventKey)
+        assertEquals("redacted", superseded.body)
+        assertFalse(store.settle(a, settle(PaymentEventStatus.PROCESSED)), "a late run never brings a superseded row back")
+        assertEquals(PaymentEventStatus.SUPERSEDED, store.get(a)!!.status)
+        assertTrue(store.claimKey(b, "e:k", now), "the key is free for the redelivery")
+
+        // a retry is claimed by exactly one of two runners
+        val failed = store.insert(row("r:f", PaymentEventStatus.FAILED, nextAttemptAt = now - 1))
+        val seen = store.get(failed)!!
+        val claims = Race.run(2) { store.claimRetry(seen, now, 60_000) }
+
+        assertEquals(1, claims.count { it.getOrThrow() }, "one claim wins")
+        assertEquals(2, store.get(failed)!!.attempts)
+        assertEquals(now + 60_000, store.get(failed)!!.nextAttemptAt, "the lease")
+
+        // what is due: FAILED with a due schedule, RECEIVED older than the stale limit whose lease is over; never a young one, a spent one, or another status
+        val dueFailed = store.insert(row("r:df", PaymentEventStatus.FAILED, nextAttemptAt = now - 1))
+        val notDue = store.insert(row("r:nd", PaymentEventStatus.FAILED, nextAttemptAt = now + 1000))
+        val staleReceived = store.insert(row("r:sr", createdAt = now - 120_000))
+        val youngReceived = store.insert(row("r:yr", createdAt = now - 5_000))
+        val spent = store.insert(row("r:sp", PaymentEventStatus.FAILED, attempts = 10, nextAttemptAt = now - 1))
+        val deferred = store.insert(row("r:de", PaymentEventStatus.DEFERRED, attempts = 0))
+        val leased = store.insert(row("r:le", createdAt = now - 120_000, nextAttemptAt = now + 30_000))
+        val exhausted = store.insert(row("r:ex", createdAt = now - 120_000, attempts = 10))
+        val dueIds = store.due(now, now - InboundDispatcher.STALE_RECEIVED_MS, 10, 50).map { it.id }.toSet()
+
+        assertEquals(setOf(dueFailed, staleReceived), dueIds, "failed $failed is on its lease, $notDue $youngReceived $spent $deferred $leased $exhausted are not due")
+        assertEquals(1, store.exhaust(now, now - InboundDispatcher.STALE_RECEIVED_MS, 10), "a stale RECEIVED row that used up its runs")
+        assertEquals(PaymentEventStatus.FAILED, store.get(exhausted)!!.status)
+        assertNull(store.get(exhausted)!!.nextAttemptAt)
+        assertEquals(PaymentEventStatus.RECEIVED, store.get(youngReceived)!!.status)
+
+        // settle writes the redacted raw request only when it is given one, and keeps the ids the row has when none is given
+        assertTrue(store.settle(dueFailed, Settlement(PaymentEventStatus.PROCESSED, true, "Succeeded", 5, 6, null, null, 200, null, 3, now, null, now)))
+        assertTrue(store.settle(dueFailed, Settlement(PaymentEventStatus.PROCESSED, null, null, null, null, null, null, 200, null, 3, now, null, now, com.panomc.plugins.market.routes.api.payment.RawRewrite("{\"x\":1}", null))))
+
+        val settled = store.get(dueFailed)!!
+
+        assertEquals(5L, settled.paymentId)
+        assertEquals(6L, settled.orderId)
+        assertEquals("Succeeded", settled.eventTypes)
+        assertEquals(true, settled.verified)
+        assertTrue(settled.headers!!.contains("\"x\""))
+        assertNull(settled.body)
+
+        // this test left rows that I18 rightly calls stuck (a stale RECEIVED, a due FAILED): they are not part of any scenario
+        sql("DELETE FROM `pano_market_payment_event`")
     }
 
     // ===================================================================================== redaction and unknown kinds

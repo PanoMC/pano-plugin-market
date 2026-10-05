@@ -158,15 +158,17 @@ class InboundDispatcher(
 
         // 3. the provider
         val result: InboundResult = try {
-            val publicId = attempt?.let { attempts.publicIdOf(it.orderId) }.orEmpty()
-            val request = PaymentInboundRequest(inboundRequest(call), attempt?.let { attempts.view(it, publicId) }, call.outcome, call.step)
-            val context = access.context(attempt?.testMode)
+            // a NOTIFY / RETURN reads its attempt again once it holds the lock: the provider must see the attempt as another call left it, not as it was
+            // before this call waited
+            suspend fun invoke(current: MarketPayment?): InboundResult {
+                val publicId = current?.let { attempts.publicIdOf(it.orderId) }.orEmpty()
+                val request = PaymentInboundRequest(inboundRequest(call), current?.let { attempts.view(it, publicId) }, call.outcome, call.step)
+                val context = access.context(current?.testMode)
 
-            if (attempt != null && call.kind != InboundKind.WEBHOOK) {
-                locks.with(attempt.id) { withTimeout(providerTimeoutMs) { access.provider.handleInbound(context, request) } }
-            } else {
-                withTimeout(providerTimeoutMs) { access.provider.handleInbound(context, request) }
+                return withTimeout(providerTimeoutMs) { access.provider.handleInbound(context, request) }
             }
+
+            if (attempt != null && call.kind != InboundKind.WEBHOOK) locks.with(attempt.id) { invoke(attempts.byId(attempt.id) ?: attempt) } else invoke(attempt)
         } catch (e: TimeoutCancellationException) {
             return failed(run, call, attempt, access, "TIMEOUT: the provider did not answer in ${providerTimeoutMs / 1000} s", 500, started)
         } catch (e: CancellationException) {

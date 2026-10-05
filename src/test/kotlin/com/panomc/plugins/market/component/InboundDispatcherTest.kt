@@ -223,13 +223,25 @@ internal class FakeAttempts : InboundAttempts {
 
     fun statusOf(id: Long): PaymentStatus = status.getValue(id)
 
+    /** Another actor moves the attempt (what a status query or a cancel would do meanwhile). */
+    fun setStatus(id: Long, to: PaymentStatus) {
+        status[id] = to
+    }
+
+    private fun current(a: MarketPayment?): MarketPayment? = a?.let {
+        MarketPayment(
+            id = it.id, orderId = it.orderId, providerId = it.providerId, status = status.getValue(it.id), reference = it.reference, token = it.token, amount = it.amount,
+            currency = it.currency, testMode = it.testMode, startPayload = it.startPayload, gatewayTransactionId = it.gatewayTransactionId
+        )
+    }
+
     override suspend fun byToken(token: String): MarketPayment? {
         failToken?.let { throw it }
 
-        return byId.values.firstOrNull { it.token == token }
+        return current(byId.values.firstOrNull { it.token == token })
     }
 
-    override suspend fun byId(id: Long): MarketPayment? = byId[id]
+    override suspend fun byId(id: Long): MarketPayment? = current(byId[id])
 
     override suspend fun publicIdOf(orderId: Long): String? = publicIds[orderId]
 
@@ -1076,6 +1088,40 @@ class InboundDispatcherTest {
 
         assertTrue(probe.overlap.get() > 0, "webhooks overlap")
         assertEquals(6, probe.reentered.get())
+    }
+
+    @Test
+    fun `a NOTIFY reads its attempt again once it holds the lock, the provider sees what the call before it left`(): Unit = runBlocking {
+        val statuses = CopyOnWriteArrayList<String>()
+        val first = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val probe = object : PaymentProvider by fake {
+            override suspend fun handleInbound(ctx: PaymentContext, request: PaymentInboundRequest): InboundResult {
+                statuses += request.attempt!!.status
+
+                if (statuses.size == 1) {
+                    first.complete(Unit)
+                    release.await()
+                    attempts.setStatus(1, PaymentStatus.PROCESSING) // what another call does while this one still holds the lock
+                }
+
+                return InboundResult.accepted(HttpReply.text("OK"), emptyList())
+            }
+        }
+
+        providers.access = ProviderAccess.Ready(probe, ProviderMoneyPolicy(), Redactor()) { tm -> LockingContext(TestContexts.payment("fake", TestContexts.settings(), vertx, tm ?: false), locks) }
+
+        val one = async(Dispatchers.Default) { dispatcher.handle(call(InboundKind.NOTIFY)) }
+
+        withTimeout(5_000) { first.await() }
+
+        val two = async(Dispatchers.Default) { dispatcher.handle(call(InboundKind.NOTIFY)) }
+
+        delay(100) // the second call has read its attempt and waits for the lock
+        release.complete(Unit)
+        withTimeout(10_000) { listOf(one, two).awaitAll() }
+
+        assertEquals(listOf("PENDING", "PROCESSING"), statuses, "the second call was handed the attempt as it was after the first one, not the one it read before waiting")
     }
 
     // ======================================================================================== settled rows are redacted
