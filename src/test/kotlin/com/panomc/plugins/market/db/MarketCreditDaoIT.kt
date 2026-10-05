@@ -124,6 +124,28 @@ class MarketCreditDaoIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `the guard refuses debits only, a guarded credit repays an account that is in debt`(): Unit = runBlocking {
+        val debtor = accounts.add(userAccount(41, balance = 100), pool)!!
+        assertEquals(1, accounts.addToBalance(debtor, -400, guarded = false, pool))
+        assertEquals(-300L, balanceOf(debtor))
+
+        // a credit smaller than the debt is accepted even though the result is still negative
+        assertEquals(1, accounts.addToBalance(debtor, 100, guarded = true, pool))
+        assertEquals(-200L, balanceOf(debtor))
+        // any debit stays refused while in debt
+        assertEquals(0, accounts.addToBalance(debtor, -1, guarded = true, pool))
+        assertEquals(-200L, balanceOf(debtor))
+        // a zero delta is a credit too
+        assertEquals(1, accounts.addToBalance(debtor, 0, guarded = true, pool))
+        assertEquals(-200L, balanceOf(debtor))
+        // repaid past zero, debits work again
+        assertEquals(1, accounts.addToBalance(debtor, 250, guarded = true, pool))
+        assertEquals(50L, balanceOf(debtor))
+        assertEquals(1, accounts.addToBalance(debtor, -50, guarded = true, pool))
+        assertEquals(0L, balanceOf(debtor))
+    }
+
+    @Test
     fun `an unguarded update may go below zero, as ISSUANCE, EXTERNAL and an ALLOW_DEBT user account do`(): Unit = runBlocking {
         val issuance = accounts.getBySystemKey(CreditSystemKey.ISSUANCE, pool)!!.id
         assertEquals(1, accounts.addToBalance(issuance, -10_000, guarded = false, pool))

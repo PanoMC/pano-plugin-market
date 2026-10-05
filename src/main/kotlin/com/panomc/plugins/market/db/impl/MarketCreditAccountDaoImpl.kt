@@ -102,9 +102,9 @@ class MarketCreditAccountDaoImpl : MarketCreditAccountDao() {
     override suspend fun addToBalance(accountId: Long, delta: Long, guarded: Boolean, sqlClient: SqlClient): Int =
         sqlClient
             .preparedQuery(
-                "UPDATE `${prefix() + tableName}` SET `balance` = `balance` + ?, `updatedAt` = ? WHERE `id` = ? AND (? = 0 OR `balance` + ? >= 0)"
+                "UPDATE `${prefix() + tableName}` SET `balance` = `balance` + ?, `updatedAt` = ? WHERE `id` = ? AND (? = 0 OR ? >= 0 OR `balance` + ? >= 0)"
             )
-            .execute(Tuple.of(delta, System.currentTimeMillis(), accountId, if (guarded) 1 else 0, delta))
+            .execute(Tuple.of(delta, System.currentTimeMillis(), accountId, if (guarded) 1 else 0, delta, delta))
             .coAwait()
             .rowCount()
 

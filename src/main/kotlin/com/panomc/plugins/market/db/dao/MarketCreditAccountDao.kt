@@ -39,9 +39,11 @@ abstract class MarketCreditAccountDao : MarketDao<MarketCreditAccount>(MarketCre
     abstract suspend fun lockByIds(ids: Collection<Long>, sqlClient: SqlClient): List<MarketCreditAccount>
 
     /**
-     * `UPDATE ... SET balance = balance + delta WHERE id = ? AND (guarded = 0 OR balance + delta >= 0)` (07 section
-     * 3.2 step 6). Returns the affected rows: 1, or 0 when the account does not exist or the guard refuses a balance
-     * below zero.
+     * `UPDATE ... SET balance = balance + delta WHERE id = ? AND (guarded = 0 OR delta >= 0 OR balance + delta >= 0)`
+     * (07 section 3.2 step 6, with one deliberate deviation: the guard applies to debits only). Returns the affected
+     * rows: 1, or 0 when the account does not exist or a guarded debit would take the balance below zero. A credit
+     * (delta >= 0) is never refused, so a user in debt (balance < 0 after an ALLOW_DEBT clawback) can be repaid by a
+     * top-up, grant, refund or release that still leaves the balance negative (07 section 3.1, 01 section 7.1).
      */
     abstract suspend fun addToBalance(accountId: Long, delta: Long, guarded: Boolean, sqlClient: SqlClient): Int
 }
