@@ -40,6 +40,7 @@ import com.panomc.plugins.market.core.pricing.CurrencyPriceResolver
 import com.panomc.plugins.market.core.pricing.DiscountInput
 import com.panomc.plugins.market.core.pricing.ItemsResult
 import com.panomc.plugins.market.core.pricing.LineInput
+import com.panomc.plugins.market.core.credit.CreditEligibility
 import com.panomc.plugins.market.core.pricing.LineKind
 import com.panomc.plugins.market.core.pricing.MethodEvaluation
 import com.panomc.plugins.market.core.pricing.MethodInput
@@ -649,7 +650,7 @@ class CheckoutService(
         val legalText = legalView?.let { QuoteLegal(c.legalTextRequired, it.id, it.version, it.title) }
 
         // ---- the lines of the answer
-        val quoteLines = quoteLines(rules.lines, lines, breakdown, catalog)
+        val quoteLines = quoteLines(rules.lines, lines, breakdown, catalog, separateCreditOrders(c, breakdown))
         val distinct = messages.distinct()
         val requiredFields = RequiredBuyerFields.of(
             c.billingInfoMode, selected?.caps?.requiredBuyerFields.orEmpty(),
@@ -2024,7 +2025,16 @@ class CheckoutService(
 
     // ------------------------------------------------------------------------------------------ answer lines
 
-    private fun quoteLines(verdicts: List<LineVerdict>, lines: List<CartLine>, breakdown: PriceBreakdown, catalog: Catalog): List<QuoteLine> {
+    /**
+     * 07 section 13: in an `onlyAcceptCredits` store a cart that mixes credit purchases (packs, the free amount) with products is the combined cart; its
+     * credit-purchase lines carry the line error `CREDIT_PACK_SEPARATE_ORDER` (the product lines already carry the engine's `CREDITS_ONLY`), so the quote cannot
+     * be checked out and checkout answers 400 `INVALID_CART`.
+     */
+    private fun separateCreditOrders(c: MarketConfig, breakdown: PriceBreakdown): Boolean =
+        c.creditsEnabled && c.onlyAcceptCredits &&
+            CreditEligibility.classify(breakdown.lines.filter { it.parentLineKey == null }.map { it.lineKind }) == CreditEligibility.CartClass.COMBINED
+
+    private fun quoteLines(verdicts: List<LineVerdict>, lines: List<CartLine>, breakdown: PriceBreakdown, catalog: Catalog, separateOrders: Boolean): List<QuoteLine> {
         val priced = breakdown.lines.associateBy { it.lineKey }
         val childrenOf = breakdown.lines.filter { it.parentLineKey != null }.groupBy { it.parentLineKey!! }
         val byKey = lines.associateBy { it.lineKey }
@@ -2038,6 +2048,8 @@ class CheckoutService(
             val errors = LinkedHashSet<String>(verdict.errors)
 
             pricedLine?.errors?.forEach { errors += it.name }
+
+            if (separateOrders && pricedLine?.lineKind == LineKind.CREDIT_PACK) errors += CREDIT_PACK_SEPARATE_ORDER
 
             out += QuoteLine(
                 lineKey = verdict.lineKey,
@@ -2357,6 +2369,7 @@ class CheckoutService(
         const val AMOUNT_OVERFLOW = "AMOUNT_OVERFLOW"
         const val INVALID_RECIPIENT = "INVALID_RECIPIENT"
         const val INVALID_CREDIT_AMOUNT = "INVALID_CREDIT_AMOUNT"
+        const val CREDIT_PACK_SEPARATE_ORDER = "CREDIT_PACK_SEPARATE_ORDER"
         const val PAYMENT_METHOD_UNAVAILABLE = "PAYMENT_METHOD_UNAVAILABLE"
         const val GUESTS_NOT_SUPPORTED = "GUESTS_NOT_SUPPORTED"
         const val TEST_MODE = "TEST_MODE"

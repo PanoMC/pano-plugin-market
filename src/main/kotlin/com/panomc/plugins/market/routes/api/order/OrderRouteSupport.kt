@@ -39,6 +39,7 @@ import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.routes.user.cart.cartService
+import com.panomc.plugins.market.service.CreditEffects
 import com.panomc.plugins.market.service.CreditHoldGuard
 import com.panomc.plugins.market.service.CreditService
 import com.panomc.plugins.market.service.DuplicateRefundPolicy
@@ -160,8 +161,12 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
         webhooks = PaidWebhooks { conn, orderId -> webhooks.emitOrderPaid(conn, orderId) },
         // O2 / O4 issue the invoice inside the transition (12 section 6.1, MK-144 wires what MK-143 built); the effects of the slices that
         // have not landed still go to PENDING_SLICES
+        // MK-092: the credit-granting lines (TOPUP / GIFT) and the cashback are posted inside the transition too
         // WIRE-1: StartShipping goes to the shipping service (derived shippingStatus); the rest still to PENDING_SLICES
-        foreign = InvoiceEffects(invoiceService(plugin), orderDao, ShippingEffects({ shippingService(plugin) }, ForeignEffects.PENDING_SLICES)),
+        foreign = CreditEffects(
+            credits, orderDao, context.getBean(MarketOrderEventDao::class.java), clock, { currentConfig(plugin) },
+            InvoiceEffects(invoiceService(plugin), orderDao, ShippingEffects({ shippingService(plugin) }, ForeignEffects.PENDING_SLICES))
+        ),
         rates = { sqlClient -> rates.getAll(sqlClient).filter { it.rate.signum() > 0 }.associate { it.currency to it.rate } },
         statsCurrency = { currentConfig(plugin).statsCurrency.name },
         // MK-079: the re-reserve of an accepted late payment checks `limitPerPlayer`; a rejected review and a duplicate payment request their refund

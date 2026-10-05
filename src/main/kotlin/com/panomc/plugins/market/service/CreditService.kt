@@ -1,7 +1,9 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.core.credit.Cashback
 import com.panomc.plugins.market.core.credit.CreditPolicy
 import com.panomc.plugins.market.core.credit.CreditPricing
+import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.money.Conversions
 import com.panomc.plugins.market.core.pricing.MethodInput
 import com.panomc.plugins.market.core.pricing.Tender
@@ -9,14 +11,21 @@ import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.db.dao.MarketCreditAccountDao
 import com.panomc.plugins.market.db.dao.MarketCreditEntryDao
 import com.panomc.plugins.market.db.dao.MarketCreditTxDao
+import com.panomc.plugins.market.db.dao.MarketOrderDao
+import com.panomc.plugins.market.db.dao.MarketOrderEventDao
 import com.panomc.plugins.market.db.model.CreditSystemKey
 import com.panomc.plugins.market.db.model.CreditTxType
 import com.panomc.plugins.market.db.model.MarketCreditAccount
 import com.panomc.plugins.market.db.model.MarketCreditEntry
 import com.panomc.plugins.market.db.model.MarketCreditTx
 import com.panomc.plugins.market.db.model.MarketOrder
+import com.panomc.plugins.market.db.model.MarketOrderEvent
 import com.panomc.plugins.market.db.model.MarketOrderItem
+import com.panomc.plugins.market.db.model.OrderActorType
+import com.panomc.plugins.market.db.model.OrderEventType
 import com.panomc.plugins.market.db.model.OrderItemKind
+import com.panomc.plugins.market.db.model.OrderSource
+import com.panomc.plugins.market.core.order.OrderEffect
 import com.panomc.plugins.market.db.tx.LockedOrder
 import com.panomc.plugins.market.error.InsufficientCredits
 import com.panomc.plugins.market.spi.payment.ReviewReason
@@ -24,6 +33,8 @@ import com.panomc.plugins.market.util.MoneyUtil
 import io.vertx.core.json.JsonObject
 import io.vertx.sqlclient.SqlClient
 import io.vertx.sqlclient.SqlConnection
+import io.vertx.sqlclient.Tuple
+import io.vertx.kotlin.coroutines.coAwait
 import org.slf4j.LoggerFactory
 
 /** A ledger account named by a posting: the account of a user (created on first use) or one of the five system accounts (07 section 3). */
@@ -463,8 +474,153 @@ class CreditService(
         postHold(order.id, userId, credits, holdKey(order.id, state.generation), conn)
     }
 
+    // ----- credit-granting lines and cashback (O2 / O4, 07 sections 8.3 and 9) -----------------------------------------------
+
+    /**
+     * The credit-granting lines of a paid order (07 section 8.3): for every item with `creditAmount > 0` a `TOPUP` (a `GIFT` when
+     * `order.source = GIFT_CODE`) of that amount to `recipientUserId ?: userId`, key `orderitem:<itemId>:topup` / `:gift`. Test-mode orders post too
+     * (only the cashback excludes them). With nobody to credit (the account was deleted meanwhile) nothing is posted and
+     * [CreditedLines.recipientMissing] is set; the caller notes it on the order timeline and the order is not diverted (the payment is valid).
+     * Idempotent per item: the second call of the same order (a replayed O2) finds every transaction under its key and writes nothing.
+     */
+    suspend fun creditOrderItems(order: MarketOrder, items: List<MarketOrderItem>, c: SqlConnection): CreditedLines {
+        val lines = items.filter { (it.creditAmount ?: 0L) > 0L }
+
+        if (lines.isEmpty()) return CreditedLines(emptyList(), false)
+
+        val recipient = order.recipientUserId ?: order.userId ?: return CreditedLines(emptyList(), true)
+
+        lockForIssuance(listOfNotNull(recipient, order.userId), c)
+
+        val type = if (order.source == OrderSource.GIFT_CODE) CreditTxType.GIFT else CreditTxType.TOPUP
+        val suffix = if (type == CreditTxType.GIFT) "gift" else "topup"
+        val posted = ArrayList<PostResult>()
+
+        for (item in lines.sortedBy { it.id }) {
+            posted += post(
+                Posting(
+                    type, "orderitem:${item.id}:$suffix", recipient, checkNotNull(item.creditAmount), AccountRef.System(CreditSystemKey.ISSUANCE),
+                    AccountRef.User(recipient), orderId = order.id
+                ),
+                c
+            )
+        }
+
+        return CreditedLines(posted, false)
+    }
+
+    /**
+     * The cashback of O2 / O4 (07 sections 9.1 and 9.2): `CASHBACK` `ISSUANCE` -> the payer, key `order:<orderId>:cashback`, the amount of
+     * [Cashback.compute] over the persisted order and its items (the settings are the ones at payment time). `null` when the order earns nothing
+     * (no rule applies or the amount floors to 0: no transaction). A replay finds the first transaction and writes nothing.
+     */
+    suspend fun cashback(order: MarketOrder, items: List<MarketOrderItem>, settings: Cashback.Settings, c: SqlConnection): PostResult? {
+        val payer = order.userId ?: return null
+        val facts = Cashback.OrderFacts(
+            userId = payer, testMode = order.testMode, pricingMode = order.pricingMode, source = order.source, totalPrice = order.totalPrice,
+            paymentFee = order.paymentFee, gatewayAmount = order.gatewayAmount, fxRate = order.fxRate,
+            items = items.map { Cashback.Item(it.kind, it.lineTotal, isCreditPack(it)) }
+        )
+        val credits = Cashback.compute(facts, settings)
+
+        if (credits <= 0L) return null
+
+        lockForIssuance(listOf(payer), c)
+
+        return post(
+            Posting(
+                CreditTxType.CASHBACK, "order:${order.id}:cashback", payer, credits, AccountRef.System(CreditSystemKey.ISSUANCE), AccountRef.User(payer),
+                orderId = order.id
+            ),
+            c
+        )
+    }
+
+    /**
+     * Takes back the cashback of [order] (07 section 9.3): after a refund ([refundId], `refundedTotalAfter` = the order's refunded total with that refund
+     * counted) the part of the cashback the refunded share stands for, key `refund:<refundId>:cashback`, policy `TAKE_AVAILABLE`; after a chargeback
+     * ([disputeId]) everything not reversed yet, key `dispute:<disputeId>:cashback`, policy `ALLOW_DEBT`. Exactly one of the two ids is given. `null` when the
+     * order has no cashback or nothing is left to take. A won dispute re-grants nothing.
+     */
+    suspend fun reverseCashback(order: MarketOrder, refundId: Long?, disputeId: Long?, refundedTotalAfter: Long = order.refundedTotal, c: SqlConnection): PostResult? {
+        require((refundId == null) != (disputeId == null)) { "a cashback reversal belongs to a refund or to a dispute" }
+
+        val cashback = txs.getByIdempotencyKey("order:${order.id}:cashback", c) ?: return null
+        val user = cashback.userId ?: return null
+        val already = txs.getByOrderId(order.id, c).filter { it.type == CreditTxType.CASHBACK_REVERSAL }.sumOf { it.amount + it.shortfall }
+        val request = if (refundId != null) {
+            Cashback.reversal(cashback.amount, already, refundedTotalAfter, order.totalPrice)
+        } else {
+            Cashback.chargeback(cashback.amount, already)
+        }
+
+        if (request <= 0L) return null
+
+        lockForIssuance(listOf(user), c, revoked = true)
+
+        return post(
+            Posting(
+                CreditTxType.CASHBACK_REVERSAL, if (refundId != null) "refund:$refundId:cashback" else "dispute:$disputeId:cashback", user, request,
+                AccountRef.User(user), AccountRef.System(CreditSystemKey.REVOKED), if (refundId != null) PostingPolicy.TAKE_AVAILABLE else PostingPolicy.ALLOW_DEBT,
+                orderId = order.id, refundId = refundId
+            ),
+            c
+        )
+    }
+
+    /** Locks the user accounts and `ISSUANCE` (and `REVOKED` for a reversal) in one statement, ascending ids (07 section 3.3): a no-op for rows `Locks.forOrder` holds. */
+    private suspend fun lockForIssuance(userIds: Collection<Long>, c: SqlConnection, revoked: Boolean = false) {
+        val ids = java.util.TreeSet<Long>()
+
+        for (userId in userIds.toSortedSet()) ids += resolve(AccountRef.User(userId), c)
+
+        ids += resolve(AccountRef.System(CreditSystemKey.ISSUANCE), c)
+
+        if (revoked) ids += resolve(AccountRef.System(CreditSystemKey.REVOKED), c)
+
+        accounts.lockByIds(ids, c)
+    }
+
+    // ----- the buyer's view (07 section 11.3) -----------------------------------------------------------------------------
+
+    /**
+     * The ledger of one user, newest entry first (`GET /me/credits`): the entries of the user's account with the type and note of their transaction and the
+     * public id of the order they belong to. [BuyerLedgerEntry.amount] is signed (the entry's own amount). `note` is read only for the types whose reason is
+     * meant for the user (`GRANT`, `REVOKE`, `CREATOR_PAYOUT`, 07 section 11.3), `null` for every other. A user without an account has an empty ledger.
+     */
+    suspend fun ledgerOf(userId: Long, offset: Long, limit: Int, c: SqlClient): BuyerLedger {
+        val account = accounts.getByUserId(userId, c) ?: return BuyerLedger(emptyList(), 0L)
+        val prefix = accounts.prefix()
+        val count = c.preparedQuery("SELECT COUNT(*) AS n FROM `${prefix}market_credit_entry` WHERE `accountId` = ?").execute(Tuple.of(account.id)).coAwait()
+            .first().getLong("n")
+        val rows = c.preparedQuery(
+            "SELECT e.`id`, t.`type`, e.`amount`, e.`balanceAfter`, t.`note`, o.`publicId`, e.`createdAt` " +
+                "FROM `${prefix}market_credit_entry` e JOIN `${prefix}market_credit_tx` t ON t.`id` = e.`txId` " +
+                "LEFT JOIN `${prefix}market_order` o ON o.`id` = t.`orderId` WHERE e.`accountId` = ? ORDER BY e.`id` DESC LIMIT ? OFFSET ?"
+        ).execute(Tuple.of(account.id, limit, offset)).coAwait()
+
+        return BuyerLedger(
+            rows.map {
+                val type = CreditTxType.valueOf(it.getString("type"))
+
+                BuyerLedgerEntry(
+                    id = it.getLong("id"), type = type, amount = it.getLong("amount"), balanceAfter = it.getLong("balanceAfter"),
+                    note = if (type in NOTE_VISIBLE) it.getString("note") else null, orderPublicId = it.getString("publicId"), createdAt = it.getLong("createdAt")
+                )
+            },
+            count
+        )
+    }
+
     companion object {
         private val logger = LoggerFactory.getLogger(CreditService::class.java)
+
+        /** The types whose `note` (the admin's reason) the buyer sees (07 section 11.3). */
+        private val NOTE_VISIBLE = setOf(CreditTxType.GRANT, CreditTxType.REVOKE, CreditTxType.CREATOR_PAYOUT)
+
+        /** `snapshot.kind = "CREDIT_PACK"`: the line is a credit purchase and never earns cashback (07 section 9.2). */
+        internal fun isCreditPack(item: MarketOrderItem): Boolean =
+            item.snapshot?.let { runCatching { JsonObject(it).getString("kind") }.getOrNull() } == "CREDIT_PACK"
 
         /** The system accounts an order transition or a multi-posting use case locks (07 section 3.3). */
         private val LOCKED_SYSTEM = listOf(CreditSystemKey.ISSUANCE, CreditSystemKey.SPENT, CreditSystemKey.HOLD, CreditSystemKey.REVOKED)
@@ -558,5 +714,74 @@ internal object CreditRunSnapshot {
 
             Math.addExact(total, line)
         }
+    }
+}
+
+/** What [CreditService.creditOrderItems] did: the postings (replays included) and whether there was nobody left to credit. */
+class CreditedLines(val posted: List<PostResult>, val recipientMissing: Boolean)
+
+/** One row of the buyer's ledger (`GET /me/credits`, 07 section 11.3): [amount] is signed, [note] only for the types the buyer may read. */
+class BuyerLedgerEntry(
+    val id: Long,
+    val type: CreditTxType,
+    val amount: Long,
+    val balanceAfter: Long,
+    val note: String?,
+    val orderPublicId: String?,
+    val createdAt: Long
+)
+
+/** A page of [BuyerLedgerEntry] rows and the number of entries the account has. */
+class BuyerLedger(val entries: List<BuyerLedgerEntry>, val entryCount: Long)
+
+/** The order timeline note of a paid credit pack whose recipient is gone (07 section 8.3). */
+const val CREDIT_RECIPIENT_GONE_NOTE = "credit recipient no longer exists"
+
+/**
+ * The `GrantCashback` and `CreditGrantingLines` effects of O2 / O4 (06 section 11, 07 sections 8.3 and 9) for [OrderService]: wrap the [ForeignEffects] it is
+ * given so that those two effects call [CreditService.cashback] and [CreditService.creditOrderItems] and every other effect still goes to [next]. The order
+ * is read again, because the `LockedOrder` was read before `StampPaid` and a tender rewrite of an accepted review changed its money columns. The cashback
+ * settings are the config values at payment time ([cashbackSettings]).
+ *
+ * Wiring (`OrderService(..., foreign = CreditEffects(credits, orders, events, clock, config, next))`) is the job of the composition root.
+ */
+class CreditEffects(
+    private val credits: CreditService,
+    private val orders: MarketOrderDao,
+    private val events: MarketOrderEventDao,
+    private val clock: com.panomc.plugins.market.core.time.Clock,
+    private val config: () -> MarketConfig,
+    private val next: ForeignEffects = ForeignEffects.PENDING_SLICES
+) : ForeignEffects {
+    override suspend fun apply(conn: SqlConnection, locked: LockedOrder, effect: OrderEffect) {
+        when (effect) {
+            is OrderEffect.GrantCashback -> credits.cashback(reload(conn, locked), locked.items, cashbackSettings(config()), conn)
+
+            is OrderEffect.CreditGrantingLines -> {
+                val order = reload(conn, locked)
+
+                if (credits.creditOrderItems(order, locked.items, conn).recipientMissing) {
+                    val now = clock.now()
+
+                    events.add(
+                        MarketOrderEvent(
+                            orderId = order.id, type = OrderEventType.NOTE, actorType = OrderActorType.SYSTEM, message = CREDIT_RECIPIENT_GONE_NOTE,
+                            createdAt = now, updatedAt = now
+                        ),
+                        conn
+                    )
+                }
+            }
+
+            else -> next.apply(conn, locked, effect)
+        }
+    }
+
+    private suspend fun reload(conn: SqlConnection, locked: LockedOrder): MarketOrder =
+        orders.getById(locked.order.id, conn) ?: error("order ${locked.order.id} vanished inside its transaction")
+
+    companion object {
+        /** 07 section 9.1: `cashbackBp = MoneyUtil.toMinor(cashbackPercent)`, the rate is `creditValue` in minor units (at least 1, like the pricing settings). */
+        fun cashbackSettings(c: MarketConfig) = Cashback.Settings(c.creditsEnabled, MoneyUtil.toMinor(c.cashbackPercent), maxOf(1L, MoneyUtil.toMinor(c.creditValue)))
     }
 }
