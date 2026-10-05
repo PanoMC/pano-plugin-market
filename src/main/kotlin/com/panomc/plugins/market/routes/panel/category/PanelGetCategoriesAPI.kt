@@ -1,13 +1,13 @@
 package com.panomc.plugins.market.routes.panel.category
 
 import com.panomc.platform.annotation.Endpoint
-import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
+import com.panomc.plugins.market.permission.MarketNode
+import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.db.dao.MarketCategoryDao
 import com.panomc.plugins.market.db.model.MarketCategory
-import com.panomc.plugins.market.permission.ManageMarketPermission
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
@@ -20,12 +20,11 @@ import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 class PanelGetCategoriesAPI(
     private val plugin: MarketPlugin,
     private val marketCategoryDao: MarketCategoryDao
-) : PanelApi() {
+) : MarketPanelApi() {
     override val paths = listOf(Path("/api/panel/market/categories", RouteType.GET))
 
-    private val authProvider: AuthProvider by lazy {
-        plugin.applicationContext.getBean(AuthProvider::class.java)
-    }
+    /** A picker: readable with any market node (04 section 5). */
+    override val nodes: Set<MarketNode> = emptySet()
 
     private val databaseManager: DatabaseManager by lazy {
         plugin.applicationContext.getBean(DatabaseManager::class.java)
@@ -36,9 +35,7 @@ class PanelGetCategoriesAPI(
             .queryParameter(optionalParam("search", stringSchema()))
             .build()
 
-    override suspend fun handle(context: RoutingContext): Result {
-        authProvider.requirePermission(ManageMarketPermission(), context)
-
+    override suspend fun handleAuthorized(context: RoutingContext): Result {
         val parameters = getParameters(context)
         val search = parameters.queryParameter("search")?.string
 
@@ -78,6 +75,8 @@ class PanelGetCategoriesAPI(
                 .put("parentId", category.parentId)
                 .put("position", category.position)
                 .put("imageFileName", category.imageFileName)
+                .put("tiered", category.tiered)
+                .put("upgradeMode", category.upgradeMode.name)
                 .put("productsCount", productCounts[category.id] ?: 0L)
                 .put("createdAt", category.createdAt)
                 .put("updatedAt", category.updatedAt)

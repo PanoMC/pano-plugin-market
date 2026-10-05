@@ -13,6 +13,12 @@ abstract class MarketCategoryDao : MarketDao<MarketCategory>(MarketCategory::cla
 
     abstract suspend fun getById(id: Long, sqlClient: SqlClient): MarketCategory?
 
+    /** Same row with a row lock (`FOR UPDATE`): partial updates and deletes of one category serialise. */
+    abstract suspend fun getByIdForUpdate(id: Long, sqlClient: SqlClient): MarketCategory?
+
+    /** `true` while any ACTIVE entitlement belongs to the tier ladder of the category (the entitlement table is read by name). */
+    abstract suspend fun hasActiveTierEntitlements(categoryId: Long, sqlClient: SqlClient): Boolean
+
     abstract suspend fun getByImageFileName(imageFileName: String, sqlClient: SqlClient): MarketCategory?
 
     abstract suspend fun getAll(search: String?, sqlClient: SqlClient): List<MarketCategory>

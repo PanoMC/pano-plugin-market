@@ -42,7 +42,7 @@ class PanelCloneComparisonAPI(
         val sqlClient = databaseManager.getSqlClient()
         val original = marketComparisonDao.getById(id, sqlClient) ?: throw NotFound()
 
-        val cloneName = original.name + " (Kopya)"
+        val cloneName = (original.name + com.panomc.plugins.market.service.CloneSuffix.of(context.request().getHeader("Accept-Language"))).take(255)
         val clone = MarketComparison(
             name = cloneName,
             status = MarketStatus.INACTIVE,

@@ -6,6 +6,8 @@ import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.catalog.ImageChange
 import com.panomc.plugins.market.core.time.SystemClock
 import com.panomc.plugins.market.db.dao.MarketBundleItemDao
+import com.panomc.plugins.market.db.dao.MarketCategoryDao
+import com.panomc.plugins.market.db.dao.MarketComparisonDao
 import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.dao.MarketProductFieldDao
 import com.panomc.plugins.market.db.dao.MarketProductPriceDao
@@ -37,7 +39,9 @@ internal fun catalogService(plugin: MarketPlugin): CatalogService {
         prices = context.getBean(MarketProductPriceDao::class.java),
         fields = context.getBean(MarketProductFieldDao::class.java),
         bundleItems = context.getBean(MarketBundleItemDao::class.java),
-        providerMeta = context.getBean(MarketProductProviderMetaDao::class.java)
+        providerMeta = context.getBean(MarketProductProviderMetaDao::class.java),
+        categories = context.getBean(MarketCategoryDao::class.java),
+        comparisons = context.getBean(MarketComparisonDao::class.java)
     )
 }
 
