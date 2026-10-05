@@ -43,7 +43,7 @@ class WireParityTest {
         "MarketConfigRequest.json" to MarketConfigRequest(v, 1, "9f2c0a", eventId),
         "MarketConfigRequest.first.json" to MarketConfigRequest(v, 1, null, eventId),
         "MarketQueryRequest.balance.json" to MarketQueryRequest(v, 1, QueryType.BALANCE, steve, null, null, eventId),
-        "MarketQueryRequest.catalog.json" to MarketQueryRequest(v, 1, QueryType.CATALOG, steve, 2, null, eventId),
+        "MarketQueryRequest.catalog.json" to MarketQueryRequest(v, 1, QueryType.CATALOG, steve, 2, QueryArgs(categoryId = 1), eventId),
         "MarketQueryRequest.placeholders.json" to MarketQueryRequest(v, 1, QueryType.PLACEHOLDERS, null, null, QueryArgs(listOf("Steve", "Alex")), eventId),
         "MarketPurchaseRequest.json" to MarketPurchaseRequest(v, 1, "4d2a9c1e-0000-4000-8000-000000000001", steve, 10, 2, 3, eventId),
         "MarketPurchaseRequest.plain.json" to MarketPurchaseRequest(v, 1, "4d2a9c1e-0000-4000-8000-000000000002", PlayerRef("Alex"), 11, 1, null, eventId),

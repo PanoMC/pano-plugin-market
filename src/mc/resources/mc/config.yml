@@ -35,5 +35,5 @@ command-aliases:
   credits: []
   panomarket: []
 
-# Rows of the /store menu chest (1 to 6).
+# Rows of the /store menu chest (2 to 6; 1 is shown as 2, the menu needs a row for its buttons).
 menu-rows: 6

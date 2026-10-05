@@ -7,6 +7,8 @@ import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.setup.SetupManager
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.db.MarketTables
+import com.panomc.plugins.market.job.MarketJobs
+import com.panomc.plugins.market.job.MarketScheduler
 import com.panomc.plugins.market.runtime.MarketBootstrap
 import com.panomc.plugins.market.runtime.MarketRuntime
 import com.panomc.plugins.market.service.ExchangeRateService
@@ -61,6 +63,9 @@ class MarketPlugin : PanoPlugin() {
     private var exchangeRateTimerId: Long? = null
     private val exchangeRateRefreshRunning = AtomicBoolean(false)
 
+    @Volatile
+    private var jobScheduler: MarketScheduler? = null
+
     override suspend fun onStart() {
         logger.info("Starting...")
         isRunning = true
@@ -82,7 +87,19 @@ class MarketPlugin : PanoPlugin() {
             val exchangeRateService = pluginBeanContext.getBean(ExchangeRateService::class.java)
 
             startExchangeRateScheduler(configManager, exchangeRateService)
+            startJobScheduler()
         }
+    }
+
+    /** The one timer of the background jobs (MK-078); idempotent. Jobs run only while the store is READY (see [MarketJobs]). */
+    private fun startJobScheduler() {
+        val running = jobScheduler ?: MarketJobs.scheduler(this).also { jobScheduler = it }
+
+        running.start(vertx)
+    }
+
+    private fun stopJobScheduler() {
+        jobScheduler?.stop(vertx)
     }
 
     internal suspend fun startPlugin() {
@@ -110,7 +127,10 @@ class MarketPlugin : PanoPlugin() {
             prefix = { MarketTables.prefixOverride ?: databaseManager.getTablePrefix() },
             pool = { databaseManager.getSqlClient() as Pool },
             initDatabase = { pluginDatabaseManager.initialize(this) },
-            armScheduler = { startExchangeRateScheduler(configManager, exchangeRateService) }
+            armScheduler = {
+                startExchangeRateScheduler(configManager, exchangeRateService)
+                startJobScheduler()
+            }
         ).also { bootstrap = it }
 
         val state = runner.run()
@@ -178,6 +198,7 @@ class MarketPlugin : PanoPlugin() {
         isRunning = false
         MarketRuntime.stopped()
         stopExchangeRateScheduler()
+        stopJobScheduler()
     }
 
     override suspend fun onDisable() {
