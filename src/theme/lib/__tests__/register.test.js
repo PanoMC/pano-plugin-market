@@ -33,6 +33,8 @@ describe('registerTheme', () => {
       '/store/order/[id]',
       '/store/[slug]',
       '/store/checkout',
+      '/profile/purchases',
+      '/profile/credits',
     ]);
     expect(pano.calls.nav[0][0].href).toBe('/store');
     expect(pano.calls.nav[0][0].text).toBe('plugins.pano-plugin-market.nav-store');

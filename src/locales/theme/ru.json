@@ -416,6 +416,91 @@
         "to-pay": "Оплачено выбранным способом",
         "refunded": "Возвращено"
       }
+    },
+    "status": {
+      "order": {
+        "PENDING": "Ожидает",
+        "REVIEW": "На проверке",
+        "COMPLETED": "Выполнен",
+        "PARTIALLY_REFUNDED": "Частично возвращён",
+        "REFUNDED": "Возвращён",
+        "CANCELLED": "Отменён",
+        "EXPIRED": "Истёк",
+        "CHARGEBACK": "Оспаривание платежа",
+        "FAILED": "Не удался"
+      }
+    },
+    "profile": {
+      "nav": {
+        "purchases": "Покупки",
+        "credits": "Кредиты",
+        "subscriptions": "Подписки",
+        "creator": "Автор"
+      },
+      "block": {
+        "title": "Магазин",
+        "balance": "Баланс кредитов:"
+      },
+      "purchases": {
+        "title": "Покупки",
+        "active-title": "Активные товары",
+        "permanent": "Бессрочно",
+        "valid-until": "Действует до {date}",
+        "subscription-link": "Подписка",
+        "redeem-title": "Активировать подарочный код",
+        "redeem-label": "Подарочный код",
+        "redeem-placeholder": "Введите подарочный код",
+        "redeem-submit": "Активировать",
+        "gift-needs-options": "Для этого подарка нужно выбрать сервер или параметр, пока это здесь невозможно. Свяжитесь с магазином.",
+        "gift-locked": "Повторить попытку можно через {seconds} с.",
+        "orders-title": "Заказы",
+        "filter-label": "Статус",
+        "filter-all": "Все",
+        "col-number": "Заказ",
+        "col-date": "Дата",
+        "col-items": "Товары",
+        "col-total": "Итого",
+        "col-status": "Статус",
+        "items-more": "+{count}",
+        "gift-received": "Полученный подарок",
+        "gift-for": "Подарок для {username}",
+        "empty": "У вас пока нет заказов."
+      },
+      "credits": {
+        "title": "Кредиты",
+        "balance": "Ваш баланс",
+        "ledger-title": "История кредитов",
+        "topup-title": "Пополнить кредиты",
+        "packs-title": "Пакеты кредитов",
+        "topup-free-title": "Выберите сумму",
+        "topup-amount-label": "Количество ({creditName})",
+        "topup-submit": "Пополнить",
+        "topup-cost": "Стоимость: {cost}",
+        "col-date": "Дата",
+        "col-type": "Тип",
+        "col-amount": "Сумма",
+        "col-balance": "Баланс",
+        "col-note": "Примечание",
+        "order-link": "Заказ",
+        "empty": "Движений по кредитам пока нет.",
+        "type": {
+          "TOPUP": "Пополнение",
+          "GRANT": "Кредиты начислены",
+          "REVOKE": "Кредиты списаны",
+          "HOLD": "Зарезервировано под заказ",
+          "CAPTURE": "Оплата кредитами",
+          "RELEASE": "Резерв снят",
+          "REFUND": "Возврат",
+          "CASHBACK": "Кешбэк",
+          "CASHBACK_REVERSAL": "Кешбэк отменён",
+          "GIFT": "Подарок",
+          "ACTION": "Награда",
+          "ACTION_REVERSAL": "Награда отменена",
+          "CREATOR_PAYOUT": "Выплата автору",
+          "EXTERNAL_IN": "С игрового сервера",
+          "EXTERNAL_OUT": "На игровой сервер"
+        }
+      }
     }
   }
 }

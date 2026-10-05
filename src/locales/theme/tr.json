@@ -416,6 +416,91 @@
         "to-pay": "Ödeme yöntemiyle ödenen",
         "refunded": "İade edilen"
       }
+    },
+    "status": {
+      "order": {
+        "PENDING": "Beklemede",
+        "REVIEW": "İncelemede",
+        "COMPLETED": "Tamamlandı",
+        "PARTIALLY_REFUNDED": "Kısmen iade edildi",
+        "REFUNDED": "İade edildi",
+        "CANCELLED": "İptal edildi",
+        "EXPIRED": "Süresi doldu",
+        "CHARGEBACK": "Ödeme itirazı",
+        "FAILED": "Başarısız"
+      }
+    },
+    "profile": {
+      "nav": {
+        "purchases": "Satın alımlar",
+        "credits": "Krediler",
+        "subscriptions": "Abonelikler",
+        "creator": "İçerik üretici"
+      },
+      "block": {
+        "title": "Mağaza",
+        "balance": "Kredi bakiyesi:"
+      },
+      "purchases": {
+        "title": "Satın alımlar",
+        "active-title": "Aktif ürünler",
+        "permanent": "Süresiz",
+        "valid-until": "{date} tarihine kadar geçerli",
+        "subscription-link": "Abonelik",
+        "redeem-title": "Hediye kodu kullan",
+        "redeem-label": "Hediye kodu",
+        "redeem-placeholder": "Hediye kodunu gir",
+        "redeem-submit": "Kullan",
+        "gift-needs-options": "Bu hediye için bir sunucu veya seçenek belirlenmesi gerekiyor, bu şu an burada mümkün değil. Lütfen mağazayla iletişime geç.",
+        "gift-locked": "{seconds} saniye sonra tekrar deneyebilirsin.",
+        "orders-title": "Siparişler",
+        "filter-label": "Durum",
+        "filter-all": "Tümü",
+        "col-number": "Sipariş",
+        "col-date": "Tarih",
+        "col-items": "Ürünler",
+        "col-total": "Toplam",
+        "col-status": "Durum",
+        "items-more": "+{count}",
+        "gift-received": "Alınan hediye",
+        "gift-for": "{username} için hediye",
+        "empty": "Henüz siparişin yok."
+      },
+      "credits": {
+        "title": "Krediler",
+        "balance": "Bakiyen",
+        "ledger-title": "Kredi geçmişi",
+        "topup-title": "Kredi yükle",
+        "packs-title": "Kredi paketleri",
+        "topup-free-title": "Bir miktar seç",
+        "topup-amount-label": "Miktar ({creditName})",
+        "topup-submit": "Yükle",
+        "topup-cost": "Tutar: {cost}",
+        "col-date": "Tarih",
+        "col-type": "Tür",
+        "col-amount": "Miktar",
+        "col-balance": "Bakiye",
+        "col-note": "Not",
+        "order-link": "Sipariş",
+        "empty": "Henüz kredi hareketi yok.",
+        "type": {
+          "TOPUP": "Yükleme",
+          "GRANT": "Kredi verildi",
+          "REVOKE": "Kredi geri alındı",
+          "HOLD": "Sipariş için ayrıldı",
+          "CAPTURE": "Kredi ile ödendi",
+          "RELEASE": "Ayrılan kredi serbest bırakıldı",
+          "REFUND": "İade",
+          "CASHBACK": "Para iadesi bonusu",
+          "CASHBACK_REVERSAL": "Para iadesi bonusu geri alındı",
+          "GIFT": "Hediye",
+          "ACTION": "Ödül",
+          "ACTION_REVERSAL": "Ödül geri alındı",
+          "CREATOR_PAYOUT": "İçerik üretici ödemesi",
+          "EXTERNAL_IN": "Oyun sunucusundan",
+          "EXTERNAL_OUT": "Oyun sunucusuna"
+        }
+      }
     }
   }
 }

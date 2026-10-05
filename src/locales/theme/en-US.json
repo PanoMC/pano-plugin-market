@@ -416,6 +416,91 @@
         "to-pay": "Paid with payment method",
         "refunded": "Refunded"
       }
+    },
+    "status": {
+      "order": {
+        "PENDING": "Pending",
+        "REVIEW": "In review",
+        "COMPLETED": "Completed",
+        "PARTIALLY_REFUNDED": "Partially refunded",
+        "REFUNDED": "Refunded",
+        "CANCELLED": "Cancelled",
+        "EXPIRED": "Expired",
+        "CHARGEBACK": "Chargeback",
+        "FAILED": "Failed"
+      }
+    },
+    "profile": {
+      "nav": {
+        "purchases": "Purchases",
+        "credits": "Credits",
+        "subscriptions": "Subscriptions",
+        "creator": "Creator"
+      },
+      "block": {
+        "title": "Store",
+        "balance": "Credit balance:"
+      },
+      "purchases": {
+        "title": "Purchases",
+        "active-title": "Active products",
+        "permanent": "Permanent",
+        "valid-until": "Valid until {date}",
+        "subscription-link": "Subscription",
+        "redeem-title": "Redeem a gift code",
+        "redeem-label": "Gift code",
+        "redeem-placeholder": "Enter your gift code",
+        "redeem-submit": "Redeem",
+        "gift-needs-options": "This gift needs a server or an option to be chosen, which is not possible here yet. Please contact the store.",
+        "gift-locked": "You can try again in {seconds} seconds.",
+        "orders-title": "Orders",
+        "filter-label": "Status",
+        "filter-all": "All",
+        "col-number": "Order",
+        "col-date": "Date",
+        "col-items": "Items",
+        "col-total": "Total",
+        "col-status": "Status",
+        "items-more": "+{count}",
+        "gift-received": "Gift received",
+        "gift-for": "Gift for {username}",
+        "empty": "You have no orders yet."
+      },
+      "credits": {
+        "title": "Credits",
+        "balance": "Your balance",
+        "ledger-title": "Credit history",
+        "topup-title": "Top up credits",
+        "packs-title": "Credit packages",
+        "topup-free-title": "Choose an amount",
+        "topup-amount-label": "Amount in {creditName}",
+        "topup-submit": "Top up",
+        "topup-cost": "Cost: {cost}",
+        "col-date": "Date",
+        "col-type": "Type",
+        "col-amount": "Amount",
+        "col-balance": "Balance",
+        "col-note": "Note",
+        "order-link": "Order",
+        "empty": "No credit movements yet.",
+        "type": {
+          "TOPUP": "Top-up",
+          "GRANT": "Credits granted",
+          "REVOKE": "Credits revoked",
+          "HOLD": "Reserved for an order",
+          "CAPTURE": "Paid with credits",
+          "RELEASE": "Reservation released",
+          "REFUND": "Refund",
+          "CASHBACK": "Cashback",
+          "CASHBACK_REVERSAL": "Cashback reversed",
+          "GIFT": "Gift",
+          "ACTION": "Reward",
+          "ACTION_REVERSAL": "Reward reversed",
+          "CREATOR_PAYOUT": "Creator payout",
+          "EXTERNAL_IN": "From the game server",
+          "EXTERNAL_OUT": "To the game server"
+        }
+      }
     }
   }
 }

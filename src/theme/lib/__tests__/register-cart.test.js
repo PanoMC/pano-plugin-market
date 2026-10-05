@@ -15,6 +15,9 @@ function fakePano({ withCart = true } = {}) {
   if (withCart) {
     pano.ui.nav.rightComponents = { edit: (fn) => calls.rightComponents.push(fn([])) };
     pano.ui.hook = { register: (h) => calls.hooks.push(h) };
+    // the profile items (14 §5 rows 9-10) are no subject here; a host that has the namespaces keeps the output quiet
+    pano.ui.nav.profileDropdown = { edit: () => {} };
+    pano.ui.profile = { content: { edit: () => {} }, nav: { edit: () => {} } };
   }
   return pano;
 }
@@ -41,7 +44,10 @@ describe('registerTheme cart items', () => {
       '/store/order/[id]',
       '/store/[slug]',
       '/store/checkout',
+      '/profile/purchases',
+      '/profile/credits',
     ]);
-    expect(seen).toHaveLength(2);
+    // nav-cart, cart-offcanvas, profile-dropdown and profile-nav are each skipped with one warning
+    expect(seen).toHaveLength(4);
   });
 });
