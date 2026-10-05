@@ -33,7 +33,7 @@ object BlockValue {
 
     /** E-mail rule of 6.2: at most 254 chars, one `@`, no whitespace / control chars / `,` `;` `<` `>`; lower-cased. */
     fun normalizeEmailAddress(raw: String?): String? {
-        if (raw == null) return null
+        if (raw == null || hasControl(raw)) return null
         val t = raw.trim().lowercase()
         if (t.isEmpty() || t.length > MAX_EMAIL_LENGTH || hasForbidden(t)) return null
         val at = t.indexOf('@')
@@ -61,6 +61,9 @@ object BlockValue {
     }
 
     private fun normalizeEmail(raw: String): String? {
+        // a control character is refused before the trim can swallow it ("a@b.com\r\n" is not an address, only spaces around one are dropped)
+        if (hasControl(raw)) return null
+
         val t = raw.trim().lowercase()
         if (t.startsWith("@")) {
             if (t.length > MAX_EMAIL_LENGTH || hasForbidden(t)) return null
@@ -77,6 +80,8 @@ object BlockValue {
     }
 
     private fun tooWide(r: IpRange): Boolean = r.prefix < (if (r.isV4) MIN_IPV4_PREFIX else MIN_IPV6_PREFIX)
+
+    private fun hasControl(t: String): Boolean = t.any { it.code < 0x20 || it.code == 0x7F }
 
     private fun hasForbidden(t: String): Boolean =
         t.any { it.isWhitespace() || it.code < 0x20 || it.code == 0x7F || it in ",;<>" }

@@ -11,6 +11,9 @@ import org.junit.jupiter.api.Test
 
 /** `market_payment` (01 section 6.2). */
 class MarketPaymentDaoIT : MarketDaoITBase() {
+    /** A DAO round-trip test writes raw rows (credit legs without a transaction, counters without orders, ...) that the cross-table invariants I1 to I22 reconcile, on purpose. */
+    override suspend fun assertInvariants() {}
+
     private val dao = MarketPaymentDaoImpl()
 
     private fun payment(

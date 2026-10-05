@@ -16,6 +16,9 @@ import org.junit.jupiter.api.Test
  * defaults; the generic update never writes `soldCount`.
  */
 class CatalogueColumnsDaoIT : MarketDaoITBase() {
+    /** A DAO round-trip test writes raw rows (credit legs without a transaction, counters without orders, ...) that the cross-table invariants I1 to I22 reconcile, on purpose. */
+    override suspend fun assertInvariants() {}
+
     private val products = MarketProductDaoImpl()
     private val categories = MarketCategoryDaoImpl()
 

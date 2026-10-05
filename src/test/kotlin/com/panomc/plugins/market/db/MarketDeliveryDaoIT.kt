@@ -17,6 +17,9 @@ import org.junit.jupiter.api.Test
 
 /** `market_delivery`, `market_server_state`, `market_webhook_endpoint`, `market_webhook_delivery`, `market_mail_outbox` (01 section 9). */
 class MarketDeliveryDaoIT : MarketDaoITBase() {
+    /** A DAO round-trip test writes raw rows (credit legs without a transaction, counters without orders, ...) that the cross-table invariants I1 to I22 reconcile, on purpose. */
+    override suspend fun assertInvariants() {}
+
     private val deliveries = MarketDeliveryDaoImpl()
     private val servers = MarketServerStateDaoImpl()
     private val endpoints = MarketWebhookEndpointDaoImpl()

@@ -1,4 +1,7 @@
-package com.panomc.plugins.market.core.abuse
+package com.panomc.plugins.market.util
+
+import com.panomc.plugins.market.core.abuse.AbuseLimits
+import com.panomc.plugins.market.core.abuse.IpRange
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
