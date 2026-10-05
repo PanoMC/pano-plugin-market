@@ -230,6 +230,79 @@ class MigrationFixupRerunIT : MarketMigrationTestBase() {
         assertEquals(taken, publicIds.first())
     }
 
+    private suspend fun insertLegacyShaped(userId: Long?, playerUsername: String, currency: String, totalPrice: Long = 0): Long {
+        sql(
+            "INSERT INTO `pano_market_order` (`userId`, `playerUsername`, `totalPrice`, `currency`, `status`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, 'PENDING', 10, 20)",
+            userId, playerUsername, totalPrice, currency
+        )
+        return sql("SELECT MAX(`id`) FROM `pano_market_order`").single().getLong(0)
+    }
+
+    @Test
+    fun `a legacy order without a user gets a guest key from the lower-cased player name`(): Unit = runBlocking {
+        migrate()
+        val id = insertLegacyShaped(null, "MixedCase", "USD", 500)
+        val report = ensure()
+        assertTrue(report.clean, report.fixupErrors.toString())
+        val row = orders().single { it.getLong("id") == id }
+        assertEquals("LEGACY", row.getString("source"))
+        assertEquals("g:mixedcase", row.getString("buyerKey"))
+        assertEquals("g:mixedcase", row.getString("recipientKey"))
+        assertNull(row.getValue("recipientUserId"))
+        assertNull(row.getValue("userId"))
+        assertEquals("MixedCase", row.getString("recipientUsername"))
+        assertEquals("USD", row.getString("baseCurrency"))
+        assertTrue(Ids.PUBLIC_ID_REGEX.matches(row.getString("publicId")))
+        val verdict = SchemaVerifier.verify(pool, prefix)
+        assertTrue(verdict.ok, verdict.describe().toString())
+    }
+
+    @Test
+    fun `an order with an empty player name and currency converges and stays empty there`(): Unit = runBlocking {
+        migrate()
+        val id = insertLegacyShaped(null, "", "")
+        val report = ensure()
+        assertTrue(report.clean, report.fixupErrors.toString())
+        val row = orders().single { it.getLong("id") == id }
+        assertEquals("", row.getString("recipientUsername"))
+        assertEquals("", row.getString("baseCurrency"))
+        assertEquals("LEGACY", row.getString("source"))
+        val second = ensure()
+        assertTrue(second.clean && second.fixupsRun.isEmpty(), second.fixupsRun.toString())
+        val after = orders().single { it.getLong("id") == id }
+        assertEquals("", after.getString("recipientUsername"))
+        assertEquals("", after.getString("baseCurrency"))
+        val verdict = SchemaVerifier.verify(pool, prefix)
+        assertTrue(verdict.ok, verdict.describe().toString())
+    }
+
+    @Test
+    fun `a public id that keeps colliding gives up after five draws and a later run converts the row`(): Unit = runBlocking {
+        migrate()
+        val taken = "T".repeat(20)
+        sql("UPDATE `pano_market_order` SET `publicId` = ?, `buyerKey` = 'u:101', `source` = 'STOREFRONT' WHERE `id` = 1", taken)
+        val seq = SeqIds(900)
+        var draws = 0
+        val stuck = object : Ids by seq {
+            override fun publicId(): String { draws++; return taken }
+        }
+        val report = ensure(stuck)
+        assertFalse(report.clean)
+        assertTrue(report.fixupErrors.any { it.startsWith("fixup order-public-ids") }, report.fixupErrors.toString())
+        assertEquals(5, draws) // gave up on the first row after exactly five draws
+        assertEquals(2L, count("market_order", "`publicId` IS NULL"))
+        assertEquals(taken, orders().single { it.getLong("id") == 1L }.getString("publicId"))
+        val verdict = SchemaVerifier.verify(pool, prefix)
+        assertFalse(verdict.ok)
+        assertTrue(verdict.unfixed.containsKey("order-public-ids"), verdict.describe().toString())
+
+        val fixed = ensure(SeqIds(1000))
+        assertTrue(fixed.clean, fixed.fixupErrors.toString())
+        assertEquals(0L, count("market_order", "`publicId` IS NULL"))
+        assertEquals(3, orders().map { it.getString("publicId") }.toSet().size)
+        assertTrue(SchemaVerifier.verify(pool, prefix).ok)
+    }
+
     @Test
     fun `a failing marker statement stops the dependent fixups instead of leaving unmarked legacy rows`(): Unit = runBlocking {
         migrate()
