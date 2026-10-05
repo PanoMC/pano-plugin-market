@@ -1751,6 +1751,26 @@
     },
     "legal-version": {
       "title": "Sürüm {version} ({locale})"
+    },
+    "mail-test": {
+      "title": "Test E-Postası Gönder",
+      "kind": "E-posta türü",
+      "recipient": "Alıcı (boş = adresiniz)",
+      "cta": "Test E-Postası Gönder",
+      "toast-sent": "Test e-postası gönderildi."
+    },
+    "server-override": {
+      "title": "Ayarları Geçersiz Kıl: {name}",
+      "state": {
+        "default": "Varsayılan ({value})",
+        "on": "Açık",
+        "off": "Kapalı"
+      },
+      "panel-list": "panel listesi",
+      "custom": "Özel Liste",
+      "template": "Duyuru metni (boş = varsayılan)",
+      "vault-rate": "Dönüşüm oranı (boş = varsayılan)",
+      "toast-saved": "Geçersiz kılma kaydedildi."
     }
   },
   "settings": {
@@ -1764,7 +1784,6 @@
       "remove-cents": "Para biriminden .00 kısmını kaldır",
       "show-bestsellers": "En çok satanları göster (Bestseller)",
       "show-featured-products": "Öne çıkan ürünleri göster (Featured Products)",
-      "send-email-after-purchase": "Satın alımdan sonra e-posta gönder",
       "sales-currency-label": "Satış Para Birimi",
       "stats-currency-label": "İstatistik Para Birimi",
       "exchange-rate": {
@@ -1814,10 +1833,6 @@
       }
     },
     "credits": {
-      "toast-error": "Ayarlar kaydedilirken bir hata oluştu.",
-      "toast-success": "Kredi ayarları başarıyla kaydedildi.",
-      "heading": "Kredi Ayarları",
-      "subtitle": "Mağazanızın kredi sistemi ve ödeme davranış ayarları.",
       "credits-label": "Krediler",
       "credits-desc": "Sistem genelinde kredi ile ödeme ve bakiye kullanımını aktif eder.",
       "only-credits-label": "Sadece Kredi ile Ödeme Kabul Et",
@@ -1826,7 +1841,32 @@
       "credit-name-desc": "Kullanıcılara gösterilecek para birimi ismi.",
       "cashback-label": "Cashback (%)",
       "cashback-desc": "Mağazadan yapılan harcamalarda kullanıcıya geri verilecek kredi oranı.",
-      "cashback-placeholder": "Cashback %"
+      "cashback-placeholder": "Cashback %",
+      "refund-split": {
+        "title": "İadeler Bölünür",
+        "body": "Kısmen kredi ile ödenen siparişler iki parça halinde iade edilir: ödeme geçidi payı ödeme yöntemi üzerinden, kredi payı alıcının bakiyesine döner. Bir iade, bir parçayı diğerine aktaramaz."
+      },
+      "price-mismatch": {
+        "title": "Kredi Fiyatları Nakit Fiyatlardan Farklı",
+        "body": "Kredi fiyatı nakit fiyatından %1'den fazla farklı olan ürünler: {count}. Alıcılar ödemenin ucuz yolunu seçebilir."
+      },
+      "packs": {
+        "title": "Kredi Paketleri",
+        "body": "Satılan sabit kredi miktarları Kredi Paketi türündeki ürünlerdir.",
+        "open": "Kredi Paketlerini Aç"
+      },
+      "credit-name-default": "Kredi",
+      "credit-value-label": "Kredi Değeri",
+      "credit-value-hint": "Bunu değiştirmek, gelecekteki siparişler için mevcut tüm bakiyelerin değerini değiştirir. Verilmiş siparişler kendi rakamlarını korur.",
+      "credit-value-prefix": "1 {name} =",
+      "mixed-label": "Bir Siparişte Kredi ve Ödeme Geçidine İzin Ver",
+      "mixed-hint": "Asla otomatik uygulanmaz: alıcı seçer. Kısmen kredi ile ödenen siparişler her ödeme yoluna göre iki parça halinde iade edilir.",
+      "top-up-label": "Kredi Yükleme",
+      "top-up-desc": "Alıcılar bir ödeme ile bakiyelerine kredi ekleyebilir.",
+      "top-up-free-label": "Serbest Yükleme Tutarı",
+      "top-up-free-desc": "Alıcılar en az ve en çok değer arasında istedikleri tutarı yazar.",
+      "top-up-min-label": "En Az Yükleme",
+      "top-up-max-label": "En Çok Yükleme"
     },
     "payments": {
       "method-count": "{count} Ödeme Yöntemi",
@@ -1873,7 +1913,10 @@
       "TOO_FEW": "En az bir para birimi ekleyin.",
       "NOT_UPWARDS": "Sonraki numara yalnızca artırılabilir.",
       "RATE_REQUIRED": "Bir kur girin.",
-      "TOO_MANY_DECIMALS": "En fazla 10 ondalık kullanın."
+      "TOO_MANY_DECIMALS": "En fazla 10 ondalık kullanın.",
+      "REQUIRES_TOP_UP": "Önce kredi yüklemeyi açın.",
+      "REQUIRES_CREDITS": "Önce kredileri açın.",
+      "MIN_ABOVE_MAX": "En az değer en çoktan büyük olamaz."
     },
     "checkout": {
       "allow-guest-checkout": "Misafir Alışverişine İzin Ver",
@@ -1984,6 +2027,251 @@
         "title-column": "Başlık",
         "status": "Durum",
         "created": "Oluşturulma"
+      }
+    },
+    "delivery": {
+      "servers-error": {
+        "title": "Sunucu Listesi Yok",
+        "body": "Sunucu listesi yüklenemedi. Sunucuları hedefleyen geri ödeme itirazı eylemleri liste yüklenene kadar denetlenemez."
+      },
+      "revoke-on-refund": "İadede Geri Al",
+      "revoke-on-refund-hint": "Bir sipariş iade edildiğinde ürünleri otomatik geri alır.",
+      "revoke-on-chargeback": "Ödeme İtirazında Geri Al",
+      "revoke-on-chargeback-hint": "Bir ödemeye itiraz edildiğinde ürünleri otomatik geri alır.",
+      "auto-block-on-chargeback": "Ödeme İtirazında Alıcıyı Engelle",
+      "auto-block-on-chargeback-hint": "İtiraz edilen siparişin alıcısını ve e-posta adresini engel listesine ekler.",
+      "revoke-credit-orders": "Kredi Yükleme İtirazından Sonra Kredi Siparişlerini Geri Al",
+      "revoke-credit-orders-hint": "İtiraz edilen bir yükleme kredi açığı bırakırsa, alıcının o günden beri kredi ile ödediği siparişler en yeniden başlayarak geri alınır.",
+      "max-attempts": "Teslimat Denemesi",
+      "max-attempts-hint": "Yeniden denenebilir bir hatadan sonra teslimatın kaç kez denendiği. 1 ile 20 arasında.",
+      "online-wait-days": "Oyuncuyu Bekleme",
+      "online-wait-days-hint": "Çevrimdışı oyuncuyu bu kadar gün sonra beklemeyi bırakır. 0 sonsuza kadar bekler.",
+      "ack-timeout": "Onay Zaman Aşımı",
+      "ack-timeout-hint": "Teslimat yeniden sunulmadan önce sunucunun sonucunu ne kadar bekleyeceği. Her denemede ikiye katlanır.",
+      "subscription-grace-days": "Abonelik Ek Süresi",
+      "subscription-grace-days-hint": "Bir aboneliğin sona ermeden önce ne kadar gecikmiş kalacağı.",
+      "subscription-reminder-days": "Yenileme Hatırlatması",
+      "subscription-reminder-days-hint": "Yenileme veya bitişten kaç gün önce hatırlatma gönderileceği.",
+      "creator-hold-days": "İçerik Üretici Kazanç Bekletmesi",
+      "creator-hold-days-hint": "Bir kazanç ödemeden sonra bu kadar beklemede kalır, böylece ödeme itirazı onu hâlâ geri çevirebilir.",
+      "days": "gün",
+      "seconds": "saniye",
+      "chargeback-invalid": {
+        "title": "Kayıtlı İtiraz Eylemleri Okunamıyor",
+        "body": "Kayıtlı değer bir eylem listesi değil. Aşağıdaki liste boş başlar ve kaydetmek kayıtlı değerin yerine geçer."
+      },
+      "chargeback-actions": "{count} İtiraz Eylemi",
+      "add-ban": "Yasaklama Komutu Ekle"
+    },
+    "modules": {
+      "recent-buyers": "Son Alıcılar",
+      "recent-buyers-hint": "En son satın alımları gösteren bir bileşen.",
+      "recent-buyers-count": "Gösterilen Alıcı",
+      "recent-buyers-show-amount": "Tutarı Göster",
+      "top-supporters": "En Çok Destekleyenler",
+      "top-supporters-hint": "En çok harcayan alıcıları gösteren bir bileşen.",
+      "top-supporters-period": "Dönem",
+      "top-supporters-count": "Gösterilen Destekçi",
+      "period": {
+        "MONTH": "Bu Ay",
+        "ALL_TIME": "Tüm Zamanlar"
+      },
+      "goal": "Topluluk Hedefi",
+      "goal-hint": "Etkin hedefe doğru ilerleme çubuğu.",
+      "open-goals": "Hedefleri Yönet",
+      "sale-badges": "İndirim Rozetleri",
+      "sale-badges-hint": "İndirimli ürünlerde üstü çizili fiyat ve indirim rozeti.",
+      "sale-countdown": "İndirim Geri Sayımı",
+      "sale-countdown-hint": "İndirimin bitişine geri sayım.",
+      "stats": "Mağaza İstatistikleri",
+      "stats-hint": "Bugünkü ve toplam sipariş, müşteri ve ürün sayıları.",
+      "sidebars": "Kenar Çubukları",
+      "sidebars-hint": "Bileşenlerin mağaza sayfasının yanında göründüğü yerler. Hiçbiri seçilmezse mağaza sayfasında kalırlar.",
+      "sidebar": {
+        "home": "Ana Sayfa Kenar Çubuğu",
+        "profile": "Profil Kenar Çubuğu"
+      }
+    },
+    "security": {
+      "checkout-rate-limit": "Ödeme Sınırı",
+      "checkout-rate-limit-hint": "Adres ve alıcı başına ödeme denemesi. 0 sınırı kapatır.",
+      "quote-rate-limit": "Fiyat Teklifi Sınırı",
+      "quote-rate-limit-hint": "Adres başına fiyat teklifi isteği.",
+      "coupon-lock-threshold": "Başarısız Kod Denemesi",
+      "coupon-lock-threshold-hint": "Kaç yanlış kupon veya hediye kodunun sonraki denemeleri kilitleyeceği.",
+      "coupon-lock-minutes": "Kod Kilidi Süresi",
+      "coupon-lock-minutes-hint": "Kod denemelerinin ne kadar kilitli kalacağı.",
+      "allow-private-webhook-targets": "Özel Ağ Webhook Hedeflerine İzin Ver",
+      "allow-private-webhook-targets-hint": "Webhook'ların kendi ağınızdaki adresleri çağırmasına izin verir. İhtiyacınız yoksa kapalı bırakın.",
+      "per-minute": "dakikada",
+      "minutes": "dakika",
+      "confirm-private": {
+        "title": "Özel Ağ Webhook Hedeflerine İzin Verilsin mi?",
+        "description": "Webhook'lar iç ağınızdaki sunucuları çağırabilecek. Webhook oluşturabilen herkes buna ulaşmak için bunu kullanabilir.",
+        "cta": "İzin Ver"
+      }
+    },
+    "mail": {
+      "title": "E-Posta",
+      "host-too-old": {
+        "title": "Pano Mağaza E-Postası İçin Çok Eski"
+      },
+      "open-platform-settings": "E-Posta Ayarlarını Aç",
+      "send-test": "Test E-Postası Gönder",
+      "order-mails": "Sipariş E-Postaları",
+      "order-mails-hint": "Abonelik, süre bitişi ve banka havalesi e-postaları her zaman gönderilir.",
+      "kinds": "Gönderilen E-Postalar",
+      "kinds-hint": "Göndermeyi durdurmak için bir e-postanın işaretini kaldırın. Hizmet e-postaları işaretlidir.",
+      "service-badge": "Hizmet",
+      "attach-invoice": "Faturayı Ekle",
+      "attach-invoice-hint": "Fatura PDF'i sipariş onayına eklenir.",
+      "reply-to": "Yanıt Adresi",
+      "reply-to-hint": "Mağaza e-postalarına verilen yanıtlar buraya gider. Boş bırakılırsa yok.",
+      "reply-to-placeholder": "destek@ornek.com",
+      "delivered-delay": "Teslim E-Postası Gecikmesi",
+      "delivered-delay-hint": "Alıcıya siparişin teslim edildiğini söylemeden önce beklenecek süre.",
+      "minutes": "dakika"
+    },
+    "minecraft": {
+      "info": {
+        "title": "Sunucu Ayarları Önceliklidir",
+        "body": "Bir sunucunun yerel yapılandırma dosyası her özelliği yine de kapatabilir ve market bileşeni her sunucuya elle kurulmalıdır.",
+        "download": "Bileşeni İndir"
+      },
+      "vault-provider-warning": {
+        "title": "Her Ekonomi Çağrısı Pano'ya Gider",
+        "body": "Pano Vault ekonomisi olduğunda her bakiye değişikliği Pano'ya gidip gelmeyi gerektirir ve sunucu bağlantısızken reddedilir."
+      },
+      "feature": {
+        "store-command": "Mağaza Komutu",
+        "credits-command": "Kredi Komutu",
+        "join-notifications": "Katılma Bildirimleri",
+        "store-menu": "Mağaza Menüsü",
+        "admin-commands": "Yönetici Komutları",
+        "placeholders": "PlaceholderAPI",
+        "luckperms": "LuckPerms",
+        "broadcast": "Satın Alma Duyurusu"
+      },
+      "feature-hint": {
+        "store-command": "/store mağaza bağlantısını ve oyuncunun son satın alımlarını yazar.",
+        "credits-command": "/credits kredi bakiyesini yazar.",
+        "join-notifications": "Oyuncular katılınca bekleyen teslimatları ve hediyeleri bildirir.",
+        "store-menu": "Katalog içeren bir sandık menüsü (Spigot, Paper ve Folia).",
+        "admin-commands": "Kredi ve satın alımları yönetmek için /panomarket komutları.",
+        "placeholders": "Kredi bakiyesi ve en çok destekleyen gibi yer tutucular.",
+        "luckperms": "Yetki teslimatlarını LuckPerms ile çalıştırır.",
+        "broadcast": "Ödenen her siparişi sunucu sohbetinde duyurur."
+      },
+      "admin-commands-list": "Yönetici Alt Komutları",
+      "admin-commands-list-hint": "Kapatmak için bir alt komutun işaretini kaldırın.",
+      "admin-command": {
+        "give-credits": "Kredi ver",
+        "take-credits": "Kredi al",
+        "set-credits": "Kredi ayarla",
+        "grant-product": "Ürün ver",
+        "purchases": "Satın alımları listele"
+      },
+      "broadcast-template": "Duyuru Metni",
+      "broadcast-template-hint": "Değişkenler: {variables}. Renk kodları & ile başlar.",
+      "broadcast-preview": "Önizleme",
+      "vault-mode": "Vault Ekonomisi",
+      "vault-mode-hint": "Kredilerin sunucunun Vault ekonomisiyle nasıl buluştuğu.",
+      "vault-option": {
+        "OFF": "Kapalı",
+        "PROVIDER": "Ekonomi Pano",
+        "CONVERT": "Dönüştürme Komutu"
+      },
+      "vault-hint": {
+        "OFF": "Krediler ve sunucu ekonomisi ayrı kalır.",
+        "PROVIDER": "Pano kredileri sunucunun Vault ekonomisidir.",
+        "CONVERT": "Oyuncular /credits convert ve /credits deposit ile kredi ve sunucu parası arasında dönüşüm yapar."
+      },
+      "vault-rate": "Dönüşüm Oranı",
+      "vault-rate-hint": "Bir kredi için sunucu parası.",
+      "vault-direction": "Dönüşüm Yönü",
+      "direction": {
+        "BOTH": "Her İki Yön",
+        "TO_SERVER": "Kredi, Sunucu Parasına",
+        "TO_CREDITS": "Sunucu Parası, Krediye"
+      },
+      "servers-error": {
+        "title": "Sunucu Listesi Yok",
+        "body": "Sunucular yüklenemedi. Tekrar denemek için sayfayı yenileyin."
+      },
+      "servers": {
+        "title": "{count} Sunucu",
+        "name": "Ad",
+        "type": "Tür",
+        "state": "Durum",
+        "version": "Bileşen",
+        "integrations": "Entegrasyonlar",
+        "waiting": "Bekleyen",
+        "override": "Geçersiz Kılma",
+        "override-settings": "Ayarları Geçersiz Kıl…",
+        "clear-override": "Geçersiz Kılmayı Temizle",
+        "download": "Bileşeni İndir",
+        "version-pair": "{have} / {want}",
+        "override-badge": "{count} Ayar",
+        "toast-cleared": "Geçersiz kılma temizlendi."
+      },
+      "state": {
+        "READY": "Hazır",
+        "OFFLINE": "Çevrimdışı",
+        "COMPONENT_MISSING": "Bileşen Yok",
+        "VERSION_MISMATCH": "Sürüm Uyuşmuyor"
+      }
+    },
+    "health": {
+      "refresh": "Yenile",
+      "recheck": "Kredileri Yeniden Denetle",
+      "ok": "Tamam",
+      "problem": "Sorun",
+      "not-checked": "Henüz denetlenmedi",
+      "ip-trust": {
+        "title": "Proxy Yapılandırılmamış",
+        "body": "İstekler bir proxy üzerinden geliyor ama Pano ona güvenmiyor; bu yüzden her ziyaretçi aynı adres gibi görünür ve hız sınırları onları ayıramaz."
+      },
+      "queue": {
+        "deliveries-pending": "Bekleyen Teslimatlar",
+        "deliveries-failed": "Başarısız Teslimatlar",
+        "mails-pending": "Bekleyen E-Postalar",
+        "webhooks-pending": "Bekleyen Webhook'lar",
+        "deferred-events": "Ertelenen Olaylar",
+        "failed-events": "Başarısız Olaylar"
+      },
+      "status": {
+        "title": "Durum",
+        "schema": "Veritabanı",
+        "runtime": "Çalışma Durumu",
+        "mail": "E-Posta",
+        "credits": "Kredi Öz Denetimi",
+        "ip-trust": "Proxy Güveni",
+        "locked": "Kilitli Alıcılar",
+        "rejected": "Reddedilen Olaylar, Son Saat"
+      },
+      "mail": {
+        "OK": "Tamam",
+        "DISABLED": "Devre Dışı",
+        "HOST_TOO_OLD": "Pano Çok Eski"
+      },
+      "jobs": {
+        "title": "{count} İş",
+        "name": "Ad",
+        "last-run": "Son Çalışma",
+        "lag": "Gecikme",
+        "last-error": "Son Hata",
+        "lag-seconds": "{seconds} sn"
+      },
+      "providers": {
+        "title": "{count} Sağlayıcı",
+        "id": "Kimlik",
+        "state": "Durum"
+      },
+      "servers": {
+        "title": "{count} Sunucu",
+        "id": "Sunucu",
+        "state": "Durum",
+        "waiting": "Bekleyen"
       }
     }
   },

@@ -7,6 +7,12 @@ import CurrencySettings from './CurrencySettings.svelte';
 import GeneralSettings from './GeneralSettings.svelte';
 import LegalSettings from './LegalSettings.svelte';
 import PaymentMethods from './PaymentMethods.svelte';
+import DeliverySettings from './DeliverySettings.svelte';
+import HealthPanel from './HealthPanel.svelte';
+import MailSettings from './MailSettings.svelte';
+import MinecraftSettings from './MinecraftSettings.svelte';
+import SecuritySettings from './SecuritySettings.svelte';
+import StoreModuleSettings from './StoreModuleSettings.svelte';
 
 export const SECTION_COMPONENTS = {
   general: GeneralSettings,
@@ -16,4 +22,10 @@ export const SECTION_COMPONENTS = {
   legal: LegalSettings,
   payments: PaymentMethods,
   credits: CreditSettings,
+  delivery: DeliverySettings,
+  modules: StoreModuleSettings,
+  security: SecuritySettings,
+  mail: MailSettings,
+  minecraft: MinecraftSettings,
+  health: HealthPanel,
 };

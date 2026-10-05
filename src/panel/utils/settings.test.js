@@ -973,10 +973,17 @@ describe('settings page', () => {
     expect(PAGE_SECTIONS).toEqual(nav);
   });
 
-  test('only currencies and legal load extra data', () => {
-    expect(extraPathFor('currencies')).toBe('/settings/currencies');
-    expect(extraPathFor('legal')).toBe('/settings/legal');
-    for (const key of PAGE_SECTIONS.filter((k) => k !== 'currencies' && k !== 'legal'))
+  test('only the sections of the 13 §17 table load extra data', () => {
+    const extra = {
+      currencies: '/settings/currencies',
+      legal: '/settings/legal',
+      delivery: '/servers',
+      minecraft: '/servers',
+      mail: '/health',
+      health: '/health',
+    };
+    for (const [key, path] of Object.entries(extra)) expect(extraPathFor(key)).toBe(path);
+    for (const key of PAGE_SECTIONS.filter((k) => !(k in extra)))
       expect(extraPathFor(key)).toBeNull();
   });
 });

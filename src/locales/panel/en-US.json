@@ -1751,6 +1751,26 @@
     },
     "legal-version": {
       "title": "Version {version} ({locale})"
+    },
+    "mail-test": {
+      "title": "Send Test Mail",
+      "kind": "Mail kind",
+      "recipient": "Recipient (empty = your address)",
+      "cta": "Send Test Mail",
+      "toast-sent": "The test mail was sent."
+    },
+    "server-override": {
+      "title": "Override Settings: {name}",
+      "state": {
+        "default": "Default ({value})",
+        "on": "On",
+        "off": "Off"
+      },
+      "panel-list": "panel list",
+      "custom": "Custom List",
+      "template": "Broadcast text (empty = default)",
+      "vault-rate": "Conversion rate (empty = default)",
+      "toast-saved": "The override was saved."
     }
   },
   "settings": {
@@ -1764,7 +1784,6 @@
       "remove-cents": "Remove the .00 part from the currency",
       "show-bestsellers": "Show bestsellers",
       "show-featured-products": "Show featured products",
-      "send-email-after-purchase": "Send an email after purchase",
       "sales-currency-label": "Sales Currency",
       "stats-currency-label": "Statistics Currency",
       "exchange-rate": {
@@ -1814,10 +1833,6 @@
       }
     },
     "credits": {
-      "toast-error": "An error occurred while saving the settings.",
-      "toast-success": "Credit settings saved successfully.",
-      "heading": "Credit Settings",
-      "subtitle": "Your store's credit system and payment behavior settings.",
       "credits-label": "Credits",
       "credits-desc": "Enables paying with credits and using balance across the system.",
       "only-credits-label": "Accept Payment Only with Credits",
@@ -1826,7 +1841,32 @@
       "credit-name-desc": "The currency name shown to users.",
       "cashback-label": "Cashback (%)",
       "cashback-desc": "The percentage of credits returned to the user on purchases made in the store.",
-      "cashback-placeholder": "Cashback %"
+      "cashback-placeholder": "Cashback %",
+      "refund-split": {
+        "title": "Refunds Are Split",
+        "body": "Orders paid partly with credits are refunded in two parts: the gateway part goes back through the payment method, the credit part goes back to the buyer's balance. A refund cannot move one part into the other."
+      },
+      "price-mismatch": {
+        "title": "Credit Prices Differ From Cash Prices",
+        "body": "Products with a credit price that differs from the cash price by more than 1 %: {count}. Buyers can pick the cheaper way to pay."
+      },
+      "packs": {
+        "title": "Credit Packs",
+        "body": "Fixed credit amounts for sale are products of the kind Credit Pack.",
+        "open": "Open Credit Packs"
+      },
+      "credit-name-default": "Credits",
+      "credit-value-label": "Credit Value",
+      "credit-value-hint": "Changing this revalues every existing balance for future orders. Orders already placed keep their own numbers.",
+      "credit-value-prefix": "1 {name} =",
+      "mixed-label": "Allow Credit And Gateway On One Order",
+      "mixed-hint": "Never applied automatically: the buyer chooses. Orders paid partly with credits are refunded in two parts, one per way of payment.",
+      "top-up-label": "Credit Top-Up",
+      "top-up-desc": "Buyers can add credits to their balance with a payment.",
+      "top-up-free-label": "Free Top-Up Amount",
+      "top-up-free-desc": "Buyers type any amount between the minimum and the maximum.",
+      "top-up-min-label": "Minimum Top-Up",
+      "top-up-max-label": "Maximum Top-Up"
     },
     "payments": {
       "method-count": "{count} Payment Methods",
@@ -1873,7 +1913,10 @@
       "TOO_FEW": "Add at least one currency.",
       "NOT_UPWARDS": "The next number can only be raised.",
       "RATE_REQUIRED": "Enter a rate.",
-      "TOO_MANY_DECIMALS": "Use at most 10 decimals."
+      "TOO_MANY_DECIMALS": "Use at most 10 decimals.",
+      "REQUIRES_TOP_UP": "Turn on credit top-up first.",
+      "REQUIRES_CREDITS": "Turn on credits first.",
+      "MIN_ABOVE_MAX": "The minimum cannot be above the maximum."
     },
     "checkout": {
       "allow-guest-checkout": "Allow Guest Checkout",
@@ -1984,6 +2027,251 @@
         "title-column": "Title",
         "status": "Status",
         "created": "Created"
+      }
+    },
+    "delivery": {
+      "servers-error": {
+        "title": "Server List Unavailable",
+        "body": "The server list could not be loaded. Chargeback actions that target servers cannot be checked until it loads."
+      },
+      "revoke-on-refund": "Revoke On Refund",
+      "revoke-on-refund-hint": "Take the goods back automatically when an order is refunded.",
+      "revoke-on-chargeback": "Revoke On Chargeback",
+      "revoke-on-chargeback-hint": "Take the goods back automatically when a payment is disputed.",
+      "auto-block-on-chargeback": "Block Buyer On Chargeback",
+      "auto-block-on-chargeback-hint": "Adds the recipient and the e-mail address of a disputed order to the block list.",
+      "revoke-credit-orders": "Revoke Credit Orders After A Top-Up Chargeback",
+      "revoke-credit-orders-hint": "When a charged-back top-up leaves a credit shortfall, orders the buyer paid with credits since then are revoked, newest first.",
+      "max-attempts": "Delivery Attempts",
+      "max-attempts-hint": "How often a delivery is retried after a retryable error. Between 1 and 20.",
+      "online-wait-days": "Wait For Player",
+      "online-wait-days-hint": "Give up waiting for an offline player after this many days. 0 waits forever.",
+      "ack-timeout": "Acknowledgement Timeout",
+      "ack-timeout-hint": "How long to wait for a server's result before the delivery is offered again. Doubles with every attempt.",
+      "subscription-grace-days": "Subscription Grace Period",
+      "subscription-grace-days-hint": "How long a subscription stays past due before it ends.",
+      "subscription-reminder-days": "Renewal Reminder",
+      "subscription-reminder-days-hint": "How many days before a renewal or expiry the reminder is sent.",
+      "creator-hold-days": "Creator Earning Hold",
+      "creator-hold-days-hint": "A creator earning stays pending this long after payment, so a chargeback can still reverse it.",
+      "days": "days",
+      "seconds": "seconds",
+      "chargeback-invalid": {
+        "title": "Stored Chargeback Actions Are Unreadable",
+        "body": "The saved value is not a list of actions. The list below starts empty and saving replaces the saved value."
+      },
+      "chargeback-actions": "{count} Chargeback Actions",
+      "add-ban": "Add Ban Command"
+    },
+    "modules": {
+      "recent-buyers": "Recent Buyers",
+      "recent-buyers-hint": "A widget with the latest purchases.",
+      "recent-buyers-count": "Buyers Shown",
+      "recent-buyers-show-amount": "Show The Amount",
+      "top-supporters": "Top Supporters",
+      "top-supporters-hint": "A widget with the buyers who spent the most.",
+      "top-supporters-period": "Period",
+      "top-supporters-count": "Supporters Shown",
+      "period": {
+        "MONTH": "This Month",
+        "ALL_TIME": "All Time"
+      },
+      "goal": "Community Goal",
+      "goal-hint": "A progress bar towards the active goal.",
+      "open-goals": "Manage Goals",
+      "sale-badges": "Sale Badges",
+      "sale-badges-hint": "Strikethrough price and a sale badge on discounted products.",
+      "sale-countdown": "Sale Countdown",
+      "sale-countdown-hint": "A countdown to the end of a discount.",
+      "stats": "Store Statistics",
+      "stats-hint": "Orders today and in total, customers and products.",
+      "sidebars": "Sidebars",
+      "sidebars-hint": "Where the widgets appear next to the store page. With nothing selected they stay on the store page.",
+      "sidebar": {
+        "home": "Home Sidebar",
+        "profile": "Profile Sidebar"
+      }
+    },
+    "security": {
+      "checkout-rate-limit": "Checkout Limit",
+      "checkout-rate-limit-hint": "Checkout attempts per address and per buyer. 0 turns the limit off.",
+      "quote-rate-limit": "Price Quote Limit",
+      "quote-rate-limit-hint": "Price quote requests per address.",
+      "coupon-lock-threshold": "Failed Code Attempts",
+      "coupon-lock-threshold-hint": "How many wrong coupon or gift codes lock further attempts.",
+      "coupon-lock-minutes": "Code Lock Duration",
+      "coupon-lock-minutes-hint": "How long code attempts stay locked.",
+      "allow-private-webhook-targets": "Allow Private Webhook Targets",
+      "allow-private-webhook-targets-hint": "Lets webhooks call addresses inside your own network. Leave off unless you need it.",
+      "per-minute": "per minute",
+      "minutes": "minutes",
+      "confirm-private": {
+        "title": "Allow Private Webhook Targets?",
+        "description": "Webhooks will be able to call servers on your internal network. Anyone who can create a webhook could use this to reach them.",
+        "cta": "Allow"
+      }
+    },
+    "mail": {
+      "title": "E-Mail",
+      "host-too-old": {
+        "title": "Pano Is Too Old For Store E-Mail"
+      },
+      "open-platform-settings": "Open E-Mail Settings",
+      "send-test": "Send Test Mail",
+      "order-mails": "Order E-Mails",
+      "order-mails-hint": "Subscription, expiry and bank-transfer mails are always sent.",
+      "kinds": "E-Mails Sent",
+      "kinds-hint": "Uncheck a mail to stop sending it. Service mails are marked.",
+      "service-badge": "Service",
+      "attach-invoice": "Attach The Invoice",
+      "attach-invoice-hint": "The invoice PDF is attached to the order confirmation.",
+      "reply-to": "Reply-To Address",
+      "reply-to-hint": "Replies to store mails go here. Leave empty for none.",
+      "reply-to-placeholder": "support@example.com",
+      "delivered-delay": "Delivered Mail Delay",
+      "delivered-delay-hint": "How long to wait before telling the buyer the order was delivered.",
+      "minutes": "minutes"
+    },
+    "minecraft": {
+      "info": {
+        "title": "Server Settings Win",
+        "body": "A server's local config file can still turn any feature off, and the market component must be installed on each server by hand.",
+        "download": "Download Component"
+      },
+      "vault-provider-warning": {
+        "title": "Every Economy Call Goes To Pano",
+        "body": "With Pano as the Vault economy every balance change needs a round trip to Pano and is refused while the server is disconnected."
+      },
+      "feature": {
+        "store-command": "Store Command",
+        "credits-command": "Credits Command",
+        "join-notifications": "Join Notifications",
+        "store-menu": "Store Menu",
+        "admin-commands": "Admin Commands",
+        "placeholders": "PlaceholderAPI",
+        "luckperms": "LuckPerms",
+        "broadcast": "Purchase Broadcast"
+      },
+      "feature-hint": {
+        "store-command": "/store prints the store link and the player's last purchases.",
+        "credits-command": "/credits prints the credit balance.",
+        "join-notifications": "Tells players about deliveries that waited and gifts when they join.",
+        "store-menu": "A chest menu with the catalogue (Spigot, Paper and Folia).",
+        "admin-commands": "/panomarket commands to manage credits and purchases.",
+        "placeholders": "Placeholders such as the credit balance and the top supporter.",
+        "luckperms": "Runs permission deliveries through LuckPerms.",
+        "broadcast": "Announces every paid order to the server chat."
+      },
+      "admin-commands-list": "Admin Sub-Commands",
+      "admin-commands-list-hint": "Uncheck a sub-command to switch it off.",
+      "admin-command": {
+        "give-credits": "Give credits",
+        "take-credits": "Take credits",
+        "set-credits": "Set credits",
+        "grant-product": "Grant a product",
+        "purchases": "List purchases"
+      },
+      "broadcast-template": "Broadcast Text",
+      "broadcast-template-hint": "Variables: {variables}. Colour codes start with &.",
+      "broadcast-preview": "Preview",
+      "vault-mode": "Vault Economy",
+      "vault-mode-hint": "How credits meet the server's Vault economy.",
+      "vault-option": {
+        "OFF": "Off",
+        "PROVIDER": "Pano Is The Economy",
+        "CONVERT": "Conversion Command"
+      },
+      "vault-hint": {
+        "OFF": "Credits and the server economy stay separate.",
+        "PROVIDER": "Pano credits are the Vault economy of the server.",
+        "CONVERT": "Players convert between credits and server money with /credits convert and /credits deposit."
+      },
+      "vault-rate": "Conversion Rate",
+      "vault-rate-hint": "Server money for one credit.",
+      "vault-direction": "Conversion Direction",
+      "direction": {
+        "BOTH": "Both Ways",
+        "TO_SERVER": "Credits To Server Money",
+        "TO_CREDITS": "Server Money To Credits"
+      },
+      "servers-error": {
+        "title": "Server List Unavailable",
+        "body": "The servers could not be loaded. Reload the page to try again."
+      },
+      "servers": {
+        "title": "{count} Servers",
+        "name": "Name",
+        "type": "Type",
+        "state": "State",
+        "version": "Component",
+        "integrations": "Integrations",
+        "waiting": "Waiting",
+        "override": "Override",
+        "override-settings": "Override Settings…",
+        "clear-override": "Clear Override",
+        "download": "Download Component",
+        "version-pair": "{have} / {want}",
+        "override-badge": "{count} Overrides",
+        "toast-cleared": "The override was cleared."
+      },
+      "state": {
+        "READY": "Ready",
+        "OFFLINE": "Offline",
+        "COMPONENT_MISSING": "Component Missing",
+        "VERSION_MISMATCH": "Version Mismatch"
+      }
+    },
+    "health": {
+      "refresh": "Refresh",
+      "recheck": "Re-Check Credits",
+      "ok": "OK",
+      "problem": "Problem",
+      "not-checked": "Not checked yet",
+      "ip-trust": {
+        "title": "Proxy Not Configured",
+        "body": "Requests arrive through a proxy but Pano does not trust it, so every visitor looks like the same address and rate limits cannot tell them apart."
+      },
+      "queue": {
+        "deliveries-pending": "Deliveries Pending",
+        "deliveries-failed": "Deliveries Failed",
+        "mails-pending": "Mails Pending",
+        "webhooks-pending": "Webhooks Pending",
+        "deferred-events": "Deferred Events",
+        "failed-events": "Failed Events"
+      },
+      "status": {
+        "title": "Status",
+        "schema": "Database",
+        "runtime": "Runtime",
+        "mail": "E-Mail",
+        "credits": "Credit Self-Check",
+        "ip-trust": "Proxy Trust",
+        "locked": "Locked Buyers",
+        "rejected": "Rejected Events, Last Hour"
+      },
+      "mail": {
+        "OK": "OK",
+        "DISABLED": "Disabled",
+        "HOST_TOO_OLD": "Pano Too Old"
+      },
+      "jobs": {
+        "title": "{count} Jobs",
+        "name": "Name",
+        "last-run": "Last Run",
+        "lag": "Lag",
+        "last-error": "Last Error",
+        "lag-seconds": "{seconds} s"
+      },
+      "providers": {
+        "title": "{count} Providers",
+        "id": "Id",
+        "state": "State"
+      },
+      "servers": {
+        "title": "{count} Servers",
+        "id": "Server",
+        "state": "State",
+        "waiting": "Waiting"
       }
     }
   },

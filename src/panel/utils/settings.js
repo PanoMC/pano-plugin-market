@@ -15,12 +15,42 @@ const int = (def, min, max) => ({ type: 'int', def, min, max });
 const num = (def, min, max, extra = {}) => ({ type: 'number', def, min, max, ...extra });
 const str = (def, max, extra = {}) => ({ type: 'string', def, max, ...extra });
 const oneOf = (def, values) => ({ type: 'enum', def, values });
+const lst = (def, allowed = null) => ({ type: 'list', def, allowed });
 
 export const CURRENCY_MODES = ['SINGLE', 'DISPLAY', 'MULTI'];
 export const MULTI_FALLBACKS = ['CONVERT', 'HIDE'];
 export const RATE_MODES = ['AUTO', 'MANUAL'];
 export const BILLING_INFO_MODES = ['OFF', 'OPTIONAL', 'REQUIRED'];
 export const EXCHANGE_RATE_MODES = ['AUTO', 'MANUAL'];
+export const TOP_SUPPORTER_PERIODS = ['MONTH', 'ALL_TIME'];
+export const SIDEBARS = ['home', 'profile'];
+export const VAULT_MODES = ['OFF', 'PROVIDER', 'CONVERT'];
+export const VAULT_DIRECTIONS = ['BOTH', 'TO_SERVER', 'TO_CREDITS'];
+export const ADMIN_COMMANDS = [
+  'give-credits',
+  'take-credits',
+  'set-credits',
+  'grant-product',
+  'purchases',
+];
+/** Order mails first, then the service mails that `sendEmailAfterPurchase` never switches off (12 §10). */
+export const MAIL_KINDS = [
+  'ORDER_RECEIVED',
+  'ORDER_CONFIRMATION',
+  'ORDER_DELIVERED',
+  'ORDER_REFUNDED',
+  'GIFT_RECEIVED',
+  'SHIPMENT_SHIPPED',
+  'SHIPMENT_DELIVERED',
+  'BANK_TRANSFER_INSTRUCTIONS',
+  'SUBSCRIPTION_REMINDER',
+  'SUBSCRIPTION_PAYMENT_FAILED',
+  'SUBSCRIPTION_CANCELLED',
+  'SUBSCRIPTION_ENDED',
+  'EXPIRY_REMINDER',
+];
+export const DEFAULT_BROADCAST_TEMPLATE = '&a{player} &7bought &e{product}&7 from the &b{store}&7!';
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const INVOICE_SERIES = /^[A-Z0-9]{1,8}$/;
 const LOCALE = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/;
@@ -56,7 +86,7 @@ export const FIELDS = {
   subscriptionManualFallback: bool(true),
   // currencies
   currencyMode: oneOf('SINGLE', CURRENCY_MODES),
-  additionalCurrencies: { type: 'list', def: [] },
+  additionalCurrencies: lst([]),
   multiCurrencyFallback: oneOf('CONVERT', MULTI_FALLBACKS),
   // billing
   billingInfoMode: oneOf('OPTIONAL', BILLING_INFO_MODES),
@@ -73,6 +103,67 @@ export const FIELDS = {
   invoiceFooter: str('', 1000),
   // legal
   legalTextRequired: bool(false),
+  // credits (saved through POST /settings/credits)
+  creditsEnabled: bool(true),
+  creditName: str('', 32),
+  cashbackPercent: num(0, 0, 100),
+  onlyAcceptCredits: bool(false),
+  creditValue: num(1, 0.01, 1_000_000_000),
+  allowMixedCreditPayment: bool(false),
+  creditTopUpEnabled: bool(false),
+  creditTopUpFreeAmount: bool(false),
+  creditTopUpMin: num(1, 0.01, 1_000_000_000),
+  creditTopUpMax: num(10_000, 0.01, 1_000_000_000),
+  // delivery (the design ranges are stricter than the backend where they differ)
+  revokeOnRefund: bool(true),
+  revokeOnChargeback: bool(true),
+  deliveryMaxAttempts: int(5, 1, 20),
+  deliveryOnlineWaitDays: int(0, 0, 365),
+  deliveryAckTimeoutSeconds: int(30, 5, 600),
+  subscriptionGraceDays: int(3, 0, 60),
+  subscriptionReminderDays: int(3, 0, 60),
+  autoBlockOnChargeback: bool(true),
+  revokeCreditOrdersOnTopUpChargeback: bool(true),
+  creatorEarningHoldDays: int(14, 0, 90),
+  chargebackActions: str('[]', 8000),
+  // modules
+  moduleRecentBuyers: bool(true),
+  moduleRecentBuyersCount: int(10, 1, 50),
+  moduleRecentBuyersShowAmount: bool(false),
+  moduleTopSupporters: bool(true),
+  moduleTopSupportersPeriod: oneOf('MONTH', TOP_SUPPORTER_PERIODS),
+  moduleTopSupportersCount: int(5, 1, 50),
+  moduleGoal: bool(true),
+  moduleSaleBadges: bool(true),
+  moduleSaleCountdown: bool(true),
+  moduleStats: bool(false),
+  moduleSidebars: lst(['home'], SIDEBARS),
+  // security
+  checkoutRateLimitPerMinute: int(6, 0, 100_000),
+  quoteRateLimitPerMinute: int(60, 1, 100_000),
+  couponLockThreshold: int(5, 1, 100),
+  couponLockMinutes: int(15, 1, 1440),
+  allowPrivateWebhookTargets: bool(false),
+  // mail
+  sendEmailAfterPurchase: bool(true),
+  mailDisabledKinds: lst([]),
+  mailAttachInvoice: bool(true),
+  mailReplyTo: str('', 254, { email: true }),
+  mailOrderDeliveredDelayMinutes: int(10, 0, 1440),
+  // minecraft (panel defaults of the in-game features, 19 §9)
+  mcStoreCommand: bool(true),
+  mcCreditsCommand: bool(true),
+  mcJoinNotifications: bool(true),
+  mcStoreMenu: bool(true),
+  mcAdminCommands: bool(true),
+  mcPlaceholders: bool(true),
+  mcLuckPerms: bool(true),
+  mcBroadcast: bool(false),
+  mcBroadcastTemplate: str(DEFAULT_BROADCAST_TEMPLATE, 256, { nonBlank: true }),
+  mcDisabledAdminCommands: lst([], ADMIN_COMMANDS),
+  mcVaultMode: oneOf('OFF', VAULT_MODES),
+  mcVaultRate: num(1, 0.000001, 1_000_000_000),
+  mcVaultDirection: oneOf('BOTH', VAULT_DIRECTIONS),
 };
 
 export const SECTION_KEYS = {
@@ -121,6 +212,73 @@ export const SECTION_KEYS = {
     'invoiceFooter',
   ],
   legal: ['legalTextRequired'],
+  credits: [
+    'creditsEnabled',
+    'onlyAcceptCredits',
+    'creditName',
+    'cashbackPercent',
+    'creditValue',
+    'allowMixedCreditPayment',
+    'creditTopUpEnabled',
+    'creditTopUpFreeAmount',
+    'creditTopUpMin',
+    'creditTopUpMax',
+  ],
+  delivery: [
+    'revokeOnRefund',
+    'revokeOnChargeback',
+    'deliveryMaxAttempts',
+    'deliveryOnlineWaitDays',
+    'deliveryAckTimeoutSeconds',
+    'subscriptionGraceDays',
+    'subscriptionReminderDays',
+    'autoBlockOnChargeback',
+    'revokeCreditOrdersOnTopUpChargeback',
+    'creatorEarningHoldDays',
+    'chargebackActions',
+  ],
+  modules: [
+    'moduleRecentBuyers',
+    'moduleRecentBuyersCount',
+    'moduleRecentBuyersShowAmount',
+    'moduleTopSupporters',
+    'moduleTopSupportersPeriod',
+    'moduleTopSupportersCount',
+    'moduleGoal',
+    'moduleSaleBadges',
+    'moduleSaleCountdown',
+    'moduleStats',
+    'moduleSidebars',
+  ],
+  security: [
+    'checkoutRateLimitPerMinute',
+    'quoteRateLimitPerMinute',
+    'couponLockThreshold',
+    'couponLockMinutes',
+    'allowPrivateWebhookTargets',
+  ],
+  mail: [
+    'sendEmailAfterPurchase',
+    'mailDisabledKinds',
+    'mailAttachInvoice',
+    'mailReplyTo',
+    'mailOrderDeliveredDelayMinutes',
+  ],
+  minecraft: [
+    'mcStoreCommand',
+    'mcCreditsCommand',
+    'mcJoinNotifications',
+    'mcStoreMenu',
+    'mcAdminCommands',
+    'mcPlaceholders',
+    'mcLuckPerms',
+    'mcBroadcast',
+    'mcBroadcastTemplate',
+    'mcDisabledAdminCommands',
+    'mcVaultMode',
+    'mcVaultRate',
+    'mcVaultDirection',
+  ],
 };
 
 /** Every key the five sections own (used by the coverage test against 00 §12). */
@@ -223,6 +381,9 @@ export const FIELD_ERROR_CODES = [
   'NOT_UPWARDS',
   'RATE_REQUIRED',
   'TOO_MANY_DECIMALS',
+  'REQUIRES_TOP_UP',
+  'REQUIRES_CREDITS',
+  'MIN_ABOVE_MAX',
 ];
 
 export function fieldErrorKey(code) {
@@ -265,10 +426,17 @@ export function validateValue(key, value) {
       if (field.code && !/^[A-Z]{3}$/.test(text)) return 'INVALID_VALUE';
       if (field.series && (!INVOICE_SERIES.test(text) || text === 'TEST')) return 'INVALID_VALUE';
       if (field.pattern && text !== '' && !field.pattern.test(text)) return 'INVALID_VALUE';
+      if (field.email && text !== '' && !EMAIL.test(text)) return 'INVALID_VALUE';
+      if (field.nonBlank && text.trim() === '') return 'REQUIRED';
       return null;
     }
-    case 'list':
-      return Array.isArray(value) ? null : 'INVALID_TYPE';
+    case 'list': {
+      if (!Array.isArray(value)) return 'INVALID_TYPE';
+      if (new Set(value).size !== value.length) return 'INVALID_VALUE';
+      if (field.allowed && value.some((item) => !field.allowed.includes(item)))
+        return 'INVALID_VALUE';
+      return null;
+    }
     default:
       return null;
   }
@@ -680,5 +848,9 @@ export function resolveSection(value) {
 export function extraPathFor(section) {
   if (section === 'currencies') return '/settings/currencies';
   if (section === 'legal') return '/settings/legal';
+  // delivery (chargeback action editors) and minecraft (per-server table) need the server list;
+  // mail reads the health report to tell "host too old" from "switched off"; health is the report.
+  if (section === 'delivery' || section === 'minecraft') return '/servers';
+  if (section === 'mail' || section === 'health') return '/health';
   return null;
 }

@@ -1,126 +1,261 @@
-<script>
-  import ApiUtil from '@panomc/sdk/utils/api';
-  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
+{#if showRefundSplitWarning(draft)}
+  <div class="alert alert-warning d-flex align-items-start mb-3" role="alert">
+    <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
+    <div>
+      <b>{$_('settings.credits.refund-split.title')}</b>
+      <div>{$_('settings.credits.refund-split.body')}</div>
+    </div>
+  </div>
+{/if}
 
-  let { settings: initialSettings = {} } = $props();
+{#if mismatch > 0}
+  <div class="alert alert-warning d-flex align-items-start mb-3" role="alert">
+    <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
+    <div>
+      <b>{$_('settings.credits.price-mismatch.title')}</b>
+      <div>{$_('settings.credits.price-mismatch.body', { values: { count: mismatch } })}</div>
+    </div>
+  </div>
+{/if}
 
-  // Local writable copy of the loaded settings: re-derived if the page load()
-  // re-runs, reassigned by the client-side refresh() after a save (navigating
-  // would remount the whole plugin page and drop the active settings tab).
-  let settings = $derived(initialSettings);
-
-  // Writable deriveds: seeded from the loaded settings and editable via bind:value;
-  // they re-sync to server truth whenever the settings state changes
-  // (e.g. after the refresh() following a save).
-  let creditsEnabled = $derived(settings.creditsEnabled ?? true);
-  let creditName = $derived(settings.creditName ?? 'Kredi');
-  let cashbackPercent = $derived(settings.cashbackPercent ?? 0);
-  let onlyAcceptCredits = $derived(settings.onlyAcceptCredits ?? false);
-
-  let saving = $state(false);
-
-  // Save is enabled only when an editable field diverges from the loaded settings;
-  // re-syncs to false after a save + refresh() (the deriveds re-seed from settings).
-  let isDirty = $derived(
-    creditsEnabled !== (settings.creditsEnabled ?? true) ||
-      creditName !== (settings.creditName ?? 'Kredi') ||
-      Number(cashbackPercent) !== (settings.cashbackPercent ?? 0) ||
-      onlyAcceptCredits !== (settings.onlyAcceptCredits ?? false)
-  );
-
-  async function refresh() {
-    const body = await ApiUtil.get({ path: '/api/panel/market/settings' });
-    if (body && !body.error) {
-      settings = body;
-    }
-  }
-
-  async function handleSave() {
-    saving = true;
-    try {
-      const body = await ApiUtil.post({
-        path: '/api/panel/market/settings/credits',
-        body: {
-          creditsEnabled,
-          creditName,
-          cashbackPercent: Number(cashbackPercent) || 0,
-          onlyAcceptCredits
-        }
-      });
-
-      if (body.error) {
-        showErrorToast($_('settings.credits.toast-error'));
-        return;
-      }
-
-      showSuccessToast($_('settings.credits.toast-success'));
-      await refresh();
-    } catch (e) {
-      showErrorToast($_('settings.credits.toast-error'));
-    } finally {
-      saving = false;
-    }
-  }
-</script>
+<div class="alert alert-info d-flex align-items-start mb-3" role="alert">
+  <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
+  <div>
+    <b>{$_('settings.credits.packs.title')}</b>
+    <div>{$_('settings.credits.packs.body')}</div>
+    <a class="alert-link" href="{base}/market/products?kind=CREDIT_PACK">
+      {$_('settings.credits.packs.open')}
+    </a>
+  </div>
+</div>
 
 <div class="card">
-  <div class="card-header">
-    <h6 class="mb-0">{$_('settings.credits.heading')}</h6>
-    <small class="text-body-secondary">{$_('settings.credits.subtitle')}</small>
-  </div>
-
   <div class="card-body">
-    <div class="row mb-3">
-      <div class="col-md-6">
-        <label for="creditsEnabledInput" class="d-block mb-1">{$_('settings.credits.credits-label')}</label>
-        <small class="text-body-secondary d-block">{$_('settings.credits.credits-desc')}</small>
+    <SwitchRow
+      id="setting-creditsEnabled"
+      label={$_('settings.credits.credits-label')}
+      hint={$_('settings.credits.credits-desc')}
+      error={message('creditsEnabled')}
+      bind:checked={draft.creditsEnabled} />
+    <SwitchRow
+      id="setting-onlyAcceptCredits"
+      label={$_('settings.credits.only-credits-label')}
+      hint={$_('settings.credits.only-credits-desc')}
+      error={message('onlyAcceptCredits')}
+      disabled={!draft.creditsEnabled}
+      bind:checked={
+        () => effective.onlyAcceptCredits, (value) => (draft.onlyAcceptCredits = value)
+      } />
+
+    <SettingRow
+      id="setting-creditName"
+      label={$_('settings.credits.credit-name-label')}
+      hint={$_('settings.credits.credit-name-desc')}
+      error={message('creditName')}>
+      <input
+        id="setting-creditName"
+        type="text"
+        class="form-control"
+        class:is-invalid={shown.creditName}
+        maxlength="32"
+        autocomplete="off"
+        placeholder={$_('settings.credits.credit-name-default')}
+        bind:value={draft.creditName} />
+    </SettingRow>
+
+    <SettingRow
+      id="setting-cashbackPercent"
+      label={$_('settings.credits.cashback-label')}
+      hint={$_('settings.credits.cashback-desc')}
+      error={message('cashbackPercent')}>
+      <div class="input-group">
+        <input
+          id="setting-cashbackPercent"
+          type="number"
+          min="0"
+          max="100"
+          step="any"
+          class="form-control"
+          class:is-invalid={shown.cashbackPercent}
+          placeholder={$_('settings.credits.cashback-placeholder')}
+          bind:value={draft.cashbackPercent} />
+        <span class="input-group-text">%</span>
       </div>
-      <div class="col d-flex align-items-center">
-        <div class="form-check form-switch m-0">
-          <input class="form-check-input" type="checkbox" role="switch" id="creditsEnabledInput" bind:checked={creditsEnabled} />
+    </SettingRow>
+
+    <SettingRow
+      id="setting-creditValue"
+      label={$_('settings.credits.credit-value-label')}
+      hint={$_('settings.credits.credit-value-hint')}
+      error={message('creditValue')}>
+      <div class="input-group">
+        <span class="input-group-text">
+          {$_('settings.credits.credit-value-prefix', { values: { name: creditLabel } })}
+        </span>
+        <input
+          id="setting-creditValue"
+          type="number"
+          min="0.01"
+          step="any"
+          class="form-control"
+          class:is-invalid={shown.creditValue}
+          aria-label={$_('settings.credits.credit-value-label')}
+          bind:value={draft.creditValue} />
+        <span class="input-group-text">{currency}</span>
+      </div>
+    </SettingRow>
+
+    <SwitchRow
+      id="setting-allowMixedCreditPayment"
+      label={$_('settings.credits.mixed-label')}
+      hint={$_('settings.credits.mixed-hint')}
+      error={message('allowMixedCreditPayment')}
+      bind:checked={draft.allowMixedCreditPayment} />
+
+    <SwitchRow
+      id="setting-creditTopUpEnabled"
+      label={$_('settings.credits.top-up-label')}
+      hint={$_('settings.credits.top-up-desc')}
+      error={message('creditTopUpEnabled')}
+      bind:checked={draft.creditTopUpEnabled} />
+
+    {#if draft.creditTopUpEnabled}
+      <SwitchRow
+        id="setting-creditTopUpFreeAmount"
+        label={$_('settings.credits.top-up-free-label')}
+        hint={$_('settings.credits.top-up-free-desc')}
+        error={message('creditTopUpFreeAmount')}
+        bind:checked={draft.creditTopUpFreeAmount} />
+
+      <SettingRow
+        id="setting-creditTopUpMin"
+        label={$_('settings.credits.top-up-min-label')}
+        error={message('creditTopUpMin')}>
+        <div class="input-group">
+          <input
+            id="setting-creditTopUpMin"
+            type="number"
+            min="0.01"
+            step="any"
+            class="form-control"
+            class:is-invalid={shown.creditTopUpMin}
+            placeholder={$_('settings.credits.top-up-min-label')}
+            bind:value={draft.creditTopUpMin} />
+          <span class="input-group-text">{creditLabel}</span>
         </div>
-      </div>
-    </div>
+      </SettingRow>
 
-    <div class="row mb-3">
-      <div class="col-md-6">
-        <label for="onlyAcceptCreditsInput" class="d-block mb-1">{$_('settings.credits.only-credits-label')}</label>
-        <small class="text-body-secondary d-block">{$_('settings.credits.only-credits-desc')}</small>
-      </div>
-      <div class="col d-flex align-items-center">
-        <div class="form-check form-switch m-0">
-          <input class="form-check-input" type="checkbox" role="switch" id="onlyAcceptCreditsInput" bind:checked={onlyAcceptCredits} />
+      <SettingRow
+        id="setting-creditTopUpMax"
+        label={$_('settings.credits.top-up-max-label')}
+        error={message('creditTopUpMax')}>
+        <div class="input-group">
+          <input
+            id="setting-creditTopUpMax"
+            type="number"
+            min="0.01"
+            step="any"
+            class="form-control"
+            class:is-invalid={shown.creditTopUpMax}
+            placeholder={$_('settings.credits.top-up-max-label')}
+            bind:value={draft.creditTopUpMax} />
+          <span class="input-group-text">{creditLabel}</span>
         </div>
-      </div>
-    </div>
-
-    <div class="row mb-3">
-      <div class="col-md-6">
-        <label class="col-form-label pb-0" for="creditNameInput">{$_('settings.credits.credit-name-label')}</label>
-        <small class="text-body-secondary d-block">{$_('settings.credits.credit-name-desc')}</small>
-      </div>
-      <div class="col-md-6">
-        <input type="text" class="form-control" id="creditNameInput" placeholder={$_('settings.credits.credit-name-label')} bind:value={creditName} />
-      </div>
-    </div>
-
-    <div class="row mb-3">
-      <div class="col-md-6">
-        <label class="col-form-label pb-0" for="cashbackInput">{$_('settings.credits.cashback-label')}</label>
-        <small class="text-body-secondary d-block">{$_('settings.credits.cashback-desc')}</small>
-      </div>
-      <div class="col-md-6">
-        <input type="number" min="0" max="100" step="0.5" class="form-control" id="cashbackInput" placeholder={$_('settings.credits.cashback-placeholder')} bind:value={cashbackPercent} />
-      </div>
-    </div>
+      </SettingRow>
+    {/if}
   </div>
 
   <div class="card-footer d-flex justify-content-start">
-    <button type="button" class="btn btn-secondary" onclick={handleSave} disabled={saving || !isDirty}>
+    <button type="button" class="btn btn-secondary" onclick={onSave} disabled={saving || !isDirty}>
       {#if saving}
-        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+        <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
       {/if}
       {$_('common.save')}
     </button>
   </div>
 </div>
+
+<script>
+  import { untrack } from 'svelte';
+  import { base } from '@panomc/sdk/svelte';
+  import { _ } from '../../../i18n';
+  import SettingRow from './SettingRow.svelte';
+  import SwitchRow from './SwitchRow.svelte';
+  import { fetchSettings, postCreditSettings, reportFailure, saveSection } from './save.js';
+  import {
+    SECTION_KEYS,
+    buildSettingsBody,
+    fieldErrorKey,
+    isDirtyBody,
+    seedValues,
+  } from '../../utils/settings.js';
+  import {
+    activeCreditKeys,
+    normalizeCredits,
+    priceMismatchCount,
+    showRefundSplitWarning,
+    validateCredits,
+  } from '../../utils/settings-extra.js';
+
+  // settings = GET /settings (credit keys and creditPriceMismatchCount), ctx = GET /context.
+  // Credits are saved through POST /settings/credits (13 §17).
+  let { settings: initial = {}, ctx = null } = $props();
+
+  const KEYS = SECTION_KEYS.credits;
+  const start = untrack(() => initial ?? {});
+
+  let settings = $state.raw(start);
+  let draft = $state(seedValues(start, KEYS));
+  let submitted = $state(false);
+  let saving = $state(false);
+  let serverMark = $state.raw(null);
+
+  // The values a save sends: the dependent switches follow their parent switch.
+  const effective = $derived(normalizeCredits(draft));
+  const currency = $derived(ctx?.currency ?? settings.currency ?? '');
+  const creditLabel = $derived(
+    String(draft.creditName ?? '').trim() || $_('settings.credits.credit-name-default'),
+  );
+  const mismatch = $derived(priceMismatchCount(settings, draft));
+  const draftKey = $derived(JSON.stringify($state.snapshot(draft)));
+  const clientErrors = $derived(validateCredits(draft));
+  const serverErrors = $derived(
+    serverMark && serverMark.draftKey === draftKey ? serverMark.errors : {},
+  );
+  const shown = $derived(submitted ? { ...clientErrors, ...serverErrors } : serverErrors);
+  const keys = $derived(activeCreditKeys(effective));
+  const isDirty = $derived(isDirtyBody(buildSettingsBody(settings, effective, keys)));
+
+  const message = (key) => (shown[key] ? $_(fieldErrorKey(shown[key])) : '');
+
+  async function onSave() {
+    if (saving || !isDirty) return;
+    submitted = true;
+    if (Object.keys(clientErrors).length > 0) {
+      reportFailure({ status: 'invalid', errors: clientErrors }, KEYS);
+      return;
+    }
+    saving = true;
+    try {
+      const result = await saveSection({
+        baseline: settings,
+        values: effective,
+        keys,
+        errors: clientErrors,
+        order: KEYS,
+        post: postCreditSettings,
+      });
+      if (result.status === 'saved') {
+        const next = (await fetchSettings()) ?? { ...settings, ...result.sent };
+        settings = next;
+        draft = seedValues(next, KEYS);
+        submitted = false;
+        serverMark = null;
+      } else if (result.status === 'failed' && Object.keys(result.errors).length > 0) {
+        serverMark = { errors: result.errors, draftKey };
+      }
+    } finally {
+      saving = false;
+    }
+  }
+</script>

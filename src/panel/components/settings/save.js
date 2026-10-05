@@ -9,6 +9,10 @@ import { toastError } from '../../utils/toast.js';
 
 export const postSettings = (body) => call(ApiUtil.post({ path: marketPath('/settings'), body }));
 
+/** POST /settings/credits: the credit keys are written by their own endpoint (13 §17 credits). */
+export const postCreditSettings = (body) =>
+  call(ApiUtil.post({ path: marketPath('/settings/credits'), body }));
+
 /** GET /settings; null on any failure. */
 export async function fetchSettings() {
   const result = await call(ApiUtil.get({ path: marketPath('/settings') }));
@@ -32,8 +36,15 @@ export function reportFailure(result, order) {
  * Validated, partial POST /settings of one section. `errors` = the client-side validation result.
  * Returns the submitSettings result; on `saved` the success toast is shown, on a failure the error toast.
  */
-export async function saveSection({ baseline, values, keys, errors = {}, order = keys }) {
-  const result = await submitSettings({ post: postSettings, baseline, values, keys, errors });
+export async function saveSection({
+  baseline,
+  values,
+  keys,
+  errors = {},
+  order = keys,
+  post = postSettings,
+}) {
+  const result = await submitSettings({ post, baseline, values, keys, errors });
   if (result.status === 'saved') showSuccessToast(get(_)('settings.toast-saved'));
   else reportFailure(result, order);
   return result;
