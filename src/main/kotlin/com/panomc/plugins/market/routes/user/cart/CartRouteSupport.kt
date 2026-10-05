@@ -4,12 +4,14 @@ import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.time.SystemClock
+import com.panomc.plugins.market.db.dao.MarketAddressDao
 import com.panomc.plugins.market.db.dao.MarketCartDao
 import com.panomc.plugins.market.db.dao.MarketCartItemDao
 import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.dao.MarketProductFieldDao
 import com.panomc.plugins.market.db.dao.MarketProductVariantDao
 import com.panomc.plugins.market.db.tx.MarketDb
+import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.service.CartService
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
@@ -30,6 +32,8 @@ internal fun cartService(plugin: MarketPlugin): CartService {
     return CartService(
         db = MarketDb({ databaseManager.getSqlClient() as Pool }, SystemClock),
         clock = SystemClock,
+        config = { currentConfig(plugin) },
+        addresses = context.getBean(MarketAddressDao::class.java),
         carts = context.getBean(MarketCartDao::class.java),
         cartItems = context.getBean(MarketCartItemDao::class.java),
         products = context.getBean(MarketProductDao::class.java),

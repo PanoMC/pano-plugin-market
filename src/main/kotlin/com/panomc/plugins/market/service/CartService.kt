@@ -9,8 +9,9 @@ import com.panomc.plugins.market.core.cart.CartMerger
 import com.panomc.plugins.market.core.cart.CartMessage
 import com.panomc.plugins.market.core.cart.CartValidator
 import com.panomc.plugins.market.core.cart.ProductFacts
-import com.panomc.plugins.market.core.money.Currencies
+import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.time.Clock
+import com.panomc.plugins.market.db.dao.MarketAddressDao
 import com.panomc.plugins.market.db.dao.MarketCartDao
 import com.panomc.plugins.market.db.dao.MarketCartItemDao
 import com.panomc.plugins.market.db.dao.MarketProductDao
@@ -24,6 +25,7 @@ import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.error.InvalidCart
 import io.vertx.core.json.JsonObject
 import io.vertx.sqlclient.SqlClient
+import java.util.Locale
 
 /**
  * The server cart of a logged-in buyer (06 section 2.2 / 2.3, MK-070): get-or-create, line writes, replace, merge on
@@ -39,6 +41,8 @@ import io.vertx.sqlclient.SqlClient
 class CartService(
     private val db: MarketDb,
     private val clock: Clock,
+    private val config: () -> MarketConfig,
+    private val addresses: MarketAddressDao,
     private val carts: MarketCartDao,
     private val cartItems: MarketCartItemDao,
     private val products: MarketProductDao,
@@ -87,12 +91,12 @@ class CartService(
 
     /** `GET /me/cart`: get-or-create, and store [currency] when one is given. */
     suspend fun get(userId: Long, currency: String? = null): CartView {
-        if (currency != null && !Currencies.isSupported(currency)) throw BadRequest()
+        val offered = currency?.let { offeredCurrency(it) ?: throw BadRequest() }
 
         return db.tx { conn ->
             val cartId = carts.ensure(userId, clock.now(), conn)
 
-            if (currency != null) carts.updateFields(cartId, mapOf("currency" to currency), clock.now(), conn)
+            if (offered != null) carts.updateFields(cartId, mapOf("currency" to offered), clock.now(), conn)
 
             view(conn, cartId)
         }
@@ -173,11 +177,14 @@ class CartService(
      * are present. Codes are stored as typed (trimmed, upper-cased) without validation: the quote validates them.
      */
     suspend fun replace(userId: Long, request: Replacement): CartView {
-        request.currency?.value?.let { if (!Currencies.isSupported(it)) throw BadRequest() }
-
         val changes = LinkedHashMap<String, Any?>()
 
-        request.currency?.let { changes["currency"] = it.value }
+        // PT-5: only the base currency or an additional currency of the store; an empty value clears the choice.
+        request.currency?.let {
+            val text = it.value?.trim()?.takeIf { v -> v.isNotEmpty() }
+
+            changes["currency"] = text?.let { v -> offeredCurrency(v) ?: throw BadRequest() }
+        }
         request.couponCode?.let { changes["couponCode"] = code(it.value) }
         request.creatorCode?.let { changes["creatorCode"] = code(it.value) }
         request.recipientUsername?.let { changes["recipientUsername"] = it.value?.trim()?.takeIf { v -> v.isNotEmpty() } }
@@ -188,11 +195,15 @@ class CartService(
 
             changes["giftMessage"] = text
         }
-        request.shippingAddressId?.let { changes["shippingAddressId"] = it.value }
         request.shippingMethodId?.let { changes["shippingMethodId"] = it.value }
 
         return db.tx { conn ->
             val id = lockedCart(conn, userId)
+
+            // 11 section 5.4: an address that is not the caller's is treated as absent (stored as NULL), never persisted.
+            request.shippingAddressId?.let { field ->
+                changes["shippingAddressId"] = field.value?.takeIf { addressId -> addresses.getById(addressId, conn)?.userId == userId }
+            }
 
             if (request.items != null) {
                 val lines = CartMerger.sumByKey(request.items)
@@ -293,6 +304,14 @@ class CartService(
         val errors = CartValidator.lineErrors(line, facts)
 
         if (errors.isNotEmpty()) throw InvalidCart(mapOf(key to errors))
+    }
+
+    /** The normalised currency when the store sells in it (the store currency or an additional one), else `null`. */
+    private fun offeredCurrency(raw: String): String? {
+        val code = raw.trim().uppercase(Locale.ROOT)
+        val current = config()
+
+        return code.takeIf { it == current.currency.name || it in current.additionalCurrencies.map { c -> c.trim().uppercase(Locale.ROOT) } }
     }
 
     private fun code(value: String?): String? {

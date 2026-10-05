@@ -2,17 +2,20 @@ package com.panomc.plugins.market.service
 
 import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NotFound
+import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.cart.CartLimits
 import com.panomc.plugins.market.core.cart.CartLine
 import com.panomc.plugins.market.core.cart.CartLineKey
 import com.panomc.plugins.market.core.cart.CartMessage
 import com.panomc.plugins.market.db.MarketDaoITBase
+import com.panomc.plugins.market.db.model.MarketAddress
 import com.panomc.plugins.market.db.model.MarketProduct
 import com.panomc.plugins.market.error.InvalidCart
 import com.panomc.plugins.market.error.MarketBusyException
 import com.panomc.plugins.market.support.Fixtures
 import com.panomc.plugins.market.support.Race
 import com.panomc.plugins.market.support.TestWiring
+import com.panomc.plugins.market.util.CurrencyType
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -30,7 +33,9 @@ import org.junit.jupiter.api.Test
  */
 class CartServiceIT : MarketDaoITBase() {
     private val w by lazy { TestWiring(pool) }
-    private val service by lazy { CartService(w.db, w.clock, w.carts, w.cartItems, w.products, w.variants, w.fields) }
+    @Volatile
+    private var config = MarketConfig(currency = CurrencyType.TRY, additionalCurrencies = listOf("USD"))
+    private val service by lazy { CartService(w.db, w.clock, { config }, w.addresses, w.carts, w.cartItems, w.products, w.variants, w.fields) }
     private var userSeq = 1000L
 
     private fun newUser(): Long = ++userSeq
@@ -67,6 +72,77 @@ class CartServiceIT : MarketDaoITBase() {
         assertEquals("USD", service.get(user).cart.currency)
         assertThrows(BadRequest::class.java) { runBlocking { service.get(user, "ZZZ") } }
         assertEquals("USD", service.get(user).cart.currency)
+    }
+
+    @Test
+    fun `get stores only an offered currency, a supported but not offered one is 400 and stores nothing`(): Unit = runBlocking {
+        val user = newUser()
+
+        assertEquals("TRY", service.get(user, "TRY").cart.currency)
+        assertEquals("USD", service.get(user, "usd").cart.currency)
+
+        // EUR is a valid ISO currency of the table but this store does not sell in it
+        assertThrows(BadRequest::class.java) { runBlocking { service.get(user, "EUR") } }
+        assertEquals("USD", service.get(user).cart.currency)
+
+        val other = newUser()
+        assertThrows(BadRequest::class.java) { runBlocking { service.get(other, "GBP") } }
+        assertNull(service.get(other).cart.currency)
+    }
+
+    @Test
+    fun `replace stores only an offered currency, trims and upper-cases it, and an empty value clears it`(): Unit = runBlocking {
+        val user = newUser()
+
+        assertEquals("USD", service.replace(user, CartService.Replacement(currency = CartService.Field(" usd "))).cart.currency)
+        assertEquals("TRY", service.replace(user, CartService.Replacement(currency = CartService.Field("TRY"))).cart.currency)
+
+        assertThrows(BadRequest::class.java) { runBlocking { service.replace(user, CartService.Replacement(currency = CartService.Field("EUR"))) } }
+        assertEquals("TRY", service.get(user).cart.currency)
+
+        assertNull(service.replace(user, CartService.Replacement(currency = CartService.Field("  "))).cart.currency)
+
+        val other = newUser()
+        assertThrows(BadRequest::class.java) { runBlocking { service.replace(other, CartService.Replacement(currency = CartService.Field("GBP"))) } }
+        assertNull(service.get(other).cart.currency)
+
+        // the offered set follows the config
+        val original = config
+
+        try {
+            config = MarketConfig(currency = CurrencyType.EUR, additionalCurrencies = emptyList())
+            assertEquals("EUR", service.replace(other, CartService.Replacement(currency = CartService.Field("eur"))).cart.currency)
+            assertThrows(BadRequest::class.java) { runBlocking { service.replace(other, CartService.Replacement(currency = CartService.Field("USD"))) } }
+        } finally {
+            config = original
+        }
+    }
+
+    @Test
+    fun `replace keeps only the shipping address of the caller, a foreign or missing id is stored as NULL`(): Unit = runBlocking {
+        val owner = newUser()
+        val stranger = newUser()
+        val ownerAddress = w.addresses.add(MarketAddress(userId = owner, label = "Home", line1 = "Street 1"), pool)
+        val strangerAddress = w.addresses.add(MarketAddress(userId = stranger, label = "Home", line1 = "Street 2"), pool)
+
+        // the stranger puts the owner's address id: treated as absent, nothing persisted, nothing echoed
+        val foreign = service.replace(stranger, CartService.Replacement(shippingAddressId = CartService.Field(ownerAddress)))
+        assertNull(foreign.cart.shippingAddressId)
+        assertNull(service.get(stranger).cart.shippingAddressId)
+
+        // a non-existent id is absent as well
+        assertNull(service.replace(stranger, CartService.Replacement(shippingAddressId = CartService.Field(999_999L))).cart.shippingAddressId)
+
+        // the own id is kept, and a later foreign id clears the previous own choice
+        assertEquals(strangerAddress, service.replace(stranger, CartService.Replacement(shippingAddressId = CartService.Field(strangerAddress))).cart.shippingAddressId)
+        assertEquals(ownerAddress, service.replace(owner, CartService.Replacement(shippingAddressId = CartService.Field(ownerAddress))).cart.shippingAddressId)
+        assertEquals(ownerAddress, service.get(owner).cart.shippingAddressId)
+        assertNull(service.replace(stranger, CartService.Replacement(shippingAddressId = CartService.Field(ownerAddress))).cart.shippingAddressId)
+
+        // explicit null clears; an absent field leaves the stored one alone
+        assertEquals(strangerAddress, service.replace(stranger, CartService.Replacement(shippingAddressId = CartService.Field(strangerAddress))).cart.shippingAddressId)
+        assertEquals(strangerAddress, service.replace(stranger, CartService.Replacement(couponCode = CartService.Field("X"))).cart.shippingAddressId)
+        assertNull(service.replace(stranger, CartService.Replacement(shippingAddressId = CartService.Field(null))).cart.shippingAddressId)
     }
 
     @Test
