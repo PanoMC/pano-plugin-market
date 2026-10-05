@@ -1202,9 +1202,7 @@ class PaymentService(
         val pricing = marketPricingConfig(c, rates)
         val held = if (order.reservationState == ReservationState.HELD) order.creditAmount else 0L
         val balance = order.userId?.let { creditAccounts.getByUserId(it, sqlClient)?.balance } ?: 0L
-        val roots = items.filter { it.kind != OrderItemKind.BUNDLE_CHILD }
-        val creditable = roots.isNotEmpty() && roots.all { it.creditUnitPrice != null }
-        val creditItems = if (creditable) roots.sumOf { Math.multiplyExact(it.creditUnitPrice!!, it.quantity.toLong()) } else null
+        val conversions = Conversions(order.baseCurrency, order.currency, order.fxRate, pricing.creditValue, pricing.removeCents, order.displayCurrency, order.displayRate)
         val profile = when (order.source) {
             OrderSource.PANEL -> PricingProfile.PANEL
             OrderSource.RENEWAL -> PricingProfile.RENEWAL
@@ -1214,14 +1212,14 @@ class PaymentService(
         }
 
         return FrozenOrder(
-            conversions = Conversions(order.baseCurrency, order.currency, order.fxRate, pricing.creditValue, pricing.removeCents, order.displayCurrency, order.displayRate),
+            conversions = conversions,
             pricingMode = com.panomc.plugins.market.core.pricing.PricingMode.valueOf(order.pricingMode.name), profile = profile,
             itemsTotal = order.totalPrice - order.shippingTotal - order.paymentFee, itemsVat = order.vatTotal - order.shippingVatAmount - order.paymentFeeVatAmount,
             shippingTotal = order.shippingTotal, shippingVat = order.shippingVatAmount, requiresShipping = order.requiresShipping, vatBp = pricing.vatBp,
             currentMethodId = order.paymentMethodId, creditAmount = order.creditAmount, creditValue = order.creditValue, creditBalance = balance + held,
             loggedIn = order.userId != null, creditsEnabled = pricing.creditsEnabled, allowMixedCreditPayment = pricing.allowMixedCreditPayment,
             onlyAcceptCredits = pricing.onlyAcceptCredits, mixedCreditCart = items.none { it.kind == OrderItemKind.CREDIT_TOPUP || (it.creditAmount ?: 0) > 0 } && order.subscriptionId == null,
-            creditItemsTotal = creditItems, renewalFee = if (order.source == OrderSource.RENEWAL) order.paymentFee else null, rates = rates
+            creditItemsTotal = CreditRunSnapshot.itemsTotal(order, items, conversions), renewalFee = if (order.source == OrderSource.RENEWAL) order.paymentFee else null, rates = rates
         )
     }
 

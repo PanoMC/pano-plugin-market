@@ -1,12 +1,15 @@
 package com.panomc.plugins.market.service
 
 import com.panomc.platform.model.Error
+import com.panomc.plugins.market.core.money.Conversions
 import com.panomc.plugins.market.core.payment.PaymentAttemptEvent
+import com.panomc.plugins.market.core.pricing.Tender
 import com.panomc.plugins.market.db.MarketDaoITBase
 import com.panomc.plugins.market.db.model.CreditSystemKey
 import com.panomc.plugins.market.db.model.CreditTxType
 import com.panomc.plugins.market.db.model.MarketCreditTx
 import com.panomc.plugins.market.db.model.MarketOrder
+import com.panomc.plugins.market.db.model.MarketOrderItem
 import com.panomc.plugins.market.db.model.MarketPayment
 import com.panomc.plugins.market.db.model.MarketProduct
 import com.panomc.plugins.market.db.model.OrderItemKind
@@ -36,6 +39,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.math.BigDecimal
 
 /**
  * The object graph of the credit tests (17 section 5.3): the real [CreditService] as the hold of checkout and as the settlement of every order transition,
@@ -657,6 +661,196 @@ class CreditOrderIT : MarketDaoITBase() {
         assertEquals(OrderStatus.CANCELLED, c.payments.cancel(notSoldOrder, pool))
     }
 
+    /** A full-credit checkout of [product] with the given codes, left `PENDING` with its hold (the crash between O1 and O2). */
+    private suspend fun pendingCreditOrder(caller: QuoteCaller, product: MarketProduct, vararg codes: Pair<String, String>): MarketOrder {
+        val body = h.body("items" to listOf(h.line(product)), "paymentMethodId" to "credits", "payWithCredits" to true, *codes)
+
+        c.deferStart = true
+
+        val order = c.orderOf(c.checkout(body, caller))
+
+        c.deferStart = false
+
+        return order
+    }
+
+    @Test
+    fun `D-O9 a full-credit order with a coupon keeps its credit part when the buyer retries with credits, nothing is posted but the capture and the balance does not move`(): Unit = runBlocking {
+        configure()
+
+        val (alex, caller) = user("Alex", credit = 10_000)
+
+        fx.coupon("TEN", DiscountUnit.PERCENT, 1_000, redeemLimit = 5)
+
+        val product = fx.product(price = 3_000, creditPrice = 2_500, stock = 3)
+        val order = pendingCreditOrder(caller, product, "couponCode" to "TEN")
+
+        assertEquals(2_250, order.creditAmount, "the hold is the credit run's total, net of the 10 % coupon")
+        assertEquals(7_750, balance(alex))
+        assertEquals(listOf(CreditTxType.HOLD), typesOf(order.id))
+
+        pay(order, "credits")
+
+        val done = c.order(order.id)
+
+        assertEquals(OrderStatus.COMPLETED, done.status)
+        assertEquals(2_250, done.creditAmount, "the retry did not re-price the credit part")
+        assertEquals(listOf(CreditTxType.HOLD, CreditTxType.CAPTURE), typesOf(order.id), "no RELEASE and no second HOLD")
+        assertEquals(listOf(2_250L, 2_250L), amountsOf(order.id))
+        assertEquals(listOf("order:${order.id}:hold", "order:${order.id}:capture"), keysOf(order.id))
+        assertEquals(7_750, balance(alex))
+        assertEquals(0, c.system(CreditSystemKey.HOLD))
+        assertEquals(2_250, c.system(CreditSystemKey.SPENT))
+    }
+
+    @Test
+    fun `D-O9 a full-credit order with a coupon and a creator code keeps its credit part on the credits retry, to the unit`(): Unit = runBlocking {
+        configure()
+
+        val (alex, caller) = user("Alex", credit = 10_000)
+
+        fx.coupon("TEN", DiscountUnit.PERCENT, 1_000, redeemLimit = 5)
+        fx.creatorCode("STREAMER", creator = "streamer", discount = 700)
+
+        val product = fx.product(price = 3_000, creditPrice = 2_500, stock = 3)
+        val order = pendingCreditOrder(caller, product, "couponCode" to "TEN", "creatorCode" to "STREAMER")
+        val held = order.creditAmount
+
+        assertTrue(held in 1 until 2_250, "both codes took something off the credit price: $held")
+        assertEquals(10_000 - held, balance(alex))
+
+        pay(order, "credits")
+
+        assertEquals(OrderStatus.COMPLETED, c.order(order.id).status)
+        assertEquals(held, c.order(order.id).creditAmount)
+        assertEquals(listOf(CreditTxType.HOLD, CreditTxType.CAPTURE), typesOf(order.id))
+        assertEquals(listOf(held, held), amountsOf(order.id))
+        assertEquals(10_000 - held, balance(alex))
+        assertEquals(held, c.system(CreditSystemKey.SPENT))
+    }
+
+    @Test
+    fun `the frozen credit items of a credits order are its credit part less the shipping the tender adds back, of any other order the credit run's lines`() {
+        val money = Conversions("EUR", "EUR", BigDecimal.ONE, 100, false)
+        val creditsOrder = MarketOrder(paymentMethodId = "credits", creditAmount = 2_650, shippingTotal = 400, totalPrice = 3_400)
+        val shipping = Tender.shippingCredits(money, 400)
+
+        assertEquals(400, shipping, "4.00 of shipping at 1.00 per credit")
+        assertEquals(2_250L, CreditRunSnapshot.itemsTotal(creditsOrder, emptyList(), money), "no item is read: the credit part was frozen at O1")
+        assertEquals(2_650L, CreditRunSnapshot.itemsTotal(creditsOrder, emptyList(), money)!! + shipping, "the tender yields creditAmount again, to the unit")
+
+        // another credit value later: the same function on both sides, so the round trip still gives creditAmount
+        val dearer = Conversions("EUR", "EUR", BigDecimal.ONE, 300, false)
+
+        assertEquals(2_650L, CreditRunSnapshot.itemsTotal(creditsOrder, emptyList(), dearer)!! + Tender.shippingCredits(dearer, 400))
+
+        // an order on any other method is priced from its items, a line that is not sold for credits makes it unpayable, bundle children cost nothing
+        val gateway = MarketOrder(paymentMethodId = "fake", creditAmount = 0)
+        val coupon = MarketOrderItem(
+            kind = OrderItemKind.PRODUCT, quantity = 2, listUnitPrice = 3_000, unitPrice = 3_000, couponAmount = 600, creditUnitPrice = 2_500,
+            snapshot = JsonObject().put(CreditRunSnapshot.KEY, 4_500L).encode()
+        )
+        val child = MarketOrderItem(kind = OrderItemKind.BUNDLE_CHILD, quantity = 1, creditUnitPrice = null)
+
+        assertEquals(4_500L, CreditRunSnapshot.itemsTotal(gateway, listOf(coupon, child), money), "the stored credit run total, not 2 x 25.00")
+        assertNull(CreditRunSnapshot.itemsTotal(gateway, listOf(coupon, MarketOrderItem(kind = OrderItemKind.PRODUCT, quantity = 1, creditUnitPrice = null)), money))
+        assertNull(CreditRunSnapshot.itemsTotal(gateway, emptyList(), money))
+
+        // no stored total: the closed form takes the code share off the credit price that is already after the discount and the upgrade
+        val bare = MarketOrderItem(
+            kind = OrderItemKind.PRODUCT, quantity = 2, listUnitPrice = 3_000, discountAmount = 1_000, upgradeAmount = 0, unitPrice = 2_500, couponAmount = 500, creditUnitPrice = 2_000
+        )
+
+        assertEquals(3_600L, CreditRunSnapshot.itemsTotal(gateway, listOf(bare), money), "2 x 20.00 x (50.00 - 5.00) / 50.00")
+        assertNull(CreditRunSnapshot.read(null))
+        assertNull(CreditRunSnapshot.read("not json"))
+        assertNull(CreditRunSnapshot.read(JsonObject().put(CreditRunSnapshot.KEY, "x").encode()))
+        assertEquals(7L, CreditRunSnapshot.read(JsonObject().put(CreditRunSnapshot.KEY, 7).encode()))
+    }
+
+    @Test
+    fun `an ordinary gateway order with a coupon switched to credits holds exactly what the credit run charges at checkout`(): Unit = runBlocking {
+        configure()
+
+        val (alex, caller) = user("Alex", credit = 10_000)
+        val (_, beaCaller) = user("Bea", credit = 10_000)
+
+        fx.coupon("TEN", DiscountUnit.PERCENT, 1_000, redeemLimit = 5)
+
+        val product = fx.product(price = 3_000, creditPrice = 2_500, stock = 5)
+        val gateway = c.orderOf(c.checkout(h.body("items" to listOf(h.line(product)), "paymentMethodId" to "fake", "couponCode" to "TEN"), caller))
+        val direct = c.orderOf(c.checkout(h.body("items" to listOf(h.line(product)), "paymentMethodId" to "credits", "payWithCredits" to true, "couponCode" to "TEN"), beaCaller))
+
+        assertEquals(0, gateway.creditAmount)
+        assertEquals(2_250, direct.creditAmount, "the credit run: 25.00 credits less the 10 % coupon")
+
+        val item = w.orderItems.getByOrderIds(listOf(gateway.id), pool).single { it.kind == OrderItemKind.PRODUCT }
+
+        assertEquals(2_500L, item.creditUnitPrice)
+        assertEquals(2_250L, CreditRunSnapshot.read(item.snapshot), "the credit run's line total is stored with the item")
+
+        pay(gateway, "credits")
+
+        val switched = c.order(gateway.id)
+
+        assertEquals(OrderStatus.COMPLETED, switched.status)
+        assertEquals(direct.creditAmount, switched.creditAmount, "the coupon stays consumed, so its credit share is taken off")
+        assertEquals(listOf(CreditTxType.HOLD, CreditTxType.CAPTURE), typesOf(gateway.id))
+        assertEquals(listOf(2_250L, 2_250L), amountsOf(gateway.id))
+        assertEquals(7_750, balance(alex))
+    }
+
+    @Test
+    fun `a switch to credits charges the credit run's rounding of a percentage code, not the money run's`(): Unit = runBlocking {
+        configure()
+
+        val (alex, caller) = user("Alex", credit = 300_000)
+        val (_, beaCaller) = user("Bea", credit = 300_000)
+
+        fx.coupon("ODD", DiscountUnit.PERCENT, 3_333, redeemLimit = 5)
+        fx.creatorCode("STREAMER", creator = "streamer", discount = 500)
+
+        // 9.99 in money, 1000.00 credits: the 33.33 % coupon takes 3.33 of the money price but 333.30 of the credit price
+        val product = fx.product(price = 999, creditPrice = 100_000, stock = 5)
+        val codes = arrayOf("couponCode" to "ODD", "creatorCode" to "STREAMER")
+        val gateway = c.orderOf(c.checkout(h.body("items" to listOf(h.line(product)), "paymentMethodId" to "fake", *codes), caller))
+        val direct = c.orderOf(c.checkout(h.body("items" to listOf(h.line(product)), "paymentMethodId" to "credits", "payWithCredits" to true, *codes), beaCaller))
+
+        assertTrue(direct.creditAmount in 1 until 100_000, "${direct.creditAmount}")
+
+        pay(gateway, "credits")
+
+        val switched = c.order(gateway.id)
+
+        assertEquals(direct.creditAmount, switched.creditAmount, "the same cart and codes cost the same credits whichever way the buyer arrived at them")
+        assertEquals(listOf(direct.creditAmount, direct.creditAmount), amountsOf(gateway.id))
+        assertEquals(300_000 - direct.creditAmount, balance(alex))
+    }
+
+    @Test
+    fun `an item without the stored credit line total falls back to the closed form over its money columns`(): Unit = runBlocking {
+        configure()
+
+        val (alex, caller) = user("Alex", credit = 10_000)
+
+        fx.coupon("TEN", DiscountUnit.PERCENT, 1_000, redeemLimit = 5)
+
+        val product = fx.product(price = 3_000, creditPrice = 2_500, stock = 5)
+        val gateway = c.orderOf(c.checkout(h.body("items" to listOf(h.line(product)), "paymentMethodId" to "fake", "couponCode" to "TEN"), caller))
+        val item = w.orderItems.getByOrderIds(listOf(gateway.id), pool).single { it.kind == OrderItemKind.PRODUCT }
+        val without = JsonObject(item.snapshot!!).also { it.remove(CreditRunSnapshot.KEY) }
+
+        sql("UPDATE `pano_market_order_item` SET `snapshot` = ? WHERE `id` = ?", without.encode(), item.id)
+
+        pay(gateway, "credits")
+
+        val switched = c.order(gateway.id)
+
+        assertEquals(OrderStatus.COMPLETED, switched.status)
+        assertEquals(2_250, switched.creditAmount, "25.00 x (30.00 - 3.00) / 30.00")
+        assertEquals(7_750, balance(alex))
+    }
+
     // ================================================================================== D-O7: late payment, re-hold
 
     @Test
@@ -1012,6 +1206,33 @@ class CreditOrderIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `D-O20 O5 a credit value without a credit part and a credit part without a value on a priced order are found, a credit part worth 0 on a total of 0 is not`(): Unit = runBlocking {
+        corrupt {
+            user("Alex", credit = 5_000)
+
+            val now = w.clock.now()
+            val raw = mapOf("playerUsername" to "alex", "pricingMode" to "MARKET", "status" to "CANCELLED", "createdAt" to now, "updatedAt" to now)
+
+            // creditValue > 0 with no credit part: nothing was ever held for that value
+            val valueOnly = Fixtures.insertRaw(pool, "market_order", raw + mapOf("creditAmount" to 0, "creditValue" to 100, "gatewayAmount" to 0, "totalPrice" to 100))
+            // a credit part with a money total that none of it covers (a mixed order never has a credit part worth 0)
+            val partOnly = Fixtures.insertRaw(pool, "market_order", raw + mapOf("creditAmount" to 500, "creditValue" to 0, "gatewayAmount" to 100, "totalPrice" to 100))
+            // a gateway total that does not add up
+            val unbalanced = Fixtures.insertRaw(pool, "market_order", raw + mapOf("creditAmount" to 0, "creditValue" to 0, "gatewayAmount" to 10, "totalPrice" to 99))
+            // the legitimate shape: a credits-only product, credit part 40.00 on a total of 0 (05 section 17 row 53)
+            val creditsOnly = Fixtures.insertRaw(pool, "market_order", raw + mapOf("creditAmount" to 4_000, "creditValue" to 0, "gatewayAmount" to 0, "totalPrice" to 0))
+            // and an ordinary full-credit order, a mixed one and a gateway one
+            val full = Fixtures.insertRaw(pool, "market_order", raw + mapOf("creditAmount" to 2_500, "creditValue" to 3_000, "gatewayAmount" to 0, "totalPrice" to 3_000))
+            val mixed = Fixtures.insertRaw(pool, "market_order", raw + mapOf("creditAmount" to 1_000, "creditValue" to 1_000, "gatewayAmount" to 2_000, "totalPrice" to 3_000))
+            val gateway = Fixtures.insertRaw(pool, "market_order", raw + mapOf("creditAmount" to 0, "creditValue" to 0, "gatewayAmount" to 3_000, "totalPrice" to 3_000))
+
+            val o5 = c.reconciler().run(full = true).problems.filter { it.invariant == "O5" }.map { it.id }.toSet()
+
+            assertEquals(setOf(valueOnly, partOnly, unbalanced), o5, "only the three broken orders: $o5 (credits-only $creditsOnly, full $full, mixed $mixed, gateway $gateway)")
+        }
+    }
+
+    @Test
     fun `D-O20 O7 a second cashback and O8 clawbacks above the grant are found`(): Unit = runBlocking {
         corrupt {
             val (alex, _) = user("Alex", credit = 5_000)
@@ -1104,6 +1325,42 @@ class CreditOrderIT : MarketDaoITBase() {
 
         assertTrue(result.ok, "${result.problems}")
         InvariantChecker.assertAll(pool)
+    }
+
+    @Test
+    fun `D-O19 a credits-only product bought with credits is a credit part worth 0 on a total of 0 and the self-check accepts it`(): Unit = runBlocking {
+        configure()
+
+        val (alex, caller) = user("Alex", credit = 20_000)
+        val creditsOnly = fx.product(price = 0, creditPrice = 4_000, stock = 5)
+        val result = c.spend(creditsOnly, caller)
+        val order = c.orderOf(result)
+
+        // 05 section 17 row 53: creditTotal 40.00, totalPrice 0, creditValue 0
+        assertEquals("COMPLETED", result.order.getString("status"))
+        assertEquals("credits", order.paymentMethodId)
+        assertEquals(4_000, order.creditAmount)
+        assertEquals(0, order.totalPrice)
+        assertEquals(0, order.creditValue)
+        assertEquals(0, order.gatewayAmount)
+        assertEquals(listOf(CreditTxType.HOLD, CreditTxType.CAPTURE), typesOf(order.id))
+        assertEquals(16_000, balance(alex))
+
+        val found = c.reconciler().run(full = true)
+
+        assertTrue(found.ok, "a credits-only order is not ledger corruption: ${found.problems}")
+        assertTrue(found.problems.none { it.invariant == "O5" })
+
+        // a credits-only product next to a priced one, and one that waits for its capture: the same shapes in every state
+        val priced = fx.product(price = 3_000, creditPrice = 2_500, stock = 5)
+
+        c.spend(priced, caller)
+        c.deferStart = true
+        c.orderOf(c.spend(creditsOnly, caller))
+
+        val again = c.reconciler().run(full = true)
+
+        assertTrue(again.ok, "${again.problems}")
     }
 
     @Test
