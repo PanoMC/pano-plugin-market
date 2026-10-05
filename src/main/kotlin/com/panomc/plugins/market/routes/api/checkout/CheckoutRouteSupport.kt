@@ -8,6 +8,7 @@ import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.time.SecureIds
 import com.panomc.plugins.market.core.time.SystemClock
+import com.panomc.plugins.market.db.dao.MarketAddressDao
 import com.panomc.plugins.market.db.dao.MarketBundleItemDao
 import com.panomc.plugins.market.db.dao.MarketCartDao
 import com.panomc.plugins.market.db.dao.MarketCartItemDao
@@ -118,6 +119,7 @@ internal fun checkoutService(plugin: MarketPlugin, withCheckout: Boolean = false
         users = PlatformUserDirectory(databaseManager),
         servers = PlatformServerDirectory(databaseManager),
         shipping = shippingService(plugin),
+        addresses = context.getBean(MarketAddressDao::class.java),
         checkout = deps
     )
 }

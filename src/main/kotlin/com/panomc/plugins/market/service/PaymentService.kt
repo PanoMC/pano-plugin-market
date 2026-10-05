@@ -916,7 +916,13 @@ class PaymentService(
                 }
 
                 is PaymentEffect.NotifyOrder -> {
-                    var orderEvent = effect.event
+                    // an admin's decision on the attempt (the bank transfer approval, 06 section 14.1) is the admin's decision on the order too: O2 / O3 / O8 carry the actor
+                    var orderEvent = if (actor != OrderActor.ADMIN) effect.event else when (val e = effect.event) {
+                        is OrderEvent.Paid -> e.copy(actor = actor)
+                        is OrderEvent.NeedsReview -> e.copy(actor = actor)
+                        is OrderEvent.Fail -> e.copy(actor = actor)
+                        else -> e
+                    }
                     var note: String? = null
                     val paidEvent = orderEvent as? OrderEvent.Paid
 
