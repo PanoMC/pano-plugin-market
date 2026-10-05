@@ -143,9 +143,11 @@
     creditsForOrder,
     defaultMethodId,
     emptyBilling,
+    existingCredits,
     nextStep,
     panelModel,
     payBody,
+    payCredits,
     payFailure,
     pickerQuote,
     startSignature,
@@ -184,7 +186,10 @@
   let leaving = $state(false);
 
   let selectedId = $state(untrack(() => defaultMethodId(order)));
-  let useCredits = $state(null);
+  // the credit part the order already has is shown ticked (and kept unless the buyer unticks it)
+  let useCredits = $state(
+    untrack(() => (existingCredits(order) > 0 ? existingCredits(order) : null)),
+  );
   let paying = $state(false);
   let alertKey = $state('');
   let waitUntil = $state(0);
@@ -205,6 +210,7 @@
       : null,
   );
   const chosenMethod = $derived(selectedMethod(pickerQuote(order), chosen));
+  const hadCredits = $derived(existingCredits(order) > 0);
   const billing = $derived(billingStep(billingFields, billingInfo));
   const waitLeft = $derived(waitUntil > nowMs ? Math.ceil((waitUntil - nowMs) / 1000) : 0);
   const continueSeconds = $derived(
@@ -288,8 +294,9 @@
     const res = await call('POST', `/api/market/orders/${encodeURIComponent(id)}/pay`, {
       body: payBody({
         methodId: chosen,
-        useCredits,
-        credits: order.credits,
+        useCredits: payCredits({ useCredits, credits, method: chosenMethod }),
+        credits,
+        hadCredits,
         billingInfo: billingInfoBody,
       }),
       headers: tokenHeaders(id, token),

@@ -11,7 +11,7 @@ import {
   validateBilling,
 } from './checkoutModel.js';
 import { messageKey } from './errorMap.js';
-import { unavailableKey } from './paymentModel.js';
+import { mixedControlsVisible, unavailableKey } from './paymentModel.js';
 import {
   IN_PAGE_KINDS,
   afterCheckout,
@@ -557,13 +557,42 @@ export function creditsAmount(useCredits, credits) {
     : null;
 }
 
-/** The credits object the shared credits control renders for an existing order (no "pay all in credits" radio). */
+/** Credits the order already pays (`totals.creditAmount`), 0 when none. */
+export function existingCredits(order) {
+  const amount = Number(order?.totals?.creditAmount);
+
+  return Number.isFinite(amount) && amount > 0 ? amount : 0;
+}
+
+/**
+ * The credits object the shared credits control renders for an existing order (no "pay all in credits" radio).
+ * An existing credit part is shown as applied and the control can always offer at least that much, so the buyer
+ * can see it and untick it.
+ */
 export function creditsForOrder(order) {
   const credits = order?.credits;
 
   if (!isObject(credits) || credits.enabled !== true) return null;
 
-  return { ...credits, payableInCredits: false, creditTotal: 0, applied: 0, appliedValue: 0 };
+  const had = existingCredits(order);
+  const value = Number(order?.totals?.creditValue);
+  const max = Number(credits.maxApplicable);
+
+  return {
+    ...credits,
+    payableInCredits: false,
+    creditTotal: 0,
+    maxApplicable: had > 0 ? Math.max(Number.isFinite(max) ? max : 0, had) : credits.maxApplicable,
+    applied: had,
+    appliedValue: had > 0 && Number.isFinite(value) ? value : 0,
+  };
+}
+
+/** The `useCredits` the panel may send: the buyer's choice only while the credit control is on screen, else null. */
+export function payCredits({ useCredits = null, credits = null, method = null } = {}) {
+  const visible = mixedControlsVisible({ config: { mixedCredit: true }, credits, method });
+
+  return visible ? useCredits : null;
 }
 
 /** A quote-shaped object for the method picker: the order's methods; a retry always has something left to pay. */
@@ -584,10 +613,20 @@ export function defaultMethodId(order) {
     : null;
 }
 
-/** Body of `POST …/pay`: `{ paymentMethodId, useCredits?, billingInfo? }`. `useCredits` only as a number. */
-export function payBody({ methodId, useCredits = null, credits = null, billingInfo = null } = {}) {
+/**
+ * Body of `POST …/pay`: `{ paymentMethodId, useCredits?, billingInfo? }`. `useCredits` only as a number. An omitted
+ * `useCredits` keeps the order's existing credit part (04 §3), so when the order had one (`hadCredits`) and the
+ * buyer sends no amount, `0` drops it.
+ */
+export function payBody({
+  methodId,
+  useCredits = null,
+  credits = null,
+  billingInfo = null,
+  hadCredits = false,
+} = {}) {
   const body = { paymentMethodId: methodId };
-  const amount = creditsAmount(useCredits, credits);
+  const amount = creditsAmount(useCredits, credits) ?? (hadCredits ? 0 : null);
 
   if (amount !== null) body.useCredits = amount;
   if (isObject(billingInfo) && Object.keys(billingInfo).length > 0) body.billingInfo = billingInfo;

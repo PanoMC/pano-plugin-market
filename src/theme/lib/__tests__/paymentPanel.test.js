@@ -17,6 +17,7 @@ import {
   effectiveStart,
   embeddedFallback,
   embeddedFields,
+  existingCredits,
   firstComponentItem,
   iframeAllow,
   iframeHeight,
@@ -30,6 +31,7 @@ import {
   notifyFailure,
   panelModel,
   payBody,
+  payCredits,
   payFailure,
   pickerQuote,
   readonlyValue,
@@ -844,6 +846,69 @@ describe('pay another way', () => {
       },
     );
     expect(payBody({ methodId: 's', billingInfo: {} })).toEqual({ paymentMethodId: 's' });
+  });
+
+  test('creditsForOrder shows the order credit part as applied and keeps it removable', () => {
+    const credits = { enabled: true, name: 'Coins', balance: 50, maxApplicable: 0 };
+    const o = order({
+      credits,
+      totals: { gatewayAmount: 500, creditAmount: 12, creditValue: 600 },
+    });
+
+    expect(existingCredits(o)).toBe(12);
+    expect(creditsForOrder(o)).toMatchObject({ applied: 12, appliedValue: 600, maxApplicable: 12 });
+    expect(
+      creditsForOrder({ ...o, credits: { ...credits, maxApplicable: 30 } }).maxApplicable,
+    ).toBe(30);
+    expect(creditsForOrder(order({ credits, totals: { gatewayAmount: 1 } }))).toMatchObject({
+      applied: 0,
+      appliedValue: 0,
+      maxApplicable: 0,
+    });
+    expect(existingCredits(order())).toBe(0);
+    expect(existingCredits(null)).toBe(0);
+  });
+
+  test('payCredits drops a credit choice whose control is not on screen', () => {
+    const credits = { enabled: true, name: 'Coins', balance: 50, maxApplicable: 20 };
+    const market = { id: 'stripe', pricing: 'MARKET' };
+
+    expect(payCredits({ useCredits: 5, credits, method: market })).toBe(5);
+    expect(payCredits({ useCredits: 'MAX', credits, method: null })).toBe('MAX');
+    expect(
+      payCredits({ useCredits: 5, credits, method: { id: 'x', pricing: 'EXTERNAL' } }),
+    ).toBeNull();
+    expect(
+      payCredits({
+        useCredits: 5,
+        credits,
+        method: { id: 'x', pricing: 'MARKET', unavailableReason: 'MIXED_CREDIT_NOT_SUPPORTED' },
+      }),
+    ).toBeNull();
+    expect(payCredits({ useCredits: 5, credits: { ...credits, maxApplicable: 0 } })).toBeNull();
+    expect(payCredits({ useCredits: 5, credits: null, method: market })).toBeNull();
+    expect(payCredits({ useCredits: null, credits, method: market })).toBeNull();
+  });
+
+  test('payBody keeps, drops or omits the order credit part', () => {
+    const credits = { maxApplicable: 12 };
+
+    // order with a credit part, box left ticked: that number is sent
+    expect(payBody({ methodId: 's', useCredits: 12, credits, hadCredits: true }).useCredits).toBe(
+      12,
+    );
+    // unticked (null) or hidden by the method (payCredits => null): 0 drops the credit part
+    expect(payBody({ methodId: 's', useCredits: null, credits, hadCredits: true })).toEqual({
+      paymentMethodId: 's',
+      useCredits: 0,
+    });
+    // order without a credit part and unticked: the member is omitted
+    expect('useCredits' in payBody({ methodId: 's', useCredits: null, credits })).toBe(false);
+    expect(
+      'useCredits' in payBody({ methodId: 's', useCredits: null, credits, hadCredits: false }),
+    ).toBe(false);
+    // a choice on an order without a credit part is still sent
+    expect(payBody({ methodId: 's', useCredits: 4, credits }).useCredits).toBe(4);
   });
 
   test('canPay: an available chosen method, not busy, not waiting', () => {
