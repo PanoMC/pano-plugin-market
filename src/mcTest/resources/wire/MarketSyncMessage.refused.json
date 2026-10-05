@@ -1,0 +1,12 @@
+{
+  "accepted": false,
+  "reason": "VERSION_MISMATCH",
+  "marketVersion": "1.4.0",
+  "acked": [
+    "812:a1:4:0:GRANT:0"
+  ],
+  "deliveries": [],
+  "cancel": [],
+  "broadcasts": [],
+  "pollAfterMs": 5000
+}

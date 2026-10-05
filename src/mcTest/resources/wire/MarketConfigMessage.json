@@ -1,0 +1,33 @@
+{
+  "accepted": true,
+  "configHash": "77aa10",
+  "settings": {
+    "mcStoreCommand": true,
+    "mcCreditsCommand": true,
+    "mcJoinNotifications": false,
+    "mcStoreMenu": true,
+    "mcAdminCommands": true,
+    "mcPlaceholders": true,
+    "mcLuckPerms": true,
+    "mcBroadcast": true,
+    "mcBroadcastTemplate": "&a{player} &7bought &f{product}",
+    "mcDisabledAdminCommands": [
+      "set-credits"
+    ],
+    "mcVaultMode": "CONVERT",
+    "mcVaultRate": 2.5,
+    "mcVaultDirection": "TO_SERVER"
+  },
+  "texts": {
+    "en-US": {
+      "store.title": "Store"
+    },
+    "tr": {
+      "store.title": "Magaza"
+    }
+  },
+  "storeUrl": "https://example.com/store",
+  "creditName": "Gems",
+  "currency": "USD",
+  "serverId": 4
+}

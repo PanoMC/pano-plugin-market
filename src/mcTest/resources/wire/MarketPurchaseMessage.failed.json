@@ -1,0 +1,8 @@
+{
+  "accepted": true,
+  "ok": false,
+  "code": "LEGAL_ACCEPTANCE_REQUIRED",
+  "extras": {
+    "legalTextId": 3
+  }
+}

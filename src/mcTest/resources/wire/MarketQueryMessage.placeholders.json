@@ -1,0 +1,19 @@
+{
+  "accepted": true,
+  "data": {
+    "lastBuyer": "Steve",
+    "topSupporter": "Alex",
+    "goalName": "Server upgrade",
+    "goalPercent": 42.5,
+    "goalProgress": 425.0,
+    "goalTarget": 1000.0,
+    "players": {
+      "Steve": {
+        "balance": 125.5
+      },
+      "Alex": {
+        "balance": 0.0
+      }
+    }
+  }
+}

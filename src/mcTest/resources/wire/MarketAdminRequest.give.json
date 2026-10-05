@@ -1,0 +1,18 @@
+{
+  "event": "MARKET_ADMIN",
+  "eventId": "0b8c0f4e-6f0a-4a39-9d52-3c1d2a7e5b10",
+  "componentVersion": "1.4.0",
+  "protocol": 1,
+  "operationId": "4d2a9c1e-0000-4000-8000-000000000003",
+  "op": "GIVE_CREDITS",
+  "actor": {
+    "console": false,
+    "username": "Admin",
+    "uuid": "11111111-2222-3333-4444-555555555555"
+  },
+  "target": {
+    "username": "Steve"
+  },
+  "amount": 10.5,
+  "note": "contest prize"
+}

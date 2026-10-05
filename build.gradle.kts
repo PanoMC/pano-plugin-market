@@ -102,6 +102,91 @@ val fakeProvider: SourceSet by sourceSets.creating {
     compileClasspath += sourceSets.main.get().output + sourceSets.main.get().compileClasspath
 }
 
+// Minecraft-side component (19 section 2.1): the same jar is also the plugin on Spigot / Paper / Folia, BungeeCord and
+// Velocity. `mc` (Java 11) and `mcVelocity` (Java 17) are compiled into the market jar, `mcTest` (T7) is not.
+// They never see the platform or `main`; `main` never sees them (verifyJar scans both directions).
+val spigotApiVersion: String by project
+val bungeecordApiVersion: String by project
+val velocityApiVersion: String by project
+val luckPermsApiVersion: String by project
+val vaultApiVersion: String by project
+val placeholderApiVersion: String by project
+val panoMcVersion: String by project
+val panoCoreJar = project.findProperty("panoCoreJar") as String? ?: System.getenv("PANO_CORE_JAR")
+
+val mc: SourceSet by sourceSets.creating
+val mcVelocity: SourceSet by sourceSets.creating
+val mcTest: SourceSet by sourceSets.creating
+
+// pano-mc-plugin Core (pano-core-<version>.jar), resolved like the platform artifact (15 section 2.1): an explicit jar
+// (-PpanoCoreJar / PANO_CORE_JAR) wins, then the Core jar built in the umbrella checkout
+// (<umbrella>/pano-mc-plugin/Core/build/libs, found by walking up from the project directory, so an embedded build, a
+// standalone checkout and a stream worktree all find it without any flag), then the Ivy pattern on the pano-mc-plugin
+// release asset as the last resort.
+fun findUmbrellaCoreJar(): File? {
+    val starts = listOf(projectDir, rootProject.projectDir).distinct()
+    for (start in starts) {
+        var dir: File? = start
+        for (i in 0 until 7) {
+            val libs = File(dir ?: break, "pano-mc-plugin/Core/build/libs")
+            val jar = libs.listFiles { f -> f.isFile && f.name.startsWith("pano-core-") && f.name.endsWith(".jar") }
+                ?.maxByOrNull { it.lastModified() }
+            if (jar != null) return jar
+            dir = dir?.parentFile
+        }
+    }
+    return null
+}
+
+val resolvedCoreJar: File? = when {
+    !panoCoreJar.isNullOrBlank() -> File(panoCoreJar)
+    else -> findUmbrellaCoreJar()
+}
+
+// The release that panoMcVersion pins has to carry the pano-core asset. 1.0.0-alpha.66 does not (the asset is attached
+// by a later release, REL-03); resolving it through Ivy can only fail, so say so instead of a bare 404.
+val coreReleasesWithoutAsset = setOf("1.0.0-alpha.66")
+val checkCoreSource by tasks.registering {
+    val usesIvy = resolvedCoreJar == null
+    val pin = panoMcVersion
+    doLast {
+        if (usesIvy && pin in coreReleasesWithoutAsset) {
+            throw GradleException(
+                "pano-core $pin has no release asset and no local Core jar was found: build it in pano-mc-plugin " +
+                    "(./gradlew :Core:build) or pass -PpanoCoreJar=<path to pano-core-*.jar> (or PANO_CORE_JAR)."
+            )
+        }
+    }
+}
+
+if (resolvedCoreJar == null) {
+    repositories {
+        exclusiveContent {
+            forRepository {
+                ivy {
+                    name = "PanoMcReleases"
+                    url = uri("https://github.com/PanoMC/pano-mc-plugin/releases/download")
+                    patternLayout { artifact("v[revision]/pano-core-[revision].[ext]") }
+                    metadataSources { artifact() }
+                    if (!panoReleaseToken.isNullOrBlank()) {
+                        credentials(HttpHeaderCredentials::class) {
+                            name = "Authorization"
+                            value = "Bearer $panoReleaseToken"
+                        }
+                        authentication { create<HttpHeaderAuthentication>("header") }
+                    }
+                }
+            }
+            filter { includeGroup("panomc.mc") }
+        }
+    }
+}
+repositories {
+    maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
+    maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://repo.helpch.at/releases/")
+}
+
 dependencies {
     // Platform classes for compiling (compileOnly: the host provides them at run time).
     when {
@@ -160,6 +245,78 @@ dependencies {
     }
     testImplementation(fakeProvider.output) // the fake provider is exercised in-process by T1
     testRuntimeOnly("org.slf4j:slf4j-simple:2.0.16")
+}
+
+// Minecraft-side dependencies: all compileOnly, the servers provide them (Kotlin stdlib comes through the Pano plugin).
+dependencies {
+    if (resolvedCoreJar != null) {
+        "mcCompileOnly"(files(resolvedCoreJar))
+    } else {
+        "mcCompileOnly"("panomc.mc:pano-core:$panoMcVersion") // no leading "v"
+    }
+    "mcCompileOnly"(kotlin("stdlib-jdk8"))
+    "mcCompileOnly"("org.spigotmc:spigot-api:$spigotApiVersion")
+    "mcCompileOnly"("net.md-5:bungeecord-api:$bungeecordApiVersion")
+    "mcCompileOnly"("net.luckperms:api:$luckPermsApiVersion")
+    "mcCompileOnly"("com.github.MilkBowl:VaultAPI:$vaultApiVersion") { isTransitive = false }
+    "mcCompileOnly"("me.clip:placeholderapi:$placeholderApiVersion") { isTransitive = false }
+
+    "mcVelocityCompileOnly"(mc.output)
+    "mcVelocityCompileOnly"("com.velocitypowered:velocity-api:$velocityApiVersion")
+
+    "mcTestImplementation"(mc.output)
+    "mcTestImplementation"(mcVelocity.output)
+    "mcTestImplementation"("com.velocitypowered:velocity-api:$velocityApiVersion")
+    "mcTestImplementation"("org.junit.jupiter:junit-jupiter-api:5.13.3")
+    "mcTestRuntimeOnly"("org.junit.jupiter:junit-jupiter-engine:5.13.3")
+    "mcTestRuntimeOnly"("org.junit.platform:junit-platform-launcher:1.13.3")
+}
+
+// mcVelocity and mcTest see everything mc compiles against (Core, the server APIs).
+configurations["mcVelocityCompileOnly"].extendsFrom(configurations["mcCompileOnly"])
+configurations["mcTestImplementation"].extendsFrom(configurations["mcCompileOnly"])
+// spigot-api 1.8.8 pulls SnakeYAML 1.x and bungeecord-api 1.21 SnakeYAML 2.x; one version for the tests.
+listOf("mcTestCompileClasspath", "mcTestRuntimeClasspath").forEach { n ->
+    configurations.named(n) { resolutionStrategy.force("org.yaml:snakeyaml:2.2") }
+}
+
+// mc / mcVelocity / mcTest compile options (19 section 2.1): Java 11 with the Java 11 API surface for mc, Java 17 for
+// mcVelocity (velocity-api class files are major 61), Kotlin language / API pinned to the oldest supported
+// pano-mc-plugin line (2.2) because the stdlib on the server is the one Pano ships.
+// kapt (pf4j @Extension) is for `main` only; the mc source sets use no annotation processor.
+tasks.matching { it.name.matches(Regex("kapt(GenerateStubs)?Mc.*Kotlin")) }.configureEach { enabled = false }
+
+fun configureMcJvm(set: SourceSet, jdk: Int, release11: Boolean) {
+    val cap = set.name.replaceFirstChar { it.uppercase() }
+    tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compile${cap}Kotlin") {
+        kotlinJavaToolchain.toolchain.use(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(jdk)) })
+        compilerOptions {
+            jvmTarget.set(if (jdk == 17) org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17 else org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+            languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2)
+            apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2)
+            if (release11) freeCompilerArgs.add("-Xjdk-release=11")
+        }
+    }
+    tasks.named<JavaCompile>("compile${cap}Java") {
+        javaCompiler.set(javaToolchains.compilerFor { languageVersion.set(JavaLanguageVersion.of(jdk)) })
+    }
+    listOf(set.compileClasspathConfigurationName, set.runtimeClasspathConfigurationName).forEach { name ->
+        configurations.named(name) {
+            attributes.attribute(org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, jdk)
+        }
+    }
+}
+configureMcJvm(mc, 11, true)
+configureMcJvm(mcVelocity, 17, false)
+configureMcJvm(mcTest, 17, false)
+tasks.named("compileMcKotlin") { dependsOn(checkCoreSource) }
+
+// Descriptors at the jar root get the plugin version (same mechanism as pano-plugin-premium-login).
+tasks.named<ProcessResources>("processMcResources") {
+    inputs.property("version", version.toString())
+    filesMatching(listOf("plugin.yml", "bungee.yml", "velocity-plugin.json")) {
+        expand(mapOf("version" to version.toString()))
+    }
 }
 
 tasks {
@@ -233,6 +390,10 @@ tasks {
         }
 
         archiveFileName.set("$pluginId-$version.jar")
+
+        // Minecraft-side component (19 section 2.2): classes, descriptors and resources at the jar root.
+        from(mc.output)
+        from(mcVelocity.output)
 
         dependencies {
             exclude(dependency("io.vertx:vertx-core"))
@@ -385,9 +546,12 @@ kotlin {
     jvmToolchain(11)
 }
 
+// (mcVelocity and mcTest set their own target in configureMcJvm: Java 17.)
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+    if (!name.contains("McVelocity") && !name.contains("McTest")) {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+        }
     }
 }
 
@@ -404,6 +568,9 @@ tasks.named<Test>("test") {
     // ApiJarTest (B-22) inspects the thin API jar, so a plain `test` builds it first.
     dependsOn(apiJar)
     systemProperty("market.apiJar", layout.buildDirectory.file("api/$pluginId-api-$version.jar").get().asFile.absolutePath)
+    // The wire fixtures the Minecraft-side WireParityTest (MC-U7) checks mc.core.wire against; the Pano-side event
+    // tests read the same files so both ends are held to one document (19 section 13).
+    systemProperty("market.wireFixtures", layout.projectDirectory.dir("src/mcTest/resources/wire").asFile.absolutePath)
 }
 
 val dbTest by tasks.registering(Test::class) {
@@ -442,6 +609,22 @@ val e2eTest by tasks.registering(Test::class) {
     }
 }
 
+tasks.register<Test>("mcTest") {
+    group = "verification"
+    description = "T7: unit tests of the Minecraft-side component (src/mcTest) with fake platform adapters."
+    testClassesDirs = mcTest.output.classesDirs
+    classpath = mcTest.runtimeClasspath
+    useJUnitPlatform()
+    maxParallelForks = 1
+    // JarRulesTest inspects the real market jar, so the jar is built first (verifyJar is the Gradle twin of those checks).
+    dependsOn(tasks.shadowJar)
+    systemProperty("market.jar", tasks.shadowJar.get().archiveFile.get().asFile.absolutePath)
+    systemProperty("market.version", version.toString())
+    systemProperty("market.mcResources", layout.projectDirectory.dir("src/mc/resources").asFile.absolutePath)
+    systemProperty("market.wireFixtures", layout.projectDirectory.dir("src/mcTest/resources/wire").asFile.absolutePath)
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+}
 tasks.withType<Test>().configureEach {
     javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
     testLogging {
@@ -527,20 +710,57 @@ val verifyJar by tasks.registering {
                 val limit = if (e.name.startsWith("com/panomc/plugins/market/mc/velocity/")) 61 else 55
                 require(major <= limit) { "${e.name} is class major $major (> $limit)" }
             }
-            // Minecraft side (19 section 2.3): once mc/ sources exist, the descriptors must be at the jar root and
-            // no class under mc/ may reference platform classes.
-            if (File(marketSrc, "mc").walkTopDown().any { it.isFile }) {
+            // Minecraft side (19 section 2): once mc sources exist the descriptors sit at the jar root with the
+            // version filled in, mc never references the platform or a market package outside mc.**, main never
+            // references mc, and neither the Minecraft APIs nor Core are bundled.
+            val mcSrc = layout.projectDirectory.dir("src/mc/kotlin").asFile
+            val mcVelocitySrc = layout.projectDirectory.dir("src/mcVelocity/kotlin").asFile
+            if (mcSrc.walkTopDown().any { it.isFile } || layout.projectDirectory.dir("src/mc/resources").asFile.walkTopDown().any { it.isFile }) {
                 for (f in listOf("plugin.yml", "bungee.yml", "velocity-plugin.json")) {
                     require(f in names) { "$f missing at the jar root" }
+                    val text = z.getInputStream(z.getEntry(f)).use { String(it.readBytes(), Charsets.UTF_8) }
+                    require(text.contains(version.toString())) { "$f does not carry the version ${version}" }
+                    require(!text.contains("\${")) { "$f still holds an unexpanded placeholder" }
                 }
-                val needle = "com/panomc/platform/".toByteArray(Charsets.ISO_8859_1)
-                names.filter { it.startsWith("com/panomc/plugins/market/mc/") && it.endsWith(".class") }.forEach { n ->
-                    val bytes = z.getInputStream(z.getEntry(n)).use { it.readBytes() }
-                    val s = String(bytes, Charsets.ISO_8859_1)
-                    require(!s.contains(String(needle, Charsets.ISO_8859_1))) { "$n references com/panomc/platform/" }
+                val bundled = listOf(
+                    "com/panomc/plugins/pano/core/", "org/bukkit/", "org/spigotmc/", "net/md_5/", "net/luckperms/",
+                    "com/velocitypowered/", "net/milkbowl/", "me/clip/"
+                )
+                val bundledHit = names.filter { n -> bundled.any { n.startsWith(it) } }
+                require(bundledHit.isEmpty()) { "market jar bundles Minecraft-side libraries: ${bundledHit.take(5)}" }
+                val platformRef = "com/panomc/platform/"
+                val mcRef = "com/panomc/plugins/market/mc/"
+                val otherMarketRef = Regex("com/panomc/plugins/market/(?!mc/)")
+                names.filter { it.endsWith(".class") && it.startsWith("com/panomc/plugins/market/") }.forEach { n ->
+                    val body = String(z.getInputStream(z.getEntry(n)).use { it.readBytes() }, Charsets.ISO_8859_1)
+                    if (n.startsWith(mcRef)) {
+                        require(!body.contains(platformRef)) { "$n references $platformRef" }
+                        require(!otherMarketRef.containsMatchIn(body)) { "$n references a market package outside mc.**" }
+                    } else {
+                        require(!body.contains(mcRef)) { "$n (main) references $mcRef" }
+                    }
+                }
+                // A platform whose sources exist must have the main class its descriptor names in the jar.
+                val descriptors = mapOf(
+                    "plugin.yml" to Regex("(?m)^main:\\s*(\\S+)"),
+                    "bungee.yml" to Regex("(?m)^main:\\s*(\\S+)"),
+                    "velocity-plugin.json" to Regex("\"main\"\\s*:\\s*\"([^\"]+)\"")
+                )
+                val platformDirs = mapOf(
+                    "plugin.yml" to File(mcSrc, "com/panomc/plugins/market/mc/spigot"),
+                    "bungee.yml" to File(mcSrc, "com/panomc/plugins/market/mc/bungee"),
+                    "velocity-plugin.json" to File(mcVelocitySrc, "com/panomc/plugins/market/mc/velocity")
+                )
+                descriptors.forEach { (file, regex) ->
+                    if (platformDirs.getValue(file).walkTopDown().any { it.isFile }) {
+                        val text = z.getInputStream(z.getEntry(file)).use { String(it.readBytes(), Charsets.UTF_8) }
+                        val main = regex.find(text)?.groupValues?.get(1)
+                        require(main != null) { "$file names no main class" }
+                        require(names.contains(main.replace('.', '/') + ".class")) { "$file names $main, which is not in the jar" }
+                    }
                 }
             }
         }
     }
 }
-tasks.named("check") { dependsOn(verifyJar) }
+tasks.named("check") { dependsOn(verifyJar, "mcTest") }
