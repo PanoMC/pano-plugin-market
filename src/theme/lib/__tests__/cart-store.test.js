@@ -700,7 +700,9 @@ describe('server mode', () => {
     expect(calls[1].body).toEqual({
       items: [{ productId: 50, quantity: 1 }],
       couponCode: 'SAVE',
+      creatorCode: null,
       recipientUsername: 'Alex',
+      giftMessage: null,
       currency: 'EUR',
     });
     expect(state().lines.map((l) => l.productId)).toEqual([50]);
@@ -721,6 +723,8 @@ describe('server mode', () => {
       items: [{ productId: 1, quantity: 1 }],
       couponCode: 'C',
       creatorCode: 'YT',
+      recipientUsername: null,
+      giftMessage: null,
       shippingMethodId: 'fast',
     });
     await store.setCurrency('USD');
@@ -728,6 +732,172 @@ describe('server mode', () => {
       currency: 'USD',
       shippingMethodId: 'fast',
       couponCode: 'C',
+    });
+  });
+
+  test('putCart keeps explicit nulls (null clears) and a cleared shipping selection is not re-sent', async () => {
+    const one = [{ productId: 1, quantity: 1 }];
+    const { store, calls } = setup({
+      user,
+      answers: [
+        wireCart(one, { couponCode: 'C', creatorCode: 'YT', recipientUsername: 'Alex' }),
+        wireCart(one, { couponCode: 'C', creatorCode: 'YT', recipientUsername: 'Alex' }),
+        wireCart(one),
+        wireCart(one),
+      ],
+    });
+    await store.init();
+    await store.putCart({ shippingMethodId: 'fast' });
+    expect(calls[1].body.shippingMethodId).toBe('fast');
+    await store.putCart({ couponCode: null, recipientUsername: null, shippingMethodId: null });
+    expect(calls[2].body).toMatchObject({
+      couponCode: null,
+      recipientUsername: null,
+      shippingMethodId: null,
+      creatorCode: 'YT',
+    });
+    expect('couponCode' in calls[2].body).toBe(true);
+    expect('recipientUsername' in calls[2].body).toBe(true);
+    expect('shippingMethodId' in calls[2].body).toBe(true);
+    await store.setCurrency('USD');
+    expect(calls[3].body.shippingMethodId).toBeNull();
+    expect(calls[3].body.couponCode).toBeNull();
+    expect(JSON.stringify(calls[3].body)).not.toContain('fast');
+  });
+
+  describe('a complete PUT is never built from lines that are not the server cart', () => {
+    const one = [{ productId: 1, quantity: 2 }];
+    const writes = (calls) => calls.filter((c) => c.method !== 'GET' && !c.path.endsWith('/merge'));
+
+    test('GET fails: setCurrency / putCart issue no PUT and the buyer is told', async () => {
+      const { store, calls, state, toasts } = setup({
+        user,
+        answers: [
+          { ok: false, code: 'NETWORK' },
+          { ok: false, code: 'NETWORK' },
+        ],
+      });
+      await store.init();
+      expect(state()).toMatchObject({ mode: 'SERVER', status: 'ERROR', lines: [] });
+      expect(await store.setCurrency('USD')).toBe(false);
+      expect(await store.putCart({ creatorCode: 'YT' })).toBe(false);
+      expect(writes(calls)).toEqual([]);
+      expect(toasts).toContain('errors.NETWORK');
+    });
+
+    test('GET fails, the forced reload works: the PUT carries the server items, not []', async () => {
+      const { store, calls, state } = setup({
+        user,
+        answers: [{ ok: false, code: 'NETWORK' }, wireCart(one), wireCart(one)],
+      });
+      await store.init();
+      expect(await store.setCurrency('USD')).toBe(true);
+      expect(calls.map((c) => c.method)).toEqual(['GET', 'GET', 'PUT']);
+      expect(calls[2].body.items).toEqual([{ productId: 1, quantity: 2 }]);
+      expect(state().count).toBe(2);
+    });
+
+    test('merge fails: browser lines are shown but never PUT over the server cart', async () => {
+      const { store, calls, state } = setup({
+        user,
+        local: { [STORAGE_KEY]: stored([sl(9)]) },
+        answers: [
+          { ok: false, code: 'NETWORK' },
+          { ok: false, code: 'NETWORK' },
+        ],
+      });
+      await store.init();
+      expect(state()).toMatchObject({ status: 'ERROR', count: 1 });
+      expect(await store.setCurrency('USD')).toBe(false);
+      expect(await store.putCart({ couponCode: 'X' })).toBe(false);
+      expect(writes(calls)).toEqual([]);
+      expect(calls.map((c) => c.path)).toEqual([
+        '/api/market/me/cart/merge',
+        '/api/market/me/cart/merge',
+        '/api/market/me/cart/merge',
+      ]);
+    });
+
+    test('merge fails, the forced reload merges: the PUT carries the merged server cart', async () => {
+      const merged = [
+        { productId: 1, quantity: 2 },
+        { productId: 9, quantity: 1 },
+      ];
+      const { store, calls } = setup({
+        user,
+        local: { [STORAGE_KEY]: stored([sl(9)]) },
+        answers: [{ ok: false, code: 'NETWORK' }, wireCart(merged), wireCart(merged)],
+      });
+      await store.init();
+      expect(await store.setCurrency('USD')).toBe(true);
+      expect(calls[2]).toMatchObject({ method: 'PUT' });
+      expect(calls[2].body.items).toEqual([
+        { productId: 1, quantity: 2 },
+        { productId: 9, quantity: 1 },
+      ]);
+    });
+
+    test('adding a subscription while the cart is unloaded loads it first and asks the replace question', async () => {
+      const { store, calls, state } = setup({
+        user,
+        answers: [{ ok: false, code: 'NETWORK' }, wireCart(one)],
+      });
+      await store.init();
+      const result = store.add({ productId: 50 }, subscriptionProduct);
+      await tick();
+      expect(calls.map((c) => c.method)).toEqual(['GET', 'GET']);
+      expect(get(store.replaceRequest)?.line.productId).toBe(50);
+      store.cancelReplace();
+      expect(await result).toBe(false);
+      expect(writes(calls)).toEqual([]);
+      expect(state().lines.map((l) => l.productId)).toEqual([1]);
+    });
+
+    test('adding while the cart stays unloaded sends nothing', async () => {
+      const { store, calls } = setup({
+        user,
+        answers: [
+          { ok: false, code: 'NETWORK' },
+          { ok: false, code: 'NETWORK' },
+        ],
+      });
+      await store.init();
+      expect(await store.add({ productId: 50 }, subscriptionProduct)).toBe(false);
+      expect(await store.add({ productId: 2 }, { name: 'B' })).toBe(false);
+      expect(writes(calls)).toEqual([]);
+      expect(get(store.replaceRequest)).toBeNull();
+    });
+
+    test('a failed mutation followed by a failed Retry keeps the previous lines; the next PUT carries them', async () => {
+      const { store, calls, state } = setup({
+        user,
+        answers: [
+          wireCart(one),
+          { ok: false, code: 'INVALID_CART' },
+          { ok: false, code: 'NETWORK' },
+          wireCart(one),
+        ],
+      });
+      await store.init();
+      expect(await store.add({ productId: 2 }, {})).toBe(false);
+      await store.retry();
+      expect(state()).toMatchObject({ status: 'ERROR', count: 2 });
+      expect(state().lines.map((l) => l.productId)).toEqual([1]);
+      expect(await store.setCurrency('USD')).toBe(true);
+      expect(calls[3]).toMatchObject({ method: 'PUT' });
+      expect(calls[3].body.items).toEqual([{ productId: 1, quantity: 2 }]);
+    });
+
+    test('a new user starts unloaded', async () => {
+      const { store, env, calls } = setup({
+        user,
+        answers: [wireCart(one), { ok: false, code: 'NETWORK' }, { ok: false, code: 'NETWORK' }],
+      });
+      await store.init();
+      env.user = { id: 8, username: 'Alex' };
+      await store.init();
+      expect(await store.setCurrency('USD')).toBe(false);
+      expect(writes(calls)).toEqual([]);
     });
   });
 

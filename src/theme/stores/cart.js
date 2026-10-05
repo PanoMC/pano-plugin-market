@@ -87,6 +87,10 @@ export function createCartStore(overrides = {}) {
   let watchers = 0;
   let pendingReplace = null;
   let serverExtras = {};
+  // user key whose server cart is in `lines` (a complete PUT may only be built from a loaded server cart)
+  let loadedKey = null;
+
+  const serverLoaded = () => loadedKey !== null && loadedKey === userKey;
 
   function commit(patch) {
     state.update((s) => {
@@ -152,6 +156,8 @@ export function createCartStore(overrides = {}) {
     const quote = res.quote || null;
     const lines = linesFromServer(cartBody.items, quote);
 
+    loadedKey = userKey;
+
     commit({
       mode: 'SERVER',
       status: 'IDLE',
@@ -205,6 +211,11 @@ export function createCartStore(overrides = {}) {
     return result;
   }
 
+  /**
+   * The complete PUT body (06 §2.2: `items` present = replace all items, every other member present = update it,
+   * `null` clears). Explicit nulls are kept; only `undefined` and an unknown currency are left out. Only call it
+   * for a loaded server cart (`putRequest` guards that).
+   */
   function currentCartBody(patch = {}) {
     const s = get(state);
     const body = { ...serverExtras, ...(s.codes || {}), ...patch };
@@ -212,17 +223,37 @@ export function createCartStore(overrides = {}) {
 
     const currency = patch.currency || d.getCurrency();
     if (currency) body.currency = currency;
+    else delete body.currency;
 
-    for (const key of Object.keys(body))
-      if (body[key] === null || body[key] === undefined) delete body[key];
+    for (const key of Object.keys(body)) if (body[key] === undefined) delete body[key];
 
     return body;
+  }
+
+  /** A complete PUT request; it never runs on lines that are not the server cart (that would wipe it). */
+  const putRequest = (patch) => () =>
+    serverLoaded()
+      ? d.call('PUT', SERVER_CART, { body: currentCartBody(patch) })
+      : Promise.resolve({ ok: false, code: 'CART_NOT_LOADED' });
+
+  /** Server mode: makes sure the server cart is in `lines`, retrying the load once; false when it is not. */
+  async function ensureServerLoaded() {
+    if (serverLoaded()) return true;
+
+    await init({ force: true });
+
+    if (serverLoaded()) return true;
+
+    // still unloaded: the buyer is told (unless they logged out meanwhile) and nothing is sent
+    if (get(state).mode === 'SERVER') failToast(get(state).error);
+    return false;
   }
 
   // ---- init ----------------------------------------------------------------------------------------------
 
   async function initGuest(key) {
     userKey = key;
+    loadedKey = null;
     quoteSeq++;
     const lines = readGuest();
 
@@ -240,16 +271,23 @@ export function createCartStore(overrides = {}) {
 
   async function initServer(key, token) {
     userKey = key;
+    if (loadedKey !== key) loadedKey = null;
+
     const local = readGuest();
 
-    commit({
-      mode: 'SERVER',
-      status: 'LOADING',
-      lines: local,
-      quote: null,
-      quoteStale: local.length > 0,
-      error: null,
-    });
+    if (loadedKey === key) {
+      // a reload of a cart we already hold: keep its lines (14 §6.3 "lines unchanged" when the reload fails)
+      commit({ mode: 'SERVER', status: 'LOADING', error: null });
+    } else {
+      commit({
+        mode: 'SERVER',
+        status: 'LOADING',
+        lines: local,
+        quote: null,
+        quoteStale: local.length > 0,
+        error: null,
+      });
+    }
 
     const currency = d.getCurrency();
     const res = local.length
@@ -260,7 +298,7 @@ export function createCartStore(overrides = {}) {
     if (token !== initToken) return;
 
     if (!res.ok) {
-      // local items stay (and are shown); retried on the next init or on "Retry"
+      // local items stay (and are shown, never PUT); retried on the next init or on "Retry"
       commit({ status: 'ERROR', error: res.code });
       return;
     }
@@ -348,19 +386,18 @@ export function createCartStore(overrides = {}) {
     return true;
   }
 
-  function doReplace(line) {
+  async function doReplace(line) {
     const s = get(state);
 
     if (s.mode === 'SERVER') {
-      return enqueue(
-        () => d.call('PUT', SERVER_CART, { body: currentCartBody({ items: [line] }) }),
-        () => d.toast('store.added-to-cart'),
-      );
+      if (!(await ensureServerLoaded())) return false;
+
+      return enqueue(putRequest({ items: [line] }), () => d.toast('store.added-to-cart'));
     }
 
     mutateGuest([line]);
     d.toast('store.added-to-cart');
-    return Promise.resolve(true);
+    return true;
   }
 
   /**
@@ -373,6 +410,10 @@ export function createCartStore(overrides = {}) {
 
     const newLine = normalizeNewLine(line, product);
     if (!newLine) return false;
+
+    // the replace question and the POST need the real server cart, not the browser lines shown while it is unloaded
+    if (get(state).mode === 'SERVER' && !serverLoaded() && !(await ensureServerLoaded()))
+      return false;
 
     const s = get(state);
 
@@ -461,7 +502,13 @@ export function createCartStore(overrides = {}) {
   async function clear() {
     await ready();
 
-    if (get(state).mode === 'SERVER') return enqueue(() => d.call('DELETE', SERVER_CART));
+    if (get(state).mode === 'SERVER')
+      return enqueue(
+        () => d.call('DELETE', SERVER_CART),
+        () => {
+          serverExtras = {}; // the server cleared its shipping selection too
+        },
+      );
 
     mutateGuest([]);
     return true;
@@ -475,11 +522,12 @@ export function createCartStore(overrides = {}) {
     await ready();
 
     if (get(state).mode !== 'SERVER') return false;
+    if (!(await ensureServerLoaded())) return false;
 
     for (const key of ['shippingAddressId', 'shippingAddress', 'shippingMethodId'])
       if (key in patch) serverExtras = { ...serverExtras, [key]: patch[key] };
 
-    return enqueue(() => d.call('PUT', SERVER_CART, { body: currentCartBody(patch) }));
+    return enqueue(putRequest(patch));
   }
 
   /** The display currency changed: the server cart is re-priced by a complete PUT, a guest quote is re-asked. */
@@ -497,6 +545,7 @@ export function createCartStore(overrides = {}) {
   /** After a successful checkout: guest lines are cleared locally; the server emptied its own cart (no request). */
   function afterCheckout() {
     if (get(state).mode === 'SERVER') {
+      serverExtras = {};
       commit({
         lines: [],
         quote: null,
@@ -638,6 +687,7 @@ export function createCartStore(overrides = {}) {
     pendingReplace = null;
     replaceRequest.set(null);
     userKey = null;
+    loadedKey = null;
     initPromise = null;
     initToken++;
     quoteSeq++;
