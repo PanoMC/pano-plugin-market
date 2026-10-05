@@ -3,6 +3,8 @@ package com.panomc.plugins.market.routes.api.order
 import com.panomc.plugins.market.core.abuse.AbuseLimits
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.auth.AuthProvider
+import com.panomc.platform.auth.PermissionManager
+import com.panomc.platform.server.ServerManager
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.hosted.HostedEnvConfig
 import com.panomc.platform.util.RateLimiter
@@ -16,6 +18,7 @@ import com.panomc.plugins.market.db.dao.MarketCreditAccountDao
 import com.panomc.plugins.market.db.dao.MarketCreditEntryDao
 import com.panomc.plugins.market.db.dao.MarketCreditTxDao
 import com.panomc.plugins.market.db.dao.MarketCurrencyRateDao
+import com.panomc.plugins.market.db.dao.MarketDeliveryDao
 import com.panomc.plugins.market.db.dao.MarketEntitlementDao
 import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.db.dao.MarketOrderEventDao
@@ -23,6 +26,7 @@ import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.dao.MarketPaymentDao
 import com.panomc.plugins.market.db.dao.MarketPaymentMethodDao
 import com.panomc.plugins.market.db.dao.MarketProductDao
+import com.panomc.plugins.market.db.dao.MarketProductFieldDao
 import com.panomc.plugins.market.db.dao.MarketRedemptionDao
 import com.panomc.plugins.market.db.dao.MarketRefundDao
 import com.panomc.plugins.market.db.dao.MarketWebhookDeliveryDao
@@ -32,6 +36,7 @@ import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.error.TooManyRequests
 import com.panomc.plugins.market.routes.api.OrderAccess
 import com.panomc.plugins.market.routes.api.OrderAccessResult
+import com.panomc.plugins.market.routes.api.checkout.PlatformUserDirectory
 import com.panomc.plugins.market.routes.api.checkout.quoteCaller
 import com.panomc.plugins.market.routes.api.payment.attemptContexts
 import com.panomc.plugins.market.routes.panel.invoice.invoiceService
@@ -41,6 +46,11 @@ import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.routes.user.cart.cartService
 import com.panomc.plugins.market.service.CreditHoldGuard
 import com.panomc.plugins.market.service.CreditService
+import com.panomc.plugins.market.service.DeliveryEffects
+import com.panomc.plugins.market.service.DeliveryService
+import com.panomc.plugins.market.service.DeliveryWebhookReporter
+import com.panomc.plugins.market.service.EntitlementService
+import com.panomc.plugins.market.service.PermissionGrantService
 import com.panomc.plugins.market.service.DuplicateRefundPolicy
 import com.panomc.plugins.market.service.ForeignEffects
 import com.panomc.plugins.market.service.InvoiceEffects
@@ -54,6 +64,9 @@ import com.panomc.plugins.market.service.RedemptionService
 import com.panomc.plugins.market.service.ReservationService
 import com.panomc.plugins.market.service.WebhookSender
 import com.panomc.plugins.market.service.WebhookService
+import com.panomc.plugins.market.service.platform.PlatformPermissionWriter
+import com.panomc.plugins.market.service.platform.PlatformPlayerAccounts
+import com.panomc.plugins.market.service.platform.PlatformServerRoster
 import io.vertx.core.Vertx
 import io.vertx.ext.web.RoutingContext
 import io.vertx.sqlclient.Pool
@@ -75,6 +88,12 @@ private var cachedAccess: Pair<MarketPlugin, OrderAccess>? = null
 
 @Volatile
 private var cachedWebhooks: Pair<MarketPlugin, WebhookService>? = null
+
+@Volatile
+private var cachedDeliveries: Pair<MarketPlugin, DeliveryService>? = null
+
+@Volatile
+private var cachedEntitlements: Pair<MarketPlugin, EntitlementService>? = null
 
 /**
  * The store webhook writer on the plugin's beans (MK-105): [OrderService] uses its `emitOrderPaid` at O2 / O4. The sender is built as the job
@@ -102,7 +121,52 @@ private fun buildWebhookService(plugin: MarketPlugin): WebhookService {
         db = MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock), clock = SystemClock, ids = SecureIds(),
         endpoints = context.getBean(MarketWebhookEndpointDao::class.java), deliveries = context.getBean(MarketWebhookDeliveryDao::class.java),
         orders = context.getBean(MarketOrderDao::class.java), orderItems = context.getBean(MarketOrderItemDao::class.java), sender = sender,
-        store = { wiring.site().let { StoreInfo(it.name, it.baseUrl) } }
+        store = { wiring.site().let { StoreInfo(it.name, it.baseUrl) } },
+        // MK-102: the outcome of the outbox row of a product WEBHOOK action goes back to its delivery row (D12 / D21)
+        reporter = DeliveryWebhookReporter(deliveryService(plugin))
+    )
+}
+
+/** The entitlements created at O2 / O4 (MK-102; 08 section 10); one per plugin instance. */
+internal fun entitlementService(plugin: MarketPlugin): EntitlementService {
+    cachedEntitlements?.takeIf { it.first === plugin }?.let { return it.second }
+
+    return synchronized(OrderWiringHolder) {
+        cachedEntitlements?.takeIf { it.first === plugin }?.second ?: EntitlementService(
+            SystemClock, { currentConfig(plugin) }, plugin.beans.getBean(MarketEntitlementDao::class.java)
+        ).also { cachedEntitlements = plugin to it }
+    }
+}
+
+/**
+ * The delivery engine on the plugin's beans (MK-102): the planning of O2 / O4 (through [DeliveryEffects]), the inline executors `CREDIT` and `PERMISSION via=PANO`
+ * and the steps `DeliveryJob` runs. The platform seams (users, permission nodes, servers) are the adapters of `service.platform`.
+ */
+internal fun deliveryService(plugin: MarketPlugin): DeliveryService {
+    cachedDeliveries?.takeIf { it.first === plugin }?.let { return it.second }
+
+    return synchronized(OrderWiringHolder) {
+        cachedDeliveries?.takeIf { it.first === plugin }?.second ?: buildDeliveryService(plugin).also { cachedDeliveries = plugin to it }
+    }
+}
+
+private fun buildDeliveryService(plugin: MarketPlugin): DeliveryService {
+    val context = plugin.beans
+    val databaseManager = { context.getBean(DatabaseManager::class.java) }
+    val orderDao = context.getBean(MarketOrderDao::class.java)
+    val locks = Locks(orderDao, context.getBean(MarketOrderItemDao::class.java), context.getBean(MarketRedemptionDao::class.java), context.getBean(MarketCreditAccountDao::class.java))
+
+    return DeliveryService(
+        db = MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock), locks = locks, clock = SystemClock, ids = SecureIds(), config = { currentConfig(plugin) },
+        orders = orderDao, orderItems = context.getBean(MarketOrderItemDao::class.java), orderEvents = context.getBean(MarketOrderEventDao::class.java),
+        deliveries = context.getBean(MarketDeliveryDao::class.java), entitlements = context.getBean(MarketEntitlementDao::class.java),
+        creditAccounts = context.getBean(MarketCreditAccountDao::class.java), products = context.getBean(MarketProductDao::class.java),
+        productFields = context.getBean(MarketProductFieldDao::class.java),
+        roster = PlatformServerRoster(databaseManager) { context.getBean(ServerManager::class.java) },
+        users = PlatformUserDirectory(databaseManager), accounts = PlatformPlayerAccounts(databaseManager), credits = creditService(plugin),
+        permissions = PermissionGrantService(
+            PlatformPermissionWriter(databaseManager, { context.getBean(PermissionManager::class.java) }, { context.getBean(ServerManager::class.java) }), SystemClock
+        )
     )
 }
 
@@ -155,9 +219,9 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
         credits = credits.checkoutHolds, settlement = credits,
         reservations = ReservationService(clock, locks, redemptions, orderDao),
         webhooks = PaidWebhooks { conn, orderId -> webhooks.emitOrderPaid(conn, orderId) },
-        // O2 / O4 issue the invoice inside the transition (12 section 6.1, MK-144 wires what MK-143 built); the effects of the slices that
-        // have not landed still go to PENDING_SLICES
-        foreign = InvoiceEffects(invoiceService(plugin), orderDao, ForeignEffects.PENDING_SLICES),
+        // O2 / O4 issue the invoice inside the transition (12 section 6.1, MK-144), then the entitlements and the GRANT / RENEW delivery rows are written (MK-102);
+        // the effects of the slices that have not landed still go to PENDING_SLICES
+        foreign = InvoiceEffects(invoiceService(plugin), orderDao, DeliveryEffects(entitlementService(plugin), deliveryService(plugin), orderDao, ForeignEffects.PENDING_SLICES)),
         rates = { sqlClient -> rates.getAll(sqlClient).filter { it.rate.signum() > 0 }.associate { it.currency to it.rate } },
         statsCurrency = { currentConfig(plugin).statsCurrency.name },
         // MK-079: the re-reserve of an accepted late payment checks `limitPerPlayer`; a rejected review and a duplicate payment request their refund

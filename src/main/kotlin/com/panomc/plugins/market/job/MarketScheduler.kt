@@ -14,6 +14,7 @@ import com.panomc.plugins.market.db.dao.MarketShipmentDao
 import com.panomc.plugins.market.routes.panel.shipping.shippingService
 import com.panomc.plugins.market.db.tx.Locks
 import com.panomc.plugins.market.db.tx.MarketDb
+import com.panomc.plugins.market.routes.api.order.deliveryService
 import com.panomc.plugins.market.routes.api.order.orderService
 import com.panomc.plugins.market.routes.api.order.paymentService
 import com.panomc.plugins.market.routes.api.order.webhookService
@@ -196,6 +197,9 @@ class MarketScheduler(
         /** `ShipmentTrackingJob` (10 section 10.2: every 60 s). */
         const val SHIPMENT_TRACKING_MS = 60_000L
 
+        /** `DeliveryJob` (08 section 17: every tick; its D22 classification keeps its own 30 s cadence). */
+        const val DELIVERY_MS = TICK_MS
+
         private val logger = LoggerFactory.getLogger(MarketScheduler::class.java)
     }
 }
@@ -207,7 +211,7 @@ class MarketScheduler(
  * Open seams (each fails closed: nothing is armed that could not do its work):
  * - `MailOutboxJob` is not registered: its `MailComposition` is `UnwiredMailComposition` until MK-142 / MK-146 land (armed now it would end every row
  *   `FAILED RENDER_ERROR`). They add `Job("mail-outbox", MarketScheduler.MAIL_OUTBOX_MS) { mailJob.runOnce() }` to [jobs].
- * - The other workers of 00 section 8.5 (`RefundReconcileJob`, `DeliveryJob`, `EntitlementExpiryJob`, `SubscriptionJob`,
+ * - The other workers of 00 section 8.5 (`RefundReconcileJob`, `EntitlementExpiryJob`, `SubscriptionJob`,
  *   `HousekeepingJob`) belong to the slices that build them; each adds one `Job` here (`InboundEventRetryJob` is MK-077's, registered below).
  */
 internal object MarketJobs {
@@ -232,9 +236,13 @@ internal object MarketJobs {
             MarketScheduler.Job("payment-reconcile", MarketScheduler.PAYMENT_RECONCILE_MS) { reconcile.runOnce() },
             MarketScheduler.Job("webhook", MarketScheduler.WEBHOOK_MS) { webhooks.tick() },
             inboundRetry(inboundEventRetryJob(plugin)),
+            delivery(DeliveryJob(deliveryService(plugin), SystemClock)),
             shipmentTracking(ShipmentTrackingJob(SystemClock, context.getBean(MarketShipmentDao::class.java), shippingService(plugin), sqlClient))
         )
     }
+
+    /** The inline delivery worker (MK-102): promote, claim and execute CREDIT / PERMISSION rows, stale claims, re-assertion, D22. */
+    fun delivery(job: DeliveryJob): MarketScheduler.Job = MarketScheduler.Job("delivery", MarketScheduler.DELIVERY_MS) { job.runOnce() }
 
     /** Polling of the carriers for the shipments that are due (MK-134). */
     fun shipmentTracking(job: ShipmentTrackingJob): MarketScheduler.Job = MarketScheduler.Job("shipment-tracking", MarketScheduler.SHIPMENT_TRACKING_MS) { job.runOnce() }
