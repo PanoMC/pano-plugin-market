@@ -193,14 +193,34 @@ class PricingInput(
     /** `CartInput.payWithCredits`, forced by `onlyAcceptCredits` (05 section 8.1). */
     val payWithCredits: Boolean,
     /** `PANEL` profile only: a gross total in the order currency (05 section 12). */
-    val priceOverride: Long?
+    val priceOverride: Long?,
+    /**
+     * `RENEWAL` profile: the charge frozen on the subscription (05 section 12). With it the engine returns the frozen
+     * total and only re-splits the VAT; without it a `RENEWAL` input is priced like any cart without promotions and
+     * cannot be finalized.
+     */
+    val renewal: RenewalCharge? = null
 )
+
+/**
+ * What a renewal order charges, frozen when the subscription was activated (05 section 12, 09 section 8.1): [price] is
+ * `market_subscription.price`, the gross total in the order currency; [paymentFee] is the fee part of it, copied from the
+ * initial order and never recomputed. The line total is `price - paymentFee`.
+ */
+class RenewalCharge(val price: Long, val paymentFee: Long)
 
 /** Shipping as priced by the rate engine: order currency, price basis, free threshold already applied. */
 class ShippingCharge(val price: Long, val vatBp: Long?)
 
-/** What the buyer chose to pay with. [useCredits] is credits x 100, `Long.MAX_VALUE` for "MAX", null / 0 = none. */
-class TenderInput(val useCredits: Long?, val method: MethodInput?)
+/**
+ * What the buyer chose to pay with. [useCredits] is credits x 100, `Long.MAX_VALUE` for "MAX" (the quote only), null / 0 =
+ * none; on a pending order (`retender`) null keeps the credit part as it is and 0 drops it. [strict] is checkout and
+ * `/pay`: a number above what can be applied is refused (`INSUFFICIENT_CREDITS`) instead of being clamped as the quote
+ * does (`CREDITS_REDUCED`), and a mixed payment that is not allowed is `MIXED_CREDIT_NOT_SUPPORTED` instead of a warning.
+ */
+class TenderInput(val useCredits: Long?, val method: MethodInput?, val strict: Boolean = false) {
+    fun withMethod(method: MethodInput?) = TenderInput(useCredits, method, strict)
+}
 
 class MethodInput(
     val id: String,
@@ -216,4 +236,22 @@ class MethodInput(
     val mixedCredit: Boolean,
     val priceAuthority: PriceAuthority,
     val physicalGoods: Boolean
-)
+) {
+    /** The pricing mode that selecting this method puts the quote in (05 section 9.5). */
+    val pricingMode: PricingMode
+        get() = when (priceAuthority) {
+            PriceAuthority.MARKET -> PricingMode.MARKET
+            PriceAuthority.GATEWAY_ADDS_TAX -> PricingMode.EXTERNAL_TAX
+            PriceAuthority.GATEWAY_CATALOG -> PricingMode.EXTERNAL
+        }
+
+    /** The built-in providers that never carry a buyer fee (05 section 9.2). */
+    val feeExempt: Boolean get() = id == CREDITS || id == FREE || id == MANUAL
+
+    companion object {
+        /** Ids of the built-in methods (05 section 9.4). */
+        const val CREDITS = "credits"
+        const val FREE = "free"
+        const val MANUAL = "manual"
+    }
+}

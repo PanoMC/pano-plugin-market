@@ -63,10 +63,26 @@ internal object PricingValidator {
             "the ${input.profile} profile takes no coupon or creator code"
         }
 
+        bad(input.buyer.creditBalance < 0) { "the credit balance is negative" }
+        // 05 section 8.1: a whole order in credits is a storefront or in-game purchase; a renewal switches to credits on /pay (retender)
+        bad(input.payWithCredits && input.profile != PricingProfile.STOREFRONT && input.profile != PricingProfile.INGAME) {
+            "the ${input.profile} profile is never paid with credits"
+        }
+
         val override = input.priceOverride
         if (override != null) {
             bad(input.profile != PricingProfile.PANEL) { "priceOverride is for the PANEL profile only" }
             bad(override < 0) { "priceOverride is negative" }
+            bad(input.pricingMode != PricingMode.MARKET) { "priceOverride sets a gross total: the order must be priced by the market" }
+        }
+
+        val renewal = input.renewal
+        if (renewal != null) {
+            bad(input.profile != PricingProfile.RENEWAL) { "a renewal charge is for the RENEWAL profile only" }
+            bad(input.lines.size != 1 || input.lines[0].quantity != 1) { "a renewal is one line of quantity 1" }
+            bad(input.lines[0].kind != LineKind.PRODUCT) { "a renewal line is a product" }
+            bad(renewal.price !in 0..PricingLimits.MAX_AMOUNT) { "renewal price ${renewal.price} is out of bounds" }
+            bad(renewal.paymentFee !in 0..renewal.price) { "renewal fee ${renewal.paymentFee} is not part of the price ${renewal.price}" }
         }
     }
 
