@@ -411,10 +411,38 @@ class CreditOrderIT : MarketDaoITBase() {
         val (alex, _, order) = pendingMixed()
         val attempt = c.attempts(order.id).single()
 
+        // another buyer's order: a final failure inside the order window leaves it open for a retry (06 section 9.2), the hold stays
+        val (blake, _, open) = pendingMixed(name = "Blake")
+
+        c.payments.applyEvent(open.id, c.attempts(open.id).single().id, PaymentAttemptEvent.Failed(final = true))
+
+        assertEquals(OrderStatus.PENDING, c.order(open.id).status)
+        assertEquals(listOf(CreditTxType.HOLD), typesOf(open.id))
+        assertEquals(3_000, balance(blake))
+
+        // after the window it is O8: both orders are past it now, the first one is failed finally
+        w.clock.advance(61 * 60_000L)
         c.payments.applyEvent(order.id, attempt.id, PaymentAttemptEvent.Failed(final = true))
 
-        assertEquals(OrderStatus.FAILED, c.order(order.id).status)
-        assertReleased(alex, order, 8_000, OrderStatus.FAILED)
+        val failed = c.order(order.id)
+
+        assertEquals(OrderStatus.FAILED, failed.status)
+        assertEquals(ReservationState.RELEASED, failed.reservationState)
+        assertEquals(listOf("order:${order.id}:hold", "order:${order.id}:release"), keysOf(order.id))
+        assertEquals(8_000, balance(alex), "the held credits are back")
+        assertEquals(5_000, c.system(CreditSystemKey.HOLD), "only the other order's hold is left")
+        assertEquals(0, c.system(CreditSystemKey.SPENT))
+        assertEquals(listOf(CreditTxType.HOLD), typesOf(open.id), "the other order is not touched")
+
+        // a replay releases nothing more
+        c.payments.applyEvent(order.id, attempt.id, PaymentAttemptEvent.Failed(final = true))
+
+        assertEquals(2, c.ledger(order.id).size)
+        assertEquals(3_000, balance(blake))
+
+        // the expiry gives the open one back
+        assertTrue(c.expiry.runOnce() >= 1)
+        assertEquals(8_000, balance(blake))
     }
 
     @Test
@@ -548,7 +576,7 @@ class CreditOrderIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `D-O6 pay switches a full-credit order to the gateway and back to credits`(): Unit = runBlocking {
+    fun `D-O6 pay keeps a full-credit order on credits as 06 section 9_3 step 2 says, a gateway is refused and nothing moves, the credits retry completes it with the first hold`(): Unit = runBlocking {
         configure()
         c.deferStart = true
 
@@ -558,31 +586,40 @@ class CreditOrderIT : MarketDaoITBase() {
 
         assertEquals(2_500, order.creditAmount)
 
-        // to the gateway: the credit part goes back, the order is paid in money
+        // to the gateway: refused, the order is a payWithCredits order and keeps its provider, credit part and hold
         c.deferStart = false
-        pay(order, "fake")
 
-        val gateway = c.order(order.id)
+        val body = expect("PAYMENT_METHOD_UNAVAILABLE", 400) { pay(order, "fake") }
 
-        assertEquals(0, gateway.creditAmount)
-        assertEquals(0, gateway.creditValue)
-        assertEquals("fake", gateway.paymentMethodId)
-        assertEquals(gateway.totalPrice, gateway.gatewayAmount)
-        assertEquals(10_000, balance(alex))
-        assertEquals(listOf(CreditTxType.HOLD, CreditTxType.RELEASE), typesOf(order.id))
-        assertEquals(0, c.system(CreditSystemKey.HOLD))
+        assertEquals("CREDITS_REQUIRED", body.getString("reason"))
 
-        // and back to credits: held again under generation 1, then the credits attempt completes the order
-        pay(gateway, "credits")
+        val kept = c.order(order.id)
 
-        val back = c.order(order.id)
+        assertEquals("credits", kept.paymentMethodId)
+        assertEquals(2_500, kept.creditAmount)
+        assertEquals(0, kept.gatewayAmount)
+        assertEquals(listOf(CreditTxType.HOLD), typesOf(order.id))
+        assertEquals(7_500, balance(alex))
+        assertEquals(2_500, c.system(CreditSystemKey.HOLD))
+        assertEquals(1, c.attempts(order.id).size, "no new attempt")
 
-        assertEquals(OrderStatus.COMPLETED, back.status)
-        assertEquals(2_500, back.creditAmount)
-        assertEquals(listOf(CreditTxType.HOLD, CreditTxType.RELEASE, CreditTxType.HOLD, CreditTxType.CAPTURE), typesOf(order.id))
-        assertEquals(listOf("order:${order.id}:hold", "order:${order.id}:release", "order:${order.id}:hold:1", "order:${order.id}:capture"), keysOf(order.id))
+        // a gateway together with useCredits is refused the same way
+        expect("PAYMENT_METHOD_UNAVAILABLE", 400) { pay(kept, "fake", credits = 1_000) }
+
+        assertEquals(listOf(CreditTxType.HOLD), typesOf(order.id))
+
+        // the credits retry: the credit part is unchanged, so no second hold, and the order completes with its capture
+        pay(c.order(order.id), "credits")
+
+        val done = c.order(order.id)
+
+        assertEquals(OrderStatus.COMPLETED, done.status)
+        assertEquals(2_500, done.creditAmount)
+        assertEquals(listOf(CreditTxType.HOLD, CreditTxType.CAPTURE), typesOf(order.id))
+        assertEquals(listOf("order:${order.id}:hold", "order:${order.id}:capture"), keysOf(order.id))
         assertEquals(7_500, balance(alex))
         assertEquals(2_500, c.system(CreditSystemKey.SPENT))
+        assertEquals(0, c.system(CreditSystemKey.HOLD))
     }
 
     @Test

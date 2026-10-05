@@ -621,12 +621,14 @@ class PaymentServiceIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `an ordinary order cannot be switched to credits, its items carry no credit price`(): Unit = runBlocking {
+    fun `an ordinary order cannot be switched to credits when its items are not sold for credits`(): Unit = runBlocking {
         val (_, caller) = user("Alex", credit = 5_000)
 
         fx.paymentMethod("fake")
 
-        val order = orderOf(buy(fx.product(price = 3000, creditPrice = 2500), "fake", 1, caller))
+        // MK-091 stores the credit price of every line a buyer could pay with credits, so a product with a credit price switches (CreditOrderIT);
+        // one that is not sold for credits (creditPrice = 0) carries none and stays refused
+        val order = orderOf(buy(fx.product(price = 3000, creditPrice = 0), "fake", 1, caller))
 
         assertEquals("NOT_PAYABLE_WITH_CREDITS", expect("PAYMENT_METHOD_UNAVAILABLE", 400) { pay(order, "credits") }.getString("reason"))
         assertEquals(1, ph.attempts(order.id).size)
