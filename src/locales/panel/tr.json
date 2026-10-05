@@ -1771,6 +1771,69 @@
       "template": "Duyuru metni (boş = varsayılan)",
       "vault-rate": "Dönüşüm oranı (boş = varsayılan)",
       "toast-saved": "Geçersiz kılma kaydedildi."
+    },
+    "webhook": {
+      "heading-create": "Webhook Oluştur",
+      "heading-edit": "Webhook Düzenle",
+      "name": "Ad",
+      "format": "Biçim",
+      "url": "URL",
+      "all-events": "Tüm Olaylar",
+      "signing": "İmzalama",
+      "max-attempts": "Azami Deneme",
+      "secret": "İmza Anahtarı",
+      "secret-generate": "Otomatik oluşturmak için boş bırakın",
+      "headers": "Başlıklar",
+      "header-name": "Başlık adı",
+      "header-value": "Başlık değeri",
+      "customize-template": "Embed Şablonunu Özelleştir",
+      "template": "Embed şablonu (JSON)",
+      "reset-template": "Varsayılana Döndür",
+      "toast-created": "Webhook oluşturuldu.",
+      "toast-updated": "Webhook kaydedildi.",
+      "errors": {
+        "REQUIRED": "Zorunlu.",
+        "TOO_LONG": "Çok uzun.",
+        "INVALID": "Geçersiz değer.",
+        "INVALID_URL": "Geçerli bir http veya https adresi girin.",
+        "INVALID_DISCORD_URL": "Bir Discord webhook adresi girin (discord.com/api/webhooks/...).",
+        "URL_MALFORMED": "Adres geçerli değil.",
+        "URL_SCHEME": "Yalnızca http ve https adreslerine izin verilir.",
+        "URL_USERINFO": "Adres kullanıcı adı veya parola içermemelidir.",
+        "URL_HOST": "Bu sunucuya izin verilmiyor.",
+        "URL_PORT": "Bu porta izin verilmiyor.",
+        "URL_DISCORD_URL": "Bir Discord webhook adresi girin (discord.com/api/webhooks/...).",
+        "URL_DNS": "Sunucu adı çözümlenemedi.",
+        "URL_PRIVATE_ADDRESS": "Özel ağ adreslerine izin verilmiyor.",
+        "OUT_OF_RANGE": "1 ile 20 arasında bir sayı girin.",
+        "INVALID_JSON": "Geçerli bir JSON girin.",
+        "INVALID_SECRET_LENGTH": "Gizli anahtar 16 ile 128 karakter uzunluğunda olmalıdır.",
+        "INVALID_SECRET_CHARS": "Gizli anahtar yalnızca yazdırılabilir ASCII karakterler içerebilir.",
+        "INVALID_HEADER_NAME": "Başlık adlarında yalnızca harf, rakam ve tire kullanılabilir.",
+        "FORBIDDEN_HEADER": "Bu başlık adı ayrılmıştır.",
+        "INVALID_HEADER_VALUE": "Başlık değerleri satır sonu içeremez.",
+        "DUPLICATE_HEADER": "Bu başlık iki kez eklenmiş.",
+        "LIMIT_REACHED": "20 webhook sınırına ulaştınız.",
+        "TOO_MANY_HEADERS": "En fazla 10 başlık ekleyebilirsiniz."
+      }
+    },
+    "webhook-secret": {
+      "title": "İmza Anahtarı",
+      "hint": "Bu anahtarı şimdi kopyalayın. Bir daha gösterilmez.",
+      "done": "Tamam"
+    },
+    "webhook-delivery": {
+      "title": "Gönderim",
+      "event": "Olay",
+      "attempts": "Deneme",
+      "http": "HTTP Durumu",
+      "duration": "Süre",
+      "ms": "{ms} ms",
+      "error": "Hata",
+      "created": "Oluşturulma",
+      "delivered": "Teslim",
+      "body": "İçerik",
+      "response": "Son Yanıt"
     }
   },
   "settings": {
@@ -2273,6 +2336,60 @@
         "state": "Durum",
         "waiting": "Bekleyen"
       }
+    },
+    "webhooks": {
+      "count": "{count} Webhook",
+      "create": "Webhook Oluştur",
+      "send-test": "Test Gönder",
+      "deliveries": "Gönderimler",
+      "enable": "Etkinleştir",
+      "disable": "Devre Dışı Bırak",
+      "enabled": "Etkin",
+      "disabled": "Devre Dışı",
+      "auto-disabled": "Otomatik Kapatıldı",
+      "auto-disabled-hint": "Art arda çok fazla başarısız gönderim nedeniyle kapatıldı.",
+      "all-events": "Tümü",
+      "invalid-discord-url": "Bir Discord webhook adresi girin (discord.com/api/webhooks/...).",
+      "toast-test-ok": "Test gönderildi: HTTP {status}, {ms} ms.",
+      "toast-test-failed": "Test başarısız (HTTP {status}). Ayrıntılar için Gönderimler sayfasını açın.",
+      "toast-deleted": "Webhook silindi.",
+      "table": {
+        "url": "URL",
+        "events": "Olaylar",
+        "format": "Biçim",
+        "signing": "İmzalama",
+        "last-delivery": "Son Gönderim"
+      },
+      "confirm-delete": {
+        "title": "Webhook Silinsin mi?",
+        "description": "{name} silinecek ve bekleyen gönderimleri iptal edilecek."
+      }
+    },
+    "webhook-deliveries": {
+      "count": "{count} Gönderim",
+      "tab": {
+        "all": "Tümü",
+        "pending": "Bekleyen",
+        "succeeded": "Başarılı",
+        "failed": "Başarısız",
+        "dead": "Vazgeçildi"
+      },
+      "table": {
+        "event": "Olay",
+        "order": "Sipariş",
+        "attempts": "Deneme",
+        "http": "HTTP",
+        "duration": "Süre",
+        "created": "Oluşturulma",
+        "delivered": "Teslim"
+      },
+      "ms": "{ms} ms",
+      "redeliver": "Yeniden Gönder",
+      "confirm-redeliver": {
+        "title": "Yeniden Gönderilsin mi?",
+        "description": "Aynı olay uç noktaya tekrar gönderilir."
+      },
+      "toast-redelivered": "Gönderim yeniden sıraya alındı."
     }
   },
   "discounts": {
@@ -2866,6 +2983,27 @@
       "OFF": "Kapalı",
       "OPTIONAL": "İsteğe Bağlı",
       "REQUIRED": "Zorunlu"
+    },
+    "webhook-event": {
+      "order-paid": "Sipariş Ödendi",
+      "order-refunded": "Sipariş İade Edildi",
+      "order-chargeback": "Ödeme İtirazı Açıldı",
+      "order-chargeback-won": "Ödeme İtirazı Kazanıldı",
+      "subscription-started": "Abonelik Başladı",
+      "subscription-renewed": "Abonelik Yenilendi",
+      "subscription-cancelled": "Abonelik İptal Edildi",
+      "subscription-expired": "Abonelik Sona Erdi",
+      "shipment-shipped": "Kargo Gönderildi",
+      "shipment-delivered": "Kargo Teslim Edildi",
+      "test-ping": "Test Ping"
+    },
+    "webhook-format": {
+      "JSON": "JSON",
+      "DISCORD": "Discord Embed"
+    },
+    "webhook-signing": {
+      "NONE": "Yok",
+      "HMAC_SHA256": "HMAC SHA-256"
     }
   },
   "alerts": {

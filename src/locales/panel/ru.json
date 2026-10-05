@@ -1771,6 +1771,69 @@
       "template": "Текст объявления (пусто = по умолчанию)",
       "vault-rate": "Курс конвертации (пусто = по умолчанию)",
       "toast-saved": "Переопределение сохранено."
+    },
+    "webhook": {
+      "heading-create": "Создать вебхук",
+      "heading-edit": "Изменить вебхук",
+      "name": "Название",
+      "format": "Формат",
+      "url": "URL",
+      "all-events": "Все события",
+      "signing": "Подпись",
+      "max-attempts": "Максимум попыток",
+      "secret": "Секрет подписи",
+      "secret-generate": "Оставьте пустым, чтобы создать автоматически",
+      "headers": "Заголовки",
+      "header-name": "Имя заголовка",
+      "header-value": "Значение заголовка",
+      "customize-template": "Настроить шаблон embed",
+      "template": "Шаблон embed (JSON)",
+      "reset-template": "Сбросить по умолчанию",
+      "toast-created": "Вебхук создан.",
+      "toast-updated": "Вебхук сохранён.",
+      "errors": {
+        "REQUIRED": "Обязательное поле.",
+        "TOO_LONG": "Слишком длинное значение.",
+        "INVALID": "Недопустимое значение.",
+        "INVALID_URL": "Введите корректный адрес http или https.",
+        "INVALID_DISCORD_URL": "Введите адрес вебхука Discord (discord.com/api/webhooks/...).",
+        "URL_MALFORMED": "Адрес недействителен.",
+        "URL_SCHEME": "Разрешены только адреса http и https.",
+        "URL_USERINFO": "Адрес не должен содержать имя пользователя или пароль.",
+        "URL_HOST": "Этот хост не разрешён.",
+        "URL_PORT": "Этот порт не разрешён.",
+        "URL_DISCORD_URL": "Введите адрес вебхука Discord (discord.com/api/webhooks/...).",
+        "URL_DNS": "Не удалось определить адрес хоста.",
+        "URL_PRIVATE_ADDRESS": "Адреса частной сети не разрешены.",
+        "OUT_OF_RANGE": "Введите число от 1 до 20.",
+        "INVALID_JSON": "Введите корректный JSON.",
+        "INVALID_SECRET_LENGTH": "Секрет должен содержать от 16 до 128 символов.",
+        "INVALID_SECRET_CHARS": "Секрет может содержать только печатные символы ASCII.",
+        "INVALID_HEADER_NAME": "В именах заголовков допустимы только буквы, цифры и дефисы.",
+        "FORBIDDEN_HEADER": "Это имя заголовка зарезервировано.",
+        "INVALID_HEADER_VALUE": "Значения заголовков не должны содержать переводы строк.",
+        "DUPLICATE_HEADER": "Этот заголовок указан дважды.",
+        "LIMIT_REACHED": "Достигнут лимит в 20 вебхуков.",
+        "TOO_MANY_HEADERS": "Можно добавить не более 10 заголовков."
+      }
+    },
+    "webhook-secret": {
+      "title": "Секрет подписи",
+      "hint": "Скопируйте этот секрет сейчас. Повторно он не будет показан.",
+      "done": "Готово"
+    },
+    "webhook-delivery": {
+      "title": "Доставка",
+      "event": "Событие",
+      "attempts": "Попытки",
+      "http": "Статус HTTP",
+      "duration": "Длительность",
+      "ms": "{ms} мс",
+      "error": "Ошибка",
+      "created": "Создана",
+      "delivered": "Доставлена",
+      "body": "Тело запроса",
+      "response": "Последний ответ"
     }
   },
   "settings": {
@@ -2273,6 +2336,60 @@
         "state": "Состояние",
         "waiting": "Ожидают"
       }
+    },
+    "webhooks": {
+      "count": "Вебхуков: {count}",
+      "create": "Создать вебхук",
+      "send-test": "Отправить тест",
+      "deliveries": "Доставки",
+      "enable": "Включить",
+      "disable": "Отключить",
+      "enabled": "Включён",
+      "disabled": "Отключён",
+      "auto-disabled": "Отключён автоматически",
+      "auto-disabled-hint": "Отключён после слишком большого числа неудачных доставок подряд.",
+      "all-events": "Все",
+      "invalid-discord-url": "Введите адрес вебхука Discord (discord.com/api/webhooks/...).",
+      "toast-test-ok": "Тест доставлен: HTTP {status}, {ms} мс.",
+      "toast-test-failed": "Тест не удался (HTTP {status}). Подробности смотрите в разделе «Доставки».",
+      "toast-deleted": "Вебхук удалён.",
+      "table": {
+        "url": "URL",
+        "events": "События",
+        "format": "Формат",
+        "signing": "Подпись",
+        "last-delivery": "Последняя доставка"
+      },
+      "confirm-delete": {
+        "title": "Удалить вебхук?",
+        "description": "Вебхук {name} будет удалён, а его ожидающие доставки отменены."
+      }
+    },
+    "webhook-deliveries": {
+      "count": "Доставок: {count}",
+      "tab": {
+        "all": "Все",
+        "pending": "Ожидают",
+        "succeeded": "Успешные",
+        "failed": "Неудачные",
+        "dead": "Прекращены"
+      },
+      "table": {
+        "event": "Событие",
+        "order": "Заказ",
+        "attempts": "Попытки",
+        "http": "HTTP",
+        "duration": "Длительность",
+        "created": "Создана",
+        "delivered": "Доставлена"
+      },
+      "ms": "{ms} мс",
+      "redeliver": "Отправить повторно",
+      "confirm-redeliver": {
+        "title": "Отправить повторно?",
+        "description": "То же событие будет отправлено на адрес ещё раз."
+      },
+      "toast-redelivered": "Доставка снова поставлена в очередь."
     }
   },
   "discounts": {
@@ -2866,6 +2983,27 @@
       "OFF": "Выключено",
       "OPTIONAL": "Необязательно",
       "REQUIRED": "Обязательно"
+    },
+    "webhook-event": {
+      "order-paid": "Заказ оплачен",
+      "order-refunded": "Заказ возвращён",
+      "order-chargeback": "Открыт спор по платежу",
+      "order-chargeback-won": "Спор по платежу выигран",
+      "subscription-started": "Подписка начата",
+      "subscription-renewed": "Подписка продлена",
+      "subscription-cancelled": "Подписка отменена",
+      "subscription-expired": "Подписка истекла",
+      "shipment-shipped": "Отправление отправлено",
+      "shipment-delivered": "Отправление доставлено",
+      "test-ping": "Тестовый пинг"
+    },
+    "webhook-format": {
+      "JSON": "JSON",
+      "DISCORD": "Discord Embed"
+    },
+    "webhook-signing": {
+      "NONE": "Нет",
+      "HMAC_SHA256": "HMAC SHA-256"
     }
   },
   "alerts": {

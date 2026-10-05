@@ -13,6 +13,8 @@ import MailSettings from './MailSettings.svelte';
 import MinecraftSettings from './MinecraftSettings.svelte';
 import SecuritySettings from './SecuritySettings.svelte';
 import StoreModuleSettings from './StoreModuleSettings.svelte';
+import WebhookDeliveries from './WebhookDeliveries.svelte';
+import Webhooks from './Webhooks.svelte';
 
 export const SECTION_COMPONENTS = {
   general: GeneralSettings,
@@ -28,4 +30,6 @@ export const SECTION_COMPONENTS = {
   mail: MailSettings,
   minecraft: MinecraftSettings,
   health: HealthPanel,
+  webhooks: Webhooks,
+  'webhook-deliveries': WebhookDeliveries,
 };
