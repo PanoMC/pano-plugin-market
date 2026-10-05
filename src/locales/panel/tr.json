@@ -413,6 +413,7 @@
         "products": "Ürünler",
         "last-updated": "Son Güncelleme"
       },
+      "delete-title": "Karşılaştırmayı Sil",
       "confirm-delete": "\"{name}\" karşılaştırmasını silmek istediğinize emin misiniz?",
       "toast-load-error": "Karşılaştırmalar yüklenirken bir hata oluştu.",
       "toast-clone-error": "Karşılaştırma klonlanırken bir hata oluştu.",

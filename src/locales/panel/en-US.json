@@ -413,6 +413,7 @@
         "products": "Products",
         "last-updated": "Last Updated"
       },
+      "delete-title": "Delete Comparison",
       "confirm-delete": "Are you sure you want to delete the comparison \"{name}\"?",
       "toast-load-error": "An error occurred while loading comparisons.",
       "toast-clone-error": "An error occurred while cloning the comparison.",

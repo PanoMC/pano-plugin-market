@@ -62,7 +62,11 @@
   import { base, page, goto } from '@panomc/sdk/svelte';
   import { _, showSuccessToast, showErrorToast } from '../../i18n';
 
+  import ConfirmModal from '../components/ConfirmModal.svelte';
+  import { currentLocale } from '../utils/locale.js';
+
   let { data } = $props();
+  let confirmModal = $state(null);
 
   const FILTER_STATUS = {
     all: null,
@@ -157,12 +161,25 @@
 
   async function deleteComparison(comp) {
     if (buttonsLoading) return;
-    if (!window.confirm($_('pages.comparisons.confirm-delete', { values: { name: comp.name } }))) return;
+    confirmModal?.open({
+      icon: 'fa-solid fa-trash',
+      variant: 'danger',
+      title: $_('pages.comparisons.delete-title'),
+      description: $_('pages.comparisons.confirm-delete', { values: { name: comp.name } }),
+      confirmLabel: $_('common.delete'),
+      onConfirm: () => performDelete(comp),
+    });
+  }
+
+  async function performDelete(comp) {
+    if (buttonsLoading) return;
     buttonsLoading = true;
     try {
       const res = await ApiUtil.delete({ path: `/api/panel/market/comparisons/${comp.id}` });
       if (res?.error) {
         showErrorToast($_('pages.comparisons.toast-delete-error'));
+        // Stale row (already deleted elsewhere): refresh the list (13 section 23).
+        if (res.error === 'NOT_FOUND') await navigate();
       } else {
         showSuccessToast($_('pages.comparisons.toast-delete-success'));
         // The deleted row may have been the last on this page; step back a page.
@@ -182,7 +199,7 @@
     if (!value) return '-';
     const d = new Date(Number(value));
     if (isNaN(d.getTime())) return '-';
-    return d.toLocaleString('tr-TR', {
+    return d.toLocaleString(currentLocale(), {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -310,3 +327,5 @@
     {/if}
   </div>
 </MarketLayout>
+
+<ConfirmModal bind:this={confirmModal} />

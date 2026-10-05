@@ -66,10 +66,10 @@ else
 
 // 48 (permissions / activity logs) is enforced by check:i18n.
 
-// 49. PENDING: no key under settings.payments.methods|fields|options remains
+// 49. no key under settings.payments.methods|fields|options remains
 for (const k of panelEn.keys())
   if (/^settings\.payments\.(methods|fields|options)(\.|$)/.test(k)) {
-    report.add('49', 'src/locales/panel/en-US.json', 0, `obsolete key '${k}'`, { pending: true });
+    report.add('49', 'src/locales/panel/en-US.json', 0, `obsolete key '${k}'`);
     break;
   }
 
@@ -79,14 +79,15 @@ for (const [file, src] of sources)
     if (!keyResolves(key, enUS))
       report.add('50', rel(file, root), lineOf(src, index), `$_('${key}') missing in en-US`);
 
-// 51-53 PENDING, 54-55 hard
+// 51-55 hard
 const forbidden = [
   ['51', /window\.confirm\(/g, 'window.confirm('],
   ['52', /data-bs-html/g, 'data-bs-html'],
   ['53', /tr-TR|minotar\.net|google\.com\/s2\/favicons|'₺'/g, 'tr-TR / minotar.net / favicons / ₺'],
 ];
+// src/main/resources/plugin-ui is generated build output (gitignored), never scanned.
 const srcAll = walk(path.join(root, 'src'), ['.svelte', '.js']).filter(
-  (f) => !f.endsWith('.test.js'),
+  (f) => !f.endsWith('.test.js') && !rel(f, root).startsWith('src/main/'),
 );
 for (const file of srcAll) {
   const src = read(file);
@@ -94,9 +95,7 @@ for (const file of srcAll) {
   for (const [id, re, label] of forbidden) {
     if (id !== '53' && !isPanel) continue;
     for (const m of src.matchAll(re))
-      report.add(id, rel(file, root), lineOf(src, m.index), `forbidden ${label}`, {
-        pending: true,
-      });
+      report.add(id, rel(file, root), lineOf(src, m.index), `forbidden ${label}`);
   }
 }
 for (const [file, src] of sources) {
