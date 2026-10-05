@@ -32,6 +32,10 @@ object FakeBukkit {
     val dispatched = CopyOnWriteArrayList<Pair<String, String>>()
     val schedulerCalls = CopyOnWriteArrayList<String>()
 
+    /** Extra `Server` / `PluginManager` methods a test provides (by method name); cleared by [reset]. */
+    val extraServer = ConcurrentHashMap<String, (Array<Any?>) -> Any?>()
+    val extraPluginManager = ConcurrentHashMap<String, (Array<Any?>) -> Any?>()
+
     @Volatile
     var dispatch: (String) -> Boolean = { true }
 
@@ -71,7 +75,7 @@ object FakeBukkit {
                 registered.add(RegisteredEvent(a[0] as Class<out Event>, a[1] as Listener, a[2] as EventPriority, a[3] as EventExecutor, a[4] as Plugin, a[5] as Boolean))
                 null
             }
-            else -> throw UnsupportedOperationException("PluginManager.${m.name}")
+            else -> extraPluginManager[m.name]?.invoke(a) ?: if (extraPluginManager.containsKey(m.name)) null else throw UnsupportedOperationException("PluginManager.${m.name}")
         }
     }
 
@@ -90,7 +94,7 @@ object FakeBukkit {
                 dispatched.add(Thread.currentThread().name to cmd)
                 dispatch(cmd)
             }
-            else -> throw UnsupportedOperationException("Server.${m.name}")
+            else -> extraServer[m.name]?.invoke(a) ?: if (extraServer.containsKey(m.name)) null else throw UnsupportedOperationException("Server.${m.name}")
         }
     }
 
@@ -107,6 +111,8 @@ object FakeBukkit {
         registered.clear()
         dispatched.clear()
         schedulerCalls.clear()
+        extraServer.clear()
+        extraPluginManager.clear()
         dispatch = { true }
         refuseTasks = null
         neverRunTasks = false
