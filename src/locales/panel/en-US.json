@@ -530,6 +530,57 @@
         "shipment-cancelled": "Shipment cancelled.",
         "invoice-regenerated": "Invoices regenerated."
       }
+    },
+    "create-order": {
+      "title": "Create Order",
+      "back": "Orders",
+      "buyer": {
+        "title": "Buyer",
+        "player": "Player Username",
+        "gift": "Gift To Another Player",
+        "recipient": "Recipient Username",
+        "email": "E-mail (optional)"
+      },
+      "items": {
+        "title": "{count} Items",
+        "add": "Add Product"
+      },
+      "table": {
+        "product": "Product",
+        "qty": "Qty",
+        "unit-price": "Unit Price",
+        "total": "Total"
+      },
+      "summary": {
+        "title": "Summary",
+        "subtotal": "Subtotal",
+        "discount": "Discount",
+        "vat": "VAT",
+        "total": "Total",
+        "override": "Override Total",
+        "override-placeholder": "Order total",
+        "mark-paid": "Mark As Paid",
+        "payment-label": "Payment label",
+        "run-deliveries": "Run Deliveries",
+        "send-mail": "Send Order E-mail",
+        "force": "Ignore Limits And Stock",
+        "note": "Note"
+      },
+      "submit": "Create Order",
+      "over-limit": "A line is over a limit or out of stock. Turn on Ignore Limits And Stock to continue.",
+      "default-payment-label": "Manual payment",
+      "toast-created": "Order created",
+      "force-alert": {
+        "title": "Limit Reached",
+        "body": "The order was refused because of a limit, cooldown, requirement or stock. You can create it anyway.",
+        "enable": "Enable Ignore Limits And Stock"
+      },
+      "errors": {
+        "player-invalid": "Use 1-32 letters, digits, \"_\", \".\" or \"*\".",
+        "recipient-invalid": "Use 1-32 letters, digits, \"_\", \".\" or \"*\".",
+        "recipient-same": "The recipient must differ from the buyer.",
+        "email-invalid": "Enter a valid e-mail address."
+      }
     }
   },
   "common": {
@@ -942,6 +993,14 @@
       },
       "headers": "Headers",
       "body": "Body"
+    },
+    "add-order-item": {
+      "title": "Add Product",
+      "variant": "Variant",
+      "quantity": "Quantity",
+      "server": "Server",
+      "add": "Add",
+      "max-quantity": "At most {max} per order."
     }
   },
   "settings": {
@@ -1564,6 +1623,28 @@
       "ORDER_REVOKED": "Order revoked",
       "ENTITLEMENT_ENDED": "Entitlement ended",
       "NOTHING_TO_REVOKE": "Nothing to revoke"
+    },
+    "line-error": {
+      "PRODUCT_UNAVAILABLE": "Product is not available",
+      "VARIANT_REQUIRED": "Choose a variant",
+      "VARIANT_UNAVAILABLE": "Variant is not available",
+      "OUT_OF_STOCK": "Out of stock",
+      "QUANTITY_REDUCED": "Quantity was reduced to the stock",
+      "MAX_QUANTITY": "Above the maximum quantity per order",
+      "PURCHASE_LIMIT_REACHED": "Purchase limit reached",
+      "COOLDOWN_ACTIVE": "Cooldown is active",
+      "REQUIREMENT_NOT_MET": "Required product is missing",
+      "PERMISSION_REQUIRED": "Permission required",
+      "ALREADY_OWNED": "Already owned",
+      "FIELD_REQUIRED": "A required field is empty",
+      "FIELD_INVALID": "A field value is invalid",
+      "SERVER_REQUIRED": "Choose a server",
+      "SERVER_UNAVAILABLE": "Server is not available",
+      "GIFT_NOT_ALLOWED": "This product cannot be gifted",
+      "LOGIN_REQUIRED": "The buyer must have an account",
+      "NOT_IN_CURRENCY": "Not priced in this currency",
+      "SUBSCRIPTION_MUST_BE_ALONE": "A subscription cannot be created manually",
+      "UNKNOWN": "This line has a problem"
     }
   },
   "alerts": {

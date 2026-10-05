@@ -530,6 +530,57 @@
         "shipment-cancelled": "Отправление отменено.",
         "invoice-regenerated": "Счета созданы заново."
       }
+    },
+    "create-order": {
+      "title": "Создать заказ",
+      "back": "Заказы",
+      "buyer": {
+        "title": "Покупатель",
+        "player": "Ник игрока",
+        "gift": "Подарить другому игроку",
+        "recipient": "Ник получателя",
+        "email": "E-mail (необязательно)"
+      },
+      "items": {
+        "title": "Товаров: {count}",
+        "add": "Добавить товар"
+      },
+      "table": {
+        "product": "Товар",
+        "qty": "Кол-во",
+        "unit-price": "Цена за единицу",
+        "total": "Итого"
+      },
+      "summary": {
+        "title": "Сводка",
+        "subtotal": "Подытог",
+        "discount": "Скидка",
+        "vat": "НДС",
+        "total": "Итого",
+        "override": "Изменить итог",
+        "override-placeholder": "Итог заказа",
+        "mark-paid": "Отметить как оплаченный",
+        "payment-label": "Название платежа",
+        "run-deliveries": "Выполнить доставку",
+        "send-mail": "Отправить письмо о заказе",
+        "force": "Игнорировать лимиты и склад",
+        "note": "Заметка"
+      },
+      "submit": "Создать заказ",
+      "over-limit": "Строка превышает лимит или отсутствует на складе. Включите «Игнорировать лимиты и склад», чтобы продолжить.",
+      "default-payment-label": "Ручной платёж",
+      "toast-created": "Заказ создан",
+      "force-alert": {
+        "title": "Достигнут лимит",
+        "body": "Заказ отклонён из-за лимита, паузы, требования или склада. Вы можете создать его всё равно.",
+        "enable": "Включить игнорирование лимитов и склада"
+      },
+      "errors": {
+        "player-invalid": "Используйте 1-32 буквы, цифры, «_», «.» или «*».",
+        "recipient-invalid": "Используйте 1-32 буквы, цифры, «_», «.» или «*».",
+        "recipient-same": "Получатель должен отличаться от покупателя.",
+        "email-invalid": "Введите корректный e-mail."
+      }
     }
   },
   "common": {
@@ -942,6 +993,14 @@
       },
       "headers": "Заголовки",
       "body": "Тело"
+    },
+    "add-order-item": {
+      "title": "Добавить товар",
+      "variant": "Вариант",
+      "quantity": "Количество",
+      "server": "Сервер",
+      "add": "Добавить",
+      "max-quantity": "Не более {max} в заказе."
     }
   },
   "settings": {
@@ -1564,6 +1623,28 @@
       "ORDER_REVOKED": "Заказ отозван",
       "ENTITLEMENT_ENDED": "Право закончилось",
       "NOTHING_TO_REVOKE": "Нечего отзывать"
+    },
+    "line-error": {
+      "PRODUCT_UNAVAILABLE": "Товар недоступен",
+      "VARIANT_REQUIRED": "Выберите вариант",
+      "VARIANT_UNAVAILABLE": "Вариант недоступен",
+      "OUT_OF_STOCK": "Нет на складе",
+      "QUANTITY_REDUCED": "Количество уменьшено до остатка",
+      "MAX_QUANTITY": "Больше максимума на заказ",
+      "PURCHASE_LIMIT_REACHED": "Достигнут лимит покупок",
+      "COOLDOWN_ACTIVE": "Действует пауза между покупками",
+      "REQUIREMENT_NOT_MET": "Не хватает обязательного товара",
+      "PERMISSION_REQUIRED": "Требуется право",
+      "ALREADY_OWNED": "Уже куплено",
+      "FIELD_REQUIRED": "Обязательное поле пусто",
+      "FIELD_INVALID": "Недопустимое значение поля",
+      "SERVER_REQUIRED": "Выберите сервер",
+      "SERVER_UNAVAILABLE": "Сервер недоступен",
+      "GIFT_NOT_ALLOWED": "Этот товар нельзя подарить",
+      "LOGIN_REQUIRED": "У покупателя должен быть аккаунт",
+      "NOT_IN_CURRENCY": "Нет цены в этой валюте",
+      "SUBSCRIPTION_MUST_BE_ALONE": "Подписку нельзя создать вручную",
+      "UNKNOWN": "Проблема со строкой"
     }
   },
   "alerts": {

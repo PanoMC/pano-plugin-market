@@ -530,6 +530,57 @@
         "shipment-cancelled": "Kargo iptal edildi.",
         "invoice-regenerated": "Faturalar yeniden oluşturuldu."
       }
+    },
+    "create-order": {
+      "title": "Sipariş Oluştur",
+      "back": "Siparişler",
+      "buyer": {
+        "title": "Alıcı",
+        "player": "Oyuncu Kullanıcı Adı",
+        "gift": "Başka Bir Oyuncuya Hediye Et",
+        "recipient": "Alıcı Oyuncu Kullanıcı Adı",
+        "email": "E-posta (isteğe bağlı)"
+      },
+      "items": {
+        "title": "{count} Ürün",
+        "add": "Ürün Ekle"
+      },
+      "table": {
+        "product": "Ürün",
+        "qty": "Adet",
+        "unit-price": "Birim Fiyat",
+        "total": "Toplam"
+      },
+      "summary": {
+        "title": "Özet",
+        "subtotal": "Ara Toplam",
+        "discount": "İndirim",
+        "vat": "KDV",
+        "total": "Toplam",
+        "override": "Toplamı Değiştir",
+        "override-placeholder": "Sipariş toplamı",
+        "mark-paid": "Ödenmiş Olarak İşaretle",
+        "payment-label": "Ödeme etiketi",
+        "run-deliveries": "Teslimatları Çalıştır",
+        "send-mail": "Sipariş E-postası Gönder",
+        "force": "Limitleri Ve Stoğu Yok Say",
+        "note": "Not"
+      },
+      "submit": "Sipariş Oluştur",
+      "over-limit": "Bir satır limiti aşıyor veya stokta yok. Devam etmek için Limitleri Ve Stoğu Yok Say seçeneğini aç.",
+      "default-payment-label": "Manuel ödeme",
+      "toast-created": "Sipariş oluşturuldu",
+      "force-alert": {
+        "title": "Limit Aşıldı",
+        "body": "Sipariş bir limit, bekleme süresi, gereksinim veya stok nedeniyle reddedildi. Yine de oluşturabilirsin.",
+        "enable": "Limitleri Ve Stoğu Yok Saymayı Aç"
+      },
+      "errors": {
+        "player-invalid": "1-32 harf, rakam, \"_\", \".\" veya \"*\" kullan.",
+        "recipient-invalid": "1-32 harf, rakam, \"_\", \".\" veya \"*\" kullan.",
+        "recipient-same": "Alıcı, satın alandan farklı olmalı.",
+        "email-invalid": "Geçerli bir e-posta adresi gir."
+      }
     }
   },
   "common": {
@@ -942,6 +993,14 @@
       },
       "headers": "Başlıklar",
       "body": "Gövde"
+    },
+    "add-order-item": {
+      "title": "Ürün Ekle",
+      "variant": "Varyant",
+      "quantity": "Adet",
+      "server": "Sunucu",
+      "add": "Ekle",
+      "max-quantity": "Siparişte en fazla {max} adet."
     }
   },
   "settings": {
@@ -1564,6 +1623,28 @@
       "ORDER_REVOKED": "Sipariş geri alındı",
       "ENTITLEMENT_ENDED": "Hak sona erdi",
       "NOTHING_TO_REVOKE": "Geri alınacak bir şey yok"
+    },
+    "line-error": {
+      "PRODUCT_UNAVAILABLE": "Ürün satışta değil",
+      "VARIANT_REQUIRED": "Bir varyant seç",
+      "VARIANT_UNAVAILABLE": "Varyant satışta değil",
+      "OUT_OF_STOCK": "Stokta yok",
+      "QUANTITY_REDUCED": "Adet stoğa göre azaltıldı",
+      "MAX_QUANTITY": "Sipariş başına azami adedin üzerinde",
+      "PURCHASE_LIMIT_REACHED": "Satın alma limitine ulaşıldı",
+      "COOLDOWN_ACTIVE": "Bekleme süresi aktif",
+      "REQUIREMENT_NOT_MET": "Gerekli ürün eksik",
+      "PERMISSION_REQUIRED": "Yetki gerekli",
+      "ALREADY_OWNED": "Zaten sahip",
+      "FIELD_REQUIRED": "Zorunlu bir alan boş",
+      "FIELD_INVALID": "Bir alan değeri geçersiz",
+      "SERVER_REQUIRED": "Bir sunucu seç",
+      "SERVER_UNAVAILABLE": "Sunucu kullanılamıyor",
+      "GIFT_NOT_ALLOWED": "Bu ürün hediye edilemez",
+      "LOGIN_REQUIRED": "Alıcının hesabı olmalı",
+      "NOT_IN_CURRENCY": "Bu para biriminde fiyatı yok",
+      "SUBSCRIPTION_MUST_BE_ALONE": "Abonelik elle oluşturulamaz",
+      "UNKNOWN": "Bu satırda bir sorun var"
     }
   },
   "alerts": {
