@@ -19,50 +19,6 @@
     "payment-methods": "Search methods..."
   },
   "pages": {
-    "stats": {
-      "title": "Market Statistics",
-      "order-status": {
-        "completed": "Successful",
-        "refunded": "Refunded",
-        "pending": "Pending",
-        "failed": "Failed"
-      },
-      "toast": {
-        "orders-load-error": "An error occurred while loading orders."
-      },
-      "week-label": "Week {week}",
-      "chart": {
-        "weekly-revenue": "Weekly Revenue (₺)",
-        "monthly-revenue": "Monthly Revenue (₺)",
-        "revenue": "Revenue (₺)",
-        "weekly-heading": "Weekly Sales Chart",
-        "monthly-heading": "Monthly Sales Chart",
-        "top-products-heading": "Best-Selling Products",
-        "payment-methods-heading": "Most Used Payment Methods"
-      },
-      "summary": {
-        "weekly-title": "This Week's Sales",
-        "monthly-title": "This Month's Sales",
-        "total-title": "Total Sales",
-        "sales-count": "{count} Sales"
-      },
-      "recent-sales": "Recent Sales",
-      "view": {
-        "table": "Table",
-        "chart": "Chart"
-      },
-      "empty": "No sales found matching your criteria.",
-      "table": {
-        "sale-id": "Sale ID",
-        "player": "Player",
-        "product": "Product",
-        "price": "Price",
-        "payment-method": "Payment Method",
-        "date": "Date"
-      },
-      "copy": "Copy",
-      "view-title": "View"
-    },
     "orders": {
       "title": "Orders",
       "count": "{count} Orders",
@@ -276,6 +232,48 @@
       "section-credits": "Credit Settings",
       "menu-label": "Settings menu",
       "load-error": "Failed to load market settings. Please refresh the page and try again."
+    },
+    "overview": {
+      "title": "Market Overview",
+      "range": {
+        "7d": "7 Days",
+        "30d": "30 Days",
+        "90d": "90 Days",
+        "month": "This Month",
+        "custom": "Custom"
+      },
+      "custom-range": {
+        "title": "Custom Date Range"
+      },
+      "card": {
+        "weekly": "Weekly Revenue (Collected)",
+        "monthly": "Monthly Revenue (Collected)",
+        "total": "Total Revenue (Collected)",
+        "refunds": "Refunds",
+        "subscriptions": "Active Subscriptions"
+      },
+      "recent-orders": "Recent Orders",
+      "charts": "Charts",
+      "view": {
+        "table": "Table",
+        "chart": "Chart"
+      },
+      "table": {
+        "order": "Order",
+        "player": "Player",
+        "products": "Products",
+        "total": "Total",
+        "payment": "Payment",
+        "date": "Date"
+      },
+      "chart": {
+        "weekly": "Weekly Revenue",
+        "monthly": "Monthly Revenue",
+        "top-products": "Best-Selling Products",
+        "payment-methods": "Payment Methods",
+        "currencies": "Revenue by Currency",
+        "week-label": "Week {week}"
+      }
     }
   },
   "common": {
@@ -1008,6 +1006,66 @@
       "WEEK": "{count, plural, one {# week} other {# weeks}}",
       "MONTH": "{count, plural, one {# month} other {# months}}",
       "YEAR": "{count, plural, one {# year} other {# years}}"
+    }
+  },
+  "alerts": {
+    "more": "+{count} more",
+    "actions": {
+      "open-health": "Open Health",
+      "open-settings": "Open Settings",
+      "open-deliveries": "Open Deliveries",
+      "open-orders": "Open Orders",
+      "open-events": "Open Payment Events",
+      "open-payments": "Open Payment Settings",
+      "open-order": "Open Order"
+    },
+    "schema-degraded": {
+      "title": "Store Database Needs Repair",
+      "body": "Some database objects the store needs are missing or damaged:"
+    },
+    "test-mode": {
+      "title": "Test Mode Is On",
+      "body": "Orders are not real and no real money is collected."
+    },
+    "mc-plugin": {
+      "title": "Minecraft Component Needs Attention",
+      "body": "Deliveries cannot run on these servers until the Pano component is ready.",
+      "missing": "does not have the Pano component installed.",
+      "mismatch": "runs component version {have}, version {want} is required.",
+      "offline": "is offline.",
+      "waiting": "{count, plural, one {# delivery is waiting.} other {# deliveries are waiting.}}",
+      "download": "Download"
+    },
+    "mail-host-too-old": {
+      "body": "Pano must be updated before the store can send e-mail."
+    },
+    "mail-disabled": {
+      "title": "E-Mail Is Disabled",
+      "body": "Order e-mails and invoices by mail are not sent."
+    },
+    "store-unavailable": {
+      "title": "Store Is Unavailable",
+      "body": "The store is not ready. Missing or unrepaired database objects:"
+    },
+    "revoke-pending": {
+      "title": "Revoke Needs Attention",
+      "body": "A refunded or charged-back order could not take its goods back. The buyer may hold both the money and the goods."
+    },
+    "review": {
+      "title": "Orders Waiting For Review",
+      "body": "{count, plural, one {# order needs a decision.} other {# orders need a decision.}}"
+    },
+    "failed-deliveries": {
+      "title": "Failed Deliveries",
+      "body": "{count, plural, one {# delivery has failed.} other {# deliveries have failed.}}"
+    },
+    "deferred-events": {
+      "title": "Deferred Payment Events",
+      "body": "{count, plural, one {# payment event is waiting to be matched.} other {# payment events are waiting to be matched.}}"
+    },
+    "provider-unavailable": {
+      "title": "Payment Provider Unavailable",
+      "body": "These payment providers cannot take payments right now: {providers}"
     }
   }
 }

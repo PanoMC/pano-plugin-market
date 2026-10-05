@@ -55,7 +55,8 @@ for (const bundle of ['client', 'server']) {
     const text = fs.readFileSync(file, 'utf8');
     if (text.includes(RUNTIME_MARKER)) copies.push(rel(file));
     if (bundle !== 'client') continue;
-    const re = /(?:\bfrom\s*|\bimport\s*\(\s*|^\s*import\s*)["']([^"'./][^"']*)["']/gm;
+    // `from` only counts as the keyword, not as the closing quote of a "from" string (a prop name).
+    const re = /(?:(?<![\w"'`.])from\s*|\bimport\s*\(\s*|^\s*import\s*)["']([^"'./][^"']*)["']/gm;
     for (const m of text.matchAll(re))
       if (!hostProvided(m[1]))
         report.add(

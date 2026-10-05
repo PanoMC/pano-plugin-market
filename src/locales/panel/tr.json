@@ -19,50 +19,6 @@
     "payment-methods": "Yöntem ara..."
   },
   "pages": {
-    "stats": {
-      "title": "Market İstatistikleri",
-      "order-status": {
-        "completed": "Başarılı",
-        "refunded": "İade",
-        "pending": "Bekliyor",
-        "failed": "Başarısız"
-      },
-      "toast": {
-        "orders-load-error": "Siparişler yüklenirken bir hata oluştu."
-      },
-      "week-label": "{week}. Hafta",
-      "chart": {
-        "weekly-revenue": "Haftalık Gelir (₺)",
-        "monthly-revenue": "Aylık Gelir (₺)",
-        "revenue": "Gelir (₺)",
-        "weekly-heading": "Haftalık Satış Grafiği",
-        "monthly-heading": "Aylık Satış Grafiği",
-        "top-products-heading": "En Çok Satılan Ürünler",
-        "payment-methods-heading": "En Çok Kullanılan Ödeme Yöntemleri"
-      },
-      "summary": {
-        "weekly-title": "Bu Haftanın Satışları",
-        "monthly-title": "Bu Ayın Satışları",
-        "total-title": "Toplam Satış",
-        "sales-count": "{count} Satış"
-      },
-      "recent-sales": "Son Satışlar",
-      "view": {
-        "table": "Tablo",
-        "chart": "Grafik"
-      },
-      "empty": "Aradığınız kriterlere uygun satış bulunamadı.",
-      "table": {
-        "sale-id": "Satış ID",
-        "player": "Oyuncu",
-        "product": "Ürün",
-        "price": "Fiyat",
-        "payment-method": "Ödeme Yöntemi",
-        "date": "Tarih"
-      },
-      "copy": "Kopyala",
-      "view-title": "Görüntüle"
-    },
     "orders": {
       "title": "Siparişler",
       "count": "{count} Sipariş",
@@ -276,6 +232,48 @@
       "section-credits": "Kredi Ayarları",
       "menu-label": "Ayarlar menüsü",
       "load-error": "Market ayarları yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin."
+    },
+    "overview": {
+      "title": "Market Genel Bakış",
+      "range": {
+        "7d": "7 Gün",
+        "30d": "30 Gün",
+        "90d": "90 Gün",
+        "month": "Bu Ay",
+        "custom": "Özel"
+      },
+      "custom-range": {
+        "title": "Özel Tarih Aralığı"
+      },
+      "card": {
+        "weekly": "Haftalık Gelir (Tahsil Edilen)",
+        "monthly": "Aylık Gelir (Tahsil Edilen)",
+        "total": "Toplam Gelir (Tahsil Edilen)",
+        "refunds": "İadeler",
+        "subscriptions": "Aktif Abonelikler"
+      },
+      "recent-orders": "Son Siparişler",
+      "charts": "Grafikler",
+      "view": {
+        "table": "Tablo",
+        "chart": "Grafik"
+      },
+      "table": {
+        "order": "Sipariş",
+        "player": "Oyuncu",
+        "products": "Ürünler",
+        "total": "Toplam",
+        "payment": "Ödeme",
+        "date": "Tarih"
+      },
+      "chart": {
+        "weekly": "Haftalık Gelir",
+        "monthly": "Aylık Gelir",
+        "top-products": "En Çok Satan Ürünler",
+        "payment-methods": "Ödeme Yöntemleri",
+        "currencies": "Para Birimine Göre Gelir",
+        "week-label": "{week}. Hafta"
+      }
     }
   },
   "common": {
@@ -1008,6 +1006,66 @@
       "WEEK": "{count, plural, other {# hafta}}",
       "MONTH": "{count, plural, other {# ay}}",
       "YEAR": "{count, plural, other {# yıl}}"
+    }
+  },
+  "alerts": {
+    "more": "+{count} tane daha",
+    "actions": {
+      "open-health": "Sağlık Durumunu Aç",
+      "open-settings": "Ayarları Aç",
+      "open-deliveries": "Teslimatları Aç",
+      "open-orders": "Siparişleri Aç",
+      "open-events": "Ödeme Olaylarını Aç",
+      "open-payments": "Ödeme Ayarlarını Aç",
+      "open-order": "Siparişi Aç"
+    },
+    "schema-degraded": {
+      "title": "Mağaza Veritabanı Onarım Gerektiriyor",
+      "body": "Mağazanın ihtiyaç duyduğu bazı veritabanı nesneleri eksik veya bozuk:"
+    },
+    "test-mode": {
+      "title": "Test Modu Açık",
+      "body": "Siparişler gerçek değildir ve gerçek para tahsil edilmez."
+    },
+    "mc-plugin": {
+      "title": "Minecraft Bileşeni Dikkat Gerektiriyor",
+      "body": "Pano bileşeni hazır olana kadar bu sunucularda teslimat çalışamaz.",
+      "missing": "sunucusunda Pano bileşeni kurulu değil.",
+      "mismatch": "sunucusunda bileşen sürümü {have}, gereken sürüm {want}.",
+      "offline": "sunucusu çevrimdışı.",
+      "waiting": "{count, plural, one {# teslimat bekliyor.} other {# teslimat bekliyor.}}",
+      "download": "İndir"
+    },
+    "mail-host-too-old": {
+      "body": "Mağazanın e-posta gönderebilmesi için Pano güncellenmelidir."
+    },
+    "mail-disabled": {
+      "title": "E-Posta Devre Dışı",
+      "body": "Sipariş e-postaları ve e-posta ile faturalar gönderilmiyor."
+    },
+    "store-unavailable": {
+      "title": "Mağaza Kullanılamıyor",
+      "body": "Mağaza hazır değil. Eksik veya onarılmamış veritabanı nesneleri:"
+    },
+    "revoke-pending": {
+      "title": "Geri Alma Dikkat Gerektiriyor",
+      "body": "İade edilen veya ters ibraz edilen bir siparişin ürünleri geri alınamadı. Alıcı hem paraya hem ürüne sahip olabilir."
+    },
+    "review": {
+      "title": "İnceleme Bekleyen Siparişler",
+      "body": "{count, plural, one {# sipariş karar bekliyor.} other {# sipariş karar bekliyor.}}"
+    },
+    "failed-deliveries": {
+      "title": "Başarısız Teslimatlar",
+      "body": "{count, plural, one {# teslimat başarısız oldu.} other {# teslimat başarısız oldu.}}"
+    },
+    "deferred-events": {
+      "title": "Ertelenen Ödeme Olayları",
+      "body": "{count, plural, one {# ödeme olayı eşleştirilmeyi bekliyor.} other {# ödeme olayı eşleştirilmeyi bekliyor.}}"
+    },
+    "provider-unavailable": {
+      "title": "Ödeme Sağlayıcısı Kullanılamıyor",
+      "body": "Bu ödeme sağlayıcıları şu anda ödeme alamıyor: {providers}"
     }
   }
 }
