@@ -7,6 +7,7 @@ import com.panomc.plugins.market.db.model.MarketProductField
 import com.panomc.plugins.market.db.model.MarketProductPrice
 import com.panomc.plugins.market.db.model.MarketProductVariant
 import com.panomc.plugins.market.service.CatalogService
+import com.panomc.plugins.market.util.HtmlSanitizer
 import com.panomc.plugins.market.util.MoneyUtil
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -107,7 +108,7 @@ object ProductJson {
             .put("id", p.id)
             .put("slug", p.slug)
             .put("name", p.name)
-            .put("description", p.description)
+            .put("description", HtmlSanitizer.sanitizeOrNull(p.description))
             .put("shortDescription", p.shortDescription)
             .put("categoryId", p.categoryId)
             .put("price", money(p.price))

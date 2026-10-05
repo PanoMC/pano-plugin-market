@@ -88,6 +88,23 @@ class ProductRequestParserTest {
     }
 
     @Test
+    fun `the description is sanitised before it is stored and the length limit is judged on the raw text`() {
+        val dirty = parse("description" to "<p onclick=\"x()\">Hi</p><script>alert(1)</script><img src=x onerror=alert(1)>")
+        val stored = dirty.scalars["description"] as String
+
+        assertFalse(stored.contains("<script", ignoreCase = true), stored)
+        assertFalse(stored.contains("onerror", ignoreCase = true), stored)
+        assertFalse(stored.contains("onclick", ignoreCase = true), stored)
+        assertTrue(stored.contains("<p>Hi</p>"), stored)
+        assertTrue(dirty.parseErrors.isEmpty())
+
+        // 100 000 raw characters whose sanitised form is shorter (a script block is dropped) are still too long
+        val rawTooLong = "<script>" + "x".repeat(100_000) + "</script>"
+        assertEquals("TOO_LONG", parse("description" to rawTooLong).parseErrors["description"])
+        assertTrue(parse("description" to "x".repeat(100_000)).parseErrors.isEmpty())
+    }
+
+    @Test
     fun `blank and null clear a nullable column and fall back to the default of a required one`() {
         val input = parse(
             "description" to "", "shortDescription" to null, "sku" to " ", "categoryId" to "-1", "status" to "", "icon" to "",

@@ -94,7 +94,9 @@ class CatalogService(
     private suspend fun save(conn: SqlClient, id: Long?, input: ProductInput): SaveResult {
         val now = clock.now()
         val create = id == null
-        val base = if (id == null) null else products.getById(id, conn)?.takeIf { it.deletedAt == null } ?: throw NotFound()
+        // The row lock is the first statement: saves, deletes and stock changes of one product serialise, so a partial
+        // update is always laid over the latest committed row and never over a stale read.
+        val base = if (id == null) null else products.getByIdForUpdate(id, conn)?.takeIf { it.deletedAt == null } ?: throw NotFound()
 
         val baseCurrency = config().currency.name
         val errors = linkedMapOf<String, String>()
@@ -162,7 +164,9 @@ class CatalogService(
             }
         } else {
             try {
-                products.update(toStore, conn)
+                if (!products.update(toStore, conn)) throw NotFound()
+            } catch (e: NotFound) {
+                throw e
             } catch (e: Exception) {
                 if (e.isDuplicateKey()) throw SlugAlreadyExists()
                 throw e
@@ -487,7 +491,7 @@ class CatalogService(
      * working. An unreferenced product is deleted with its variants, prices, fields, bundle rows and provider meta.
      */
     suspend fun delete(id: Long): DeleteResult = db.tx { conn ->
-        val product = products.getById(id, conn)?.takeIf { it.deletedAt == null } ?: throw NotFound()
+        val product = products.getByIdForUpdate(id, conn)?.takeIf { it.deletedAt == null } ?: throw NotFound()
         val now = clock.now()
 
         if (products.isReferenced(id, conn)) {
@@ -520,7 +524,7 @@ class CatalogService(
      * `value` / `variantId` / `mode`. Returns the stock after the change.
      */
     suspend fun changeStock(productId: Long, variantId: Long?, mode: StockMode, value: Int?): StockResult = db.tx { conn ->
-        val product = products.getById(productId, conn)?.takeIf { it.deletedAt == null } ?: throw NotFound()
+        val product = products.getByIdForUpdate(productId, conn)?.takeIf { it.deletedAt == null } ?: throw NotFound()
         val errors = linkedMapOf<String, String>()
 
         var variant: MarketProductVariant? = null

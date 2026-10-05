@@ -835,6 +835,124 @@ class CatalogServiceIT : MarketDaoITBase() {
         assertTrue(p.name.startsWith("Updated "))
     }
 
+    // ----- description sanitising (11 section 6.1) ---------------------------------------------------------------------
+
+    @Test
+    fun `a description is stored sanitised on create and on update, and an over long raw text is refused`(): Unit = runBlocking {
+        val dirty = "<p onclick=\"x()\">Hi</p><script>alert(1)</script><img src=x onerror=alert(1)>"
+        val saved = create("description" to dirty)
+
+        fun assertClean(text: String?) {
+            assertNotNull(text)
+            assertFalse(text!!.contains("<script", ignoreCase = true), text)
+            assertFalse(text.contains("onerror", ignoreCase = true), text)
+            assertFalse(text.contains("onclick", ignoreCase = true), text)
+            assertTrue(text.contains("<p>Hi</p>"), text)
+        }
+
+        assertClean(w.products.getById(saved.id, pool)!!.description)
+        assertClean(service.get(saved.id).product.description)
+
+        service.update(saved.id, input("description" to "<b>ok</b>"))
+        assertEquals("<b>ok</b>", service.get(saved.id).product.description)
+
+        service.update(saved.id, input("description" to dirty))
+        assertClean(w.products.getById(saved.id, pool)!!.description)
+
+        val tooLong = "<script>" + "x".repeat(100_000) + "</script>"
+        assertEquals("TOO_LONG", fieldErrors { service.update(saved.id, input("description" to tooLong)) }["description"])
+        assertEquals("TOO_LONG", fieldErrors { create("description" to tooLong) }["description"])
+        assertClean(w.products.getById(saved.id, pool)!!.description)
+    }
+
+    // ----- concurrent save and delete ----------------------------------------------------------------------------------
+
+    @Test
+    fun `an update racing a delete of a referenced product leaves a cleanly archived row, never a live slug on a deleted one`(): Unit = runBlocking {
+        repeat(Race.rounds) { round ->
+            val slug = "race-ref-$round"
+            val saved = create("slug" to slug, "variants" to """[{"name":"A"}]""")
+            Fixtures.insertRaw(pool, "market_order_item", mapOf("productId" to saved.id))
+
+            val results = Race.run(10) { i ->
+                if (i == 4) service.delete(saved.id) else service.update(saved.id, input("name" to "Racer $i", "slug" to slug, "status" to "ACTIVE"))
+            }
+
+            results.filter { it.isFailure }.forEach { assertTrue(it.exceptionOrNull() is NotFound, "round $round: ${it.exceptionOrNull()}") }
+            assertTrue(results[4].isSuccess, "round $round: ${results[4].exceptionOrNull()}")
+
+            val row = w.products.getById(saved.id, pool)!!
+            assertNotNull(row.deletedAt, "round $round")
+            assertEquals(MarketStatus.ARCHIVED, row.status, "round $round")
+            assertEquals("$slug--d${saved.id}", row.slug, "round $round")
+            assertNull(w.products.getBySlug(slug, pool), "round $round: the live slug must be free")
+            assertEquals(slug, create("slug" to slug).slug)
+        }
+    }
+
+    @Test
+    fun `an update racing a delete of an unreferenced product leaves no row and no orphaned set part`(): Unit = runBlocking {
+        repeat(Race.rounds) { round ->
+            val saved = create(
+                "variants" to """[{"name":"A"}]""", "fields" to """[{"fieldKey":"f","label":"F"}]""",
+                "prices" to """[{"currency":"USD","price":"1"}]""", "providerMeta" to """{"stripe":{}}"""
+            )
+
+            val results = Race.run(10) { i ->
+                if (i == 4) {
+                    service.delete(saved.id)
+                } else {
+                    service.update(
+                        saved.id,
+                        input(
+                            "name" to "Racer $i", "variants" to """[{"name":"B$i"}]""", "fields" to """[{"fieldKey":"g","label":"G"}]""",
+                            "prices" to """[{"currency":"USD","price":"2"}]""", "providerMeta" to """{"stripe":{"a":1}}"""
+                        )
+                    )
+                }
+            }
+
+            results.filter { it.isFailure }.forEach { assertTrue(it.exceptionOrNull() is NotFound, "round $round: ${it.exceptionOrNull()}") }
+            assertTrue(results[4].isSuccess, "round $round: ${results[4].exceptionOrNull()}")
+
+            assertNull(w.products.getById(saved.id, pool), "round $round")
+            listOf("market_product_variant", "market_product_field", "market_product_price", "market_product_provider_meta")
+                .forEach { assertEquals(0L, count(it, "`productId` = ?", saved.id), "round $round: $it") }
+        }
+    }
+
+    @Test
+    fun `an update of a product whose row was deleted underneath is NOT_FOUND and writes nothing`(): Unit = runBlocking {
+        val saved = create()
+        service.delete(saved.id)
+
+        assertThrows(NotFound::class.java) { runBlocking { service.update(saved.id, input("name" to "Late")) } }
+        assertEquals(0L, count("market_product_variant", "`productId` = ?", saved.id))
+    }
+
+    @Test
+    fun `two concurrent partial updates of different columns both survive`(): Unit = runBlocking {
+        repeat(Race.rounds) { round ->
+            val saved = create("name" to "Initial $round", "slug" to "partial-race-$round", "priority" to 0, "price" to "5")
+
+            val results = Race.run(20) { i ->
+                runCatching {
+                    when (i % 3) {
+                        0 -> service.update(saved.id, input("name" to "Renamed $i"))
+                        1 -> service.update(saved.id, input("priority" to i + 1))
+                        else -> service.update(saved.id, input("price" to "${10 + i}"))
+                    }
+                }
+            }
+
+            assertTrue(results.all { it.getOrThrow().isSuccess }, "round $round: $results")
+            val p = w.products.getById(saved.id, pool)!!
+            assertTrue(p.name.startsWith("Renamed "), "round $round: the rename was reverted: ${p.name}")
+            assertTrue(p.priority > 0, "round $round: the priority change was reverted")
+            assertTrue(p.price != 500L, "round $round: the price change was reverted")
+        }
+    }
+
     // ----- list -------------------------------------------------------------------------------------------------------
 
     @Test

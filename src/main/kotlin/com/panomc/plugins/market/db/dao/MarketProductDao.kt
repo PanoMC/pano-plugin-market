@@ -12,7 +12,8 @@ abstract class MarketProductDao : MarketDao<MarketProduct>(MarketProduct::class.
      * Writes every column except the counters `stock` and `soldCount`, the soft-delete marker `deletedAt`, `createdAt`
      * and `id` (00 section 8.3: a stale read can never overwrite a counter).
      */
-    abstract suspend fun update(product: MarketProduct, sqlClient: SqlClient)
+    /** Writes the generic columns of a live (not soft deleted) product; `false` when no such row matched. */
+    abstract suspend fun update(product: MarketProduct, sqlClient: SqlClient): Boolean
 
     /** Sets `stock` explicitly (`null` = unlimited): the manual adjustment path; `update` no longer writes it. */
     abstract suspend fun setStock(id: Long, stock: Int?, sqlClient: SqlClient)
@@ -54,6 +55,12 @@ abstract class MarketProductDao : MarketDao<MarketProduct>(MarketProduct::class.
     abstract suspend fun deleteById(id: Long, sqlClient: SqlClient)
 
     abstract suspend fun getById(id: Long, sqlClient: SqlClient): MarketProduct?
+
+    /**
+     * `SELECT ... WHERE id = ? FOR UPDATE`: takes the row lock so a save, a delete and a stock change of one product
+     * serialise (call it first inside the transaction).
+     */
+    abstract suspend fun getByIdForUpdate(id: Long, sqlClient: SqlClient): MarketProduct?
 
     abstract suspend fun getBySlug(slug: String, sqlClient: SqlClient): MarketProduct?
 

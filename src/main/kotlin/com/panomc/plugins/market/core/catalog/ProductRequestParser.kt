@@ -4,6 +4,7 @@ import com.panomc.plugins.market.db.model.BillingMode
 import com.panomc.plugins.market.db.model.PeriodUnit
 import com.panomc.plugins.market.db.model.ProductFieldType
 import com.panomc.plugins.market.db.model.ProductKind
+import com.panomc.plugins.market.util.HtmlSanitizer
 import com.panomc.plugins.market.util.MarketStatus
 import com.panomc.plugins.market.util.ProductDurationType
 import io.vertx.core.json.JsonArray
@@ -37,7 +38,17 @@ object ProductRequestParser {
 
         if (r.has("name")) s["name"] = r.string("name") ?: ""
         if (r.has("slug")) s["slug"] = r.string("slug")
-        if (r.has("description")) s["description"] = r.string("description", trim = false)
+        if (r.has("description")) {
+            // 11 section 6.1: the 100 000 character limit is judged on the raw text, the stored value is the sanitised one.
+            val raw = r.string("description", trim = false)
+
+            if (raw != null && raw.length > ProductRules.MAX_DESCRIPTION) {
+                errors["description"] = "TOO_LONG"
+                s["description"] = null
+            } else {
+                s["description"] = HtmlSanitizer.sanitizeOrNull(raw)
+            }
+        }
         if (r.has("shortDescription")) s["shortDescription"] = r.string("shortDescription")
         if (r.has("categoryId")) s["categoryId"] = r.long("categoryId")?.takeIf { it != -1L }
         if (r.has("price")) s["price"] = r.money("price") ?: 0L

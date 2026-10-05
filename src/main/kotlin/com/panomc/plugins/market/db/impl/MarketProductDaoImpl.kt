@@ -106,11 +106,11 @@ class MarketProductDaoImpl : MarketProductDao() {
 
     // The counters (stock, soldCount) and the soft-delete marker are not written by the generic update (00 section 8.3):
     // they change only through guarded atomic statements, never from a stale read.
-    override suspend fun update(product: MarketProduct, sqlClient: SqlClient) {
+    override suspend fun update(product: MarketProduct, sqlClient: SqlClient): Boolean {
         val query =
-            "UPDATE `${prefix() + tableName}` SET `slug` = ?, `name` = ?, `description` = ?, `categoryId` = ?, `price` = ?, `creditPrice` = ?, `requiredProducts` = ?, `requireOnlyOne` = ?, `requiredPermission` = ?, `status` = ?, `featured` = ?, `durationType` = ?, `durationStart` = ?, `durationExpiry` = ?, `priority` = ?, `icon` = ?, `imageFileName` = ?, `actions` = ?, `kind` = ?, `shortDescription` = ?, `compareAtPrice` = ?, `vatPercent` = ?, `physical` = ?, `sku` = ?, `weightGrams` = ?, `lengthMm` = ?, `widthMm` = ?, `heightMm` = ?, `hsCode` = ?, `originCountry` = ?, `billingMode` = ?, `periodUnit` = ?, `periodCount` = ?, `subscriptionMaxCycles` = ?, `limitPerPlayer` = ?, `maxQuantityPerOrder` = ?, `cooldownSeconds` = ?, `tierRank` = ?, `creditAmount` = ?, `allowGift` = ?, `serverChoices` = ?, `hasVariants` = ?, `variantOptions` = ?, `metaTitle` = ?, `metaDescription` = ?, `updatedAt` = ? WHERE `id` = ?"
+            "UPDATE `${prefix() + tableName}` SET `slug` = ?, `name` = ?, `description` = ?, `categoryId` = ?, `price` = ?, `creditPrice` = ?, `requiredProducts` = ?, `requireOnlyOne` = ?, `requiredPermission` = ?, `status` = ?, `featured` = ?, `durationType` = ?, `durationStart` = ?, `durationExpiry` = ?, `priority` = ?, `icon` = ?, `imageFileName` = ?, `actions` = ?, `kind` = ?, `shortDescription` = ?, `compareAtPrice` = ?, `vatPercent` = ?, `physical` = ?, `sku` = ?, `weightGrams` = ?, `lengthMm` = ?, `widthMm` = ?, `heightMm` = ?, `hsCode` = ?, `originCountry` = ?, `billingMode` = ?, `periodUnit` = ?, `periodCount` = ?, `subscriptionMaxCycles` = ?, `limitPerPlayer` = ?, `maxQuantityPerOrder` = ?, `cooldownSeconds` = ?, `tierRank` = ?, `creditAmount` = ?, `allowGift` = ?, `serverChoices` = ?, `hasVariants` = ?, `variantOptions` = ?, `metaTitle` = ?, `metaDescription` = ?, `updatedAt` = ? WHERE `id` = ? AND `deletedAt` IS NULL"
 
-        sqlClient
+        val rows = sqlClient
             .preparedQuery(query)
             .execute(
                 Tuple.tuple()
@@ -137,6 +137,8 @@ class MarketProductDaoImpl : MarketProductDao() {
                     .addValue(product.id)
             )
             .coAwait()
+
+        return rows.rowCount() > 0
     }
 
     override suspend fun adjustStock(id: Long, delta: Int, sqlClient: SqlClient): Boolean {
@@ -251,6 +253,17 @@ class MarketProductDaoImpl : MarketProductDao() {
 
     override suspend fun getById(id: Long, sqlClient: SqlClient): MarketProduct? {
         val query = "SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `id` = ?"
+
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery(query)
+            .execute(Tuple.of(id))
+            .coAwait()
+
+        return rows.toEntities().getOrNull(0)
+    }
+
+    override suspend fun getByIdForUpdate(id: Long, sqlClient: SqlClient): MarketProduct? {
+        val query = "SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `id` = ? FOR UPDATE"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
