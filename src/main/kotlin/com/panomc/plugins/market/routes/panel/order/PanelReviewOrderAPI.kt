@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.order
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
@@ -57,7 +58,7 @@ internal fun orderReviewService(plugin: MarketPlugin): OrderReviewService {
 }
 
 private fun buildOrderReviewService(plugin: MarketPlugin): OrderReviewService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager = { context.getBean(DatabaseManager::class.java) }
     val orderDao = context.getBean(MarketOrderDao::class.java)
     val locks = Locks(orderDao, context.getBean(MarketOrderItemDao::class.java), context.getBean(MarketRedemptionDao::class.java), context.getBean(MarketCreditAccountDao::class.java))
@@ -74,7 +75,7 @@ private fun buildOrderReviewService(plugin: MarketPlugin): OrderReviewService {
 
 /** The order of a panel path `:id`, or 404; a malformed id is a 400. */
 internal suspend fun panelOrder(plugin: MarketPlugin, context: RoutingContext) =
-    plugin.applicationContext.getBean(MarketOrderDao::class.java)
+    plugin.beans.getBean(MarketOrderDao::class.java)
         .getById(parseId(context.pathParam("id")), plugin.applicationContext.getBean(DatabaseManager::class.java).getSqlClient()) ?: throw NotFound()
 
 /** The activity log row of an order decision, written by the acting panel user. */

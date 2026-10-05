@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.settings.payment
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.config.ConfigManager
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
@@ -99,7 +100,7 @@ internal fun providerLookup(plugin: MarketPlugin): ProviderLookup {
     return synchronized(PaymentMethodServiceHolder) {
         cachedLookup?.takeIf { it.first === plugin }?.second
             ?: ProviderRegistry.forPlatform(
-                plugin.wrapper.pluginManager,
+                plugin.applicationContext.getBean(com.panomc.platform.PluginManager::class.java),
                 builtInPayment = { BUILT_IN_PAYMENT_PROVIDERS },
                 builtInShipping = { com.panomc.plugins.market.routes.panel.shipping.BUILT_IN_SHIPPING_PROVIDERS }
             )
@@ -133,7 +134,7 @@ internal fun paymentWiring(plugin: MarketPlugin): PaymentWiring {
 }
 
 private fun buildWiring(plugin: MarketPlugin): PaymentWiring {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager by lazy { context.getBean(DatabaseManager::class.java) }
     val db = MarketDb({ databaseManager.getSqlClient() as Pool }, SystemClock)
     val cipher = SecretCipher.load(plugin.pluginDataFolder.toPath())
@@ -159,7 +160,7 @@ private fun buildWiring(plugin: MarketPlugin): PaymentWiring {
 }
 
 private fun buildService(plugin: MarketPlugin): PaymentMethodService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager by lazy { context.getBean(DatabaseManager::class.java) }
     val db = MarketDb({ databaseManager.getSqlClient() as Pool }, SystemClock)
     val wiring = paymentWiring(plugin)

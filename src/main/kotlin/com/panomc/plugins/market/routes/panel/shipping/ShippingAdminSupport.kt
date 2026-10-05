@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.shipping
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.config.ConfigManager
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
@@ -92,7 +93,7 @@ internal fun shippingService(plugin: MarketPlugin): ShippingService {
 private class Wiring(val db: MarketDb, val cipher: SecretCipher, val contexts: ShippingContexts, val site: () -> SiteInfo)
 
 private fun wiringOf(plugin: MarketPlugin): Wiring {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager by lazy { context.getBean(DatabaseManager::class.java) }
     val db = MarketDb({ databaseManager.getSqlClient() as Pool }, SystemClock)
     val cipher = SecretCipher.load(plugin.pluginDataFolder.toPath())
@@ -118,7 +119,7 @@ private fun wiringOf(plugin: MarketPlugin): Wiring {
 }
 
 private fun buildQuoter(plugin: MarketPlugin): ShippingService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val wiring = wiringOf(plugin)
 
     return ShippingService(
@@ -137,7 +138,7 @@ private fun buildQuoter(plugin: MarketPlugin): ShippingService {
 }
 
 private fun buildService(plugin: MarketPlugin): ShippingAdminService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val wiring = wiringOf(plugin)
 
     return ShippingAdminService(

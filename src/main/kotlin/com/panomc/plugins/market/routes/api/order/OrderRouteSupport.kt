@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.routes.api.order
 
+import com.panomc.plugins.market.core.abuse.AbuseLimits
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.hosted.HostedEnvConfig
@@ -87,10 +89,10 @@ internal fun webhookService(plugin: MarketPlugin): WebhookService {
 }
 
 private fun buildWebhookService(plugin: MarketPlugin): WebhookService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager = { context.getBean(DatabaseManager::class.java) }
     val wiring = paymentWiring(plugin)
-    val version = plugin.wrapper.descriptor.version
+    val version = plugin.applicationContext.getBean(com.panomc.platform.PluginManager::class.java).getPlugin(plugin.pluginId).descriptor.version
     val sender = WebhookSender(
         OutboundHttp.create(context.getBean(Vertx::class.java), version), wiring.cipher, SystemClock, version,
         { TargetPolicy.effectiveAllowPrivate(currentConfig(plugin).allowPrivateWebhookTargets, HostedEnvConfig.current.isHosted) }
@@ -134,7 +136,7 @@ internal fun orderService(plugin: MarketPlugin): OrderService {
 }
 
 private fun buildOrderService(plugin: MarketPlugin): OrderService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val clock = SystemClock
     val orderDao = context.getBean(MarketOrderDao::class.java)
     val redemptionDao = context.getBean(MarketRedemptionDao::class.java)
@@ -176,7 +178,7 @@ internal fun paymentService(plugin: MarketPlugin): PaymentService {
 }
 
 private fun buildPaymentService(plugin: MarketPlugin): PaymentService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager = { context.getBean(DatabaseManager::class.java) }
     val orderDao = context.getBean(MarketOrderDao::class.java)
     val locks = Locks(orderDao, context.getBean(MarketOrderItemDao::class.java), context.getBean(MarketRedemptionDao::class.java), context.getBean(MarketCreditAccountDao::class.java))
@@ -200,7 +202,7 @@ internal fun orderAccess(plugin: MarketPlugin): OrderAccess {
 
     return synchronized(OrderWiringHolder) {
         cachedAccess?.takeIf { it.first === plugin }?.second
-            ?: OrderAccess(plugin.applicationContext.getBean(MarketOrderDao::class.java), SystemClock).also { cachedAccess = plugin to it }
+            ?: OrderAccess(plugin.beans.getBean(MarketOrderDao::class.java), SystemClock).also { cachedAccess = plugin to it }
     }
 }
 
@@ -239,7 +241,7 @@ internal class OrderMutationLimiter(private val perMinute: () -> Int) {
         if (n <= 0) return
 
         val limiters = current?.takeIf { it.perMinute == n }
-            ?: Pair(n, RateLimiter(n, 60_000L / n), RateLimiter(n, 60_000L / n)).also { current = it }
+            ?: Pair(n, RateLimiter(n, AbuseLimits.refillMs(n)!!), RateLimiter(n, AbuseLimits.refillMs(n)!!)).also { current = it }
         val bucket = IpRange.bucketKey(clientIp)
         val retry = maxOf(1L, Math.ceil(60.0 / n).toLong())
 

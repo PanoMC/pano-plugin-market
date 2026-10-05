@@ -58,7 +58,7 @@ object AbuseLimits {
     const val BLOCK_EXPIRED_RETENTION_DAYS = 30
 
     /** L1: refill one token per `60000 / perMinute` ms; 0 disables the limiter (null). */
-    fun refillMs(perMinute: Int): Long? = if (perMinute <= 0) null else 60_000L / perMinute
+    fun refillMs(perMinute: Int): Long? = if (perMinute <= 0) null else maxOf(1L, 60_000L / perMinute)
 
     /** L4: units one unpaid offline-method order may hold of a stock-limited product. */
     fun heldUnitsCap(maxQuantityPerOrder: Int?): Int =

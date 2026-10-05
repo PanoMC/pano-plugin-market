@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.api.checkout
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.config.ConfigManager
 import com.panomc.platform.db.DatabaseManager
@@ -32,7 +33,7 @@ class GetCheckoutConfigAPI(private val plugin: MarketPlugin) : MarketApi() {
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 
     private val service by lazy {
-        val context = plugin.applicationContext
+        val context = plugin.beans
 
         CheckoutConfigService(
             config = { currentConfig(plugin) },
@@ -57,7 +58,7 @@ class GetCheckoutConfigAPI(private val plugin: MarketPlugin) : MarketApi() {
 
 /** The legal text service on the plugin's beans (stateless: a route keeps one). */
 internal fun legalTextService(plugin: MarketPlugin): LegalTextService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager by lazy { context.getBean(DatabaseManager::class.java) }
 
     return LegalTextService(

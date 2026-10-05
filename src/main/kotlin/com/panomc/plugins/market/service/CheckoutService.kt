@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.core.abuse.AbuseLimits
 import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NotLoggedIn
 import com.panomc.platform.model.Error as PanoError
@@ -1242,7 +1243,7 @@ class CheckoutService(
         if (perMinute <= 0) return null
 
         return limiters?.takeIf { it.perMinute == perMinute }
-            ?: Limiters(perMinute, RateLimiter(perMinute, 60_000L / perMinute), RateLimiter(perMinute, 60_000L / perMinute)).also { limiters = it }
+            ?: Limiters(perMinute, RateLimiter(perMinute, AbuseLimits.refillMs(perMinute)!!), RateLimiter(perMinute, AbuseLimits.refillMs(perMinute)!!)).also { limiters = it }
     }
 
     private fun limitIp(caller: QuoteCaller, c: MarketConfig) {

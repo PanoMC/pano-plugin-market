@@ -408,7 +408,9 @@ post_install_restart() {
   [ -z "${MARKET_E2E_NO_POST_INSTALL_RESTART:-}" ] || return 0
   [ -f "$INSTANCE/plugins/$(basename "$PLUGIN_JAR")" ] || return 0 # install-legacy installs without the market
   local i
-  for ((i = 0; i < 20; i++)); do market_marker_ok && return 0; sleep 1; done
+  # The marker alone is not proof: a plugin that finished its setup hook after the wizard logs "Started!" with its beans missing
+  # (MarketBootstrap "No qualifying bean ...", /api/market/store 500), so the store route must answer too (MK-080).
+  for ((i = 0; i < 20; i++)); do market_marker_ok && store_ok && return 0; sleep 1; done
   say "note: the market did not initialise in the install JVM; restarting it once (post-install restart, see evidence/MK-012.md)"
   stop_recorded || abort_boot 19 "the install JVM did not exit for the post-install restart"
   mv -f "$INSTANCE/pano.log" "$INSTANCE/pano-install.log" 2>/dev/null

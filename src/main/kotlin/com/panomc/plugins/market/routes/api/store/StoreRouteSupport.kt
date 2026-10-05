@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.api.store
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
@@ -23,7 +24,7 @@ import io.vertx.ext.web.RoutingContext
 
 /** The read service of the store routes on the plugin's beans (stateless: a route keeps one). */
 internal fun storeQueryService(plugin: MarketPlugin): StoreQueryService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager by lazy { context.getBean(DatabaseManager::class.java) }
 
     return StoreQueryService(

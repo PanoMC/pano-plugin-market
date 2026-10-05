@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.settings.currency
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
@@ -29,7 +30,7 @@ import io.vertx.sqlclient.Pool
 
 /** The currency rate service of the settings routes on the plugin's beans (stateless: a route keeps one). */
 internal fun currencyRateService(plugin: MarketPlugin): CurrencyRateService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager by lazy { context.getBean(DatabaseManager::class.java) }
     val exchangeRates by lazy { plugin.pluginBeanContext.getBean(ExchangeRateService::class.java) }
 

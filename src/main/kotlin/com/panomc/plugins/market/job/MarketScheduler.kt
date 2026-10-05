@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.job
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.time.Clock
@@ -213,7 +214,7 @@ internal object MarketJobs {
     fun scheduler(plugin: MarketPlugin): MarketScheduler = MarketScheduler(SystemClock, jobs(plugin), enabled = { MarketRuntime.isReady })
 
     fun jobs(plugin: MarketPlugin): List<MarketScheduler.Job> {
-        val context = plugin.applicationContext
+        val context = plugin.beans
         val databaseManager = { context.getBean(DatabaseManager::class.java) }
         val sqlClient: suspend () -> io.vertx.sqlclient.SqlClient = { databaseManager().getSqlClient() }
         val orderDao = context.getBean(MarketOrderDao::class.java)

@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.product
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.error.BadRequest
 import com.panomc.plugins.market.MarketPlugin
@@ -27,7 +28,7 @@ import java.io.File
 
 /** The service of the product routes, built on the plugin's beans (stateless: a route keeps one). */
 internal fun catalogService(plugin: MarketPlugin): CatalogService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager by lazy { context.getBean(DatabaseManager::class.java) }
 
     return CatalogService(
