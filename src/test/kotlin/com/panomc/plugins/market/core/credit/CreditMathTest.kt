@@ -127,6 +127,8 @@ class CreditMathTest {
         assertEquals(1_000L, CreditMath.mixedValue(33_333, 3, one, "TRY"))
         // the most credits a value can pay: floor
         assertEquals(33_333L, CreditMath.maxCredits(1_000, 3, one))
+        // 66666.67: the floor is 66666, never 66667 (half up would buy 0.01 credit more than the value is worth)
+        assertEquals(66_666L, CreditMath.maxCredits(2_000, 3, one))
         // shipping: ceiling, and nothing for no shipping
         assertEquals(33_334L, CreditMath.shippingCredits(1_000, 3, one))
         assertEquals(0L, CreditMath.shippingCredits(0, 3, one))

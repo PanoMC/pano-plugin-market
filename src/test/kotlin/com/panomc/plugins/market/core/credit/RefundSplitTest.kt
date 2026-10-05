@@ -285,6 +285,13 @@ class RefundSplitTest {
         val mixed = mixedOrder(rT = 2_500, rG = 1_500, rCA = 1_000, pT = 2_500, pG = 1_500, pCA = 1_000)
         assertEquals(Split(5_000, 3_000, 2_000, 2_000), split(mixed))
         assertEquals(5_000L, invalid(RefundSplit.compute(mixed, Request(amount = 5_001), partial)).limits.max)
+        // the gateway part in flight is not available again: 60.00 - 15.00 refunded - 15.00 in flight = 30.00 left
+        val g = invalid(RefundSplit.compute(mixed, Request(Mode.OVERRIDE, gatewayAmount = 3_500), partial))
+        assertEquals(Problem.GATEWAY_PART_OUT_OF_RANGE, g.problem)
+        assertEquals(3_000L, g.limits.maxGateway)
+        assertEquals(Split(3_000, 3_000, 0, 0), split(mixed, Request(Mode.OVERRIDE, gatewayAmount = 3_000)))
+        // and the credits in flight are not available again either: 40.00 - 10.00 - 10.00 = 20.00
+        assertEquals(Problem.CREDIT_PART_OUT_OF_RANGE, invalid(RefundSplit.compute(mixed, Request(Mode.OVERRIDE, creditAmount = 2_500), partial)).problem)
     }
 
     @Test
