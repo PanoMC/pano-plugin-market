@@ -11,7 +11,11 @@ import com.panomc.plugins.market.db.tx.Locks
 import com.panomc.plugins.market.error.InvalidCoupon
 import com.panomc.plugins.market.error.InvalidCreatorCode
 import com.panomc.plugins.market.error.InvalidGiftCode
+import com.panomc.plugins.market.util.GiftType
+import io.vertx.core.json.JsonArray
 import io.vertx.kotlin.coroutines.coAwait
+import io.vertx.sqlclient.Row
+import io.vertx.sqlclient.SqlClient
 import io.vertx.sqlclient.SqlConnection
 import io.vertx.sqlclient.Tuple
 
@@ -40,6 +44,57 @@ class CustomerKeys(
     val recipientKey: String = "",
     val recipientKeys: List<String> = listOfNotNull(recipientKey.ifEmpty { null })
 )
+
+/**
+ * `market_gift` as a redemption reads it (01 section 3.4). [productIds] is the pool of a `RANDOM` gift (the single `productId` of a
+ * `PRODUCT` gift is [productId]). [usedCount] is the counter of the row, never written by anything but the guarded statements.
+ */
+class GiftRow(
+    val id: Long,
+    val code: String,
+    val name: String,
+    val type: GiftType,
+    val productId: Long?,
+    val productIds: List<Long>,
+    /** Credits x 100 of a `CREDIT` gift. */
+    val creditAmount: Long?,
+    val active: Boolean,
+    val startDate: Long?,
+    val expiryDate: Long?,
+    val redeemLimit: Int?,
+    val customerRedeemLimit: Int?,
+    val usedCount: Int,
+    val deletedAt: Long?
+) {
+    /** 21 section 6 step 1: an inactive or deleted code is `CODE_NOT_FOUND`, then the window: `CODE_NOT_STARTED` / `CODE_EXPIRED`. */
+    fun checkOpen(now: Long) {
+        if (deletedAt != null || !active) throw InvalidGiftCode(RedemptionService.CODE_NOT_FOUND)
+
+        if (startDate != null && now < startDate) throw InvalidGiftCode(RedemptionService.CODE_NOT_STARTED)
+
+        if (expiryDate != null && now > expiryDate) throw InvalidGiftCode(RedemptionService.CODE_EXPIRED)
+    }
+
+    /** The products a redemption of this gift can hand out, in the order of the pool. */
+    val candidates: List<Long> get() = when (type) {
+        GiftType.PRODUCT -> listOfNotNull(productId)
+        GiftType.RANDOM -> productIds
+        GiftType.CREDIT -> emptyList()
+    }
+}
+
+/** One row of `GET /<kind>/:id/redemptions` (04 section 6). [playerUsername] is the order's payer. */
+class RedemptionRow(
+    val orderId: Long,
+    val playerUsername: String,
+    val amount: Long,
+    val currency: String,
+    val state: RedemptionState,
+    val createdAt: Long
+)
+
+/** A page of [RedemptionRow] and the number of rows behind it. */
+class RedemptionPage(val rows: List<RedemptionRow>, val total: Long)
 
 /**
  * A discount that cannot be used any more: its `usageLimit` is exhausted or its row is gone or soft-deleted. Internal:
@@ -202,6 +257,52 @@ class RedemptionService(
         return held
     }
 
+    // ----- gift rows and redemption lists (MK-113) ---------------------------------------------------------------------------
+
+    private fun giftOf(row: Row): GiftRow = GiftRow(
+        id = row.getLong("id"), code = row.getString("code"), name = row.getString("name") ?: "", type = GiftType.valueOf(row.getString("type")),
+        productId = row.getLong("productId"), productIds = row.getString("productIds")?.let { raw -> runCatching { JsonArray(raw).map { (it as Number).toLong() } }.getOrNull() }.orEmpty(),
+        creditAmount = row.getLong("creditAmount"), active = row.getString("status") == "ACTIVE", startDate = row.getLong("startDate"), expiryDate = row.getLong("expiryDate"),
+        redeemLimit = row.getInteger("redeemLimit"), customerRedeemLimit = row.getInteger("customerRedeemLimit"), usedCount = row.getInteger("usedCount"), deletedAt = row.getLong("deletedAt")
+    )
+
+    private val giftColumns =
+        "`id`, `code`, `name`, `type`, `productId`, `productIds`, `creditAmount`, `status`, `startDate`, `expiryDate`, `redeemLimit`, `customerRedeemLimit`, `usedCount`, `deletedAt`"
+
+    /** The live (not soft-deleted) gift with [code], an unlocked read; `null` when there is none. Callers normalise the code first (11 section 6.2). */
+    suspend fun giftByCode(client: SqlClient, code: String): GiftRow? =
+        client.preparedQuery("SELECT $giftColumns FROM ${table("market_gift")} WHERE `code` = ? AND `deletedAt` IS NULL").execute(Tuple.of(code)).coAwait()
+            .firstOrNull()?.let(::giftOf)
+
+    /** The gift row by id as it is now (an unlocked read, deleted rows included). */
+    suspend fun gift(client: SqlClient, id: Long): GiftRow? =
+        client.preparedQuery("SELECT $giftColumns FROM ${table("market_gift")} WHERE `id` = ?").execute(Tuple.of(id)).coAwait().firstOrNull()?.let(::giftOf)
+
+    /** 21 section 6 step 1: the gift row `FOR UPDATE` (a locking read: the freshest committed row, whatever the snapshot of the transaction). */
+    suspend fun lockGift(conn: SqlConnection, id: Long): GiftRow? =
+        conn.preparedQuery("SELECT $giftColumns FROM ${table("market_gift")} WHERE `id` = ? FOR UPDATE").execute(Tuple.of(id)).coAwait().firstOrNull()?.let(::giftOf)
+
+    /**
+     * The redemptions of one coupon, creator code or gift (04 section 6), newest first, `RELEASED` rows included (the list is the history; `state`
+     * says what still counts). [page] is 1-based.
+     */
+    suspend fun listFor(client: SqlClient, kind: RedemptionKind, refId: Long, page: Long, pageSize: Long): RedemptionPage {
+        val rows = client.preparedQuery(
+            "SELECT r.`orderId`, o.`playerUsername`, r.`amount`, r.`currency`, r.`state`, r.`createdAt` FROM ${table("market_redemption")} r " +
+                "LEFT JOIN ${table("market_order")} o ON o.`id` = r.`orderId` WHERE r.`kind` = ? AND r.`refId` = ? ORDER BY r.`createdAt` DESC, r.`id` DESC LIMIT ? OFFSET ?"
+        ).execute(Tuple.of(kind.name, refId, pageSize, (page - 1) * pageSize)).coAwait().map {
+            RedemptionRow(it.getLong("orderId"), it.getString("playerUsername") ?: "", it.getLong("amount"), it.getString("currency"), RedemptionState.valueOf(it.getString("state")), it.getLong("createdAt"))
+        }
+        val total = client.preparedQuery("SELECT COUNT(*) AS `n` FROM ${table("market_redemption")} WHERE `kind` = ? AND `refId` = ?").execute(Tuple.of(kind.name, refId)).coAwait()
+            .first().getLong("n")
+
+        return RedemptionPage(rows, total)
+    }
+
+    /** Whether any redemption row (any state) names the code: a coupon, creator code, gift or discount with one is soft-deleted, one without is removed (01 section 13). */
+    suspend fun hasRedemptions(client: SqlClient, kind: RedemptionKind, refId: Long): Boolean =
+        client.preparedQuery("SELECT 1 FROM ${table("market_redemption")} WHERE `kind` = ? AND `refId` = ? LIMIT 1").execute(Tuple.of(kind.name, refId)).coAwait().iterator().hasNext()
+
     private fun limitReached(use: CodeUse): Throwable = when (use.kind) {
         RedemptionKind.COUPON -> InvalidCoupon(CODE_LIMIT_REACHED)
         RedemptionKind.CREATOR_CODE -> InvalidCreatorCode(CODE_LIMIT_REACHED)
@@ -219,5 +320,7 @@ class RedemptionService(
     companion object {
         const val CODE_LIMIT_REACHED = "CODE_LIMIT_REACHED"
         const val CODE_NOT_FOUND = "CODE_NOT_FOUND"
+        const val CODE_NOT_STARTED = "CODE_NOT_STARTED"
+        const val CODE_EXPIRED = "CODE_EXPIRED"
     }
 }
