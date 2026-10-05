@@ -43,6 +43,12 @@ class VaultSettingsReader(private val config: EffectiveConfig) {
         return VaultSettings(mode, parseDirection(s.mcVaultDirection), parseRate(s.mcVaultRate))
     }
 
+    /** The mode the panel set in the last accepted `MARKET_CONFIG`; `null` until one arrived (every start begins without). */
+    fun panelMode(): VaultMode? = config.remote?.settings?.let { parseMode(it.mcVaultMode) }
+
+    /** The local `config.yml` switch alone (the panel is not consulted): `false` = this server switched Vault off for good. */
+    fun localSwitchOn(): Boolean = config.local.features.allows(Feature.VAULT)
+
     companion object {
         fun parseMode(raw: String?): VaultMode = VaultMode.values().firstOrNull { it.name.equals(raw?.trim(), true) } ?: VaultMode.OFF
 

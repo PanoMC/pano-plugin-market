@@ -82,6 +82,7 @@ import com.panomc.plugins.market.spi.payment.PaymentEvent
 import com.panomc.plugins.market.spi.payment.PaymentProvider
 import com.panomc.plugins.market.spi.payment.QueryPaymentRequest
 import com.panomc.plugins.market.spi.payment.QueryReason
+import com.panomc.plugins.market.spi.payment.RefundSupport
 import com.panomc.plugins.market.spi.payment.ReviewReason
 import com.panomc.plugins.market.spi.payment.StartPaymentRequest
 import com.panomc.plugins.market.spi.payment.StartPaymentResult
@@ -352,6 +353,10 @@ class PaymentService(
     ) {
         val policy get() = ProviderMoneyPolicy(caps.buyerMayPayMore, caps.priceAuthority)
     }
+
+    /** The two answers that decide whether a duplicate payment on [providerId] is refunded automatically (`autoRefundDuplicatePayments`, refund support of the provider). */
+    suspend fun duplicateRefundRule(sqlClient: SqlClient, providerId: String): DuplicateRefundRule =
+        DuplicateRefundRule(config().autoRefundDuplicatePayments, resolve(providerId, sqlClient)?.caps?.refund.let { it != null && it != RefundSupport.NONE })
 
     /** The provider behind [providerId] with its decrypted settings and capabilities; `null` when it is not registered or throws while it describes itself. */
     private suspend fun resolve(providerId: String, sqlClient: SqlClient): Resolved? {
@@ -904,6 +909,11 @@ class PaymentService(
                 is PaymentEffect.RecordPaymentOnOrder -> recordPaymentOnOrder(conn, order, effect.attemptId)
 
                 is PaymentEffect.PanelAlert -> after += AfterCommit.PanelAlert(orderId, order.reviewReason)
+
+                // a second paid attempt of a paid order: the automatic refund of exactly that money, or an alert saying why not (00 section 7.2)
+                is PaymentEffect.FlagDuplicate -> duplicateRefundRule(conn, attempt.providerId).let { rule ->
+                    orderService.onDuplicatePayment(conn, orderId, attemptId, rule.autoRefund, rule.providerCanRefund, after)
+                }
 
                 is PaymentEffect.NotifyOrder -> {
                     var orderEvent = effect.event

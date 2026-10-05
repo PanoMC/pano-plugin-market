@@ -8,14 +8,21 @@ import com.panomc.plugins.market.core.order.OrderStateMachine
 import com.panomc.plugins.market.core.order.OrderTransition
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.core.time.Ids
+import com.panomc.plugins.market.db.dao.MarketEntitlementDao
 import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.db.dao.MarketOrderEventDao
 import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.dao.MarketPaymentDao
+import com.panomc.plugins.market.db.dao.MarketProductDao
+import com.panomc.plugins.market.db.dao.MarketRefundDao
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.db.model.MarketOrderEvent
 import com.panomc.plugins.market.db.model.MarketOrderItem
+import com.panomc.plugins.market.db.model.BillingMode
 import com.panomc.plugins.market.db.model.MarketPayment
+import com.panomc.plugins.market.db.model.MarketRefund
+import com.panomc.plugins.market.db.model.RefundOrigin
+import com.panomc.plugins.market.db.model.RefundStatus
 import com.panomc.plugins.market.db.model.OrderActorType
 import com.panomc.plugins.market.db.model.OrderEventType
 import com.panomc.plugins.market.db.model.OrderSource
@@ -25,6 +32,7 @@ import com.panomc.plugins.market.db.tx.LockedOrder
 import com.panomc.plugins.market.db.tx.OrderChangedException
 import com.panomc.plugins.market.error.CreditsDisabled
 import com.panomc.plugins.market.error.PaymentMethodUnavailable
+import com.panomc.plugins.market.error.PurchaseLimitReached
 import com.panomc.plugins.market.util.MoneyUtil
 import com.panomc.plugins.market.spi.payment.ReviewReason
 import com.panomc.plugins.market.util.OrderStatus
@@ -83,6 +91,14 @@ interface CreditSettlement {
     /** `/pay`: the credit part of [order] becomes [newCredits] (`RELEASE(old)` then `HOLD(new)`); [order] still carries the old part. */
     suspend fun retender(conn: SqlConnection, order: MarketOrder, newCredits: Long)
 
+    /**
+     * O4 of an order that came through O9 (06 section 7.4, 07 section 5 C5): the hold was released together with the stock, so [credits] are held
+     * again (the next hold generation) before they are captured; `InsufficientCredits` (400) when the balance does not cover them, which rolls
+     * the accept back and leaves the order in `REVIEW`. The default refuses (409 `CREDITS_DISABLED`): an implementation that does not override
+     * it can never complete a released order with a credit part without its hold. `CreditService` (MK-091) overrides it.
+     */
+    suspend fun rehold(conn: SqlConnection, order: MarketOrder, credits: Long): Unit = throw CreditsDisabled()
+
     companion object {
         val UNAVAILABLE: CreditSettlement = object : CreditSettlement {
             override suspend fun capture(conn: SqlConnection, order: MarketOrder) = throw CreditsDisabled()
@@ -119,6 +135,83 @@ fun interface PaidWebhooks {
 
     companion object {
         val NONE = PaidWebhooks { _, _ -> }
+    }
+}
+
+/**
+ * The per-player limit of a re-reserve (06 section 7.4: "per-player limit exceeded meanwhile => 409 `PURCHASE_LIMIT_REACHED`"): run under the
+ * `RELEASE` locks before a released order is brought back to `HELD` without `force`. [UNAVAILABLE] throws (the accept fails closed and the order
+ * stays `REVIEW`) so an `OrderService` built without it can never complete a released order past a limit; [ProductPurchaseLimits] is the real check.
+ */
+fun interface PurchaseLimitCheck {
+    suspend fun check(conn: SqlConnection, locked: LockedOrder)
+
+    companion object {
+        val UNAVAILABLE = PurchaseLimitCheck { _, locked ->
+            throw IllegalStateException("order ${locked.order.id}: this OrderService was built without a purchase limit check, it cannot re-reserve")
+        }
+    }
+}
+
+/** What decides the fate of the money of a duplicate payment (00 section 7.2): the `autoRefundDuplicatePayments` switch and the refund support of the provider. */
+class DuplicateRefundRule(val autoRefund: Boolean, val providerCanRefund: Boolean)
+
+/**
+ * The [DuplicateRefundRule] of a payment provider, for the duplicates an accepted review finds (the payment service asks the same two questions for a
+ * duplicate that arrives on a paid order). [ALERT_ONLY] (the default of an `OrderService`) never requests a refund: the timeline note and the panel alert say so.
+ */
+fun interface DuplicateRefundPolicy {
+    suspend fun rule(conn: SqlConnection, providerId: String): DuplicateRefundRule
+
+    companion object {
+        val ALERT_ONLY = DuplicateRefundPolicy { _, _ -> DuplicateRefundRule(autoRefund = false, providerCanRefund = false) }
+    }
+}
+
+/**
+ * [PurchaseLimitCheck] on `limitPerPlayer`: what the recipient holds or has on hold ([MarketOrderDao.usageByProduct]; the released order itself is
+ * not counted) plus this order's own units must stay within the limit of every product that has one. A `TIMED` product the recipient already owns
+ * is an extension, never a second holding (as for [RecipientLimitGuard]). The cooldown is a checkout rule and is not judged for a payment that
+ * already happened.
+ */
+class ProductPurchaseLimits(
+    private val orders: MarketOrderDao,
+    private val products: MarketProductDao,
+    private val entitlements: MarketEntitlementDao,
+    private val clock: Clock
+) : PurchaseLimitCheck {
+    override suspend fun check(conn: SqlConnection, locked: LockedOrder) {
+        val units = HashMap<Long, Long>()
+
+        for (item in locked.items) {
+            val productId = item.productId ?: continue
+
+            units.merge(productId, (item.quantity - item.refundedQuantity).toLong(), Long::plus)
+        }
+
+        if (units.isEmpty()) return
+
+        val limited = products.getByIds(units.keys.toList(), conn).filter { it.limitPerPlayer != null }
+
+        if (limited.isEmpty()) return
+
+        val keys = RecipientLimitGuard.recipientKeys(locked.order)
+        val usage = orders.usageByProduct(keys, limited.map { it.id }, conn)
+        val now = clock.now()
+        var owned: Set<Long>? = null
+
+        for (product in limited.sortedBy { it.id }) {
+            val limit = product.limitPerPlayer!!
+            val used = usage[product.id]?.used ?: 0L
+
+            if (used + (units[product.id] ?: 0L) <= limit) continue
+
+            val ids = owned ?: keys.flatMap { entitlements.getActiveByOwner(it, now, conn) }.map { it.productId }.toSet().also { owned = it }
+
+            if (product.billingMode == BillingMode.TIMED && product.id in ids) continue
+
+            throw PurchaseLimitReached(product.id, limit)
+        }
     }
 }
 
@@ -217,7 +310,16 @@ class OrderService(
     /** `market_currency_rate` as `currency -> units per 1 base unit` (the table of the pricing code), for the frozen `exchangeRate`. */
     private val rates: suspend (SqlClient) -> Map<String, BigDecimal> = { emptyMap() },
     /** The stats currency of the store settings: `exchangeRate` is stats units per 1 order-currency unit. */
-    private val statsCurrency: () -> String = { "" }
+    private val statsCurrency: () -> String = { "" },
+    /** The limit check of a re-reserve (O4 after O9); the default refuses to re-reserve at all. */
+    private val limits: PurchaseLimitCheck = PurchaseLimitCheck.UNAVAILABLE,
+    /**
+     * Where a system refund (`origin = SYSTEM`: rejected review with money received, duplicate payment) is requested; `null` for a service that has
+     * no refund table behind it: a review rejection with `refund = true` then fails (and rolls back), a duplicate payment only raises the alert.
+     */
+    private val refunds: MarketRefundDao? = null,
+    /** How the second paying attempt of an accepted review is treated (refund or alert); the default only alerts. */
+    private val duplicates: DuplicateRefundPolicy = DuplicateRefundPolicy.ALERT_ONLY
 ) {
     private fun table(name: String) = "`${orders.prefix()}$name`"
 
@@ -411,8 +513,10 @@ class OrderService(
      * rows of the order; everything here runs on its connection and only writes rows. The returned [TransitionResult.after] runs after
      * the commit.
      *
-     * The effects of the review decisions (O4 / O5) and of refunds and disputes (O10 to O12) belong to the slices that own those
-     * flows and stop the transition with [EffectNotOwnedYet]; the effects of other slices go through [ForeignEffects].
+     * The review decisions are applied here (MK-079): O4 re-reserves a released hold (limits, stock, codes, then the credit hold again unless
+     * `force`), rewrites the tender of an `AMOUNT_MISMATCH` and then does everything of O2; O5 releases the hold and requests the refund of the
+     * money received. The effects of refunds and disputes (O10 to O12) belong to the slices that own those flows and stop the transition with
+     * [EffectNotOwnedYet]; the effects of other slices go through [ForeignEffects].
      */
     suspend fun transition(conn: SqlConnection, locked: LockedOrder, event: OrderEvent, actorUserId: Long? = null, message: String? = null): TransitionResult {
         val order = orders.getById(locked.order.id, conn) ?: throw OrderChangedException(locked.order.id, "the row is gone")
@@ -447,6 +551,9 @@ class OrderService(
         val after = ArrayList<AfterCommit>()
         var reviewReason: String? = order.reviewReason
         val closed = ArrayList<MarketPayment>()
+        // the order row as the effects of an accept leave it (the tender rewrite changes the credit part), and whether its credit part is held
+        var current = order
+        var creditsHeld = order.creditAmount > 0 && order.reservationState == ReservationState.HELD
 
         for (effect in decision.effects) {
             when (effect) {
@@ -455,9 +562,21 @@ class OrderService(
                 // the redemptions turn APPLIED inside the reservation commit
                 is OrderEffect.ApplyRedemptions -> Unit
 
-                is OrderEffect.CaptureCreditHold -> if (order.creditAmount > 0) settlement.capture(conn, order)
+                is OrderEffect.CaptureCreditHold -> if (current.creditAmount > 0) {
+                    check(creditsHeld) { "order ${order.id}: its credit part is not held, nothing to capture" }
 
-                is OrderEffect.StampPaid -> stampPaid(conn, order, effect)
+                    settlement.capture(conn, current)
+                }
+
+                is OrderEffect.StampPaid -> {
+                    stampPaid(conn, order, effect)
+
+                    if (event is OrderEvent.ReviewAccepted) {
+                        // every other attempt that brought money is a second payment of a paid order from here on: flagged first, so the order's own attempt can be settled
+                        flagOtherPayingAttempts(conn, order, now, after)
+                        settleReviewedAttempt(conn, order, now)
+                    }
+                }
 
                 is OrderEffect.ClearExpiry -> updateOrder(conn, order.id, linkedMapOf("expiresAt" to null))
 
@@ -503,8 +622,37 @@ class OrderService(
                 is OrderEffect.QueueGrantDeliveries, is OrderEffect.SubscriptionOnOrderPaid, is OrderEffect.IssueInvoice, is OrderEffect.QueueMail,
                 is OrderEffect.AdvanceGoalProgress, is OrderEffect.StartShipping -> foreign.apply(conn, locked, effect)
 
-                is OrderEffect.ReReserve, is OrderEffect.RewriteTender, is OrderEffect.RecordForceOverride, is OrderEffect.CreateRefundForPaidAmount ->
-                    throw EffectNotOwnedYet(effect, "MK-079")
+                is OrderEffect.ReReserve -> {
+                    if (!effect.force) limits.check(conn, locked)
+
+                    check(reservationsOrThrow().reReserve(conn, locked, effect.force)) { "order ${order.id} was not RELEASED when its re-reserve ran" }
+
+                    // the hold went back with the stock (06 section 7.3): it is placed again before anything is captured. An AMOUNT_MISMATCH accept
+                    // re-tenders to the paid attempt's credit part (RewriteTender holds exactly that), so the superseded part is never held
+                    if (order.creditAmount > 0 && decision.effects.none { it is OrderEffect.RewriteTender }) {
+                        settlement.rehold(conn, order, order.creditAmount)
+
+                        creditsHeld = true
+                    }
+                }
+
+                is OrderEffect.RecordForceOverride -> orderEvents.add(
+                    MarketOrderEvent(
+                        orderId = order.id, type = OrderEventType.NOTE, actorType = OrderActorType.ADMIN, actorUserId = actorUserId, message = FORCE_OVERRIDE_NOTE,
+                        data = JsonObject().put("override", FORCE_OVERRIDE_NOTE).put("codesAndLimitsReReserved", false).put("stockClampedAtZero", true).encode(),
+                        createdAt = now, updatedAt = now
+                    ),
+                    conn
+                )
+
+                is OrderEffect.RewriteTender -> {
+                    val tender = rewriteTender(conn, order, creditsHeld)
+
+                    current = tender.order
+                    creditsHeld = tender.creditsHeld
+                }
+
+                is OrderEffect.CreateRefundForPaidAmount -> requestRefundsForReceivedMoney(conn, order, actorUserId, now)
 
                 is OrderEffect.ReserveStockAndLimits, is OrderEffect.HoldCredits, is OrderEffect.SetExpiresAt ->
                     throw IllegalStateException("${effect::class.simpleName} belongs to order creation, not to a transition")
@@ -520,6 +668,203 @@ class OrderService(
         if (closed.isNotEmpty()) after += AfterCommit.CancelAtGateway(closed.distinctBy { it.id })
 
         return TransitionResult(decision, order.status, after)
+    }
+
+    /**
+     * `AMOUNT_MISMATCH` accepted (06 section 9.4): the order's tender becomes the snapshot of the attempt that was paid (`creditAmount`,
+     * `creditValue`, `paymentFee = feeAmount`, `totalPrice = orderTotal`, `gatewayAmount = amount`) and the credit hold follows it: a held part is
+     * re-tendered (`RELEASE(old)`, `HOLD(new)`), a part that is not held is held fresh. `InsufficientCredits` rolls the accept back.
+     */
+    private suspend fun rewriteTender(conn: SqlConnection, order: MarketOrder, held: Boolean): Tender {
+        val attemptId = checkNotNull(order.paymentId) { "order ${order.id}: an AMOUNT_MISMATCH review without the paid attempt" }
+        val attempt = checkNotNull(payments.getById(attemptId, conn)) { "order ${order.id}: paid attempt $attemptId is gone" }
+        var holding = held
+
+        if (held) {
+            if (attempt.creditAmount != order.creditAmount) {
+                settlement.retender(conn, order, attempt.creditAmount)
+
+                holding = attempt.creditAmount > 0
+            }
+        } else {
+            // nothing is held (a released order, or an order without a credit part): the paid attempt's part is held fresh, also when it equals the order's old part
+            if (attempt.creditAmount > 0) settlement.rehold(conn, order, attempt.creditAmount)
+
+            holding = attempt.creditAmount > 0
+        }
+
+        updateOrder(
+            conn, order.id,
+            linkedMapOf(
+                "creditAmount" to attempt.creditAmount, "creditValue" to attempt.creditValue, "paymentFee" to attempt.feeAmount,
+                "totalPrice" to attempt.orderTotal, "gatewayAmount" to attempt.amount
+            )
+        )
+
+        val now = clock.now()
+
+        orderEvents.add(
+            MarketOrderEvent(
+                orderId = order.id, type = OrderEventType.NOTE, actorType = OrderActorType.ADMIN, message = TENDER_REWRITTEN_NOTE,
+                data = JsonObject().put("paymentId", attempt.id).put("creditAmount", attempt.creditAmount).put("totalPrice", attempt.orderTotal)
+                    .put("gatewayAmount", attempt.amount).put("previousCreditAmount", order.creditAmount).put("previousTotalPrice", order.totalPrice).encode(),
+                createdAt = now, updatedAt = now
+            ),
+            conn
+        )
+
+        return Tender(orders.getById(order.id, conn)!!, holding)
+    }
+
+    private class Tender(val order: MarketOrder, val creditsHeld: Boolean)
+
+    /**
+     * O4 with several paying attempts (00 section 7.2): while the order sat in `REVIEW` every attempt that brought money was recorded on it. The
+     * accept makes the order's own attempt (`paymentId`) the payment of the order; each other attempt with money (`SUCCEEDED` or `REVIEW`) is a second
+     * paid attempt on a paid order from now on: flagged `duplicate = 1` and handled like any duplicate (a `SYSTEM` refund request, or a timeline note
+     * and a panel alert). The order's `paidAmount` is then the own attempt's money, not the sum.
+     */
+    private suspend fun flagOtherPayingAttempts(conn: SqlConnection, order: MarketOrder, now: Long, after: MutableList<AfterCommit>) {
+        val ownId = order.paymentId ?: return
+        val own = payments.getById(ownId, conn) ?: return
+        val others = payments.getByOrderId(order.id, conn).filter {
+            it.id != ownId && (it.paidAmount ?: 0L) > 0 && !it.duplicate && (it.status == PaymentStatus.SUCCEEDED || it.status == PaymentStatus.REVIEW)
+        }
+
+        if (others.isEmpty()) return
+
+        for (other in others) {
+            val rows = conn.preparedQuery("UPDATE ${table("market_payment")} SET `duplicate` = 1, `updatedAt` = ? WHERE `id` = ? AND `duplicate` = 0")
+                .execute(Tuple.of(now, other.id)).coAwait().rowCount()
+
+            if (rows != 1) continue
+
+            val rule = duplicates.rule(conn, other.providerId)
+
+            onDuplicatePayment(conn, order.id, other.id, rule.autoRefund, rule.providerCanRefund, after)
+        }
+
+        if ((own.paidAmount ?: 0L) > 0) updateOrder(conn, order.id, linkedMapOf("paidAmount" to own.paidAmount))
+    }
+
+    /**
+     * O4: the human accepted the money of the attempt that went to `REVIEW` (underpaid, overpaid, wrong currency, ...) as the payment of the order, so
+     * that attempt is `SUCCEEDED` from now on (a completed order is never left pointing at a `REVIEW` attempt). One `SUCCEEDED` attempt per order
+     * is a standing invariant (I13): when another attempt of the order already holds that place the row is left as it is.
+     */
+    private suspend fun settleReviewedAttempt(conn: SqlConnection, order: MarketOrder, now: Long) {
+        val attempt = order.paymentId?.let { payments.getById(it, conn) } ?: return
+
+        if (attempt.status != PaymentStatus.REVIEW) return
+        if (payments.getByOrderId(order.id, conn).any { it.id != attempt.id && it.status == PaymentStatus.SUCCEEDED && !it.duplicate }) return
+
+        val rows = conn.preparedQuery(
+            "UPDATE ${table("market_payment")} SET `status` = ?, `closedAt` = COALESCE(`closedAt`, ?), `startPayload` = NULL, `updatedAt` = ? WHERE `id` = ? AND `status` = ?"
+        ).execute(Tuple.of(PaymentStatus.SUCCEEDED.name, now, now, attempt.id, PaymentStatus.REVIEW.name)).coAwait().rowCount()
+
+        if (rows != 1) throw OrderChangedException(order.id, "attempt ${attempt.id} moved under the lock")
+
+        orderEvents.add(
+            MarketOrderEvent(
+                orderId = order.id, type = OrderEventType.PAYMENT_SUCCEEDED, actorType = OrderActorType.ADMIN,
+                data = JsonObject().put("paymentId", attempt.id).put("providerId", attempt.providerId).put("from", PaymentStatus.REVIEW.name)
+                    .put("to", PaymentStatus.SUCCEEDED.name).put("accepted", true).put("paidAmount", attempt.paidAmount).encode(),
+                createdAt = now, updatedAt = now
+            ),
+            conn
+        )
+    }
+
+    /**
+     * O5 with `refund = true` (06 section 11): the money the order received is requested back, one `SYSTEM` refund row per attempt that
+     * brought money (a duplicate was refunded on its own), in the currency the gateway took it in. The credit part is never refunded: a hold that
+     * is still there was released by the same transition. The refund is only requested here; the gateway call is the refund service's.
+     */
+    private suspend fun requestRefundsForReceivedMoney(conn: SqlConnection, order: MarketOrder, actorUserId: Long?, now: Long) {
+        checkNotNull(refunds) { "order ${order.id}: this OrderService was built without the refund table, it cannot request the refund of a rejected review" }
+        val money = payments.getByOrderId(order.id, conn).filter {
+            (it.paidAmount ?: 0L) > 0 && !it.duplicate && (it.status == PaymentStatus.SUCCEEDED || it.status == PaymentStatus.REVIEW)
+        }
+
+        if (money.isEmpty()) {
+            // paid money that no attempt row carries cannot be sent back to a gateway automatically: the transition refuses instead of closing the order on it
+            check(order.paidAmount <= 0) { "order ${order.id} recorded ${order.paidAmount} as received, but no attempt carries it" }
+
+            return
+        }
+
+        for (attempt in money) {
+            requestRefund(conn, order, attempt, attempt.paidAmount!!, "sys:reject:${order.id}:${attempt.id}", REASON_REVIEW_REJECTED, actorUserId, now)
+        }
+    }
+
+    /** A `REQUESTED` refund row (`origin = SYSTEM`) for the money of [attempt] plus its timeline row; replays under the same [key] are harmless. */
+    private suspend fun requestRefund(
+        conn: SqlConnection, order: MarketOrder, attempt: MarketPayment, amount: Long, key: String, reason: String, actorUserId: Long?, now: Long
+    ): Long? {
+        val table = checkNotNull(refunds) { "order ${order.id}: this OrderService was built without the refund table" }
+        val currency = attempt.paidCurrency ?: attempt.currency
+        val id = table.add(
+            MarketRefund(
+                orderId = order.id, paymentId = attempt.id, providerId = attempt.providerId, status = RefundStatus.REQUESTED, origin = RefundOrigin.SYSTEM,
+                idempotencyKey = key, amount = amount, gatewayAmount = amount, currency = currency, reason = reason, revoke = false, restock = false,
+                initiatedBy = actorUserId, createdAt = now, updatedAt = now
+            ),
+            conn
+        ) ?: return null
+
+        orderEvents.add(
+            MarketOrderEvent(
+                orderId = order.id, type = OrderEventType.REFUND_REQUESTED, actorType = if (actorUserId != null) OrderActorType.ADMIN else OrderActorType.SYSTEM,
+                actorUserId = actorUserId,
+                data = JsonObject().put("refundId", id).put("origin", RefundOrigin.SYSTEM.name).put("reason", reason).put("paymentId", attempt.id)
+                    .put("amount", amount).put("currency", currency).encode(),
+                createdAt = now, updatedAt = now
+            ),
+            conn
+        )
+
+        return id
+    }
+
+    /**
+     * A second attempt of a paid order was paid (00 section 7.2, `duplicate = 1` is already written): with `autoRefundDuplicatePayments`, a provider
+     * that can refund and a refund table, a `SYSTEM` refund of exactly that attempt's money is requested; in every other case the order timeline gets
+     * an alert row saying why and the panel is alerted after the commit. The caller holds the order lock (the scopes of `PaymentService.applyIn`).
+     * The refund row carries the duplicate attempt's `paymentId`, so the refund service must not treat it as a refund of the order's own payment (no O10).
+     */
+    suspend fun onDuplicatePayment(
+        conn: SqlConnection, orderId: Long, attemptId: Long, autoRefund: Boolean, providerCanRefund: Boolean, after: MutableList<AfterCommit>
+    ) {
+        val order = orders.getById(orderId, conn) ?: throw OrderChangedException(orderId, "the row is gone")
+        val attempt = payments.getById(attemptId, conn) ?: throw NoSuchElementException("attempt $attemptId does not exist")
+        val now = clock.now()
+        val paid = attempt.paidAmount ?: 0L
+        val why = when {
+            paid <= 0 -> "NO_MONEY_RECORDED"
+            !autoRefund -> "AUTO_REFUND_OFF"
+            !providerCanRefund -> "REFUND_NOT_SUPPORTED"
+            refunds == null -> "NO_REFUND_TABLE"
+            else -> null
+        }
+
+        if (why == null) {
+            requestRefund(conn, order, attempt, paid, "sys:dup:${attempt.id}", REASON_DUPLICATE_PAYMENT, null, now)
+
+            return
+        }
+
+        orderEvents.add(
+            MarketOrderEvent(
+                orderId = orderId, type = OrderEventType.NOTE, actorType = OrderActorType.SYSTEM, message = DUPLICATE_PAYMENT_ALERT,
+                data = JsonObject().put("alert", DUPLICATE_PAYMENT_ALERT).put("paymentId", attempt.id).put("providerId", attempt.providerId).put("paidAmount", paid)
+                    .put("paidCurrency", attempt.paidCurrency ?: attempt.currency).put("refund", "NOT_REQUESTED").put("why", why).encode(),
+                createdAt = now, updatedAt = now
+            ),
+            conn
+        )
+
+        after += AfterCommit.PanelAlert(orderId, DUPLICATE_PAYMENT_ALERT)
     }
 
     private fun attemptOf(event: OrderEvent): Long? = when (event) {
@@ -655,5 +1000,12 @@ class OrderService(
         const val ACCESS_TOKEN_BYTES = 20
         private const val MAX_ID_TRIES = 3
         private val OPEN_ATTEMPT = setOf(PaymentStatus.CREATED, PaymentStatus.PENDING, PaymentStatus.PROCESSING)
+
+        /** Timeline `NOTE` messages and refund reasons written by the review flow (`market_order_event.message`, `market_refund.reason`). */
+        const val FORCE_OVERRIDE_NOTE = "FORCE_OVERRIDE"
+        const val TENDER_REWRITTEN_NOTE = "TENDER_REWRITTEN"
+        const val DUPLICATE_PAYMENT_ALERT = "DUPLICATE_PAYMENT"
+        const val REASON_REVIEW_REJECTED = "REVIEW_REJECTED"
+        const val REASON_DUPLICATE_PAYMENT = "DUPLICATE_PAYMENT"
     }
 }

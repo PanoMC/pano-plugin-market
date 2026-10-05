@@ -83,6 +83,8 @@
     "CANCELLED_MARKET_SHIPMENT": "<b>{username}</b> cancelled shipment <b>#{shipmentId}</b> of order <b>#{orderId}</b>.",
     "UPDATED_MARKET_ORDER_SHIPPING_ADDRESS": "<b>{username}</b> updated the shipping address of order <b>#{orderId}</b>.",
     "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> changed the status of order <b>#{orderId}</b> to \"{status}\".",
+    "CANCELLED_MARKET_ORDER": "<b>{username}</b> cancelled order <b>#{orderId}</b>.",
+    "REVIEWED_MARKET_ORDER": "<b>{username}</b> decided \"{decision}\" on the review of order <b>#{orderId}</b>.",
     "UPDATED_MARKET_ORDER_EXCHANGE_RATE": "<b>{username}</b> updated the exchange rate of order <b>#{orderId}</b> to <b>{exchangeRate}</b>.",
     "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> refreshed the market exchange rate to <b>{exchangeRate}</b>.",
     "CREATED_MARKET_LEGAL_TEXT": "<b>{username}</b> published version <b>{version}</b> of the legal text ({locale}).",
