@@ -46,7 +46,12 @@ internal object DiscountStage {
          * records no upgrade link and gets no deduction, so one owned entitlement finances at most one line.
          */
         val upgradeClaimants: Set<String>
-    )
+    ) {
+        /** The same run with the automatic discounts switched off (scenario S2 of 05 section 6.4; upgrades still apply). */
+        fun withoutDiscounts() = Settings(
+            unit, now, subtotal, discounts, false, fullGift, upgradeLink, upgradeDeduction, recipientTiers, upgradeClaimants
+        )
+    }
 
     /**
      * One owned entitlement finances **one** line per run (05 section 5.2): per tiered category the claimant is the
@@ -141,8 +146,8 @@ internal object DiscountStage {
     }
 
     /** 05 section 2 rule 4: basis points from the database are clamped to 0..10000. */
-    private fun clampBp(bp: Long): Long = bp.coerceIn(0L, 10_000L)
+    internal fun clampBp(bp: Long): Long = bp.coerceIn(0L, 10_000L)
 
     /** A stored admin amount outside 0..MAX_AMOUNT is clamped, so one bad row never fails a whole quote. */
-    private fun clampAmount(amount: Long): Long = amount.coerceIn(0L, PricingLimits.MAX_AMOUNT)
+    internal fun clampAmount(amount: Long): Long = amount.coerceIn(0L, PricingLimits.MAX_AMOUNT)
 }

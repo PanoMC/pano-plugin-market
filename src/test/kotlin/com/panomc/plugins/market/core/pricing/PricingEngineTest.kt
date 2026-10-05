@@ -2,6 +2,15 @@ package com.panomc.plugins.market.core.pricing
 
 import com.panomc.plugins.market.config.CurrencyMode
 import com.panomc.plugins.market.config.MultiCurrencyFallback
+import com.panomc.plugins.market.core.pricing.PricingFixtures.CR5
+import com.panomc.plugins.market.core.pricing.PricingFixtures.K25
+import com.panomc.plugins.market.core.pricing.PricingFixtures.K50P2
+import com.panomc.plugins.market.core.pricing.PricingFixtures.KF20
+import com.panomc.plugins.market.core.pricing.PricingFixtures.KF500
+import com.panomc.plugins.market.core.pricing.PricingFixtures.KMIN
+import com.panomc.plugins.market.core.pricing.PricingFixtures.Product
+import com.panomc.plugins.market.core.pricing.PricingFixtures.coupon
+import com.panomc.plugins.market.core.pricing.PricingFixtures.creatorCode
 import com.panomc.plugins.market.core.pricing.PricingFixtures.D1
 import com.panomc.plugins.market.core.pricing.PricingFixtures.D2
 import com.panomc.plugins.market.core.pricing.PricingFixtures.D3
@@ -29,6 +38,7 @@ import com.panomc.plugins.market.core.pricing.PricingFixtures.price
 import com.panomc.plugins.market.core.pricing.PricingFixtures.topUp
 import com.panomc.plugins.market.db.model.OrderItemKind
 import com.panomc.plugins.market.db.model.UpgradeMode
+import com.panomc.plugins.market.util.CouponScope
 import com.panomc.plugins.market.util.DiscountScope
 import com.panomc.plugins.market.util.DiscountUnit
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -785,6 +795,829 @@ class PricingEngineTest {
         assertTrue(r.canCheckout)
     }
 
+    // ================================================================ stage A3: coupon and creator code (05 section 6)
+
+    private fun ItemsResult.reasons(): List<PricingCode?> = listOf(coupon?.reason, creatorCode?.reason)
+
+    @Test
+    fun `row 14 a percent coupon takes its share of every eligible line`() {
+        val r = price(line(P1), line(P2, 3), coupon = K25)
+        assertEquals(2500L, r.key("L1").couponShare)
+        assertEquals(749L, r.key("L2").couponShare) // 29.97 x 25 % = 7.4925
+        assertEquals(3249L, r.couponDiscount)
+        assertEquals(7500L, r.key("L1").lineBasis)
+        assertEquals(2248L, r.key("L2").lineBasis)
+        assertEquals(9748L, r.itemsTotal)
+        assertEquals(1625L, r.itemsVat) // 12.50 + 3.75
+        assertEquals(CodeOutcome(1, "K25", true, null, 3249), r.coupon)
+        assertNull(r.creatorCode)
+        assertEquals(0L, r.creatorDiscount)
+        assertTrue(r.canCheckout)
+        assertEquals(12997L, r.subtotal) // the codes change neither the subtotal nor the automatic figures
+        assertEquals(0L, r.discountTotal)
+    }
+
+    @Test
+    fun `row 15 a FIXED coupon is allocated over the lines by largest remainder`() {
+        val r = price(line(P1), line(P2, 3), coupon = KF20)
+        assertEquals(1539L, r.key("L1").couponShare)
+        assertEquals(461L, r.key("L2").couponShare)
+        assertEquals(2000L, r.couponDiscount)
+        assertEquals(8461L, r.key("L1").lineBasis)
+        assertEquals(2536L, r.key("L2").lineBasis)
+        assertEquals(10997L, r.itemsTotal)
+        assertEquals(1833L, r.itemsVat) // 14.10 + 4.23
+    }
+
+    @Test
+    fun `row 16 a FIXED coupon larger than the cart takes the whole cart and leaves no VAT`() {
+        val r = price(line(P1), coupon = KF500)
+        assertEquals(10000L, r.couponDiscount)
+        assertEquals(10000L, r.key("L1").couponShare)
+        assertEquals(0L, r.itemsBasis)
+        assertEquals(0L, r.itemsTotal)
+        assertEquals(0L, r.itemsVat)
+        assertTrue(r.coupon!!.valid)
+    }
+
+    @Test
+    fun `row 17 a scoped coupon touches only the listed products`() {
+        val r = price(line(P1), line(P2, 3), coupon = K50P2)
+        assertEquals(0L, r.key("L1").couponShare)
+        assertEquals(1499L, r.key("L2").couponShare) // 14.985 rounds half up
+        assertEquals(1499L, r.couponDiscount)
+        assertEquals(1498L, r.key("L2").lineBasis)
+        assertEquals(11498L, r.itemsTotal)
+    }
+
+    @Test
+    fun `row 18 a scoped coupon with nothing eligible is refused and ignored`() {
+        val r = price(line(P1), coupon = K50P2)
+        assertEquals(CodeOutcome(4, "K50P2", false, PricingCode.COUPON_NOT_APPLICABLE, 0), r.coupon)
+        assertEquals(10000L, r.itemsTotal)
+        assertFalse(r.canCheckout)
+        assertEquals(listOf(PricingMessage(PricingCode.COUPON_NOT_APPLICABLE, MessageLevel.ERROR)), r.messages)
+    }
+
+    @Test
+    fun `row 19 the coupon minimum is checked against the whole cart`() {
+        val r = price(line(P1), line(P2, 3), coupon = KMIN) // 129.97 < 150.00
+        assertEquals(PricingCode.CODE_MIN_AMOUNT, r.coupon!!.reason)
+        assertFalse(r.coupon!!.valid)
+        assertEquals(12997L, r.itemsTotal)
+        assertFalse(r.canCheckout)
+    }
+
+    @Test
+    fun `row 20 the coupon minimum looks at the amount after the automatic discount`() {
+        val r = price(line(P1, 2), discounts = listOf(D1), coupon = KMIN) // 200.00 -> 180.00 >= 150.00
+        assertTrue(r.coupon!!.valid)
+        assertEquals(4500L, r.couponDiscount)
+        assertEquals(13500L, r.itemsTotal)
+        // and just below the minimum it is refused: 150.00 is enough, 149.99 is not
+        val exact = coupon(9, "EXACT", 2500, min = 18000)
+        assertTrue(price(line(P1, 2), discounts = listOf(D1), coupon = exact).coupon!!.valid)
+        val above = coupon(9, "ABOVE", 2500, min = 18001)
+        assertEquals(PricingCode.CODE_MIN_AMOUNT, price(line(P1, 2), discounts = listOf(D1), coupon = above).coupon!!.reason)
+    }
+
+    @Test
+    fun `row 21 every state of a coupon gives its reason and a total that is untouched`() {
+        val cases = listOf(
+            coupon(1, "K25", 2500, found = false) to PricingCode.CODE_NOT_FOUND,
+            coupon(1, "K25", 2500, active = false) to PricingCode.CODE_NOT_FOUND,
+            coupon(1, "K25", 2500, start = NOW + 1) to PricingCode.CODE_NOT_STARTED,
+            coupon(1, "K25", 2500, expiry = NOW) to PricingCode.CODE_EXPIRED,
+            coupon(1, "K25", 2500, redeemLimit = 3, used = 3) to PricingCode.CODE_LIMIT_REACHED,
+            coupon(1, "K25", 2500, customerRedeemLimit = 1, buyerUses = 1) to PricingCode.CODE_LIMIT_REACHED
+        )
+        for ((c, reason) in cases) {
+            val r = price(line(P1), coupon = c)
+            assertEquals(reason, r.coupon!!.reason, "$reason")
+            assertFalse(r.coupon!!.valid)
+            assertEquals(0L, r.couponDiscount)
+            assertEquals(10000L, r.itemsTotal)
+            assertFalse(r.canCheckout)
+        }
+        // the boundaries on the other side are all valid
+        for (c in listOf(
+            coupon(1, "K25", 2500, start = NOW), coupon(1, "K25", 2500, expiry = NOW + 1),
+            coupon(1, "K25", 2500, redeemLimit = 3, used = 2), coupon(1, "K25", 2500, customerRedeemLimit = 1, buyerUses = 0)
+        )) {
+            assertEquals(2500L, price(line(P1), coupon = c).couponDiscount)
+        }
+    }
+
+    @Test
+    fun `the first failing check of a coupon gives the reason`() {
+        // not found beats everything, not started beats expired, expired beats the limits, the limits beat the lines
+        assertEquals(PricingCode.CODE_NOT_FOUND, price(line(P1), coupon = coupon(1, "K", 2500, found = false, expiry = NOW)).coupon!!.reason)
+        assertEquals(PricingCode.CODE_NOT_STARTED, price(line(P1), coupon = coupon(1, "K", 2500, start = NOW + 5, expiry = NOW)).coupon!!.reason)
+        assertEquals(PricingCode.CODE_EXPIRED, price(line(P1), coupon = coupon(1, "K", 2500, expiry = NOW, redeemLimit = 1, used = 1)).coupon!!.reason)
+        assertEquals(
+            PricingCode.CODE_LIMIT_REACHED,
+            price(line(P1), coupon = coupon(1, "K", 2500, scope = CouponScope.SELECTED, redeemLimit = 1, used = 1)).coupon!!.reason
+        )
+        assertEquals(
+            PricingCode.COUPON_NOT_APPLICABLE,
+            price(line(P1), coupon = coupon(1, "K", 2500, scope = CouponScope.SELECTED, min = 99_999_999)).coupon!!.reason
+        )
+        assertEquals(PricingCode.EXTERNAL_PRICING, price(line(P1), coupon = coupon(1, "K", 2500, found = false), mode = PricingMode.EXTERNAL).coupon!!.reason)
+    }
+
+    @Test
+    fun `row 22 automatic discounts and a coupon stack when they may`() {
+        val r = price(line(P1), discounts = listOf(D1), coupon = K25)
+        assertEquals(9000L, r.key("L1").unitPrice)
+        assertEquals(2250L, r.couponDiscount)
+        assertEquals(6750L, r.itemsTotal)
+        assertEquals(1125L, r.itemsVat)
+        assertEquals(1000L, r.discountTotal)
+        assertEquals(listOf(DiscountRedemption(1, 1000)), r.discountRedemptions)
+    }
+
+    @Test
+    fun `row 23 without combining, a coupon that beats the automatic discount takes its place`() {
+        val r = price(line(P1), discounts = listOf(D1), coupon = K25, config = config(combine = false))
+        assertEquals(0L, r.discountTotal)
+        assertEquals(10000L, r.key("L1").unitPrice)
+        assertNull(r.key("L1").discountId)
+        assertEquals(2500L, r.couponDiscount)
+        assertEquals(7500L, r.itemsTotal)
+        assertTrue(r.discountRedemptions.isEmpty()) // no DISCOUNT redemption row in S2
+        assertTrue(r.coupon!!.valid)
+    }
+
+    @Test
+    fun `row 24 without combining, an automatic discount that beats the coupon keeps its place`() {
+        val r = price(line(P1), discounts = listOf(D5), coupon = K25, config = config(combine = false))
+        assertEquals(4000L, r.discountTotal)
+        assertEquals(6000L, r.itemsTotal)
+        assertEquals(0L, r.couponDiscount)
+        assertEquals(CodeOutcome(1, "K25", false, PricingCode.CODE_NOT_COMBINABLE, 0), r.coupon)
+        assertEquals(listOf(DiscountRedemption(5, 4000)), r.discountRedemptions)
+        assertFalse(r.canCheckout) // checkout would answer 400 INVALID_COUPON: the buyer must remove it
+    }
+
+    @Test
+    fun `row 25 without combining, a tie keeps the automatic discount and does not consume the coupon`() {
+        val r = price(line(P1), discounts = listOf(discount(10, 2500)), coupon = K25, config = config(combine = false))
+        assertEquals(2500L, r.discountTotal)
+        assertEquals(7500L, r.itemsTotal)
+        assertEquals(PricingCode.CODE_NOT_COMBINABLE, r.coupon!!.reason)
+        assertEquals(0L, r.couponDiscount)
+    }
+
+    @Test
+    fun `row 26 a creator code takes a percentage like a coupon and keeps the attribution`() {
+        val r = price(line(P1), creatorCode = CR5)
+        assertEquals(500L, r.creatorDiscount)
+        assertEquals(500L, r.key("L1").creatorShare)
+        assertEquals(500L, r.key("L1").couponAmount)
+        assertEquals(9500L, r.itemsTotal)
+        assertEquals(1583L, r.itemsVat)
+        assertEquals(CodeOutcome(1, "CR5", true, null, 500), r.creatorCode)
+        assertNull(r.coupon)
+    }
+
+    @Test
+    fun `row 27 the creator code takes its share of what the coupon left`() {
+        val r = price(line(P1), coupon = K25, creatorCode = CR5)
+        val l = r.key("L1")
+        assertEquals(2500L, l.couponShare)
+        assertEquals(375L, l.creatorShare) // 5 % of 75.00
+        assertEquals(2875L, l.couponAmount)
+        assertEquals(2500L, r.couponDiscount)
+        assertEquals(375L, r.creatorDiscount)
+        assertEquals(7125L, r.itemsTotal)
+        assertEquals(1188L, r.itemsVat) // 11.875 rounds half up
+    }
+
+    @Test
+    fun `row 28 a creator never benefits from their own code`() {
+        val own = creatorCode(creatorUserId = 900)
+        val cases = listOf(
+            "payer" to PricingFixtures.buyer(userId = 900, recipientUserId = 900),
+            "gift to the creator by a guest" to PricingFixtures.buyer(userId = null, loggedIn = false, recipientUserId = 900, email = "guest@example.com"),
+            "gift to the creator by another user" to PricingFixtures.buyer(userId = 5, recipientUserId = 900)
+        )
+        for ((name, buyer) in cases) {
+            val r = price(line(P1), creatorCode = own, buyer = buyer)
+            assertEquals(CodeOutcome(1, "CR", false, PricingCode.CODE_NOT_FOUND, 0), r.creatorCode, name)
+            assertEquals(10000L, r.itemsTotal, name)
+            assertFalse(r.canCheckout, name)
+        }
+        // the order e-mail of the creator's account, written differently
+        val byMail = creatorCode(creatorUserId = 900, creatorEmail = " Creator@Example.com ")
+        val guest = PricingFixtures.buyer(userId = null, loggedIn = false, recipientUserId = null, email = "creator@EXAMPLE.com")
+        assertEquals(PricingCode.CODE_NOT_FOUND, price(line(P1), creatorCode = byMail, buyer = guest).creatorCode!!.reason)
+        // somebody else is not the creator; a missing e-mail never matches a missing e-mail
+        assertTrue(price(line(P1), creatorCode = byMail, buyer = PricingFixtures.buyer(userId = 5, email = "else@example.com")).creatorCode!!.valid)
+        val noMail = creatorCode(creatorUserId = null, creatorEmail = null)
+        assertTrue(price(line(P1), creatorCode = noMail, buyer = PricingFixtures.buyer(userId = null, loggedIn = false, recipientUserId = null, email = null)).creatorCode!!.valid)
+    }
+
+    @Test
+    fun `row 29 without combining, a creator code loses its discount but keeps the attribution`() {
+        val r = price(line(P1), discounts = listOf(D5), creatorCode = CR5, config = config(combine = false))
+        assertEquals(6000L, r.itemsTotal)
+        assertEquals(0L, r.creatorDiscount)
+        assertEquals(CodeOutcome(1, "CR5", true, PricingCode.CODE_NOT_COMBINABLE, 0), r.creatorCode)
+        assertTrue(r.canCheckout) // valid: the reason is an info message
+        assertEquals(listOf(PricingMessage(PricingCode.CODE_NOT_COMBINABLE, MessageLevel.INFO)), r.messages)
+    }
+
+    @Test
+    fun `a creator code that has its own failing checks is refused with the reason`() {
+        val cases = listOf(
+            creatorCode(found = false) to PricingCode.CODE_NOT_FOUND,
+            creatorCode(active = false) to PricingCode.CODE_NOT_FOUND,
+            creatorCode(start = NOW + 1) to PricingCode.CODE_NOT_STARTED,
+            creatorCode(expiry = NOW) to PricingCode.CODE_EXPIRED,
+            creatorCode(redeemLimit = 2, used = 2) to PricingCode.CODE_LIMIT_REACHED
+        )
+        for ((c, reason) in cases) {
+            val r = price(line(P1), creatorCode = c)
+            assertEquals(reason, r.creatorCode!!.reason)
+            assertFalse(r.creatorCode!!.valid)
+            assertEquals(0L, r.creatorDiscount)
+            assertEquals(10000L, r.itemsTotal)
+            assertFalse(r.canCheckout)
+            assertEquals(listOf(PricingMessage(reason, MessageLevel.ERROR)), r.messages)
+        }
+        // a creator code has no per-customer limit and no minimum amount: those are coupon checks
+        assertEquals(500L, price(line(P1), creatorCode = creatorCode(redeemLimit = 2, used = 1)).creatorDiscount)
+    }
+
+    @Test
+    fun `a creator code without a discount is valid and gives attribution only`() {
+        for (c in listOf(creatorCode(value = 0), creatorCode(value = 0, unit = DiscountUnit.FIXED))) {
+            val r = price(line(P1), creatorCode = c)
+            assertEquals(CodeOutcome(1, "CR", true, null, 0), r.creatorCode)
+            assertEquals(10000L, r.itemsTotal)
+            assertTrue(r.messages.isEmpty())
+        }
+        // even where nothing is eligible: there is no discount to zero, so no reason
+        assertNull(price(line(P9), creatorCode = creatorCode(value = 0)).creatorCode!!.reason)
+    }
+
+    @Test
+    fun `a creator code takes nothing from a subscription, a credit purchase or a line the coupon emptied`() {
+        // subscription (row 72), credit pack and top-up: valid with the info reason COUPON_NOT_APPLICABLE, discount 0
+        for (lines in listOf(arrayOf(line(P9)), arrayOf(line(P6)))) {
+            val r = price(*lines, creatorCode = CR5)
+            assertEquals(CodeOutcome(1, "CR5", true, PricingCode.COUPON_NOT_APPLICABLE, 0), r.creatorCode)
+            assertEquals(r.itemsAmount, r.itemsBasis)
+            assertTrue(r.canCheckout)
+        }
+        val topUp = price(topUp(25000), config = config(creditValue = 10), creatorCode = CR5)
+        assertEquals(PricingCode.COUPON_NOT_APPLICABLE, topUp.creatorCode!!.reason)
+        // a 100 % coupon leaves nothing for the creator code
+        val everything = coupon(7, "ALL", 10000)
+        val r = price(line(P1), coupon = everything, creatorCode = CR5)
+        assertEquals(10000L, r.couponDiscount)
+        assertEquals(0L, r.creatorDiscount)
+        assertEquals(PricingCode.COUPON_NOT_APPLICABLE, r.creatorCode!!.reason)
+        assertTrue(r.creatorCode!!.valid)
+        assertEquals(0L, r.itemsTotal)
+        // a mixed cart: the creator code takes the product and leaves the pack
+        val mixed = price(line(P1), line(P6), creatorCode = CR5)
+        assertEquals(500L, mixed.creatorDiscount)
+        assertEquals(0L, mixed.key("L6").creatorShare)
+    }
+
+    @Test
+    fun `row 54 a coupon does not discount a credit pack unless the pack is listed`() {
+        val r = price(line(P1), line(P6), coupon = K25)
+        assertEquals(2500L, r.couponDiscount) // P1 only
+        assertEquals(0L, r.key("L6").couponShare)
+        assertEquals(17500L, r.itemsTotal)
+        // K25 on a pack alone
+        val alone = price(line(P6), coupon = K25)
+        assertEquals(PricingCode.COUPON_NOT_APPLICABLE, alone.coupon!!.reason)
+        assertEquals(10000L, alone.itemsTotal)
+        // the admin lists the pack explicitly: now it takes the coupon
+        val listed = coupon(8, "PACK", 2500, scope = CouponScope.SELECTED, productIds = setOf(6))
+        val pack = price(line(P6), coupon = listed)
+        assertEquals(2500L, pack.couponDiscount)
+        // a category scope never reaches a credit pack
+        val byCategory = coupon(8, "CAT", 2500, scope = CouponScope.SELECTED, categoryIds = setOf(5))
+        assertEquals(PricingCode.COUPON_NOT_APPLICABLE, price(line(P6), coupon = byCategory).coupon!!.reason)
+    }
+
+    @Test
+    fun `a selected coupon takes products by id and by category, bundles included`() {
+        val byCategory = coupon(8, "CAT", 5000, scope = CouponScope.SELECTED, categoryIds = setOf(2))
+        val r = price(line(P1), line(P2, 2), line(P3), coupon = byCategory)
+        assertEquals(0L, r.key("L1").couponShare)
+        assertEquals(999L, r.key("L2").couponShare) // 19.98 / 2
+        assertEquals(2495L, r.key("L3").couponShare) // 49.90 / 2
+        val bundle = coupon(8, "B", 1000, scope = CouponScope.SELECTED, productIds = setOf(5))
+        val b = price(line(P5), coupon = bundle)
+        assertEquals(1200L, b.key("L5").couponShare)
+        assertTrue(b.lines.filter { it.kind == OrderItemKind.BUNDLE_CHILD }.all { it.couponShare == 0L && it.lineTotal == 0L })
+        // scope ALL takes bundles too
+        assertEquals(3000L, price(line(P5), coupon = K25).couponDiscount)
+    }
+
+    @Test
+    fun `a coupon takes nothing from a line that costs nothing, a hidden line or a subscription`() {
+        // a line the automatic discount made free is not eligible
+        val free = price(line(P2, 2), discounts = listOf(D2), coupon = K25)
+        assertEquals(PricingCode.COUPON_NOT_APPLICABLE, free.coupon!!.reason)
+        assertEquals(0L, free.itemsTotal)
+        // a line hidden by the MULTI / HIDE fallback is out of every sum
+        val hide = config(mode = CurrencyMode.MULTI, fallback = MultiCurrencyFallback.HIDE)
+        val r = price(line(P1), line(P2, 3), config = hide, currency = "USD", coupon = K25)
+        assertTrue(r.key("L2").excluded)
+        assertEquals(0L, r.key("L2").couponShare)
+        assertEquals(75L, r.couponDiscount) // 25 % of 2.99 = 0.7475 -> 0.75
+        assertFalse(r.canCheckout) // the hidden line is an error of its own
+        // the minimum of the coupon is entered in the base currency and converted: 299.00 TRY is 7.48 USD
+        val min = coupon(8, "MIN", 2500, min = 29900)
+        assertEquals(PricingCode.CODE_MIN_AMOUNT, price(line(P1), line(P2, 3), config = hide, currency = "USD", coupon = min).coupon!!.reason)
+        // a subscription next to a product: only the product takes the coupon
+        val mixed = price(line(P9), line(P1), coupon = K25)
+        assertEquals(0L, mixed.key("L9").couponShare)
+        assertEquals(2500L, mixed.couponDiscount)
+        assertEquals(10500L, mixed.itemsTotal) // 30.00 + 75.00
+    }
+
+    @Test
+    fun `a FIXED code splits its amount by largest remainder and a tie goes to the lower line`() {
+        // 0.01 over two equal lines: the first line gets the quantum
+        val a = line(P1, key = "a")
+        val b = line(P1, key = "b")
+        val r = price(a, b, coupon = coupon(8, "ONE", 1, DiscountUnit.FIXED))
+        assertEquals(listOf(1L, 0L), listOf(r.key("a").couponShare, r.key("b").couponShare))
+        assertEquals(1L, r.couponDiscount)
+        // 1.00 over 1 : 2 : 3 (6.00 of cart) is 0.17 / 0.33 / 0.50 exactly by rounding down plus the leftover
+        val x = line(P2, key = "x", basePrice = 100)
+        val y = line(P2, key = "y", basePrice = 200)
+        val z = line(P2, key = "z", basePrice = 300)
+        val s = price(x, y, z, coupon = coupon(8, "SPLIT", 100, DiscountUnit.FIXED))
+        assertEquals(listOf(17L, 33L, 50L), listOf(s.key("x").couponShare, s.key("y").couponShare, s.key("z").couponShare))
+        assertEquals(100L, s.couponDiscount)
+        // never more than the line and always exactly the amount: 0.02 over three equal 0.01 lines
+        val tiny = listOf("p", "q", "r").map { line(P2, key = it, basePrice = 1) }
+        val t = price(*tiny.toTypedArray(), coupon = coupon(8, "TWO", 2, DiscountUnit.FIXED))
+        assertEquals(listOf(1L, 1L, 0L), tiny.map { t.key(it.lineKey).couponShare })
+        assertEquals(2L, t.couponDiscount)
+        assertTrue(t.lines.all { it.lineBasis >= 0 })
+    }
+
+    @Test
+    fun `a coupon in whole units under removeCents takes whole units`() {
+        val cfg = config(removeCents = true)
+        val r = price(line(P2, 3), config = cfg, coupon = K25) // 30.00 x 25 % = 7.50 -> 8.00
+        assertEquals(800L, r.couponDiscount)
+        val fixed = price(line(P2, 3), config = cfg, coupon = coupon(8, "F", 1050, DiscountUnit.FIXED)) // 10.50 -> 11.00 (half up)
+        assertEquals(1100L, fixed.couponDiscount)
+        assertTrue(fixed.lines.all { it.couponShare % 100 == 0L && it.lineBasis % 100 == 0L })
+    }
+
+    @Test
+    fun `row 63 a FIXED coupon is converted into the order currency`() {
+        val cfg = config(mode = CurrencyMode.MULTI)
+        val r = price(line(P1, 2), config = cfg, currency = "USD", coupon = KF20)
+        assertEquals(50L, r.couponDiscount) // 20.00 TRY = 0.50 USD
+        assertEquals(548L, r.itemsTotal)
+        assertEquals(91L, r.itemsVat)
+        // a coupon that converts to nothing takes nothing and is still valid
+        val tiny = price(line(P1, 2), config = cfg, currency = "USD", coupon = coupon(8, "T", 10, DiscountUnit.FIXED))
+        assertEquals(0L, tiny.couponDiscount)
+        assertTrue(tiny.coupon!!.valid)
+    }
+
+    @Test
+    fun `row 68 an external price takes no code and says so once on the quote`() {
+        val r = price(line(P1), discounts = listOf(D1), coupon = K25, creatorCode = CR5, mode = PricingMode.EXTERNAL)
+        assertEquals(0L, r.discountTotal)
+        assertEquals(0L, r.couponDiscount)
+        assertEquals(0L, r.creatorDiscount)
+        assertEquals(CodeOutcome(1, "K25", false, PricingCode.EXTERNAL_PRICING, 0), r.coupon)
+        assertEquals(CodeOutcome(1, "CR5", false, PricingCode.EXTERNAL_PRICING, 0), r.creatorCode)
+        assertEquals(10000L, r.itemsTotal) // an estimate
+        assertEquals(0L, r.itemsVat)
+        assertEquals(listOf(PricingMessage(PricingCode.EXTERNAL_PRICING, MessageLevel.INFO)), r.messages)
+        assertFalse(r.canCheckout) // an entered code that cannot apply must be removed
+        assertTrue(price(line(P1), mode = PricingMode.EXTERNAL).canCheckout)
+    }
+
+    @Test
+    fun `row 72 a subscription takes no promotion`() {
+        val r = price(line(P9), discounts = listOf(D1), coupon = K25)
+        assertEquals(0L, r.discountTotal)
+        assertEquals(PricingCode.COUPON_NOT_APPLICABLE, r.coupon!!.reason)
+        assertEquals(3000L, r.itemsTotal)
+        assertEquals(500L, r.itemsVat)
+    }
+
+    @Test
+    fun `row 79 a credit top-up takes no code`() {
+        val cfg = config(creditValue = 10)
+        val r = price(topUp(25000), config = cfg, discounts = listOf(D1), coupon = K25)
+        assertEquals(PricingCode.COUPON_NOT_APPLICABLE, r.coupon!!.reason)
+        assertEquals(2500L, r.itemsTotal)
+        assertEquals(417L, r.itemsVat) // VAT is computed as for any line
+        // a SELECTED coupon cannot list a top-up either (it has no product)
+        val selected = coupon(8, "S", 2500, scope = CouponScope.SELECTED, productIds = setOf(0))
+        assertEquals(PricingCode.COUPON_NOT_APPLICABLE, price(topUp(25000), config = cfg, coupon = selected).coupon!!.reason)
+    }
+
+    @Test
+    fun `a code of a profile that takes none is refused as a caller bug`() {
+        for (profile in listOf(PricingProfile.PANEL, PricingProfile.GIFT_CODE, PricingProfile.INGAME, PricingProfile.RENEWAL)) {
+            assertEquals(PricingError.INVALID_INPUT, refused { price(line(P1), coupon = K25, profile = profile) }.error, "$profile coupon")
+            assertEquals(PricingError.INVALID_INPUT, refused { price(line(P1), creatorCode = CR5, profile = profile) }.error, "$profile creator")
+            price(line(P1), profile = profile) // without a code they all price
+        }
+    }
+
+    // ---------------------------------------------------------------- the combine rule (05 section 6.4) both ways
+
+    @Test
+    fun `combine on stacks the coupon on top of the automatic discount`() {
+        val r = price(line(P1), line(P2, 3), discounts = listOf(D1), coupon = K25, config = config(combine = true))
+        // 10 % off first (P1 90.00, P2 8.99 x 3), then 25 % of what is left per line (22.50 and 6.74)
+        assertEquals(1300L, r.discountTotal)
+        assertEquals(2924L, r.couponDiscount)
+        assertEquals(8773L, r.itemsBasis)
+        assertTrue(r.coupon!!.valid)
+    }
+
+    @Test
+    fun `combine off takes the cheaper of the automatic discount and the coupon, never both`() {
+        val lines = arrayOf(line(P1), line(P2, 3))
+        val off = config(combine = false)
+        val r = price(*lines, discounts = listOf(D1), coupon = K25, config = off)
+        // S1 (discount only) 116.97, S2 (coupon only) 97.48: the coupon wins
+        assertEquals(11697L, price(*lines, discounts = listOf(D1), config = off).itemsBasis)
+        assertEquals(9748L, price(*lines, coupon = K25, config = off).itemsBasis)
+        assertEquals(0L, r.discountTotal)
+        assertEquals(3249L, r.couponDiscount)
+        assertEquals(9748L, r.itemsBasis)
+        // with a bigger automatic discount the order flips, whatever the order the inputs come in
+        for (discounts in listOf(listOf(D1, D5), listOf(D5, D1))) {
+            val flipped = price(*lines, discounts = discounts, coupon = K25, config = off)
+            assertEquals(7797L, flipped.itemsBasis) // 40 % off per unit: 60.00 + 3 x 5.99
+            assertEquals(0L, flipped.couponDiscount)
+            assertEquals(PricingCode.CODE_NOT_COMBINABLE, flipped.coupon!!.reason)
+        }
+    }
+
+    @Test
+    fun `without combining, a code whose minimum is met only without the automatic discount can win there`() {
+        // 2 x 100.00 = 200.00; D1 takes 10 % (180.00 < 190.00); the coupon wants 190.00 and takes 25 %
+        val needs190 = coupon(8, "MIN190", 2500, min = 19000)
+        val stacked = price(line(P1, 2), discounts = listOf(D1), coupon = needs190, config = config(combine = true))
+        assertEquals(PricingCode.CODE_MIN_AMOUNT, stacked.coupon!!.reason) // stacked, it is checked after the discount
+        assertEquals(18000L, stacked.itemsTotal)
+        val either = price(line(P1, 2), discounts = listOf(D1), coupon = needs190, config = config(combine = false))
+        assertTrue(either.coupon!!.valid) // S2: no automatic discount, 200.00 >= 190.00
+        assertEquals(0L, either.discountTotal)
+        assertEquals(5000L, either.couponDiscount)
+        assertEquals(15000L, either.itemsTotal) // cheaper than the 180.00 of S1
+        assertTrue(either.discountRedemptions.isEmpty())
+    }
+
+    @Test
+    fun `without combining, the upgrade deduction applies in both scenarios`() {
+        val buyer = PricingFixtures.buyer(listOf(owned(501, T1, 5000)))
+        val s2 = price(line(T2), discounts = listOf(D1), coupon = K25, buyer = buyer, config = config(combine = false))
+        // S1: 120.00 - 12.00 - 50.00 = 58.00; S2: 120.00 - 50.00 = 70.00 and the coupon 25 % of 70.00 = 17.50 -> 52.50
+        assertEquals(5000L, s2.upgradeDiscount)
+        assertEquals(0L, s2.discountTotal)
+        assertEquals(1750L, s2.couponDiscount)
+        assertEquals(5250L, s2.itemsBasis)
+        assertEquals(501L, s2.key("L22").upgradeFromEntitlementId)
+        // and the entitlement the line creates is worth what was really paid (row 30 with a coupon)
+        val l = s2.key("L22")
+        assertEquals(10250L, PricePaid.moneyOrder(s2.conversions, l.lineBasis, l.quantity, l.upgradeUnitAmount))
+    }
+
+    @Test
+    fun `without combining, the choice with no automatic discount or no code is no choice`() {
+        val noDiscount = price(line(P1), coupon = K25, config = config(combine = false))
+        assertEquals(2500L, noDiscount.couponDiscount)
+        assertTrue(noDiscount.coupon!!.valid)
+        val noCode = price(line(P1), discounts = listOf(D1), config = config(combine = false))
+        assertEquals(1000L, noCode.discountTotal)
+        // an expired coupon next to an automatic discount: the reason stays the coupon's own
+        val expired = price(line(P1), discounts = listOf(D1), coupon = coupon(8, "OLD", 5000, expiry = NOW), config = config(combine = false))
+        assertEquals(PricingCode.CODE_EXPIRED, expired.coupon!!.reason)
+        assertEquals(1000L, expired.discountTotal)
+        // a coupon that gives nothing keeps its own validity
+        val zero = price(line(P1), discounts = listOf(D1), coupon = coupon(8, "ZERO", 0), config = config(combine = false))
+        assertTrue(zero.coupon!!.valid)
+        assertEquals(1000L, zero.discountTotal)
+    }
+
+    @Test
+    fun `without combining, a coupon and a creator code together are weighed against the automatic discount`() {
+        val both = price(line(P1), discounts = listOf(D1), coupon = K25, creatorCode = CR5, config = config(combine = false))
+        // S1 90.00 against S2 71.25: the codes win together
+        assertEquals(0L, both.discountTotal)
+        assertEquals(2500L, both.couponDiscount)
+        assertEquals(375L, both.creatorDiscount)
+        assertEquals(7125L, both.itemsTotal)
+        val small = price(line(P1), discounts = listOf(D5), coupon = K25, creatorCode = CR5, config = config(combine = false))
+        // S1 60.00 against S2 71.25: the discount wins, the coupon is refused, the creator keeps the attribution
+        assertEquals(4000L, small.discountTotal)
+        assertEquals(PricingCode.CODE_NOT_COMBINABLE, small.coupon!!.reason)
+        assertFalse(small.coupon!!.valid)
+        assertEquals(PricingCode.CODE_NOT_COMBINABLE, small.creatorCode!!.reason)
+        assertTrue(small.creatorCode!!.valid)
+        assertEquals(6000L, small.itemsTotal)
+    }
+
+    // ================================================================ stage A4: VAT and line totals (05 section 7)
+
+    @Test
+    fun `row 1 VAT contained in a gross price`() {
+        val r = price(line(P1))
+        val l = r.key("L1")
+        assertEquals(10000L, r.subtotal)
+        assertEquals(1667L, r.itemsVat)
+        assertEquals(1667L, l.vatAmount)
+        assertEquals(2000L, l.vatPercent)
+        assertEquals(10000L, l.lineBasis)
+        assertEquals(10000L, l.lineTotal)
+        assertEquals(10000L, r.itemsTotal)
+    }
+
+    @Test
+    fun `row 2 inclusive VAT rounds half up`() {
+        val r = price(line(P2, 3))
+        assertEquals(2997L, r.subtotal)
+        assertEquals(500L, r.itemsVat) // 4.995
+        assertEquals(2997L, r.itemsTotal)
+    }
+
+    @Test
+    fun `row 3 exclusive VAT is added on top`() {
+        val r = price(line(P1), config = config(includeVat = false))
+        val l = r.key("L1")
+        assertEquals(10000L, r.subtotal)
+        assertEquals(2000L, l.vatAmount)
+        assertEquals(10000L, l.lineBasis)
+        assertEquals(12000L, l.lineTotal)
+        assertEquals(12000L, r.itemsTotal)
+        assertEquals(2000L, r.itemsVat)
+    }
+
+    @Test
+    fun `row 4 exclusive VAT rounds the added amount`() {
+        val r = price(line(P2, 3), config = config(includeVat = false))
+        assertEquals(599L, r.itemsVat) // 5.994
+        assertEquals(3596L, r.itemsTotal)
+    }
+
+    @Test
+    fun `row 5 a per-product VAT rate overrides the global one`() {
+        val r = price(line(P1), line(P3))
+        assertEquals(1667L, r.key("L1").vatAmount)
+        assertEquals(454L, r.key("L3").vatAmount) // 49.90 at 10 %
+        assertEquals(1000L, r.key("L3").vatPercent)
+        assertEquals(2121L, r.itemsVat)
+        assertEquals(14990L, r.itemsTotal)
+    }
+
+    @Test
+    fun `row 6 a per-product VAT rate with exclusive prices`() {
+        val r = price(line(P3, 2), config = config(includeVat = false))
+        assertEquals(9980L, r.key("L3").lineBasis)
+        assertEquals(998L, r.itemsVat)
+        assertEquals(10978L, r.itemsTotal)
+    }
+
+    @Test
+    fun `VAT is taken on the amount after every discount, with showVatInPrice on and off`() {
+        // row 7: percent discount per unit
+        val seven = price(line(P2, 3), discounts = listOf(D1))
+        assertEquals(450L, seven.itemsVat) // 26.97 inside: 4.495 -> 4.50
+        assertEquals(2697L, seven.itemsTotal)
+        // row 9: best discount wins per line
+        val nine = price(line(P1), line(P3), discounts = listOf(D1, D3))
+        assertEquals(1908L, nine.itemsVat) // 15.00 + 4.08
+        assertEquals(13490L, nine.itemsTotal)
+        // row 11
+        val eleven = price(line(P1, 2), discounts = listOf(D4))
+        assertEquals(2667L, eleven.itemsVat)
+        assertEquals(16000L, eleven.itemsTotal)
+        // row 69: exclusive prices and a FIXED coupon
+        val sixtyNine = price(line(P1), coupon = KF20, config = config(includeVat = false))
+        assertEquals(8000L, sixtyNine.key("L1").lineBasis)
+        assertEquals(1600L, sixtyNine.itemsVat)
+        assertEquals(9600L, sixtyNine.itemsTotal)
+        // a percent coupon on exclusive prices: VAT on the discounted net
+        val exclusive = price(line(P1), coupon = K25, config = config(includeVat = false))
+        assertEquals(1500L, exclusive.itemsVat)
+        assertEquals(9000L, exclusive.itemsTotal)
+    }
+
+    @Test
+    fun `rows 30 to 35 the upgrade deduction is taken before VAT`() {
+        fun total(vararg lines: LineInput, discounts: List<DiscountInput> = emptyList(), owns: List<OwnedTier>) =
+            price(*lines, discounts = discounts, buyer = PricingFixtures.buyer(owns))
+        val r30 = total(line(T2), owns = listOf(owned(501, T1, 5000)))
+        assertEquals(7000L, r30.itemsTotal)
+        assertEquals(1167L, r30.itemsVat)
+        val r31 = total(line(T3), owns = listOf(owned(501, T1, 2500)))
+        assertEquals(17500L, r31.itemsTotal)
+        assertEquals(2917L, r31.itemsVat)
+        val r32 = total(line(T2), discounts = listOf(D1), owns = listOf(owned(501, T1, 5000)))
+        assertEquals(5800L, r32.itemsTotal)
+        assertEquals(967L, r32.itemsVat)
+        val full = PricingFixtures.tier(22, 12000, 2, UpgradeMode.FULL)
+        val r33 = total(line(full), owns = listOf(owned(501, T1, 5000)))
+        assertEquals(12000L, r33.itemsTotal)
+        assertEquals(2000L, r33.itemsVat)
+        val r34 = total(line(T3), discounts = listOf(D6), owns = listOf(owned(502, T2, 15000)))
+        assertEquals(0L, r34.itemsTotal)
+        assertEquals(0L, r34.itemsVat)
+        val r35 = total(line(T3), owns = listOf(owned(501, T1, 5000), owned(502, T2, 12000)))
+        assertEquals(8000L, r35.itemsTotal)
+        assertEquals(1333L, r35.itemsVat)
+    }
+
+    @Test
+    fun `row 36 a bundle is one priced line and its children carry no amount at all`() {
+        val r = price(line(P5, 2))
+        val bundle = r.key("L5")
+        assertEquals(24000L, bundle.lineTotal)
+        assertEquals(4000L, bundle.vatAmount)
+        assertEquals(24000L, r.itemsTotal)
+        assertEquals(4000L, r.itemsVat)
+        val children = r.lines.filter { it.kind == OrderItemKind.BUNDLE_CHILD }
+        assertEquals(listOf(6, 2), children.map { it.quantity })
+        for (c in children) {
+            assertEquals(listOf(0L, 0L, 0L, 0L, 0L, 0L, 0L), listOf(c.lineAmount, c.couponShare, c.creatorShare, c.lineBasis, c.vatPercent, c.vatAmount, c.lineTotal))
+        }
+    }
+
+    @Test
+    fun `rows 37 and 38 a variant price and the item part of a physical order`() {
+        val xl = price(line(P4, variantId = 2, basePrice = 27500))
+        assertEquals(27500L, xl.key("L4v2").lineTotal)
+        assertEquals(4583L, xl.itemsVat) // 45.83, shipping VAT is stage B
+        val exclusive = price(line(P4, variantId = 1), config = config(includeVat = false))
+        assertEquals(30000L, exclusive.itemsTotal)
+        assertEquals(5000L, exclusive.itemsVat)
+        assertEquals(25000L, exclusive.subtotal)
+    }
+
+    @Test
+    fun `rows 40 to 42 removeCents rounds the amounts and the VAT is taken on whole units`() {
+        val cfg = config(removeCents = true)
+        val r40 = price(line(P2, 3), config = cfg)
+        assertEquals(3000L, r40.subtotal)
+        assertEquals(500L, r40.itemsVat)
+        assertEquals(3000L, r40.itemsTotal)
+        val r41 = price(line(P2, 3), config = cfg, discounts = listOf(D7))
+        assertEquals(800L, r41.key("L2").unitPrice)
+        assertEquals(400L, r41.itemsVat)
+        assertEquals(2400L, r41.itemsTotal)
+        val r42 = price(line(P3), config = config(removeCents = true, includeVat = false))
+        assertEquals(5000L, r42.key("L3").listUnitPrice)
+        assertEquals(500L, r42.itemsVat)
+        assertEquals(5500L, r42.itemsTotal)
+    }
+
+    @Test
+    fun `row 58 tiny amounts keep one VAT cent`() {
+        val r = price(line(P8, 3), discounts = listOf(D6))
+        assertEquals(6L, r.itemsTotal)
+        assertEquals(1L, r.itemsVat)
+    }
+
+    @Test
+    fun `rows 59 to 61 and 64 VAT in other currencies`() {
+        // DISPLAY: charged in the base currency, the converted figure is informative
+        val display = config(mode = CurrencyMode.DISPLAY)
+        val one = price(line(P1), config = display, currency = "USD")
+        assertEquals(10000L, one.itemsTotal)
+        assertEquals(1667L, one.itemsVat)
+        assertEquals(250L, one.conversions.toDisplay(one.itemsTotal))
+        assertEquals(75L, price(line(P2, 3), config = display, currency = "USD").let { it.conversions.toDisplay(it.itemsTotal) }) // 74.925
+        // MULTI with an explicit price (row 60) and the converted fallback (row 61)
+        val multi = config(mode = CurrencyMode.MULTI)
+        val r60 = price(line(P1, 2), config = multi, currency = "USD")
+        assertEquals(598L, r60.itemsTotal)
+        assertEquals(100L, r60.itemsVat)
+        val r61 = price(line(P2, 3), config = multi, currency = "USD")
+        assertEquals(75L, r61.itemsTotal)
+        assertEquals(13L, r61.itemsVat) // 0.125 rounds half up to a whole cent of the order currency
+        // zero-decimal currency: VAT in whole yen, half up
+        val r64 = price(line(P1), line(P2), config = multi, currency = "JPY")
+        assertEquals(7500L, r64.key("L1").vatAmount) // 75 JPY
+        assertEquals(800L, r64.key("L2").vatAmount) // 7.5 JPY -> 8 JPY
+        assertEquals(0L, r64.itemsVat % 100)
+    }
+
+    @Test
+    fun `row 67 when the gateway adds the tax the lines carry none`() {
+        val r = price(line(P1), mode = PricingMode.EXTERNAL_TAX)
+        val l = r.key("L1")
+        assertEquals(8333L, l.lineTotal)
+        assertEquals(10000L, l.lineBasis)
+        assertEquals(0L, l.vatAmount)
+        assertEquals(0L, l.vatPercent)
+        assertEquals(8333L, r.itemsTotal)
+        assertEquals(0L, r.itemsVat)
+        // with exclusive prices the gateway simply adds its tax to the net
+        val net = price(line(P1), mode = PricingMode.EXTERNAL_TAX, config = config(includeVat = false))
+        assertEquals(10000L, net.itemsTotal)
+        assertEquals(0L, net.itemsVat)
+        // a coupon still works: the tax is taken off the discounted amount
+        val withCoupon = price(line(P1), mode = PricingMode.EXTERNAL_TAX, coupon = K25)
+        assertEquals(2500L, withCoupon.couponDiscount)
+        assertEquals(6250L, withCoupon.itemsTotal) // 75.00 - 12.50
+    }
+
+    @Test
+    fun `row 70 a gift code order is worth nothing and carries no VAT`() {
+        val r = price(line(P1), line(P2, 3), discounts = listOf(D1), profile = PricingProfile.GIFT_CODE)
+        assertEquals(0L, r.itemsTotal)
+        assertEquals(0L, r.itemsVat)
+        assertEquals(0L, r.itemsBasis)
+        assertTrue(r.lines.all { it.lineTotal == 0L && it.vatAmount == 0L && it.lineBasis == 0L })
+    }
+
+    @Test
+    fun `a product rate of zero, a rate over 100 percent and a negative global rate are clamped`() {
+        val zero = Product(30, "Tax free", 10000, vatBp = 0)
+        val r0 = price(line(zero))
+        assertEquals(0L, r0.itemsVat)
+        assertEquals(0L, r0.key("L30").vatPercent)
+        assertEquals(10000L, r0.itemsTotal)
+        val huge = Product(31, "Silly rate", 10000, vatBp = 20_000)
+        val rh = price(line(huge))
+        assertEquals(10_000L, rh.key("L31").vatPercent)
+        assertEquals(5000L, rh.itemsVat) // 100 % VAT: half of the gross is VAT
+        val negative = price(line(P1), config = config(vatBp = -5))
+        assertEquals(0L, negative.itemsVat)
+        val exclusive = price(line(huge), config = config(includeVat = false))
+        assertEquals(10_000L, exclusive.itemsVat)
+        assertEquals(20_000L, exclusive.itemsTotal)
+    }
+
+    @Test
+    fun `VAT rows of a result add up to the VAT total and the line totals to the items total`() {
+        for (includeVat in listOf(true, false)) {
+            val r = price(line(P1, 2), line(P2, 3), line(P3, 4), line(P6), line(P9), discounts = listOf(D1),
+                coupon = K25, creatorCode = CR5, config = config(includeVat = includeVat))
+            assertEquals(r.itemsVat, r.lines.sumOf { it.vatAmount }, "includeVat=$includeVat")
+            assertEquals(r.itemsTotal, r.lines.sumOf { it.lineTotal })
+            assertEquals(r.itemsBasis, r.lines.sumOf { it.lineBasis })
+            assertEquals(r.itemsTotal, r.itemsBasis + if (includeVat) 0L else r.itemsVat)
+            // the identity of 05 section 7
+            assertEquals(r.itemsBasis, r.subtotal - r.discountTotal - r.upgradeDiscount - r.couponDiscount - r.creatorDiscount)
+        }
+    }
+
+    @Test
+    fun `a line hidden by the currency fallback carries nothing`() {
+        val hide = config(mode = CurrencyMode.MULTI, fallback = MultiCurrencyFallback.HIDE)
+        val r = price(line(P1), line(P2, 3), config = hide, currency = "USD")
+        val hidden = r.key("L2")
+        assertTrue(hidden.excluded)
+        assertEquals(listOf(0L, 0L, 0L, 0L, 0L), listOf(hidden.lineBasis, hidden.vatPercent, hidden.vatAmount, hidden.lineTotal, hidden.couponShare))
+        assertEquals(299L, r.itemsTotal)
+        assertEquals(50L, r.itemsVat)
+    }
+
+    @Test
+    fun `row 81 the physical basis counts the physical lines only, after the coupon`() {
+        val r = price(line(P1), line(P4, variantId = 1), coupon = K25)
+        assertEquals(18750L, r.physicalBasis)
+        assertEquals(18750L, r.physicalBasisBase)
+        assertEquals(7500L + 18750L, r.itemsBasis)
+        assertTrue(r.requiresShipping)
+        val digital = price(line(P1), coupon = K25)
+        assertFalse(digital.requiresShipping)
+        assertEquals(0L, digital.physicalBasis)
+        // base-currency figures of a foreign order are converted back: 6.88 USD is 275.20 TRY
+        val multi = config(mode = CurrencyMode.MULTI)
+        val usd = price(line(P4, variantId = 2, basePrice = 27500), config = multi, currency = "USD")
+        assertEquals(688L, usd.physicalBasis)
+        assertEquals(27520L, usd.physicalBasisBase) // 6.88 / 0.025 = 275.20
+        assertEquals(27520L, usd.itemsBasisBase)
+    }
+
+    @Test
+    fun `a physical line hidden by the currency fallback needs no shipping and adds nothing to the physical basis`() {
+        val hide = config(mode = CurrencyMode.MULTI, fallback = MultiCurrencyFallback.HIDE)
+        val r = price(line(P1), line(P4, variantId = 1), config = hide, currency = "USD", coupon = K25)
+        assertTrue(r.key("L4v1").excluded)
+        assertFalse(r.key("L1").excluded)
+        assertFalse(r.requiresShipping) // "any priced line is physical": a hidden line is not priced
+        assertEquals(0L, r.physicalBasis)
+        assertEquals(0L, r.physicalBasisBase)
+        // the same cart in the base currency does need shipping
+        assertTrue(price(line(P1), line(P4, variantId = 1), coupon = K25).requiresShipping)
+    }
+
     // ---------------------------------------------------------------- determinism
 
     @Test
@@ -942,6 +1775,229 @@ class PricingEngineTest {
         )) {
             assertTrue((seen[branch] ?: 0) >= 100, "the loop barely exercised '$branch': ${seen[branch]}")
         }
+    }
+
+    // ---------------------------------------------------------------- the seeded property loop of stages A3 and A4
+
+    @Test
+    fun `property loop over 10000 seeded carts with codes and VAT, shares add up, rows add up and an independent oracle agrees`() {
+        val rnd = Random(20261006)
+        val seen = java.util.TreeMap<String, Int>()
+        fun hit(branch: String) = seen.merge(branch, 1) { a, b -> a + b }
+        var linesChecked = 0L
+        repeat(10_000) { n ->
+            val input = randomCodesInput(rnd)
+            val result = PricingEngine.priceItems(input)
+            val expected = PricingOracle.expectFull(input)
+            val where = "cart #$n"
+            val q = result.conversions.oq
+            val priced = result.lines.filter { it.kind != OrderItemKind.BUNDLE_CHILD }
+            assertEquals(input.lines.size, priced.size, where)
+
+            // the independent oracle: every figure of every line, and the outcome of every code
+            assertEquals(expected.currency, result.currency, where)
+            for ((i, line) in priced.withIndex()) {
+                val e = expected.lines[i]
+                val tag = "$where line ${line.lineKey}"
+                assertEquals(e.a2.list, line.listUnitPrice, tag)
+                assertEquals(e.a2.unitDiscount, line.unitDiscount, tag)
+                assertEquals(e.a2.upgrade, line.upgradeUnitAmount, tag)
+                assertEquals(e.a2.discountId, line.discountId, tag)
+                assertEquals(e.couponShare, line.couponShare, "$tag coupon share")
+                assertEquals(e.creatorShare, line.creatorShare, "$tag creator share")
+                assertEquals(e.basis, line.lineBasis, "$tag basis")
+                assertEquals(e.vatPercent, line.vatPercent, "$tag vat percent")
+                assertEquals(e.vat, line.vatAmount, "$tag vat")
+                assertEquals(e.total, line.lineTotal, "$tag total")
+            }
+            fun same(name: String, engine: CodeOutcome?, oracle: PricingOracle.CodeOut?) {
+                assertEquals(oracle == null, engine == null, "$where $name present")
+                if (engine != null && oracle != null) {
+                    assertEquals(oracle.valid, engine.valid, "$where $name valid")
+                    assertEquals(oracle.reason, engine.reason, "$where $name reason")
+                    assertEquals(oracle.discount, engine.discount, "$where $name discount")
+                }
+            }
+            same("coupon", result.coupon, expected.coupon)
+            same("creator code", result.creatorCode, expected.creator)
+            assertEquals(expected.basis, BigInteger.valueOf(result.itemsBasis), where)
+            assertEquals(expected.total, BigInteger.valueOf(result.itemsTotal), where)
+            assertEquals(expected.vat, BigInteger.valueOf(result.itemsVat), where)
+            assertEquals(expected.physicalBasis, BigInteger.valueOf(result.physicalBasis), where)
+            assertEquals(expected.basisBase, result.itemsBasisBase, where)
+            assertEquals(expected.physicalBasisBase, result.physicalBasisBase, where)
+
+            // the identities of 05 section 7, summed on BigInteger so that nothing can wrap
+            fun sum(f: (PricedLine) -> Long) = priced.fold(BigInteger.ZERO) { a, l -> a + BigInteger.valueOf(f(l)) }
+            val identity = BigInteger.valueOf(result.subtotal) - BigInteger.valueOf(result.discountTotal) - BigInteger.valueOf(result.upgradeDiscount) -
+                BigInteger.valueOf(result.couponDiscount) - BigInteger.valueOf(result.creatorDiscount)
+            assertEquals(identity, sum { it.lineBasis }, "$where basis identity")
+            assertEquals(BigInteger.valueOf(result.itemsBasis), sum { it.lineBasis }, where)
+            assertEquals(BigInteger.valueOf(result.itemsTotal), sum { it.lineTotal }, where)
+            assertEquals(BigInteger.valueOf(result.itemsVat), sum { it.vatAmount }, where)
+            assertEquals(BigInteger.valueOf(result.couponDiscount), sum { it.couponShare }, where)
+            assertEquals(BigInteger.valueOf(result.creatorDiscount), sum { it.creatorShare }, where)
+            if (input.pricingMode == PricingMode.MARKET) {
+                val vatOnTop = if (input.config.pricesIncludeVat) BigInteger.ZERO else BigInteger.valueOf(result.itemsVat)
+                assertEquals(sum { it.lineBasis } + vatOnTop, BigInteger.valueOf(result.itemsTotal), "$where total identity")
+            }
+            // a code reports what it took, and the lines carry exactly that
+            assertEquals(result.coupon?.discount ?: 0L, result.couponDiscount, where)
+            assertEquals(result.creatorCode?.discount ?: 0L, result.creatorDiscount, where)
+
+            for (line in priced) {
+                val tag = "$where line ${line.lineKey}"
+                linesChecked++
+                // nothing negative, shares stay inside the line, the figures are on the quantum
+                assertTrue(line.couponShare >= 0 && line.creatorShare >= 0 && line.lineBasis >= 0 && line.vatAmount >= 0 && line.lineTotal >= 0, tag)
+                assertEquals(line.couponShare + line.creatorShare, line.couponAmount, tag)
+                assertTrue(line.couponAmount <= line.lineAmount, tag)
+                assertEquals(line.lineAmount - line.couponAmount, line.lineBasis, tag)
+                for (v in listOf(line.couponShare, line.creatorShare, line.lineBasis, line.vatAmount, line.lineTotal)) assertEquals(0L, v % q, "$tag quantum")
+                // lineTotal <= listUnitPrice x quantity, plus the VAT added on top of exclusive prices
+                val ceiling = BigInteger.valueOf(line.listUnitPrice) * BigInteger.valueOf(line.quantity.toLong()) +
+                    if (input.pricingMode == PricingMode.MARKET && !input.config.pricesIncludeVat) BigInteger.valueOf(line.vatAmount) else BigInteger.ZERO
+                assertTrue(BigInteger.valueOf(line.lineTotal) <= ceiling, "$tag total over the list price")
+                // a code never takes from a line it does not apply to
+                val source = input.lines.single { it.lineKey == line.lineKey }
+                if (line.couponAmount > 0) {
+                    assertFalse(source.subscription, "$tag a code took from a subscription")
+                    assertFalse(source.kind == LineKind.CREDIT_TOPUP, tag)
+                }
+                if (line.creatorShare > 0) assertTrue(source.kind == LineKind.PRODUCT || source.kind == LineKind.BUNDLE, "$tag creator share on ${source.kind}")
+                if (line.excluded) assertEquals(0L, line.lineTotal + line.lineBasis + line.couponAmount, tag)
+                assertTrue(line.vatAmount <= line.lineBasis, "$tag VAT over the basis")
+                val rate = source.vatBp
+                if (rate != null) hit("per-product VAT rate")
+                if (rate != null && rate !in 0L..10_000L) hit("VAT rate clamped")
+                if (source.physical && !line.excluded) hit("physical line")
+            }
+
+            // the codes: branch counters (the loop must not be vacuous)
+            val coupon = result.coupon
+            val creator = result.creatorCode
+            if (coupon != null) hit(if (coupon.valid) "coupon applied" else "coupon refused: ${coupon.reason}")
+            if (creator != null) {
+                hit(if (!creator.valid) "creator code refused: ${creator.reason}" else if (creator.reason != null) "creator code attribution only: ${creator.reason}" else "creator code applied")
+            }
+            if (result.couponDiscount > 0 && result.creatorDiscount > 0) hit("coupon then creator code")
+            if (input.coupon?.unit == DiscountUnit.FIXED && priced.count { it.couponShare > 0 } >= 2) hit("FIXED coupon allocated over several lines")
+            if (input.creatorCode?.unit == DiscountUnit.FIXED && priced.count { it.creatorShare > 0 } >= 2) hit("FIXED creator code allocated over several lines")
+            if (input.pricingMode == PricingMode.EXTERNAL_TAX) hit("EXTERNAL_TAX")
+            if (input.pricingMode == PricingMode.EXTERNAL) hit("EXTERNAL")
+            hit(if (input.config.pricesIncludeVat) "VAT inclusive" else "VAT exclusive")
+            if (input.config.removeCents) hit("removeCents")
+            if (result.currency != result.baseCurrency) hit("foreign order currency")
+            if (input.creatorCode?.let { it.creatorUserId == input.buyer.recipientUserId || it.creatorUserId == input.buyer.userId } == true) hit("creator uses own code")
+
+            // combine off: the chosen basis is the cheaper of "automatic discounts only" and "codes only" (property 6)
+            if (!input.config.combineDiscountsAndCoupons && (input.coupon != null || input.creatorCode != null)) {
+                val s1 = PricingEngine.priceItems(withCodes(input, null, null))
+                val s2 = PricingEngine.priceItems(withDiscounts(input, emptyList()))
+                assertEquals(minOf(s1.itemsBasis, s2.itemsBasis), result.itemsBasis, "$where combine off")
+                if (s1.discountTotal > 0) {
+                    hit("combine off, automatic discount present")
+                    if (s2.itemsBasis < s1.itemsBasis) hit("combine off, codes chosen") else hit("combine off, automatic discount chosen")
+                    // never both: a code and an automatic discount are exclusive in the result
+                    assertTrue(result.discountTotal == 0L || result.couponDiscount + result.creatorDiscount == 0L, "$where both taken")
+                }
+            }
+            if (input.config.combineDiscountsAndCoupons && result.discountTotal > 0 && result.couponDiscount > 0) hit("combine on, both taken")
+
+            // determinism, and independence of the order the discounts arrive in
+            assertEquals(result, PricingEngine.priceItems(input), where)
+            assertEquals(result, PricingEngine.priceItems(withDiscounts(input, input.discounts.shuffled(rnd))), where)
+        }
+        assertTrue(linesChecked >= 10_000, "only $linesChecked lines were checked")
+        println("PROPERTY-LOOP-A3A4 lines=$linesChecked branches=$seen")
+        for (branch in listOf(
+            "coupon applied", "creator code applied", "coupon then creator code", "creator code attribution only: COUPON_NOT_APPLICABLE",
+            "creator code refused: CODE_NOT_FOUND", "coupon refused: CODE_NOT_FOUND", "coupon refused: COUPON_NOT_APPLICABLE",
+            "coupon refused: CODE_MIN_AMOUNT", "coupon refused: CODE_LIMIT_REACHED", "coupon refused: CODE_EXPIRED",
+            "coupon refused: CODE_NOT_STARTED", "coupon refused: EXTERNAL_PRICING", "coupon refused: CODE_NOT_COMBINABLE",
+            "creator code attribution only: CODE_NOT_COMBINABLE", "FIXED coupon allocated over several lines",
+            "FIXED creator code allocated over several lines", "creator uses own code", "combine off, codes chosen",
+            "combine off, automatic discount chosen", "combine on, both taken", "VAT inclusive", "VAT exclusive", "EXTERNAL_TAX",
+            "EXTERNAL", "per-product VAT rate", "VAT rate clamped", "physical line", "removeCents", "foreign order currency"
+        )) {
+            assertTrue((seen[branch] ?: 0) >= 100, "the loop barely exercised '$branch': ${seen[branch]}")
+        }
+    }
+
+    private fun withCodes(i: PricingInput, coupon: CouponInput?, creatorCode: CreatorCodeInput?) = PricingInput(
+        i.config, i.now, i.profile, i.requestedCurrency, i.lines, i.buyer, i.discounts, coupon, creatorCode, i.pricingMode,
+        i.payWithCredits, i.priceOverride
+    )
+
+    /** [randomInput] with a coupon and a creator code, per-line VAT rates, physical lines and a random combine rule. */
+    private fun randomCodesInput(rnd: Random): PricingInput {
+        val base = randomInput(rnd)
+        val storefront = rnd.nextInt(100) < 85 // only the storefront takes codes; the A2 loop covers the other profiles
+        val c = base.config
+        val config = PricingConfig(
+            baseCurrency = c.baseCurrency, currencyMode = c.currencyMode, additionalCurrencies = c.additionalCurrencies,
+            multiCurrencyFallback = c.multiCurrencyFallback, rates = c.rates, vatBp = listOf(2000L, 0L, 1800L, 10_000L, 1L)[rnd.nextInt(5)],
+            pricesIncludeVat = c.pricesIncludeVat, removeCents = c.removeCents, minimumOrderAmount = 0,
+            combineDiscountsAndCoupons = rnd.nextBoolean(), creditsEnabled = true, onlyAcceptCredits = false,
+            creditValue = c.creditValue, allowMixedCreditPayment = true, cashbackBp = 0
+        )
+        val rates = listOf<Long?>(null, null, null, 0L, 1000L, 2000L, 20_000L)
+        val lines = base.lines.map { l ->
+            LineInput(
+                lineKey = l.lineKey, productId = l.productId, variantId = l.variantId, kind = l.kind, quantity = l.quantity,
+                basePrice = l.basePrice, currencyPrices = l.currencyPrices, creditPrice = l.creditPrice,
+                vatBp = rates[rnd.nextInt(rates.size)], categoryPath = l.categoryPath, physical = rnd.nextInt(4) == 0,
+                subscription = l.subscription, tier = l.tier, topUpCredits = l.topUpCredits, children = l.children
+            )
+        }
+        val buyer = PricingFixtures.buyer(
+            base.buyer.recipientTiers, userId = 1, recipientUserId = listOf(1L, 1L, 900L, null)[rnd.nextInt(4)],
+            email = listOf("buyer@example.com", null, "Buyer@Example.com ")[rnd.nextInt(3)]
+        )
+        return PricingInput(
+            config = config, now = base.now, profile = if (storefront) PricingProfile.STOREFRONT else base.profile,
+            requestedCurrency = base.requestedCurrency, lines = lines, buyer = buyer, discounts = base.discounts,
+            coupon = if (storefront && rnd.nextInt(10) < 6) randomCoupon(rnd) else null,
+            creatorCode = if (storefront && rnd.nextInt(10) < 5) randomCreatorCode(rnd) else null,
+            pricingMode = base.pricingMode, payWithCredits = false, priceOverride = if (storefront) null else base.priceOverride
+        )
+    }
+
+    private fun randomDiscountValue(rnd: Random, unit: DiscountUnit): Long = when {
+        unit == DiscountUnit.PERCENT && rnd.nextInt(30) == 0 -> rnd.nextLong(10_001, 50_000) // clamped to 100 %
+        unit == DiscountUnit.PERCENT -> rnd.nextLong(0, 10_001)
+        rnd.nextInt(30) == 0 -> rnd.nextLong(1, Long.MAX_VALUE / 4) // clamped to the bound
+        else -> rnd.nextLong(0, 300_000)
+    }
+
+    private fun randomCoupon(rnd: Random): CouponInput {
+        val unit = if (rnd.nextBoolean()) DiscountUnit.PERCENT else DiscountUnit.FIXED
+        return CouponInput(
+            found = rnd.nextInt(20) != 0, id = 7, code = "RC", active = rnd.nextInt(20) != 0,
+            discount = randomDiscountValue(rnd, unit), unit = unit,
+            scope = if (rnd.nextBoolean()) CouponScope.ALL else CouponScope.SELECTED,
+            productIds = (1..6).filter { rnd.nextInt(3) == 0 }.map { it.toLong() }.toSet(),
+            categoryIds = (1..5).filter { rnd.nextInt(3) == 0 }.map { it.toLong() }.toSet(),
+            minPaymentAmount = if (rnd.nextInt(3) == 0) rnd.nextLong(0, 1_500_000) else null,
+            startDate = if (rnd.nextInt(14) == 0) NOW + rnd.nextLong(-2, 4) else null,
+            expiryDate = if (rnd.nextInt(14) == 0) NOW + rnd.nextLong(-3, 3) else null,
+            redeemLimit = if (rnd.nextInt(12) == 0) rnd.nextInt(1, 4) else null,
+            customerRedeemLimit = if (rnd.nextInt(12) == 0) rnd.nextInt(1, 3) else null,
+            usedCount = rnd.nextInt(0, 4), buyerUses = rnd.nextInt(0, 3)
+        )
+    }
+
+    private fun randomCreatorCode(rnd: Random): CreatorCodeInput {
+        val unit = if (rnd.nextBoolean()) DiscountUnit.PERCENT else DiscountUnit.FIXED
+        return CreatorCodeInput(
+            found = rnd.nextInt(20) != 0, id = 3, code = "RCR", active = rnd.nextInt(20) != 0,
+            discount = if (rnd.nextInt(8) == 0) 0 else randomDiscountValue(rnd, unit), unit = unit, commissionBp = 1000,
+            creatorUserId = listOf(900L, 901L, null)[rnd.nextInt(3)],
+            startDate = if (rnd.nextInt(14) == 0) NOW + rnd.nextLong(-2, 4) else null,
+            expiryDate = if (rnd.nextInt(14) == 0) NOW + rnd.nextLong(-3, 3) else null,
+            redeemLimit = if (rnd.nextInt(12) == 0) rnd.nextInt(1, 4) else null, usedCount = rnd.nextInt(0, 4),
+            creatorEmail = listOf(null, "creator@example.com", "buyer@example.com")[rnd.nextInt(3)]
+        )
     }
 
     private fun withDiscounts(i: PricingInput, discounts: List<DiscountInput>) = PricingInput(

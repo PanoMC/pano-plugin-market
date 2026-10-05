@@ -161,7 +161,12 @@ class CreatorCodeInput(
     val startDate: Long?,
     val expiryDate: Long?,
     val redeemLimit: Int?,
-    val usedCount: Int
+    val usedCount: Int,
+    /**
+     * E-mail of the creator's account, for the self-use check of 05 section 6.3 (check 3: "the order e-mail equals the
+     * creator account's e-mail"; the input model of section 3 lists only the user id, the check needs this too).
+     */
+    val creatorEmail: String? = null
 )
 
 class PricingInput(
