@@ -119,7 +119,14 @@ class FakeMcPlatform : McPlatform {
     override fun luckPermsAvailable() = luckPerms
     override fun vaultAvailable() = vault
     override fun placeholderApiAvailable() = placeholders
-    override fun isPresent(username: String) = presentPlayers.containsKey(username.lowercase())
+
+    /** When set, `isPresent` throws it (an authentication plugin that is not ready, a broken adapter). */
+    var presenceError: Throwable? = null
+
+    override fun isPresent(username: String): Boolean {
+        presenceError?.let { throw it }
+        return presentPlayers.containsKey(username.lowercase())
+    }
     override fun playerUuid(username: String): String? = presentPlayers[username.lowercase()]
     override fun offlineUuid(username: String): String = offline(username)
 

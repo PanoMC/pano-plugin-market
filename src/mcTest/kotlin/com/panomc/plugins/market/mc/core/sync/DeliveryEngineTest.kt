@@ -190,24 +190,87 @@ class DeliveryEngineTest {
     }
 
     @Test
-    fun `u2 a later delivery of the same player never overtakes an earlier queued one`() {
+    fun `u2 a delivery that does not require online runs at once while an earlier requires-online one of the player stays queued`() {
         val h = harness()
         h.sync(
             response(
                 deliveries = listOf(
                     delivery("a", 5, commands = listOf("say five"), requiresOnline = true),
-                    delivery("b", 6, commands = listOf("say six"), requiresOnline = false)
+                    delivery("b", 6, commands = listOf("lp user Steve parent remove vip"), requiresOnline = false, phase = "REVOKE")
                 )
             )
         )
-        assertTrue(h.platform.console.isEmpty(), "six must wait behind five")
-        assertEquals(2, h.request().queued)
-        h.sync(response(deliveries = listOf(delivery("c", 7, commands = listOf("say seven")))))
-        assertEquals(3, h.request().queued)
+        assertEquals(listOf("lp user Steve parent remove vip"), h.platform.console, "the undo of an absent player runs at once (19 section 6.2 step 4)")
+        var req = h.request()
+        assertEquals(1, req.queued, "only the requires-online delivery is queued")
+        assertEquals(mapOf("a" to "QUEUED", "b" to "DONE"), req.results.associate { it.key to it.status })
 
+        // A later delivery in a later response is not held either.
+        h.sync(response(deliveries = listOf(delivery("c", 7, commands = listOf("say seven")))))
+        assertEquals(listOf("lp user Steve parent remove vip", "say seven"), h.platform.console)
+        assertEquals(1, h.request().queued)
+
+        // The player joins: the one waiting delivery runs, nothing else is left.
         h.platform.join("Steve")
         h.engine.onPlayerPresent("Steve")
-        assertEquals(listOf("say five", "say six", "say seven"), h.platform.console)
+        assertEquals(listOf("lp user Steve parent remove vip", "say seven", "say five"), h.platform.console)
+        assertEquals(0, h.request().queued)
+    }
+
+    @Test
+    fun `u2 after the queued blocker is cancelled nothing of the player is left waiting`() {
+        val h = harness()
+        h.sync(
+            response(
+                deliveries = listOf(
+                    delivery("a", 5, commands = listOf("say five"), requiresOnline = true),
+                    delivery("b", 6, commands = listOf("say six"), requiresOnline = false, phase = "REVOKE")
+                )
+            )
+        )
+        assertEquals(1, h.request().queued)
+        h.sync(response(cancel = listOf("a")))
+        assertEquals("CANCELLED", h.result("a")!!.status)
+        assertEquals(0, h.request().queued)
+        assertTrue(h.store.waitingFor("Steve").isEmpty(), "nothing of the player waits any more")
+        h.platform.join("Steve")
+        h.engine.onPlayerPresent("Steve")
+        assertEquals(listOf("say six"), h.platform.console, "the cancelled one never runs, the undo ran exactly once")
+    }
+
+    @Test
+    fun `u2 after the queued blocker has expired nothing of the player is left waiting`() {
+        val h = harness()
+        h.sync(
+            response(
+                deliveries = listOf(
+                    delivery("a", 5, commands = listOf("say five"), requiresOnline = true, expiresAt = h.clock.now() + 60_000),
+                    delivery("b", 6, commands = listOf("say six"), requiresOnline = false, phase = "EXPIRE")
+                )
+            )
+        )
+        assertEquals(listOf("say six"), h.platform.console)
+        assertEquals(1, h.request().queued)
+        h.clock.advance(60_000)
+        assertEquals(1, h.engine.expireDue())
+        assertEquals("EXPIRED", h.result("a")!!.status)
+        assertEquals(0, h.request().queued)
+        assertTrue(h.store.waitingFor("Steve").isEmpty())
+        h.platform.join("Steve")
+        h.engine.onPlayerPresent("Steve")
+        assertEquals(listOf("say six"), h.platform.console)
+    }
+
+    @Test
+    fun `u2 a present players waiting queue runs before a newly offered delivery of that player`() {
+        val h = harness()
+        h.sync(response(deliveries = listOf(delivery("a", 5, commands = listOf("say five"), requiresOnline = true))))
+        assertEquals(1, h.request().queued)
+        h.platform.join("Steve") // the join event has not reached the engine yet
+        h.sync(response(deliveries = listOf(delivery("b", 6, commands = listOf("say six")))))
+        assertEquals(listOf("say five", "say six"), h.platform.console, "id order for a present player")
+        assertEquals(0, h.request().queued)
+        assertEquals("a", h.callbacks.drains.single().second.single().key)
     }
 
     @Test
@@ -252,6 +315,134 @@ class DeliveryEngineTest {
         h2.platform.join("Steve")
         h2.engine.onPlayerPresent("sTeVe")
         assertEquals(1, h2.platform.console.size)
+    }
+
+    // ======== MC-U2 (review fixes): the join is verified and never the only way to release a record ===============
+
+    @Test
+    fun `u2 a join event of a player who is not present runs nothing and the record stays queued`() {
+        val h = harness()
+        h.sync(response(deliveries = listOf(delivery("k1", 1, commands = listOf("say hello"), requiresOnline = true))))
+        assertTrue(h.engine.onPlayerPresent("Steve").isEmpty(), "the player left (or never was authenticated) by the time the event arrived")
+        assertTrue(h.platform.console.isEmpty(), "a command for an absent player would do nothing and still be reported DONE")
+        assertEquals(1, h.request().queued)
+        assertEquals("QUEUED", h.result("k1")!!.status)
+        assertTrue(h.callbacks.drains.isEmpty())
+
+        h.platform.join("Steve")
+        assertEquals(listOf("k1"), h.engine.onPlayerPresent("Steve").map { it.key })
+        assertEquals(listOf("say hello"), h.platform.console)
+        assertEquals("DONE", h.result("k1")!!.status)
+    }
+
+    @Test
+    fun `u2 a player who leaves while the queue runs leaves the remaining deliveries queued`() {
+        val h = harness()
+        h.sync(
+            response(
+                deliveries = listOf(
+                    delivery("a", 1, commands = listOf("say a"), requiresOnline = true),
+                    delivery("b", 2, commands = listOf("say b"), requiresOnline = true)
+                )
+            )
+        )
+        h.platform.join("Steve")
+        h.platform.dispatcher = {
+            h.platform.leave("Steve") // lobby auto-transfer, kick, quit: the player is gone after the first command
+            DispatchResult.OK
+        }
+        val ran = h.engine.onPlayerPresent("Steve")
+        assertEquals(listOf("a"), ran.map { it.key })
+        assertEquals(listOf("say a"), h.platform.console)
+        assertEquals("DONE", h.result("a")!!.status)
+        assertEquals("QUEUED", h.result("b")!!.status)
+        assertEquals(1, h.request().queued)
+        assertEquals(listOf("a"), h.callbacks.drains.single().second.map { it.key })
+
+        h.platform.dispatcher = { DispatchResult.OK }
+        h.platform.join("Steve")
+        assertEquals(listOf("b"), h.engine.onPlayerPresent("Steve").map { it.key })
+        assertEquals(listOf("say a", "say b"), h.platform.console)
+        assertEquals(0, h.request().queued)
+    }
+
+    @Test
+    fun `u2 a platform that cannot tell whether the player is online is treated as not online`() {
+        val h = harness()
+        h.platform.join("Steve")
+        h.platform.presenceError = IllegalStateException("auth plugin not ready")
+        h.sync(response(deliveries = listOf(delivery("k1", 1, requiresOnline = true))))
+        assertTrue(h.platform.console.isEmpty(), "nothing is executed on a guess")
+        assertEquals(1, h.request().queued)
+        assertTrue(h.log.has("could not tell whether Steve is online"))
+
+        h.platform.presenceError = null
+        h.engine.onPlayerPresent("Steve")
+        assertEquals(1, h.platform.console.size)
+    }
+
+    @Test
+    fun `u2 the tick runs the queue of a present player whose join event was missed`() {
+        val h = harness()
+        h.sync(
+            response(
+                deliveries = listOf(
+                    delivery("s", 1, player = "Steve", commands = listOf("say steve"), requiresOnline = true),
+                    delivery("x", 2, player = "Alex", commands = listOf("say alex"), requiresOnline = true)
+                )
+            )
+        )
+        assertEquals(2, h.request().queued)
+        h.platform.join("Steve") // no onPlayerPresent: the event was lost
+        val before = h.callbacks.localChanges
+        assertEquals(0, h.engine.expireDue(), "nothing expired")
+        assertEquals(listOf("say steve"), h.platform.console, "only the player who is present")
+        assertEquals(1, h.request().queued)
+        assertEquals("DONE", h.result("s")!!.status)
+        assertEquals("QUEUED", h.result("x")!!.status)
+        assertEquals(listOf("Steve"), h.callbacks.drains.map { it.first })
+        assertTrue(h.callbacks.localChanges > before, "the loop reports the result early")
+
+        assertEquals(0, h.engine.expireDue())
+        assertEquals(1, h.platform.console.size, "a second tick runs nothing again")
+    }
+
+    @Test
+    fun `u2 a join that meets a failing journal write is made up by the next tick once the journal works`() {
+        val (h, flaky) = flakyHarness()
+        h.sync(response(deliveries = listOf(delivery("k1", 1, commands = listOf("say hello"), requiresOnline = true))))
+        assertEquals(1, h.request().queued)
+        h.platform.join("Steve")
+        flaky().failNextAppend = true
+        assertTrue(h.engine.onPlayerPresent("Steve").isEmpty())
+        assertTrue(h.platform.console.isEmpty(), "no durable 'started' entry, no dispatch")
+        assertFalse(h.engine.status().storeHealthy)
+        assertEquals(1, h.store.waitingCount(), "it stays queued")
+
+        assertEquals(0, h.engine.expireDue())
+        assertEquals(listOf("say hello"), h.platform.console, "the tick probed the journal and ran the queue of the present player")
+        assertTrue(h.engine.status().storeHealthy)
+        assertEquals("DONE", h.result("k1")!!.status)
+        assertEquals(0, h.request().queued)
+    }
+
+    @Test
+    fun `u2 a join that arrives while the journal is already failing is not lost`() {
+        val (h, flaky) = flakyHarness()
+        h.sync(response(deliveries = listOf(delivery("k1", 1, commands = listOf("say hello"), requiresOnline = true))))
+        flaky().failAppends = true
+        h.sync(response(deliveries = listOf(delivery("k2", 2, player = "Alex")))) // this write fails and the store turns unhealthy
+        assertFalse(h.engine.status().storeHealthy)
+        h.platform.join("Steve")
+        assertTrue(h.engine.onPlayerPresent("Steve").isEmpty(), "dropped: the journal is not writable")
+        assertEquals(0, h.engine.expireDue(), "still failing: the probe fails and nothing runs")
+        assertTrue(h.platform.console.isEmpty())
+
+        flaky().failAppends = false
+        assertEquals(0, h.engine.expireDue())
+        assertEquals(listOf("say hello"), h.platform.console, "k1 ran once the journal worked, without a second join")
+        assertEquals("DONE", h.result("k1")!!.status)
+        assertNull(h.store.get("k2"), "the delivery whose write failed was never stored and is offered again by Pano")
     }
 
     // ======== MC-U3: cancel =======================================================================================

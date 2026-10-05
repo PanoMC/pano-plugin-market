@@ -21,9 +21,10 @@ fun delivery(
     kind: String = DeliveryKind.COMMAND,
     permission: DeliveryPermission? = null,
     uuid: String? = null,
-    display: DeliveryDisplay? = DeliveryDisplay("Diamonds", "ORD$id", false, null)
+    display: DeliveryDisplay? = DeliveryDisplay("Diamonds", "ORD$id", false, null),
+    phase: String = "GRANT"
 ) = SyncDelivery(
-    key = key, id = id, kind = kind, phase = "GRANT", player = DeliveryPlayer(player, uuid),
+    key = key, id = id, kind = kind, phase = phase, player = DeliveryPlayer(player, uuid),
     requiresOnline = requiresOnline, expiresAt = expiresAt, issuer = "market:order-$id",
     commands = if (kind == DeliveryKind.COMMAND) commands else emptyList(), permission = permission, display = display
 )

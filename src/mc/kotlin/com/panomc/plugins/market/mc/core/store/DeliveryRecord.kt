@@ -27,7 +27,7 @@ data class RecordResult(
  * One delivery key as the component stores it (the record of 19 section 5). Immutable: a change is a new value made by
  * [StateStore] from a [JournalOp].
  *
- * `QUEUED` with `startedAt == null` is *waiting* (for the player, or behind an earlier delivery of that player);
+ * `QUEUED` with `startedAt == null` is *waiting* (a `requiresOnline` delivery whose player was not present);
  * `QUEUED` with `startedAt != null` is *running* (the "started" journal entry is written before dispatch). A running
  * record found at start-up is an interrupted execution and becomes `FAILED / INTERRUPTED`.
  *

@@ -104,6 +104,12 @@ class DeliveryRuntime(
                 if (connected) l.connectionNow(true)
                 expireTimer = scheduler.schedule(options.expireEveryMs) { expireTick() }
                 purgeTimer = scheduler.schedule(options.purgeFirstAfterMs) { purgeTick() }
+                // Players who are online already (a /reload, a late enable) never produce a join event: run what waits for them.
+                try {
+                    e.releasePresent()
+                } catch (t: Throwable) {
+                    log.error("Running the Market queue of the players who are already online failed: ${t.message}", t)
+                }
                 lastEngineStatus = e.status()
             } catch (t: Throwable) {
                 log.error("The Market delivery component could not open its state in $baseDir and stays idle: ${t.message}", t)

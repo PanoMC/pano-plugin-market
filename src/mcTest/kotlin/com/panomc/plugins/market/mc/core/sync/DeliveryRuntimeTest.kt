@@ -104,6 +104,27 @@ class DeliveryRuntimeTest {
     }
 
     @Test
+    fun `a player who is already online at start has the waiting queue run without a join event`() {
+        val seed = Rig(dir, log)
+        seed.runtime.start()
+        seed.runtime.connectionChanged(true)
+        await("first request") { seed.transport.sent >= 1 }
+        seed.transport.respond(0, response(deliveries = listOf(delivery("k1", 1, requiresOnline = true, commands = listOf("say hello")))))
+        await("queued") { seed.runtime.status().engine.queued == 1 }
+        seed.runtime.stop()
+        assertTrue(seed.platform.console.isEmpty())
+
+        // A /reload or a late enable: the player is online before the component starts, so no join event will ever come.
+        val rig = Rig(dir, log)
+        rig.platform.join("Steve")
+        rig.runtime.start()
+        await("command dispatched at start") { rig.platform.console == listOf("say hello") }
+        await("drain callback") { rig.callbacks.drains.size == 1 }
+        await("queue empty") { rig.runtime.status().engine.queued == 0 }
+        rig.runtime.stop()
+    }
+
+    @Test
     fun `a corrupt store puts the runtime into recovery mode until confirmed`() {
         val seed = Rig(dir, log)
         seed.platform.join("Steve")

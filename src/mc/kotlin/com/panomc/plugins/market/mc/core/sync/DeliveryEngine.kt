@@ -316,6 +316,11 @@ class DeliveryEngine(
             .sortedWith(compareBy({ idOf(it.second) }, { it.first }))
         var changed = false
         for ((_, offer) in order) {
+            if (pendingFinishes.isNotEmpty()) {
+                // An earlier delivery of this response ran but its result is not durable yet: nothing new runs before it is.
+                log.warn("A result could not be written to the Market journal; the remaining deliveries of this response were left for Pano to offer again.")
+                return changed
+            }
             try {
                 changed = admit(offer, now) or changed
             } catch (e: StoreWriteException) {
@@ -412,16 +417,36 @@ class DeliveryEngine(
             finishAtOnce(rec, RecordState.EXPIRED, RecordResult(message = "expired before it could run"), now)
             return true
         }
-        val present = platform.isPresent(rec.player.username)
-        val behind = store.waitingFor(rec.player.username).any { it.id < rec.id }
-        if (!present && (rec.requiresOnline || behind)) {
+        // Only `requiresOnline` + absent is queued (19 section 6.2 step 4, 08 section 8.2 rule 4); everything else runs now.
+        // A record is never held just because an earlier one of the same player waits: a held record could only be released
+        // by a join (a cancel or an expiry of the blocker would leave it waiting), and an undo (REVOKE / EXPIRE) must not
+        // wait for a player who stays away. Grant-before-revoke is Pano's predecessor gate (08 section 11.4).
+        var present = isPresent(rec.player.username)
+        if (present && store.waitingFor(rec.player.username).isNotEmpty()) {
+            // The join of this player was missed (or still on its way): their queue runs first, in id order.
+            val ran = drain(rec.player.username)
+            if (ran.isNotEmpty()) callbacks.safely("onQueueDrained") { onQueueDrained(rec.player.username, ran) }
+            // A result that could not be written stops everything new; Pano offers this key again.
+            if (pendingFinishes.isNotEmpty()) return ran.isNotEmpty()
+            present = isPresent(rec.player.username)
+        }
+        if (!present && rec.requiresOnline) {
             store.commit(JournalOp.Received(rec))
             return true
         }
-        if (present && behind) drain(rec.player.username)
         store.commit(listOf(JournalOp.Received(rec), JournalOp.Started(rec.key, clock.now())))
         runAndFinish(rec.key)
         return true
+    }
+
+    /** Presence as the adapter reports it; a throwing adapter counts as "not present" (nothing is executed on a guess). */
+    private fun isPresent(username: String): Boolean = try {
+        platform.isPresent(username)
+    } catch (e: VirtualMachineError) {
+        throw e
+    } catch (t: Throwable) {
+        log.warn("The platform could not tell whether $username is online (${t.message}); treated as not online.")
+        false
     }
 
     /** A key Pano offers again is never executed again; its stored result (or `QUEUED`) is reported again (rule 2). */
@@ -569,6 +594,11 @@ class DeliveryEngine(
                     )
                 )
             } else {
+                // The join event reached the engine through an async hop and may be old; the player can have left in the
+                // meantime (lobby transfer, kick, quit), also while an earlier delivery of this very loop was running. A
+                // command for an absent player does nothing yet would be reported DONE, so presence is asked right before
+                // each start and the rest stays waiting for the next join.
+                if (waiting.requiresOnline && !isPresent(username)) break
                 store.commit(JournalOp.Started(waiting.key, now))
                 runAndFinish(waiting.key)
             }
@@ -578,7 +608,26 @@ class DeliveryEngine(
         return ran
     }
 
-    /** Expires waiting records whose `expiresAt` passed (also while the player stays away). Returns how many. */
+    /**
+     * Runs the queue of every waiting player who is present now. A join is a one-shot event: it can be dropped while the
+     * journal is failing, and a player who is online when the component starts never produces one. This sweep (every
+     * [expireDue] tick and once at start) makes those up, so a purchase never waits for a relog of a player who is online.
+     */
+    fun releasePresent() {
+        retryPendingFinishes()
+        if (!store.healthy || pendingFinishes.isNotEmpty() || store.recovery != null) return
+        val names = LinkedHashMap<String, String>()
+        store.waiting().forEach { names.putIfAbsent(it.playerKey, it.player.username) }
+        for (name in names.values) {
+            if (!store.healthy || pendingFinishes.isNotEmpty()) return
+            if (isPresent(name)) onPlayerPresent(name)
+        }
+    }
+
+    /**
+     * The 15 s tick: probes a failed journal, expires waiting records whose `expiresAt` passed (also while the player stays
+     * away) and then runs the queue of waiting players who are present ([releasePresent]). Returns how many expired.
+     */
     fun expireDue(): Int {
         retryPendingFinishes()
         if (!store.healthy) {
@@ -588,11 +637,16 @@ class DeliveryEngine(
         }
         val now = clock.now()
         val due = store.waiting().filter { it.expiresAt != null && it.expiresAt <= now }
-        if (due.isEmpty()) return 0
-        if (!commitOrLog(due.map { JournalOp.Finished(it.key, RecordState.EXPIRED, RecordResult(message = "expired before the player joined"), now) })) return 0
-        callbacks.safely("onLocalChange") { onLocalChange() }
-        publishStatus()
-        return due.size
+        var expired = 0
+        if (due.isNotEmpty() &&
+            commitOrLog(due.map { JournalOp.Finished(it.key, RecordState.EXPIRED, RecordResult(message = "expired before the player joined"), now) })
+        ) {
+            expired = due.size
+            callbacks.safely("onLocalChange") { onLocalChange() }
+            publishStatus()
+        }
+        releasePresent()
+        return expired
     }
 
     /** The daily retention purge: acknowledged records older than 30 days after `ackedAt`; unacknowledged ones stay. */
