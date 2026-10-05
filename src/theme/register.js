@@ -2,6 +2,7 @@ import { viewComponent } from '@panomc/sdk';
 import { pluginId } from '../i18n';
 import { has, setPano } from './utils/host.js';
 import { initProfileNav, registerDropdown } from './stores/profileNav.js';
+import { registerSidebarWidgets } from './components/widgets/widgetsLoader.js';
 // side effect: the checkout draft clears itself on logout from any page (14 §10.2)
 import './stores/checkoutDraft.js';
 
@@ -120,7 +121,10 @@ export function registerTheme(pano) {
     });
   });
 
-  // Item 11 (sidebar widgets) is added by the slice that creates its components, through optional(name, fn).
+  // 11. Sidebar widgets in the home and profile sidebars, only with page-sidebar-id (14 §13.2)
+  optional('sidebar-widgets', () => {
+    registerSidebarWidgets(pano);
+  });
 }
 
 export { optional as registerOptional };

@@ -570,6 +570,28 @@
           "MANUAL": "Manuel ödeme"
         }
       }
+    },
+    "widgets": {
+      "goal": {
+        "progress": "{progress} / {target}",
+        "ends-in": "Bitmesine {time} var",
+        "ends-on": "Bitiş: {date}"
+      },
+      "top-supporters": {
+        "title": "En çok destek verenler"
+      },
+      "recent-buyers": {
+        "title": "Son alışverişler",
+        "more": "+{count}"
+      },
+      "stats": {
+        "title": "Mağaza istatistikleri",
+        "orders-today": "Bugünkü siparişler",
+        "orders-total": "Toplam sipariş",
+        "customers-total": "Müşteriler",
+        "products-total": "Ürünler"
+      },
+      "rank": "{rank}. sıra"
     }
   }
 }

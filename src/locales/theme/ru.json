@@ -570,6 +570,28 @@
           "MANUAL": "Ручная выплата"
         }
       }
+    },
+    "widgets": {
+      "goal": {
+        "progress": "{progress} из {target}",
+        "ends-in": "Заканчивается через {time}",
+        "ends-on": "Окончание: {date}"
+      },
+      "top-supporters": {
+        "title": "Топ спонсоров"
+      },
+      "recent-buyers": {
+        "title": "Недавние покупатели",
+        "more": "+{count}"
+      },
+      "stats": {
+        "title": "Статистика магазина",
+        "orders-today": "Заказов сегодня",
+        "orders-total": "Всего заказов",
+        "customers-total": "Покупатели",
+        "products-total": "Товары"
+      },
+      "rank": "Место {rank}"
     }
   }
 }

@@ -570,6 +570,28 @@
           "MANUAL": "Manual payout"
         }
       }
+    },
+    "widgets": {
+      "goal": {
+        "progress": "{progress} of {target}",
+        "ends-in": "Ends in {time}",
+        "ends-on": "Ends {date}"
+      },
+      "top-supporters": {
+        "title": "Top supporters"
+      },
+      "recent-buyers": {
+        "title": "Recent buyers",
+        "more": "+{count}"
+      },
+      "stats": {
+        "title": "Store stats",
+        "orders-today": "Orders today",
+        "orders-total": "Total orders",
+        "customers-total": "Customers",
+        "products-total": "Products"
+      },
+      "rank": "Rank {rank}"
     }
   }
 }
