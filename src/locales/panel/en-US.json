@@ -21,7 +21,8 @@
     "credit-accounts": "Search player...",
     "creator-report": "Search player or code...",
     "blocks": "Search blocks...",
-    "subscriptions": "Search subscriptions..."
+    "subscriptions": "Search subscriptions...",
+    "shipments": "Search shipments..."
   },
   "pages": {
     "orders": {
@@ -1139,6 +1140,55 @@
         "RATE_OVERLAP": "The server found overlapping ranges in a zone. Check the ranges.",
         "RATE_UNREACHABLE": "A row follows a flat rate in the same zone and can never apply."
       }
+    },
+    "shipments": {
+      "title": "Shipments",
+      "count": "{count} Shipments",
+      "stale": "Stale",
+      "tab": {
+        "all": "All",
+        "to-ship": "To Ship",
+        "in-transit": "In Transit",
+        "delivered": "Delivered",
+        "problems": "Problems"
+      },
+      "table": {
+        "order": "Order",
+        "recipient": "Recipient",
+        "carrier": "Carrier",
+        "tracking": "Tracking",
+        "shipped": "Shipped",
+        "delivered": "Delivered"
+      },
+      "actions": {
+        "view": "View",
+        "label": "Download Label",
+        "generic-label": "Generic Label",
+        "track": "Track Now",
+        "retry": "Retry",
+        "release": "Release Items",
+        "cancel": "Cancel"
+      },
+      "cancel": {
+        "title": "Cancel this shipment?",
+        "description": "The shipment is cancelled at the carrier when possible and its items become shippable again."
+      },
+      "force": {
+        "title": "Cancel anyway?",
+        "description": "The carrier could not confirm the cancellation. The shipment is cancelled here only; cancel it at the carrier yourself, or a label may still be billed.",
+        "cta": "Cancel Anyway"
+      },
+      "release": {
+        "title": "Release the items?",
+        "description": "The items of this returned or lost parcel become shippable again, so they can be shipped anew or refunded."
+      },
+      "toast": {
+        "tracked": "Shipment tracking updated.",
+        "retried": "Shipment retried.",
+        "released": "Items released.",
+        "cancelled": "Shipment cancelled.",
+        "updated": "Shipment updated."
+      }
     }
   },
   "common": {
@@ -1943,6 +1993,84 @@
       "webhook-url": "Webhook URL",
       "no-webhook-url": "This carrier has no webhook URL.",
       "balance": "Balance"
+    },
+    "shipment": {
+      "title": "Shipment",
+      "order": "Order",
+      "recipient": "Recipient",
+      "provider": "Carrier",
+      "tracking": "Tracking",
+      "shipped": "Shipped",
+      "delivered": "Delivered",
+      "last-error": "Last Error",
+      "note": "Note",
+      "items": {
+        "product": "Product",
+        "quantity": "Quantity"
+      },
+      "carrier-name": "Carrier name",
+      "tracking-number": "Tracking number",
+      "tracking-url": "Tracking URL (http or https)",
+      "status": "Status"
+    },
+    "create-shipment": {
+      "title": "Create Shipment",
+      "quote-expired": "The shipping quote of this order has expired. Fresh rates are used.",
+      "lines": "Items to ship",
+      "quantity": "Quantity",
+      "nothing-left": "Every unit of this order is already shipped.",
+      "parcels": "Parcels",
+      "weight": "Weight (g)",
+      "lengthMm": "Length (mm)",
+      "widthMm": "Width (mm)",
+      "heightMm": "Height (mm)",
+      "add-parcel": "Add Parcel",
+      "provider": "Carrier",
+      "manual": "Manual entry",
+      "balance": "Balance: {balance}",
+      "carrier-name": "Carrier name",
+      "tracking-number": "Tracking number",
+      "tracking-url": "Tracking URL (http or https)",
+      "service": "Service",
+      "service-any": "Any service",
+      "get-rates": "Get Rates",
+      "no-rates": "This carrier returned no rates. Choose a service and create the shipment.",
+      "days": "{range} days",
+      "note": "Note",
+      "cta": "Create Shipment",
+      "toast": "Shipment created.",
+      "errors": {
+        "rate": "Choose one of the rates.",
+        "parcels-REQUIRED": "Add at least one parcel.",
+        "parcels-TOO_MANY": "Too many parcels for this carrier.",
+        "parcels-OUT_OF_RANGE": "A parcel weight or size is out of range.",
+        "parcels-DIMENSIONS_REQUIRED": "This carrier needs all three dimensions.",
+        "items-REQUIRED": "Choose at least one item.",
+        "items-DUPLICATE": "An item appears twice.",
+        "items-INVALID_QUANTITY": "A quantity is invalid.",
+        "items-EXCEEDS_SHIPPABLE": "A quantity is higher than what is left to ship.",
+        "items-CUSTOMS_DATA_MISSING": "Customs data (HS code, origin country) is missing on an item.",
+        "manual-NOT_SUPPORTED": "This carrier does not accept manual tracking.",
+        "manual-TRACKING_REQUIRED": "A tracking number is required.",
+        "providerId-CREATE_NOT_SUPPORTED": "This carrier cannot create shipments."
+      }
+    },
+    "shipping-address": {
+      "title": "Edit Shipping Address",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "company": "Company",
+      "phone": "Phone (with country code)",
+      "email": "Email",
+      "country": "Country",
+      "state": "State",
+      "city": "City",
+      "district": "District",
+      "neighborhood": "Neighborhood",
+      "line1": "Address line 1",
+      "line2": "Address line 2",
+      "postalCode": "Postal code",
+      "toast": "Shipping address updated."
     }
   },
   "settings": {
@@ -3173,6 +3301,26 @@
       "RULES": "Own Rates",
       "CARRIER": "Live Carrier Rate",
       "CARRIER_WITH_FALLBACK": "Live Rate With Fallback"
+    },
+    "provider-error": {
+      "CONFIGURATION": "The carrier is not configured correctly.",
+      "AUTHENTICATION": "The carrier rejected the credentials.",
+      "IP_NOT_ALLOWED": "The server IP is not allowed by the carrier.",
+      "GATEWAY_UNREACHABLE": "The carrier could not be reached.",
+      "GATEWAY_REJECTED": "The carrier refused the request.",
+      "RATE_LIMITED": "The carrier is rate limiting requests.",
+      "INVALID_REQUEST": "The carrier found the request invalid.",
+      "UNSUPPORTED": "The carrier does not support this.",
+      "NOT_FOUND": "The carrier does not know this shipment.",
+      "INTERNAL": "The carrier had an internal error.",
+      "INSUFFICIENT_BALANCE": "The carrier balance is too low.",
+      "ADDRESS_INVALID": "The carrier rejected the address.",
+      "SERVICE_UNAVAILABLE": "The service is unavailable.",
+      "RATE_EXPIRED": "The rate expired. Cancel and create the shipment again.",
+      "WEIGHT_LIMIT": "The weight exceeds the carrier limit.",
+      "REJECTED": "The carrier rejected the shipment.",
+      "OTHER": "The carrier reported an error.",
+      "TIMEOUT": "The carrier did not answer in time."
     }
   },
   "alerts": {

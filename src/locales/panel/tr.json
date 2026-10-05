@@ -21,7 +21,8 @@
     "credit-accounts": "Oyuncu ara...",
     "creator-report": "Oyuncu veya kod ara...",
     "blocks": "Engellerde ara...",
-    "subscriptions": "Abonelik ara..."
+    "subscriptions": "Abonelik ara...",
+    "shipments": "Gönderi ara..."
   },
   "pages": {
     "orders": {
@@ -1139,6 +1140,55 @@
         "RATE_OVERLAP": "Sunucu bir bölgede çakışan aralıklar buldu. Aralıkları kontrol edin.",
         "RATE_UNREACHABLE": "Aynı bölgede sabit fiyattan sonra gelen bir satır hiçbir zaman uygulanamaz."
       }
+    },
+    "shipments": {
+      "title": "Gönderiler",
+      "count": "{count} Gönderi",
+      "stale": "Eski",
+      "tab": {
+        "all": "Tümü",
+        "to-ship": "Gönderilecek",
+        "in-transit": "Yolda",
+        "delivered": "Teslim Edildi",
+        "problems": "Sorunlu"
+      },
+      "table": {
+        "order": "Sipariş",
+        "recipient": "Alıcı",
+        "carrier": "Kargo",
+        "tracking": "Takip",
+        "shipped": "Gönderildi",
+        "delivered": "Teslim Edildi"
+      },
+      "actions": {
+        "view": "Görüntüle",
+        "label": "Etiketi İndir",
+        "generic-label": "Genel Etiket",
+        "track": "Şimdi Takip Et",
+        "retry": "Yeniden Dene",
+        "release": "Ürünleri Serbest Bırak",
+        "cancel": "İptal Et"
+      },
+      "cancel": {
+        "title": "Bu gönderi iptal edilsin mi?",
+        "description": "Mümkünse gönderi kargo firmasında da iptal edilir ve ürünleri yeniden gönderilebilir hale gelir."
+      },
+      "force": {
+        "title": "Yine de iptal edilsin mi?",
+        "description": "Kargo firması iptali doğrulayamadı. Gönderi yalnızca burada iptal edilir; kargo firmasında kendiniz iptal etmezseniz etiket yine de ücretlendirilebilir.",
+        "cta": "Yine de İptal Et"
+      },
+      "release": {
+        "title": "Ürünler serbest bırakılsın mı?",
+        "description": "İade edilen veya kaybolan paketin ürünleri yeniden gönderilebilir hale gelir; yeniden gönderilebilir veya iade edilebilir."
+      },
+      "toast": {
+        "tracked": "Gönderi takibi güncellendi.",
+        "retried": "Gönderi yeniden denendi.",
+        "released": "Ürünler serbest bırakıldı.",
+        "cancelled": "Gönderi iptal edildi.",
+        "updated": "Gönderi güncellendi."
+      }
     }
   },
   "common": {
@@ -1943,6 +1993,84 @@
       "webhook-url": "Webhook adresi",
       "no-webhook-url": "Bu kargo firmasının webhook adresi yok.",
       "balance": "Bakiye"
+    },
+    "shipment": {
+      "title": "Gönderi",
+      "order": "Sipariş",
+      "recipient": "Alıcı",
+      "provider": "Kargo",
+      "tracking": "Takip",
+      "shipped": "Gönderildi",
+      "delivered": "Teslim Edildi",
+      "last-error": "Son Hata",
+      "note": "Not",
+      "items": {
+        "product": "Ürün",
+        "quantity": "Adet"
+      },
+      "carrier-name": "Kargo firması adı",
+      "tracking-number": "Takip numarası",
+      "tracking-url": "Takip bağlantısı (http veya https)",
+      "status": "Durum"
+    },
+    "create-shipment": {
+      "title": "Gönderi Oluştur",
+      "quote-expired": "Bu siparişin kargo teklifinin süresi doldu. Güncel fiyatlar kullanılır.",
+      "lines": "Gönderilecek ürünler",
+      "quantity": "Adet",
+      "nothing-left": "Bu siparişin tüm ürünleri zaten gönderildi.",
+      "parcels": "Paketler",
+      "weight": "Ağırlık (g)",
+      "lengthMm": "Uzunluk (mm)",
+      "widthMm": "Genişlik (mm)",
+      "heightMm": "Yükseklik (mm)",
+      "add-parcel": "Paket Ekle",
+      "provider": "Kargo",
+      "manual": "Elle giriş",
+      "balance": "Bakiye: {balance}",
+      "carrier-name": "Kargo firması adı",
+      "tracking-number": "Takip numarası",
+      "tracking-url": "Takip bağlantısı (http veya https)",
+      "service": "Hizmet",
+      "service-any": "Herhangi bir hizmet",
+      "get-rates": "Fiyatları Getir",
+      "no-rates": "Bu kargo firması fiyat döndürmedi. Bir hizmet seçip gönderiyi oluşturun.",
+      "days": "{range} gün",
+      "note": "Not",
+      "cta": "Gönderi Oluştur",
+      "toast": "Gönderi oluşturuldu.",
+      "errors": {
+        "rate": "Fiyatlardan birini seçin.",
+        "parcels-REQUIRED": "En az bir paket ekleyin.",
+        "parcels-TOO_MANY": "Bu kargo için çok fazla paket var.",
+        "parcels-OUT_OF_RANGE": "Bir paketin ağırlığı veya boyutu sınırların dışında.",
+        "parcels-DIMENSIONS_REQUIRED": "Bu kargo üç boyutun da girilmesini ister.",
+        "items-REQUIRED": "En az bir ürün seçin.",
+        "items-DUPLICATE": "Bir ürün iki kez geçiyor.",
+        "items-INVALID_QUANTITY": "Bir adet geçersiz.",
+        "items-EXCEEDS_SHIPPABLE": "Bir adet, gönderilecek kalandan fazla.",
+        "items-CUSTOMS_DATA_MISSING": "Bir üründe gümrük bilgisi (GTİP kodu, menşe ülke) eksik.",
+        "manual-NOT_SUPPORTED": "Bu kargo elle takip girişini kabul etmiyor.",
+        "manual-TRACKING_REQUIRED": "Takip numarası gerekli.",
+        "providerId-CREATE_NOT_SUPPORTED": "Bu kargo gönderi oluşturamaz."
+      }
+    },
+    "shipping-address": {
+      "title": "Teslimat Adresini Düzenle",
+      "firstName": "Ad",
+      "lastName": "Soyad",
+      "company": "Şirket",
+      "phone": "Telefon (ülke koduyla)",
+      "email": "E-posta",
+      "country": "Ülke",
+      "state": "Eyalet",
+      "city": "Şehir",
+      "district": "İlçe",
+      "neighborhood": "Mahalle",
+      "line1": "Adres satırı 1",
+      "line2": "Adres satırı 2",
+      "postalCode": "Posta kodu",
+      "toast": "Teslimat adresi güncellendi."
     }
   },
   "settings": {
@@ -3173,6 +3301,26 @@
       "RULES": "Kendi Fiyatlarım",
       "CARRIER": "Canlı Kargo Fiyatı",
       "CARRIER_WITH_FALLBACK": "Yedek Fiyatlı Canlı Fiyat"
+    },
+    "provider-error": {
+      "CONFIGURATION": "Kargo firması doğru yapılandırılmamış.",
+      "AUTHENTICATION": "Kargo firması kimlik bilgilerini reddetti.",
+      "IP_NOT_ALLOWED": "Sunucu IP adresine kargo firması izin vermiyor.",
+      "GATEWAY_UNREACHABLE": "Kargo firmasına ulaşılamadı.",
+      "GATEWAY_REJECTED": "Kargo firması isteği reddetti.",
+      "RATE_LIMITED": "Kargo firması istekleri sınırlıyor.",
+      "INVALID_REQUEST": "Kargo firması isteği geçersiz buldu.",
+      "UNSUPPORTED": "Kargo firması bunu desteklemiyor.",
+      "NOT_FOUND": "Kargo firması bu gönderiyi tanımıyor.",
+      "INTERNAL": "Kargo firmasında iç hata oluştu.",
+      "INSUFFICIENT_BALANCE": "Kargo firması bakiyesi yetersiz.",
+      "ADDRESS_INVALID": "Kargo firması adresi reddetti.",
+      "SERVICE_UNAVAILABLE": "Hizmet kullanılamıyor.",
+      "RATE_EXPIRED": "Fiyatın süresi doldu. İptal edip gönderiyi yeniden oluşturun.",
+      "WEIGHT_LIMIT": "Ağırlık kargo limitini aşıyor.",
+      "REJECTED": "Kargo firması gönderiyi reddetti.",
+      "OTHER": "Kargo firması bir hata bildirdi.",
+      "TIMEOUT": "Kargo firması zamanında yanıt vermedi."
     }
   },
   "alerts": {
