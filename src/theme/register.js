@@ -24,6 +24,12 @@ export function registerTheme(pano) {
     component: viewComponent(() => import('./pages/StorePage.svelte')),
   });
 
+  // 3. Order page; three segments, so it never competes with the two-segment /store/[slug]
+  pano.ui.page.register({
+    path: '/store/order/[id]',
+    component: viewComponent(() => import('./pages/OrderPage.svelte')),
+  });
+
   // 4. Product page; the pattern loses against the exact routes (/store/checkout)
   pano.ui.page.register({
     path: '/store/[slug]',

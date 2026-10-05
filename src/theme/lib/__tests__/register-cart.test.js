@@ -38,6 +38,7 @@ describe('registerTheme cart items', () => {
     console.warn = warn;
     expect(pano.calls.pages.map((p) => p.path)).toEqual([
       '/store',
+      '/store/order/[id]',
       '/store/[slug]',
       '/store/checkout',
     ]);
