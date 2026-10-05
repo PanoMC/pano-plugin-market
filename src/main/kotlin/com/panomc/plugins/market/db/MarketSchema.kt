@@ -718,12 +718,118 @@ object MarketSchema {
         unique("uq_name", "name")
     }
 
+    // --- scheme version 5, second half: entitlement, address, cart, invoice (01 sections 4, 5.5, 5.6, 6.7) --------
+
+    val ENTITLEMENT = table("market_entitlement", "Market entitlement table.") {
+        id()
+        bigint("userId", nullable = true)
+        str("playerUsername", 64)
+        str("ownerKey", 80)
+        bigint("productId")
+        bigint("variantId", default = 0)
+        bigint("orderId")
+        bigint("orderItemId")
+        bigint("subscriptionId", nullable = true)
+        int("quantity", default = 1)
+        str("status", 24, "ACTIVE")
+        bigint("startsAt")
+        bigint("expiresAt", nullable = true)
+        bigint("tierCategoryId", nullable = true)
+        int("tierRank", nullable = true)
+        bigint("pricePaid", default = 0)
+        bigint("replacedById", nullable = true)
+        str("endReason", 32, nullable = true)
+        bigint("reminderSentAt", nullable = true)
+        bigint("endedAt", nullable = true)
+        timestamps()
+        key("idx_owner_product", "ownerKey", "productId", "status")
+        key("idx_expiry", "status", "expiresAt")
+        key("idx_orderItem", "orderItemId")
+        key("idx_subscription", "subscriptionId")
+        key("idx_tier", "tierCategoryId", "ownerKey", "status")
+    }
+
+    val ADDRESS = table("market_address", "Market address book table.") {
+        id()
+        bigint("userId")
+        str("label", 64, nullable = true)
+        flag("isDefault", 0)
+        str("firstName", 255, nullable = true)
+        str("lastName", 255, nullable = true)
+        str("company", 255, nullable = true)
+        str("phone", 255, nullable = true)
+        str("email", 255, nullable = true)
+        str("country", 255, nullable = true)
+        str("state", 255, nullable = true)
+        str("city", 255, nullable = true)
+        str("district", 255, nullable = true)
+        str("neighborhood", 255, nullable = true)
+        str("line1", 255, nullable = true)
+        str("line2", 255, nullable = true)
+        str("postalCode", 16, nullable = true)
+        str("identityNumber", 255, nullable = true)
+        str("type", 255, nullable = true)
+        str("taxOffice", 255, nullable = true)
+        str("taxNumber", 255, nullable = true)
+        timestamps()
+        key("idx_user", "userId")
+    }
+
+    val CART = table("market_cart", "Market cart table.") {
+        id()
+        bigint("userId")
+        str("currency", 8, nullable = true)
+        str("couponCode", 64, nullable = true)
+        str("creatorCode", 64, nullable = true)
+        str("recipientUsername", 64, nullable = true)
+        str("giftMessage", 255, nullable = true)
+        bigint("shippingAddressId", nullable = true)
+        bigint("shippingMethodId", nullable = true)
+        timestamps()
+        unique("uq_user", "userId")
+    }
+
+    val CART_ITEM = table("market_cart_item", "Market cart line table.") {
+        id()
+        bigint("cartId")
+        bigint("productId")
+        bigint("variantId", default = 0)
+        int("quantity", default = 1)
+        text("fieldValues")
+        bigint("targetServerId", nullable = true)
+        char("lineKey", 40)
+        timestamps()
+        unique("uq_cart_line", "cartId", "lineKey")
+        key("idx_product", "productId")
+    }
+
+    val INVOICE = table("market_invoice", "Market invoice and credit note table.") {
+        id()
+        bigint("orderId")
+        str("type", 24)
+        bigint("refundId", default = 0)
+        str("series", 16)
+        bigint("sequence")
+        str("number", 32)
+        str("locale", 16)
+        str("currency", 8)
+        bigint("total")
+        bigint("vatTotal")
+        text("snapshot", nullable = false)
+        str("fileName", 255, nullable = true)
+        bigint("issuedAt")
+        timestamps()
+        unique("uq_series_seq", "series", "sequence")
+        unique("uq_order_type_refund", "orderId", "type", "refundId")
+    }
+
     /** Every table the plugin owns, in creation order. Later migration slices append their tables here. */
     val tables: List<Table> = listOf(
         CATEGORY, COMPARISON, COUPON, CREATOR_CODE, DISCOUNT, GIFT, ORDER, ORDER_ITEM, PAYMENT_METHOD, PRODUCT,
         PRODUCT_VARIANT, PRODUCT_PRICE, PRODUCT_FIELD, BUNDLE_ITEM, PRODUCT_PROVIDER_META, CURRENCY_RATE,
         REDEMPTION, CREATOR_EARNING, CREATOR_PAYOUT,
-        ORDER_EVENT, LEGAL_TEXT, SEQUENCE
+        ORDER_EVENT, LEGAL_TEXT, SEQUENCE,
+        ENTITLEMENT, ADDRESS, CART, CART_ITEM, INVOICE
     )
 
     /** The table declared under [name] (without prefix), or an error naming it. */

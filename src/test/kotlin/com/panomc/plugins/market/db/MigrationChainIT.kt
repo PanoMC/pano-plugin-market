@@ -77,7 +77,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         runChain()
         val migrated = SchemaSnapshot.take(pool)
         val fresh = freshSchema()
-        assertEquals(22, migrated.tables.size)
+        assertEquals(27, migrated.tables.size)
         assertEquals(fresh.tables, migrated.tables)
         assertEquals(fresh.columns, migrated.columns)
         assertEquals(fresh.keys, migrated.keys)
@@ -250,8 +250,9 @@ class MigrationChainIT : MarketMigrationTestBase() {
         assertEquals(4, migration.from)
         assertEquals(5, migration.to)
         assertTrue(migration.isMigratable(4) && !migration.isMigratable(3))
-        // order: MODIFY status + 70 columns + 10 indexes; item: 25 columns; CREATE order_event, legal_text, sequence
-        assertEquals(1 + 70 + 10 + 25 + 3, migration.handlers.size)
+        // order: MODIFY status + 70 columns + 10 indexes; item: 25 columns; CREATE order_event, legal_text, sequence,
+        // entitlement, address, cart, cart_item, invoice
+        assertEquals(1 + 70 + 10 + 25 + 8, migration.handlers.size)
         // the table carries the version 1 -> 2 exchangeRate alter in front of the 81 statements of this step
         assertEquals(1 + 1 + 70 + 10, MarketSchema.ORDER.alters.size)
         assertEquals(25, MarketSchema.ORDER_ITEM.alters.size)

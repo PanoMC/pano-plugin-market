@@ -5,6 +5,7 @@ import com.panomc.plugins.market.db.MarketSchema
 import com.panomc.plugins.market.db.dao.MarketSequenceDao
 import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.sqlclient.SqlClient
+import io.vertx.sqlclient.SqlConnection
 import io.vertx.sqlclient.Tuple
 import org.springframework.beans.factory.config.ConfigurableBeanFactory
 import org.springframework.context.annotation.Lazy
@@ -27,6 +28,23 @@ class MarketSequenceDaoImpl : MarketSequenceDao() {
             .coAwait()
             .firstOrNull()
             ?.getLong(0)
+
+    override suspend fun next(name: String, connection: SqlConnection): Long {
+        val table = prefix() + tableName
+        val now = System.currentTimeMillis()
+        // The row is created on first use, then incremented under its row lock. ON DUPLICATE KEY UPDATE takes an
+        // exclusive lock on an existing row (INSERT IGNORE would take a shared one, and concurrent first callers
+        // upgrading it to exclusive deadlock), so concurrent callers simply queue up.
+        connection
+            .preparedQuery("INSERT INTO `$table` (`name`, `value`, `createdAt`, `updatedAt`) VALUES (?, 0, ?, ?) ON DUPLICATE KEY UPDATE `value` = `value`")
+            .execute(Tuple.of(name, now, now))
+            .coAwait()
+        connection
+            .preparedQuery("UPDATE `$table` SET `value` = LAST_INSERT_ID(`value` + 1), `updatedAt` = ? WHERE `name` = ?")
+            .execute(Tuple.of(now, name))
+            .coAwait()
+        return connection.query("SELECT LAST_INSERT_ID()").execute().coAwait().first().getLong(0)
+    }
 
     override suspend fun uninstall(sqlClient: SqlClient) {
         sqlClient

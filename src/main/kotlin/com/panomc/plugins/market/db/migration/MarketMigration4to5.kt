@@ -11,13 +11,13 @@ import org.slf4j.LoggerFactory
 /**
  * Scheme version 4 to 5 (01 section 14.2): orders. `market_order` has its `status` widened to VARCHAR(24) and gains 70
  * columns and 10 indexes, `market_order_item` gains 25 columns, and the tables `market_order_event`,
- * `market_legal_text` and `market_sequence` are created. DDL only (rule 7): legacy orders are converted by the fixups
+ * `market_legal_text`, `market_sequence`, `market_entitlement`, `market_address`, `market_cart`, `market_cart_item` and
+ * `market_invoice` are created. DDL only (rule 7): legacy orders are converted by the fixups
  * of [MarketSchema.fixups], not here. Every statement comes from the declaration in [MarketSchema], one handler per
- * statement, and a failing statement is logged without stopping the step (rule 3). The remaining tables of this step
- * (cart, entitlement, address, invoice) are appended by their own slice.
+ * statement, and a failing statement is logged without stopping the step (rule 3).
  */
 @Migration
-class MarketMigration4to5 : DatabaseMigration(4, 5, "Orders: widened status, order columns, timeline, legal text") {
+class MarketMigration4to5 : DatabaseMigration(4, 5, "Orders: widened status, order columns, timeline, legal text, entitlement, address, cart, invoice") {
     override val handlers: List<suspend (SqlClient) -> Unit> =
         statements().map { statement -> handler(statement) }
 
@@ -38,7 +38,9 @@ class MarketMigration4to5 : DatabaseMigration(4, 5, "Orders: widened status, ord
         /** `market_order` carried one `ALTER` before this step (the version 1 to 2 `exchangeRate`): not part of it. */
         private const val ORDER_ALTERS_BEFORE_THIS_STEP = 1
 
-        private val created = listOf(MarketSchema.ORDER_EVENT, MarketSchema.LEGAL_TEXT, MarketSchema.SEQUENCE)
+        private val created = listOf(MarketSchema.ORDER_EVENT, MarketSchema.LEGAL_TEXT, MarketSchema.SEQUENCE,
+            MarketSchema.ENTITLEMENT, MarketSchema.ADDRESS, MarketSchema.CART, MarketSchema.CART_ITEM, MarketSchema.INVOICE
+        )
 
         /** Every statement of the step as a function of the table prefix: the `ALTER`s and index creations, then the `CREATE`s. */
         internal fun statements(): List<(String) -> String> {

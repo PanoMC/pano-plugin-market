@@ -32,7 +32,12 @@ class SchemaVerifierIT : MarketDbTestBase() {
         // scheme version 4 (01 sections 3.5 and 8)
         "pano_market_redemption" to ("uq_kind_ref_order" to listOf("kind", "refId", "orderId")),
         "pano_market_creator_earning" to ("uq_order_code" to listOf("orderId", "creatorCodeId")),
-        "pano_market_creator_payout" to ("uq_idem" to listOf("idempotencyKey"))
+        "pano_market_creator_payout" to ("uq_idem" to listOf("idempotencyKey")),
+        // scheme version 5 (01 sections 4, 6.7)
+        "pano_market_cart" to ("uq_user" to listOf("userId")),
+        "pano_market_cart_item" to ("uq_cart_line" to listOf("cartId", "lineKey")),
+        "pano_market_invoice" to ("uq_series_seq" to listOf("series", "sequence")),
+        "pano_market_sequence" to ("uq_name" to listOf("name"))
     )
 
     private suspend fun rebuild() {
