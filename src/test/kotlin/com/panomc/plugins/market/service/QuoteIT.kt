@@ -271,6 +271,8 @@ class QuoteIT : MarketDaoITBase() {
 
     private suspend fun raw(product: MarketProduct, vararg values: Pair<String, Any?>) = Fixtures.setColumns(pool, "market_product", product.id, mapOf(*values))
 
+    private suspend fun rawRow(table: String, id: Long, vararg values: Pair<String, Any?>) = Fixtures.setColumns(pool, table, id, mapOf(*values))
+
     private suspend fun count(table: String): Long =
         pool.query("SELECT COUNT(*) AS c FROM `pano_$table`").execute().coAwait().first().getLong("c")
 
@@ -586,6 +588,27 @@ class QuoteIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a gift credit top-up needs a registered recipient`(): Unit = runBlocking {
+        method()
+        config = base(topUp = true, topUpFree = true)
+        val (_, caller) = user("Alex")
+        user("Bob")
+
+        val ok = quote(topUp = TopUpRequest(2500), caller = caller, recipient = "Bob")
+
+        assertTrue(ok.canCheckout, "a gift top-up to a registered player is checkoutable")
+        assertNull(ok.message("INVALID_RECIPIENT"))
+        assertNull(ok.message("RECIPIENT_UNKNOWN"))
+
+        val unknown = quote(topUp = TopUpRequest(2500), caller = caller, recipient = "Never_Joined")
+
+        assertEquals("error", unknown.message("INVALID_RECIPIENT")!!.level, "credits need an account")
+        assertFalse(unknown.canCheckout)
+
+        assertTrue(quote(topUp = TopUpRequest(2500), caller = caller, recipient = "alex").canCheckout, "the own name is no gift")
+    }
+
+    @Test
     fun `LOGIN_REQUIRED for a guest and a credit pack or a subscription and for a store that refuses guests`(): Unit = runBlocking {
         val pack = fx.product(price = 500).also { raw(it, "kind" to "CREDIT_PACK", "creditAmount" to 5000) }
         val sub = fx.product(price = 500).also { raw(it, "billingMode" to "SUBSCRIPTION", "periodUnit" to "MONTH", "periodCount" to 1) }
@@ -828,6 +851,140 @@ class QuoteIT : MarketDaoITBase() {
 
         assertEquals("CODE_LIMIT_REACHED", quote(line(p), caller = caller, code = used.code).coupon!!.reason)
         assertTrue(quote(line(p), code = used.code).coupon!!.valid, "another buyer is not limited")
+    }
+
+    @Test
+    fun `CODE_EXPIRED and CODE_NOT_STARTED come from the dates of the code rows and deduct nothing`(): Unit = runBlocking {
+        val p = fx.product(price = 10_000)
+        val now = w.clock.now()
+        val expired = fx.coupon("OLD", discount = 1000).also { rawRow("market_coupon", it.id, "expiryDate" to now - 1000) }
+        val atExpiry = fx.coupon("EDGE", discount = 1000).also { rawRow("market_coupon", it.id, "expiryDate" to now) }
+        val future = fx.coupon("SOON", discount = 1000).also { rawRow("market_coupon", it.id, "startDate" to now + 60_000) }
+        val running = fx.coupon("LIVE", discount = 1000).also { rawRow("market_coupon", it.id, "startDate" to now - 1000, "expiryDate" to now + 60_000) }
+        user("Streamer")
+        val oldCreator = fx.creatorCode("OLDSTREAM", creator = "Streamer", discount = 500).also { rawRow("market_creator_code", it.id, "expiryDate" to now - 1000) }
+        val newCreator = fx.creatorCode("NEWSTREAM", creator = "Streamer", discount = 500).also { rawRow("market_creator_code", it.id, "startDate" to now + 60_000) }
+
+        val e = quote(line(p), code = expired.code)
+
+        assertFalse(e.coupon!!.valid)
+        assertEquals("CODE_EXPIRED", e.coupon!!.reason)
+        assertEquals("error", e.message("CODE_EXPIRED")!!.level)
+        assertEquals(0L, e.couponDiscount)
+        assertEquals(10_000L, e.total)
+        assertFalse(e.canCheckout)
+
+        assertEquals("CODE_EXPIRED", quote(line(p), code = atExpiry.code).coupon!!.reason, "the expiry instant itself is already over")
+
+        val f = quote(line(p), code = future.code)
+
+        assertFalse(f.coupon!!.valid)
+        assertEquals("CODE_NOT_STARTED", f.coupon!!.reason)
+        assertEquals("error", f.message("CODE_NOT_STARTED")!!.level)
+        assertEquals(0L, f.couponDiscount)
+        assertEquals(10_000L, f.total)
+        assertFalse(f.canCheckout)
+
+        val live = quote(line(p), code = running.code)
+
+        assertTrue(live.coupon!!.valid)
+        assertEquals(1000L, live.couponDiscount)
+
+        val oc = quote(line(p), creator = oldCreator.code)
+
+        assertFalse(oc.creatorCode!!.valid)
+        assertEquals("CODE_EXPIRED", oc.creatorCode!!.reason)
+        assertNotNull(oc.message("CODE_EXPIRED"))
+        assertEquals(0L, oc.creatorDiscount)
+        assertEquals(10_000L, oc.total)
+
+        val nc = quote(line(p), creator = newCreator.code)
+
+        assertFalse(nc.creatorCode!!.valid)
+        assertEquals("CODE_NOT_STARTED", nc.creatorCode!!.reason)
+        assertNotNull(nc.message("CODE_NOT_STARTED"))
+        assertEquals(0L, nc.creatorDiscount)
+        assertEquals(10_000L, nc.total)
+    }
+
+    @Test
+    fun `CODE_MIN_AMOUNT compares the goods with minPaymentAmount of the coupon row`(): Unit = runBlocking {
+        val p = fx.product(price = 10_000)
+        val coupon = fx.coupon("BIGSPENDER", discount = 1000, minPaymentAmount = 15_000)
+
+        val low = quote(line(p), code = coupon.code)
+
+        assertFalse(low.coupon!!.valid)
+        assertEquals("CODE_MIN_AMOUNT", low.coupon!!.reason)
+        assertEquals("error", low.message("CODE_MIN_AMOUNT")!!.level)
+        assertEquals(0L, low.couponDiscount)
+        assertEquals(10_000L, low.total)
+        assertFalse(low.canCheckout)
+
+        val enough = quote(line(p, 2), code = coupon.code)
+
+        assertTrue(enough.coupon!!.valid)
+        assertNull(enough.message("CODE_MIN_AMOUNT"))
+        assertEquals(2000L, enough.couponDiscount)
+        assertEquals(18_000L, enough.total)
+    }
+
+    @Test
+    fun `CODE_NOT_COMBINABLE when combineDiscountsAndCoupons is off and an automatic discount applies`(): Unit = runBlocking {
+        val p = fx.product(price = 10_000)
+        fx.discount(value = 2000, unit = DiscountUnit.PERCENT)
+        val coupon = fx.coupon("TENP", discount = 1000)
+        user("Streamer")
+        val creator = fx.creatorCode("STREAMER5", creator = "Streamer", discount = 500)
+
+        // combining allowed: discount first, the coupon on what is left
+        val combined = quote(line(p), code = coupon.code)
+
+        assertTrue(combined.coupon!!.valid)
+        assertEquals(800L, combined.couponDiscount, "10 % of the 8000 that the automatic discount left")
+        assertEquals(7200L, combined.total)
+        assertNull(combined.message("CODE_NOT_COMBINABLE"))
+
+        config = base(combine = false)
+        val automaticOnly = quote(line(p)).total
+
+        val q = quote(line(p), code = coupon.code)
+
+        assertFalse(q.coupon!!.valid)
+        assertEquals("CODE_NOT_COMBINABLE", q.coupon!!.reason)
+        assertEquals("error", q.message("CODE_NOT_COMBINABLE")!!.level)
+        assertEquals(0L, q.couponDiscount)
+        assertEquals(automaticOnly, q.total, "nothing of the refused coupon is deducted")
+        assertFalse(q.canCheckout)
+
+        // a creator code stays an attribution but discounts nothing
+        val c = quote(line(p), creator = creator.code)
+
+        assertTrue(c.creatorCode!!.valid)
+        assertEquals("CODE_NOT_COMBINABLE", c.creatorCode!!.reason)
+        assertEquals(0L, c.creatorDiscount)
+        assertEquals(automaticOnly, c.total)
+    }
+
+    @Test
+    fun `CREDITS_ONLY for a product priced in credits only in a money quote`(): Unit = runBlocking {
+        method()
+        val creditsOnly = fx.product(price = 0, creditPrice = 500)
+        val free = fx.product(price = 0)
+        val (_, caller) = user("Alex", credit = 10_000)
+
+        val q = quote(line(creditsOnly), caller = caller)
+
+        assertEquals(listOf("CREDITS_ONLY"), q.lines.single().errors)
+        assertFalse(q.canCheckout, "it must never become free")
+
+        assertFalse(quote(line(creditsOnly)).canCheckout, "also for a guest")
+        assertTrue(quote(line(free), caller = caller).lines.single().errors.isEmpty(), "a plain free product stays free")
+
+        val paid = quote(line(creditsOnly), caller = caller, payWithCredits = true)
+
+        assertFalse(paid.lines.single().errors.contains("CREDITS_ONLY"), "paid with credits it is a normal credit order")
+        assertTrue(paid.canCheckout)
     }
 
     @Test

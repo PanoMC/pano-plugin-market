@@ -8,6 +8,7 @@ import com.panomc.platform.model.RouteType
 import com.panomc.platform.model.Successful
 import com.panomc.platform.util.RateLimiter
 import com.panomc.plugins.market.MarketPlugin
+import com.panomc.plugins.market.core.abuse.IpRange
 import com.panomc.plugins.market.error.TooManyRequests
 import com.panomc.plugins.market.routes.base.MarketPublicMutationApi
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
@@ -46,7 +47,9 @@ class QuoteAPI(private val plugin: MarketPlugin) : MarketPublicMutationApi() {
     override suspend fun handleMarket(context: RoutingContext): Result {
         val ip = ClientIpResolver.resolve(context)
 
-        if (ip.trusted && ip.ip != null) limit(ip.ip)
+        val key = limiterKey(ip.ip)
+
+        if (ip.trusted && key != null) limit(key)
 
         val input = parseQuoteInput(getParameters(context).body().jsonObject)
         val caller = quoteCaller(plugin, context)
@@ -56,7 +59,7 @@ class QuoteAPI(private val plugin: MarketPlugin) : MarketPublicMutationApi() {
         return Successful(mapOf("quote" to service.quote(input, caller, databaseManager.getSqlClient()).toJson()))
     }
 
-    /** 60 / min per address by default; `0` switches the limit off. The bucket is rebuilt when the setting changes. */
+    /** 60 / min per limiter key (`limiterKey`) by default; `0` switches the limit off. The bucket is rebuilt when the setting changes. */
     private fun limit(ip: String) {
         val perMinute = currentConfig(plugin).quoteRateLimitPerMinute
 
@@ -65,5 +68,10 @@ class QuoteAPI(private val plugin: MarketPlugin) : MarketPublicMutationApi() {
         val current = limiter?.takeIf { it.first == perMinute } ?: (perMinute to RateLimiter(perMinute, 60_000L / perMinute)).also { limiter = it }
 
         if (!current.second.tryAcquire(ip)) throw TooManyRequests(Math.ceil(60.0 / perMinute).toLong())
+    }
+
+    companion object {
+        /** Limiter key of a client address (11 section 2 rule 4): IPv4 as is, IPv6 by its `/64` prefix; null when unusable. */
+        internal fun limiterKey(ip: String?): String? = IpRange.bucketKey(ip)
     }
 }

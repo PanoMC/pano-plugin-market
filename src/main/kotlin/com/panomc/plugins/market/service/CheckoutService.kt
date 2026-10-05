@@ -229,7 +229,7 @@ class CheckoutService(
             else -> ""
         }
         val hasCreditPack = lines.any { catalog.products[it.productId]?.kind == ProductKind.CREDIT_PACK }
-        val recipient = resolveRecipient(caller, payerName, recipientAsked, giftMessage, c, hasCreditPack, messages, sqlClient)
+        val recipient = resolveRecipient(caller, payerName, recipientAsked, giftMessage, c, hasCreditPack || topUp != null, messages, sqlClient)
 
         if (!loggedIn && !c.allowGuestCheckout) messages += QuoteMessage(LineCode.LOGIN_REQUIRED, LineRules.ERROR)
 
