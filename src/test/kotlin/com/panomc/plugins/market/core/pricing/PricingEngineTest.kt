@@ -2963,6 +2963,8 @@ class PricingEngineTest {
         assertEquals(350L, OrderValues.cashback(r)) // gatewayShare 0.70: floor(70.00 x 5 %) = 3.50 credits
         val cheap = full(line(P2), config = config(cashbackBp = 333))
         assertEquals(33L, OrderValues.cashback(cheap)) // floor(0.3326) = 0.33
+        // the fraction above one half still floors: 9.99 x 3.36 % = 0.3357 credits is 0.33, never 0.34
+        assertEquals(33L, OrderValues.cashback(full(line(P2), config = config(cashbackBp = 336))))
         // nothing on credit tender, on a credit purchase, on shipping, with no percentage
         val paid = full(line(P1), payWithCredits = true, buyer = PricingFixtures.buyer(balance = 99999), config = config(cashbackBp = 500))
         assertEquals(0L, OrderValues.cashback(paid))
