@@ -108,9 +108,28 @@ describe('loadList', () => {
     expect(data.error).toBe('NETWORK_ERROR');
     expect(data.ctx).toBeNull();
   });
+
+  test('a non-JSON (string) body is NETWORK_ERROR with the empty shape, never spread into data', async () => {
+    responder = (path) => (path.endsWith('/context') ? '<html>502</html>' : '<html>502</html>');
+    const { data } = await loadList(event('?status=X'), opts);
+    expect(data).toEqual({
+      orders: [],
+      count: 0,
+      totalPage: 1,
+      page: 1,
+      error: 'NETWORK_ERROR',
+      ctx: null,
+      filters: { search: null, status: 'X' },
+    });
+  });
 });
 
 describe('loadContext', () => {
+  test('loadContext returns null on a string body', async () => {
+    responder = () => '<html>502</html>';
+    expect(await loadContext(event(''))).toBeNull();
+  });
+
   test('loadContext returns null on an error body', async () => {
     responder = () => ({ error: 'NO_PERMISSION' });
     expect(await loadContext(event(''))).toBeNull();

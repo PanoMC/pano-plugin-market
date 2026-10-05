@@ -93,7 +93,10 @@ export const marketPath = (path) => (path.startsWith('/api') ? path : API_BASE +
 
 /**
  * Normalises one ApiUtil call. `promise` = ApiUtil.get/post/put/delete(...).
- * A falsy body (demo mode, swallowed request) or a rejected promise is NETWORK_ERROR.
+ * A falsy or non-object body (demo mode, swallowed request, or the raw text ApiUtil returns for a
+ * non-JSON reply such as a proxy 502 page) or a rejected promise is NETWORK_ERROR: the request may
+ * or may not have been executed, so the caller must keep its idempotency state. A Blob (CSV
+ * export) is an object and passes.
  */
 export async function call(promise) {
   let body;
@@ -102,7 +105,7 @@ export async function call(promise) {
   } catch {
     return { ok: false, error: 'NETWORK_ERROR', body: {} };
   }
-  if (!body) return { ok: false, error: 'NETWORK_ERROR', body: {} };
+  if (!body || typeof body !== 'object') return { ok: false, error: 'NETWORK_ERROR', body: {} };
   if (body.error) return { ok: false, error: body.error, body };
   return { ok: true, body };
 }

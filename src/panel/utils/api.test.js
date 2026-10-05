@@ -72,6 +72,18 @@ describe('api (13 25.1 tests 12-14)', () => {
     expect((await call(Promise.reject(new Error('boom')))).error).toBe('NETWORK_ERROR');
   });
 
+  test('13b. call maps a non-object body (raw text of a proxy error page) to NETWORK_ERROR', async () => {
+    for (const raw of ['<html>502 Bad Gateway</html>', 'x', 42, true]) {
+      expect(await call(Promise.resolve(raw))).toEqual({
+        ok: false,
+        error: 'NETWORK_ERROR',
+        body: {},
+      });
+    }
+    const blob = new Blob(['a,b']);
+    expect(await call(Promise.resolve(blob))).toEqual({ ok: true, body: blob });
+  });
+
   test('14. errorKey: unknown code is errors.UNKNOWN, every code of 04 11 is known', () => {
     expect(errorKey('SOMETHING_NEW')).toBe('errors.UNKNOWN');
     expect(errorKey(undefined)).toBe('errors.UNKNOWN');

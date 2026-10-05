@@ -6,7 +6,7 @@ import { PLUGIN_ID } from './plugin.js';
 /** GET /context; null on any failure. `get` = ({ path, request }) => Promise<body>. */
 export async function loadContextWith({ get }, event) {
   const body = await get({ path: marketPath('/context'), request: event });
-  if (!body || body.error) return null;
+  if (!body || typeof body !== 'object' || body.error) return null;
   return body;
 }
 
@@ -43,8 +43,11 @@ export async function loadListWith(deps, event, { path, params = [], nodes, empt
     body = await fetchPage(1);
   }
 
-  if (!body || body.error) {
-    const failed = empty(body?.error || 'NETWORK_ERROR', filters);
+  if (!body || typeof body !== 'object' || body.error) {
+    const failed = empty(
+      (body && typeof body === 'object' && body.error) || 'NETWORK_ERROR',
+      filters,
+    );
     failed.data.ctx = ctx;
     return failed;
   }
