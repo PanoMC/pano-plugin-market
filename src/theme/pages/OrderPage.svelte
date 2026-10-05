@@ -27,11 +27,9 @@
       <ErrorAlert message={$_(messageKey(refreshFailed))} onretry={reload} />
     {/if}
 
-    <!--
-      Payment panel slot (MTU-09): rendered when view.panels.payment (AWAITING_PAYMENT, owner) and, read-only,
-      when view.panels.instructions (PROCESSING). It needs: id, order, token (the access token in use or null),
-      view, onrefetch = reload. Nothing is mounted here before that component exists.
-    -->
+    {#if !view.limited && (view.panels.payment || view.panels.instructions)}
+      <PaymentPanel {id} {order} {view} {token} {removeCents} onrefetch={reload} />
+    {/if}
 
     {#if view.panels.items && order.items?.length}
       <section class="vstack gap-2" aria-labelledby="market-order-items-title">
@@ -115,6 +113,7 @@
   import OrderItems from '../components/order/OrderItems.svelte';
   import OrderStatusBlock from '../components/order/OrderStatusBlock.svelte';
   import OrderTotals from '../components/order/OrderTotals.svelte';
+  import PaymentPanel from '../components/order/PaymentPanel.svelte';
   import ShipmentList from '../components/order/ShipmentList.svelte';
   import StoreStateCard from '../components/store/StoreStateCard.svelte';
   import { messageKey } from '../lib/errorMap.js';
