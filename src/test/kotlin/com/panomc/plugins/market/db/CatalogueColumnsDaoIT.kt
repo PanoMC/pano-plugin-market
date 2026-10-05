@@ -3,6 +3,7 @@ package com.panomc.plugins.market.db
 import com.panomc.plugins.market.db.impl.MarketCategoryDaoImpl
 import com.panomc.plugins.market.db.impl.MarketProductDaoImpl
 import com.panomc.plugins.market.db.model.MarketCategory
+import com.panomc.plugins.market.db.model.UpgradeMode
 import com.panomc.plugins.market.db.model.MarketProduct
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -82,16 +83,19 @@ class CatalogueColumnsDaoIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `a category written by the existing dao carries tiered 0 and upgradeMode DIFFERENCE`(): Unit = runBlocking {
+    fun `a category written by the dao carries tiered 0 and upgradeMode DIFFERENCE and the update writes both`(): Unit = runBlocking {
         val id = categories.add(MarketCategory(name = "Ranks"), pool)
         val row = sql("SELECT `tiered`, `upgradeMode` FROM `pano_market_category` WHERE `id` = ?", id).single()
         assertEquals(0, (row.getValue("tiered") as Number).toInt())
         assertEquals("DIFFERENCE", row.getString("upgradeMode"))
-        sql("UPDATE `pano_market_category` SET `tiered` = 1, `upgradeMode` = 'FULL' WHERE `id` = ?", id)
-        assertEquals("Ranks", categories.getById(id, pool)!!.name)
-        categories.update(MarketCategory(id = id, name = "Ranks 2"), pool)
+        // MK-051: the dao now owns both columns, the entity carries them
+        categories.update(MarketCategory(id = id, name = "Ranks 2", tiered = true, upgradeMode = UpgradeMode.FULL), pool)
         val after = sql("SELECT `tiered`, `upgradeMode` FROM `pano_market_category` WHERE `id` = ?", id).single()
         assertEquals(1, (after.getValue("tiered") as Number).toInt())
         assertEquals("FULL", after.getString("upgradeMode"))
+        val read = categories.getById(id, pool)!!
+        assertEquals("Ranks 2", read.name)
+        assertEquals(true, read.tiered)
+        assertEquals(UpgradeMode.FULL, read.upgradeMode)
     }
 }

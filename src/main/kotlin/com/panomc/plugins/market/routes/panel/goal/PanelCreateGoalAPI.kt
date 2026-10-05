@@ -1,4 +1,4 @@
-package com.panomc.plugins.market.routes.panel.category
+package com.panomc.plugins.market.routes.panel.goal
 
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.auth.AuthProvider
@@ -8,43 +8,51 @@ import com.panomc.platform.model.Result
 import com.panomc.platform.model.RouteType
 import com.panomc.platform.model.Successful
 import com.panomc.plugins.market.MarketPlugin
-import com.panomc.plugins.market.log.DeletedMarketCategoryLog
+import com.panomc.plugins.market.log.CreatedMarketGoalLog
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
-import com.panomc.plugins.market.routes.panel.product.deleteFile
 import io.vertx.ext.web.RoutingContext
+import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
+import io.vertx.ext.web.validation.builder.Bodies
 import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
+import io.vertx.json.schema.common.dsl.Schemas.*
 
-/** `DELETE /api/panel/market/categories/:id` (`P:CAT`): children move up, products are detached; `409 CATEGORY_IN_USE` for a tiered category with ACTIVE entitlements. */
+/** `POST /api/panel/market/goals` (04 section 5, `P:CAT`). */
 @Endpoint
-class PanelDeleteCategoryAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/categories/:id", RouteType.DELETE))
+class PanelCreateGoalAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
+    override val paths = listOf(Path("/api/panel/market/goals", RouteType.POST))
 
     override val nodes = setOf(MarketNode.CATALOG)
 
-    private val catalog by lazy { categoryCatalog(plugin) }
+    private val goals by lazy { goalService(plugin) }
 
     private val authProvider: AuthProvider by lazy { plugin.applicationContext.getBean(AuthProvider::class.java) }
 
     private val databaseManager: DatabaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
-        ValidationHandlerBuilder.create(schemaRepository).build()
+        ValidationHandlerBuilder.create(schemaRepository)
+            .body(
+                Bodies.json(
+                    objectSchema()
+                        .allowAdditionalProperties(true)
+                )
+            )
+            .predicate(RequestPredicate.BODY_REQUIRED)
+            .build()
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
-        val result = catalog.deleteCategory(parseId(context.pathParam("id")))
-
-        result.orphanedFiles.forEach { deleteFile(plugin, it) }
+        val goal = goals.create(getParameters(context).body().jsonObject)
 
         val sqlClient = databaseManager.getSqlClient()
         val userId = authProvider.getUserIdFromRoutingContext(context)
         val username = databaseManager.userDao.getUsernameFromUserId(userId, sqlClient)!!
 
-        databaseManager.panelActivityLogDao.add(DeletedMarketCategoryLog(userId, username, plugin.pluginId, result.name), sqlClient)
+        databaseManager.panelActivityLogDao.add(CreatedMarketGoalLog(userId, username, plugin.pluginId, goal.name), sqlClient)
 
-        return Successful()
+        return Successful(mapOf("id" to goal.id))
     }
 }

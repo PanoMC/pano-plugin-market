@@ -35,7 +35,7 @@ import org.junit.jupiter.api.Test
 class CatalogServiceIT : MarketDaoITBase() {
     private val w by lazy { TestWiring(pool) }
     private val service by lazy {
-        CatalogService(w.db, { w.config }, w.clock, w.products, w.variants, w.prices, w.fields, w.bundleItems, w.providerMeta)
+        CatalogService(w.db, { w.config }, w.clock, w.products, w.variants, w.prices, w.fields, w.bundleItems, w.providerMeta, w.categories, w.comparisons)
     }
     private var counter = 0
 
@@ -1025,5 +1025,229 @@ class CatalogServiceIT : MarketDaoITBase() {
         assertTrue(service.delete(a.id).soft)
 
         assertNull(w.products.getById(b.id, pool)!!.deletedAt)
+    }
+
+    // ----- bundle rules (MK-051) ------------------------------------------------------------------------------------
+
+    @Test
+    fun `a bundle cannot contain a bundle`(): Unit = runBlocking {
+        val inner = w.fixtures.bundle(w.fixtures.product() to 1)
+
+        val errors = fieldErrors { create("kind" to "BUNDLE", "bundleItems" to """[{"productId":${inner.id},"quantity":1}]""") }
+
+        assertEquals("NESTED_BUNDLE", errors["bundleItems.0.productId"])
+        assertEquals(1L, count("market_bundle_item"))
+    }
+
+    @Test
+    fun `a bundle cannot contain a physical child, a subscription or a credit pack`(): Unit = runBlocking {
+        val physical = w.fixtures.product(columns = mapOf("physical" to true))
+        val subscription = w.fixtures.product(columns = mapOf("billingMode" to "SUBSCRIPTION"))
+        val pack = w.fixtures.product(columns = mapOf("kind" to "CREDIT_PACK"))
+
+        val errors = fieldErrors {
+            create(
+                "kind" to "BUNDLE",
+                "bundleItems" to """[{"productId":${physical.id},"quantity":1},{"productId":${subscription.id},"quantity":1},{"productId":${pack.id},"quantity":1}]"""
+            )
+        }
+
+        assertEquals("PHYSICAL_CHILD", errors["bundleItems.0.productId"])
+        assertEquals("SUBSCRIPTION_CHILD", errors["bundleItems.1.productId"])
+        assertEquals("INVALID_CHILD", errors["bundleItems.2.productId"])
+    }
+
+    @Test
+    fun `a bundle with a standard child is saved and a bundle stays non physical`(): Unit = runBlocking {
+        val child = w.fixtures.product()
+
+        val saved = create("kind" to "BUNDLE", "physical" to true, "bundleItems" to """[{"productId":${child.id},"quantity":2}]""")
+
+        assertFalse(service.get(saved.id).product.physical)
+        assertEquals(listOf(child.id to 2), service.get(saved.id).bundleItems.map { it.productId to it.quantity })
+    }
+
+    @Test
+    fun `a product that is a bundle child cannot become physical, a subscription or a bundle`(): Unit = runBlocking {
+        val child = w.fixtures.product()
+        create("kind" to "BUNDLE", "bundleItems" to """[{"productId":${child.id},"quantity":1}]""")
+
+        assertEquals("IN_BUNDLE", fieldErrors { service.update(child.id, input("physical" to true, "weightGrams" to 100)) }["physical"])
+        assertEquals("NESTED_BUNDLE", fieldErrors { service.update(child.id, input("kind" to "BUNDLE", "bundleItems" to """[{"productId":${w.fixtures.product().id},"quantity":1}]""")) }["kind"])
+
+        service.update(child.id, input("price" to "5"))
+        assertEquals(500L, service.get(child.id).product.price)
+    }
+
+    @Test
+    fun `a deleted bundle no longer pins its child`(): Unit = runBlocking {
+        val child = w.fixtures.product()
+        val bundle = create("kind" to "BUNDLE", "bundleItems" to """[{"productId":${child.id},"quantity":1}]""")
+        Fixtures.insertRaw(pool, "market_order_item", mapOf("productId" to bundle.id))
+        assertTrue(service.delete(bundle.id).soft)
+
+        service.update(child.id, input("physical" to true, "weightGrams" to 100))
+
+        assertTrue(service.get(child.id).product.physical)
+    }
+
+    // ----- clone (MK-051) -------------------------------------------------------------------------------------------
+
+    @Test
+    fun `clone copies variants fields prices bundle rows and provider meta with new ids`(): Unit = runBlocking {
+        val child = w.fixtures.product()
+        val axes = """[{"key":"size","label":"Size","values":[{"key":"s","label":"S"},{"key":"l","label":"L"}]}]"""
+        val saved = service.create(
+            named(
+                "stock" to 9, "sku" to "ORIG", "featured" to true, "compareAtPrice" to "20", "limitPerPlayer" to 2,
+                "variantOptions" to axes,
+                "variants" to """[{"name":"S","sku":"V-S","optionValues":{"size":"s"},"price":"9","stock":4,"prices":[{"currency":"USD","price":"10"}]},
+                                  {"name":"L","optionValues":{"size":"l"},"stock":null}]""",
+                "fields" to """[{"fieldKey":"nick","label":"Nick","required":true}]""",
+                "prices" to """[{"currency":"TRY","price":"300"}]""",
+                "providerMeta" to """{"stripe":{"packageId":"123"}}""",
+                "actions" to """[{"type":"CREDIT","value":2.5},{"type":"CREDIT","value":1}]"""
+            )
+        )
+        val bundle = create("kind" to "BUNDLE", "bundleItems" to """[{"productId":${child.id},"quantity":3}]""")
+
+        val copy = service.clone(saved.id, " (Copy)")
+        val original = service.get(saved.id)
+        val cloned = service.get(copy.id)
+
+        assertTrue(copy.id != saved.id)
+        assertEquals("${original.product.name} (Copy)", cloned.product.name)
+        assertEquals("${original.product.slug}-copy", cloned.product.slug)
+        assertEquals(MarketStatus.INACTIVE, cloned.product.status)
+        assertEquals(original.product.price, cloned.product.price)
+        assertEquals(9, cloned.product.stock)
+        assertEquals("ORIG", cloned.product.sku)
+        assertTrue(cloned.product.featured)
+        assertEquals(2, cloned.product.limitPerPlayer)
+        assertEquals(0, cloned.product.soldCount)
+        assertTrue(cloned.product.hasVariants)
+        assertEquals(original.product.variantOptions, cloned.product.variantOptions)
+
+        assertEquals(2, cloned.variants.size)
+        assertTrue(cloned.variants.none { v -> original.variants.any { it.id == v.id } })
+        assertEquals(listOf("S", "L"), cloned.variants.map { it.name })
+        assertEquals(listOf(4, null), cloned.variants.map { it.stock })
+        assertEquals(listOf(900L, null), cloned.variants.map { it.price })
+
+        assertEquals(original.fields.map { it.fieldKey to it.required }, cloned.fields.map { it.fieldKey to it.required })
+        assertTrue(cloned.fields.none { f -> original.fields.any { it.id == f.id } })
+
+        val variantIds = cloned.variants.map { it.id }.toSet()
+        assertEquals(2, cloned.prices.size)
+        assertTrue(cloned.prices.all { it.productId == copy.id && (it.variantId == 0L || it.variantId in variantIds) })
+        assertEquals(setOf("TRY" to 0L, "USD" to cloned.variants.first().id), cloned.prices.map { it.currency to it.variantId }.toSet())
+        assertEquals(mapOf("stripe" to """{"packageId":"123"}"""), cloned.providerMeta.mapValues { it.value.filterNot { c -> c.isWhitespace() } })
+
+        // the original keeps everything
+        assertEquals(2, original.variants.size)
+        assertEquals(2, original.prices.size)
+
+        val clonedActions = io.vertx.core.json.JsonArray(cloned.product.actions)
+        assertEquals(listOf("a1", "a2"), clonedActions.map { (it as JsonObject).getString("id") })
+
+        val bundleCopy = service.clone(bundle.id, " (Copy)")
+        assertEquals(listOf(child.id to 3), service.get(bundleCopy.id).bundleItems.map { it.productId to it.quantity })
+        assertEquals(bundle.id, service.get(bundle.id).bundleItems.first().bundleProductId)
+        assertEquals(ProductKind.BUNDLE, service.get(bundleCopy.id).product.kind)
+    }
+
+    @Test
+    fun `clone numbers the slug and copies the image through the callback`(): Unit = runBlocking {
+        val saved = create()
+        w.products.update(w.products.getById(saved.id, pool)!!.let { p -> com.panomc.plugins.market.db.model.MarketProduct(
+            id = p.id, slug = p.slug, name = p.name, price = p.price, imageFileName = "img.png", updatedAt = 1) }, pool)
+
+        val first = service.clone(saved.id, " (Kopya)") { "copy-of-$it" }
+        val second = service.clone(saved.id, " (Kopya)")
+        val third = service.clone(saved.id, " (Kopya)")
+
+        assertEquals("${service.get(saved.id).product.slug}-copy", first.slug)
+        assertEquals("${service.get(saved.id).product.slug}-copy-2", second.slug)
+        assertEquals("${service.get(saved.id).product.slug}-copy-3", third.slug)
+        assertEquals("copy-of-img.png", service.get(first.id).product.imageFileName)
+        assertNull(service.get(second.id).product.imageFileName)
+    }
+
+    @Test
+    fun `clone of a missing or deleted product is not found and cloning twice at once yields distinct slugs`(): Unit = runBlocking {
+        assertThrows(NotFound::class.java) { runBlocking { service.clone(99999, " (Copy)") } }
+
+        val saved = create()
+        val slugs = Race.run(6) { service.clone(saved.id, " (Copy)").slug }.mapNotNull { it.getOrNull() }
+
+        assertEquals(slugs.size, slugs.toSet().size)
+
+        val gone = create()
+        Fixtures.insertRaw(pool, "market_order_item", mapOf("productId" to gone.id))
+        service.delete(gone.id)
+        assertThrows(NotFound::class.java) { runBlocking { service.clone(gone.id, " (Copy)") } }
+    }
+
+    // ----- comparisons (MK-051) -------------------------------------------------------------------------------------
+
+    private fun comparison(vararg pairs: Pair<String, Any?>) = JsonObject(mapOf("name" to "Compare", *pairs))
+
+    @Test
+    fun `comparison is saved and limited to 12 products and 50 features`(): Unit = runBlocking {
+        val ids = (1..13).map { w.fixtures.product().id }
+
+        val id = service.saveComparison(null, comparison("selectedProducts" to JsonArray(ids.take(12)), "features" to JsonArray((1..50).map { JsonObject().put("id", "f$it") }), "cellValues" to JsonObject().put("a", "yes")))
+        assertEquals(12, JsonArray(w.comparisons.getById(id, pool)!!.productIds).size())
+
+        assertEquals("TOO_MANY", comparisonErrors { service.saveComparison(null, comparison("selectedProducts" to JsonArray(ids))) }["selectedProducts"])
+        assertEquals("TOO_MANY", comparisonErrors { service.saveComparison(null, comparison("features" to JsonArray((1..51).map { JsonObject().put("id", "f$it") }))) }["features"])
+        assertEquals(1L, count("market_comparison"))
+    }
+
+    @Test
+    fun `comparison shape errors name their path and nothing is stored`(): Unit = runBlocking {
+        val a = w.fixtures.product()
+
+        val errors = comparisonErrors {
+            service.saveComparison(
+                null,
+                JsonObject().put("name", " ").put("priority", "x").put("selectedProducts", JsonArray().add(a.id).add(a.id).add(99999).add("z"))
+                    .put("features", JsonArray().add("str").add(JsonObject().put("id", "dup")).add(JsonObject().put("id", "dup")))
+                    .put("cellValues", JsonObject().put("k", 5).put("k2", "x".repeat(501)))
+            )
+        }
+
+        assertEquals("REQUIRED", errors["name"])
+        assertEquals("INVALID", errors["priority"])
+        assertEquals("DUPLICATE", errors["selectedProducts.1"])
+        assertEquals("INVALID", errors["selectedProducts.3"])
+        assertEquals("INVALID", errors["features.0"])
+        assertEquals("DUPLICATE", errors["features.2.id"])
+        assertEquals("INVALID", errors["cellValues.k"])
+        assertEquals("INVALID", errors["cellValues.k2"])
+        assertEquals(0L, count("market_comparison"))
+
+        assertEquals("NOT_FOUND", comparisonErrors { service.saveComparison(null, comparison("selectedProducts" to JsonArray().add(99999))) }["selectedProducts.0"])
+        assertThrows(NotFound::class.java) { runBlocking { service.saveComparison(424242, comparison()) } }
+    }
+
+    @Test
+    fun `comparison update replaces the row`(): Unit = runBlocking {
+        val a = w.fixtures.product()
+        val id = service.saveComparison(null, comparison("selectedProducts" to JsonArray().add(a.id)))
+
+        service.saveComparison(id, comparison("name" to "Renamed", "status" to "INACTIVE", "priority" to 4))
+
+        val row = w.comparisons.getById(id, pool)!!
+        assertEquals("Renamed", row.name)
+        assertEquals(MarketStatus.INACTIVE, row.status)
+        assertEquals(4, row.priority)
+        assertEquals("[]", row.productIds)
+    }
+
+    private suspend fun comparisonErrors(block: suspend () -> Unit): Map<String, String> {
+        val e = runCatching { block() }.exceptionOrNull()
+        assertTrue(e is com.panomc.platform.error.BadRequest, "expected BAD_REQUEST, got $e")
+        return JsonObject((e as com.panomc.platform.error.BadRequest).encode(emptyMap())).getJsonObject("fieldErrors").map.mapValues { it.value as String }
     }
 }

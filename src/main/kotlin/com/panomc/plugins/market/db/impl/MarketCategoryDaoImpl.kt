@@ -28,7 +28,7 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
 
     override suspend fun add(category: MarketCategory, sqlClient: SqlClient): Long {
         val query =
-            "INSERT INTO `${prefix() + tableName}` (`name`, `description`, `icon`, `color`, `status`, `parentId`, `position`, `imageFileName`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO `${prefix() + tableName}` (`name`, `description`, `icon`, `color`, `status`, `parentId`, `position`, `imageFileName`, `tiered`, `upgradeMode`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
@@ -42,6 +42,8 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
                     category.parentId,
                     category.position,
                     category.imageFileName,
+                    category.tiered,
+                    category.upgradeMode.name,
                     category.createdAt,
                     category.updatedAt
                 )
@@ -53,7 +55,7 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
 
     override suspend fun update(category: MarketCategory, sqlClient: SqlClient) {
         val query =
-            "UPDATE `${prefix() + tableName}` SET `name` = ?, `description` = ?, `icon` = ?, `color` = ?, `status` = ?, `parentId` = ?, `position` = ?, `imageFileName` = ?, `updatedAt` = ? WHERE `id` = ?"
+            "UPDATE `${prefix() + tableName}` SET `name` = ?, `description` = ?, `icon` = ?, `color` = ?, `status` = ?, `parentId` = ?, `position` = ?, `imageFileName` = ?, `tiered` = ?, `upgradeMode` = ?, `updatedAt` = ? WHERE `id` = ?"
 
         sqlClient
             .preparedQuery(query)
@@ -67,6 +69,8 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
                     category.parentId,
                     category.position,
                     category.imageFileName,
+                    category.tiered,
+                    category.upgradeMode.name,
                     category.updatedAt,
                     category.id
                 )
@@ -92,6 +96,29 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
             .coAwait()
 
         return rows.toEntities().getOrNull(0)
+    }
+
+    override suspend fun getByIdForUpdate(id: Long, sqlClient: SqlClient): MarketCategory? {
+        val query = "SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `id` = ? FOR UPDATE"
+
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery(query)
+            .execute(Tuple.of(id))
+            .coAwait()
+
+        return rows.toEntities().getOrNull(0)
+    }
+
+    override suspend fun hasActiveTierEntitlements(categoryId: Long, sqlClient: SqlClient): Boolean {
+        val query =
+            "SELECT 1 FROM `${prefix()}market_entitlement` WHERE `tierCategoryId` = ? AND `status` = 'ACTIVE' LIMIT 1"
+
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery(query)
+            .execute(Tuple.of(categoryId))
+            .coAwait()
+
+        return rows.size() > 0
     }
 
     override suspend fun getByImageFileName(imageFileName: String, sqlClient: SqlClient): MarketCategory? {
