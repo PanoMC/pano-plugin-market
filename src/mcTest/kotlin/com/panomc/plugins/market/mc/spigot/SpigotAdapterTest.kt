@@ -1,7 +1,9 @@
 package com.panomc.plugins.market.mc.spigot
 
+import com.panomc.plugins.market.mc.core.link.PermissionApplier
 import com.panomc.plugins.market.mc.core.link.PresenceRules
 import com.panomc.plugins.market.mc.core.link.PresenceTracker
+import com.panomc.plugins.market.mc.core.platform.PermissionOutcome
 import com.panomc.plugins.market.mc.core.wire.McPlatformName
 import fr.xephi.authme.api.v3.AuthMeApi
 import fr.xephi.authme.events.LoginEvent
@@ -155,5 +157,41 @@ class SpigotAdapterTest {
         FakeBukkit.registered.single { it.type == LogoutEvent::class.java }.let { it.executor.execute(it.listener, LogoutEvent(steve)) }
         assertFalse(platform().isPresent("Steve"))
         assertEquals(listOf("Steve"), announced)
+    }
+
+    @Test
+    fun `applyPermission hands the tracker uuid and the Pano hint to LuckPerms separately`() {
+        val calls = ArrayList<List<String?>>()
+        val applier = object : PermissionApplier {
+            override fun apply(username: String, presentUuid: String?, uuidHint: String?, op: String, nodes: List<String>, expiresAt: Long?): PermissionOutcome {
+                calls.add(listOf(username, presentUuid, uuidHint, op))
+                return PermissionOutcome(true)
+            }
+        }
+        val plugin = FakeBukkit.plugin("PanoMarket")
+        val p = SpigotMcPlatform(
+            plugin, MarketScheduler(plugin, false), tracker, com.panomc.plugins.market.mc.core.support.TestLog(),
+            McPlatformName.PAPER, permissionApplier = { applier }
+        )
+        p.applyPermission("Steve", "pano-hint", "ADD", listOf("group.vip"), null)
+        PresenceRules(tracker, { false }, { true }, {}).onJoin("Steve", "server-uuid")
+        p.applyPermission("Steve", "pano-hint", "REMOVE", listOf("group.vip"), null)
+        assertEquals(listOf(listOf("Steve", null, "pano-hint", "ADD"), listOf("Steve", "server-uuid", "pano-hint", "REMOVE")), calls)
+    }
+
+    @Test
+    fun `an AuthMe login event after the player quit is ignored (the player is not online any more)`() {
+        FakeBukkit.plugin("AuthMe")
+        val bridge = AuthMeBridge(FakeBukkit.plugin("PanoMarket"))
+        val announced = ArrayList<String>()
+        val rules = PresenceRules(tracker, { true }, { false }, { announced.add(it) })
+        // The same guard MarketSpigotPlugin installs: a login of a player that is not online is dropped.
+        bridge.registerEvents({ if (it.isOnline) rules.onAuthLogin(it.name, it.uniqueId.toString()) }, { rules.onAuthLogout(it.name) })
+        val steve = FakeBukkit.player("Steve", online = false)
+        rules.onJoin("Steve", steve.uniqueId.toString())
+        rules.onQuit("Steve")
+        FakeBukkit.registered.single { it.type == LoginEvent::class.java }.let { it.executor.execute(it.listener, LoginEvent(steve)) }
+        assertFalse(platform().isPresent("Steve"))
+        assertTrue(announced.isEmpty())
     }
 }

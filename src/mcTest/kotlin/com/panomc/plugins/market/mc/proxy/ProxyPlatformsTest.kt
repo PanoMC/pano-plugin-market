@@ -2,8 +2,10 @@ package com.panomc.plugins.market.mc.proxy
 
 import com.panomc.plugins.market.mc.bungee.BungeeMcPlatform
 import com.panomc.plugins.market.mc.core.link.CommandHopTimeout
+import com.panomc.plugins.market.mc.core.link.PermissionApplier
 import com.panomc.plugins.market.mc.core.link.PresenceRules
 import com.panomc.plugins.market.mc.core.link.PresenceTracker
+import com.panomc.plugins.market.mc.core.platform.PermissionOutcome
 import com.panomc.plugins.market.mc.core.wire.McPlatformName
 import com.panomc.plugins.market.mc.velocity.VelocityMcPlatform
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -92,5 +94,32 @@ class ProxyPlatformsTest {
         assertFalse(velocity().isPresent("Steve"))
         assertEquals(listOf("Steve"), announced)
         assertEquals(UUID.nameUUIDFromBytes("OfflinePlayer:Alex".toByteArray()).toString(), bungee().offlineUuid("Alex"))
+    }
+
+    private class RecordingApplier : PermissionApplier {
+        val calls = CopyOnWriteArrayList<List<String?>>()
+        override fun apply(username: String, presentUuid: String?, uuidHint: String?, op: String, nodes: List<String>, expiresAt: Long?): PermissionOutcome {
+            calls.add(listOf(username, presentUuid, uuidHint, op))
+            return PermissionOutcome(true)
+        }
+    }
+
+    @Test
+    fun `applyPermission hands the tracker uuid and the Pano hint to LuckPerms separately`() {
+        val applier = RecordingApplier()
+        val platforms = listOf(
+            BungeeMcPlatform(tracker, { pool.execute(it) }, { true }, { true }, permissionApplier = { applier }),
+            VelocityMcPlatform(tracker, { pool.execute(it) }, { CompletableFuture.completedFuture(true) }, { true }, permissionApplier = { applier })
+        )
+        platforms.forEach { it.applyPermission("Steve", "pano-hint", "ADD", listOf("group.vip"), null) } // not connected
+        PresenceRules(tracker, { false }, { true }, {}).onJoin("Steve", "proxy-uuid")
+        platforms.forEach { it.applyPermission("Steve", "pano-hint", "ADD", listOf("group.vip"), null) } // connected
+        assertEquals(
+            listOf(
+                listOf("Steve", null, "pano-hint", "ADD"), listOf("Steve", null, "pano-hint", "ADD"),
+                listOf("Steve", "proxy-uuid", "pano-hint", "ADD"), listOf("Steve", "proxy-uuid", "pano-hint", "ADD")
+            ),
+            applier.calls.toList()
+        )
     }
 }

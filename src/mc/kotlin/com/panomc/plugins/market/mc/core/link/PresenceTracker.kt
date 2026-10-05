@@ -22,14 +22,12 @@ class PresenceTracker {
         return !before && authenticated
     }
 
-    /** Authentication finished (AuthMe login). Returns `true` when this made them present. */
+    /** Authentication finished (AuthMe login) of a connected player. Returns `true` when this made them present; a name that is not connected is ignored. */
     @Synchronized
     fun authenticate(name: String, uuid: String?): Boolean {
-        val e = entries[key(name)]
-        if (e == null) {
-            entries[key(name)] = Entry(name, uuid, true)
-            return true
-        }
+        // No entry = not connected (every connected player has one from the join event or the enable-time seeding): a
+        // login event that arrives after the quit must not bring the player back, nothing would ever remove them again.
+        val e = entries[key(name)] ?: return false
         if (uuid != null) e.uuid = uuid
         val was = e.authenticated
         e.authenticated = true

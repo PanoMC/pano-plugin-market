@@ -127,10 +127,11 @@ object FakeBukkit {
         return p
     }
 
-    fun player(name: String, uuid: UUID = UUID.nameUUIDFromBytes(name.toByteArray())): Player = proxyOf(Player::class.java) { m, _ ->
+    fun player(name: String, uuid: UUID = UUID.nameUUIDFromBytes(name.toByteArray()), online: Boolean = true): Player = proxyOf(Player::class.java) { m, _ ->
         when (m.name) {
             "getName" -> name
             "getUniqueId" -> uuid
+            "isOnline" -> online
             else -> throw UnsupportedOperationException("Player.${m.name}")
         }
     }

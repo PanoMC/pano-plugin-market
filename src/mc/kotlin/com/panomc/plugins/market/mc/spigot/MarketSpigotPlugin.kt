@@ -60,7 +60,7 @@ class MarketSpigotPlugin : JavaPlugin(), Listener {
             server.pluginManager.registerEvents(this, this)
             if (bridge.installed()) {
                 // Without the login events nobody could ever become present after the login: then fall back to "online".
-                authActive = bridge.registerEvents({ p -> presenceRules.onAuthLogin(p.name, p.uniqueId.toString()) }, { p -> presenceRules.onAuthLogout(p.name) })
+                authActive = bridge.registerEvents({ p -> if (p.isOnline) presenceRules.onAuthLogin(p.name, p.uniqueId.toString()) }, { p -> presenceRules.onAuthLogout(p.name) })
                 if (!authActive) log.warn("AuthMe is installed but its login events could not be hooked; players count as present on join.")
             }
             // Players online already (a /reload or a late enable) produce no join event.

@@ -28,10 +28,12 @@ class SpigotMcPlatform(
     private val neverJoinedUuid: (String) -> UUID = { UUID.nameUUIDFromBytes("OfflinePlayer:$it".toByteArray(Charsets.UTF_8)) },
     private val commandTimeoutMs: Long = 30_000,
     private val vaultProbe: () -> Boolean = { false },
-    private val placeholderProbe: () -> Boolean = { false }
+    private val placeholderProbe: () -> Boolean = { false },
+    /** Creates the LuckPerms executor on first use (LuckPerms classes are not loaded before); replaced in tests. */
+    private val permissionApplier: () -> PermissionApplier = { LuckPermsLoader.create(neverJoinedUuid) }
 ) : McPlatform {
 
-    private val permissions: PermissionApplier by lazy { LuckPermsLoader.create(neverJoinedUuid) }
+    private val permissions: PermissionApplier by lazy(permissionApplier)
 
     override fun luckPermsAvailable(): Boolean = try {
         Bukkit.getPluginManager().isPluginEnabled("LuckPerms")
@@ -56,5 +58,5 @@ class SpigotMcPlatform(
     }
 
     override fun applyPermission(username: String, uuidHint: String?, op: String, nodes: List<String>, expiresAt: Long?): PermissionOutcome =
-        permissions.apply(username, uuidHint, op, nodes, expiresAt)
+        permissions.apply(username, presence.uuid(username), uuidHint, op, nodes, expiresAt)
 }

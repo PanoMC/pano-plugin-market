@@ -76,7 +76,7 @@ class MarketComponentTest {
         platform.luckPerms = luckPerms
         val executor = LuckPermsExecutor({ lp.api }, { UUID.nameUUIDFromBytes("offline".toByteArray()) }, nodeFactory = lp.factory(), timeoutMs = 1_000)
         platform.permissionHandler = { c ->
-            if (lpFailure) PermissionOutcome(false, "storage offline") else executor.apply(c.username, c.uuidHint, c.op, c.nodes, c.expiresAt)
+            if (lpFailure) PermissionOutcome(false, "storage offline") else executor.apply(c.username, tracker?.uuid(c.username), c.uuidHint, c.op, c.nodes, c.expiresAt)
         }
         val link = FakeLink()
         // With a tracker the engine sees presence exactly as the adapters report it (join / AuthMe login), not the fake's own list.

@@ -123,10 +123,23 @@ class PresenceTest {
     }
 
     @Test
-    fun `an authenticate event for an unknown connection still makes the player present`() {
+    fun `a login event after the quit does not make the player present and does not call onPresent`() {
+        authMe = true
+        val rules = spigotRules()
+        rules.onJoin("Steve", "u1")
+        rules.onQuit("Steve")
+        rules.onAuthLogin("Steve", "u1")
+        assertFalse(tracker.isPresent("steve"))
+        assertNull(tracker.uuid("steve"))
+        assertTrue(tracker.presentNames().isEmpty())
+        assertTrue(present.isEmpty())
+    }
+
+    @Test
+    fun `an authenticate event for a name that never connected is ignored`() {
         authMe = true
         spigotRules().onAuthLogin("Late", "u9")
-        assertTrue(tracker.isPresent("late"))
-        assertEquals("u9", tracker.uuid("late"))
+        assertFalse(tracker.isPresent("late"))
+        assertTrue(present.isEmpty())
     }
 }

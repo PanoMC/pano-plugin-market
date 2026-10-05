@@ -5,6 +5,7 @@ import com.panomc.plugins.market.mc.core.platform.PermissionOutcome
 import com.panomc.plugins.market.mc.core.platform.SystemMcClock
 import net.luckperms.api.LuckPerms
 import net.luckperms.api.LuckPermsProvider
+import net.luckperms.api.model.data.DataMutateResult
 import net.luckperms.api.model.user.User
 import net.luckperms.api.node.Node
 import java.time.Instant
@@ -17,16 +18,23 @@ import java.util.concurrent.TimeUnit
  * the class below is only loaded once LuckPerms is known to be installed.
  */
 interface PermissionApplier {
-    fun apply(username: String, uuidHint: String?, op: String, nodes: List<String>, expiresAt: Long?): PermissionOutcome
+    /**
+     * [presentUuid] is the uuid the platform itself knows (the connected, authenticated player); [uuidHint] is only
+     * Pano's `user.mcUuid`, which differs between proxy, online and offline backends (19 section 3) and is used last.
+     */
+    fun apply(username: String, presentUuid: String?, uuidHint: String?, op: String, nodes: List<String>, expiresAt: Long?): PermissionOutcome
 }
 
 /**
  * LuckPerms API 5.x, from the engine thread (never the main thread; every LuckPerms future is awaited with a bound).
  *
- * - user: the UUID hint when it parses, else `lookupUniqueId(name)`, else the platform's never-joined id (the same one
- *   Pano's own permission sync stores for a player that was never seen), then `loadUser(uuid, name)`;
+ * - user: the connected player's own uuid when there is one, else `lookupUniqueId(name)` (offline users are loaded by
+ *   name), else Pano's uuid hint when it parses, else the platform's never-joined id (the same one Pano's own
+ *   permission sync stores for a player that was never seen), then `loadUser(uuid, name)`;
  * - `ADD`: upsert per node in the global context. No node: add. A permanent node already there: nothing to do.
- *   A temporary one: replaced when the new expiry is later (permanent counts as the latest), kept otherwise;
+ *   A temporary one: replaced when the new expiry is later (permanent counts as the latest), kept otherwise.
+ *   A negated node (value false) of the same key is removed first, LuckPerms refuses an add over it. A refused add
+ *   (or remove, a missing node excepted) is a failed outcome, never DONE;
  * - `REMOVE`: every global-context node with that key goes (a missing node is fine: the undo is idempotent);
  * - `group.<name>` is an inheritance node, `Node.builder(key)` picks the type from the key;
  * - saved with `saveUser`, only when something changed. Any exception is a failed outcome with its message.
@@ -39,7 +47,7 @@ class LuckPermsExecutor(
     private val nodeFactory: (String, Instant?) -> Node = ::buildNode
 ) : PermissionApplier {
 
-    override fun apply(username: String, uuidHint: String?, op: String, nodes: List<String>, expiresAt: Long?): PermissionOutcome {
+    override fun apply(username: String, presentUuid: String?, uuidHint: String?, op: String, nodes: List<String>, expiresAt: Long?): PermissionOutcome {
         return try {
             if (op != "ADD" && op != "REMOVE") return PermissionOutcome(false, "unknown permission operation $op")
             val keys = nodes.map { it.trim() }
@@ -49,7 +57,7 @@ class LuckPermsExecutor(
             }
             val lp = api()
             val manager = lp.userManager
-            val uuid = resolveUuid(lp, username, uuidHint)
+            val uuid = resolveUuid(lp, username, presentUuid, uuidHint)
             val user = await(manager.loadUser(uuid, username), "loading the LuckPerms user")
                 ?: throw IllegalStateException("LuckPerms returned no user for $username")
             var changed = false
@@ -65,10 +73,10 @@ class LuckPermsExecutor(
         }
     }
 
-    private fun resolveUuid(lp: LuckPerms, username: String, hint: String?): UUID {
-        parse(hint)?.let { return it }
+    private fun resolveUuid(lp: LuckPerms, username: String, presentUuid: String?, hint: String?): UUID {
+        parse(presentUuid)?.let { return it }
         val looked = await(lp.userManager.lookupUniqueId(username), "looking up the LuckPerms user")
-        return looked ?: offlineUuid(username)
+        return looked ?: parse(hint) ?: offlineUuid(username)
     }
 
     private fun parse(value: String?): UUID? = try {
@@ -77,26 +85,42 @@ class LuckPermsExecutor(
         null
     }
 
-    private fun globalExisting(user: User, key: String): List<Node> =
-        user.data().toCollection().filter { it.key == key && it.value && it.contexts.isEmpty }
+    private fun globalNodes(user: User, key: String): List<Node> =
+        user.data().toCollection().filter { it.key == key && it.contexts.isEmpty }
 
     private fun upsert(user: User, key: String, expiresAt: Long?): Boolean {
-        val existing = globalExisting(user, key)
+        val all = globalNodes(user, key)
+        val existing = all.filter { it.value }
         val newExpiry = expiresAt?.let { Instant.ofEpochMilli(it) }
         if (existing.any { !it.hasExpiry() }) return false
         if (newExpiry != null) {
             val latest = existing.mapNotNull { it.expiry }.maxOrNull()
             if (latest != null && !latest.isBefore(newExpiry)) return false
         }
-        existing.forEach { user.data().remove(it) }
-        user.data().add(nodeFactory(key, newExpiry))
+        // Every global node of this key goes first, the negated ones too: LuckPerms refuses an add over any node with
+        // the same key and context (FAIL_ALREADY_HAS), whatever its value or expiry.
+        val removed = ArrayList<Node>()
+        for (n in all) {
+            val r = user.data().remove(n)
+            if (r.wasSuccessful()) removed.add(n) else if (r != DataMutateResult.FAIL_LACKS) throw IllegalStateException("LuckPerms refused to remove $key: $r")
+        }
+        val r = user.data().add(nodeFactory(key, newExpiry))
+        if (!r.wasSuccessful()) {
+            removed.forEach { user.data().add(it) } // best effort: leave the in-memory user as it was
+            throw IllegalStateException("LuckPerms refused to add $key: $r")
+        }
         return true
     }
 
     private fun remove(user: User, key: String): Boolean {
-        val existing = globalExisting(user, key)
-        existing.forEach { user.data().remove(it) }
-        return existing.isNotEmpty()
+        val existing = globalNodes(user, key).filter { it.value }
+        var changed = false
+        for (n in existing) {
+            val r = user.data().remove(n)
+            if (r.wasSuccessful()) changed = true
+            else if (r != DataMutateResult.FAIL_LACKS) throw IllegalStateException("LuckPerms refused to remove $key: $r")
+        }
+        return changed
     }
 
     private fun <T> await(future: CompletableFuture<T>, what: String): T? = try {

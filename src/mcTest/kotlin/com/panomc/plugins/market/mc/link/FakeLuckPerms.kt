@@ -54,13 +54,16 @@ class FakeLuckPerms {
     val nodeInfo = HashMap<Node, FakeNode>()
     val loads = CopyOnWriteArrayList<Pair<UUID, String?>>()
     val lookups = CopyOnWriteArrayList<String>()
+    val refusedAdds = CopyOnWriteArrayList<String>()
+    /** Makes every add of a granting node (value true) fail, as a LuckPerms that refuses for a reason the executor cannot see. */
+    var rejectAdds = false
     var saves = 0
     var lookupResult: UUID? = null
     var loadFuture: (() -> CompletableFuture<User>)? = null
     var saveFuture: (() -> CompletableFuture<Void>)? = null
 
-    fun seed(key: String, expiry: Instant? = null, global: Boolean = true): Node {
-        val f = FakeNode(key, expiry, true, global)
+    fun seed(key: String, expiry: Instant? = null, global: Boolean = true, value: Boolean = true): Node {
+        val f = FakeNode(key, expiry, value, global)
         nodeInfo[f.node] = f
         nodes.add(f.node)
         return f.node
@@ -68,6 +71,10 @@ class FakeLuckPerms {
 
     /** What is stored now: key to expiry, global context only. */
     fun stored(): List<Pair<String, Instant?>> = nodes.filter { nodeInfo[it]!!.global }.map { nodeInfo[it]!!.key to nodeInfo[it]!!.expiry }
+
+    /** What is stored now with its value: global context only. */
+    fun storedValues(): List<Triple<String, Boolean, Instant?>> =
+        nodes.filter { nodeInfo[it]!!.global }.map { Triple(nodeInfo[it]!!.key, nodeInfo[it]!!.value, nodeInfo[it]!!.expiry) }
 
     fun factory(): (String, Instant?) -> Node = { key, expiry ->
         val f = FakeNode(key, expiry)
@@ -78,8 +85,22 @@ class FakeLuckPerms {
     private val nodeMap: NodeMap = proxyOf(NodeMap::class.java) { m, a ->
         when (m.name) {
             "toCollection" -> nodes.toList()
-            "add" -> { nodes.add(a[0] as Node); DataMutateResult.SUCCESS }
-            "remove" -> { nodes.remove(a[0] as Node); DataMutateResult.SUCCESS }
+            // Real LuckPerms: an add is refused while a node with the same key and context exists, whatever its value or expiry.
+            "add" -> {
+                val n = a[0] as Node
+                val info = nodeInfo[n]!!
+                if (nodes.any { nodeInfo[it]!!.key == info.key && nodeInfo[it]!!.global == info.global }) {
+                    refusedAdds.add(info.key)
+                    DataMutateResult.FAIL_ALREADY_HAS
+                } else if (rejectAdds && info.value) {
+                    refusedAdds.add(info.key)
+                    DataMutateResult.FAIL_ALREADY_HAS
+                } else {
+                    nodes.add(n)
+                    DataMutateResult.SUCCESS
+                }
+            }
+            "remove" -> if (nodes.remove(a[0] as Node)) DataMutateResult.SUCCESS else DataMutateResult.FAIL_LACKS
             else -> throw UnsupportedOperationException("NodeMap.${m.name}")
         }
     }
