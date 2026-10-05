@@ -1,8 +1,10 @@
 package com.panomc.plugins.market.job
 
 import com.panomc.plugins.market.core.time.Clock
+import com.panomc.plugins.market.db.model.MarketPaymentEvent
 import com.panomc.plugins.market.routes.api.payment.InboundDispatcher
 import com.panomc.plugins.market.routes.api.payment.InboundEventStore
+import com.panomc.plugins.market.routes.api.shipping.ShippingInboundDispatcher
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 
@@ -22,8 +24,18 @@ class InboundEventRetryJob(
     private val dispatcher: InboundDispatcher,
     private val store: InboundEventStore,
     private val clock: Clock,
-    private val batch: Int = BATCH
+    private val batch: Int = BATCH,
+    /**
+     * The retry of the rows of shipping webhooks (`providerId = "shipping:<id>"`, MK-134): the payment dispatcher cannot run them again (no payment
+     * provider has that id), so they go to this one. `null` leaves them alone.
+     */
+    private val shipping: ShippingRetry? = null
 ) {
+    /** Runs a stored shipping webhook again (10 section 10.1); `false` when somebody else claimed the row first. */
+    fun interface ShippingRetry {
+        suspend fun retry(row: MarketPaymentEvent): Boolean
+    }
+
     /** Rows run again by this call. */
     suspend fun runOnce(): Int {
         try {
@@ -36,7 +48,9 @@ class InboundEventRetryJob(
 
             for (row in store.due(now, staleBefore, InboundDispatcher.MAX_ATTEMPTS, batch)) {
                 try {
-                    if (dispatcher.retry(row)) handled++
+                    val ran = if (row.providerId.startsWith(ShippingInboundDispatcher.PROVIDER_PREFIX)) shipping?.retry(row) ?: false else dispatcher.retry(row)
+
+                    if (ran) handled++
                 } catch (e: CancellationException) {
                     throw e
                 } catch (t: Throwable) {

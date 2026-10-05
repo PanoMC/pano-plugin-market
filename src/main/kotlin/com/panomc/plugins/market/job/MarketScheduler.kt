@@ -9,6 +9,8 @@ import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.dao.MarketPaymentDao
 import com.panomc.plugins.market.db.dao.MarketRedemptionDao
+import com.panomc.plugins.market.db.dao.MarketShipmentDao
+import com.panomc.plugins.market.routes.panel.shipping.shippingService
 import com.panomc.plugins.market.db.tx.Locks
 import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.routes.api.order.orderService
@@ -190,6 +192,9 @@ class MarketScheduler(
         /** `InboundEventRetryJob` (02 section 7.3 step 7: every 60 s). */
         const val INBOUND_RETRY_MS = 60_000L
 
+        /** `ShipmentTrackingJob` (10 section 10.2: every 60 s). */
+        const val SHIPMENT_TRACKING_MS = 60_000L
+
         private val logger = LoggerFactory.getLogger(MarketScheduler::class.java)
     }
 }
@@ -201,7 +206,7 @@ class MarketScheduler(
  * Open seams (each fails closed: nothing is armed that could not do its work):
  * - `MailOutboxJob` is not registered: its `MailComposition` is `UnwiredMailComposition` until MK-142 / MK-146 land (armed now it would end every row
  *   `FAILED RENDER_ERROR`). They add `Job("mail-outbox", MarketScheduler.MAIL_OUTBOX_MS) { mailJob.runOnce() }` to [jobs].
- * - The other workers of 00 section 8.5 (`RefundReconcileJob`, `DeliveryJob`, `EntitlementExpiryJob`, `SubscriptionJob`, `ShipmentTrackingJob`,
+ * - The other workers of 00 section 8.5 (`RefundReconcileJob`, `DeliveryJob`, `EntitlementExpiryJob`, `SubscriptionJob`,
  *   `HousekeepingJob`) belong to the slices that build them; each adds one `Job` here (`InboundEventRetryJob` is MK-077's, registered below).
  */
 internal object MarketJobs {
@@ -225,9 +230,13 @@ internal object MarketJobs {
             MarketScheduler.Job("order-expiry", MarketScheduler.ORDER_EXPIRY_MS) { expiry.runOnce() },
             MarketScheduler.Job("payment-reconcile", MarketScheduler.PAYMENT_RECONCILE_MS) { reconcile.runOnce() },
             MarketScheduler.Job("webhook", MarketScheduler.WEBHOOK_MS) { webhooks.tick() },
-            inboundRetry(inboundEventRetryJob(plugin))
+            inboundRetry(inboundEventRetryJob(plugin)),
+            shipmentTracking(ShipmentTrackingJob(SystemClock, context.getBean(MarketShipmentDao::class.java), shippingService(plugin), sqlClient))
         )
     }
+
+    /** Polling of the carriers for the shipments that are due (MK-134). */
+    fun shipmentTracking(job: ShipmentTrackingJob): MarketScheduler.Job = MarketScheduler.Job("shipment-tracking", MarketScheduler.SHIPMENT_TRACKING_MS) { job.runOnce() }
 
     /** The retry of inbound payment traffic as a scheduler job (MK-077): FAILED and crashed `RECEIVED` rows are run again from their stored raw request. */
     fun inboundRetry(job: InboundEventRetryJob): MarketScheduler.Job = MarketScheduler.Job("inbound-retry", MarketScheduler.INBOUND_RETRY_MS) { job.runOnce() }

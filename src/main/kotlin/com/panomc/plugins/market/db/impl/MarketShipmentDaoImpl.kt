@@ -192,6 +192,18 @@ class MarketShipmentDaoImpl : MarketShipmentDao() {
             Tuple.of(polledAt, nextPollAt, polledAt, id), sqlClient
         ) > 0
 
+    override suspend fun claimPoll(id: Long, seen: Long, until: Long, now: Long, sqlClient: SqlClient): Boolean =
+        change("`nextPollAt` = ?, `updatedAt` = ?", "`id` = ? AND `nextPollAt` = ?", Tuple.of(until, now, id, seen), sqlClient) > 0
+
+    override suspend fun getByPieceNumber(providerId: String, trackingNumber: String, limit: Int, sqlClient: SqlClient): List<MarketShipment> {
+        val escaped = trackingNumber.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_").replace("\"", "\\\\\"")
+
+        return many(
+            "`providerId` = ? AND `status` <> 'CANCELLED' AND `packages` LIKE ?", "`id` DESC LIMIT $limit",
+            Tuple.of(providerId, "%\"trackingNumber\":\"$escaped\"%"), sqlClient
+        )
+    }
+
     override suspend fun uninstall(sqlClient: SqlClient) {
         sqlClient
             .query("DROP TABLE IF EXISTS `${prefix() + tableName}`")

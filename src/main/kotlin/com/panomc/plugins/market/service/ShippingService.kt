@@ -53,6 +53,9 @@ import com.panomc.plugins.market.spi.shipping.SenderAddress
 import com.panomc.plugins.market.spi.shipping.ShipItem
 import com.panomc.plugins.market.spi.shipping.ShippingCapabilities
 import com.panomc.plugins.market.spi.shipping.ShippingProvider
+import com.panomc.plugins.market.spi.shipping.ShippingContext
+import com.panomc.plugins.market.spi.shipping.ShippingUrls
+import com.panomc.plugins.market.spi.shipping.ShipmentLookup
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.shipping.NextPoll
@@ -204,7 +207,8 @@ class ShippingService(
         val settings: ProviderSettings,
         val testMode: Boolean,
         val capabilities: ShippingCapabilities,
-        val version: Long
+        val version: Long,
+        val token: String? = null
     ) {
         val sender: Address? get() = SenderAddress.from(settings)
     }
@@ -446,7 +450,7 @@ class ShippingService(
 
         val settings = codec.decrypt(stored)
 
-        return Carrier(provider, settings, row?.testMode ?: false, provider.capabilities(settings), settingsVersion(row?.settings))
+        return Carrier(provider, settings, row?.testMode ?: false, provider.capabilities(settings), settingsVersion(row?.settings), row?.webhookToken)
     }
 
     /**
@@ -1885,7 +1889,7 @@ class ShippingService(
         if (row.carrierReference == null && !(row.trackingNumber != null && carrier.capabilities.externalTracking)) throw StatusQueryNotSupported()
 
         val updates = try {
-            withTimeout(fx().trackTimeoutMs) { carrier.provider.track(contexts.create(carrier.provider, carrier.settings, row.testMode), TrackRequest(listOf(viewOf(row)))) }
+            withTimeout(fx().trackTimeoutMs) { carrier.provider.track(trackingContext(carrier, row.testMode), TrackRequest(listOf(viewOf(row)))) }
         } catch (e: CancellationException) {
             if (e is TimeoutCancellationException) throw ShippingProviderError(TIMEOUT, shipmentId) else throw e
         } catch (e: ProviderException) {
@@ -2396,6 +2400,162 @@ class ShippingService(
             .execute(Tuple.from(values + window.pageSize.toLong() + window.offset)).coAwait().map { it.getLong("id") }
 
         return ShipmentPage(ids.mapNotNull { id -> fx().shipments.getById(id, sqlClient)?.let { shipmentJson(it, false, sqlClient, false) } }, count)
+    }
+
+    // ================================================================================================ tracking (MK-134; 10 sections 7.2, 10)
+
+    /** The context of a call that has shipments in play: the provider's webhook URL with the install token and a `ctx.shipments` bound to its own rows. */
+    private fun trackingContext(carrier: Carrier, testMode: Boolean): ShippingContext =
+        BoundShippingContext(contexts.create(carrier.provider, carrier.settings, testMode), carrier.provider.id, carrier.token, ownShipments(carrier.provider.id))
+
+    /** `ctx.shipments` of provider [providerId]: market's shipments of that provider only, never another provider's. */
+    private fun ownShipments(providerId: String): ShipmentLookup = object : ShipmentLookup {
+        override suspend fun byMerchantReference(reference: String): ShipmentView? =
+            fx().db.tx { conn -> fx().shipments.getByMerchantReference(reference, conn)?.takeIf { it.providerId == providerId }?.let { viewOf(it) } }
+
+        override suspend fun byCarrierReference(reference: String): ShipmentView? =
+            fx().db.tx { conn -> fx().shipments.getByCarrierReference(providerId, reference, conn)?.let { viewOf(it) } }
+
+        override suspend fun byTrackingNumber(trackingNumber: String): ShipmentView? =
+            fx().db.tx { conn -> shipmentByNumber(providerId, trackingNumber, conn)?.let { viewOf(it) } }
+    }
+
+    private class BoundShippingContext(
+        private val base: ShippingContext, providerId: String, token: String?, override val shipments: ShipmentLookup
+    ) : ShippingContext by base {
+        override val urls: ShippingUrls = object : ShippingUrls {
+            override fun webhook(channel: String): String =
+                "${base.site.baseUrl}/api/market/shipping/$providerId/webhook/${token ?: "{installToken}"}" +
+                    if (channel == com.panomc.plugins.market.spi.MarketSpi.DEFAULT_CHANNEL) "" else "/$channel"
+        }
+    }
+
+    /**
+     * Polling of one provider (10 section 10.2): the batch size it accepts and the call. Built by [pollAccess] only for a provider that is registered,
+     * enabled, configured and has `trackingPull`.
+     */
+    class PollAccess internal constructor(val trackBatchSize: Int, private val call: suspend (List<MarketShipment>) -> List<TrackingUpdate>) {
+        suspend fun track(shipments: List<MarketShipment>): List<TrackingUpdate> = call(shipments)
+    }
+
+    /** `null` when the provider is not registered, not enabled, not configured, or has no `trackingPull`: its shipments are skipped, `nextPollAt` untouched. */
+    suspend fun pollAccess(providerId: String, sqlClient: SqlClient): PollAccess? {
+        val carrier = usableOrNull(providerId, sqlClient) ?: return null
+
+        if (!carrier.capabilities.trackingPull) return null
+
+        return PollAccess(maxOf(1, carrier.capabilities.trackBatchSize)) { rows ->
+            // one call per test mode: the context of a call carries a single mode
+            rows.groupBy { it.testMode }.flatMap { (testMode, group) ->
+                carrier.provider.track(trackingContext(carrier, testMode), TrackRequest(group.map { viewOf(it) }))
+            }
+        }
+    }
+
+    /** Can this shipment be asked for? A carrier reference, or a number the carrier tracks without having created the shipment (10 section 9.7). */
+    fun pollable(row: MarketShipment, access: PollAccess?): Boolean = access != null && (row.carrierReference != null || row.trackingNumber != null)
+
+    /**
+     * The updates of a poll that name [row] go through [applyUpdate] (source `POLL`); the others belong to other shipments of the chunk or are
+     * foreign and are left to them. Returns how many updates were applied. A failing update does not stop the next ones: the first failure is rethrown after all ran.
+     */
+    suspend fun applyPolled(row: MarketShipment, updates: List<TrackingUpdate>): Int {
+        var applied = 0
+        var failure: Exception? = null
+
+        for (update in updates) {
+            if (!resolves(update.target, row)) continue
+
+            try {
+                applyUpdate(row.id, update, TrackingSource.POLL)
+
+                applied++
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (failure == null) failure = e else failure.addSuppressed(e)
+            }
+        }
+
+        failure?.let { throw it }
+
+        return applied
+    }
+
+    /**
+     * What a poll did to the row (10 section 10.2): `pollCount + 1`, `lastPolledAt = now`, `nextPollAt` from [TrackingSchedule.next] unless the shipment
+     * is terminal, `stale = 1` once the schedule is over. Under the order lock, so a terminal state reached by an update of this very poll (or a manual edit
+     * meanwhile) is seen. Called for a success and for a failure alike.
+     */
+    suspend fun finishPoll(shipmentId: Long) {
+        val row = fx().db.tx { conn -> fx().shipments.getById(shipmentId, conn) } ?: return
+
+        inOrder(row.orderId) { conn, _ ->
+            val current = fx().shipments.getById(shipmentId, conn) ?: return@inOrder
+            val now = clock.now()
+            val next = if (current.status in ShipmentStateMachine.TERMINAL) NextPoll(null, false) else TrackingSchedule.next(current.createdAt, now)
+
+            fx().shipments.recordPoll(shipmentId, now, next.nextPollAt, conn)
+
+            if (current.status !in ShipmentStateMachine.TERMINAL && current.stale != next.stale) setShipment(conn, shipmentId, mapOf("stale" to if (next.stale) 1 else 0))
+        }
+    }
+
+    /** The carrier row learns the last failure of a poll (shown in the panel). */
+    suspend fun recordCarrierError(providerId: String, error: String, sqlClient: SqlClient) {
+        val row = carriers.getByProviderId(providerId, sqlClient) ?: return
+
+        carriers.recordError(row.id, error.take(255), clock.now(), sqlClient)
+    }
+
+    // ------------------------------------------------------------------------------------------------ inbound webhooks
+
+    /** What the inbound pipeline needs of a provider (10 section 10.1): a registered provider, enabled or not, with the settings as stored. */
+    class InboundAccess internal constructor(
+        val provider: ShippingProvider,
+        val redactor: com.panomc.plugins.market.core.abuse.Redactor,
+        private val contextFor: () -> ShippingContext
+    ) {
+        fun context(): ShippingContext = contextFor()
+    }
+
+    /**
+     * A registered provider receives every inbound request whatever its carrier row says (a carrier disabled after shipping must still deliver status
+     * updates); the settings may be incomplete, `require()` then throws `CONFIGURATION` and the dispatcher answers 503. `null` = not registered.
+     */
+    suspend fun inboundAccess(providerId: String, sqlClient: SqlClient): InboundAccess? {
+        val resolved = lookup.shipping(providerId) ?: return null
+        val provider = resolved.provider
+        val row = carriers.getByProviderId(providerId, sqlClient)
+        val codec = SettingsCodec(provider.settingsSchema(), cipher)
+        val settings = codec.decrypt(row?.settings?.let { runCatching { JsonObject(it) }.getOrNull() })
+        val secrets = (settings as? com.panomc.plugins.market.provider.StoredProviderSettings)?.valuesOf(provider.settingsSchema().secretKeys) ?: emptySet()
+        val carrier = Carrier(provider, settings, row?.testMode ?: false, ShippingCapabilities(), 0, row?.webhookToken)
+
+        return InboundAccess(provider, com.panomc.plugins.market.core.abuse.Redactor(secrets)) { trackingContext(carrier, carrier.testMode) }
+    }
+
+    /** The shipment of [providerId] that [target] names, or `null` (10 section 10.1 target resolution; the newest not cancelled row when several match). */
+    suspend fun resolveTarget(providerId: String, target: ShipmentTarget, sqlClient: SqlClient): MarketShipment? {
+        val shipments = fx().shipments
+
+        return when (target) {
+            is ShipmentTarget.Id -> shipments.getById(target.shipmentId, sqlClient)?.takeIf { it.providerId == providerId }
+            is ShipmentTarget.MerchantReference -> shipments.getByMerchantReference(target.reference, sqlClient)?.takeIf { it.providerId == providerId }
+            is ShipmentTarget.CarrierReference -> shipments.getByCarrierReference(providerId, target.reference, sqlClient)
+            is ShipmentTarget.TrackingNumber -> shipmentByNumber(providerId, target.trackingNumber, sqlClient)
+        }
+    }
+
+    /** The master number first (`idx_tracking`), then the number of one piece (`packages[]`). */
+    private suspend fun shipmentByNumber(providerId: String, number: String, sqlClient: SqlClient): MarketShipment? {
+        val shipments = fx().shipments
+
+        shipments.getByTrackingNumber(number, sqlClient).filter { it.providerId == providerId && it.status != ShipmentStatus.CANCELLED }.maxByOrNull { it.id }?.let { return it }
+
+        return shipments.getByPieceNumber(providerId, number, 20, sqlClient).firstOrNull { row ->
+            parse("{\"p\":${row.packages ?: "[]"}}")?.getJsonArray("p")?.any { (it as? JsonObject)?.getString("trackingNumber") == number } == true
+        }
     }
 
     companion object {

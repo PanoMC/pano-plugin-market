@@ -22,6 +22,7 @@ import com.panomc.plugins.market.provider.ProviderLogImpl
 import com.panomc.plugins.market.provider.ProviderStateStoreImpl
 import com.panomc.plugins.market.provider.StoredProviderSettings
 import com.panomc.plugins.market.routes.api.order.paymentService
+import com.panomc.plugins.market.routes.api.shipping.shippingInboundDispatcher
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
@@ -201,7 +202,7 @@ internal fun attemptPageService(plugin: MarketPlugin): AttemptPageService {
 internal fun inboundEventRetryJob(plugin: MarketPlugin): InboundEventRetryJob {
     cachedRetry?.takeIf { it.first === plugin }?.let { return it.second }
 
-    val built = InboundEventRetryJob(inboundDispatcher(plugin), inboundEventStore(plugin), SystemClock)
+    val built = InboundEventRetryJob(inboundDispatcher(plugin), inboundEventStore(plugin), SystemClock, shipping = InboundEventRetryJob.ShippingRetry { row -> shippingInboundDispatcher(plugin).retry(row) })
 
     return synchronized(InboundWiringHolder) { cachedRetry?.takeIf { it.first === plugin }?.second ?: built.also { cachedRetry = plugin to it } }
 }

@@ -40,4 +40,16 @@ abstract class MarketShipmentDao : MarketDao<MarketShipment>(MarketShipment::cla
 
     /** Atomic `pollCount + 1` with the poll times (`nextPollAt` may be `null` to stop polling). */
     abstract suspend fun recordPoll(id: Long, polledAt: Long, nextPollAt: Long?, sqlClient: SqlClient): Boolean
+
+    /**
+     * Claims a poll (10 section 10.2): `nextPollAt = until` only while it is still [seen]. `true` for exactly one of several concurrent pollers,
+     * `false` (zero rows) when somebody else claimed it, or the shipment was polled, finished or changed meanwhile.
+     */
+    abstract suspend fun claimPoll(id: Long, seen: Long, until: Long, now: Long, sqlClient: SqlClient): Boolean
+
+    /**
+     * Shipments of [providerId] that carry [trackingNumber] as the number of one piece (`packages[].trackingNumber`), newest first, not cancelled.
+     * The match is a `LIKE` pre-filter on the JSON text; the caller confirms it on the parsed array.
+     */
+    abstract suspend fun getByPieceNumber(providerId: String, trackingNumber: String, limit: Int, sqlClient: SqlClient): List<MarketShipment>
 }
