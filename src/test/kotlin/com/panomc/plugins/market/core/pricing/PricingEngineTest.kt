@@ -2,6 +2,7 @@ package com.panomc.plugins.market.core.pricing
 
 import com.panomc.plugins.market.config.CurrencyMode
 import com.panomc.plugins.market.config.MultiCurrencyFallback
+import com.panomc.plugins.market.core.money.Rounding
 import com.panomc.plugins.market.core.pricing.PricingFixtures.CR5
 import com.panomc.plugins.market.core.pricing.PricingFixtures.K25
 import com.panomc.plugins.market.core.pricing.PricingFixtures.K50P2
@@ -2887,8 +2888,98 @@ class PricingEngineTest {
         bad { PricingEngine.finalize(PricingFixtures.price(line(P9), profile = PricingProfile.RENEWAL), null, TenderInput(null, null)) }
         // the whole order in credits belongs to the storefront and the game
         bad { PricingFixtures.price(line(P1), profile = PricingProfile.PANEL, payWithCredits = true) }
-        // a mixed order can never be larger than its total (a caller that hands in a corrupt balance)
-        bad { PricingFixtures.price(line(P1), buyer = PricingFixtures.buyer(balance = -1)) }
+    }
+
+    // ---------------------------------------------------------------- a buyer in credit debt (07 sections 3.1, 8.5, invariant L6)
+
+    @Test
+    fun `a buyer in credit debt is quoted like a buyer with nothing to spend and is never refused`() {
+        // a dispute clawback (ALLOW_DEBT) can leave a USER balance below zero; the balance is passed as it is and the engine clamps it
+        val debtor = PricingFixtures.buyer(balance = -10_000)
+        val broke = PricingFixtures.buyer(balance = 0)
+
+        // a gateway quote: nothing can be applied, MAX applies nothing, the order is payable in money
+        val gateway = full(line(P1), method = PricingFixtures.METHOD_F, buyer = debtor, useCredits = MixedPayment.MAX)
+        assertEquals(0L, gateway.credits!!.maxApplicable)
+        assertEquals(0L, gateway.creditAmount)
+        assertEquals(0L, gateway.creditValue)
+        assertEquals(0L, gateway.credits!!.balance) // the spendable amount, never negative
+        assertEquals(10320L, gateway.gatewayAmount)
+        assertTrue(gateway.canCheckout)
+        assertEquals(full(line(P1), method = PricingFixtures.METHOD_F, buyer = broke, useCredits = MixedPayment.MAX), gateway)
+
+        // the top-up that repays the debt is quoted: it is a credit purchase, no credits are tendered against it
+        val topUp = full(topUp(50_000), method = PricingFixtures.METHOD_F, buyer = debtor)
+        assertEquals(0L, topUp.credits!!.maxApplicable)
+        assertEquals(50_000L, topUp.total - topUp.paymentFee)
+        assertTrue(topUp.canCheckout)
+        assertEquals(PricingFixtures.METHOD_F.id, topUp.paymentMethodId)
+
+        // the whole order in credits: the debtor cannot pay it
+        val whole = full(line(P1), payWithCredits = true, buyer = debtor)
+        assertEquals(0L, whole.creditAmount)
+        assertEquals(10_000L, whole.credits!!.creditTotal)
+        assertTrue(whole.codes().contains(PricingCode.INSUFFICIENT_CREDITS))
+        assertFalse(whole.canCheckout)
+
+        // a number of credits: the quote clamps it to what can be applied (nothing), checkout refuses it
+        val asked = full(line(P1), method = PricingFixtures.METHOD_F, buyer = debtor, useCredits = 3000)
+        assertEquals(0L, asked.creditAmount)
+        assertTrue(asked.codes().contains(PricingCode.CREDITS_REDUCED))
+        assertFalse(asked.codes().contains(PricingCode.INSUFFICIENT_CREDITS))
+        val strict = full(line(P1), method = PricingFixtures.METHOD_F, buyer = debtor, useCredits = 3000, strict = true)
+        assertEquals(0L, strict.creditAmount)
+        assertTrue(strict.codes().contains(PricingCode.INSUFFICIENT_CREDITS))
+        assertFalse(strict.codes().contains(PricingCode.CREDITS_REDUCED))
+        assertFalse(strict.canCheckout)
+
+        // every profile prices it; the in-game purchase just cannot be paid
+        for (profile in listOf(PricingProfile.STOREFRONT, PricingProfile.PANEL, PricingProfile.GIFT_CODE, PricingProfile.RENEWAL)) {
+            val lines = if (profile == PricingProfile.RENEWAL) arrayOf(line(P9)) else arrayOf(line(P1))
+            val renewal = if (profile == PricingProfile.RENEWAL) RenewalCharge(3000, 87) else null
+            assertEquals(
+                price(*lines, profile = profile, buyer = broke, renewal = renewal),
+                price(*lines, profile = profile, buyer = debtor, renewal = renewal), "profile $profile"
+            )
+        }
+        val ingame = full(line(P1), profile = PricingProfile.INGAME, payWithCredits = true, buyer = debtor)
+        assertEquals(0L, ingame.creditAmount)
+        assertTrue(ingame.codes().contains(PricingCode.INSUFFICIENT_CREDITS))
+
+        // a guest never had a balance, whatever it was handed in
+        assertEquals(0L, full(line(P1), buyer = PricingFixtures.buyer(loggedIn = false, userId = null, balance = -500)).credits!!.balance)
+    }
+
+    @Test
+    fun `MixedPayment counts a debt as nothing to spend, also when it is called with one`() {
+        val c = PricingFixtures.conversionsOf(PricingFixtures.price(line(P1)))
+        val max = MixedPayment.apply(c, 10_000, null, -5_000, MixedPayment.MAX, strict = false)
+        assertEquals(0L, max.maxApplicable)
+        assertEquals(0L, max.applied)
+        assertEquals(0L, max.appliedValue)
+        assertEquals(10_000L, max.remainder)
+        assertFalse(max.reduced)
+        val quote = MixedPayment.apply(c, 10_000, null, -5_000, 3_000, strict = false)
+        assertTrue(quote.reduced)
+        assertEquals(0L, quote.applied)
+        val strict = MixedPayment.apply(c, 10_000, null, -5_000, 3_000, strict = true)
+        assertTrue(strict.rejected)
+        assertEquals(MixedPayment.apply(c, 10_000, null, 0, 3_000, strict = true), strict)
+        assertEquals(PricingError.INVALID_INPUT, refused { MixedPayment.apply(c, 10_000, null, 5_000, -1, strict = true) }.error)
+        assertEquals(PricingError.INVALID_INPUT, refused { MixedPayment.apply(c, 10_000, null, 5_000, MixedPayment.MAX, strict = true) }.error)
+    }
+
+    @Test
+    fun `the creator earning follows how the money run was priced, a cart that is not payable in credits is a money cart`() {
+        // P3 has no credit price: payWithCredits is refused (NOT_PAYABLE_WITH_CREDITS) and the money run is the normal one,
+        // so its net money amount is what a commission would be taken from (10 % VAT inside 49.90 is 4.54)
+        val r = full(line(P3), payWithCredits = true, buyer = PricingFixtures.buyer(balance = 99_999))
+        assertEquals(PricingCode.NOT_PAYABLE_WITH_CREDITS, r.tender.unavailable)
+        assertFalse(r.items.credit!!.payable)
+        assertEquals(4536L, OrderValues.creatorEarning(r, 1000).baseAmount)
+        // a guest cannot pay with credits either
+        val guest = full(line(P1), payWithCredits = true, buyer = PricingFixtures.buyer(loggedIn = false, userId = null))
+        assertEquals(8333L, OrderValues.creatorEarning(guest, 1000).baseAmount)
     }
 
     @Test
@@ -2955,6 +3046,60 @@ class PricingEngineTest {
     }
 
     @Test
+    fun `a full-credit order that costs the buyer nothing earns the creator nothing, however much its money record says`() {
+        // 100.00 TRY, 15.00 credits at 1.00 per credit; a fixed coupon of 20.00 takes the whole credit price, the money record is 80.00
+        val cheap = Product(44, "Cheap in credits", 10000, 1500, listOf(2))
+        val rich = PricingFixtures.buyer(balance = 99_999)
+        val coupon = full(line(cheap), coupon = KF20, creatorCode = CR5, payWithCredits = true, buyer = rich)
+        assertEquals(8000L, coupon.items.itemsTotal) // the money record
+        assertEquals(0L, coupon.creditAmount) // what the buyer pays
+        assertEquals(0L, coupon.gatewayAmount)
+        assertEquals(0L, coupon.credits!!.creditTotal)
+        assertTrue(coupon.items.creatorCode!!.valid) // the attribution is kept
+        val e = OrderValues.creatorEarning(coupon, CR5.commissionBp)
+        assertEquals(0L, e.baseAmount)
+        assertEquals(0L, e.amount)
+
+        // the same through a fixed automatic discount that is at least the credit price
+        val fixedOff = discount(30, 2000, DiscountUnit.FIXED, DiscountScope.PRODUCTS, productIds = setOf(44))
+        val auto = full(line(cheap), discounts = listOf(fixedOff), payWithCredits = true, buyer = rich)
+        assertEquals(8000L, auto.items.itemsTotal)
+        assertEquals(0L, auto.creditAmount)
+        assertEquals(0L, OrderValues.creatorEarning(auto, 1000).baseAmount)
+        assertEquals(0L, OrderValues.creatorEarning(auto, 1000).amount)
+
+        // two lines: only the credits the line cost count (the free line adds nothing, the other earns on its credits)
+        val mixed = full(line(cheap), line(P1), discounts = listOf(fixedOff), payWithCredits = true, buyer = rich)
+        assertEquals(10_000L, mixed.creditAmount) // the cheap line is free in credits, P1 costs 100.00 credits
+        assertEquals(10_000L, OrderValues.creatorEarning(mixed, 1000).baseAmount)
+        assertEquals(1000L, OrderValues.creatorEarning(mixed, 1000).amount)
+
+        // the same cart paid in money still earns on the net money amount
+        val money = full(line(cheap), discounts = listOf(fixedOff), method = PricingFixtures.METHOD_F)
+        assertEquals(6667L, OrderValues.creatorEarning(money, 1000).baseAmount) // 80.00 - 13.33
+        assertEquals(667L, OrderValues.creatorEarning(money, 1000).amount)
+    }
+
+    @Test
+    fun `row 53 a credits-only order earns the creator on the credits it cost, not on its zero money total`() {
+        val buyer = PricingFixtures.buyer(balance = 5000)
+        val order = full(line(creditsOnlyProduct), payWithCredits = true, buyer = buyer)
+        assertEquals(0L, order.total)
+        assertEquals(4000L, order.creditAmount)
+        val e = OrderValues.creatorEarning(order, 1000)
+        assertEquals(4000L, e.baseAmount) // 40.00 credits x 1.00
+        assertEquals(400L, e.amount)
+        // at 0.50 per credit
+        val half = full(line(creditsOnlyProduct), payWithCredits = true, buyer = buyer, config = config(creditValue = 50))
+        assertEquals(2000L, OrderValues.creatorEarning(half, 1000).baseAmount)
+        // the credits of a credit pack or of the shipping never count
+        val shipped = full(line(Product(14, "T-shirt for credits", 25000, 25000, listOf(3), physical = true)), payWithCredits = true,
+            config = config(creditValue = 30), shipping = 2990, buyer = PricingFixtures.buyer(balance = 99_999))
+        assertEquals(25000L + 9967L, shipped.creditAmount)
+        assertEquals(7500L, OrderValues.creatorEarning(shipped, 1000).baseAmount) // 250.00 credits x 0.30, no shipping
+    }
+
+    @Test
     fun `row 74 cashback is paid on the gateway part of the merchandise only`() {
         val r = full(
             line(P1), method = PricingFixtures.METHOD_F, buyer = PricingFixtures.buyer(balance = 3000), useCredits = MixedPayment.MAX,
@@ -3003,8 +3148,12 @@ class PricingEngineTest {
     private val loopPool: List<Product> = listOf(
         P1, P2, P3, P4, P5, P5M, P6, P8, P9, creditsOnlyProduct, T1, T2, T3,
         Product(14, "T-shirt for credits", 25000, 25000, listOf(3), physical = true),
-        Product(43, "Crate", 4500, 3000, listOf(2))
+        Product(43, "Crate", 4500, 3000, listOf(2)),
+        Product(44, "Cheap in credits", 10000, 1500, listOf(2))
     )
+
+    /** The products of [loopPool] that can be paid with credits (credit price above 0, or free in money and priced in credits). */
+    private val creditablePool: List<Product> = loopPool.filter { it.creditPrice > 0L && it.kind == LineKind.PRODUCT && it.tier == null }
 
     private fun PricingConfig.withCredits(enabled: Boolean) = PricingConfig(
         baseCurrency, currencyMode, additionalCurrencies, multiCurrencyFallback, rates, vatBp, pricesIncludeVat, removeCents,
@@ -3044,7 +3193,11 @@ class PricingEngineTest {
 
         val lines: List<LineInput>
         var renewal: RenewalCharge? = null
+        val creditableCart = rnd.nextInt(4) == 0
+        // 100.00 TRY priced 15.00 in credits, with a fixed 20.00 coupon: free in credits while the money record is 80.00 (05 section 10)
+        val cheapCase = profile == PricingProfile.STOREFRONT && rnd.nextInt(20) == 0
         when {
+            cheapCase -> lines = listOf(line(loopPool.single { it.id == 44L }))
             profile == PricingProfile.RENEWAL -> {
                 lines = listOf(line(P9))
                 val price = rnd.nextLong(1, 2000) * 100
@@ -3052,7 +3205,9 @@ class PricingEngineTest {
             }
             profile == PricingProfile.STOREFRONT && rnd.nextInt(16) == 0 -> lines = listOf(topUp(rnd.nextLong(100, 1_000_000)))
             else -> lines = (1..1 + rnd.nextInt(4)).map { i ->
-                val p = loopPool[rnd.nextInt(loopPool.size)]
+                // a quarter of the carts are made of products that have a credit price, so that the credit run is reached often
+                val pool = if (creditableCart) creditablePool else loopPool
+                val p = pool[rnd.nextInt(pool.size)]
                 val variant = if (p === P4) rnd.nextLong(0, 3) else 0L
                 line(p, if (p.tier != null) 1 else 1 + rnd.nextInt(3), variantId = variant, key = "k$i", basePrice = if (variant == 2L) 27500 else p.price)
             }
@@ -3060,14 +3215,16 @@ class PricingEngineTest {
         val storefront = profile == PricingProfile.STOREFRONT
         val discounts = if (profile == PricingProfile.GIFT_CODE || profile == PricingProfile.RENEWAL) emptyList()
         else listOf(D1, D2, D3, D4, D5, D6, D7).filter { rnd.nextInt(6) == 0 }
-        val coupon = if (storefront && rnd.nextInt(10) < 3) listOf(K25, KF20, KF500, K50P2, KMIN)[rnd.nextInt(5)] else null
+        val coupon = if (cheapCase) KF20 else if (storefront && rnd.nextInt(10) < 3) listOf(K25, KF20, KF500, K50P2, KMIN)[rnd.nextInt(5)] else null
         val creator = if (storefront && rnd.nextInt(5) == 0) CR5 else null
         val loggedIn = rnd.nextInt(10) != 0
         val owned = if (rnd.nextInt(10) == 0) listOf(owned(501, T1, rnd.nextLong(0, 20_000))) else emptyList()
-        val balance = when (rnd.nextInt(4)) {
+        // a negative USER balance is a debt after a dispute clawback (07 section 3.1): the engine treats it as 0, it never refuses it
+        val balance = when (rnd.nextInt(5)) {
             0 -> 0L
             1 -> rnd.nextLong(0, 50_000)
             2 -> rnd.nextLong(0, 5_000_000)
+            3 -> -rnd.nextLong(1, if (rnd.nextBoolean()) 100_000 else 1_000_000_000_000L / 10)
             else -> rnd.nextLong(0, 1_000_000_000_000L / 10)
         }
         val buyer = PricingFixtures.buyer(owned, balance = balance, loggedIn = loggedIn, userId = if (loggedIn) 1L else null)
@@ -3076,7 +3233,7 @@ class PricingEngineTest {
             in 6..11 -> PricingMode.EXTERNAL
             else -> PricingMode.MARKET
         }
-        val payWithCredits = profile == PricingProfile.INGAME || (storefront && rnd.nextInt(4) == 0)
+        val payWithCredits = profile == PricingProfile.INGAME || cheapCase || (storefront && rnd.nextInt(4) == 0)
         val shipping = if (rnd.nextInt(100) < 55) ShippingCharge(rnd.nextLong(0, 400_000), if (rnd.nextInt(3) == 0) rnd.nextLong(0, 3000) else null) else null
         check(oq > 0)
         val input = PricingFixtures.input(
@@ -3137,7 +3294,7 @@ class PricingEngineTest {
             assertEquals(e.messages, t.messages.map { it.code }, "$where messages")
             if (e.creditsBlock) {
                 val c = t.credits!!
-                assertEquals(if (input.buyer.loggedIn) input.buyer.creditBalance else 0L, c.balance, "$where balance")
+                assertEquals(if (input.buyer.loggedIn) maxOf(0L, input.buyer.creditBalance) else 0L, c.balance, "$where balance")
                 assertEquals(e.payable, c.payableInCredits, "$where payable")
                 assertEquals(e.creditTotal, c.creditTotal, "$where creditTotal")
                 assertEquals(e.shippingCredits, c.shippingCredits, "$where shippingCredits")
@@ -3168,6 +3325,26 @@ class PricingEngineTest {
             if (items.payWithCredits) {
                 assertEquals(0L, r.paymentFee, "$where no fee on a credit order")
                 if (r.creditAmount > 0L) assertEquals(0L, r.gatewayAmount, "$where no gateway on a full-credit order")
+            }
+            if (input.buyer.loggedIn && input.buyer.creditBalance < 0L) hit("buyer in debt")
+            // 05 section 10: a creator earns on what the buyer paid; an order that cost nothing earns nothing, whatever its money record says
+            if (input.profile == PricingProfile.STOREFRONT && r.items.lines.any { it.lineKind == LineKind.PRODUCT || it.lineKind == LineKind.BUNDLE }) {
+                val earning = OrderValues.creatorEarning(r, 1000)
+                assertTrue(earning.baseAmount >= 0L && earning.amount >= 0L && earning.amount <= earning.baseAmount, "$where earning is never negative")
+                val created = t.unavailable == null && t.messages.none { it.code == PricingCode.INSUFFICIENT_CREDITS } // a refused tender is no order
+                if (created && items.payWithCredits && items.credit?.payable == true) {
+                    // a credit-mode order earns on the credits it cost: never on the money record, never more than the credits spent are worth
+                    val spent = Rounding.ratioQ(
+                        java.math.BigDecimal.valueOf(r.creditAmount).multiply(java.math.BigDecimal.valueOf(input.config.creditValue)),
+                        java.math.BigDecimal(100), 1L
+                    )
+                    assertTrue(earning.baseAmount <= spent, "$where credit-mode earning ${earning.baseAmount} above the credits spent worth $spent")
+                    if (r.creditAmount == 0L) {
+                        assertEquals(0L, earning.baseAmount, "$where an order that cost nothing earns nothing")
+                        if (r.total > 0L && r.gatewayAmount == 0L) hit("free in credits with a money record")
+                    }
+                    if (r.creditAmount > 0L) hit("credit-mode earning")
+                }
             }
             when (input.profile) {
                 PricingProfile.GIFT_CODE -> {
@@ -3219,7 +3396,7 @@ class PricingEngineTest {
             "method refused: AMOUNT_BELOW_MINIMUM", "method refused: AMOUNT_ABOVE_MAXIMUM", "method refused: PHYSICAL_NOT_SUPPORTED",
             "method refused: CURRENCY_NOT_SUPPORTED", "method list agrees with the tender", "credits forced by the store", "can checkout",
             "profile STOREFRONT", "profile PANEL", "profile GIFT_CODE", "profile INGAME", "profile RENEWAL",
-            "pricing mode EXTERNAL", "pricing mode EXTERNAL_TAX"
+            "pricing mode EXTERNAL", "pricing mode EXTERNAL_TAX", "buyer in debt", "credit-mode earning", "free in credits with a money record"
         )
         for (branch in required) assertTrue((seen[branch] ?: 0) >= 100, "the loop barely exercised '$branch': ${seen[branch]}")
     }

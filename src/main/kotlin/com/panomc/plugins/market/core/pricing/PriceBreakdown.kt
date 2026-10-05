@@ -219,12 +219,15 @@ class FrozenOrder(
     val requiresShipping: Boolean,
     /** `config.vatBp` for the VAT contained in the payment fee. */
     val vatBp: Long,
-    /** The method the order is on now (`credits` for a full-credit order); a switch away from it drops the credits. */
+    /**
+     * The method the order is on now. `credits` marks a full-credit (`payWithCredits`) order: it keeps its provider, a retender to
+     * anything else answers `CREDITS_REQUIRED` and leaves the credit part untouched (06 section 9.3 step 2).
+     */
     val currentMethodId: String?,
     /** The credit part now held for the order (`order.creditAmount` / `creditValue`). */
     val creditAmount: Long,
     val creditValue: Long,
-    /** The buyer's balance plus the order's own outstanding hold (07 section 6.4). */
+    /** The buyer's balance plus the order's own outstanding hold (07 section 6.4); a debt can make it negative, the engine counts that as 0. */
     val creditBalance: Long,
     val loggedIn: Boolean,
     val creditsEnabled: Boolean,

@@ -63,7 +63,8 @@ internal object PricingValidator {
             "the ${input.profile} profile takes no coupon or creator code"
         }
 
-        bad(input.buyer.creditBalance < 0) { "the credit balance is negative" }
+        // a negative USER balance is a debt (07 sections 3.1 and 8.5, invariant L6): it is legitimate after a dispute clawback,
+        // so it is no input error; stage C treats it as nothing to spend (`TenderTerms.creditBalance`, `MixedPayment.apply`)
         // 05 section 8.1: a whole order in credits is a storefront or in-game purchase; a renewal switches to credits on /pay (retender)
         bad(input.payWithCredits && input.profile != PricingProfile.STOREFRONT && input.profile != PricingProfile.INGAME) {
             "the ${input.profile} profile is never paid with credits"
