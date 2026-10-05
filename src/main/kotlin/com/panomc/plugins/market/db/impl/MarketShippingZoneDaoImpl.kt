@@ -93,6 +93,14 @@ class MarketShippingZoneDaoImpl : MarketShippingZoneDao() {
     override suspend fun getActive(sqlClient: SqlClient): List<MarketShippingZone> =
         many("`status` = ?", "`position` ASC, `id` ASC", Tuple.of("ACTIVE"), sqlClient)
 
+    override suspend fun getSellable(sqlClient: SqlClient): List<MarketShippingZone> =
+        many(
+            "`status` = ? AND EXISTS (SELECT 1 FROM `${prefix()}market_shipping_rate` r " +
+                "JOIN `${prefix()}market_shipping_method` m ON m.`id` = r.`methodId` " +
+                "WHERE r.`zoneId` = `${prefix() + tableName}`.`id` AND m.`status` = 'ACTIVE' AND m.`deletedAt` IS NULL)",
+            "`position` ASC, `id` ASC", Tuple.of("ACTIVE"), sqlClient
+        )
+
     override suspend fun delete(id: Long, sqlClient: SqlClient): Boolean = remove("`id` = ?", Tuple.of(id), sqlClient) > 0
 
     override suspend fun uninstall(sqlClient: SqlClient) {

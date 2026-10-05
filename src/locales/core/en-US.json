@@ -65,6 +65,7 @@
     "RAN_MARKET_PROVIDER_ACTION": "<b>{username}</b> ran the \"{action}\" action of the \"{name}\" payment method.",
     "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> changed the status of order <b>#{orderId}</b> to \"{status}\".",
     "UPDATED_MARKET_ORDER_EXCHANGE_RATE": "<b>{username}</b> updated the exchange rate of order <b>#{orderId}</b> to <b>{exchangeRate}</b>.",
-    "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> refreshed the market exchange rate to <b>{exchangeRate}</b>."
+    "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> refreshed the market exchange rate to <b>{exchangeRate}</b>.",
+    "CREATED_MARKET_LEGAL_TEXT": "<b>{username}</b> published version <b>{version}</b> of the legal text ({locale})."
   }
 }

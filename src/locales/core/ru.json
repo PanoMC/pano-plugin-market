@@ -65,6 +65,7 @@
     "RAN_MARKET_PROVIDER_ACTION": "<b>{username}</b> запустил действие \"{action}\" способа оплаты \"{name}\".",
     "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> изменил статус заказа <b>#{orderId}</b> на \"{status}\".",
     "UPDATED_MARKET_ORDER_EXCHANGE_RATE": "<b>{username}</b> обновил обменный курс заказа <b>#{orderId}</b> на <b>{exchangeRate}</b>.",
-    "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> обновил обменный курс маркета до <b>{exchangeRate}</b>."
+    "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> обновил обменный курс маркета до <b>{exchangeRate}</b>.",
+    "CREATED_MARKET_LEGAL_TEXT": "<b>{username}</b> опубликовал версию <b>{version}</b> юридического текста ({locale})."
   }
 }

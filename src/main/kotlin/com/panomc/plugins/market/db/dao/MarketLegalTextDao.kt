@@ -25,4 +25,10 @@ abstract class MarketLegalTextDao : MarketDao<MarketLegalText>(MarketLegalText::
      * inactive). `false` when there is no such row.
      */
     abstract suspend fun activate(id: Long, sqlClient: SqlClient): Boolean
+
+    /** The active row of every locale (at most one per locale), ordered by locale. */
+    abstract suspend fun getAllActive(sqlClient: SqlClient): List<MarketLegalText>
+
+    /** Every version of every locale, newest first (`version` descending, then locale). */
+    abstract suspend fun getAll(sqlClient: SqlClient): List<MarketLegalText>
 }

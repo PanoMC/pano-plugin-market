@@ -73,6 +73,20 @@ class MarketLegalTextDaoImpl : MarketLegalTextDao() {
         return rows.toEntities()
     }
 
+    override suspend fun getAllActive(sqlClient: SqlClient): List<MarketLegalText> =
+        sqlClient
+            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `active` = 1 ORDER BY `locale`")
+            .execute()
+            .coAwait()
+            .toEntities()
+
+    override suspend fun getAll(sqlClient: SqlClient): List<MarketLegalText> =
+        sqlClient
+            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` ORDER BY `version` DESC, `locale`")
+            .execute()
+            .coAwait()
+            .toEntities()
+
     override suspend fun maxVersion(sqlClient: SqlClient): Int =
         sqlClient
             .preparedQuery("SELECT COALESCE(MAX(`version`), 0) FROM `${prefix() + tableName}`")
