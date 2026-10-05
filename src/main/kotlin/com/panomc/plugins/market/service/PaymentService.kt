@@ -82,6 +82,7 @@ import com.panomc.plugins.market.spi.payment.PaymentEvent
 import com.panomc.plugins.market.spi.payment.PaymentProvider
 import com.panomc.plugins.market.spi.payment.QueryPaymentRequest
 import com.panomc.plugins.market.spi.payment.QueryReason
+import com.panomc.plugins.market.spi.payment.RefundSupport
 import com.panomc.plugins.market.spi.payment.ReviewReason
 import com.panomc.plugins.market.spi.payment.StartPaymentRequest
 import com.panomc.plugins.market.spi.payment.StartPaymentResult
@@ -904,6 +905,12 @@ class PaymentService(
                 is PaymentEffect.RecordPaymentOnOrder -> recordPaymentOnOrder(conn, order, effect.attemptId)
 
                 is PaymentEffect.PanelAlert -> after += AfterCommit.PanelAlert(orderId, order.reviewReason)
+
+                // a second paid attempt of a paid order: the automatic refund of exactly that money, or an alert saying why not (00 section 7.2)
+                is PaymentEffect.FlagDuplicate -> orderService.onDuplicatePayment(
+                    conn, orderId, attemptId, config().autoRefundDuplicatePayments,
+                    resolve(attempt.providerId, conn)?.caps?.refund.let { it != null && it != RefundSupport.NONE }, after
+                )
 
                 is PaymentEffect.NotifyOrder -> {
                     var orderEvent = effect.event

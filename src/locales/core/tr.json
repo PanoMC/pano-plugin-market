@@ -79,6 +79,8 @@
     "REVEALED_MARKET_SHIPPING_SECRET": "<b>{username}</b> \"{name}\" kargo firmasının gizli bilgilerini görüntüledi.",
     "RAN_MARKET_SHIPPING_ACTION": "<b>{username}</b> \"{name}\" kargo firmasının \"{action}\" eylemini çalıştırdı.",
     "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin durumunu \"{status}\" olarak değiştirdi.",
+    "CANCELLED_MARKET_ORDER": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişi iptal etti.",
+    "REVIEWED_MARKET_ORDER": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin incelemesinde \"{decision}\" kararı verdi.",
     "UPDATED_MARKET_ORDER_EXCHANGE_RATE": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin döviz kurunu <b>{exchangeRate}</b> olarak güncelledi.",
     "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> market döviz kurunu <b>{exchangeRate}</b> olarak yeniledi.",
     "CREATED_MARKET_LEGAL_TEXT": "<b>{username}</b> yasal metnin <b>{version}</b>. sürümünü ({locale}) yayınladı.",

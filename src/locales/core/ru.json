@@ -79,6 +79,8 @@
     "REVEALED_MARKET_SHIPPING_SECRET": "<b>{username}</b> показал секреты перевозчика \"{name}\".",
     "RAN_MARKET_SHIPPING_ACTION": "<b>{username}</b> запустил действие \"{action}\" перевозчика \"{name}\".",
     "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> изменил статус заказа <b>#{orderId}</b> на \"{status}\".",
+    "CANCELLED_MARKET_ORDER": "<b>{username}</b> отменил заказ <b>#{orderId}</b>.",
+    "REVIEWED_MARKET_ORDER": "<b>{username}</b> принял решение \"{decision}\" по проверке заказа <b>#{orderId}</b>.",
     "UPDATED_MARKET_ORDER_EXCHANGE_RATE": "<b>{username}</b> обновил обменный курс заказа <b>#{orderId}</b> на <b>{exchangeRate}</b>.",
     "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> обновил обменный курс маркета до <b>{exchangeRate}</b>.",
     "CREATED_MARKET_LEGAL_TEXT": "<b>{username}</b> опубликовал версию <b>{version}</b> юридического текста ({locale}).",
