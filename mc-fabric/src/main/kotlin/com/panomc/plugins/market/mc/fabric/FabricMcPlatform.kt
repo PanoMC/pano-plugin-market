@@ -30,9 +30,10 @@ fun interface ConsoleRunner {
  * (`MinecraftServer.execute`) and the engine waits for it there (`CommandHop`: a command that timed out before it started
  * is cancelled and never runs).
  *
- * A delivery is only DONE when the command is known to have run: an unparsable line is a failure, a command that reported
- * a failure is a failure, and a command that reported nothing at all is "not confirmed" and therefore also a failure
- * (fail closed: a lost delivery is noticed and retried by the admin, a wrongly confirmed one is lost money).
+ * A delivery is DONE when the command was dispatched without exception (19 section 6.3): an unparsable line is a failure
+ * (nothing ran) and a command that REPORTED a failure is a failure. A command that ran and reported no result at all is
+ * DONE: since Minecraft 1.20.3 a `/function` without `/return` is void and never calls the result callback, yet it ran
+ * completely; calling that a failure would make the admin retry it and deliver the goods twice.
  */
 class FabricMcPlatform(
     private val presence: PresenceTracker,
@@ -67,11 +68,8 @@ class FabricMcPlatform(
         if (line.isEmpty()) return DispatchResult(false, "empty command")
         return when (val outcome = CommandHop.call(commandTimeoutMs, submit) { runner.run(line) }) {
             is ConsoleOutcome.NotRun -> DispatchResult(false, "unknown or incorrect command: ${outcome.reason}")
-            is ConsoleOutcome.Ran -> when {
-                outcome.failures > 0 -> DispatchResult(false, "the command reported a failure")
-                outcome.successes == 0 -> DispatchResult(false, "the command did not report a result; it is not confirmed")
-                else -> DispatchResult.OK
-            }
+            is ConsoleOutcome.Ran ->
+                if (outcome.failures > 0) DispatchResult(false, "the command reported a failure") else DispatchResult.OK
         }
     }
 
