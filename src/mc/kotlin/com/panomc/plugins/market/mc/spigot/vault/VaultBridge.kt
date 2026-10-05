@@ -15,7 +15,10 @@ import com.panomc.plugins.market.mc.spigot.MarketScheduler
 import org.bukkit.Bukkit
 import org.bukkit.plugin.Plugin
 import org.bukkit.plugin.ServicesManager
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 
 /**
  * The Vault bridge of the Spigot / Paper / Folia component (19 section 10, owner: "two modes, or off"). One instance per
@@ -28,6 +31,10 @@ import java.nio.file.Path
  * - `PROVIDER`: the credits are registered as the Vault `Economy` (priority Highest) while Vault is installed.
  * The mode is read live every [pollMs] (the panel can change it any time): the economy is registered / unregistered on the
  * server thread, and journal entries of money operations whose outcome was unknown are resolved at every start in any mode.
+ * Every start begins without panel settings (they arrive with the first `MARKET_CONFIG` answer, seconds later), but Vault
+ * consumers look for the economy once, in their own `onEnable`: so the last mode the panel set is remembered in
+ * `vault/mode` and PROVIDER is registered at [start] already (the local switch and the Vault plugin still decide); the first
+ * answer of Pano then confirms it or takes it away at the next check.
  *
  * Vault classes are only touched through [VaultGlue] and only after the Vault plugin was seen enabled.
  */
@@ -54,6 +61,7 @@ class VaultBridge(
     private val texts = VaultMessages(features.messages)
     private val client = EconomyClient(link, componentVersion, log)
     private val journal = VaultJournal(dataDir.resolve("vault"), log, clock::now)
+    private val modeFile: Path = dataDir.resolve("vault").resolve(MODE_FILE)
     private val mainThread = MainThread { task -> marketScheduler.runGlobal(task) }
 
     private val ops = VaultOps(
@@ -82,6 +90,11 @@ class VaultBridge(
 
     @Volatile
     private var running = false
+
+    /** The panel mode as last written to [modeFile]; `null` = no usable file (nothing was ever remembered). */
+    @Volatile
+    private var remembered: VaultMode? = null
+    private var warnedRemember = false
     private var warnedMissingVault = false
     private var warnedOutranked: String? = null
 
@@ -94,6 +107,7 @@ class VaultBridge(
     fun start() {
         if (running) return
         running = true
+        remembered = readRemembered()
         ops.start()
         features.commands.registerSub("credits", "convert", Feature.VAULT) { sender, args -> commands.convert(sender, args) }
         features.commands.registerSub("credits", "deposit", Feature.VAULT) { sender, args -> commands.deposit(sender, args) }
@@ -131,20 +145,65 @@ class VaultBridge(
         }
     }
 
-    /** Brings the registration in line with the effective mode. Registering / unregistering happens on the server thread. */
+    /**
+     * Brings the registration in line with the effective mode. Registering / unregistering happens on the server thread.
+     * While no `MARKET_CONFIG` answer was accepted the remembered panel mode stands in for it (the local switch still wins).
+     */
     fun apply(onServerThread: Boolean) {
-        val mode = settings.current().mode
-        val wantProvider = mode == VaultMode.PROVIDER
+        val panel = settings.panelMode()
+        if (panel != null) remember(panel)
+        val mode = panel ?: remembered ?: VaultMode.OFF
+        val wantProvider = mode == VaultMode.PROVIDER && settings.localSwitchOn()
         if (wantProvider && !vaultAvailable()) {
-            if (!warnedMissingVault) {
+            if (panel != null && !warnedMissingVault) {
                 warnedMissingVault = true
                 log.warn("Vault: the panel set mcVaultMode to PROVIDER but the Vault plugin is not installed, so the credits are not registered as the economy.")
             }
             return unregisterOnThread(onServerThread)
         }
         warnedMissingVault = false
-        if (wantProvider && provider == null) registerOnThread(onServerThread)
+        if (wantProvider && provider == null) {
+            if (panel == null) log.info("Vault: Pano has not answered yet; registering the credits economy from the mode remembered from the last run (PROVIDER).")
+            registerOnThread(onServerThread)
+        }
         if (!wantProvider && provider != null) unregisterOnThread(onServerThread)
+    }
+
+    /** The mode of the last run, `null` when there is no file or it is not a mode name (that means OFF until Pano answers). */
+    private fun readRemembered(): VaultMode? =
+        try {
+            if (Files.exists(modeFile)) {
+                val text = String(Files.readAllBytes(modeFile), Charsets.UTF_8).trim()
+                VaultMode.values().firstOrNull { it.name == text }
+            } else {
+                null
+            }
+        } catch (t: Exception) {
+            log.warn("Vault: the remembered mode could not be read (${t.message}); it counts as OFF until Pano answers.")
+            null
+        }
+
+    /** Writes the panel mode when it differs from what is remembered (small file, temp + rename; losing it only means OFF until Pano answers). */
+    @Synchronized
+    private fun remember(mode: VaultMode) {
+        if (remembered == mode) return
+        try {
+            Files.createDirectories(modeFile.parent)
+            val tmp = modeFile.resolveSibling("$MODE_FILE.tmp")
+            Files.write(tmp, (mode.name + "\n").toByteArray(Charsets.UTF_8))
+            try {
+                Files.move(tmp, modeFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(tmp, modeFile, StandardCopyOption.REPLACE_EXISTING)
+            }
+            remembered = mode
+            warnedRemember = false
+        } catch (t: Exception) {
+            if (!warnedRemember) {
+                warnedRemember = true
+                log.warn("Vault: the panel mode could not be remembered for the next start (${t.message}); after a restart the credits economy is registered only once Pano answers.")
+            }
+        }
     }
 
     private fun registerOnThread(onServerThread: Boolean) = onThread(onServerThread) { registerProvider() }
@@ -224,5 +283,6 @@ class VaultBridge(
 
     private companion object {
         const val DEFAULT_CREDIT_NAME = "Credits"
+        const val MODE_FILE = "mode"
     }
 }
