@@ -84,7 +84,9 @@
         "name": "Ürün Adı",
         "category": "Kategori",
         "price": "Fiyat",
-        "stock": "Stok"
+        "stock": "Stok",
+        "type": "Tür",
+        "sold": "Satılan"
       },
       "uncategorized": "Kategorisiz",
       "stock-count": "{count} Adet",
@@ -93,7 +95,12 @@
       "toast-clone-error": "Ürün klonlanırken bir hata oluştu.",
       "toast-clone-success": "Ürün başarıyla klonlandı.",
       "toast-delete-error": "Ürün silinirken bir hata oluştu.",
-      "toast-delete-success": "Ürün başarıyla silindi."
+      "toast-delete-success": "Ürün başarıyla silindi.",
+      "delete-title": "Ürünü Sil",
+      "badge": {
+        "physical": "Fiziksel",
+        "variants": "Varyantlı"
+      }
     },
     "create-product": {
       "title": "Ürün Düzenleyici",
@@ -294,7 +301,99 @@
         "PHYSICAL_NOT_ALLOWED": "Yalnızca standart tek seferlik ürünler fiziksel olabilir.",
         "INVALID_DATE_RANGE": "Bitiş, başlangıçtan sonra olmalıdır.",
         "NEEDS_ACTIVE_VARIANT": "En az bir aktif varyant ekleyin.",
-        "NEEDS_ITEMS": "En az bir ürün ekleyin."
+        "NEEDS_ITEMS": "En az bir ürün ekleyin.",
+        "INVALID_NUMBER": "Tam sayı girin.",
+        "INVALID_OPTION": "Listelenen seçeneklerden birini seçin.",
+        "INVALID_URL": "Geçerli bir http veya https adresi girin.",
+        "BACKREFERENCE": "Desende geri başvuru kullanılamaz.",
+        "LOOKAROUND": "Desende ileri/geri bakış kullanılamaz.",
+        "MIN_ABOVE_MAX": "En az değer en çok değerden büyük olamaz.",
+        "ALL_OR_NONE": "Üç boyutun hepsini girin veya hiçbirini girmeyin."
+      },
+      "actions": {
+        "server-choices": "Alıcının Seçebileceği Sunucular",
+        "title": "{count} Eylem",
+        "other-phase": "Diğer"
+      },
+      "action-type": {
+        "CREDIT": "Kredi",
+        "PERMISSION": "Yetki",
+        "COMMAND": "Komut",
+        "WEBHOOK": "Webhook"
+      },
+      "action-type-desc": {
+        "CREDIT": "Alıcının kredi hesabına bakiye ekler",
+        "PERMISSION": "Yetki düğümleri veya gruplar verir",
+        "COMMAND": "Bir sunucuda konsol komutları çalıştırır",
+        "WEBHOOK": "Eylem çalışınca bir adresi çağırır"
+      },
+      "action-errors": {
+        "REQUIRED": "Bu alan zorunludur.",
+        "TOO_LONG": "Bu değer çok uzun.",
+        "INVALID": "Bu değer geçerli değil.",
+        "INVALID_VALUE": "Bu eylemin değerini kontrol edin.",
+        "INVALID_PHASE": "Bu eylem bu ürün için bu aşamada çalışamaz.",
+        "OUT_OF_RANGE": "Bu değer aralığın dışında.",
+        "NOT_INTEGER": "Tam sayı girin.",
+        "TOO_MANY": "Çok fazla eylem var.",
+        "DUPLICATE_ID": "Bu eylem kimliği iki kez kullanılmış.",
+        "INVALID_WEBHOOK_URL": "Yer tutucu içermeyen herkese açık bir http veya https adresi girin.",
+        "PER_UNIT_NEEDS_MAX_QUANTITY": "Adet başına teslimat için sipariş başına azami adet 100 veya daha az olmalı.",
+        "FIELD_NOT_USABLE": "Burada kullanılan özel alan yok veya komutlarda kullanılamıyor.",
+        "UNKNOWN_SERVER": "Seçilen bir sunucu artık yok.",
+        "SERVER_CHOICES_REQUIRED": "Alıcının seçebileceği en az bir sunucu seçin.",
+        "SERVER_REQUIRED": "En az bir sunucu seçin.",
+        "NO_SERVERS": "Sunucu eylemlerini kullanmadan önce bir sunucu bağlayın.",
+        "PERMISSION_ADMIN_REQUIRED": "Bu eylemi kaydetme yetkiniz yok."
+      },
+      "fields": {
+        "title": "{count} Özel Alan",
+        "add": "Alan Ekle",
+        "label": "Etiket",
+        "key": "Anahtar",
+        "type": "Tür",
+        "required": "Zorunlu",
+        "prop": {
+          "label": "Etiket",
+          "fieldKey": "Anahtar",
+          "type": "Tür",
+          "helpText": "Yardım metni",
+          "placeholder": "Yer tutucu",
+          "defaultValue": "Varsayılan değer",
+          "options": "Seçenekler",
+          "pattern": "Desen",
+          "minLength": "En az uzunluk",
+          "maxLength": "En çok uzunluk",
+          "minValue": "En düşük değer",
+          "maxValue": "En yüksek değer",
+          "other": "Alan"
+        }
+      },
+      "shipping": {
+        "disabled-title": "Kargo Kurulu Değil",
+        "disabled-body": "Kargo yöntemi oluşturulana kadar fiziksel ürünler satın alınamaz.",
+        "disabled-link": "Kargo Yöntemlerini Aç",
+        "weight": "Ağırlık",
+        "dimensions": "Boyutlar",
+        "lengthMm": "Uzunluk",
+        "widthMm": "Genişlik",
+        "heightMm": "Yükseklik",
+        "sku": "SKU",
+        "hs-code": "GTİP Kodu",
+        "origin-country": "Menşei Ülke",
+        "origin-none": "Belirtilmedi"
+      },
+      "limits": {
+        "per-player": "Oyuncu Başına Sınır",
+        "max-quantity": "Sipariş Başına Azami Adet",
+        "max-quantity-locked": "Süreli, abonelik ve kademeli ürünlerde 1 olarak sabittir.",
+        "cooldown": "Bekleme Süresi",
+        "cooldown-unit": "Bekleme süresi birimi",
+        "no-limit": "Sınır yok"
+      },
+      "seo": {
+        "title": "Meta başlık",
+        "description": "Meta açıklama"
       }
     },
     "comparisons": {
@@ -792,6 +891,58 @@
     "date-range": {
       "from": "Başlangıç",
       "to": "Bitiş"
+    },
+    "action-editor": {
+      "no-servers": "Bu siteye henüz bağlı bir sunucu yok.",
+      "remove": "Eylemi Kaldır",
+      "locked": "Bu eylemi değiştirme yetkiniz yok.",
+      "phase": "Aşama",
+      "credit": "Kredi",
+      "credit-placeholder": "Satın alınan adet başına miktar",
+      "nodes": "Yetki Düğümleri",
+      "nodes-placeholder": "Bir yetki veya grup yazıp Enter'a basın...",
+      "via": "Uygulama Yolu",
+      "via-PANO": "Pano",
+      "via-SERVER": "Sunucu yetki eklentisi",
+      "via-PANO-help": "Yetki oyuncunun Pano hesabında saklanır.",
+      "via-SERVER-help": "Minecraft sunucusu yetkiyi oyuncuya uygular.",
+      "commands": "Komutlar",
+      "command-placeholder": "Başında eğik çizgi olmayan komut",
+      "add-command": "Komut Ekle",
+      "variables": "Değişkenler",
+      "unknown-variable": "{name} bu üründe tanımlı değil.",
+      "url": "Webhook Adresi",
+      "url-placeholder": "https://example.com/hook",
+      "format": "Biçim",
+      "format-JSON": "JSON",
+      "format-DISCORD": "Discord",
+      "signing": "İmzalama",
+      "signing-NONE": "Yok",
+      "signing-HMAC_SHA256": "HMAC SHA-256",
+      "secret": "Gizli Anahtar",
+      "secret-placeholder": "Otomatik oluşturmak için boş bırakın",
+      "secret-generated": "Bu anahtarı şimdi kopyalayın. Kaydettikten sonra gizlenir.",
+      "generate": "Oluştur",
+      "delay": "Gecikme",
+      "seconds": "saniye",
+      "server-mode": "Sunucular",
+      "mode-FIXED": "Seçilen sunucular",
+      "mode-BUYER_CHOICE": "Alıcının seçimi",
+      "mode-ALL_CONNECTED": "Bağlı tüm sunucular",
+      "go-to-choices": "Sunucuları seç",
+      "all-permission-servers": "Sunucu seçilmezse izin veren her sunucu kullanılır.",
+      "requires-online": "Oyuncunun Çevrimiçi Olması Gerekir",
+      "per-unit": "Adet Başına",
+      "per-unit-help": "Tüm miktar için tek teslimat yerine satın alınan her adet için ayrı teslimat."
+    },
+    "server-picker": {
+      "connected": "Bağlı",
+      "disconnected": "Bağlı değil",
+      "no-plugin": "Pano Market bileşeni bu sunucuda kurulu değil.",
+      "version-mismatch": "Sunucuda bileşen sürümü {have} çalışıyor, {want} sürümü gerekli.",
+      "version-mismatch-label": "Bileşen sürümü uyuşmuyor.",
+      "offline": "Çevrimdışı",
+      "unknown": "Bilinmeyen sunucu #{id}"
     }
   },
   "modals": {
@@ -1146,6 +1297,37 @@
       "mode-ADJUST": "Ekle Veya Çıkar",
       "value": "Miktar",
       "success": "Stok güncellendi."
+    },
+    "product-field": {
+      "title-add": "Özel Alan Ekle",
+      "title-edit": "Özel Alanı Düzenle",
+      "label": "Etiket",
+      "field-key": "Anahtar, örn. rank",
+      "key-locked": "Alan kaydedildikten sonra anahtar değiştirilemez.",
+      "type": "Tür",
+      "types": {
+        "TEXT": "Metin",
+        "NUMBER": "Sayı",
+        "SELECT": "Seçim",
+        "CHECKBOX": "Onay kutusu",
+        "USERNAME": "Minecraft kullanıcı adı",
+        "EMAIL": "E-posta adresi",
+        "DISCORD_ID": "Discord kimliği"
+      },
+      "required": "Zorunlu",
+      "usable-in-commands": "Komutlarda kullanılabilir",
+      "help-text": "Yardım metni",
+      "placeholder": "Yer tutucu",
+      "default-value": "Varsayılan değer",
+      "default-none": "Varsayılan yok",
+      "options": "Seçenekler",
+      "option-value": "Değer",
+      "option-label": "Etiket",
+      "pattern": "Desen (düzenli ifade)",
+      "min-length": "En az uzunluk",
+      "max-length": "En çok uzunluk",
+      "min-value": "En düşük değer",
+      "max-value": "En yüksek değer"
     }
   },
   "settings": {
@@ -1795,6 +1977,11 @@
       "ONE_TIME": "Tek Seferlik",
       "TIMED": "Süreli",
       "SUBSCRIPTION": "Abonelik"
+    },
+    "product-kind": {
+      "STANDARD": "Standart",
+      "BUNDLE": "Paket",
+      "CREDIT_PACK": "Kredi Paketi"
     }
   },
   "alerts": {

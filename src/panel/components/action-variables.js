@@ -1,0 +1,31 @@
+// Variables an action command may use (13 §8.9). Kept equal to the catalogue of 08-delivery.md §3.2;
+// `gift.message` is deliberately absent (never allowed in a command, 08 §3.3). `{field.<key>}` and
+// `{variant.<key>}` entries are added per product by `variableNames` in utils/actions.js.
+export const ACTION_VARIABLES = [
+  'username',
+  'quantity',
+  'unit',
+  'uuid',
+  'buyer.username',
+  'order.id',
+  'order.publicId',
+  'order.total',
+  'order.currency',
+  'product.id',
+  'product.name',
+  'product.slug',
+  'product.sku',
+  'bundle.name',
+  'variant.name',
+  'variant.sku',
+  'server.id',
+  'server.name',
+  'price',
+  'expiresAt',
+  'expiresAt.iso',
+  'period.days',
+  'period.seconds',
+  'date',
+  'time',
+  'phase',
+];

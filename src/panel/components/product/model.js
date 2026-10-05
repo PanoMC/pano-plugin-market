@@ -2,8 +2,12 @@
 // rules, client validation with dotted error paths, the multipart payload of 04 §5 and the
 // mapping of server `fieldErrors` back onto inputs and tabs. No Svelte, no SDK import.
 import { toEpoch, toLocalInput } from '../../utils/format.js';
+import { actionFromApi, serializeActions } from '../../utils/actions.js';
 import { slugError } from '../../utils/validate.js';
 import { MAX_AXES, MAX_AXIS_VALUES, MAX_VARIANTS, blankVariant } from '../../utils/variants.js';
+import { validateExtras } from './extras.js';
+import { fieldFromApi, serializeFields } from './fields.js';
+import { buildProviderMeta } from './provider-meta.js';
 
 export const KINDS = ['STANDARD', 'BUNDLE', 'CREDIT_PACK'];
 export const STATUSES = ['ACTIVE', 'INACTIVE', 'ARCHIVED'];
@@ -233,10 +237,10 @@ export function fromApi(p, ctx) {
       variantName: row.variantName ?? '',
       hasVariants: !!row.hasVariants,
     })),
-    fields: p.fields ?? [],
+    fields: (p.fields ?? []).map(fieldFromApi),
     providerMeta: p.providerMeta ?? {},
     serverChoices: p.serverChoices ?? [],
-    actions: p.actions ?? [],
+    actions: (p.actions ?? []).map(actionFromApi),
     metaTitle: p.metaTitle ?? '',
     metaDescription: p.metaDescription ?? '',
   };
@@ -464,7 +468,11 @@ function validatePriceRows(rows, ctx, prefix, errors) {
  *
  * `category` is the selected category (`{tiered}`) or null. `isEdit` is true for a saved product.
  */
-export function validateProduct(product, ctx, { category = null, isEdit = false } = {}) {
+export function validateProduct(
+  product,
+  ctx,
+  { category = null, isEdit = false, servers = null } = {},
+) {
   const errors = {};
   const exponent = currencyExponent(ctx);
   const multi = isMulti(ctx);
@@ -661,6 +669,9 @@ export function validateProduct(product, ctx, { category = null, isEdit = false 
     });
   }
 
+  // the tabs of MPU-08: custom fields, shipping, limits, SEO, provider meta, actions
+  Object.assign(errors, validateExtras(product, ctx, { servers }));
+
   return { errors };
 }
 
@@ -818,9 +829,14 @@ export function buildPayload(
 
   json.requiredProducts = product.requiredProducts ?? [];
   json.serverChoices = product.serverChoices ?? [];
-  json.actions = product.actions ?? [];
-  json.fields = (product.fields ?? []).map((row) => row);
-  json.providerMeta = product.providerMeta ?? {};
+  json.actions = serializeActions(product.actions);
+  json.fields = serializeFields(product.fields);
+  // declared providers get their defaults filled in; the meta of a provider that is not installed
+  // any more is kept (the part is a full replacement of the set)
+  json.providerMeta = {
+    ...(product.providerMeta ?? {}),
+    ...buildProviderMeta(ctx?.productMetaSchemas, product.providerMeta),
+  };
 
   const axes = (product.variantOptions ?? []).map((axis) => ({
     key: axis.key,

@@ -1,5 +1,6 @@
-<!-- Written by MPU-07 because the Adjust Stock button lives in its tabs; MPU-08 owns this file and
-     may extend it (13 §8.2). open({ productId, variants, variantId }) / onUpdated({ variantId, stock }). -->
+<!-- Adjust Stock (13 §8.2, §8.11): used by the Pricing / Variants tabs and the products list.
+     open({ productId, variants, variantId }) / onUpdated({ variantId, stock }). The modal is hidden
+     before onUpdated runs. -->
 <div class="modal fade" tabindex="-1" aria-hidden="true" bind:this={modalElement}>
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">

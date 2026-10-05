@@ -84,7 +84,9 @@
         "name": "Product Name",
         "category": "Category",
         "price": "Price",
-        "stock": "Stock"
+        "stock": "Stock",
+        "type": "Type",
+        "sold": "Sold"
       },
       "uncategorized": "Uncategorized",
       "stock-count": "{count} pcs",
@@ -93,7 +95,12 @@
       "toast-clone-error": "An error occurred while cloning the product.",
       "toast-clone-success": "Product cloned successfully.",
       "toast-delete-error": "An error occurred while deleting the product.",
-      "toast-delete-success": "Product deleted successfully."
+      "toast-delete-success": "Product deleted successfully.",
+      "delete-title": "Delete Product",
+      "badge": {
+        "physical": "Physical",
+        "variants": "Variants"
+      }
     },
     "create-product": {
       "title": "Product Editor",
@@ -294,7 +301,99 @@
         "PHYSICAL_NOT_ALLOWED": "Only standard one-time products can be physical.",
         "INVALID_DATE_RANGE": "The end must be after the start.",
         "NEEDS_ACTIVE_VARIANT": "Add at least one active variant.",
-        "NEEDS_ITEMS": "Add at least one product."
+        "NEEDS_ITEMS": "Add at least one product.",
+        "INVALID_NUMBER": "Enter a whole number.",
+        "INVALID_OPTION": "Choose one of the listed options.",
+        "INVALID_URL": "Enter a valid http or https address.",
+        "BACKREFERENCE": "Backreferences are not allowed in the pattern.",
+        "LOOKAROUND": "Lookarounds are not allowed in the pattern.",
+        "MIN_ABOVE_MAX": "The minimum must not be above the maximum.",
+        "ALL_OR_NONE": "Enter all three dimensions or none."
+      },
+      "actions": {
+        "server-choices": "Servers The Buyer May Choose",
+        "title": "{count} Actions",
+        "other-phase": "Other"
+      },
+      "action-type": {
+        "CREDIT": "Credits",
+        "PERMISSION": "Permission",
+        "COMMAND": "Command",
+        "WEBHOOK": "Webhook"
+      },
+      "action-type-desc": {
+        "CREDIT": "Adds balance to the buyer's credit account",
+        "PERMISSION": "Grants permission nodes or groups",
+        "COMMAND": "Runs console commands on a server",
+        "WEBHOOK": "Calls a URL when the action runs"
+      },
+      "action-errors": {
+        "REQUIRED": "This field is required.",
+        "TOO_LONG": "This value is too long.",
+        "INVALID": "This value is not valid.",
+        "INVALID_VALUE": "Check the value of this action.",
+        "INVALID_PHASE": "This action cannot run in this phase for this product.",
+        "OUT_OF_RANGE": "This value is out of range.",
+        "NOT_INTEGER": "Enter a whole number.",
+        "TOO_MANY": "There are too many actions.",
+        "DUPLICATE_ID": "This action id is used twice.",
+        "INVALID_WEBHOOK_URL": "Enter a public http or https address without placeholders.",
+        "PER_UNIT_NEEDS_MAX_QUANTITY": "Per-unit delivery needs a maximum quantity per order of 100 or less.",
+        "FIELD_NOT_USABLE": "A custom field used here does not exist or is not usable in commands.",
+        "UNKNOWN_SERVER": "A selected server no longer exists.",
+        "SERVER_CHOICES_REQUIRED": "Choose at least one server the buyer may pick.",
+        "SERVER_REQUIRED": "Select at least one server.",
+        "NO_SERVERS": "Connect a server before using server actions.",
+        "PERMISSION_ADMIN_REQUIRED": "You are not allowed to save this action."
+      },
+      "fields": {
+        "title": "{count} Custom Fields",
+        "add": "Add Field",
+        "label": "Label",
+        "key": "Key",
+        "type": "Type",
+        "required": "Required",
+        "prop": {
+          "label": "Label",
+          "fieldKey": "Key",
+          "type": "Type",
+          "helpText": "Help text",
+          "placeholder": "Placeholder",
+          "defaultValue": "Default value",
+          "options": "Options",
+          "pattern": "Pattern",
+          "minLength": "Minimum length",
+          "maxLength": "Maximum length",
+          "minValue": "Minimum value",
+          "maxValue": "Maximum value",
+          "other": "Field"
+        }
+      },
+      "shipping": {
+        "disabled-title": "Shipping Is Not Set Up",
+        "disabled-body": "Physical products cannot be bought until a shipping method exists.",
+        "disabled-link": "Open Shipping Methods",
+        "weight": "Weight",
+        "dimensions": "Dimensions",
+        "lengthMm": "Length",
+        "widthMm": "Width",
+        "heightMm": "Height",
+        "sku": "SKU",
+        "hs-code": "HS Code",
+        "origin-country": "Country Of Origin",
+        "origin-none": "Not specified"
+      },
+      "limits": {
+        "per-player": "Limit Per Player",
+        "max-quantity": "Maximum Quantity Per Order",
+        "max-quantity-locked": "Fixed to 1 for timed, subscription and tiered products.",
+        "cooldown": "Cooldown",
+        "cooldown-unit": "Cooldown unit",
+        "no-limit": "No limit"
+      },
+      "seo": {
+        "title": "Meta title",
+        "description": "Meta description"
       }
     },
     "comparisons": {
@@ -792,6 +891,58 @@
     "date-range": {
       "from": "From",
       "to": "To"
+    },
+    "action-editor": {
+      "no-servers": "No server is connected to this site yet.",
+      "remove": "Remove Action",
+      "locked": "You do not have the permission to change this action.",
+      "phase": "Phase",
+      "credit": "Credits",
+      "credit-placeholder": "Amount per purchased unit",
+      "nodes": "Permission Nodes",
+      "nodes-placeholder": "Type a permission or group and press Enter...",
+      "via": "Applied Through",
+      "via-PANO": "Pano",
+      "via-SERVER": "Server permission plugin",
+      "via-PANO-help": "The permission is stored on the player's Pano account.",
+      "via-SERVER-help": "The Minecraft server applies the permission to the player.",
+      "commands": "Commands",
+      "command-placeholder": "Command without the leading slash",
+      "add-command": "Add Command",
+      "variables": "Variables",
+      "unknown-variable": "{name} is not defined on this product.",
+      "url": "Webhook URL",
+      "url-placeholder": "https://example.com/hook",
+      "format": "Format",
+      "format-JSON": "JSON",
+      "format-DISCORD": "Discord",
+      "signing": "Signing",
+      "signing-NONE": "None",
+      "signing-HMAC_SHA256": "HMAC SHA-256",
+      "secret": "Secret",
+      "secret-placeholder": "Leave empty to generate one",
+      "secret-generated": "Copy this secret now. It is hidden after you save.",
+      "generate": "Generate",
+      "delay": "Delay",
+      "seconds": "seconds",
+      "server-mode": "Servers",
+      "mode-FIXED": "Selected servers",
+      "mode-BUYER_CHOICE": "Buyer's choice",
+      "mode-ALL_CONNECTED": "All connected servers",
+      "go-to-choices": "Choose servers",
+      "all-permission-servers": "With no server selected, every server that allows it is used.",
+      "requires-online": "Requires Player Online",
+      "per-unit": "Per Unit",
+      "per-unit-help": "One delivery per purchased unit instead of one delivery for the whole quantity."
+    },
+    "server-picker": {
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "no-plugin": "The Pano Market component is not installed on this server.",
+      "version-mismatch": "The server runs component version {have}, version {want} is required.",
+      "version-mismatch-label": "The component version does not match.",
+      "offline": "Offline",
+      "unknown": "Unknown server #{id}"
     }
   },
   "modals": {
@@ -1146,6 +1297,37 @@
       "mode-ADJUST": "Add Or Remove",
       "value": "Quantity",
       "success": "Stock updated."
+    },
+    "product-field": {
+      "title-add": "Add Custom Field",
+      "title-edit": "Edit Custom Field",
+      "label": "Label",
+      "field-key": "Key, e.g. rank",
+      "key-locked": "The key cannot change after the field is saved.",
+      "type": "Type",
+      "types": {
+        "TEXT": "Text",
+        "NUMBER": "Number",
+        "SELECT": "Selection",
+        "CHECKBOX": "Checkbox",
+        "USERNAME": "Minecraft username",
+        "EMAIL": "E-mail address",
+        "DISCORD_ID": "Discord ID"
+      },
+      "required": "Required",
+      "usable-in-commands": "Usable in commands",
+      "help-text": "Help text",
+      "placeholder": "Placeholder",
+      "default-value": "Default value",
+      "default-none": "No default",
+      "options": "Options",
+      "option-value": "Value",
+      "option-label": "Label",
+      "pattern": "Pattern (regular expression)",
+      "min-length": "Minimum length",
+      "max-length": "Maximum length",
+      "min-value": "Minimum value",
+      "max-value": "Maximum value"
     }
   },
   "settings": {
@@ -1795,6 +1977,11 @@
       "ONE_TIME": "One Time",
       "TIMED": "Timed",
       "SUBSCRIPTION": "Subscription"
+    },
+    "product-kind": {
+      "STANDARD": "Standard",
+      "BUNDLE": "Bundle",
+      "CREDIT_PACK": "Credit Pack"
     }
   },
   "alerts": {

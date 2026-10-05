@@ -1,137 +1,316 @@
+<MarketLayout area="catalog" sections={sectionsFor('catalog', user)} active="products">
+  {#snippet right()}
+    <a href="{base}/market/products/create-product" class="btn btn-primary">
+      <i class="fa-solid fa-plus" aria-hidden="true"></i>
+      <span class="d-lg-inline d-none ms-2">{$_('pages.products.add-product')}</span>
+    </a>
+  {/snippet}
+
+  {#if data.error}
+    <LoadError error={data.error} />
+  {:else}
+    <div class="card">
+      <CardHeader>
+        <div slot="left">
+          {$_('pages.products.count', { values: { count: productCount } })}
+        </div>
+        <div slot="middle" style="width: 250px;">
+          <SearchInput
+            autofocus
+            initialValue={filters.search}
+            searching={$navigating !== null}
+            debounceMs={300}
+            placeholderKey="plugins.pano-plugin-market.search.products"
+            onchange={(value) => go({ search: value })} />
+        </div>
+        <div slot="right" class="d-flex align-items-center gap-3">
+          <CardFilters>
+            <CardFiltersItem
+              button
+              active={filters.status === ''}
+              onclick={() => go({ status: null })}>
+              {$_('common.all')}
+            </CardFiltersItem>
+            {#each STATUS_FILTERS as status (status)}
+              <CardFiltersItem
+                button
+                active={filters.status === status}
+                onclick={() => go({ status })}>
+                {$_(`pages.create-product.statuses.${status}`)}
+              </CardFiltersItem>
+            {/each}
+          </CardFilters>
+          <div class="vr d-none d-md-block"></div>
+          <CardFilters>
+            {#each KIND_FILTERS as kind (kind)}
+              <CardFiltersItem
+                button
+                active={filters.kind === kind}
+                onclick={() => go({ kind: filters.kind === kind ? null : kind })}>
+                {$_(`enums.product-kind.${kind}`)}
+              </CardFiltersItem>
+            {/each}
+            {#if hasExtraFilters(filters)}
+              <CardFiltersItem button onclick={() => go({ kind: null, categoryId: null })}>
+                {$_('common.clear-filters')}
+              </CardFiltersItem>
+            {/if}
+          </CardFilters>
+        </div>
+      </CardHeader>
+
+      {#if products.length === 0}
+        <NoContent icon="" />
+      {:else}
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th class="align-middle text-nowrap" scope="col"></th>
+                <th class="align-middle text-nowrap" scope="col">
+                  {$_('pages.products.table.name')}
+                </th>
+                <th class="align-middle text-nowrap" scope="col">
+                  {$_('pages.products.table.type')}
+                </th>
+                <th class="align-middle text-nowrap" scope="col">{$_('common.status')}</th>
+                <th class="align-middle text-nowrap" scope="col">
+                  {$_('pages.products.table.category')}
+                </th>
+                <th class="align-middle text-nowrap" scope="col">
+                  {$_('pages.products.table.price')}
+                </th>
+                <th class="align-middle text-nowrap" scope="col">
+                  {$_('pages.products.table.stock')}
+                </th>
+                <th class="align-middle text-nowrap" scope="col">
+                  {$_('pages.products.table.sold')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each products as product (product.id)}
+                {@const stock = stockCell(product)}
+                <tr>
+                  <th class="align-middle" scope="row">
+                    <div class="dropdown position-static">
+                      <button
+                        type="button"
+                        class="btn btn-link"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                        title={$_('common.actions')}
+                        aria-label={$_('common.actions')}>
+                        <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
+                      </button>
+                      <div
+                        class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                        <button
+                          type="button"
+                          class="dropdown-item"
+                          onclick={() => editProduct(product.id)}>
+                          <i class="fas fa-pen me-2" aria-hidden="true"></i>
+                          {$_('common.edit')}
+                        </button>
+                        <button
+                          type="button"
+                          class="dropdown-item"
+                          disabled={busy}
+                          onclick={() => cloneProduct(product.id)}>
+                          <i class="fas fa-clone me-2" aria-hidden="true"></i>
+                          {$_('common.clone')}
+                        </button>
+                        <button
+                          type="button"
+                          class="dropdown-item"
+                          disabled={busy}
+                          onclick={() => adjustStock(product)}>
+                          <i class="fas fa-boxes-stacked me-2" aria-hidden="true"></i>
+                          {$_('pages.create-product.adjust-stock')}
+                        </button>
+                        <button
+                          type="button"
+                          class="dropdown-item link-danger"
+                          disabled={busy}
+                          onclick={() => deleteProduct(product)}>
+                          <i class="fas fa-trash me-2" aria-hidden="true"></i>
+                          {$_('common.delete')}
+                        </button>
+                      </div>
+                    </div>
+                  </th>
+                  <td class="align-middle">
+                    <div class="d-flex align-items-center gap-2">
+                      {#if product.imageFileName}
+                        <img
+                          src={imageUrl(product.imageFileName)}
+                          alt=""
+                          width="40"
+                          height="40"
+                          loading="lazy"
+                          class="rounded object-fit-cover flex-shrink-0" />
+                      {:else}
+                        <div
+                          class="d-flex align-items-center justify-content-center bg-body-secondary rounded flex-shrink-0"
+                          style="width: 40px; height: 40px;">
+                          <i
+                            class="fas {product.icon || 'fa-box'} text-body-secondary"
+                            aria-hidden="true"></i>
+                        </div>
+                      {/if}
+                      <div class="vstack">
+                        <a
+                          class="text-decoration-none fw-medium"
+                          href="{base}/market/products/create-product?id={product.id}">
+                          {product.name}
+                        </a>
+                        <span class="text-body-secondary small">ID: #{product.id}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="align-middle">
+                    <div class="d-flex flex-wrap gap-1">
+                      {#each typeBadges(product) as badge (badge.key)}
+                        <span class="badge text-bg-{badge.tone}">{$_(badge.key)}</span>
+                      {/each}
+                    </div>
+                  </td>
+                  <td class="align-middle">
+                    <span class="badge text-bg-{statusTone(product.status)}">
+                      {$_(`pages.create-product.statuses.${product.status}`)}
+                    </span>
+                  </td>
+                  <td class="align-middle">
+                    {product.categoryName || $_('pages.products.uncategorized')}
+                  </td>
+                  <td class="align-middle text-nowrap">
+                    {fmt.money(product.price, currency)}
+                    {#if product.compareAtPrice !== null && product.compareAtPrice !== undefined}
+                      <div class="text-body-secondary text-decoration-line-through small">
+                        {fmt.money(product.compareAtPrice, currency)}
+                      </div>
+                    {/if}
+                  </td>
+                  <td class="align-middle text-nowrap">
+                    {#if stock.unlimited}
+                      {$_('common.unlimited')}
+                    {:else}
+                      {$_('pages.products.stock-count', { values: { count: stock.count } })}
+                    {/if}
+                  </td>
+                  <td class="align-middle text-nowrap">{product.soldCount ?? 0}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+
+        {#if totalPage > 1}
+          <div class="card-footer">
+            <Pagination
+              page={currentPage}
+              {totalPage}
+              on:firstPageClick={() => gotoPage(1)}
+              on:lastPageClick={() => gotoPage(totalPage)}
+              on:pageLinkClick={(event) => gotoPage(event.detail.page)} />
+          </div>
+        {/if}
+      {/if}
+    </div>
+  {/if}
+</MarketLayout>
+
+<ConfirmModal bind:this={confirmModal} />
+<StockModal bind:this={stockModal} onUpdated={onStockUpdated} />
+
 <script module>
-  import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { loadList } from '../utils/list.js';
+  import { PRODUCT_PARAMS } from '../components/products/filters.js';
 
   /**
    * @type {import("@sveltejs/kit").PageLoad}
    */
-  export async function load(event) {
-    const {
-      parent,
-      url: { searchParams },
-    } = event;
-    const { pageTitle } = await parent();
-
-    pageTitle.set('plugins.pano-plugin-market.pages.products.title');
-
-    const pageNum = parseInt(searchParams.get('page')) || 1;
-    const search = searchParams.get('search');
-    const statusParam = searchParams.get('status');
-    const status = statusParam === 'ACTIVE' || statusParam === 'INACTIVE' ? statusParam : null;
-
-    const fetchPage = (p) =>
-      ApiUtil.get({
-        path:
-          '/api/panel/market/products' +
-          buildQueryParams({
-            page: p === 1 ? null : p,
-            search: search || null,
-            status,
-          }),
-        request: event,
-      });
-
-    let effectivePage = pageNum;
-    // Fetch the first products page alongside market settings (for the SALES
-    // currency symbol shown in the price column).
-    let [body, settingsRes] = await Promise.all([
-      fetchPage(pageNum),
-      ApiUtil.get({ path: '/api/panel/market/settings', request: event }),
-    ]);
-
-    const currencySymbol =
-      settingsRes && !settingsRes.error ? settingsRes.currencySymbol || '' : '';
-
-    // A stale ?page= (bookmark / back-button after deletes) points past the last
-    // page; fall back to page 1 with the same filters instead of faking an empty store.
-    if (body?.error === 'PAGE_NOT_FOUND' && pageNum > 1) {
-      effectivePage = 1;
-      body = await fetchPage(1);
-    }
-
-    if (!body || body.error) {
-      return {
-        data: {
-          products: [],
-          productCount: 0,
-          totalPage: 1,
-          page: 1,
-          currencySymbol,
-          error: body?.error || 'NETWORK_ERROR',
-        },
-      };
-    }
-
-    body.page = effectivePage;
-    body.currencySymbol = currencySymbol;
-    return { data: body };
+  export function load(event) {
+    return loadList(event, {
+      path: '/products',
+      params: PRODUCT_PARAMS,
+      nodes: ['CAT'],
+      emptyKey: 'products',
+      title: 'pages.products.title',
+    });
   }
 </script>
 
 <script>
+  import {
+    CardHeader,
+    CardFilters,
+    CardFiltersItem,
+    NoContent,
+    Pagination,
+    SearchInput,
+  } from '@panomc/sdk/components/panel';
+  import ApiUtil from '@panomc/sdk/utils/api';
+  import { base, goto, navigating, page } from '@panomc/sdk/svelte';
+  import { _, showErrorToast, showSuccessToast } from '../../i18n';
   import MarketLayout from '../layouts/MarketLayout.svelte';
-  import { CardHeader, CardFilters, CardFiltersItem, Pagination, SearchInput, NoContent } from '@panomc/sdk/components/panel';
-  import { base, goto, page } from '@panomc/sdk/svelte';
-  import { _, showSuccessToast, showErrorToast } from '../../i18n';
+  import ConfirmModal from '../components/ConfirmModal.svelte';
+  import LoadError from '../components/LoadError.svelte';
+  import StockModal from '../components/modals/StockModal.svelte';
+  import {
+    KIND_FILTERS,
+    STATUS_FILTERS,
+    hasExtraFilters,
+    listParams,
+    normalizeFilters,
+    pageAfterDelete,
+    statusTone,
+    stockCell,
+    typeBadges,
+  } from '../components/products/filters.js';
+  import { sectionsFor } from '../navigation.js';
+  import { call, errorKey, errorParams, marketPath } from '../utils/api.js';
+  import { gotoList } from '../utils/list.js';
+  import { fmt } from '../utils/locale.js';
 
   let { data } = $props();
 
-  // Data comes straight from load(); the panel host remounts this view
-  // ({#key data}) whenever load() re-runs, so we render load()'s result directly.
-  let products = $derived(data.products || []);
-  let productCount = $derived(data.productCount || 0);
-  let totalPage = $derived(data.totalPage || 1);
-  let currentPage = $derived(data.page || 1);
-  let loadError = $derived(data.error || null);
+  let confirmModal = $state(null);
+  let stockModal = $state(null);
+  let busy = $state(false);
 
-  // SALES-currency symbol from GET /settings (fetched in load()); threaded into
-  // the price formatter. Never hardcode a currency symbol.
-  let currencySymbol = $derived(data.currencySymbol || '');
+  const user = $derived($page.data?.user);
+  const filters = $derived(normalizeFilters(data.filters));
+  const products = $derived(data.products ?? []);
+  const productCount = $derived(data.productCount ?? data.count ?? 0);
+  const totalPage = $derived(data.totalPage ?? 1);
+  const currentPage = $derived(data.page ?? 1);
+  const currency = $derived(data.ctx?.currency ?? null);
 
-  // All list state (page / search / status) lives in the URL query params.
-  let currentSearch = $derived($page.url.searchParams.get('search') || '');
-  let currentStatus = $derived($page.url.searchParams.get('status') || 'ALL');
+  // The URL is the source of truth; load() re-runs on every navigation. A filter or search change
+  // always drops `page`.
+  function go(overrides) {
+    return gotoList('/market/products', listParams(filters, overrides));
+  }
 
-  let isSearching = $state(false);
-  let buttonsLoading = $state(false);
-
-  // Merge the current URL state with overrides into a products query string.
-  // page 1 / status ALL / empty search are omitted (buildQueryParams drops falsy).
-  function buildQuery({ page: pageNum = currentPage, search = currentSearch, status = currentStatus } = {}) {
-    return buildQueryParams({
-      page: pageNum && Number(pageNum) > 1 ? pageNum : null,
-      search: search || null,
-      status: status && status !== 'ALL' ? status : null,
+  function gotoPage(pageNum) {
+    return gotoList('/market/products', {
+      ...listParams(filters),
+      ...(pageNum > 1 ? { page: pageNum } : {}),
     });
   }
 
-  // Navigate to the products route with the merged query; invalidateAll re-runs load().
-  function navigate(overrides = {}) {
-    return goto(`${base}/market/products${buildQuery(overrides)}`, {
-      invalidateAll: true,
-      keepFocus: true,
-      noscroll: true,
-    });
+  function reload(pageNum = currentPage) {
+    return pageNum > 1 ? gotoPage(pageNum) : go({});
   }
 
-  // href for a status pill: preserves the current search and resets to page 1.
-  function statusHref(status) {
-    return `/market/products${buildQueryParams({
-      search: currentSearch || null,
-      status: status === 'ALL' ? null : status,
-    })}`;
+  // A modal is hidden before the page is re-loaded (13 §1.4); Bootstrap's fade takes 300 ms.
+  function afterModalHidden(run) {
+    setTimeout(run, 350);
   }
 
-  async function onSearchChange(val) {
-    isSearching = true;
-    try {
-      await navigate({ page: 1, search: val });
-    } finally {
-      isSearching = false;
-    }
-  }
-
-  function onPageClick(pageNum) {
-    return navigate({ page: pageNum });
+  function imageUrl(fileName) {
+    return `${base}/api/panel/market/products/image/${encodeURIComponent(fileName)}?thumbnail=true`;
   }
 
   function editProduct(id) {
@@ -139,197 +318,53 @@
   }
 
   async function cloneProduct(id) {
-    if (buttonsLoading) return;
-    buttonsLoading = true;
-    try {
-      const res = await ApiUtil.post({ path: `/api/panel/market/products/${id}/clone` });
-      if (res?.error) {
-        showErrorToast($_('pages.products.toast-clone-error'));
-      } else {
-        showSuccessToast($_('pages.products.toast-clone-success'));
-        await navigate();
-      }
-    } catch (e) {
-      console.error('[Market] Failed to clone product', e);
-      showErrorToast($_('pages.products.toast-clone-error'));
-    } finally {
-      buttonsLoading = false;
+    if (busy) return;
+    busy = true;
+    const result = await call(ApiUtil.post({ path: marketPath(`/products/${id}/clone`) }));
+    busy = false;
+    if (!result.ok) {
+      showErrorToast($_(errorKey(result.error)), errorParams(result.error, result.body));
+      return;
     }
+    showSuccessToast($_('pages.products.toast-clone-success'));
+    await reload();
   }
 
-  async function deleteProduct(product) {
-    if (buttonsLoading) return;
-    if (!window.confirm($_('pages.products.confirm-delete', { values: { name: product.name } }))) return;
-    buttonsLoading = true;
-    try {
-      const res = await ApiUtil.delete({ path: `/api/panel/market/products/${product.id}` });
-      if (res?.error) {
-        showErrorToast($_('pages.products.toast-delete-error'));
-      } else {
+  // Adjust Stock needs the variants of the product, which only GET /products/:id returns.
+  async function adjustStock(product) {
+    if (busy) return;
+    busy = true;
+    const result = await call(ApiUtil.get({ path: marketPath(`/products/${product.id}`) }));
+    busy = false;
+    if (!result.ok) {
+      showErrorToast($_(errorKey(result.error)), errorParams(result.error, result.body));
+      return;
+    }
+    const record = result.body.product ?? result.body;
+    stockModal?.open({ productId: product.id, variants: record.variants ?? [], variantId: 0 });
+  }
+
+  function onStockUpdated() {
+    afterModalHidden(() => reload());
+  }
+
+  function deleteProduct(product) {
+    confirmModal?.open({
+      icon: 'fa-solid fa-trash',
+      title: $_('pages.products.delete-title'),
+      description: $_('pages.products.confirm-delete', { values: { name: product.name } }),
+      confirmLabel: $_('common.delete'),
+      variant: 'danger',
+      onConfirm: async () => {
+        const result = await call(ApiUtil.delete({ path: marketPath(`/products/${product.id}`) }));
+        if (!result.ok) {
+          showErrorToast($_(errorKey(result.error)), errorParams(result.error, result.body));
+          return false;
+        }
         showSuccessToast($_('pages.products.toast-delete-success'));
-        // If we removed the last row on a non-first page, step back a page.
-        const targetPage = products.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
-        await navigate({ page: targetPage });
-      }
-    } catch (e) {
-      console.error('[Market] Failed to delete product', e);
-      showErrorToast($_('pages.products.toast-delete-error'));
-    } finally {
-      buttonsLoading = false;
-    }
-  }
-
-  function formatPrice(value, symbol) {
-    const formatted = Number(value || 0).toFixed(2);
-    return symbol ? `${formatted} ${symbol}` : formatted;
-  }
-
-  function imageUrl(fileName) {
-    return `${base}/api/panel/market/products/image/${fileName}?thumbnail=true`;
+        const target = pageAfterDelete(products.length, currentPage);
+        afterModalHidden(() => reload(target));
+      },
+    });
   }
 </script>
-<MarketLayout>
-  {#snippet right()}
-    <a href="{base}/market/products/create-product" class="btn btn-secondary">
-      <i class="fa-solid fa-plus"></i>
-      <span class="d-lg-inline d-none ms-2">{$_('pages.products.add-product')}</span>
-    </a>
-  {/snippet}
-  <div class="card">
-    <CardHeader>
-      <div slot="left">
-        {$_('pages.products.count', { values: { count: productCount } })}
-      </div>
-      <div slot="middle" style="width: 250px;">
-        <SearchInput
-          initialValue={currentSearch}
-          searching={isSearching}
-          placeholderKey="plugins.pano-plugin-market.search.products"
-          onchange={onSearchChange} />
-      </div>
-      <CardFilters slot="right">
-        <CardFiltersItem href={statusHref('ALL')} active={currentStatus === 'ALL'}>{$_('common.all')}</CardFiltersItem>
-        <CardFiltersItem href={statusHref('ACTIVE')} active={currentStatus === 'ACTIVE'}>{$_('common.active')}</CardFiltersItem>
-        <CardFiltersItem href={statusHref('INACTIVE')} active={currentStatus === 'INACTIVE'}>{$_('common.inactive')}</CardFiltersItem>
-      </CardFilters>
-    </CardHeader>
-
-    {#if loadError}
-      <div class="text-center text-body-secondary py-5">
-        <i class="fas fa-triangle-exclamation mb-2 fs-3"></i>
-        <div>{$_('pages.products.load-error')}</div>
-      </div>
-    {:else if products.length === 0}
-      <NoContent />
-    {:else}
-      <div class="table-responsive">
-        <table class="table table-hover align-middle">
-          <thead>
-            <tr>
-              <th scope="col" style="width: 60px;"></th>
-              <th scope="col" class="text-nowrap" style="width: 60px;">{$_('pages.products.table.icon')}</th>
-              <th scope="col" class="text-nowrap">{$_('pages.products.table.thumbnail')}</th>
-              <th scope="col" class="text-nowrap">{$_('pages.products.table.name')}</th>
-              <th scope="col" class="text-nowrap">{$_('common.status')}</th>
-              <th scope="col" class="text-nowrap">{$_('pages.products.table.category')}</th>
-              <th scope="col" class="text-nowrap">{$_('pages.products.table.price')}</th>
-              <th scope="col" class="text-nowrap">{$_('pages.products.table.stock')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each products as product (product.id)}
-              <tr>
-                <th scope="row">
-                  <div class="dropdown position-static">
-                    <button
-                      type="button"
-                      class="btn btn-link"
-                      data-bs-toggle="dropdown"
-                      title={$_('common.actions')}
-                      aria-label={$_('common.actions')}>
-                      <span class="fas fa-ellipsis-v"></span>
-                    </button>
-                    <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
-                      <button type="button" class="dropdown-item" onclick={() => editProduct(product.id)}>
-                        <i class="fas fa-pen me-2"></i>
-                        {$_('common.edit')}
-                      </button>
-                      <button type="button" class="dropdown-item" onclick={() => cloneProduct(product.id)}>
-                        <i class="fas fa-clone me-2"></i>
-                        {$_('common.clone')}
-                      </button>
-                      <button type="button" class="dropdown-item text-danger" onclick={() => deleteProduct(product)}>
-                        <i class="fas fa-trash me-2"></i>
-                        {$_('common.delete')}
-                      </button>
-                    </div>
-                  </div>
-                </th>
-                <td>
-                  <div class="d-flex align-items-center justify-content-center bg-body-secondary rounded-circle" style="width: 36px; height: 36px;">
-                    <i class="fas {product.icon || 'fa-box'} text-body-secondary"></i>
-                  </div>
-                </td>
-                <td>
-                  <div class="d-flex align-items-center justify-content-center bg-primary-subtle rounded overflow-hidden" style="width: 40px; height: 40px;">
-                    {#if product.imageFileName}
-                      <img src={imageUrl(product.imageFileName)} alt={product.name} class="w-100 h-100 object-fit-cover" />
-                    {:else}
-                      <!-- Premium vector box icon representing default product package -->
-                      <svg class="w-100 h-100 p-2 text-primary opacity-75" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="opacity-50"/>
-                        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="opacity-75"/>
-                      </svg>
-                    {/if}
-                  </div>
-                </td>
-                <td>
-                  <div class="vstack gap-0">
-                    <button
-                      type="button"
-                      title={$_('common.edit')}
-                      class="btn btn-link p-0 border-0 text-decoration-none text-start fw-medium focus-ring"
-                      onclick={() => editProduct(product.id)}>
-                      {product.name}
-                    </button>
-                    <span class="text-body-secondary small">ID: #{product.id}</span>
-                  </div>
-                </td>
-                <td>
-                  {#if product.status === 'ACTIVE'}
-                    <span class="badge text-bg-success">{$_('common.active')}</span>
-                  {:else if product.status === 'HIDDEN'}
-                    <span class="badge text-bg-secondary">{$_('common.hidden')}</span>
-                  {:else}
-                    <span class="badge text-bg-danger">{$_('common.inactive')}</span>
-                  {/if}
-                </td>
-                <td>
-                  <span class="badge text-bg-primary fw-medium border-0">{product.categoryName || $_('pages.products.uncategorized')}</span>
-                </td>
-                <td class="">
-                  {formatPrice(product.price, currencySymbol)}
-                </td>
-                <td>
-                  <span class="badge text-bg-primary fw-medium border-0">
-                    {product.stock === null || product.stock === undefined ? $_('common.unlimited') : $_('pages.products.stock-count', { values: { count: product.stock } })}
-                  </span>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-
-      <div class="card-footer">
-        <Pagination
-          page={currentPage}
-          {totalPage}
-          on:firstPageClick={() => onPageClick(1)}
-          on:lastPageClick={() => onPageClick(totalPage)}
-          on:pageLinkClick={(event) => onPageClick(event.detail.page)} />
-      </div>
-    {/if}
-  </div>
-</MarketLayout>
