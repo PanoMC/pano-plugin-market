@@ -104,6 +104,26 @@ describe('what the sections must show', () => {
       );
   });
 
+  test('the per-server override modal shows the same PROVIDER warning, gated on the effective mode', () => {
+    const text = modal('ServerOverrideModal.svelte');
+    expect(text).toContain('settings.minecraft.vault-provider-warning.title');
+    expect(text).toContain('settings.minecraft.vault-provider-warning.body');
+    expect(text).toContain("effectiveVaultMode(form, defaults) === 'PROVIDER'");
+    expect(text).toMatch(/\{#if providerMode\}[\s\S]*vault-provider-warning/);
+  });
+
+  test('the warning body carries the round trip and the compromised-server risk (19 §10)', () => {
+    const body = get(en, 'settings.minecraft.vault-provider-warning.body');
+    expect(body).toContain('round trip');
+    expect(body).toContain('compromised game server can move its players');
+    for (const locale of [tr, ru])
+      expect(get(locale, 'settings.minecraft.vault-provider-warning.body')).not.toBe(body);
+    expect(get(tr, 'settings.minecraft.vault-provider-warning.body')).toContain('Ele geçirilmiş');
+    expect(get(ru, 'settings.minecraft.vault-provider-warning.body')).toContain(
+      'Скомпрометированный',
+    );
+  });
+
   test('the Minecraft section lists version, marketState, waiting count, download link and override', () => {
     const text = source(SECTIONS.minecraft);
     for (const needle of [

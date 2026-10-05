@@ -2140,7 +2140,7 @@
       },
       "vault-provider-warning": {
         "title": "Every Economy Call Goes To Pano",
-        "body": "With Pano as the Vault economy every balance change needs a round trip to Pano and is refused while the server is disconnected."
+        "body": "With Pano as the Vault economy every balance change needs a round trip to Pano and is refused while the server is disconnected. A compromised game server can move its players' credits."
       },
       "feature": {
         "store-command": "Store Command",

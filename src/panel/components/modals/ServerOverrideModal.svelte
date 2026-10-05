@@ -112,6 +112,16 @@
             </div>
           </div>
 
+          {#if providerMode}
+            <div class="alert alert-warning d-flex align-items-start mb-0" role="alert">
+              <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
+              <div>
+                <b>{$_('settings.minecraft.vault-provider-warning.title')}</b>
+                <div>{$_('settings.minecraft.vault-provider-warning.body')}</div>
+              </div>
+            </div>
+          {/if}
+
           {#if convert}
             <div>
               <input
@@ -194,6 +204,8 @@
   let saving = $state(false);
 
   const convert = $derived(effectiveVaultMode(form, defaults) === 'CONVERT');
+  // 19 §10: the PROVIDER warning also applies to an override (or an inherited PROVIDER default).
+  const providerMode = $derived(effectiveVaultMode(form, defaults) === 'PROVIDER');
   const errors = $derived(validateOverride(form, defaults));
   const shown = $derived(submitted ? errors : {});
 

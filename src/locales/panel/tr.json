@@ -2140,7 +2140,7 @@
       },
       "vault-provider-warning": {
         "title": "Her Ekonomi Çağrısı Pano'ya Gider",
-        "body": "Pano Vault ekonomisi olduğunda her bakiye değişikliği Pano'ya gidip gelmeyi gerektirir ve sunucu bağlantısızken reddedilir."
+        "body": "Pano Vault ekonomisi olduğunda her bakiye değişikliği Pano'ya gidip gelmeyi gerektirir ve sunucu bağlantısızken reddedilir. Ele geçirilmiş bir oyun sunucusu oyuncularının kredilerini hareket ettirebilir."
       },
       "feature": {
         "store-command": "Mağaza Komutu",
