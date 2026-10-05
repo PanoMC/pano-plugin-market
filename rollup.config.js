@@ -10,6 +10,20 @@ const production = !dev;
 
 const bundleSdk = process.env.BUNDLE_SDK === 'true';
 
+// --- Lane-scoped check builds (D-WB2) ----------------------------------------------
+// MARKET_UI_SIDE=panel|theme compiles one side only into build/ui-check/<side>/ (the other
+// side's register.js is replaced by an empty stub, so none of its files are read) and never
+// touches src/main/resources/plugin-ui. Unset = the real full build.
+const side = process.env.MARKET_UI_SIDE || '';
+if (side && side !== 'panel' && side !== 'theme') {
+  console.error(`[pano] ERROR: MARKET_UI_SIDE must be 'panel' or 'theme', got '${side}'.`);
+  process.exit(1);
+}
+const outRoot = side ? `build/ui-check/${side}` : 'src/main/resources/plugin-ui';
+const otherSideRegister = side
+  ? path.resolve(`src/${side === 'panel' ? 'theme' : 'panel'}/register.js`)
+  : null;
+
 // --- Svelte version guard ---------------------------------------------------
 // The svelte COMPILER this plugin builds with must match the runtime the Pano
 // host (theme/panel) serves in the browser — compiled output and runtime are only
@@ -23,8 +37,7 @@ function checkSvelteVersion() {
   let sdkPin = null;
   try {
     sdkPin =
-      read(path.resolve('node_modules/@panomc/sdk/package.json')).dependencies
-        ?.svelte ?? null;
+      read(path.resolve('node_modules/@panomc/sdk/package.json')).dependencies?.svelte ?? null;
   } catch {
     // sdk not installed — rollup will fail on its own with a clearer error.
   }
@@ -116,6 +129,24 @@ function entryFacadePlugin() {
   };
 }
 
+function sideStubPlugin() {
+  const stubId = '\0pano-other-side-stub';
+  return {
+    name: 'pano-other-side-stub',
+    async resolveId(source, importer) {
+      if (!otherSideRegister || !importer) return null;
+      const resolved = await this.resolve(source, importer, { skipSelf: true });
+      if (resolved && path.resolve(resolved.id) === otherSideRegister) return stubId;
+      return null;
+    },
+    load(id) {
+      if (id !== stubId) return null;
+      const name = side === 'panel' ? 'registerTheme' : 'registerPanel';
+      return `export function ${name}() {}\n`;
+    },
+  };
+}
+
 const baseConfig = {
   input: 'pano:entry',
   output: {
@@ -127,14 +158,15 @@ const baseConfig = {
   },
   plugins: [
     entryFacadePlugin(),
+    sideStubPlugin(),
     del({
-      targets: ['src/main/resources/plugin-ui/*'], // Always clean the resources folder
+      targets: [`${outRoot}/*`], // Always clean the output folder of this build
       runOnce: true, // Run only once
     }),
     production && terser(),
     manifestPlugin(),
   ],
-  preserveEntrySignatures: 'strict'
+  preserveEntrySignatures: 'strict',
 };
 
 export default [
@@ -143,7 +175,7 @@ export default [
     ...baseConfig,
     output: {
       ...baseConfig.output,
-      dir: 'src/main/resources/plugin-ui/server', // Server directory
+      dir: `${outRoot}/server`, // Server directory
       entryFileNames: 'server.mjs', // Server entry file
     },
     plugins: [
@@ -165,7 +197,7 @@ export default [
     ...baseConfig,
     output: {
       ...baseConfig.output,
-      dir: 'src/main/resources/plugin-ui/client', // Client directory
+      dir: `${outRoot}/client`, // Client directory
       entryFileNames: 'client.mjs', // Client entry file
     },
     // Bare 'svelte'/'svelte/*', 'svelte-i18n' and '@panomc/sdk*' specifiers stay

@@ -1,0 +1,37 @@
+{
+  "comment": "Files that may use {@html ...}. file = repo path, or a bare file name matching any directory. wrapper = sanitising function the expression must be wrapped in (null = value is sanitised by the market backend, 14 §2 rule 7 / 13 §1 rule 6).",
+  "entries": [
+    {
+      "file": "src/theme/components/ProductDetailModal.svelte",
+      "wrapper": null,
+      "note": "legacy storefront, removed when MTU replaces it"
+    },
+    {
+      "file": "ProductPage.svelte",
+      "wrapper": null,
+      "note": "ProductDetail.description (server sanitised)"
+    },
+    {
+      "file": "LegalModal.svelte",
+      "wrapper": null,
+      "note": "checkout config.legal.content (server sanitised)"
+    },
+    {
+      "file": "PaymentInstructions.svelte",
+      "wrapper": null,
+      "note": "PaymentStart.instructions.body (server sanitised)"
+    },
+    {
+      "file": "LegalVersionModal.svelte",
+      "wrapper": null,
+      "note": "panel legal text version preview (server sanitised)"
+    },
+    {
+      "file": "ProductDescriptionPreview.svelte",
+      "wrapper": null,
+      "note": "panel product description preview (server sanitised)"
+    }
+  ],
+  "allowedTexts": ["ID", "TR", "EN", "RU", "URL", "API", "CSV", "PDF", "SKU", "USD", "EUR", "TRY"],
+  "comment2": "allowedTexts = technical labels (no translation) that may appear as literal text nodes."
+}

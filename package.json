@@ -13,7 +13,15 @@
     "build": "cross-env DEV=false rollup -c",
     "dev": "cross-env DEV=true rollup -c --watch",
     "prepublishOnly": "npm run build",
-    "lint:prettier": "prettier -c . --config .prettierrc",
+    "test": "bun test src scripts && bun scripts/check-locales.mjs",
+    "check:panel": "bun scripts/check-build.js --side panel && bun test src/panel --pass-with-no-tests && bun scripts/check-locales.mjs && bun scripts/check-i18n.js --side panel && bun scripts/check-static.js --side panel",
+    "check:theme": "bun scripts/check-build.js --side theme && bun test src/theme --pass-with-no-tests && bun scripts/check-theme.js && bun scripts/check-i18n.js --side theme && bun scripts/check-static.js --side theme",
+    "check:build": "bun run build && bun scripts/check-build.js",
+    "check:i18n": "bun scripts/check-i18n.js",
+    "check:static": "bun scripts/check-static.js",
+    "check:ui": "bun run check:build && bun run check:i18n && bun run check:static && bun run lint:prettier",
+    "lint:prettier": "prettier -c rollup.config.js package.json scripts src/main.js src/main.test.js src/i18n.js src/panel/register.js src/theme/register.js --config .prettierrc",
+    "lint:prettier:all": "prettier -c . --config .prettierrc",
     "format:prettier": "prettier --write . --config .prettierrc"
   },
   "devDependencies": {

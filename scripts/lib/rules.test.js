@@ -1,0 +1,124 @@
+import { describe, expect, test } from 'bun:test';
+import { placeholders } from './icu.js';
+import { compareLocales, keyResolves, usedKeys } from './i18n-rules.js';
+import { classTokens, hardcodedTexts, parseTags, splitSvelte, topLevelGlobals } from './scan.js';
+import { checkJsFile, checkSvelteFile } from './static-rules.js';
+import { isAllowedThemeClass } from './bootstrap-classes.js';
+
+const allowlist = {
+  entries: [
+    { file: 'src/panel/Ok.svelte', wrapper: null },
+    { file: 'Wrapped.svelte', wrapper: 'clean' },
+  ],
+  allowedTexts: ['ID'],
+};
+const svelte = (file, src, isTheme = false) =>
+  checkSvelteFile(file, src, { allowlist, isTheme }).map((v) => v.rule);
+
+describe('icu placeholders', () => {
+  test('plain, plural and nested', () => {
+    expect(
+      placeholders('Hi {name}, {count, plural, one {# item of {shop}} other {# items}}'),
+    ).toEqual(['count', 'name', 'shop']);
+    expect(placeholders('no vars')).toEqual([]);
+  });
+});
+
+describe('locale comparison', () => {
+  const m = (o) => new Map(Object.entries(o));
+  test('identical sets pass', () => {
+    const maps = { tr: m({ a: 'x {n}' }), 'en-US': m({ a: 'y {n}' }), ru: m({ a: 'z {n}' }) };
+    expect(compareLocales(maps, 'f')).toEqual([]);
+  });
+  test('missing ru key, empty value and placeholder drift fail', () => {
+    const maps = {
+      tr: m({ a: 'x', b: '' }),
+      'en-US': m({ a: 'y {n}', b: 'q' }),
+      ru: m({ a: 'z' }),
+    };
+    const p = compareLocales(maps, 'f').join('\n');
+    expect(p).toContain("key 'a' missing in ru".replace('a', 'b'));
+    expect(p).toContain('empty or non-string value');
+    expect(p).toContain("placeholders of 'a'");
+  });
+  test('used keys', () => {
+    const src = "$_('a.b') $_(`x.${y}`) $_('dyn.' + k) $_('plugins.pano-plugin-market.c', {})";
+    expect(usedKeys(src).map((k) => k.key)).toEqual(['a.b', 'c']);
+    expect(keyResolves('errors.NOPE', new Map())).toBe(true);
+    expect(keyResolves('nope.x', new Map())).toBe(false);
+  });
+});
+
+describe('static rules', () => {
+  test('clean runes file passes', () => {
+    expect(
+      svelte(
+        'a.svelte',
+        '<script>let { a } = $props();</script>\n<button onclick={() => a()}>{a}</button>',
+      ),
+    ).toEqual([]);
+  });
+  test('export let, $:, on:click, dispatcher, slot', () => {
+    expect(
+      svelte(
+        'a.svelte',
+        '<script>export let a;\n$: b = a;\nimport { createEventDispatcher } from "svelte";</script>',
+      ),
+    ).toEqual(['runes', 'runes', 'runes']);
+    expect(svelte('a.svelte', '<button on:click={f}>{t}</button>')).toEqual(['runes']);
+    expect(svelte('a.svelte', '<Pagination on:pageLinkClick={f} />')).toEqual([]);
+    expect(svelte('a.svelte', '<slot />')).toEqual(['runes']);
+  });
+  test('html sinks need the allow-list and the wrapper', () => {
+    expect(svelte('x.svelte', '<div>{@html a}</div>')).toEqual(['html']);
+    expect(svelte('src/panel/Ok.svelte', '<div>{@html a}</div>')).toEqual([]);
+    expect(svelte('src/Wrapped.svelte', '<div>{@html clean(a)}</div>')).toEqual([]);
+    expect(svelte('src/Wrapped.svelte', '<div>{@html a}</div>')).toEqual(['html']);
+  });
+  test('hard-coded text', () => {
+    expect(svelte('a.svelte', '<p>Hello</p>')).toEqual(['text']);
+    expect(svelte('a.svelte', '<p>{$_("k")} <b>{a > 1 ? "x" : "y"}</b> &nbsp;</p>')).toEqual([]);
+    expect(svelte('a.svelte', '<p>ID: #{a}</p>')).toEqual([]);
+    expect(hardcodedTexts('{#if a}<i class="x"></i>{:else}{b}{/if}')).toEqual([]);
+  });
+  test('theme style and class rules', () => {
+    expect(svelte('t.svelte', '<style>a{}</style>', true)).toContain('theme-style');
+    expect(svelte('t.svelte', '<div class="card shadow-sm {x}">{a}</div>', true)).toEqual([]);
+    expect(svelte('t.svelte', '<div class="card my-custom">{a}</div>', true)).toEqual([
+      'theme-class',
+    ]);
+    expect(svelte('t.svelte', '<div class={a ? "d-flex gap-2" : "bogus"}>{a}</div>', true)).toEqual(
+      ['theme-class'],
+    );
+    expect(
+      isAllowedThemeClass('fa-solid') &&
+        isAllowedThemeClass('text-bg-primary') &&
+        isAllowedThemeClass('col-md-6'),
+    ).toBe(true);
+    expect(isAllowedThemeClass('cursor-pointer')).toBe(false);
+  });
+  test('storage at module top level', () => {
+    expect(checkJsFile('a.js', "const v = localStorage.getItem('k');").map((v) => v.rule)).toEqual([
+      'storage',
+    ]);
+    expect(
+      checkJsFile('a.js', "export function f() { return localStorage.getItem('k'); }"),
+    ).toEqual([]);
+    expect(checkJsFile('a.js', "export const f = () => localStorage.getItem('k');")).toEqual([]);
+    expect(checkJsFile('a.js', "// localStorage in a comment\nconst s = 'localStorage';")).toEqual(
+      [],
+    );
+    expect(svelte('a.svelte', '<script module>const v = localStorage.x;</script>')).toEqual([
+      'storage',
+    ]);
+    expect(svelte('a.svelte', '<script>const v = localStorage.x;</script>')).toEqual([]);
+    expect(topLevelGlobals('if (a) { window.x }', ['window'])).toEqual([]);
+  });
+  test('scanner helpers', () => {
+    expect(parseTags('<a href="x>y" on:click={() => a > b}>t</a>').map((t) => t.name)).toEqual([
+      'a',
+    ]);
+    expect(classTokens(' class="a {b} c" class:d={e}')).toEqual(['a', 'c', 'd']);
+    expect(splitSvelte('<script module>1</script><style>a</style>x').scripts[0].module).toBe(true);
+  });
+});
