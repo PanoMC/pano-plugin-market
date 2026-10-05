@@ -366,6 +366,32 @@ export function firstErrorPath(errors) {
   return [...paths].sort((a, b) => rank(a) - rank(b))[0];
 }
 
+/**
+ * Indexes of the variant rows whose error sits in the collapsed Details row (attributes, per-currency
+ * prices): the Variants tab renders those rows open so the input exists to be marked and focused.
+ */
+export function errorDetailRows(errors) {
+  const rows = new Set();
+  for (const path of Object.keys(errors ?? {})) {
+    const match = /^variants\.(\d+)\.(attributes|prices)(\.|$)/.exec(path);
+    if (match) rows.add(Number(match[1]));
+  }
+  return rows;
+}
+
+/**
+ * The `data-field` names to try for an error path, longest first: an error on a part of a holder
+ * (`variants.2.attributes.0.key`) falls back to the holder that exists (`variants.2.attributes`).
+ */
+export function revealCandidates(path) {
+  const parts = String(path ?? '')
+    .split('.')
+    .filter((part) => part !== '');
+  const out = [];
+  for (let n = parts.length; n > 0; n--) out.push(parts.slice(0, n).join('.'));
+  return out;
+}
+
 const KNOWN_FIELD_ERRORS = new Set([
   'REQUIRED',
   'TOO_LONG',
@@ -543,8 +569,8 @@ export function validateProduct(product, ctx, { category = null, isEdit = false 
     }
   }
 
-  // variants
-  const axes = product.variantOptions ?? [];
+  // variant axes: the editor is rendered, and the axes are sent, only while variants are on
+  const axes = product.hasVariants ? (product.variantOptions ?? []) : [];
   if (axes.length > MAX_AXES) errors.variantOptions = 'TOO_MANY';
   axes.forEach((axis, i) => {
     if (String(axis.label ?? '').trim() === '') errors[`variantOptions.${i}.label`] = 'REQUIRED';
@@ -709,7 +735,8 @@ function variantWire(variant, index, ctx, multi) {
  * Builds the save request (13 §8.10, 04 §5). Returns
  * `{ scalars: [[name, string]], json: { part: value }, files: [{ part, file }], pathMap }`.
  *
- * - nullable scalars that are empty are omitted (the PUT is a full form, as before);
+ * - nullable scalars that are empty are omitted on create and sent as an empty part on edit (PUT is a
+ *   partial update, an empty part clears the stored value to NULL);
  * - `stock` is sent on create only, `prices` only in MULTI mode (full replacement of the set);
  * - `pathMap` maps the server's indexed `prices.<i>...` / `variants.<i>.prices.<j>...` paths onto the
  *   currency-coded paths the inputs carry.
@@ -722,14 +749,18 @@ export function buildPayload(
   const multi = isMulti(ctx);
   const scalars = [];
   const put = (name, value) => scalars.push([name, String(value)]);
+  // A nullable scalar: sent when it has a value; when it is empty it is omitted on create and sent as
+  // an empty part on edit. PUT is a partial update (04 §5), so omitting would keep the stored value
+  // and an emptied field could never be cleared; an empty multipart part means NULL.
   const putOpt = (name, value) => {
-    if (isNum(value)) put(name, value);
+    if (isNum(value) && String(value) !== '') put(name, value);
+    else if (isEdit) put(name, '');
   };
 
   put('name', String(product.name).trim());
   put('slug', product.slug);
   put('description', product.description ?? '');
-  putOpt('shortDescription', product.shortDescription === '' ? null : product.shortDescription);
+  putOpt('shortDescription', product.shortDescription);
   put(
     'categoryId',
     product.categoryId === null || product.categoryId === undefined ? -1 : product.categoryId,
@@ -752,35 +783,32 @@ export function buildPayload(
     put('periodCount', product.periodCount);
     put('periodUnit', product.periodUnit);
   }
-  if (product.billingMode === 'SUBSCRIPTION')
-    putOpt('subscriptionMaxCycles', product.subscriptionMaxCycles);
-  if (product.tierRank !== null && product.tierRank !== undefined && product.tierRank !== '')
-    put('tierRank', product.tierRank);
+  putOpt(
+    'subscriptionMaxCycles',
+    product.billingMode === 'SUBSCRIPTION' ? product.subscriptionMaxCycles : null,
+  );
+  putOpt('tierRank', product.tierRank);
 
   if (!isEdit && product.hasStockLimit && !product.hasVariants) put('stock', product.stock || 0);
 
   put('durationType', product.saleWindow ? 'TEMPORARY' : 'LIFETIME');
-  if (product.saleWindow) {
-    const start = toEpoch(product.durationStart);
-    const end = toEpoch(product.durationExpiry);
-    if (start !== null) put('durationStart', start);
-    if (end !== null) put('durationExpiry', end);
-  }
+  putOpt('durationStart', product.saleWindow ? toEpoch(product.durationStart) : null);
+  putOpt('durationExpiry', product.saleWindow ? toEpoch(product.durationExpiry) : null);
 
   put('requireOnlyOne', !!product.requireOnlyOne);
-  if (product.requiredPermission) put('requiredPermission', product.requiredPermission);
+  putOpt('requiredPermission', product.requiredPermission);
   putOpt('limitPerPlayer', product.limitPerPlayer);
   putOpt('maxQuantityPerOrder', product.maxQuantityPerOrder);
   putOpt('cooldownSeconds', product.cooldownSeconds);
-  if (product.sku) put('sku', product.sku);
+  putOpt('sku', product.sku);
   putOpt('weightGrams', product.physical ? product.weightGrams : null);
   putOpt('lengthMm', product.physical ? product.lengthMm : null);
   putOpt('widthMm', product.physical ? product.widthMm : null);
   putOpt('heightMm', product.physical ? product.heightMm : null);
-  if (product.physical && product.hsCode) put('hsCode', product.hsCode);
-  if (product.physical && product.originCountry) put('originCountry', product.originCountry);
-  if (product.metaTitle) put('metaTitle', product.metaTitle);
-  if (product.metaDescription) put('metaDescription', product.metaDescription);
+  putOpt('hsCode', product.physical ? product.hsCode : null);
+  putOpt('originCountry', product.physical ? product.originCountry : null);
+  putOpt('metaTitle', product.metaTitle);
+  putOpt('metaDescription', product.metaDescription);
   put('hasVariants', !!product.hasVariants);
   if (isEdit && removeImage && !imageFile) put('removeImage', true);
 

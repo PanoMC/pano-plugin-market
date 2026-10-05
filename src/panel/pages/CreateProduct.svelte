@@ -469,6 +469,7 @@
     defaultProduct,
     fieldErrorKey,
     firstErrorPath,
+    revealCandidates,
     fromApi,
     mapServerErrors,
     snapshot,
@@ -592,7 +593,11 @@
     const tab = tabOfPath(path);
     if (tab && tabs.includes(tab) && tab !== currentTab) selectTab(tab);
     await tick();
-    const holder = document.querySelector(`[data-field="${path}"]`);
+    let holder = null;
+    for (const name of revealCandidates(path)) {
+      holder = document.querySelector(`[data-field="${name}"]`);
+      if (holder) break;
+    }
     if (!holder) return;
     const control = holder.matches('input,select,textarea,button')
       ? holder

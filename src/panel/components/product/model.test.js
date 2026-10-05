@@ -11,11 +11,13 @@ import {
   currencyExponent,
   defaultProduct,
   ensurePriceRows,
+  errorDetailRows,
   fieldErrorKey,
   firstErrorPath,
   fromApi,
   isMulti,
   mapServerErrors,
+  revealCandidates,
   slugify,
   snapshot,
   tabOfPath,
@@ -498,6 +500,39 @@ describe('validation: variants', () => {
     expect(e['variants.0.prices.EUR.compareAtPrice']).toBe('COMPARE_NOT_ABOVE_PRICE');
   });
 
+  test('axes are not validated while variants are off', () => {
+    const axes = [{ key: 'a', label: '', values: [{ key: 'x', label: '' }] }];
+    const off = errorsOf(valid({ hasVariants: false, variantOptions: axes }));
+    expect(Object.keys(off).filter((k) => k.startsWith('variantOptions'))).toEqual([]);
+    const on = errorsOf(withVariants([variant()], { variantOptions: axes }));
+    expect(on['variantOptions.0.label']).toBe('REQUIRED');
+  });
+
+  test('errorDetailRows finds the variant rows whose error is in the Details row', () => {
+    const rows = errorDetailRows({
+      'variants.2.attributes.0.key': 'INVALID_FORMAT',
+      'variants.2.attributes': 'TOO_MANY',
+      'variants.0.prices.EUR.price': 'OUT_OF_RANGE',
+      'variants.1.name': 'REQUIRED',
+      'variants.3.pricesX': 'INVALID',
+      'prices.EUR.price': 'REQUIRED',
+    });
+    expect([...rows].sort()).toEqual([0, 2]);
+    expect(errorDetailRows({}).size).toBe(0);
+    expect(errorDetailRows(null).size).toBe(0);
+  });
+
+  test('revealCandidates falls back to the longest existing holder prefix', () => {
+    expect(revealCandidates('variants.2.attributes.0.key')).toEqual([
+      'variants.2.attributes.0.key',
+      'variants.2.attributes.0',
+      'variants.2.attributes',
+      'variants.2',
+      'variants',
+    ]);
+    expect(revealCandidates('')).toEqual([]);
+  });
+
   test('axes: labels required, at most 3 axes and 20 values', () => {
     const e = errorsOf(
       withVariants([variant()], {
@@ -620,18 +655,105 @@ describe('payload', () => {
     expect(scalar(payload, 'creditAmount')).toBeUndefined();
   });
 
-  test('empty nullable scalars are omitted; no category sends -1', () => {
+  const NULLABLES = [
+    'shortDescription',
+    'compareAtPrice',
+    'vatPercent',
+    'subscriptionMaxCycles',
+    'tierRank',
+    'durationStart',
+    'durationExpiry',
+    'requiredPermission',
+    'limitPerPlayer',
+    'maxQuantityPerOrder',
+    'cooldownSeconds',
+    'sku',
+    'weightGrams',
+    'lengthMm',
+    'widthMm',
+    'heightMm',
+    'hsCode',
+    'originCountry',
+    'metaTitle',
+    'metaDescription',
+  ];
+
+  test('create omits empty nullable scalars; no category sends -1', () => {
     const payload = buildPayload(valid(), SINGLE);
-    for (const name of [
-      'shortDescription',
-      'compareAtPrice',
-      'vatPercent',
-      'tierRank',
-      'limitPerPlayer',
-      'stock',
-    ])
-      expect(scalar(payload, name)).toBeUndefined();
+    for (const name of [...NULLABLES, 'stock']) expect(scalar(payload, name)).toBeUndefined();
     expect(scalar(payload, 'categoryId')).toBe('-1');
+  });
+
+  test('edit sends an empty part for every empty nullable scalar (PUT is a partial update)', () => {
+    const payload = buildPayload(valid(), SINGLE, { isEdit: true });
+    for (const name of NULLABLES) expect(scalar(payload, name)).toBe('');
+    expect(scalar(payload, 'stock')).toBeUndefined();
+  });
+
+  test('edit still sends the values that are set', () => {
+    const p = valid({
+      physical: true,
+      weightGrams: 250,
+      hsCode: '1234',
+      originCountry: 'DE',
+      sku: 'SKU-1',
+      requiredPermission: 'a.b',
+      limitPerPlayer: 3,
+      metaTitle: 'T',
+      saleWindow: true,
+      durationStart: '2026-03-01T08:00',
+      durationExpiry: '2026-03-02T08:00',
+    });
+    const payload = buildPayload(p, SINGLE, { isEdit: true });
+    expect(scalar(payload, 'weightGrams')).toBe('250');
+    expect(scalar(payload, 'hsCode')).toBe('1234');
+    expect(scalar(payload, 'originCountry')).toBe('DE');
+    expect(scalar(payload, 'sku')).toBe('SKU-1');
+    expect(scalar(payload, 'requiredPermission')).toBe('a.b');
+    expect(scalar(payload, 'limitPerPlayer')).toBe('3');
+    expect(scalar(payload, 'metaTitle')).toBe('T');
+    expect(scalar(payload, 'durationStart')).not.toBe('');
+    expect(scalar(payload, 'durationExpiry')).not.toBe('');
+    expect(scalar(payload, 'lengthMm')).toBe('');
+  });
+
+  test('edit clears the sale window and the subscription cycles when they no longer apply', () => {
+    const off = buildPayload(
+      valid({ saleWindow: false, durationStart: '2026-03-01T08:00', subscriptionMaxCycles: 4 }),
+      SINGLE,
+      { isEdit: true },
+    );
+    expect(scalar(off, 'durationStart')).toBe('');
+    expect(scalar(off, 'durationExpiry')).toBe('');
+    expect(scalar(off, 'subscriptionMaxCycles')).toBe('');
+    const notPhysical = buildPayload(valid({ physical: false, weightGrams: 100 }), SINGLE, {
+      isEdit: true,
+    });
+    expect(scalar(notPhysical, 'weightGrams')).toBe('');
+  });
+
+  test('round trip: clearing vatPercent and compareAtPrice on a loaded product sends the clear', () => {
+    const loaded = fromApi(
+      {
+        id: 5,
+        name: 'Rank',
+        slug: 'rank',
+        price: 10,
+        compareAtPrice: 15,
+        vatPercent: 7,
+        billingMode: 'ONE_TIME',
+        kind: 'STANDARD',
+        status: 'ACTIVE',
+      },
+      SINGLE,
+    );
+    expect(scalar(buildPayload(loaded, SINGLE, { isEdit: true }), 'vatPercent')).toBe('7');
+    const cleared = { ...loaded, vatPercent: null, compareAtPrice: '' };
+    const payload = buildPayload(cleared, SINGLE, { isEdit: true });
+    expect(scalar(payload, 'vatPercent')).toBe('');
+    expect(scalar(payload, 'compareAtPrice')).toBe('');
+    // raising the price above the old compare-at is valid once compare-at is empty
+    expect(errorsOf({ ...cleared, price: 20 }, SINGLE, { isEdit: true })).toEqual({});
   });
 
   test('stock is sent on create only, and not with variants', () => {

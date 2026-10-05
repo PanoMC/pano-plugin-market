@@ -396,7 +396,7 @@
                     </div>
                   </td>
                 </tr>
-                {#if open[variant._key]}
+                {#if open[variant._key] || errorRows.has(i)}
                   <tr>
                     <td colspan={columnCount}>
                       <div class="row g-3 p-2">
@@ -508,6 +508,7 @@
     MAX_ATTRIBUTES,
     currencyExponent,
     ensurePriceRows,
+    errorDetailRows,
     fieldErrorKey,
     isMulti,
   } from './model.js';
@@ -704,6 +705,9 @@
   function toggle(key) {
     open[key] = !open[key];
   }
+
+  // rows whose error sits in the Details row are rendered open so the input exists to be marked
+  const errorRows = $derived(errorDetailRows(errors));
 
   function attributeError(index) {
     const prefix = `variants.${index}.attributes`;

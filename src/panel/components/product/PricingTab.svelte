@@ -319,7 +319,7 @@
 
   let vatOverride = $state(product.vatPercent !== null);
 
-  // An emptied override input is read as "store default" (null is never sent).
+  // An emptied override input is read as "store default" (an empty part clears it on edit).
   function onVatDefaultChange(event) {
     vatOverride = !event.currentTarget.checked;
     product.vatPercent = vatOverride ? (ctx?.vatPercent ?? 0) : null;
