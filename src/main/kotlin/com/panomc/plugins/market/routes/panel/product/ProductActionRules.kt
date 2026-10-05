@@ -49,6 +49,23 @@ interface ProductActionCheck {
 
     suspend fun onSave(conn: SqlClient, request: Request): Outcome
 
+    /**
+     * A save that does not submit `actions` but changes what the stored actions depend on (`serverChoices`, billing mode, `maxQuantityPerOrder`,
+     * the fields a command may use) re-checks the stored actions against the new product: the strict rules (`InvalidProduct`) and [ActionGuard]
+     * (`NoPermission`). Nothing is rewritten: the stored text, with its encrypted secrets, stays as it is.
+     */
+    class Unchanged(
+        val stored: String,
+        val storedServerChoices: String?,
+        val billingMode: BillingMode,
+        val maxQuantityPerOrder: Int?,
+        val serverChoices: String?,
+        val fields: Map<String, Boolean>,
+        val caller: ActionGuard.Caller?
+    )
+
+    suspend fun onUnchanged(conn: SqlClient, request: Unchanged)
+
     /** A clone counts as new: every action of [source] needs the privilege of [ActionGuard]. The stored text (secrets already encrypted) is copied as it is. */
     suspend fun onClone(conn: SqlClient, source: String?, serverChoices: String?, caller: ActionGuard.Caller?)
 }
@@ -68,19 +85,35 @@ class ProductActionRules(
     private val hosted: () -> Boolean = { false },
     private val random: SecureRandom = SecureRandom()
 ) : ProductActionCheck {
-    override suspend fun onSave(conn: SqlClient, request: ProductActionCheck.Request): ProductActionCheck.Outcome {
+    private suspend fun context(conn: SqlClient, billingMode: BillingMode, maxQuantityPerOrder: Int?, fields: Map<String, Boolean>, choices: List<Long>): ActionParser.Context {
         val granted = roster.snapshot(conn).granted.toSet()
-        val choices = idList(request.serverChoices)
-        val context = ActionParser.Context(
+
+        return ActionParser.Context(
             kind = ActionParser.Kind.PRODUCT,
-            billingMode = request.billingMode,
-            maxQuantityPerOrder = request.maxQuantityPerOrder,
-            fields = request.fields,
+            billingMode = billingMode,
+            maxQuantityPerOrder = maxQuantityPerOrder,
+            fields = fields,
             serverIds = granted,
             hasServers = granted.isNotEmpty(),
             hasServerChoices = choices.isNotEmpty(),
             webhookUrlOk = { url -> TargetPolicy.syntaxOk(url, TargetPolicy.effectiveAllowPrivate(allowPrivateWebhookTargets(), hosted())) }
         )
+    }
+
+    override suspend fun onUnchanged(conn: SqlClient, request: ProductActionCheck.Unchanged) {
+        val choices = idList(request.serverChoices)
+        val parsed = ActionParser.parse(request.stored, context(conn, request.billingMode, request.maxQuantityPerOrder, request.fields, choices))
+
+        if (!parsed.ok) throw InvalidProduct(parsed.errors)
+
+        val stored = ActionParser.parseStored(request.stored).actions
+
+        if (ActionGuard.violations(stored, stored, request.caller, choices, idList(request.storedServerChoices)).isNotEmpty()) throw NoPermission()
+    }
+
+    override suspend fun onSave(conn: SqlClient, request: ProductActionCheck.Request): ProductActionCheck.Outcome {
+        val choices = idList(request.serverChoices)
+        val context = context(conn, request.billingMode, request.maxQuantityPerOrder, request.fields, choices)
 
         val parsed = ActionParser.parse(request.submitted, context)
 

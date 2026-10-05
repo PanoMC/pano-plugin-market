@@ -165,14 +165,25 @@ class CatalogService(
         if (errors.isNotEmpty()) throw InvalidProduct(errors)
 
         // 08 section 2.2 and 11 section 14.4: the strict action rules, then the privilege rule, against the stored row that the lock above holds
-        val checked = input.actions?.let { submitted ->
-            val fieldRules: Map<String, Boolean> =
-                input.fields?.associate { it.fieldKey to it.usableInCommands } ?: base?.let { b -> fields.getByProductId(b.id, conn).associate { it.fieldKey to it.usableInCommands } }.orEmpty()
+        suspend fun fieldRules(): Map<String, Boolean> =
+            input.fields?.associate { it.fieldKey to it.usableInCommands } ?: base?.let { b -> fields.getByProductId(b.id, conn).associate { it.fieldKey to it.usableInCommands } }.orEmpty()
 
+        val checked = input.actions?.let { submitted ->
             actionCheck.onSave(
                 conn,
                 ProductActionCheck.Request(
-                    base?.actions, base?.serverChoices, submitted, product.billingMode, product.maxQuantityPerOrder, product.serverChoices, fieldRules, actionCaller
+                    base?.actions, base?.serverChoices, submitted, product.billingMode, product.maxQuantityPerOrder, product.serverChoices, fieldRules(), actionCaller
+                )
+            )
+        }
+
+        // a partial update that leaves `actions` alone but moves what they depend on is checked against the stored actions: otherwise widening
+        // `serverChoices` (or switching the billing mode) would be a way around the privilege rule and the strict rules
+        if (input.actions == null && base != null && !base.actions.isNullOrBlank() && actionInputsChanged(base, product, input)) {
+            actionCheck.onUnchanged(
+                conn,
+                ProductActionCheck.Unchanged(
+                    base.actions, base.serverChoices, product.billingMode, product.maxQuantityPerOrder, product.serverChoices, fieldRules(), actionCaller
                 )
             )
         }
@@ -225,6 +236,13 @@ class CatalogService(
 
         return SaveResult(productId, slug, product.name, warnings, orphans, if (base == null) emptyMap() else changes(base, toStore), checked?.generatedSecrets.orEmpty())
     }
+
+    /** `true` when the save moves something the stored actions are validated against (08 section 2.2): choices, billing mode, quantity limit, command fields. */
+    private fun actionInputsChanged(before: MarketProduct, after: MarketProduct, input: ProductInput): Boolean =
+        before.billingMode != after.billingMode ||
+            before.maxQuantityPerOrder != after.maxQuantityPerOrder ||
+            ProductActionRules.idList(before.serverChoices).toSet() != ProductActionRules.idList(after.serverChoices).toSet() ||
+            input.fields != null
 
     private fun changes(before: MarketProduct, after: MarketProduct): Map<String, Any?> {
         val changes = linkedMapOf<String, Any?>()
