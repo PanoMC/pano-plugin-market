@@ -73,8 +73,8 @@ internal class BankRig(val w: TestWiring, private val vertx: Vertx) {
     lateinit var bank: BankTransferService
         private set
 
-    fun config(bankHours: Int = 72, guests: Boolean = true, orderExpiryMinutes: Int = 60) = MarketConfig(
-        currency = CurrencyType.EUR, statsCurrency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC",
+    fun config(bankHours: Int = 72, guests: Boolean = true, orderExpiryMinutes: Int = 60, showVat: Boolean = true) = MarketConfig(
+        currency = CurrencyType.EUR, statsCurrency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = showVat, creditValue = 1.0, storeTimeZone = "UTC",
         allowGuestCheckout = guests, bankTransferExpiryHours = bankHours, orderExpiryMinutes = orderExpiryMinutes
     )
 
