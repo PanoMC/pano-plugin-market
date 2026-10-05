@@ -38,7 +38,7 @@ object GiftCodeGuards {
 }
 
 /**
- * `POST /api/market/me/gifts/redeem` (21 section 6): the code guard first, the lookup of the (normalised) code, then
+ * `POST /api/market/me/gifts/redeem` (21 section 6): the L1 rate limit, the code guard, the lookup of the (normalised) code, then
  * [CheckoutService.redeemGift] with the gift's id. An unknown, malformed or soft-deleted code is the same `CODE_NOT_FOUND` and is counted by the
  * guard; a lock answers 429 `CODE_ATTEMPTS_LOCKED` before any lookup.
  */
@@ -47,9 +47,13 @@ class GiftRedeemService(
     private val redemptions: RedemptionService,
     private val client: suspend () -> SqlClient,
     private val clock: Clock,
-    private val guard: () -> GiftCodeGuard = { GiftCodeGuards.guard }
+    private val guard: () -> GiftCodeGuard = { GiftCodeGuards.guard },
+    /** L1 (11 section 11: IP and buyer bucket, both must pass); throws `TooManyRequests`. The route passes `MarketRateLimits.checkout`. */
+    private val limit: (QuoteCaller) -> Unit = {}
 ) {
     suspend fun redeem(rawCode: String?, targetServerId: Long?, fieldValues: Map<String, Any?>, caller: QuoteCaller, locale: String?): CheckoutResult {
+        limit(caller)
+
         val subjects = subjectsOf(caller)
         val code = CartLimits.normalizeCode(rawCode)?.takeIf { CartLimits.codeFits(it) && PromotionRules.codeValid(it) }
 

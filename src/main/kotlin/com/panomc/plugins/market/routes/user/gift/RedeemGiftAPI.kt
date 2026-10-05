@@ -78,7 +78,8 @@ class RedeemGiftAPI(private val plugin: MarketPlugin) : MarketUserApi() {
         GiftRedeemService(
             checkout = checkoutService(plugin, withCheckout = true), redemptions = RedemptionService(SystemClock, locks, redemptionDao),
             client = { databaseManager.getSqlClient() }, clock = SystemClock,
-            guard = abuseWiring(plugin).codeGuard.forScope(AbuseLimits.SCOPE_GIFT).let { guard -> { guard } }
+            guard = abuseWiring(plugin).codeGuard.forScope(AbuseLimits.SCOPE_GIFT).let { guard -> { guard } },
+            limit = { caller -> abuseWiring(plugin).rateLimits.checkout(caller.clientIp, "u:${caller.userId}") }
         )
     }
 

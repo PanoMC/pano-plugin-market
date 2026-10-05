@@ -893,6 +893,32 @@ class CheckoutService(
         return a
     }
 
+    /**
+     * L4 held-unit cap on stock subjects: `MAX_QUANTITY` for every cart line that contributes units to a stock-limited subject whose sum exceeds
+     * `AbuseLimits.heldUnitsCap` of the subject's product. A subject without stock (a variant with NULL stock, a product without stock) is never capped.
+     */
+    private fun heldUnitLineErrors(a: Assessment): Map<String, List<String>> {
+        class Held(var units: Long = 0, val cap: Int, val lines: MutableSet<String> = LinkedHashSet())
+
+        val subjects = LinkedHashMap<Pair<Boolean, Long>, Held>()
+
+        for (l in a.items.lines) {
+            val product = l.productId?.let { a.catalog.products[it] } ?: continue
+            val variant = if (l.variantId != 0L) a.catalog.variants[l.variantId] else null
+            val stock = if (l.variantId != 0L) variant?.stock else product.stock
+
+            if (stock == null) continue
+
+            val subject = Pair(l.variantId != 0L, if (l.variantId != 0L) l.variantId else product.id)
+            val held = subjects.getOrPut(subject) { Held(cap = AbuseLimits.heldUnitsCap(product.maxQuantityPerOrder)) }
+
+            held.units += l.quantity
+            held.lines += l.parentLineKey ?: l.lineKey
+        }
+
+        return subjects.values.filter { it.units > it.cap }.flatMap { it.lines }.distinct().associateWith { listOf(LineCode.MAX_QUANTITY) }
+    }
+
     /** The A1 to A12 table of 06 section 5.2 in its order; throws the first failure. Phase B runs it again on the locked rows. */
     private fun failOn(a: Assessment, request: CheckoutRequest, caller: QuoteCaller, frozen: Boolean) {
         val messages = a.messages
@@ -923,15 +949,11 @@ class CheckoutService(
 
         if (lineErrors.isNotEmpty()) throw InvalidCart(lineErrors)
 
-        // L4 (11 section 11): one unpaid order on an offline method may hold at most min(maxQuantityPerOrder ?: 10, 10) units of a stock-limited product
+        // L4 (11 section 11): one unpaid order on an offline method may hold at most min(maxQuantityPerOrder ?: 10, 10) units of a stock subject.
+        // The subjects are the ones the reservation takes (06 section 7.1): the variant when the line names one, else the product, and every
+        // child of a bundle on its own row with `line quantity x child quantity`; the units of all lines (and of a bundle's children) add up
         val offline = a.selected?.id == OrderTimings.BANK_TRANSFER_PROVIDER || a.selected?.caps?.longPending == true
-        val hoarded = if (!offline) emptyMap() else a.lines.filter { l ->
-            val product = a.catalog.products[l.productId] ?: return@filter false
-            val variant = if (l.variantId != 0L) a.catalog.variants[l.variantId] else null
-            val limited = product.stock != null || variant?.stock != null
-
-            limited && l.quantity > AbuseLimits.heldUnitsCap(product.maxQuantityPerOrder)
-        }.associate { it.lineKey to listOf(LineCode.MAX_QUANTITY) }
+        val hoarded = if (!offline) emptyMap() else heldUnitLineErrors(a)
 
         if (hoarded.isNotEmpty()) throw InvalidCart(hoarded)
 
