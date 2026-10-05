@@ -95,7 +95,7 @@ internal class CreditHarness(val w: TestWiring, val vertx: Vertx, lockWaitSecond
             w.clock, w.ids, w.orders, w.orderItems, w.orderEvents, w.payments, redemptions, { _, _ -> false },
             credits = credits.checkoutHolds, settlement = credits,
             // MK-092: the production composition, the credit-granting lines and the cashback are posted inside the transition (the recorder still sees the rest)
-            reservations = reservations, foreign = CreditEffects(credits, w.orders, w.orderEvents, w.clock, { h.config.toConfig() }, ph.effects),
+            reservations = reservations, foreign = CreditEffects(credits, w.orders, w.orderEvents, w.clock, { h.config.toConfig() }, directory, ph.effects),
             webhooks = PaidWebhooks { conn, orderId -> ph.webhooks.service.emitOrderPaid(conn, orderId) },
             rates = { sqlClient -> w.currencyRates.getAll(sqlClient).filter { it.rate.signum() > 0 }.associate { it.currency to it.rate } },
             statsCurrency = { ph.statsCurrency },

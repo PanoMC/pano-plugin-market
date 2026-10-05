@@ -484,6 +484,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
 
     @Test
     fun `filters search category featured kind and sorts`(): Unit = runBlocking {
+        config = MarketConfig(creditTopUpEnabled = true) // a credit pack is listed only while the top-up is on (07 section 8)
         val cat = fx.category("Cat")
         val sub = fx.category("Sub", parentId = cat.id)
         val a = fx.product(slug = "alpha", name = "Alpha sword", price = 3000, categoryId = cat.id)
@@ -588,6 +589,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
 
     @Test
     fun `required products need to be owned and a guest sees the login hint where an account is needed`(): Unit = runBlocking {
+        config = MarketConfig(creditTopUpEnabled = true) // a credit pack is purchasable only while the top-up is on (07 section 8)
         val user = fx.user()
         val base = fx.product(slug = "base", name = "Base")
         val addon = fx.product(slug = "addon", name = "Addon")

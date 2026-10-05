@@ -356,14 +356,16 @@ class CreditReconciler(
             )
         }
 
-        // O6: a paid item that grants credits to an existing user has exactly one TOPUP / GIFT of that amount
+        // O6: a paid item that grants credits to an existing user has exactly one TOPUP / GIFT of that amount. An order whose recipient was gone at O2 carries the
+        // NOTE of `CREDIT_RECIPIENT_GONE_NOTE` (07 section 8.3: nothing is posted, the admin refunds) and is not a problem.
         for (row in rows(
             sql,
             "SELECT x.`id`, x.`oid`, x.`ca`, x.`n`, x.`s` FROM (SELECT i.`id`, o.`id` AS oid, i.`creditAmount` AS ca, " +
                 "(SELECT COUNT(*) FROM $tx c WHERE c.`idempotencyKey` IN (CONCAT('orderitem:', i.`id`, ':topup'), CONCAT('orderitem:', i.`id`, ':gift'))) AS n, " +
                 "(SELECT COALESCE(SUM(c.`amount`), 0) FROM $tx c WHERE c.`idempotencyKey` IN (CONCAT('orderitem:', i.`id`, ':topup'), CONCAT('orderitem:', i.`id`, ':gift'))) AS s " +
                 "FROM ${t("market_order_item")} i JOIN $orders o ON o.`id` = i.`orderId` WHERE i.`creditAmount` > 0 AND o.`updatedAt` >= ? " +
-                "AND o.`status` IN ('COMPLETED', 'PARTIALLY_REFUNDED', 'REFUNDED', 'CHARGEBACK') AND COALESCE(o.`recipientUserId`, o.`userId`) IS NOT NULL) x " +
+                "AND o.`status` IN ('COMPLETED', 'PARTIALLY_REFUNDED', 'REFUNDED', 'CHARGEBACK') AND COALESCE(o.`recipientUserId`, o.`userId`) IS NOT NULL " +
+                "AND NOT EXISTS (SELECT 1 FROM ${t("market_order_event")} ev WHERE ev.`orderId` = o.`id` AND ev.`type` = 'NOTE' AND ev.`message` = '$CREDIT_RECIPIENT_GONE_NOTE')) x " +
                 "WHERE x.`n` <> 1 OR x.`s` <> x.`ca`",
             since
         )) {

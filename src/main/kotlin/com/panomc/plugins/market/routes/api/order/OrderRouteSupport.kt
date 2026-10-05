@@ -32,6 +32,7 @@ import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.error.TooManyRequests
 import com.panomc.plugins.market.routes.api.OrderAccess
 import com.panomc.plugins.market.routes.api.OrderAccessResult
+import com.panomc.plugins.market.routes.api.checkout.PlatformUserDirectory
 import com.panomc.plugins.market.routes.api.checkout.quoteCaller
 import com.panomc.plugins.market.routes.api.payment.attemptContexts
 import com.panomc.plugins.market.routes.panel.invoice.invoiceService
@@ -161,6 +162,7 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
         // MK-092: the credit-granting lines (TOPUP / GIFT) and the cashback are posted inside the transition too
         foreign = CreditEffects(
             credits, orderDao, context.getBean(MarketOrderEventDao::class.java), clock, { currentConfig(plugin) },
+            PlatformUserDirectory { context.getBean(DatabaseManager::class.java) },
             InvoiceEffects(invoiceService(plugin), orderDao, ForeignEffects.PENDING_SLICES)
         ),
         rates = { sqlClient -> rates.getAll(sqlClient).filter { it.rate.signum() > 0 }.associate { it.currency to it.rate } },

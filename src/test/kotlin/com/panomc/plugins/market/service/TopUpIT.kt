@@ -186,7 +186,7 @@ class TopUpIT : MarketDaoITBase() {
         // the same payment event again, and the effect itself run again: nothing new is posted
         c.succeed(done.id, c.attempts(done.id).single())
 
-        val again = c.ph.db.tx { conn -> c.credits.creditOrderItems(w.orders.getById(done.id, conn)!!, itemsOf(done.id), conn) }
+        val again = c.ph.db.tx { conn -> c.credits.creditOrderItems(w.orders.getById(done.id, conn)!!, itemsOf(done.id), conn) { true } }
 
         assertTrue(again.posted.isNotEmpty() && again.posted.all { it.replayed }, "a replayed O2 finds every transaction under its key")
         assertEquals(1, txs(done.id).size)
@@ -280,25 +280,143 @@ class TopUpIT : MarketDaoITBase() {
         expect("INVALID_RECIPIENT", 400) { c.checkout(h.body("items" to listOf(h.line(product, 1)), "paymentMethodId" to "fake", "recipientUsername" to "Never_Joined"), caller) }
     }
 
+    /** The platform deletes a user: the user row goes and the orders are anonymised (`userId = NULL`; `recipientUserId` is left alone, 01 section 13). */
+    private suspend fun deleteAccount(u: TestUser) {
+        w.users.remove(u.id)
+        w.orders.anonymizeByUserId(u.id, pool)
+    }
+
+    /** Either only the top-up or the whole credit system is switched off. */
+    private fun switchOff(topUpOnly: Boolean) {
+        h.config = if (topUpOnly) h.config.copy(creditTopUpEnabled = false) else h.config.copy(creditsEnabled = false)
+    }
+
+    private suspend fun assertGoneNote(orderId: Long) {
+        val notes = w.orderEvents.getByOrderId(orderId, pool).filter { it.type == OrderEventType.NOTE }
+
+        assertEquals(listOf(CREDIT_RECIPIENT_GONE_NOTE), notes.map { it.message })
+    }
+
     @Test
-    fun `a recipient who is gone at O2 gets nothing, the order is still completed and the timeline says why`(): Unit = runBlocking {
+    fun `a buyer who is deleted before O2 gets nothing, the order is still completed and the timeline says why`(): Unit = runBlocking {
         configure()
 
-        val (_, caller) = user("Alex")
+        val (alex, caller) = user("Alex")
         val order = gateway(caller, items = listOf(h.line(pack(), 1)))
 
-        // the buyer's account is removed between checkout and payment: both ids are anonymised to NULL (01 section 13)
-        setOrderColumn(order.id, "userId", null)
-        setOrderColumn(order.id, "recipientUserId", null)
+        assertEquals(alex.id, order.recipientUserId, "a self purchase stores the payer as the recipient, the anonymisation does not clear it")
+
+        deleteAccount(alex)
+
+        assertNull(w.orders.getById(order.id, pool)!!.userId)
+        assertEquals(alex.id, w.orders.getById(order.id, pool)!!.recipientUserId)
 
         val done = paid(order)
 
         assertEquals(OrderStatus.COMPLETED, done.status, "the payment is valid, the order is not diverted")
-        assertTrue(txs(done.id).isEmpty())
+        assertTrue(txs(done.id).isEmpty(), "nothing is posted to the account of a deleted user")
+        assertEquals(0, balance(alex))
+        assertGoneNote(done.id)
+    }
 
-        val notes = w.orderEvents.getByOrderId(done.id, pool).filter { it.type == OrderEventType.NOTE }
+    @Test
+    fun `a gift recipient who is deleted before O2 gets nothing, the payer is not credited, the note is written and the order is completed`(): Unit = runBlocking {
+        configure()
 
-        assertEquals(listOf(CREDIT_RECIPIENT_GONE_NOTE), notes.map { it.message })
+        val (alex, caller) = user("Alex")
+        val (bob, _) = user("Bob")
+        val order = gateway(caller, "recipientUsername" to "Bob", items = listOf(h.line(pack(), 1)))
+
+        assertEquals(bob.id, order.recipientUserId)
+        assertEquals(alex.id, order.userId)
+
+        deleteAccount(bob)
+
+        val done = paid(order)
+
+        assertEquals(OrderStatus.COMPLETED, done.status)
+        assertTrue(txs(done.id).isEmpty(), "no TOPUP for the deleted recipient and none for the payer")
+        assertEquals(0, balance(alex), "the payer is not credited instead")
+        assertEquals(0, balance(bob))
+        assertGoneNote(done.id)
+    }
+
+    @Test
+    fun `a recipient who is alive at O2 is credited, the existence check does not get in the way of a gift`(): Unit = runBlocking {
+        configure()
+
+        val (alex, caller) = user("Alex")
+        val (bob, _) = user("Bob")
+        val done = paid(gateway(caller, "recipientUsername" to "Bob", items = listOf(h.line(pack(30_000), 1))))
+
+        assertEquals(30_000, balance(bob))
+        assertEquals(0, balance(alex))
+        assertEquals(listOf(bob.id), txs(done.id).map { it.userId })
+    }
+
+    // ================================================================================== packs need top-up (07 section 8 intro, 14.1)
+
+    @Test
+    fun `a pack with top-up off or with credits off is a line error, cannot be checked out and writes no order`(): Unit = runBlocking {
+        configure()
+
+        val (_, caller) = user("Alex")
+        val product = pack()
+        val input = QuoteInput(items = listOf(CartLine(product.id, 0, 1)))
+
+        // control: on
+        assertTrue(c.service.quote(input, caller, pool).canCheckout)
+
+        for (label in listOf("top-up off", "credits off")) {
+            switchOff(label == "top-up off")
+
+            val quote = c.service.quote(input, caller, pool)
+
+            assertEquals(listOf("PRODUCT_UNAVAILABLE"), quote.lines.single().errors, label)
+            assertFalse(quote.canCheckout, label)
+
+            val before = count("market_order")
+
+            expect("INVALID_CART", 400) { c.checkout(h.body("items" to listOf(h.line(product, 1)), "paymentMethodId" to "fake"), caller) }
+            assertEquals(before, count("market_order"), "$label: no order row")
+
+            configure()
+        }
+    }
+
+    @Test
+    fun `listings omit packs while they cannot be bought, the page of a pack says PRODUCT_UNAVAILABLE and a standard product is unaffected`(): Unit = runBlocking {
+        configure()
+
+        val store = StoreQueryService(
+            { h.config.toConfig() }, w.clock, w.categories, w.products, w.variants, w.prices, w.fields, w.bundleItems, w.discounts,
+            w.currencyRates, w.comparisons, w.orderItems, w.entitlements
+        )
+        val standard = fx.product(slug = "plain-${System.nanoTime()}", price = 1000)
+        val product = pack(slug = "listed-pack")
+        val viewer = StoreViewer(userId = fx.user("Viewer").id)
+
+        fun slugs(json: JsonObject) = json.getJsonArray("products").map { (it as JsonObject).getString("slug") }.toSet()
+
+        assertTrue(slugs(store.products(ProductListQuery(), viewer, pool)).containsAll(listOf(product.slug, standard.slug)))
+        assertTrue(store.product(product.slug, null, viewer, pool).getJsonObject("purchasable").getBoolean("ok"))
+
+        for (topUpOnly in listOf(true, false)) {
+            switchOff(topUpOnly)
+
+            val listed = slugs(store.products(ProductListQuery(), viewer, pool))
+
+            assertFalse(product.slug in listed)
+            assertTrue(standard.slug in listed)
+            assertFalse(product.slug in store.store(null, viewer, pool).getJsonArray("products").map { (it as JsonObject).getString("slug") })
+
+            val purchasable = store.product(product.slug, null, viewer, pool).getJsonObject("purchasable")
+
+            assertFalse(purchasable.getBoolean("ok"))
+            assertEquals("PRODUCT_UNAVAILABLE", purchasable.getString("reason"))
+
+            configure()
+        }
     }
 
     @Test
