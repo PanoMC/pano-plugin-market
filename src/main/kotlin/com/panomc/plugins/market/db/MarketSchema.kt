@@ -1202,6 +1202,127 @@ object MarketSchema {
         key("idx_order", "orderId")
     }
 
+    // --- scheme version 9: subscriptions (01 section 10); version 10 part a: abuse and store modules (01 section 12) ---
+
+    val SUBSCRIPTION = table("market_subscription", "Market subscription table.") {
+        id()
+        bigint("userId", nullable = true)
+        str("playerUsername", 64)
+        str("ownerKey", 80)
+        str("email", 255, nullable = true)
+        bigint("productId")
+        bigint("variantId", default = 0)
+        str("productName", 255)
+        bigint("initialOrderId")
+        bigint("initialOrderItemId")
+        bigint("entitlementId", nullable = true)
+        str("providerId", 64)
+        str("mode", 16)
+        str("status", 16, "PENDING")
+        str("intervalUnit", 8)
+        int("intervalCount")
+        bigint("price")
+        str("currency", 8)
+        int("maxCycles", nullable = true)
+        int("cycleCount", default = 0)
+        bigint("currentPeriodStart", nullable = true)
+        bigint("currentPeriodEnd", nullable = true)
+        bigint("nextChargeAt", nullable = true)
+        bigint("nextQueryAt", nullable = true)
+        bigint("lastQueriedAt", nullable = true)
+        str("remoteCancelState", 16, "NONE")
+        int("remoteCancelAttempts", default = 0)
+        bigint("graceEndsAt", nullable = true)
+        flag("cancelAtPeriodEnd", 0)
+        bigint("cancelRequestedAt", nullable = true)
+        bigint("cancelledAt", nullable = true)
+        bigint("endedAt", nullable = true)
+        str("endReason", 32, nullable = true)
+        str("gatewaySubscriptionId", 191, nullable = true)
+        str("gatewayCustomerId", 191, nullable = true)
+        text("storedMethod") // ENC
+        str("storedMethodLabel", 64, nullable = true)
+        int("failCount", default = 0)
+        bigint("lastFailureAt", nullable = true)
+        bigint("reminderSentAt", nullable = true)
+        bigint("targetServerId", nullable = true)
+        text("fieldValues") // JSON
+        text("providerData") // ENC
+        flag("testMode", 0)
+        timestamps()
+        unique("uq_provider_sub", "providerId", "gatewaySubscriptionId")
+        key("idx_charge", "status", "nextChargeAt")
+        key("idx_period", "status", "currentPeriodEnd")
+        key("idx_query", "nextQueryAt")
+        key("idx_owner", "ownerKey")
+        key("idx_user", "userId")
+    }
+
+    val SUBSCRIPTION_RENEWAL = table("market_subscription_renewal", "Market subscription renewal table.") {
+        id()
+        bigint("subscriptionId")
+        int("periodIndex")
+        bigint("periodStart")
+        bigint("periodEnd")
+        bigint("orderId", nullable = true)
+        bigint("paymentId", nullable = true)
+        str("status", 16, "PENDING")
+        bigint("amount")
+        str("currency", 8)
+        int("attempts", default = 0)
+        bigint("nextAttemptAt", nullable = true)
+        str("lastError", 512, nullable = true)
+        timestamps()
+        unique("uq_sub_period", "subscriptionId", "periodIndex")
+        key("idx_due", "status", "nextAttemptAt")
+    }
+
+    val BLOCK = table("market_block", "Market block list table.") {
+        id()
+        str("type", 16)
+        str("value", 255)
+        str("reason", 255, nullable = true)
+        str("source", 16)
+        bigint("orderId", nullable = true)
+        bigint("createdBy", nullable = true)
+        bigint("expiresAt", nullable = true)
+        int("hitCount", default = 0)
+        bigint("lastHitAt", nullable = true)
+        timestamps()
+        unique("uq_type_value", "type", "value")
+    }
+
+    val THROTTLE = table("market_throttle", "Market throttle table.") {
+        id()
+        str("scope", 32)
+        str("subject", 191)
+        int("count", default = 0)
+        bigint("windowStart")
+        bigint("lockedUntil", nullable = true)
+        timestamps()
+        unique("uq_scope_subject", "scope", "subject")
+    }
+
+    val GOAL = table("market_goal", "Market goal table.") {
+        id()
+        str("name", 255)
+        str("description", 512, nullable = true)
+        str("metric", 16)
+        text("productIds") // JSON
+        bigint("target")
+        bigint("progress", default = 0)
+        str("currency", 8, nullable = true)
+        str("period", 16, "ONE_TIME")
+        bigint("periodStart", nullable = true)
+        bigint("startsAt", nullable = true)
+        bigint("endsAt", nullable = true)
+        str("status", 16, "ACTIVE")
+        flag("showOnStore", 1)
+        bigint("completedAt", nullable = true)
+        int("position", default = 0)
+        timestamps()
+    }
+
     /** Every table the plugin owns, in creation order. Later migration slices append their tables here. */
     val tables: List<Table> = listOf(
         CATEGORY, COMPARISON, COUPON, CREATOR_CODE, DISCOUNT, GIFT, ORDER, ORDER_ITEM, PAYMENT_METHOD, PRODUCT,
@@ -1211,7 +1332,8 @@ object MarketSchema {
         ENTITLEMENT, ADDRESS, CART, CART_ITEM, INVOICE,
         PAYMENT, PAYMENT_EVENT, REFUND, REFUND_ITEM, DISPUTE, PROVIDER_STATE,
         CREDIT_ACCOUNT, CREDIT_TX, CREDIT_ENTRY,
-        DELIVERY, SERVER_STATE, WEBHOOK_ENDPOINT, WEBHOOK_DELIVERY, MAIL_OUTBOX
+        DELIVERY, SERVER_STATE, WEBHOOK_ENDPOINT, WEBHOOK_DELIVERY, MAIL_OUTBOX,
+        SUBSCRIPTION, SUBSCRIPTION_RENEWAL, BLOCK, THROTTLE, GOAL
     )
 
     /** The table declared under [name] (without prefix), or an error naming it. */

@@ -7,6 +7,8 @@ import com.panomc.plugins.market.db.migration.MarketMigration4to5
 import com.panomc.plugins.market.db.migration.MarketMigration5to6
 import com.panomc.plugins.market.db.migration.MarketMigration6to7
 import com.panomc.plugins.market.db.migration.MarketMigration7to8
+import com.panomc.plugins.market.db.migration.MarketMigration8to9
+import com.panomc.plugins.market.db.migration.MarketMigration9to10
 import com.panomc.plugins.market.support.MarketMigrationTestBase
 import com.panomc.plugins.market.support.MarketTestDb
 import io.vertx.kotlin.coroutines.coAwait
@@ -24,7 +26,7 @@ import org.junit.jupiter.api.Test
  * interrupted half-way. Each later migration slice appends its step to [chain]; `2 -> 3`, `3 -> 4`, `4 -> 5` (orders) and `5 -> 6` (payments) and `6 -> 7` (credits) are in.
  */
 class MigrationChainIT : MarketMigrationTestBase() {
-    private val chain: List<() -> DatabaseMigration> = listOf({ MarketMigration2to3() }, { MarketMigration3to4() }, { MarketMigration4to5() }, { MarketMigration5to6() }, { MarketMigration6to7() }, { MarketMigration7to8() })
+    private val chain: List<() -> DatabaseMigration> = listOf({ MarketMigration2to3() }, { MarketMigration3to4() }, { MarketMigration4to5() }, { MarketMigration5to6() }, { MarketMigration6to7() }, { MarketMigration7to8() }, { MarketMigration8to9() }, { MarketMigration9to10() })
 
     private suspend fun runChain(client: SqlClient = pool) {
         for (step in chain) step().migrate(client)
@@ -80,7 +82,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         runChain()
         val migrated = SchemaSnapshot.take(pool)
         val fresh = freshSchema()
-        assertEquals(41, migrated.tables.size)
+        assertEquals(46, migrated.tables.size)
         assertEquals(fresh.tables, migrated.tables)
         assertEquals(fresh.columns, migrated.columns)
         assertEquals(fresh.keys, migrated.keys)
@@ -178,6 +180,8 @@ class MigrationChainIT : MarketMigrationTestBase() {
             MarketMigration5to6().migrate(pool)
             MarketMigration6to7().migrate(pool)
             MarketMigration7to8().migrate(pool)
+            MarketMigration8to9().migrate(pool)
+            MarketMigration9to10().migrate(pool)
 
             val findings = SchemaVerifier.verify(pool, prefix).findings
             assertEquals(listOf("pano_market_product_variant"), findings.map { it.target })
@@ -194,6 +198,8 @@ class MigrationChainIT : MarketMigrationTestBase() {
             MarketMigration5to6().migrate(closed)
             MarketMigration6to7().migrate(closed)
             MarketMigration7to8().migrate(closed)
+            MarketMigration8to9().migrate(closed)
+            MarketMigration9to10().migrate(closed)
         } finally {
             sql("DROP VIEW IF EXISTS `pano_market_product_variant`")
         }
@@ -373,7 +379,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         for (t in listOf("payment", "payment_event", "refund", "refund_item", "dispute", "provider_state")) assertEquals(0L, count("market_$t"), t)
         // the credit ledger of scheme version 7 does not exist yet: it is all the verifier misses
         assertEquals(
-            (listOf("pano_market_credit_account", "pano_market_credit_entry", "pano_market_credit_tx") + step8Tables).sorted(),
+            (listOf("pano_market_credit_account", "pano_market_credit_entry", "pano_market_credit_tx") + step8Tables + step9Tables).sorted(),
             SchemaVerifier.verify(pool, prefix).findings.map { it.target }.sorted()
         )
     }
@@ -398,6 +404,8 @@ class MigrationChainIT : MarketMigrationTestBase() {
             assertTrue(SchemaVerifier.verify(pool, prefix).ok)
         }
     }
+
+    private val step9Tables = listOf("subscription", "subscription_renewal", "block", "throttle", "goal").map { "pano_market_$it" }.toSet()
 
     private val step8Tables = listOf("delivery", "server_state", "webhook_endpoint", "webhook_delivery", "mail_outbox").map { "pano_market_$it" }.toSet()
 
@@ -440,8 +448,8 @@ class MigrationChainIT : MarketMigrationTestBase() {
         MarketMigration6to7().migrate(pool)
         assertEquals(5L, count("market_credit_account"))
         assertEquals(seeded, dump(columnsOfCurrentTables()).getValue("pano_market_credit_account"))
-        // only the tables of step 8 are still missing
-        assertEquals(step8Tables.sorted(), SchemaVerifier.verify(pool, prefix).findings.map { it.target }.sorted())
+        // only the tables of steps 8 to 10 are still missing
+        assertEquals((step8Tables + step9Tables).sorted(), SchemaVerifier.verify(pool, prefix).findings.map { it.target }.sorted())
     }
 
     @Test
@@ -465,12 +473,14 @@ class MigrationChainIT : MarketMigrationTestBase() {
                 assertTrue(SchemaSnapshot.take(pool) != expected, "interrupted after $stopAfter handlers is a partial schema")
             } else {
                 // all three tables exist, only the seed is missing (and the five tables of step 8 are not there yet)
-                assertEquals(expected.tables.filterNot { row -> step8Tables.any { row.startsWith("$it|") } }, SchemaSnapshot.take(pool).tables)
+                assertEquals(expected.tables.filterNot { row -> (step8Tables + step9Tables).any { row.startsWith("$it|") } }, SchemaSnapshot.take(pool).tables)
                 assertEquals(0L, count("market_credit_account"), "interrupted before the seed")
             }
             assertTrue(MarketSchema.ensure(pool, prefix).clean)
             MarketMigration6to7().migrate(pool)
             MarketMigration7to8().migrate(pool)
+            MarketMigration8to9().migrate(pool)
+            MarketMigration9to10().migrate(pool)
             assertEquals(expected, SchemaSnapshot.take(pool), "interrupted after $stopAfter handlers")
             assertEquals(5L, count("market_credit_account"), "interrupted after $stopAfter handlers")
             assertTrue(SchemaVerifier.verify(pool, prefix).ok)
@@ -501,7 +511,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
 
     @Test
     fun `step 7 to 8 creates the five empty tables and leaves every existing table untouched, twice changes nothing`(): Unit = runBlocking {
-        for (step in chain.dropLast(1)) step().migrate(pool)
+        for (step in chain.take(5)) step().migrate(pool)
         val columns = columnsOfCurrentTables()
         val before = dump(columns)
         assertTrue(step8Tables.none { it in columns.keys })
@@ -515,8 +525,8 @@ class MigrationChainIT : MarketMigrationTestBase() {
         val schema = SchemaSnapshot.take(pool)
         MarketMigration7to8().migrate(pool)
         assertEquals(schema, SchemaSnapshot.take(pool))
-        assertEquals(schema, freshSchema())
-        assertEquals(emptyList<SchemaVerifier.Finding>(), SchemaVerifier.verify(pool, prefix).findings)
+        // only the tables of the later steps are missing
+        assertEquals(step9Tables.sorted(), SchemaVerifier.verify(pool, prefix).findings.map { it.target }.sorted())
     }
 
     @Test
@@ -526,12 +536,74 @@ class MigrationChainIT : MarketMigrationTestBase() {
         val total = MarketMigration7to8().handlers.size
         for (stopAfter in listOf(total / 2, 1, total - 1)) {
             resetState()
-            for (step in chain.dropLast(1)) step().migrate(pool)
+            for (step in chain.take(5)) step().migrate(pool)
             for (handler in MarketMigration7to8().handlers.take(stopAfter)) handler(pool)
             assertTrue(SchemaSnapshot.take(pool) != expected, "interrupted after $stopAfter handlers is a partial schema")
             MarketMigration7to8().migrate(pool)
+            MarketMigration8to9().migrate(pool)
+            MarketMigration9to10().migrate(pool)
             assertEquals(expected, SchemaSnapshot.take(pool), "interrupted after $stopAfter handlers")
             assertEquals(emptyList<SchemaVerifier.Finding>(), SchemaVerifier.verify(pool, prefix).findings)
+        }
+    }
+
+    // --- 8 -> 9 and 9 -> 10 (MK-030) -----------------------------------------------------------------------------
+
+    @Test
+    fun `the steps declare 8 to 9 and 9 to 10 with one CREATE handler per table`() {
+        val first = MarketMigration8to9()
+        assertEquals(8, first.from)
+        assertEquals(9, first.to)
+        assertTrue(first.isMigratable(8) && !first.isMigratable(7))
+        assertEquals(2, first.handlers.size)
+        val second = MarketMigration9to10()
+        assertEquals(9, second.from)
+        assertEquals(10, second.to)
+        assertTrue(second.isMigratable(9) && !second.isMigratable(8))
+        assertEquals(3, second.handlers.size)
+        val statements = MarketMigration8to9.statements() + MarketMigration9to10.statements()
+        assertTrue(statements.map { it("pano_") }.all { it.startsWith("CREATE TABLE IF NOT EXISTS") })
+        assertEquals(10, chain.last()().to)
+    }
+
+    @Test
+    fun `steps 8 to 9 and 9 to 10 create the empty tables, leave the others untouched and change nothing when run twice`(): Unit = runBlocking {
+        for (step in chain.take(6)) step().migrate(pool)
+        val columns = columnsOfCurrentTables()
+        val before = dump(columns)
+        assertTrue(step9Tables.none { it in columns.keys })
+
+        MarketMigration8to9().migrate(pool)
+        MarketMigration9to10().migrate(pool)
+
+        assertEquals(before, dump(columns))
+        val after = columnsOfCurrentTables()
+        assertTrue(step9Tables.all { it in after.keys })
+        for (t in listOf("subscription", "subscription_renewal", "block", "throttle", "goal")) assertEquals(0L, count("market_$t"), t)
+        val schema = SchemaSnapshot.take(pool)
+        MarketMigration8to9().migrate(pool)
+        MarketMigration9to10().migrate(pool)
+        assertEquals(schema, SchemaSnapshot.take(pool))
+        assertEquals(schema, freshSchema())
+        assertEquals(emptyList<SchemaVerifier.Finding>(), SchemaVerifier.verify(pool, prefix).findings)
+    }
+
+    @Test
+    fun `steps 8 to 9 and 9 to 10 interrupted after any number of handlers are completed by the full steps`(): Unit = runBlocking {
+        runChain()
+        val expected = SchemaSnapshot.take(pool)
+        for ((step, stops) in listOf<Pair<() -> DatabaseMigration, List<Int>>>({ MarketMigration8to9() } to listOf(1), { MarketMigration9to10() } to listOf(1, 2))) {
+            for (stopAfter in stops) {
+                resetState()
+                for (s in chain.take(6)) s().migrate(pool)
+                if (step().to == 10) MarketMigration8to9().migrate(pool)
+                for (handler in step().handlers.take(stopAfter)) handler(pool)
+                assertTrue(SchemaSnapshot.take(pool) != expected, "interrupted after $stopAfter handlers of ${step().from} to ${step().to} is a partial schema")
+                if (step().to == 9) MarketMigration8to9().migrate(pool)
+                MarketMigration9to10().migrate(pool)
+                assertEquals(expected, SchemaSnapshot.take(pool), "interrupted after $stopAfter handlers of ${step().from} to ${step().to}")
+                assertEquals(emptyList<SchemaVerifier.Finding>(), SchemaVerifier.verify(pool, prefix).findings)
+            }
         }
     }
 }

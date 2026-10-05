@@ -13,6 +13,11 @@ import com.panomc.plugins.market.db.impl.MarketCreditTxDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCurrencyRateDaoImpl
 import com.panomc.plugins.market.db.impl.MarketDeliveryDaoImpl
 import com.panomc.plugins.market.db.impl.MarketMailOutboxDaoImpl
+import com.panomc.plugins.market.db.impl.MarketSubscriptionDaoImpl
+import com.panomc.plugins.market.db.impl.MarketSubscriptionRenewalDaoImpl
+import com.panomc.plugins.market.db.impl.MarketBlockDaoImpl
+import com.panomc.plugins.market.db.impl.MarketThrottleDaoImpl
+import com.panomc.plugins.market.db.impl.MarketGoalDaoImpl
 import com.panomc.plugins.market.db.impl.MarketServerStateDaoImpl
 import com.panomc.plugins.market.db.impl.MarketWebhookDeliveryDaoImpl
 import com.panomc.plugins.market.db.impl.MarketWebhookEndpointDaoImpl
@@ -82,7 +87,9 @@ class MarketSchemaIT : MarketDbTestBase() {
         // scheme version 7 (MK-028)
         "credit_account", "credit_tx", "credit_entry",
         // scheme version 8 (MK-029)
-        "delivery", "server_state", "webhook_endpoint", "webhook_delivery", "mail_outbox"
+        "delivery", "server_state", "webhook_endpoint", "webhook_delivery", "mail_outbox",
+        // scheme versions 9 and 10, part a (MK-030)
+        "subscription", "subscription_renewal", "block", "throttle", "goal"
     ).map { "pano_market_$it" }.sorted()
 
     /** Drops every table and runs `ensure` again: the way a test that damaged the schema puts it back. */
@@ -94,7 +101,7 @@ class MarketSchemaIT : MarketDbTestBase() {
     // --- ensure ------------------------------------------------------------------------------------------------
 
     @Test
-    fun `ensure on an empty database creates the forty-one tables`(): Unit = runBlocking {
+    fun `ensure on an empty database creates the forty-six tables`(): Unit = runBlocking {
         MarketTestDb.dropAllTables(pool)
         val report = MarketSchema.ensure(pool, prefix)
         assertTrue(report.clean, report.ddlErrors.toString())
@@ -112,7 +119,7 @@ class MarketSchemaIT : MarketDbTestBase() {
         val after = SchemaSnapshot.take(pool)
         assertTrue(first.clean && second.clean)
         assertEquals(before, after)
-        assertTrue(before.columns.isNotEmpty() && before.keys.isNotEmpty() && before.tables.size == 41)
+        assertTrue(before.columns.isNotEmpty() && before.keys.isNotEmpty() && before.tables.size == 46)
     }
 
     @Test
@@ -136,7 +143,7 @@ class MarketSchemaIT : MarketDbTestBase() {
 
             val expected = SchemaSnapshot.take(pool)
             val actual = SchemaSnapshot.take(referencePool)
-            assertEquals(41, expected.tables.size)
+            assertEquals(46, expected.tables.size)
             assertEquals(expected.tables, actual.tables)
             assertEquals(expected.columns, actual.columns)
             assertEquals(expected.keys, actual.keys)
@@ -207,11 +214,13 @@ class MarketSchemaIT : MarketDbTestBase() {
         { c -> MarketDisputeDaoImpl().init(c) }, { c -> MarketProviderStateDaoImpl().init(c) },
         { c -> MarketCreditAccountDaoImpl().init(c) }, { c -> MarketCreditTxDaoImpl().init(c) }, { c -> MarketCreditEntryDaoImpl().init(c) },
         { c -> MarketDeliveryDaoImpl().init(c) }, { c -> MarketServerStateDaoImpl().init(c) }, { c -> MarketWebhookEndpointDaoImpl().init(c) },
-        { c -> MarketWebhookDeliveryDaoImpl().init(c) }, { c -> MarketMailOutboxDaoImpl().init(c) }
+        { c -> MarketWebhookDeliveryDaoImpl().init(c) }, { c -> MarketMailOutboxDaoImpl().init(c) },
+        { c -> MarketSubscriptionDaoImpl().init(c) }, { c -> MarketSubscriptionRenewalDaoImpl().init(c) }, { c -> MarketBlockDaoImpl().init(c) },
+        { c -> MarketThrottleDaoImpl().init(c) }, { c -> MarketGoalDaoImpl().init(c) }
     )
 
     @Test
-    fun `the forty-one Dao init calls create the same schema as ensure`(): Unit = runBlocking {
+    fun `the forty-six Dao init calls create the same schema as ensure`(): Unit = runBlocking {
         MarketTestDb.dropAllTables(pool)
         allDaoInits().forEach { it(pool) }
         allDaoInits().forEach { it(pool) } // twice: idempotent
