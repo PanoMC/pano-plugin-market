@@ -145,7 +145,7 @@ class RaceE2E : E2eTestBase() {
      */
     private fun assertSingleSetOfSideEffects(orderId: Long) {
         val sideEffects = mapOf(
-            "market_delivery" to Triple("orderId", "`orderItemId`, `actionId`, `unitIndex`, `phase`, `attemptGroup`", 0L),
+            "market_delivery" to Triple("orderId", "`orderItemId`, `actionId`, `unitIndex`, `phase`, `attemptGroup`", 2L),
             "market_mail_outbox" to Triple("orderId", "`kind`, `recipient`", 0L),
             "market_webhook_delivery" to Triple("orderId", "`endpointId`, `event`", 0L)
         )
@@ -154,7 +154,7 @@ class RaceE2E : E2eTestBase() {
             val (column, key, expected) = spec
             val row = db.sql("SELECT COUNT(*) AS n, COUNT(DISTINCT $key) AS d FROM `pano_$table` WHERE `$column` = ?", orderId).first()
 
-            assertEquals(expected, row.getLong("n"), "rows of $table for the order (nothing writes them yet)")
+            assertEquals(expected, row.getLong("n"), "rows of $table for the order (MK-102: VIP has two GRANT actions, one row each, so mail and webhook stay empty until their slices)")
             assertEquals(row.getLong("n"), row.getLong("d"), "no business key of $table exists twice for the order")
         }
     }
