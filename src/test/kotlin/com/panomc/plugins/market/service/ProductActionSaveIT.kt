@@ -131,6 +131,34 @@ class ProductActionSaveIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a partial update without actions that widens the server choices is checked against the stored actions`(): Unit = runBlocking {
+        val choice = """[{"type":"COMMAND","value":["say hi"],"serverMode":"BUYER_CHOICE"}]"""
+        val saved = service.create(named("actions" to choice, "serverChoices" to listOf(1, 2)), Caller(consoles = setOf(1, 2)))
+        val before = w.products.getById(saved.id, pool)!!
+
+        // only serverChoices is sent: a catalogue-only editor must not make the command run on server 3
+        assertThrows(NoPermission::class.java) { runBlocking { service.update(saved.id, input("serverChoices" to listOf(1, 2, 3)), Caller(consoles = setOf(1, 2))) } }
+        assertEquals("[1,2]", w.products.getById(saved.id, pool)!!.serverChoices)
+        assertEquals(before.actions, w.products.getById(saved.id, pool)!!.actions)
+
+        // a field that nothing depends on stays free, the same choices pass, and narrowing passes
+        service.update(saved.id, input("price" to "15"), Caller())
+        service.update(saved.id, input("serverChoices" to listOf(1)), Caller())
+        assertEquals("[1]", w.products.getById(saved.id, pool)!!.serverChoices)
+
+        // with the console of the new server the widening is allowed
+        service.update(saved.id, input("serverChoices" to listOf(1, 3)), Caller(consoles = setOf(3)))
+        assertEquals("[1,3]", w.products.getById(saved.id, pool)!!.serverChoices)
+
+        // dropping every choice leaves a BUYER_CHOICE command without a choice: the strict rule refuses it
+        val e = runCatching { service.update(saved.id, input("serverChoices" to emptyList<Int>()), Caller(admin = true)) }.exceptionOrNull()
+
+        assertTrue(e is InvalidProduct)
+        assertEquals("SERVER_CHOICES_REQUIRED", JsonObject((e as InvalidProduct).encode(emptyMap())).getJsonObject("fieldErrors").getString("actions.0.serverMode"))
+        assertEquals("[1,3]", w.products.getById(saved.id, pool)!!.serverChoices)
+    }
+
+    @Test
     fun `a bad action list is INVALID_PRODUCT with the dotted path and nothing is saved`(): Unit = runBlocking {
         val unknown = """[{"type":"COMMAND","value":["x"],"targetServers":[99]}]"""
         val e = runCatching { service.create(named("actions" to unknown), Caller(admin = true)) }.exceptionOrNull()
