@@ -1071,6 +1071,137 @@ object MarketSchema {
         return "INSERT IGNORE INTO `${CREDIT_ACCOUNT.physicalName(prefix)}` (`type`, `systemKey`, `balance`, `createdAt`, `updatedAt`) VALUES $rows"
     }
 
+    // --- scheme version 8: delivery, server state, webhooks, mail outbox (01 section 9) ---------------------------
+
+    val DELIVERY = table("market_delivery", "Market delivery table.") {
+        id()
+        str("sourceType", 24, "ORDER_ITEM")
+        bigint("orderId", nullable = true)
+        bigint("orderItemId", nullable = true)
+        bigint("sourceId", nullable = true)
+        bigint("entitlementId", nullable = true)
+        bigint("subscriptionId", nullable = true)
+        str("phase", 16)
+        str("actionId", 32)
+        str("actionType", 16)
+        int("unitIndex", default = 0)
+        int("attemptGroup", default = 0)
+        bigint("serverId", default = 0)
+        str("idempotencyKey", 191)
+        str("status", 24, "PENDING")
+        flag("requiresOnline", 0)
+        str("playerUsername", 64)
+        str("playerUuid", 36, nullable = true)
+        text("payload", nullable = false) // JSON
+        text("result") // JSON
+        str("transport", 16, nullable = true)
+        flag("guaranteed", 0)
+        int("attempts", default = 0)
+        bigint("runAfter")
+        bigint("nextAttemptAt", nullable = true)
+        bigint("cancelRequestedAt", nullable = true)
+        bigint("waitUntil", nullable = true)
+        str("claimToken", 36, nullable = true)
+        bigint("claimedUntil", nullable = true)
+        bigint("sentAt", nullable = true)
+        bigint("confirmedAt", nullable = true)
+        str("lastErrorCode", 48, nullable = true)
+        str("lastError", 512, nullable = true)
+        timestamps()
+        unique("uq_idem", "idempotencyKey")
+        key("idx_due", "status", "nextAttemptAt")
+        key("idx_order", "orderId")
+        key("idx_item", "orderItemId")
+        key("idx_server", "serverId", "status")
+        key("idx_player", "playerUsername", "status")
+        key("idx_entitlement", "entitlementId")
+    }
+
+    val SERVER_STATE = table("market_server_state", "Market Minecraft server state table.") {
+        id()
+        bigint("serverId")
+        str("mcComponentVersion", 32, nullable = true)
+        str("capabilities", 255, nullable = true)
+        str("platform", 16, nullable = true)
+        int("protocol", nullable = true)
+        int("queuedCount", nullable = true)
+        bigint("lastSeenAt", nullable = true)
+        text("settings") // JSON
+        timestamps()
+        unique("uq_server", "serverId")
+    }
+
+    val WEBHOOK_ENDPOINT = table("market_webhook_endpoint", "Market webhook endpoint table.") {
+        id()
+        str("name", 128)
+        str("url", 1024)
+        text("events", nullable = false) // JSON
+        str("format", 16, "JSON")
+        str("signing", 16, "NONE")
+        text("secret") // ENC
+        text("headers") // ENC
+        text("template")
+        flag("enabled", 1)
+        int("maxAttempts", default = 8)
+        int("failureCount", default = 0)
+        int("lastStatusCode", nullable = true)
+        bigint("lastDeliveryAt", nullable = true)
+        str("disabledReason", 64, nullable = true)
+        timestamps()
+    }
+
+    val WEBHOOK_DELIVERY = table("market_webhook_delivery", "Market webhook delivery table.") {
+        id()
+        bigint("endpointId", default = 0)
+        bigint("deliveryId", default = 0)
+        char("eventId", 36)
+        str("event", 64)
+        bigint("orderId", nullable = true)
+        str("url", 1024)
+        str("format", 16)
+        str("signing", 16)
+        text("secret") // ENC
+        text("body", nullable = false)
+        str("status", 16, "PENDING")
+        int("attempts", default = 0)
+        int("maxAttempts", default = 8)
+        bigint("nextAttemptAt", nullable = true)
+        bigint("claimedUntil", nullable = true)
+        int("lastStatusCode", nullable = true)
+        str("lastError", 512, nullable = true)
+        str("lastResponse", 2048, nullable = true)
+        int("durationMs", nullable = true)
+        bigint("deliveredAt", nullable = true)
+        timestamps()
+        unique("uq_eventId", "eventId")
+        key("idx_due", "status", "nextAttemptAt")
+        key("idx_endpoint", "endpointId", "id")
+        key("idx_order", "orderId")
+    }
+
+    val MAIL_OUTBOX = table("market_mail_outbox", "Market mail outbox table.") {
+        id()
+        str("kind", 48)
+        str("refType", 32)
+        bigint("refId")
+        str("refKey", 64, "")
+        bigint("orderId", nullable = true)
+        bigint("userId", nullable = true)
+        str("recipient", 255)
+        str("locale", 16)
+        text("params", nullable = false) // JSON
+        str("status", 16, "PENDING")
+        int("attempts", default = 0)
+        bigint("nextAttemptAt", nullable = true)
+        bigint("claimedUntil", nullable = true)
+        str("lastError", 512, nullable = true)
+        bigint("sentAt", nullable = true)
+        timestamps()
+        unique("uq_mail", "kind", "refType", "refId", "refKey", "recipient")
+        key("idx_due", "status", "nextAttemptAt")
+        key("idx_order", "orderId")
+    }
+
     /** Every table the plugin owns, in creation order. Later migration slices append their tables here. */
     val tables: List<Table> = listOf(
         CATEGORY, COMPARISON, COUPON, CREATOR_CODE, DISCOUNT, GIFT, ORDER, ORDER_ITEM, PAYMENT_METHOD, PRODUCT,
@@ -1079,7 +1210,8 @@ object MarketSchema {
         ORDER_EVENT, LEGAL_TEXT, SEQUENCE,
         ENTITLEMENT, ADDRESS, CART, CART_ITEM, INVOICE,
         PAYMENT, PAYMENT_EVENT, REFUND, REFUND_ITEM, DISPUTE, PROVIDER_STATE,
-        CREDIT_ACCOUNT, CREDIT_TX, CREDIT_ENTRY
+        CREDIT_ACCOUNT, CREDIT_TX, CREDIT_ENTRY,
+        DELIVERY, SERVER_STATE, WEBHOOK_ENDPOINT, WEBHOOK_DELIVERY, MAIL_OUTBOX
     )
 
     /** The table declared under [name] (without prefix), or an error naming it. */

@@ -6,6 +6,7 @@ import com.panomc.plugins.market.db.migration.MarketMigration3to4
 import com.panomc.plugins.market.db.migration.MarketMigration4to5
 import com.panomc.plugins.market.db.migration.MarketMigration5to6
 import com.panomc.plugins.market.db.migration.MarketMigration6to7
+import com.panomc.plugins.market.db.migration.MarketMigration7to8
 import com.panomc.plugins.market.support.MarketMigrationTestBase
 import com.panomc.plugins.market.support.MarketTestDb
 import io.vertx.kotlin.coroutines.coAwait
@@ -23,7 +24,7 @@ import org.junit.jupiter.api.Test
  * interrupted half-way. Each later migration slice appends its step to [chain]; `2 -> 3`, `3 -> 4`, `4 -> 5` (orders) and `5 -> 6` (payments) and `6 -> 7` (credits) are in.
  */
 class MigrationChainIT : MarketMigrationTestBase() {
-    private val chain: List<() -> DatabaseMigration> = listOf({ MarketMigration2to3() }, { MarketMigration3to4() }, { MarketMigration4to5() }, { MarketMigration5to6() }, { MarketMigration6to7() })
+    private val chain: List<() -> DatabaseMigration> = listOf({ MarketMigration2to3() }, { MarketMigration3to4() }, { MarketMigration4to5() }, { MarketMigration5to6() }, { MarketMigration6to7() }, { MarketMigration7to8() })
 
     private suspend fun runChain(client: SqlClient = pool) {
         for (step in chain) step().migrate(client)
@@ -79,7 +80,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         runChain()
         val migrated = SchemaSnapshot.take(pool)
         val fresh = freshSchema()
-        assertEquals(36, migrated.tables.size)
+        assertEquals(41, migrated.tables.size)
         assertEquals(fresh.tables, migrated.tables)
         assertEquals(fresh.columns, migrated.columns)
         assertEquals(fresh.keys, migrated.keys)
@@ -176,6 +177,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
             MarketMigration4to5().migrate(pool)
             MarketMigration5to6().migrate(pool)
             MarketMigration6to7().migrate(pool)
+            MarketMigration7to8().migrate(pool)
 
             val findings = SchemaVerifier.verify(pool, prefix).findings
             assertEquals(listOf("pano_market_product_variant"), findings.map { it.target })
@@ -191,6 +193,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
             MarketMigration4to5().migrate(closed)
             MarketMigration5to6().migrate(closed)
             MarketMigration6to7().migrate(closed)
+            MarketMigration7to8().migrate(closed)
         } finally {
             sql("DROP VIEW IF EXISTS `pano_market_product_variant`")
         }
@@ -370,7 +373,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         for (t in listOf("payment", "payment_event", "refund", "refund_item", "dispute", "provider_state")) assertEquals(0L, count("market_$t"), t)
         // the credit ledger of scheme version 7 does not exist yet: it is all the verifier misses
         assertEquals(
-            listOf("pano_market_credit_account", "pano_market_credit_entry", "pano_market_credit_tx"),
+            (listOf("pano_market_credit_account", "pano_market_credit_entry", "pano_market_credit_tx") + step8Tables).sorted(),
             SchemaVerifier.verify(pool, prefix).findings.map { it.target }.sorted()
         )
     }
@@ -395,6 +398,8 @@ class MigrationChainIT : MarketMigrationTestBase() {
             assertTrue(SchemaVerifier.verify(pool, prefix).ok)
         }
     }
+
+    private val step8Tables = listOf("delivery", "server_state", "webhook_endpoint", "webhook_delivery", "mail_outbox").map { "pano_market_$it" }.toSet()
 
     private suspend fun systemAccounts(): List<String> =
         sql("SELECT `systemKey` FROM `pano_market_credit_account` WHERE `type` = 'SYSTEM' ORDER BY `id`").map { it.getString("systemKey") }
@@ -435,7 +440,8 @@ class MigrationChainIT : MarketMigrationTestBase() {
         MarketMigration6to7().migrate(pool)
         assertEquals(5L, count("market_credit_account"))
         assertEquals(seeded, dump(columnsOfCurrentTables()).getValue("pano_market_credit_account"))
-        assertEquals(emptyList<SchemaVerifier.Finding>(), SchemaVerifier.verify(pool, prefix).findings)
+        // only the tables of step 8 are still missing
+        assertEquals(step8Tables.sorted(), SchemaVerifier.verify(pool, prefix).findings.map { it.target }.sorted())
     }
 
     @Test
@@ -458,12 +464,13 @@ class MigrationChainIT : MarketMigrationTestBase() {
             if (stopAfter < total - 1) {
                 assertTrue(SchemaSnapshot.take(pool) != expected, "interrupted after $stopAfter handlers is a partial schema")
             } else {
-                // all three tables exist, only the seed is missing
-                assertEquals(expected, SchemaSnapshot.take(pool))
+                // all three tables exist, only the seed is missing (and the five tables of step 8 are not there yet)
+                assertEquals(expected.tables.filterNot { row -> step8Tables.any { row.startsWith("$it|") } }, SchemaSnapshot.take(pool).tables)
                 assertEquals(0L, count("market_credit_account"), "interrupted before the seed")
             }
             assertTrue(MarketSchema.ensure(pool, prefix).clean)
             MarketMigration6to7().migrate(pool)
+            MarketMigration7to8().migrate(pool)
             assertEquals(expected, SchemaSnapshot.take(pool), "interrupted after $stopAfter handlers")
             assertEquals(5L, count("market_credit_account"), "interrupted after $stopAfter handlers")
             assertTrue(SchemaVerifier.verify(pool, prefix).ok)
@@ -480,5 +487,51 @@ class MigrationChainIT : MarketMigrationTestBase() {
         sql("DELETE FROM `pano_market_credit_account` WHERE `systemKey` = 'EXTERNAL'")
         assertTrue(MarketSchema.ensure(pool, prefix).clean)
         assertEquals(5L, count("market_credit_account"))
+    }
+
+    @Test
+    fun `the step declares 7 to 8 with one CREATE handler per table`() {
+        val migration = MarketMigration7to8()
+        assertEquals(7, migration.from)
+        assertEquals(8, migration.to)
+        assertTrue(migration.isMigratable(7) && !migration.isMigratable(6))
+        assertEquals(5, migration.handlers.size)
+        assertTrue(MarketMigration7to8.statements().map { it("pano_") }.all { it.startsWith("CREATE TABLE IF NOT EXISTS") })
+    }
+
+    @Test
+    fun `step 7 to 8 creates the five empty tables and leaves every existing table untouched, twice changes nothing`(): Unit = runBlocking {
+        for (step in chain.dropLast(1)) step().migrate(pool)
+        val columns = columnsOfCurrentTables()
+        val before = dump(columns)
+        assertTrue(step8Tables.none { it in columns.keys })
+
+        MarketMigration7to8().migrate(pool)
+
+        assertEquals(before, dump(columns))
+        val after = columnsOfCurrentTables()
+        assertTrue(step8Tables.all { it in after.keys })
+        for (t in listOf("delivery", "server_state", "webhook_endpoint", "webhook_delivery", "mail_outbox")) assertEquals(0L, count("market_$t"), t)
+        val schema = SchemaSnapshot.take(pool)
+        MarketMigration7to8().migrate(pool)
+        assertEquals(schema, SchemaSnapshot.take(pool))
+        assertEquals(schema, freshSchema())
+        assertEquals(emptyList<SchemaVerifier.Finding>(), SchemaVerifier.verify(pool, prefix).findings)
+    }
+
+    @Test
+    fun `step 7 to 8 interrupted after any number of handlers is completed by the full step`(): Unit = runBlocking {
+        runChain()
+        val expected = SchemaSnapshot.take(pool)
+        val total = MarketMigration7to8().handlers.size
+        for (stopAfter in listOf(total / 2, 1, total - 1)) {
+            resetState()
+            for (step in chain.dropLast(1)) step().migrate(pool)
+            for (handler in MarketMigration7to8().handlers.take(stopAfter)) handler(pool)
+            assertTrue(SchemaSnapshot.take(pool) != expected, "interrupted after $stopAfter handlers is a partial schema")
+            MarketMigration7to8().migrate(pool)
+            assertEquals(expected, SchemaSnapshot.take(pool), "interrupted after $stopAfter handlers")
+            assertEquals(emptyList<SchemaVerifier.Finding>(), SchemaVerifier.verify(pool, prefix).findings)
+        }
     }
 }
