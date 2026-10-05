@@ -88,6 +88,61 @@ class ClientIpResolverTest {
     }
 
     @Test
+    fun `a public peer cannot switch the IP dimension off with a forwarding header`() {
+        for (header in listOf("X-Forwarded-For", "X-Real-IP", "Forwarded")) {
+            ClientIpResolver.reset()
+            ClientIpResolver.clock = clock
+
+            val ip = ClientIpResolver.resolve(request("203.0.113.9", header to "198.51.100.7"), emptyList())
+
+            assertEquals("203.0.113.9", ip.ip, "$header: the socket peer, never the header")
+            assertTrue(ip.trusted, "$header: limits and blocks stay keyed on the socket address")
+            assertEquals("UNCONFIGURED_PROXY", ClientIpResolver.ipTrust(), "$header still raises the health flag")
+        }
+
+        val v6 = ClientIpResolver.resolve(request("2001:db8::1", "X-Forwarded-For" to "198.51.100.7"), emptyList())
+
+        assertTrue(v6.trusted)
+        assertEquals("2001:db8::1", v6.ip)
+    }
+
+    @Test
+    fun `a private, link-local or loopback peer that forwards stays untrusted`() {
+        for (peer in listOf(
+            "10.1.2.3", "172.16.0.1", "172.31.255.254", "192.168.1.1", "169.254.1.1", "127.0.0.1", "::1",
+            "fc00::1", "fd12:3456::1", "fe80::1", "::ffff:192.168.0.9"
+        )) {
+            ClientIpResolver.reset()
+            ClientIpResolver.clock = clock
+
+            val ip = ClientIpResolver.resolve(request(peer, "X-Real-IP" to "198.51.100.7"), emptyList())
+
+            assertFalse(ip.trusted, peer)
+            assertEquals("UNCONFIGURED_PROXY", ClientIpResolver.ipTrust(), peer)
+        }
+
+        // 172.32.0.1 and 11.0.0.1 sit just outside the private ranges
+        for (peer in listOf("172.32.0.1", "172.15.255.255", "11.0.0.1", "192.169.0.1", "169.255.0.1", "fe00::1")) {
+            ClientIpResolver.reset()
+            ClientIpResolver.clock = clock
+
+            val ip = ClientIpResolver.resolve(request(peer, "X-Forwarded-For" to "198.51.100.7"), emptyList())
+
+            assertTrue(ip.trusted, peer)
+        }
+    }
+
+    @Test
+    fun `private range detection is literal`() {
+        assertTrue(ClientIpResolver.isPrivateOrLoopback("10.0.0.1"))
+        assertTrue(ClientIpResolver.isPrivateOrLoopback("fe80::1%eth0"))
+        assertFalse(ClientIpResolver.isPrivateOrLoopback("localhost"))
+        assertFalse(ClientIpResolver.isPrivateOrLoopback("example.com"))
+        assertFalse(ClientIpResolver.isPrivateOrLoopback("999.1.1.1"))
+        assertFalse(ClientIpResolver.isPrivateOrLoopback(""))
+    }
+
+    @Test
     fun `the other forwarding headers count too`() {
         for (header in listOf("X-Real-IP", "Forwarded")) {
             ClientIpResolver.reset()

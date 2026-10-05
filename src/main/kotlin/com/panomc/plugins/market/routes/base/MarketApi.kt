@@ -19,6 +19,14 @@ abstract class MarketApi : Api() {
     override suspend fun onBeforeHandle(context: RoutingContext) {
         super.onBeforeHandle(context)
 
+        marketChecks(context)
+    }
+
+    /**
+     * The market part of [onBeforeHandle] (runtime gate, store switch, and for subclasses the CSRF proof): everything
+     * after the platform's own checks, callable by a test without the host.
+     */
+    internal open suspend fun marketChecks(context: RoutingContext) {
         MarketGate.requireReady()
 
         if (requiresStoreEnabled) MarketGate.requireStoreEnabled()
@@ -37,14 +45,20 @@ abstract class MarketApi : Api() {
 abstract class MarketPublicMutationApi : MarketApi() {
     private val authProvider by lazy { applicationContext.getBean(AuthProvider::class.java) }
 
-    override suspend fun onBeforeHandle(context: RoutingContext) {
-        super.onBeforeHandle(context)
+    /** Whether the request carries a valid session. Overridable so a test can stand in for the host. */
+    protected open suspend fun isLoggedIn(context: RoutingContext): Boolean = authProvider.isLoggedIn(context)
+
+    /** Whether the request carries the CSRF proof. Overridable so a test can stand in for the host. */
+    protected open fun isCsrfSafe(context: RoutingContext): Boolean = authProvider.isCsrfSafe(context)
+
+    override suspend fun marketChecks(context: RoutingContext) {
+        super.marketChecks(context)
 
         val method = context.request().method()
 
         // A guest has no ambient credential: skip the session lookup for the safe methods and for guests.
         if (!MarketGate.isSafeMethod(method) &&
-            MarketGate.csrfViolation(method, authProvider.isLoggedIn(context), authProvider.isCsrfSafe(context))
+            MarketGate.csrfViolation(method, isLoggedIn(context), isCsrfSafe(context))
         ) {
             throw InvalidCsrfToken()
         }

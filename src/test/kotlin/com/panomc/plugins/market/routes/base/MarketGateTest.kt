@@ -1,6 +1,8 @@
 package com.panomc.plugins.market.routes.base
 
 import com.panomc.platform.error.BadRequest
+import com.panomc.platform.error.InvalidCsrfToken
+import com.panomc.platform.error.NoPermission
 import com.panomc.plugins.market.error.MarketBusyException
 import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.error.StoreBusy
@@ -201,5 +203,170 @@ class MarketGateTest {
         assertEquals("P:SET", RouteAuth.describe(PanelRoute(setOf(MarketNode.SETTINGS))))
         assertEquals("P:CAT,PAY", RouteAuth.describe(PanelRoute(setOf(MarketNode.PAYMENTS, MarketNode.CATALOG))))
         assertEquals("UNKNOWN", RouteAuth.describe("not a route"))
+    }
+
+    // ---- the wiring of the four base classes
+
+    private fun requestContext(method: HttpMethod): RoutingContext {
+        val request = Proxy.newProxyInstance(
+            javaClass.classLoader,
+            arrayOf(io.vertx.core.http.HttpServerRequest::class.java)
+        ) { _, m, _ ->
+            when (m.name) {
+                "method" -> method
+                else -> error("unexpected call ${m.name}")
+            }
+        } as io.vertx.core.http.HttpServerRequest
+
+        return Proxy.newProxyInstance(
+            javaClass.classLoader,
+            arrayOf(RoutingContext::class.java)
+        ) { _, m, _ ->
+            when (m.name) {
+                "request" -> request
+                else -> error("unexpected call ${m.name}")
+            }
+        } as RoutingContext
+    }
+
+    private fun ready() {
+        MarketRuntime.reset()
+        MarketRuntime.starting()
+        MarketRuntime.finish(null, emptyList(), degraded = false)
+    }
+
+    private class StubUser(val csrfSafe: Boolean) : MarketUserApi() {
+        override val paths = emptyList<com.panomc.platform.model.Path>()
+        override suspend fun handleMarket(context: RoutingContext): com.panomc.platform.model.Result? = null
+        override fun getValidationHandler(schemaRepository: io.vertx.json.schema.SchemaRepository) = null
+        override fun isCsrfSafe(context: RoutingContext) = csrfSafe
+    }
+
+    private class StubMutation(val loggedIn: Boolean, val csrfSafe: Boolean) : MarketPublicMutationApi() {
+        override val paths = emptyList<com.panomc.platform.model.Path>()
+        override suspend fun handleMarket(context: RoutingContext): com.panomc.platform.model.Result? = null
+        override fun getValidationHandler(schemaRepository: io.vertx.json.schema.SchemaRepository) = null
+        override suspend fun isLoggedIn(context: RoutingContext) = loggedIn
+        override fun isCsrfSafe(context: RoutingContext) = csrfSafe
+    }
+
+    private class StubPublic(override val requiresStoreEnabled: Boolean = true) : MarketApi() {
+        override val paths = emptyList<com.panomc.platform.model.Path>()
+        override suspend fun handleMarket(context: RoutingContext): com.panomc.platform.model.Result? = null
+        override fun getValidationHandler(schemaRepository: io.vertx.json.schema.SchemaRepository) = null
+    }
+
+    private class StubPanel(
+        override val exemptFromRuntimeGate: Boolean = false,
+        val deny: Boolean = false
+    ) : MarketPanelApi() {
+        override val nodes = setOf(MarketNode.SETTINGS)
+        var authorizeCalls = 0
+        var reachedHandler = false
+        override val paths = emptyList<com.panomc.platform.model.Path>()
+        override fun getValidationHandler(schemaRepository: io.vertx.json.schema.SchemaRepository) = null
+
+        override suspend fun authorize(context: RoutingContext) {
+            authorizeCalls++
+
+            if (deny) throw NoPermission()
+        }
+
+        override suspend fun handleAuthorized(context: RoutingContext): com.panomc.platform.model.Result? {
+            reachedHandler = true
+
+            return null
+        }
+
+        fun gate() = marketChecks()
+    }
+
+    @Test
+    fun `USER route, a mutating call without proof is refused, with proof or on GET it passes`() = runBlocking {
+        ready()
+
+        for (method in listOf(HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.PATCH)) {
+            assertThrows(InvalidCsrfToken::class.java) { StubUser(csrfSafe = false).marketChecks(requestContext(method)) }
+            StubUser(csrfSafe = true).marketChecks(requestContext(method))
+        }
+
+        StubUser(csrfSafe = false).marketChecks(requestContext(HttpMethod.GET))
+        MarketRuntime.reset()
+    }
+
+    @Test
+    fun `PUB-M route, logged in without proof is refused, a guest or a proven session passes`() = runBlocking {
+        ready()
+
+        assertThrows(InvalidCsrfToken::class.java) {
+            runBlocking { StubMutation(loggedIn = true, csrfSafe = false).marketChecks(requestContext(HttpMethod.POST)) }
+        }
+        StubMutation(loggedIn = false, csrfSafe = false).marketChecks(requestContext(HttpMethod.POST))
+        StubMutation(loggedIn = true, csrfSafe = true).marketChecks(requestContext(HttpMethod.POST))
+        StubMutation(loggedIn = true, csrfSafe = false).marketChecks(requestContext(HttpMethod.GET))
+        MarketRuntime.reset()
+    }
+
+    @Test
+    fun `a state other than READY is STORE_UNAVAILABLE in all four classes, an exempt panel route passes`() = runBlocking {
+        for (state in listOf(MarketRuntime.State.STOPPED, MarketRuntime.State.STARTING, MarketRuntime.State.DEGRADED)) {
+            MarketRuntime.reset()
+
+            when (state) {
+                MarketRuntime.State.STARTING -> MarketRuntime.starting()
+                MarketRuntime.State.DEGRADED -> {
+                    MarketRuntime.starting()
+                    MarketRuntime.finish(null, emptyList(), degraded = true)
+                }
+
+                else -> Unit
+            }
+
+            assertEquals(state, MarketRuntime.state)
+
+            val get = requestContext(HttpMethod.GET)
+
+            assertThrows(StoreUnavailable::class.java) { runBlocking { StubPublic().marketChecks(get) } }
+            assertThrows(StoreUnavailable::class.java) {
+                runBlocking { StubMutation(loggedIn = false, csrfSafe = true).marketChecks(get) }
+            }
+            assertThrows(StoreUnavailable::class.java) { StubUser(csrfSafe = true).marketChecks(get) }
+            assertThrows(StoreUnavailable::class.java) { StubPanel().gate() }
+
+            StubPanel(exemptFromRuntimeGate = true).gate()
+        }
+
+        MarketRuntime.reset()
+    }
+
+    @Test
+    fun `the store switch gates the public, user and mutation classes but not a route that opts out`() = runBlocking {
+        ready()
+        MarketGate.storeEnabled = { false }
+        val get = requestContext(HttpMethod.GET)
+
+        assertThrows(StoreDisabled::class.java) { runBlocking { StubPublic().marketChecks(get) } }
+        assertThrows(StoreDisabled::class.java) { StubUser(csrfSafe = true).marketChecks(get) }
+        assertThrows(StoreDisabled::class.java) {
+            runBlocking { StubMutation(loggedIn = false, csrfSafe = true).marketChecks(get) }
+        }
+        StubPublic(requiresStoreEnabled = false).marketChecks(get)
+
+        MarketRuntime.reset()
+    }
+
+    @Test
+    fun `a panel route asks authorize before its handler and a refusal never reaches the handler`() = runBlocking {
+        val denied = StubPanel(deny = true)
+
+        assertThrows(NoPermission::class.java) { runBlocking { denied.handle(fakeContext(Recorder())) } }
+        assertEquals(1, denied.authorizeCalls)
+        assertFalse(denied.reachedHandler)
+
+        val allowed = StubPanel()
+        allowed.handle(fakeContext(Recorder()))
+
+        assertEquals(1, allowed.authorizeCalls)
+        assertTrue(allowed.reachedHandler)
     }
 }

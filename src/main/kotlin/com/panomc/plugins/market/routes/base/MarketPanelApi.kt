@@ -24,11 +24,21 @@ abstract class MarketPanelApi : PanelApi() {
     override suspend fun onBeforeHandle(context: RoutingContext) {
         super.onBeforeHandle(context)
 
+        marketChecks()
+    }
+
+    /** The market part of [onBeforeHandle], after the platform's checks; callable by a test without the host. */
+    internal fun marketChecks() {
         if (!exemptFromRuntimeGate) MarketGate.requireReady()
     }
 
-    final override suspend fun handle(context: RoutingContext): Result? {
+    /** The permission decision of [handle]; throws the platform `NoPermission`. Overridable so a test can stand in for the host. */
+    protected open suspend fun authorize(context: RoutingContext) {
         MarketPermissions.require(context, nodes)
+    }
+
+    final override suspend fun handle(context: RoutingContext): Result? {
+        authorize(context)
 
         return MarketGate.guarded(context) { handleAuthorized(context) }
     }

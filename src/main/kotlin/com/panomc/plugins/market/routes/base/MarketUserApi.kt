@@ -17,10 +17,18 @@ abstract class MarketUserApi : LoggedInApi() {
 
     protected open val requiresStoreEnabled: Boolean = true
 
+    /** Whether the request carries the CSRF proof. Overridable so a test can stand in for the host. */
+    protected open fun isCsrfSafe(context: RoutingContext): Boolean = authProvider.isCsrfSafe(context)
+
     override suspend fun onBeforeHandle(context: RoutingContext) {
         super.onBeforeHandle(context)
 
-        if (MarketGate.csrfViolation(context.request().method(), isLoggedIn = true, csrfSafe = authProvider.isCsrfSafe(context))) {
+        marketChecks(context)
+    }
+
+    /** The market part of [onBeforeHandle], after the platform's login check; callable by a test without the host. */
+    internal fun marketChecks(context: RoutingContext) {
+        if (MarketGate.csrfViolation(context.request().method(), isLoggedIn = true, csrfSafe = isCsrfSafe(context))) {
             throw InvalidCsrfToken()
         }
 

@@ -22,7 +22,10 @@ data class ClientIp(val ip: String?, val trusted: Boolean)
  * - the socket peer wins; a forwarded header is honoured only from a peer listed in `server.trusted-proxies`
  *   (the platform's [TrustedProxyIpResolver]);
  * - a forwarding header that was not honoured means a reverse proxy nobody configured: every buyer would share one
- *   address, so `trusted = false` and the health flag `UNCONFIGURED_PROXY` is raised for an hour;
+ *   address, so the health flag `UNCONFIGURED_PROXY` is raised for an hour and, when the socket peer is a loopback /
+ *   private / link-local address (a proxy on the same host or LAN), `trusted = false`. From a public socket peer the
+ *   header is just ignored (`trusted = true`, the socket address counts): otherwise any client could skip the IP
+ *   limiter and its IP block by sending one header;
  * - a loopback socket peer without a forwarding header is the theme / panel SSR upstream, not a buyer:
  *   `trusted = false` but no health flag (rule 2a).
  */
@@ -51,7 +54,10 @@ object ClientIpResolver {
         if (unconfiguredProxy) {
             lastUnconfiguredProxyAt = clock.now()
 
-            return ClientIp(resolved.ip, trusted = false)
+            // Only a same-host or LAN peer can plausibly be a reverse proxy nobody configured. A public socket peer
+            // is a direct client: its forwarding header is ignored and it stays keyed (and blockable) on its socket
+            // address, so a header can never switch the IP dimension off (review fix, deviates from 11 section 2).
+            return ClientIp(resolved.ip, trusted = !isPrivateOrLoopback(resolved.ip))
         }
 
         if (!resolved.fromForwardedHeader && isLoopback(resolved.ip)) {
@@ -79,6 +85,28 @@ object ClientIpResolver {
         val mapped = value.removePrefix("::ffff:").takeIf { it != value }
 
         return mapped != null && IPV4.matches(mapped) && mapped.startsWith("127.")
+    }
+
+    /**
+     * Loopback, RFC1918, `169.254/16`, `fc00::/7`, `fe80::/10` (and the IPv4-mapped forms). Literal addresses only:
+     * anything that is not a literal is treated as public and nothing is ever resolved.
+     */
+    fun isPrivateOrLoopback(ip: String): Boolean {
+        val value = ip.trim().substringBefore('%').lowercase()
+
+        val literal = IPV4.matches(value) || (value.contains(':') && value.all { it in "0123456789abcdef:." })
+
+        if (!literal) return false
+
+        val address = try {
+            java.net.InetAddress.getByName(value)
+        } catch (_: Exception) {
+            return false
+        }
+
+        if (address.isLoopbackAddress || address.isSiteLocalAddress || address.isLinkLocalAddress) return true
+
+        return address is java.net.Inet6Address && (address.address[0].toInt() and 0xfe) == 0xfc
     }
 
     internal fun reset() {
