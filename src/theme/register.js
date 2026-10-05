@@ -31,8 +31,29 @@ export function registerTheme(pano) {
     return navigationItems;
   });
 
-  // Items 7-11 (cart button, cart offcanvas, profile dropdown / profile navigation, sidebar widgets)
-  // are added by the slices that create their components, each through optional(name, fn).
+  // 7. Cart button in the navbar (14 §7.3)
+  optional('nav-cart', () => {
+    pano.ui.nav.rightComponents.edit((components) => {
+      components.push({
+        id: 'market-cart',
+        priority: 50,
+        component: viewComponent(() => import('./components/cart/NavCart.svelte')),
+      });
+      return components;
+    });
+  });
+
+  // 8. Cart offcanvas outside the navbar DOM (14 §7.1)
+  optional('cart-offcanvas', () => {
+    pano.ui.hook.register({
+      name: 'theme:top',
+      component: viewComponent(() => import('./components/cart/CartOffcanvas.svelte')),
+      skipLoad: true,
+    });
+  });
+
+  // Items 9-11 (profile dropdown / profile navigation, sidebar widgets) are added by the slices that
+  // create their components, each through optional(name, fn).
 }
 
 export { optional as registerOptional };
