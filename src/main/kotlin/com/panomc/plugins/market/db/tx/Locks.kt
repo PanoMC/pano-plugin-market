@@ -32,7 +32,10 @@ enum class OrderLockScope {
     /** Anything that may end in O2 / O3 / O9: creator code, products, credit accounts, subscription. */
     COMMIT,
 
-    /** O5 to O8, O4 with a re-reserve, refunds: codes, discounts, products, variants, credit accounts, subscription. */
+    /**
+     * O5 to O8, O4 with a re-reserve, refunds: codes, discounts, products, variants, credit accounts (a superset of
+     * [COMMIT]'s, plus `REVOKED` when credits are granted or a cashback can apply), subscription.
+     */
     RELEASE
 }
 
@@ -196,9 +199,15 @@ class Locks(
      * The order lock of every transition on an existing order (06 section 13.2): unlocked read, the rows [scope] needs in
      * the global order, `SELECT ... FOR UPDATE` of the order row, verification, then [block] with the locked order.
      *
-     * [cashback] adds the `ISSUANCE` account to a `COMMIT` lock: it is locked only when a cashback or a credit grant can
-     * be posted (locking it for every payment would serialise all of them on one row). A scope other than
+     * [cashback] adds the payer's account and the `ISSUANCE` account to a `COMMIT` or `RELEASE` lock (and `REVOKED` to a
+     * `RELEASE` lock): the caller passes it when a ledger posting beyond the order's own credit hold can happen, that is
+     * a cashback of O2 / O4, or in a refund transition the `REFUND` of a credit part and the `CASHBACK_REVERSAL`. They
+     * are locked only then, because locking them for every payment would serialise all of them on one row. Credit-granting
+     * items (`TOPUP` / `GIFT`, payer and recipient) are found from the order itself and need no flag. A scope other than
      * `PAYMENT` locks the subscription row when the order has one.
+     *
+     * `RELEASE` locks every credit account `COMMIT` does (an accept of a released order re-reserves and then commits in
+     * one transaction), so a posting made under either scope never takes a level 4 row after the order row.
      *
      * Throws [OrderChangedException] when `status`, `reservationState`, `updatedAt`, the payer, the recipient, the
      * subscription or a code of the order differs from the unlocked read; the caller's transaction rolls back and the
@@ -324,7 +333,10 @@ class Locks(
                 system(CreditSystemKey.HOLD)
             }
 
-            OrderLockScope.COMMIT -> {
+            // RELEASE is the scope of O4 after O9 (re-reserve, then everything of O2: capture, TOPUP / GIFT, CASHBACK) and of the
+            // refund transitions (21 section 3.2 and 3.4), so it locks at least what COMMIT locks. REVOKED is added for the
+            // postings that only a RELEASE transition makes (clawback and cashback reversal: user -> REVOKED).
+            OrderLockScope.COMMIT, OrderLockScope.RELEASE -> {
                 if (holds || grants || cashback) user(order.userId)
 
                 if (holds) {
@@ -332,17 +344,14 @@ class Locks(
                     system(CreditSystemKey.SPENT)
                 }
 
-                if (grants || cashback) system(CreditSystemKey.ISSUANCE)
+                if (grants || cashback) {
+                    system(CreditSystemKey.ISSUANCE)
 
-                // A credit pack bought as a gift grants to the recipient (07 section 3.3).
+                    if (scope == OrderLockScope.RELEASE) system(CreditSystemKey.REVOKED)
+                }
+
+                // A credit pack bought as a gift grants to the recipient (07 section 3.3); a clawback takes it back from there.
                 if (grants && order.recipientUserId != null) user(order.recipientUserId)
-            }
-
-            // SPENT too: an accept of a released order captures right after its re-reserve in the same transaction.
-            OrderLockScope.RELEASE -> if (holds) {
-                user(order.userId)
-                system(CreditSystemKey.HOLD)
-                system(CreditSystemKey.SPENT)
             }
         }
 
