@@ -1,13 +1,18 @@
 package com.panomc.plugins.market.core.payment
 
 import com.panomc.plugins.market.core.order.OrderActor
+import com.panomc.plugins.market.core.order.OrderEffect
 import com.panomc.plugins.market.core.order.OrderEvent
+import com.panomc.plugins.market.core.order.OrderState
+import com.panomc.plugins.market.core.order.OrderStateMachine
+import com.panomc.plugins.market.core.order.OrderTransition
 import com.panomc.plugins.market.core.payment.PaymentAttemptEvent.*
 import com.panomc.plugins.market.core.payment.PaymentEffect.*
 import com.panomc.plugins.market.core.payment.PaymentTransition.Move
 import com.panomc.plugins.market.core.payment.PaymentTransition.NoOp
 import com.panomc.plugins.market.db.model.PaymentStatus
 import com.panomc.plugins.market.db.model.PaymentStatus.*
+import com.panomc.plugins.market.db.model.ReservationState
 import com.panomc.plugins.market.spi.payment.PriceAuthority
 import com.panomc.plugins.market.spi.payment.ReviewReason
 import com.panomc.plugins.market.util.OrderStatus
@@ -25,8 +30,15 @@ class PaymentStateMachineTest {
     private fun attempt(status: PaymentStatus, amount: Long = 1000, credit: Long = 0, testMode: Boolean = false, currency: String = eur) =
         AttemptState(7, status, amount, currency, credit, testMode)
 
-    private fun order(status: OrderStatus = OrderStatus.PENDING, gateway: Long = 1000, credit: Long = 0, windowOver: Boolean = false) =
-        OrderTender(status, gateway, credit, windowOver)
+    private fun order(
+        status: OrderStatus = OrderStatus.PENDING,
+        gateway: Long = 1000,
+        credit: Long = 0,
+        windowOver: Boolean = false,
+        paymentAttemptId: Long? = null
+    ) = OrderTender(status, gateway, credit, windowOver, paymentAttemptId)
+
+    private val paidOrders = listOf(OrderStatus.COMPLETED, OrderStatus.PARTIALLY_REFUNDED, OrderStatus.REFUNDED, OrderStatus.CHARGEBACK)
 
     private fun decide(a: AttemptState, o: OrderTender, e: PaymentAttemptEvent, p: ProviderMoneyPolicy = plain) =
         PaymentStateMachine.decide(a, o, e, p)
@@ -125,22 +137,69 @@ class PaymentStateMachineTest {
     }
 
     @Test
-    fun `Succeeded against an order in REVIEW only records the payment`() {
-        assertEquals(
-            Move(SUCCEEDED, listOf(RecordPaid, ClearStartPayload, StampClosed)),
-            decide(attempt(PROCESSING), order(OrderStatus.REVIEW), Succeeded(1000, eur))
-        )
+    fun `Succeeded against an order in REVIEW records the payment on the order and alerts the panel`() {
+        val expected = Move(SUCCEEDED, listOf(RecordPaid, ClearStartPayload, StampClosed, RecordPaymentOnOrder(7), PanelAlert))
+        assertEquals(expected, decide(attempt(PROCESSING), order(OrderStatus.REVIEW), Succeeded(1000, eur)))
+        // The order's own attempt (corrected success after an underpaid review) and a different one are both recorded.
+        assertEquals(expected, decide(attempt(REVIEW), order(OrderStatus.REVIEW, paymentAttemptId = 7), Succeeded(1000, eur)))
+        assertEquals(expected, decide(attempt(PROCESSING), order(OrderStatus.REVIEW, paymentAttemptId = 3), Succeeded(1000, eur)))
+    }
+
+    @Test
+    fun `money arriving on a REVIEW order is refunded by a later rejection (the order machine sees the recorded amount)`() {
+        // NeedsReview(FRAUD_REVIEW) first: no money, the order has no paidAmount.
+        val noMoney = OrderState(OrderStatus.REVIEW, reservationState = ReservationState.HELD, paidAmount = null, reviewReason = ReviewReason.FRAUD_REVIEW)
+        val before = OrderStateMachine.decide(noMoney, OrderEvent.ReviewRejected(refund = true)) as OrderTransition.Move
+        assertFalse(OrderEffect.CreateRefundForPaidAmount in before.effects)
+        // The gateway then confirms the payment: the machine tells the service to record it on the order ...
+        val paid = decide(attempt(PROCESSING), order(OrderStatus.REVIEW), Succeeded(1000, eur)) as Move
+        assertTrue(RecordPaymentOnOrder(7) in paid.effects)
+        // ... after which the order carries paidAmount 1000 and the rejection refunds it.
+        val after = OrderStateMachine.decide(noMoney.copy(paidAmount = 1000), OrderEvent.ReviewRejected(refund = true)) as OrderTransition.Move
+        assertEquals(OrderStatus.CANCELLED, after.to)
+        assertTrue(OrderEffect.CreateRefundForPaidAmount in after.effects)
     }
 
     @Test
     fun `a second Succeeded on an already paid order flags the attempt as duplicate and never touches the order`() {
-        for (o in listOf(OrderStatus.COMPLETED, OrderStatus.PARTIALLY_REFUNDED, OrderStatus.REFUNDED, OrderStatus.CHARGEBACK)) {
-            for (s in listOf(CREATED, PENDING, PROCESSING, FAILED, CANCELLED, EXPIRED)) {
-                val r = decide(attempt(s), order(o), Succeeded(1000, eur)) as Move
-                assertEquals(SUCCEEDED, r.to)
-                assertEquals(listOf(RecordPaid, ClearStartPayload, StampClosed, FlagDuplicate), r.effects, "$s on order $o")
-                assertTrue(r.effects.none { it is NotifyOrder })
+        for (o in paidOrders) {
+            for (s in listOf(CREATED, PENDING, PROCESSING, FAILED, CANCELLED, EXPIRED, REVIEW)) {
+                // Another attempt carries the order's payment, or the payment is not recorded at all.
+                for (carried in listOf(3L, null)) {
+                    val r = decide(attempt(s), order(o, paymentAttemptId = carried), Succeeded(1000, eur)) as Move
+                    assertEquals(SUCCEEDED, r.to)
+                    assertEquals(listOf(RecordPaid, ClearStartPayload, StampClosed, FlagDuplicate), r.effects, "$s on order $o carried by $carried")
+                    assertTrue(r.effects.none { it is NotifyOrder })
+                }
             }
+        }
+    }
+
+    @Test
+    fun `the order's own attempt, settled after an accepted review, is not a duplicate`() {
+        // O3 (attempt REVIEW, order.paymentId = 7) -> admin accepts (O4, the attempt stays REVIEW) -> the gateway confirms.
+        for (o in paidOrders) {
+            val r = decide(attempt(REVIEW), order(o, paymentAttemptId = 7), Succeeded(1000, eur)) as Move
+            assertEquals(Move(SUCCEEDED, listOf(RecordPaid, ClearStartPayload, StampClosed)), r, o.name)
+        }
+        // The same attempt id on a paid order is only exempt for the attempt that carries the payment.
+        val other = decide(attempt(REVIEW), order(OrderStatus.COMPLETED, paymentAttemptId = 8), Succeeded(1000, eur)) as Move
+        assertTrue(FlagDuplicate in other.effects)
+    }
+
+    @Test
+    fun `money that fails the amount check on a paid order alerts the panel unless it is the order's own attempt`() {
+        for (o in paidOrders) {
+            assertEquals(
+                Move(REVIEW, listOf(RecordPaid, RecordReviewReason(ReviewReason.UNDERPAID), PanelAlert)),
+                decide(attempt(PENDING), order(o, paymentAttemptId = 3), Succeeded(900, eur)),
+                o.name
+            )
+            assertEquals(
+                Move(REVIEW, listOf(RecordPaid, RecordReviewReason(ReviewReason.UNDERPAID))),
+                decide(attempt(PENDING), order(o, paymentAttemptId = 7), Succeeded(900, eur)),
+                o.name
+            )
         }
     }
 
@@ -184,7 +243,7 @@ class PaymentStateMachineTest {
             r.effects
         )
         val inReview = decide(a, order(OrderStatus.REVIEW, gateway = 800, credit = 200), Succeeded(1000, eur)) as Move
-        assertEquals(listOf(RecordPaid, ClearStartPayload, StampClosed), inReview.effects)
+        assertEquals(listOf(RecordPaid, ClearStartPayload, StampClosed, RecordPaymentOnOrder(7), PanelAlert), inReview.effects)
     }
 
     // ---- amount check (00 section 6.9) ----
@@ -246,13 +305,13 @@ class PaymentStateMachineTest {
     }
 
     @Test
-    fun `a failed amount check against a released order is O9 with the amount reason, against a review or paid order no order move`() {
+    fun `a failed amount check against a released order is O9 with the amount reason, against a review order it is recorded, against a paid order no order move`() {
         assertEquals(
             Move(REVIEW, listOf(RecordPaid, RecordReviewReason(ReviewReason.UNDERPAID), NotifyOrder(OrderEvent.LatePayment(7, ReviewReason.UNDERPAID)))),
             decide(attempt(CANCELLED), order(OrderStatus.CANCELLED), Succeeded(900, eur))
         )
         assertEquals(
-            Move(REVIEW, listOf(RecordPaid, RecordReviewReason(ReviewReason.UNDERPAID))),
+            Move(REVIEW, listOf(RecordPaid, RecordReviewReason(ReviewReason.UNDERPAID), RecordPaymentOnOrder(7), PanelAlert)),
             decide(attempt(PENDING), order(OrderStatus.REVIEW), Succeeded(900, eur))
         )
         assertEquals(
@@ -290,6 +349,14 @@ class PaymentStateMachineTest {
     }
 
     @Test
+    fun `NeedsReview without money on an order already in REVIEW records only the reason`() {
+        assertEquals(
+            Move(REVIEW, listOf(RecordReviewReason(ReviewReason.FRAUD_REVIEW))),
+            decide(attempt(PROCESSING), order(OrderStatus.REVIEW), NeedsReview(ReviewReason.FRAUD_REVIEW))
+        )
+    }
+
+    @Test
     fun `NeedsReview moves every unsettled attempt to REVIEW with the provider reason, SUCCEEDED and REVIEW are untouched`() {
         for (s in statuses) {
             val r = decide(attempt(s), order(), NeedsReview(ReviewReason.FRAUD_REVIEW))
@@ -320,9 +387,10 @@ class PaymentStateMachineTest {
     @Test
     fun `every attempt status times order status times tender times amount outcome matches the oracle`() {
         var cases = 0
-        for (s in statuses) for (o in OrderStatus.values()) for (tenderOk in listOf(true, false)) for (paid in listOf(900L, 1000L, 1100L)) {
+        // carried: the attempt id the order already carries (the attempt under test is 7).
+        for (s in statuses) for (o in OrderStatus.values()) for (tenderOk in listOf(true, false)) for (paid in listOf(900L, 1000L, 1100L)) for (carried in listOf(null, 7L, 8L)) {
             val a = attempt(s, amount = 1000, credit = 0)
-            val ord = order(o, gateway = if (tenderOk) 1000 else 600, credit = if (tenderOk) 0 else 400)
+            val ord = order(o, gateway = if (tenderOk) 1000 else 600, credit = if (tenderOk) 0 else 400, paymentAttemptId = carried)
             val r = decide(a, ord, Succeeded(paid, eur), plain)
             cases++
             // A SUCCEEDED attempt never changes; a replayed bad payment on an attempt already in REVIEW is a no-op.
@@ -332,10 +400,14 @@ class PaymentStateMachineTest {
             }
             r as Move
             if (paid != 1000L) {
-                assertEquals(REVIEW, r.to, "$s/$o/$tenderOk/$paid")
+                assertEquals(REVIEW, r.to, "$s/$o/$tenderOk/$paid/$carried")
+                // Money on an order in REVIEW is recorded on it; a paid order alerts unless the attempt is its own.
+                assertEquals(o == OrderStatus.REVIEW, RecordPaymentOnOrder(7) in r.effects, "$s/$o/$paid/$carried record")
+                val alert = (o == OrderStatus.REVIEW) || (o in paidOrders && carried != 7L)
+                assertEquals(alert, PanelAlert in r.effects, "$s/$o/$paid/$carried alert")
                 continue
             }
-            assertEquals(SUCCEEDED, r.to, "$s/$o/$tenderOk/$paid")
+            assertEquals(SUCCEEDED, r.to, "$s/$o/$tenderOk/$paid/$carried")
             val notify = r.effects.filterIsInstance<NotifyOrder>().map { it.event }
             val expectedNotify: List<OrderEvent> = when (o) {
                 OrderStatus.PENDING ->
@@ -347,11 +419,13 @@ class PaymentStateMachineTest {
                 else -> emptyList()
             }
             assertEquals(expectedNotify, notify, "$s/$o/$tenderOk")
-            val duplicate = o in listOf(OrderStatus.COMPLETED, OrderStatus.PARTIALLY_REFUNDED, OrderStatus.REFUNDED, OrderStatus.CHARGEBACK)
-            assertEquals(duplicate, FlagDuplicate in r.effects, "$s/$o duplicate flag")
+            val duplicate = o in paidOrders && carried != 7L
+            assertEquals(duplicate, FlagDuplicate in r.effects, "$s/$o/$carried duplicate flag")
+            assertEquals(o == OrderStatus.REVIEW, RecordPaymentOnOrder(7) in r.effects, "$s/$o/$carried record on order")
+            assertEquals(o == OrderStatus.REVIEW, PanelAlert in r.effects, "$s/$o/$carried alert")
             // Never both: a duplicate does not also move the order.
             assertFalse(duplicate && notify.isNotEmpty())
         }
-        assertEquals(8 * 9 * 2 * 3, cases)
+        assertEquals(8 * 9 * 2 * 3 * 3, cases)
     }
 }
