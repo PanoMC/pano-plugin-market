@@ -481,10 +481,6 @@
     },
     "settings": {
       "title": "Market Ayarları",
-      "section-general": "Genel Ayarlar",
-      "section-payments": "Ödeme Yöntemleri",
-      "section-credits": "Kredi Ayarları",
-      "menu-label": "Ayarlar menüsü",
       "load-error": "Market ayarları yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin."
     },
     "overview": {
@@ -1746,34 +1742,29 @@
         "REQUIRED": "En az bir para birimi seçin."
       },
       "stored-settings": "Kayıtlı ayarlar"
+    },
+    "invoice-sequence": {
+      "title": "{series} Dizisini Düzenle",
+      "next-number": "Sonraki numara",
+      "current": "Şu anki sonraki numara: {current}. Numara yalnızca artırılabilir.",
+      "toast-saved": "Numara dizisi güncellendi."
+    },
+    "legal-version": {
+      "title": "Sürüm {version} ({locale})"
     }
   },
   "settings": {
     "general": {
-      "heading": "Genel Ayarlar",
-      "subheading": "Mağazanızın temel görünüm ve davranış ayarları.",
       "store-name": "Mağaza Adı",
       "store-description": "Mağaza Açıklaması",
-      "currency-label": "Para Birimi",
-      "currency": {
-        "try": "Türk Lirası (₺)",
-        "usd": "US Dollar ($)",
-        "eur": "Euro (€)",
-        "gbp": "British Pound (£)"
-      },
       "vat-label": "Vergi (%)",
       "vat-placeholder": "Vergi %",
-      "min-order-amount": "Minimum Sipariş Tutarı",
       "show-vat-in-price": "Fiyatlara vergi dahildir göster",
-      "allow-guest-checkout": "Misafir alışverişine izin ver",
       "test-mode": "Test modu (canlı satış yapılmaz)",
       "remove-cents": "Para biriminden .00 kısmını kaldır",
       "show-bestsellers": "En çok satanları göster (Bestseller)",
       "show-featured-products": "Öne çıkan ürünleri göster (Featured Products)",
       "send-email-after-purchase": "Satın alımdan sonra e-posta gönder",
-      "combine-discounts-and-coupons": "Genel indirimler ve kuponlar birlikte kullanılabilir mi",
-      "toast-success": "Genel ayarlar başarıyla kaydedildi.",
-      "toast-error": "Ayarlar kaydedilirken bir hata oluştu.",
       "sales-currency-label": "Satış Para Birimi",
       "stats-currency-label": "İstatistik Para Birimi",
       "exchange-rate": {
@@ -1796,7 +1787,31 @@
         "toast-refresh-failed": "Kur alınamadı. Lütfen daha sonra tekrar deneyin.",
         "toast-refresh-error": "Kur güncellenirken bir hata oluştu."
       },
-      "show-comparisons": "Karşılaştırma tablolarını göster (Comparisons)"
+      "show-comparisons": "Karşılaştırma tablolarını göster (Comparisons)",
+      "store-enabled": "Mağaza Açık",
+      "store-enabled-hint": "Kapalıyken mağaza ziyaretçilere kapalıdır. Panel çalışmaya devam eder.",
+      "time-zone": "Saat Dilimi",
+      "time-zone-hint": "İstatistik, hedef ve zamanlamalarda günleri ayırmak için kullanılır.",
+      "time-zone-default": "Sunucu Varsayılanı",
+      "time-zone-placeholder": "Europe/Istanbul",
+      "page-size": "Sayfa Başına Ürün",
+      "page-size-hint": "1 ile 60 arasında.",
+      "test-mode-hint": "Açıkken test ödeme yöntemlerini yalnızca ödeme veya ayar yetkisi olan yöneticiler kullanabilir; ziyaretçiler kullanamaz.",
+      "test-mode-credits-hint": "Test modunda alınan krediler gerçek bakiyedir: testten sonra geri alın.",
+      "confirm": {
+        "STORE_DISABLED": {
+          "title": "Mağaza kapatılsın mı?",
+          "description": "Mağazayı tekrar açana kadar ziyaretçiler göz atamaz veya satın alamaz."
+        },
+        "CURRENCY_CHANGED": {
+          "title": "Mağaza para birimi değiştirilsin mi?",
+          "description": "Mevcut fiyatlar aynı sayılarla kalır ve artık yeni para biriminde okunur."
+        },
+        "MANY": {
+          "title": "Bu değişiklikler uygulansın mı?"
+        },
+        "cta": "Değişiklikleri Uygula"
+      }
     },
     "credits": {
       "toast-error": "Ayarlar kaydedilirken bir hata oluştu.",
@@ -1839,6 +1854,137 @@
       "view": "Görüntüle",
       "configure": "Yapılandır",
       "docs": "Dokümantasyon"
+    },
+    "toast-saved": "Ayarlar kaydedildi.",
+    "toast-invalid": "Vurgulanan alanları kontrol edin.",
+    "pending": {
+      "title": "Bölüm Henüz Hazır Değil",
+      "body": "Bu ayar bölümü sonraki bir güncellemeyle gelecek."
+    },
+    "field-error": {
+      "REQUIRED": "Bu alan zorunludur.",
+      "INVALID_TYPE": "Geçerli bir sayı girin.",
+      "INVALID_VALUE": "Bu değer geçerli değil.",
+      "OUT_OF_RANGE": "Değer izin verilen aralığın dışında.",
+      "TOO_LONG": "Bu metin çok uzun.",
+      "SAME_AS_OTHER_SERIES": "Diğer seriden farklı bir seri kullanın.",
+      "CONTAINS_BASE_CURRENCY": "Mağaza para birimi ek para birimi olamaz.",
+      "NO_ACTIVE_TEXT": "Önce bir yasal metin yayınlayın.",
+      "TOO_FEW": "En az bir para birimi ekleyin.",
+      "NOT_UPWARDS": "Sonraki numara yalnızca artırılabilir.",
+      "RATE_REQUIRED": "Bir kur girin.",
+      "TOO_MANY_DECIMALS": "En fazla 10 ondalık kullanın."
+    },
+    "checkout": {
+      "allow-guest-checkout": "Misafir Alışverişine İzin Ver",
+      "allow-guest-checkout-hint": "Misafirler giriş yapmak yerine bir kullanıcı adı ve e-posta adresi girer.",
+      "allow-gift-purchase": "Hediye Alımına İzin Ver",
+      "minimum-order-amount": "Minimum Sipariş Tutarı",
+      "minimum-order-amount-hint": "0, alt sınır olmadığı anlamına gelir.",
+      "combine-discounts-and-coupons": "İndirim ve Kuponlar Birleştirilebilsin",
+      "order-expiry-minutes": "Bekleyen Sipariş Süresi",
+      "order-expiry-minutes-hint": "Ödenmemiş sipariş bu süreden sonra serbest bırakılır. Ödeme yöntemi süreyi uzatabilir.",
+      "minutes": "dk",
+      "hours": "saat",
+      "bank-transfer-expiry-hours": "Banka Havalesi Süresi",
+      "bank-transfer-expiry-hours-hint": "Banka havalesi siparişinin ödemeyi ne kadar bekleyeceği.",
+      "auto-refund-duplicate-payments": "Mükerrer Ödemeleri Otomatik İade Et",
+      "auto-refund-duplicate-payments-hint": "Zaten ödenmiş bir sipariş için gelen ikinci ödeme alıcıya iade edilir.",
+      "subscription-manual-fallback": "Aboneliği Yenileme Hatırlatmasıyla Sat",
+      "subscription-manual-fallback-hint": "Otomatik yenilemesi olmayan yöntemler aboneliği yenileme hatırlatmasıyla satar."
+    },
+    "currencies": {
+      "mode": "Para Birimi Modu",
+      "mode-hint": {
+        "SINGLE": "Her fiyat mağaza para biriminde gösterilir ve tahsil edilir.",
+        "DISPLAY": "Fiyatlar yalnızca gösterim için çevrilir; alıcılardan mağaza para biriminde tahsilat yapılır.",
+        "MULTI": "Ürünler para birimi başına fiyat taşıyabilir ve alıcılardan seçtikleri para biriminde tahsilat yapılır."
+      },
+      "additional": "Ek Para Birimleri",
+      "add": "Para Birimi Ekle",
+      "rates": "Döviz Kurları",
+      "refresh-rates": "Kurları Yenile",
+      "no-rates": "Kurunu ayarlamak için bir para birimi ekleyin.",
+      "toast-refreshed": "Döviz kurları güncellendi.",
+      "table": {
+        "currency": "Para Birimi",
+        "mode": "Mod",
+        "rate": "Kur",
+        "fetched": "Alındı"
+      },
+      "fallback": "Ürünün Alıcının Para Biriminde Fiyatı Yoksa",
+      "fallback-option": {
+        "CONVERT": "Fiyatı Çevir",
+        "HIDE": "Ürünü Gizle"
+      },
+      "fallback-hint": {
+        "CONVERT": "Mağaza para birimindeki fiyat yukarıdaki kurla çevrilir.",
+        "HIDE": "Ürün o para biriminde sunulmaz."
+      },
+      "confirm-leave-multi": {
+        "title": "Çoklu para birimi modundan çıkılsın mı?",
+        "description": "Para birimi başına fiyatlar saklanır ancak geri dönene kadar kullanılmaz.",
+        "cta": "Çoklu Para Biriminden Çık"
+      }
+    },
+    "billing": {
+      "info-mode": "Alıcı Fatura Bilgisi",
+      "info-mode-hint": {
+        "OFF": "Ödeme sırasında fatura bilgisi hiç istenmez.",
+        "OPTIONAL": "Alıcılar fatura bilgisi ekleyebilir; bir ödeme yöntemi bazı alanları yine de zorunlu kılabilir.",
+        "REQUIRED": "Alıcılar ödemeyi tamamlamak için fatura bilgilerini doldurmalıdır."
+      },
+      "invoice-enabled": "PDF Fatura Düzenle",
+      "invoice-enabled-hint": "Bir sipariş ödendiğinde fatura oluşturulur.",
+      "series": "Fatura Serisi",
+      "series-hint": "En fazla 8 büyük harf veya rakam; TEST ayrılmıştır.",
+      "credit-note-series": "İade Faturası Serisi",
+      "credit-orders": "Kredi ile Ödenen Siparişlere Fatura Kes",
+      "credit-orders-hint": "Tamamen kredi ile ödenen siparişler de fatura alır.",
+      "locale": "Fatura Dili",
+      "locale-buyer": "Alıcının Dili",
+      "show-logo": "Faturada Logoyu Göster",
+      "seller-name": "Satıcı Adı",
+      "seller-address": "Satıcı Adresi",
+      "seller-tax-office": "Vergi Dairesi",
+      "seller-tax-number": "Vergi Numarası",
+      "footer": "Fatura Alt Bilgisi",
+      "seller-notice": {
+        "title": "Satıcı Adı Boş",
+        "body": "Faturalar yine de düzenlenir; satıcı bölümünde site adı görünür."
+      },
+      "preview-pdf": "PDF Önizleme",
+      "sequences": {
+        "title": "{count} Numara Dizisi",
+        "series": "Seri",
+        "next-number": "Sonraki Numara"
+      }
+    },
+    "legal": {
+      "required": "Ödemede Kabulü Zorunlu Kıl",
+      "required-hint": "Alıcılar etkin metni kabul etmek için bir kutuyu işaretlemelidir. Her sipariş kabul edilen sürümü kaydeder.",
+      "locale": "Dil",
+      "title": "Başlık",
+      "content": "Metin",
+      "publish": "Yeni Sürümü Yayınla",
+      "confirm-publish": {
+        "title": "Yeni sürüm yayınlansın mı?",
+        "description": "Alıcılar bundan sonra yeni sürümü kabul eder; önceki siparişler kabul ettikleri sürümü korur."
+      },
+      "confirm-switch": {
+        "title": "Değişiklikleriniz silinsin mi?",
+        "description": "Düzenlediğiniz metin yayınlanmadı. Dili değiştirmek onu siler.",
+        "cta": "Değişiklikleri Sil"
+      },
+      "toast-published": "Yeni sürüm yayınlandı.",
+      "versions": {
+        "title": "{count} Sürüm",
+        "version": "Sürüm",
+        "locale": "Dil",
+        "title-column": "Başlık",
+        "status": "Durum",
+        "created": "Oluşturulma"
+      }
     }
   },
   "discounts": {
@@ -2418,6 +2564,20 @@
       "NONE": "Desteklenmiyor",
       "GATEWAY_MANAGED": "Ödeme altyapısı yönetir",
       "MERCHANT_INITIATED": "Mağaza tahsil eder"
+    },
+    "currency-mode": {
+      "SINGLE": "Tek Para Birimi",
+      "DISPLAY": "Gösterim Çevirisi",
+      "MULTI": "Çoklu Para Birimi"
+    },
+    "rate-source": {
+      "AUTO": "Otomatik",
+      "MANUAL": "Manuel"
+    },
+    "billing-info-mode": {
+      "OFF": "Kapalı",
+      "OPTIONAL": "İsteğe Bağlı",
+      "REQUIRED": "Zorunlu"
     }
   },
   "alerts": {

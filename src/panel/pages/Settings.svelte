@@ -1,7 +1,33 @@
+<MarketLayout area="settings" sections={sectionsFor('settings', user)} active={section}>
+  {#if data.error}
+    <LoadError error={data.error} />
+  {:else if Section}
+    <Section
+      settings={data.settings}
+      ctx={data.ctx}
+      extra={data.extra}
+      extraError={data.extraError} />
+  {:else}
+    <div class="alert alert-info d-flex align-items-start mb-0" role="alert">
+      <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
+      <div>
+        <b>{$_('settings.pending.title')}</b>
+        <div>{$_('settings.pending.body')}</div>
+      </div>
+    </div>
+    <PluginHook name="market:panel:settings:section:{section}" props={{ ctx: data.ctx }} />
+  {/if}
+</MarketLayout>
+
 <script module>
   import ApiUtil from '@panomc/sdk/utils/api';
+  import { loadContext } from '../utils/context.js';
+  import { marketPath } from '../utils/api.js';
+  import { extraPathFor, resolveSection } from '../utils/settings.js';
 
   /**
+   * GET /settings, GET /context and the section's own extra data (13 §17) in parallel.
+   *
    * @type {import("@sveltejs/kit").PageLoad}
    */
   export async function load(event) {
@@ -10,91 +36,49 @@
 
     pageTitle.set('plugins.pano-plugin-market.pages.settings.title');
 
-    const body = await ApiUtil.get({
-      path: '/api/panel/market/settings',
-      request: event,
-    });
+    const section = resolveSection(event.url.searchParams.get('section'));
+    const extraPath = extraPathFor(section);
 
-    // Do NOT fall back to an empty settings object on failure: the sections
-    // would silently render defaults that, if saved, overwrite the real config.
-    // Surface an explicit error state instead.
-    if (!body || body.error) {
-      return { data: { error: body?.error || 'NETWORK_ERROR' } };
+    const [settings, ctx, extra] = await Promise.all([
+      ApiUtil.get({ path: marketPath('/settings'), request: event }),
+      loadContext(event),
+      extraPath ? ApiUtil.get({ path: marketPath(extraPath), request: event }) : null,
+    ]);
+
+    // Do NOT fall back to an empty settings object on failure: the sections would silently render
+    // defaults that, if saved, overwrite the real config. Surface an explicit error state instead.
+    if (!settings || typeof settings !== 'object' || settings.error) {
+      return { data: { section, ctx, error: settings?.error || 'NETWORK_ERROR' } };
     }
 
-    return { data: body };
+    const extraOk = extra && typeof extra === 'object' && !extra.error;
+
+    return {
+      data: {
+        section,
+        ctx,
+        settings,
+        extra: extraOk ? extra : null,
+        extraError: extraPath && !extraOk ? extra?.error || 'NETWORK_ERROR' : null,
+      },
+    };
   }
 </script>
 
 <script>
-  import { base, page, goto } from '@panomc/sdk/svelte';
-  import { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { page } from '@panomc/sdk/svelte';
   import { _ } from '../../i18n';
   import MarketLayout from '../layouts/MarketLayout.svelte';
-  import GeneralSettings from '../components/settings/GeneralSettings.svelte';
-  import PaymentMethods from '../components/settings/PaymentMethods.svelte';
-  import CreditSettings from '../components/settings/CreditSettings.svelte';
+  import LoadError from '../components/LoadError.svelte';
+  import PluginHook from '../components/PluginHook.svelte';
+  import { SECTION_COMPONENTS } from '../components/settings/registry.js';
+  import { sectionsFor } from '../navigation.js';
 
   let { data } = $props();
 
-  const SECTIONS = [
-    { key: 'general', label: 'pages.settings.section-general' },
-    { key: 'payments', label: 'pages.settings.section-payments' },
-    { key: 'credits', label: 'pages.settings.section-credits' }
-  ];
-
-  const loadError = $derived(data?.error || null);
-
-  // The active section lives in the URL (?section=payments): deep links open the
-  // right tab, and the browser back button restores the previous one. Clicking a
-  // tab navigates (goto) instead of flipping local state, so the address bar and
-  // history always reflect the visible section. `general` is the default and is
-  // omitted from the query string.
-  const section = $derived.by(() => {
-    const value = $page.url.searchParams.get('section');
-    return value && SECTIONS.some((s) => s.key === value) ? value : 'general';
-  });
-
-  function selectSection(key) {
-    if (key === section) return;
-    const queryParams = buildQueryParams({ section: key === 'general' ? null : key });
-    goto(`${base}/market/settings${queryParams}`, { invalidateAll: true });
-  }
+  const user = $derived($page.data?.user);
+  const section = $derived(resolveSection(data.section));
+  // The active section lives in the URL (?section=); every section link is a real link, so the
+  // address bar and history always match what is shown. `general` is the default.
+  const Section = $derived(SECTION_COMPONENTS[section] ?? null);
 </script>
-
-<MarketLayout>
-  <div class="row g-3">
-    <aside class="col-12 col-md-3">
-      <div class="nav flex-column nav-pills sticky-md-top" role="tablist" aria-orientation="vertical" aria-label={$_('pages.settings.menu-label')}>
-        {#each SECTIONS as item (item.key)}
-          <button
-            type="button"
-            class="nav-link text-start"
-            class:active={section === item.key}
-            role="tab"
-            aria-selected={section === item.key}
-            onclick={() => selectSection(item.key)}>
-            {$_(item.label)}
-          </button>
-        {/each}
-      </div>
-    </aside>
-
-    <div class="col-12 col-md-9">
-      {#if loadError}
-        <div class="card">
-          <div class="card-body text-center text-body-secondary py-5">
-            <i class="fas fa-triangle-exclamation mb-2 fs-3"></i>
-            <div>{$_('pages.settings.load-error')}</div>
-          </div>
-        </div>
-      {:else if section === 'general'}
-        <GeneralSettings settings={data} />
-      {:else if section === 'payments'}
-        <PaymentMethods settings={data} />
-      {:else if section === 'credits'}
-        <CreditSettings settings={data} />
-      {/if}
-    </div>
-  </div>
-</MarketLayout>

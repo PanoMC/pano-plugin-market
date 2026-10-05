@@ -1,0 +1,40 @@
+// Host-bound glue of the settings sections: the POST /settings call, the toasts and the focus move.
+// The decisions (validation, partial body, status) live in utils/settings.js and are unit tested.
+import ApiUtil from '@panomc/sdk/utils/api';
+import { get } from 'svelte/store';
+import { _, showErrorToast, showSuccessToast } from '../../../i18n';
+import { call, marketPath } from '../../utils/api.js';
+import { focusFirstInvalid, submitSettings } from '../../utils/settings.js';
+import { toastError } from '../../utils/toast.js';
+
+export const postSettings = (body) => call(ApiUtil.post({ path: marketPath('/settings'), body }));
+
+/** GET /settings; null on any failure. */
+export async function fetchSettings() {
+  const result = await call(ApiUtil.get({ path: marketPath('/settings') }));
+  return result.ok ? result.body : null;
+}
+
+/** Toast + focus for a result of submitSettings / saveCurrencies that was not saved. */
+export function reportFailure(result, order) {
+  const t = get(_);
+  if (result.status === 'invalid') {
+    showErrorToast(t('settings.toast-invalid'));
+    focusFirstInvalid(result.errors, order);
+  } else if (result.status === 'failed') {
+    toastError(t, { error: result.error, body: {} });
+    if (result.errors && Object.keys(result.errors).length > 0)
+      focusFirstInvalid(result.errors, order);
+  }
+}
+
+/**
+ * Validated, partial POST /settings of one section. `errors` = the client-side validation result.
+ * Returns the submitSettings result; on `saved` the success toast is shown, on a failure the error toast.
+ */
+export async function saveSection({ baseline, values, keys, errors = {}, order = keys }) {
+  const result = await submitSettings({ post: postSettings, baseline, values, keys, errors });
+  if (result.status === 'saved') showSuccessToast(get(_)('settings.toast-saved'));
+  else reportFailure(result, order);
+  return result;
+}

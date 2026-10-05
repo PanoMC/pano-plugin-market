@@ -481,10 +481,6 @@
     },
     "settings": {
       "title": "Market Settings",
-      "section-general": "General Settings",
-      "section-payments": "Payment Methods",
-      "section-credits": "Credit Settings",
-      "menu-label": "Settings menu",
       "load-error": "Failed to load market settings. Please refresh the page and try again."
     },
     "overview": {
@@ -1746,34 +1742,29 @@
         "REQUIRED": "Select at least one currency."
       },
       "stored-settings": "Stored settings"
+    },
+    "invoice-sequence": {
+      "title": "Edit Sequence {series}",
+      "next-number": "Next number",
+      "current": "Current next number: {current}. A number can only be raised.",
+      "toast-saved": "Sequence updated."
+    },
+    "legal-version": {
+      "title": "Version {version} ({locale})"
     }
   },
   "settings": {
     "general": {
-      "heading": "General Settings",
-      "subheading": "Basic appearance and behavior settings for your store.",
       "store-name": "Store Name",
       "store-description": "Store Description",
-      "currency-label": "Currency",
-      "currency": {
-        "try": "Turkish Lira (₺)",
-        "usd": "US Dollar ($)",
-        "eur": "Euro (€)",
-        "gbp": "British Pound (£)"
-      },
       "vat-label": "Tax (%)",
       "vat-placeholder": "Tax %",
-      "min-order-amount": "Minimum Order Amount",
       "show-vat-in-price": "Show prices as tax-inclusive",
-      "allow-guest-checkout": "Allow guest checkout",
       "test-mode": "Test mode (no live sales)",
       "remove-cents": "Remove the .00 part from the currency",
       "show-bestsellers": "Show bestsellers",
       "show-featured-products": "Show featured products",
       "send-email-after-purchase": "Send an email after purchase",
-      "combine-discounts-and-coupons": "Can general discounts and coupons be used together",
-      "toast-success": "General settings saved successfully.",
-      "toast-error": "An error occurred while saving the settings.",
       "sales-currency-label": "Sales Currency",
       "stats-currency-label": "Statistics Currency",
       "exchange-rate": {
@@ -1796,7 +1787,31 @@
         "toast-refresh-failed": "Could not fetch the exchange rate. Please try again later.",
         "toast-refresh-error": "An error occurred while updating the exchange rate."
       },
-      "show-comparisons": "Show comparison tables (Comparisons)"
+      "show-comparisons": "Show comparison tables (Comparisons)",
+      "store-enabled": "Store Enabled",
+      "store-enabled-hint": "While off, the storefront is closed to visitors. The panel keeps working.",
+      "time-zone": "Time Zone",
+      "time-zone-hint": "Used to cut days for statistics, goals and schedules.",
+      "time-zone-default": "Server Default",
+      "time-zone-placeholder": "Europe/Istanbul",
+      "page-size": "Products Per Page",
+      "page-size-hint": "Between 1 and 60.",
+      "test-mode-hint": "While on, only admins with payment or settings rights can check out with test gateways; visitors cannot.",
+      "test-mode-credits-hint": "Credits bought in test mode are real balance: revoke them after testing.",
+      "confirm": {
+        "STORE_DISABLED": {
+          "title": "Close the store?",
+          "description": "Visitors cannot browse or buy until you turn the store back on."
+        },
+        "CURRENCY_CHANGED": {
+          "title": "Change the store currency?",
+          "description": "Existing prices keep their numbers and are now read in the new currency."
+        },
+        "MANY": {
+          "title": "Apply these changes?"
+        },
+        "cta": "Apply Changes"
+      }
     },
     "credits": {
       "toast-error": "An error occurred while saving the settings.",
@@ -1839,6 +1854,137 @@
       "view": "View",
       "configure": "Configure",
       "docs": "Documentation"
+    },
+    "toast-saved": "Settings saved.",
+    "toast-invalid": "Check the highlighted fields.",
+    "pending": {
+      "title": "Section Not Available Yet",
+      "body": "This settings section arrives with a later update."
+    },
+    "field-error": {
+      "REQUIRED": "This field is required.",
+      "INVALID_TYPE": "Enter a valid number.",
+      "INVALID_VALUE": "This value is not valid.",
+      "OUT_OF_RANGE": "The value is outside the allowed range.",
+      "TOO_LONG": "This text is too long.",
+      "SAME_AS_OTHER_SERIES": "Use a different series than the other one.",
+      "CONTAINS_BASE_CURRENCY": "The store currency cannot be an additional currency.",
+      "NO_ACTIVE_TEXT": "Publish a legal text first.",
+      "TOO_FEW": "Add at least one currency.",
+      "NOT_UPWARDS": "The next number can only be raised.",
+      "RATE_REQUIRED": "Enter a rate.",
+      "TOO_MANY_DECIMALS": "Use at most 10 decimals."
+    },
+    "checkout": {
+      "allow-guest-checkout": "Allow Guest Checkout",
+      "allow-guest-checkout-hint": "Guests enter a username and an e-mail address instead of signing in.",
+      "allow-gift-purchase": "Allow Gift Purchases",
+      "minimum-order-amount": "Minimum Order Amount",
+      "minimum-order-amount-hint": "0 means no minimum.",
+      "combine-discounts-and-coupons": "Combine Discounts And Coupons",
+      "order-expiry-minutes": "Pending Order Lifetime",
+      "order-expiry-minutes-hint": "An unpaid order is released after this time. A payment method may extend it.",
+      "minutes": "min",
+      "hours": "hours",
+      "bank-transfer-expiry-hours": "Bank Transfer Lifetime",
+      "bank-transfer-expiry-hours-hint": "How long a bank transfer order waits for its payment.",
+      "auto-refund-duplicate-payments": "Refund Duplicate Payments Automatically",
+      "auto-refund-duplicate-payments-hint": "A second payment for an order that is already paid is returned to the buyer.",
+      "subscription-manual-fallback": "Sell Subscriptions With Renewal Reminders",
+      "subscription-manual-fallback-hint": "Methods without automatic renewal sell subscriptions with a renewal reminder."
+    },
+    "currencies": {
+      "mode": "Currency Mode",
+      "mode-hint": {
+        "SINGLE": "Every price is shown and charged in the store currency.",
+        "DISPLAY": "Prices are converted for display only; buyers are charged in the store currency.",
+        "MULTI": "Products can carry a price per currency and buyers are charged in the currency they chose."
+      },
+      "additional": "Additional Currencies",
+      "add": "Add A Currency",
+      "rates": "Exchange Rates",
+      "refresh-rates": "Refresh Rates",
+      "no-rates": "Add a currency to set its rate.",
+      "toast-refreshed": "Exchange rates updated.",
+      "table": {
+        "currency": "Currency",
+        "mode": "Mode",
+        "rate": "Rate",
+        "fetched": "Fetched"
+      },
+      "fallback": "When A Product Has No Price In The Buyer's Currency",
+      "fallback-option": {
+        "CONVERT": "Convert The Price",
+        "HIDE": "Hide The Product"
+      },
+      "fallback-hint": {
+        "CONVERT": "The store-currency price is converted with the rate above.",
+        "HIDE": "The product is not offered in that currency."
+      },
+      "confirm-leave-multi": {
+        "title": "Leave multi-currency mode?",
+        "description": "Per-currency prices are kept but not used until you switch back.",
+        "cta": "Leave Multi-Currency"
+      }
+    },
+    "billing": {
+      "info-mode": "Buyer Billing Information",
+      "info-mode-hint": {
+        "OFF": "Checkout never asks for billing details.",
+        "OPTIONAL": "Buyers can add billing details; a payment method may still require some fields.",
+        "REQUIRED": "Buyers must fill in billing details to check out."
+      },
+      "invoice-enabled": "Issue PDF Invoices",
+      "invoice-enabled-hint": "An invoice is created when an order is paid.",
+      "series": "Invoice Series",
+      "series-hint": "Up to 8 capital letters or digits; TEST is reserved.",
+      "credit-note-series": "Credit Note Series",
+      "credit-orders": "Invoice Orders Paid With Credits",
+      "credit-orders-hint": "Orders paid entirely with credits get an invoice too.",
+      "locale": "Invoice Language",
+      "locale-buyer": "Buyer's Language",
+      "show-logo": "Show Logo On The Invoice",
+      "seller-name": "Seller Name",
+      "seller-address": "Seller Address",
+      "seller-tax-office": "Tax Office",
+      "seller-tax-number": "Tax Number",
+      "footer": "Invoice Footer",
+      "seller-notice": {
+        "title": "Seller Name Is Empty",
+        "body": "Invoices are still issued; the seller block then shows the site name."
+      },
+      "preview-pdf": "Preview PDF",
+      "sequences": {
+        "title": "{count} Number Sequences",
+        "series": "Series",
+        "next-number": "Next Number"
+      }
+    },
+    "legal": {
+      "required": "Require Acceptance At Checkout",
+      "required-hint": "Buyers must tick a box to accept the active text. Each order records the version they accepted.",
+      "locale": "Language",
+      "title": "Title",
+      "content": "Text",
+      "publish": "Publish New Version",
+      "confirm-publish": {
+        "title": "Publish a new version?",
+        "description": "Buyers accept the new version from now on; earlier orders keep the version they accepted."
+      },
+      "confirm-switch": {
+        "title": "Discard your changes?",
+        "description": "The text you edited has not been published. Switching the language drops it.",
+        "cta": "Discard Changes"
+      },
+      "toast-published": "New version published.",
+      "versions": {
+        "title": "{count} Versions",
+        "version": "Version",
+        "locale": "Language",
+        "title-column": "Title",
+        "status": "Status",
+        "created": "Created"
+      }
     }
   },
   "discounts": {
@@ -2418,6 +2564,20 @@
       "NONE": "Not supported",
       "GATEWAY_MANAGED": "Managed by the gateway",
       "MERCHANT_INITIATED": "Charged by the store"
+    },
+    "currency-mode": {
+      "SINGLE": "Single Currency",
+      "DISPLAY": "Display Conversion",
+      "MULTI": "Multiple Currencies"
+    },
+    "rate-source": {
+      "AUTO": "Automatic",
+      "MANUAL": "Manual"
+    },
+    "billing-info-mode": {
+      "OFF": "Off",
+      "OPTIONAL": "Optional",
+      "REQUIRED": "Required"
     }
   },
   "alerts": {
