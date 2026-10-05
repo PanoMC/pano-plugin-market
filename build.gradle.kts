@@ -1,4 +1,5 @@
 import java.net.URL
+import java.util.zip.ZipFile
 
 buildscript {
     repositories { mavenCentral() }
@@ -21,7 +22,13 @@ val vertxVersion: String by project
 val gsonVersion: String by project
 val handlebarsVersion: String by project
 val springContextVersion: String by project
+val panoVersion: String by project
 val bootstrap = (project.findProperty("bootstrap") as String?)?.toBoolean() ?: false
+// Standalone builds resolve the platform fat jar (15 section 2.1): "release" = Ivy pattern on the GitHub release
+// asset (default), "jitpack" = -PpanoSource=jitpack, or a local jar with -PpanoJar=/path/Pano-<version>.jar.
+val panoSource = (project.findProperty("panoSource") as String?) ?: "release"
+val panoJar = project.findProperty("panoJar") as String?
+val panoReleaseToken = (project.findProperty("panoReleaseToken") as String?) ?: System.getenv("PANO_RELEASE_TOKEN")
 val noui = project.hasProperty("noui")
 val pluginsDir: File? by rootProject.extra
 
@@ -65,15 +72,43 @@ val pluginRequires: String? by project
 val organization: String? by project
 
 repositories {
+    if (!bootstrap && panoJar == null && panoSource == "release") {
+        exclusiveContent {
+            forRepository {
+                ivy {
+                    name = "PanoReleases"
+                    url = uri("https://github.com/PanoMC/Pano/releases/download")
+                    patternLayout { artifact("v[revision]/Pano-[revision].[ext]") }
+                    metadataSources { artifact() }
+                    // Anonymous while PanoMC/Pano is public; CI may pass a read-only token.
+                    if (!panoReleaseToken.isNullOrBlank()) {
+                        credentials(HttpHeaderCredentials::class) {
+                            name = "Authorization"
+                            value = "Bearer $panoReleaseToken"
+                        }
+                        authentication { create<HttpHeaderAuthentication>("header") }
+                    }
+                }
+            }
+            filter { includeGroup("panomc.release") }
+        }
+    }
     mavenCentral()
     maven("https://jitpack.io")
 }
 
+// Fake payment provider plugin (T3, 17 section 6): own source set, own jar, never part of the market jar.
+val fakeProvider: SourceSet by sourceSets.creating {
+    compileClasspath += sourceSets.main.get().output + sourceSets.main.get().compileClasspath
+}
+
 dependencies {
-    if (bootstrap) {
-        compileOnly(project(mapOf("path" to ":Pano")))
-    } else {
-        compileOnly("com.github.panomc:pano:v1.0.0-alpha.492")
+    // Platform classes for compiling (compileOnly: the host provides them at run time).
+    when {
+        bootstrap -> compileOnly(project(mapOf("path" to ":Pano")))
+        panoJar != null -> compileOnly(files(panoJar))
+        panoSource == "jitpack" -> compileOnly("com.github.panomc:pano:v$panoVersion")
+        else -> compileOnly("panomc.release:pano:$panoVersion") // no leading "v"
     }
 
     compileOnly(kotlin("stdlib-jdk8"))
@@ -97,8 +132,30 @@ dependencies {
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.13.3")
     // Gradle 9 requires the JUnit Platform launcher on the test runtime classpath explicitly.
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.13.3")
-    testImplementation("io.vertx:vertx-unit:${vertxVersion}")
-    testImplementation("io.vertx:vertx-lang-kotlin-coroutines:${vertxVersion}")
+
+    // Host classes for T1/T2/T4. T0 must not need them (T0ClasspathTest).
+    if (bootstrap) {
+        testImplementation(project(mapOf("path" to ":Pano")))
+        testImplementation("io.vertx:vertx-web:$vertxVersion")
+        testImplementation("io.vertx:vertx-web-client:$vertxVersion")
+        testImplementation("io.vertx:vertx-mysql-client:$vertxVersion")
+        testImplementation("io.vertx:vertx-lang-kotlin:$vertxVersion")
+        testImplementation("io.vertx:vertx-lang-kotlin-coroutines:$vertxVersion")
+        testImplementation("io.vertx:vertx-json-schema:$vertxVersion")
+        testImplementation("org.springframework:spring-context:$springContextVersion")
+        testImplementation("com.google.code.gson:gson:$gsonVersion")
+        testImplementation("org.pf4j:pf4j:$pf4jVersion")
+    } else {
+        // The fat jar already contains Vert.x 5.0.1, Gson, Spring, pf4j and the coroutines; a second copy
+        // of any of them breaks linkage, so no separate io.vertx:* test dependency is added here.
+        when {
+            panoJar != null -> testImplementation(files(panoJar))
+            panoSource == "jitpack" -> testImplementation("com.github.panomc:pano:v$panoVersion")
+            else -> testImplementation("panomc.release:pano:$panoVersion")
+        }
+    }
+    testImplementation(fakeProvider.output) // the fake provider is exercised in-process by T1
+    testRuntimeOnly("org.slf4j:slf4j-simple:2.0.16")
 }
 
 tasks {
@@ -311,13 +368,147 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
     }
 }
 
-// JUnit Platform for Jupiter tests; the test executor runs on JDK 21 like the host (the main
-// classes compile to Java 11 bytecode, which JDK 21 runs fine).
-tasks.named<Test>("test") {
-    useJUnitPlatform()
-    javaLauncher.set(
-        javaToolchains.launcherFor {
-            languageVersion.set(JavaLanguageVersion.of(21))
-        }
-    )
+// Compiler options shared by main, test and the fake provider source set.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    // Real JVM default methods in SPI interfaces (00 section 10): methods can be added without breaking older plugin jars.
+    compilerOptions.freeCompilerArgs.add("-jvm-default=enable")
 }
+
+// Tiers (17 section 2/3.2): `test` = T0 + T1 (no database, no instance); `dbTest` = T2 (real MariaDB, tag "db");
+// `e2eTest` = T4 (tag "e2e"). The test JVM is JDK 21 like the host; main classes are Java 11 bytecode.
+tasks.named<Test>("test") {
+    useJUnitPlatform { excludeTags("db", "e2e") }
+}
+
+val dbTest by tasks.registering(Test::class) {
+    group = "verification"
+    description = "T2: DAO, schema, migration and service tests against a real MariaDB (PANO_IT_MARIADB)."
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform { includeTags("db") }
+    maxParallelForks = 1
+    doFirst {
+        require(!System.getenv("PANO_IT_MARIADB").isNullOrBlank()) {
+            "dbTest needs PANO_IT_MARIADB=host:port and PANO_IT_MARIADB_PASSWORD"
+        }
+    }
+}
+
+val e2eTest by tasks.registering(Test::class) {
+    group = "verification"
+    description = "T4: end-to-end scenarios against the isolated instance (scripts/e2e-instance.sh)."
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform { includeTags("e2e") }
+    maxParallelForks = 1
+    dependsOn("fakeProviderJar")
+    systemProperty("market.e2e.fakeJar", layout.buildDirectory.file("fake/pano-plugin-market-fake-$version.jar").get().asFile.absolutePath)
+    doFirst {
+        require(!System.getenv("PANO_IT_MARIADB").isNullOrBlank() && !System.getenv("MARKET_E2E_URL").isNullOrBlank()) {
+            "e2eTest needs PANO_IT_MARIADB and MARKET_E2E_URL (start the instance with scripts/e2e-instance.sh)"
+        }
+    }
+}
+
+tasks.withType<Test>().configureEach {
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
+    testLogging {
+        events("failed", "skipped")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+    reports.junitXml.required.set(true)
+
+    // A gated task that executed nothing, or skipped anything, is a failure: a missing database or a @Disabled
+    // class can never look like a green run.
+    val taskName = name
+    val gated = taskName != "test"
+    addTestListener(object : TestListener {
+        override fun beforeSuite(suite: TestDescriptor) {}
+        override fun beforeTest(testDescriptor: TestDescriptor) {}
+        override fun afterTest(testDescriptor: TestDescriptor, result: TestResult) {}
+        override fun afterSuite(suite: TestDescriptor, result: TestResult) {
+            if (suite.parent == null) {
+                println("TEST-SUMMARY $taskName: executed=${result.testCount} failed=${result.failedTestCount} skipped=${result.skippedTestCount}")
+                if (gated && (result.testCount == 0L || result.skippedTestCount > 0L)) {
+                    throw GradleException("$taskName: executed=${result.testCount} skipped=${result.skippedTestCount}")
+                }
+            }
+        }
+    })
+}
+
+val fakeProviderJar by tasks.registering(Jar::class) {
+    group = "build"
+    description = "Packages the T3 fake payment provider plugin (tests only; never in build/libs)."
+    from(fakeProvider.output)
+    archiveFileName.set("pano-plugin-market-fake-$version.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("fake")) // never build/libs: the release uploads build/libs/*.jar
+    manifest {
+        attributes(
+            "id" to "pano-plugin-market-fake",
+            "name" to "Market fake gateway (tests only)",
+            "main-class" to "com.panomc.plugins.marketfake.FakePlugin",
+            "version" to version,
+            "pano-version" to pluginPanoVersion,
+            "developer" to "Pano",
+            "dependencies" to "pano-plugin-market"
+        )
+    }
+}
+
+// Part of `check`: the shipped jar must not carry host libraries, the fake provider or too-new bytecode.
+val verifyJar by tasks.registering {
+    group = "verification"
+    description = "Checks the market jar: no host or fake classes, SPI present, Java 11 bytecode."
+    dependsOn(tasks.shadowJar)
+    val marketSrc = layout.projectDirectory.dir("src/main/kotlin/com/panomc/plugins/market").asFile
+    doLast {
+        val jar = tasks.shadowJar.get().archiveFile.get().asFile
+        ZipFile(jar).use { z ->
+            val names = z.entries().asSequence().map { it.name }.toList()
+            val forbidden = listOf(
+                "com/panomc/plugins/marketfake/", "com/panomc/platform/", "kotlin/", "kotlinx/coroutines/",
+                "io/vertx/", "org/springframework/", "com/google/gson/"
+            )
+            val hit = names.filter { n -> forbidden.any { n.startsWith(it) } }
+            require(hit.isEmpty()) { "market jar contains forbidden classes: ${hit.take(5)}" }
+            // The SPI package arrives with the payment SPI slice; once its sources exist the jar must carry it.
+            if (File(marketSrc, "spi").walkTopDown().any { it.isFile }) {
+                require(names.any { it.startsWith("com/panomc/plugins/market/spi/") }) { "SPI missing from the jar" }
+            }
+            require(names.none { it.startsWith("org/apache/pdfbox/") }) {
+                "PDFBox must be relocated under com/panomc/plugins/market/shaded"
+            }
+            // Java 11 bytecode (00 section 10): class major version of every market class must be <= 55
+            // (mc.velocity is Java 17, 19 section 2).
+            z.entries().asSequence().filter { it.name.endsWith(".class") && !it.name.startsWith("META-INF/") }.forEach { e ->
+                val major = z.getInputStream(e).use { s ->
+                    val b = ByteArray(8)
+                    var read = 0
+                    while (read < 8) {
+                        val r = s.read(b, read, 8 - read)
+                        require(r > 0) { "${e.name} is truncated" }
+                        read += r
+                    }
+                    ((b[6].toInt() and 0xff) shl 8) or (b[7].toInt() and 0xff)
+                }
+                val limit = if (e.name.startsWith("com/panomc/plugins/market/mc/velocity/")) 61 else 55
+                require(major <= limit) { "${e.name} is class major $major (> $limit)" }
+            }
+            // Minecraft side (19 section 2.3): once mc/ sources exist, the descriptors must be at the jar root and
+            // no class under mc/ may reference platform classes.
+            if (File(marketSrc, "mc").walkTopDown().any { it.isFile }) {
+                for (f in listOf("plugin.yml", "bungee.yml", "velocity-plugin.json")) {
+                    require(f in names) { "$f missing at the jar root" }
+                }
+                val needle = "com/panomc/platform/".toByteArray(Charsets.ISO_8859_1)
+                names.filter { it.startsWith("com/panomc/plugins/market/mc/") && it.endsWith(".class") }.forEach { n ->
+                    val bytes = z.getInputStream(z.getEntry(n)).use { it.readBytes() }
+                    val s = String(bytes, Charsets.ISO_8859_1)
+                    require(!s.contains(String(needle, Charsets.ISO_8859_1))) { "$n references com/panomc/platform/" }
+                }
+            }
+        }
+    }
+}
+tasks.named("check") { dependsOn(verifyJar) }
