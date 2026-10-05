@@ -160,7 +160,142 @@
       "create-success": "Ürün başarıyla oluşturuldu.",
       "delete-confirm": "\"{name}\" ürününü silmek istediğinize emin misiniz?",
       "delete-error": "Ürün silinirken bir hata oluştu.",
-      "delete-success": "Ürün başarıyla silindi."
+      "delete-success": "Ürün başarıyla silindi.",
+      "tabs": {
+        "general": "Genel",
+        "pricing": "Fiyatlandırma",
+        "variants": "Varyantlar",
+        "fields": "Özel Alanlar",
+        "bundle": "Paket",
+        "shipping": "Kargo",
+        "limits": "Limitler",
+        "providers": "Sağlayıcılar",
+        "seo": "SEO",
+        "actions": "Aksiyonlar"
+      },
+      "tab-has-errors": "Bu sekmede geçersiz alanlar var",
+      "pending-tab": "{tab} bölümü yeniden hazırlanıyor.",
+      "validation-failed": "Bazı alanları düzeltmeniz gerekiyor.",
+      "side-load-failed": "Bu liste yüklenemedi.",
+      "reload": "Yeniden Yükle",
+      "image-error": "5 MB a kadar PNG, JPEG, GIF veya WebP bir görsel seçin.",
+      "delete-title": "Ürünü Sil",
+      "kind": "Tür",
+      "kind-locked": "Tür, ürün oluşturulduktan sonra değiştirilemez.",
+      "kinds": {
+        "STANDARD": "Standart",
+        "BUNDLE": "Paket",
+        "CREDIT_PACK": "Kredi Paketi"
+      },
+      "statuses": {
+        "ACTIVE": "Aktif",
+        "INACTIVE": "Pasif",
+        "ARCHIVED": "Arşivlenmiş"
+      },
+      "physical": "Fiziksel Ürün",
+      "allow-gift": "Hediye Edilebilir",
+      "tier-rank": "Kademe Sırası",
+      "short-description": "Kısa açıklama",
+      "sale-window": "Satış Aralığı",
+      "compare-at-price": "Eski Fiyat",
+      "compare-at-placeholder": "Üstü çizili gösterilen eski fiyat",
+      "credit-amount": "Kredi Miktarı",
+      "credit-amount-help": "Alıcıya verilecek kredi miktarı.",
+      "vat": "KDV",
+      "vat-default": "Mağaza Varsayılanını Kullan (% {percent})",
+      "billing-mode": "Faturalama",
+      "billing-locked": "Paketler ve kredi paketleri her zaman tek seferlik satın alınır.",
+      "period": "Süre",
+      "period-count": "Birim sayısı",
+      "period-unit": "Birim",
+      "units": {
+        "MINUTE": "Dakika",
+        "HOUR": "Saat",
+        "DAY": "Gün",
+        "WEEK": "Hafta",
+        "MONTH": "Ay",
+        "YEAR": "Yıl"
+      },
+      "max-cycles": "En Fazla Dönem",
+      "max-cycles-placeholder": "Boş bırakılırsa iptal edilene kadar sürer",
+      "limit-stock": "Stoğu Sınırla",
+      "adjust-stock": "Stoğu Düzenle",
+      "currency-prices": "Para Birimine Göre Fiyatlar",
+      "grid": {
+        "currency": "Para Birimi",
+        "price": "Fiyat",
+        "compare-at": "Eski Fiyat"
+      },
+      "subscription-notice": {
+        "title": "Abonelik Ürünleri Tek Başına Satılır",
+        "body": "Abonelik, siparişteki tek ürün olmak zorundadır. Yinelenen ödemeyi desteklemeyen ödeme yöntemleri bunu süreli ürün olarak satar ve alıcıya yenileme hatırlatması gönderir."
+      },
+      "variants": {
+        "enable": "Bu ürünün varyantları var",
+        "enable-help": "Alıcı bir varyant seçer; stok, fiyat ve ağırlık varyanta göre farklı olabilir.",
+        "pack-locked": "Kredi paketlerinin varyantı olamaz.",
+        "options": "Seçenekler",
+        "add-axis": "Seçenek Ekle",
+        "axis-label": "Seçenek adı, örn. Beden",
+        "value-label": "Değer, örn. Büyük",
+        "add-value": "Değer Ekle",
+        "generate": "Varyantları Oluştur",
+        "generated": "{added} eklendi, {kept} korundu, {orphans} seçeneklerde yok.",
+        "too-many": "Bu seçenekler {count} varyant üretir; sınır {max}.",
+        "no-options": "Önce en az bir değeri olan bir seçenek ekleyin.",
+        "title": "{count} Varyant",
+        "add-variant": "Varyant Ekle",
+        "name": "Ad",
+        "sku": "SKU",
+        "price": "Fiyat",
+        "product-price": "Ürün fiyatı",
+        "compare-at": "Eski Fiyat",
+        "stock": "Stok",
+        "weight": "Ağırlık (g)",
+        "product-weight": "Ürün ağırlığı",
+        "period-count": "Süre",
+        "duplicate": "Çoğalt",
+        "not-in-options": "Seçeneklerde Yok",
+        "attributes": "Nitelikler",
+        "attribute-key": "anahtar",
+        "attribute-value": "değer",
+        "attributes-help": "Komutlarda ve webhook larda '{variant.anahtar}' olarak kullanılabilir.",
+        "image": "Varyant Görseli",
+        "image-title": "Varyant görseli",
+        "image-error": "5 MB a kadar PNG, JPEG, GIF veya WebP bir görsel seçin.",
+        "disable-title": "Tüm Varyantlar Kaldırılsın mı?",
+        "disable-description": "Varyantlar kaydettiğinizde kaldırılır. Siparişlerde kullanılmış varyantlar silinmez, arşivlenir.",
+        "disable-confirm": "Varyantları Kaldır"
+      },
+      "bundle": {
+        "title": "Pakette {count} Ürün",
+        "add": "Ürün Ekle",
+        "add-cta": "Pakete Ekle",
+        "product": "Ürün",
+        "variant": "Varyant",
+        "choose-variant": "Bir varyant seçin",
+        "quantity": "Adet",
+        "search": "Ürün ara..."
+      },
+      "field-errors": {
+        "REQUIRED": "Bu alan zorunludur.",
+        "TOO_LONG": "Bu değer çok uzun.",
+        "INVALID": "Bu değer geçerli değil.",
+        "INVALID_FORMAT": "Yalnızca küçük harf, rakam ve tek tire kullanın.",
+        "RESERVED_SLUG": "Bu kimlik mağaza tarafından ayrılmış.",
+        "SLUG_ALREADY_EXISTS": "Bu ürün kimliği zaten kullanımda.",
+        "OUT_OF_RANGE": "Bu değer izin verilen aralığın dışında.",
+        "NOT_INTEGER": "Tam sayı girin.",
+        "MAX_DECIMALS": "Bu alan için çok fazla ondalık basamak var.",
+        "COMPARE_NOT_ABOVE_PRICE": "Eski fiyat, fiyattan yüksek olmalıdır.",
+        "REQUIRES_PRICE": "Önce bir fiyat girin.",
+        "DUPLICATE": "Bu değer zaten kullanılıyor.",
+        "TOO_MANY": "Çok fazla kayıt var.",
+        "PHYSICAL_NOT_ALLOWED": "Yalnızca standart tek seferlik ürünler fiziksel olabilir.",
+        "INVALID_DATE_RANGE": "Bitiş, başlangıçtan sonra olmalıdır.",
+        "NEEDS_ACTIVE_VARIANT": "En az bir aktif varyant ekleyin.",
+        "NEEDS_ITEMS": "En az bir ürün ekleyin."
+      }
     },
     "comparisons": {
       "title": "Karşılaştırmalar",
@@ -1001,6 +1136,16 @@
       "server": "Sunucu",
       "add": "Ekle",
       "max-quantity": "Siparişte en fazla {max} adet."
+    },
+    "stock": {
+      "title": "Stoğu Düzenle",
+      "target": "Hedef",
+      "product": "Ürünün kendisi",
+      "mode": "Mod",
+      "mode-SET": "Şuna Ayarla",
+      "mode-ADJUST": "Ekle Veya Çıkar",
+      "value": "Miktar",
+      "success": "Stok güncellendi."
     }
   },
   "settings": {
@@ -1645,6 +1790,11 @@
       "NOT_IN_CURRENCY": "Bu para biriminde fiyatı yok",
       "SUBSCRIPTION_MUST_BE_ALONE": "Abonelik elle oluşturulamaz",
       "UNKNOWN": "Bu satırda bir sorun var"
+    },
+    "billing-mode": {
+      "ONE_TIME": "Tek Seferlik",
+      "TIMED": "Süreli",
+      "SUBSCRIPTION": "Abonelik"
     }
   },
   "alerts": {

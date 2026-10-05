@@ -160,7 +160,142 @@
       "create-success": "Product created successfully.",
       "delete-confirm": "Are you sure you want to delete the product \"{name}\"?",
       "delete-error": "An error occurred while deleting the product.",
-      "delete-success": "Product deleted successfully."
+      "delete-success": "Product deleted successfully.",
+      "tabs": {
+        "general": "General",
+        "pricing": "Pricing",
+        "variants": "Variants",
+        "fields": "Custom Fields",
+        "bundle": "Bundle",
+        "shipping": "Shipping",
+        "limits": "Limits",
+        "providers": "Providers",
+        "seo": "SEO",
+        "actions": "Actions"
+      },
+      "tab-has-errors": "This tab has invalid fields",
+      "pending-tab": "The {tab} section is being rebuilt.",
+      "validation-failed": "Some fields need your attention.",
+      "side-load-failed": "Could not load this list.",
+      "reload": "Reload",
+      "image-error": "Choose a PNG, JPEG, GIF or WebP image up to 5 MB.",
+      "delete-title": "Delete Product",
+      "kind": "Type",
+      "kind-locked": "The type cannot be changed after the product is created.",
+      "kinds": {
+        "STANDARD": "Standard",
+        "BUNDLE": "Bundle",
+        "CREDIT_PACK": "Credit Pack"
+      },
+      "statuses": {
+        "ACTIVE": "Active",
+        "INACTIVE": "Inactive",
+        "ARCHIVED": "Archived"
+      },
+      "physical": "Physical Product",
+      "allow-gift": "Can Be Gifted",
+      "tier-rank": "Tier Rank",
+      "short-description": "Short description",
+      "sale-window": "Sale Window",
+      "compare-at-price": "Compare-At Price",
+      "compare-at-placeholder": "Original price shown struck through",
+      "credit-amount": "Credit Amount",
+      "credit-amount-help": "The credits the buyer receives.",
+      "vat": "VAT",
+      "vat-default": "Use Store Default ({percent} %)",
+      "billing-mode": "Billing",
+      "billing-locked": "Bundles and credit packs are always one-time purchases.",
+      "period": "Period",
+      "period-count": "Number of units",
+      "period-unit": "Unit",
+      "units": {
+        "MINUTE": "Minutes",
+        "HOUR": "Hours",
+        "DAY": "Days",
+        "WEEK": "Weeks",
+        "MONTH": "Months",
+        "YEAR": "Years"
+      },
+      "max-cycles": "Maximum Cycles",
+      "max-cycles-placeholder": "Empty means until cancelled",
+      "limit-stock": "Limit Stock",
+      "adjust-stock": "Adjust Stock",
+      "currency-prices": "Prices Per Currency",
+      "grid": {
+        "currency": "Currency",
+        "price": "Price",
+        "compare-at": "Compare-At Price"
+      },
+      "subscription-notice": {
+        "title": "Subscription Products Are Sold Alone",
+        "body": "A subscription must be the only item in an order. Payment methods without recurring billing sell it as a timed product and remind the buyer to renew."
+      },
+      "variants": {
+        "enable": "This product has variants",
+        "enable-help": "The buyer chooses one variant; stock, price and weight can differ per variant.",
+        "pack-locked": "Credit packs cannot have variants.",
+        "options": "Options",
+        "add-axis": "Add Option",
+        "axis-label": "Option name, e.g. Size",
+        "value-label": "Value, e.g. Large",
+        "add-value": "Add Value",
+        "generate": "Generate Variants",
+        "generated": "{added} added, {kept} kept, {orphans} not in options.",
+        "too-many": "These options make {count} variants; the limit is {max}.",
+        "no-options": "Add an option with at least one value first.",
+        "title": "{count} Variants",
+        "add-variant": "Add Variant",
+        "name": "Name",
+        "sku": "SKU",
+        "price": "Price",
+        "product-price": "Product price",
+        "compare-at": "Compare-At Price",
+        "stock": "Stock",
+        "weight": "Weight (g)",
+        "product-weight": "Product weight",
+        "period-count": "Period",
+        "duplicate": "Duplicate",
+        "not-in-options": "Not In Options",
+        "attributes": "Attributes",
+        "attribute-key": "key",
+        "attribute-value": "value",
+        "attributes-help": "Available in commands and webhooks as '{variant.key}'.",
+        "image": "Variant Image",
+        "image-title": "Variant image",
+        "image-error": "Choose a PNG, JPEG, GIF or WebP image up to 5 MB.",
+        "disable-title": "Remove All Variants?",
+        "disable-description": "The variants are removed when you save. Variants already used by orders are archived, not erased.",
+        "disable-confirm": "Remove Variants"
+      },
+      "bundle": {
+        "title": "{count} Products In This Bundle",
+        "add": "Add Product",
+        "add-cta": "Add To Bundle",
+        "product": "Product",
+        "variant": "Variant",
+        "choose-variant": "Choose a variant",
+        "quantity": "Quantity",
+        "search": "Search products..."
+      },
+      "field-errors": {
+        "REQUIRED": "This field is required.",
+        "TOO_LONG": "This value is too long.",
+        "INVALID": "This value is not valid.",
+        "INVALID_FORMAT": "Use lower-case letters, digits and single hyphens only.",
+        "RESERVED_SLUG": "This ID is reserved by the store.",
+        "SLUG_ALREADY_EXISTS": "This product ID is already in use.",
+        "OUT_OF_RANGE": "This value is out of range.",
+        "NOT_INTEGER": "Enter a whole number.",
+        "MAX_DECIMALS": "Too many decimal places for this field.",
+        "COMPARE_NOT_ABOVE_PRICE": "The compare-at price must be higher than the price.",
+        "REQUIRES_PRICE": "Enter a price first.",
+        "DUPLICATE": "This value is already used.",
+        "TOO_MANY": "There are too many entries.",
+        "PHYSICAL_NOT_ALLOWED": "Only standard one-time products can be physical.",
+        "INVALID_DATE_RANGE": "The end must be after the start.",
+        "NEEDS_ACTIVE_VARIANT": "Add at least one active variant.",
+        "NEEDS_ITEMS": "Add at least one product."
+      }
     },
     "comparisons": {
       "title": "Comparisons",
@@ -1001,6 +1136,16 @@
       "server": "Server",
       "add": "Add",
       "max-quantity": "At most {max} per order."
+    },
+    "stock": {
+      "title": "Adjust Stock",
+      "target": "Target",
+      "product": "The product",
+      "mode": "Mode",
+      "mode-SET": "Set To",
+      "mode-ADJUST": "Add Or Remove",
+      "value": "Quantity",
+      "success": "Stock updated."
     }
   },
   "settings": {
@@ -1645,6 +1790,11 @@
       "NOT_IN_CURRENCY": "Not priced in this currency",
       "SUBSCRIPTION_MUST_BE_ALONE": "A subscription cannot be created manually",
       "UNKNOWN": "This line has a problem"
+    },
+    "billing-mode": {
+      "ONE_TIME": "One Time",
+      "TIMED": "Timed",
+      "SUBSCRIPTION": "Subscription"
     }
   },
   "alerts": {
