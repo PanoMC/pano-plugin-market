@@ -32,9 +32,19 @@ class T0ClasspathTest {
         else Files.walk(dir).use { s -> s.filter { it.toString().endsWith(".class") }.map { it.toFile() }.collect(java.util.stream.Collectors.toList()) }
     }
 
+    /**
+     * The one allowed exception: `MarketExtension` extends the platform's plugin event listener (02 section 2), which
+     * is how a provider plugin registers. Only that exact reference in that exact class is let through; built at run
+     * time like [forbidden].
+     */
+    private val allowedReferences: Map<String, String> = mapOf(
+        "MarketExtension.class" to listOf("com", "panomc", "platform", "api", "event", "PluginEventListener").joinToString("/")
+    )
+
     private fun offenders(files: List<File>): List<String> = files.flatMap { f ->
         val bytes = f.readBytes()
-        val text = String(bytes, Charsets.ISO_8859_1)
+        val allowed = allowedReferences[f.name]
+        val text = String(bytes, Charsets.ISO_8859_1).let { if (allowed != null) it.replace(allowed, "") else it }
         forbidden.filter { text.contains(it) }.map { "${f.name} references $it" }
     }
 
@@ -52,6 +62,24 @@ class T0ClasspathTest {
         val files = classFiles(test, "core", "spi")
         assertTrue(files.isNotEmpty(), "expected test classes under $test")
         assertEquals(emptyList<String>(), offenders(files))
+    }
+
+    @Test
+    fun `the market extension exemption lets only the plugin event listener through`() {
+        val dir = Files.createTempDirectory("t0allow").toFile()
+        try {
+            val listener = allowedReferences.getValue("MarketExtension.class")
+            val ext = File(dir, "MarketExtension.class")
+            ext.writeBytes(("xx" + listener + " yy").toByteArray(Charsets.ISO_8859_1))
+            assertEquals(emptyList<String>(), offenders(listOf(ext)))
+            ext.writeBytes(("xx" + listener + " " + forbidden[0] + "Other yy").toByteArray(Charsets.ISO_8859_1))
+            assertEquals(1, offenders(listOf(ext)).size, "another platform class in the same file is still refused")
+            val other = File(dir, "Other.class")
+            other.writeBytes(("xx" + listener + " yy").toByteArray(Charsets.ISO_8859_1))
+            assertEquals(1, offenders(listOf(other)).size, "the exemption is for MarketExtension only")
+        } finally {
+            dir.deleteRecursively()
+        }
     }
 
     @Test

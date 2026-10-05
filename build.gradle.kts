@@ -127,6 +127,10 @@ dependencies {
     // https://mvnrepository.com/artifact/org.springframework/spring-context
     compileOnly("org.springframework:spring-context:${springContextVersion}")
 
+    // spi.testkit (ProviderContractTest, ShippingProviderContractTest) is part of the API jar and uses JUnit; it is
+    // compiled against the API only, the plugin that runs the contract brings its own JUnit (02 section 9).
+    compileOnly("org.junit.jupiter:junit-jupiter-api:5.13.3")
+
     // Same JUnit setup as the host (see Pano/build.gradle.kts).
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.13.3")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.13.3")
@@ -259,7 +263,26 @@ tasks {
     }
 }
 
+// Thin API jar for standalone plugin builds (02 section 9, 16 section 6.1): com/panomc/plugins/market/spi/** (testkit
+// included) plus the Kotlin module file for the top-level settingsSchema { } DSL. Written to build/api, not build/libs,
+// so every glob over build/libs/pano-plugin-market-*.jar (store upload, E2E instance, copyJar) sees only the plugin jar.
+val apiJar by tasks.registering(Jar::class) {
+    group = "build"
+    description = "Thin SPI jar attached to every market release for standalone plugin builds."
+    archiveFileName.set("$pluginId-api-$version.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("api"))
+    from(sourceSets.main.get().output.classesDirs) {
+        include("com/panomc/plugins/market/spi/**")
+        include("META-INF/*.kotlin_module")
+    }
+    includeEmptyDirs = false
+    manifest {
+        attributes("Implementation-Title" to "$pluginId-api", "Implementation-Version" to version.toString())
+    }
+}
+
 tasks.named("build") {
+    dependsOn(apiJar)
     if (!noui) {
         dependsOn("zipPluginUI")
     }
@@ -378,6 +401,9 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 // `e2eTest` = T4 (tag "e2e"). The test JVM is JDK 21 like the host; main classes are Java 11 bytecode.
 tasks.named<Test>("test") {
     useJUnitPlatform { excludeTags("db", "e2e") }
+    // ApiJarTest (B-22) inspects the thin API jar, so a plain `test` builds it first.
+    dependsOn(apiJar)
+    systemProperty("market.apiJar", layout.buildDirectory.file("api/$pluginId-api-$version.jar").get().asFile.absolutePath)
 }
 
 val dbTest by tasks.registering(Test::class) {

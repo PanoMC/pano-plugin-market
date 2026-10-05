@@ -38,8 +38,20 @@ class T0ClasspathTest {
         return out
     }
 
-    private fun violations(classFile: File): List<String> =
-        classFile.inputStream().use { utf8Constants(it) }.filter { c -> forbidden.any { c.contains(it) } }
+    /**
+     * The one allowed exception (02 section 2): `spi.MarketExtension` extends the platform's plugin event listener, which is
+     * how a provider plugin registers. Exactly that class name and its descriptor form, in exactly that class file.
+     */
+    private val allowed: Map<String, Set<String>> = mapOf(
+        "MarketExtension.class" to setOf(
+            "com/panomc/platform/api/event/PluginEventListener", "Lcom/panomc/platform/api/event/PluginEventListener;"
+        )
+    )
+
+    private fun violations(classFile: File): List<String> {
+        val exempt = allowed[classFile.name] ?: emptySet()
+        return classFile.inputStream().use { utf8Constants(it) }.filter { c -> c !in exempt && forbidden.any { c.contains(it) } }
+    }
 
     /** Directories of the main and test class output that hold the given package. */
     private fun roots(pkg: String): List<File> =
