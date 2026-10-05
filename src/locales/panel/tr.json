@@ -71,7 +71,9 @@
       "toast-load-error": "Kategoriler yüklenirken bir hata oluştu.",
       "toast-delete-success": "Kategori başarıyla silindi.",
       "toast-delete-error": "Kategori silinirken bir hata oluştu.",
-      "toast-sort-error": "Sıralama kaydedilemedi."
+      "toast-sort-error": "Sıralama kaydedilemedi.",
+      "tiered": "Kademeli",
+      "delete-title": "Kategoriyi Sil"
     },
     "products": {
       "title": "Ürünler",
@@ -445,7 +447,9 @@
       "table": {
         "code": "Hediye Kodu",
         "products": "Ürünler",
-        "validity": "Geçerlilik Süresi"
+        "validity": "Geçerlilik Süresi",
+        "name": "Ad",
+        "used": "Kullanılan"
       },
       "credit-amount": "{amount} Kredi",
       "random-gift": "Rastgele Hediye ({count} Ürün Seçili)",
@@ -455,7 +459,8 @@
       "confirm-delete": "\"{code}\" hediyesini silmek istediğinize emin misiniz?",
       "toast-delete-success": "Hediye başarıyla silindi.",
       "toast-delete-error": "Hediye silinirken bir hata oluştu.",
-      "toast-load-error": "Hediyeler yüklenirken bir hata oluştu."
+      "toast-load-error": "Hediyeler yüklenirken bir hata oluştu.",
+      "delete-title": "Hediyeyi Sil"
     },
     "discounts": {
       "title": "İndirimler",
@@ -815,6 +820,68 @@
         "recipient-same": "Alıcı, satın alandan farklı olmalı.",
         "email-invalid": "Geçerli bir e-posta adresi gir."
       }
+    },
+    "deliveries": {
+      "title": "Teslimatlar",
+      "filters": "Filtreler",
+      "count": "{count} Teslimat",
+      "tab": {
+        "all": "Tümü",
+        "waiting": "Bekleyen",
+        "failed": "Başarısız",
+        "done": "Tamamlanan"
+      },
+      "phase": "Aşama",
+      "phase-all": "Tüm Aşamalar",
+      "table": {
+        "order": "Sipariş",
+        "player": "Oyuncu",
+        "product": "Ürün",
+        "action": "İşlem",
+        "server": "Sunucu",
+        "attempts": "Deneme",
+        "last-error": "Son Hata",
+        "when": "Zaman"
+      },
+      "actions": {
+        "retry": "Yeniden Dene",
+        "offer-again": "Şimdi Tekrar Sun",
+        "cancel": "İptal Et",
+        "view-order": "Siparişi Görüntüle"
+      },
+      "cancel-requested": "İptal istendi",
+      "requires-online": "Oyuncunun çevrimiçi olması gerekir",
+      "scheduled-for": "Planlanan:",
+      "retry-title": "Teslimatı Yeniden Dene",
+      "retry-description": "Teslimat aynı anahtarla yeniden kuyruğa alınır.",
+      "offer-again-title": "Şimdi Tekrar Sun",
+      "offer-again-description": "Aynı anahtar oyun sunucusuna tekrar sunulur. Sunucu tekrarları ayıklar, yani hiçbir şey iki kez çalışmaz.",
+      "cancel-title": "Teslimatı İptal Et",
+      "cancel-description": "Oyun sunucusu teslimatı aldıysa, sunucu yanıt verene kadar \"iptal istendi\" görünür.",
+      "toast-retry": "Teslimat yeniden kuyruğa alındı.",
+      "toast-cancel": "Teslimat iptal edildi."
+    },
+    "goals": {
+      "title": "Hedefler",
+      "create-goal": "Hedef Oluştur",
+      "count": "{count} Hedef",
+      "table": {
+        "name": "Ad",
+        "metric": "Ölçüt",
+        "progress": "İlerleme",
+        "period": "Dönem",
+        "ends": "Bitiş",
+        "on-store": "Mağazada"
+      },
+      "delete-title": "Hedefi Sil",
+      "confirm-delete": "\"{name}\" hedefini silmek istediğinizden emin misiniz?",
+      "toast-delete-success": "Hedef silindi.",
+      "field-errors": {
+        "REQUIRED": "Bu alan zorunludur.",
+        "TOO_LONG": "Metin çok uzun.",
+        "INVALID": "Geçerli bir hedef girin (0 üzeri tutar veya en az 1 tam sayı).",
+        "BEFORE_START": "Bitiş, başlangıçtan sonra olmalıdır."
+      }
     }
   },
   "common": {
@@ -962,7 +1029,12 @@
       "toast-name-required": "Kategori adı zorunludur.",
       "toast-updated": "Kategori güncellendi.",
       "toast-created": "Kategori oluşturuldu.",
-      "toast-save-error": "Kategori kaydedilirken bir hata oluştu."
+      "toast-save-error": "Kategori kaydedilirken bir hata oluştu.",
+      "tiered": "Kademeli Kategori",
+      "tiered-hint": "Alıcılar kategoriden aynı anda tek ürün taşır ve daha üst bir ürüne yükseltme yapabilir.",
+      "upgrade-mode": "Yükseltme Fiyatı",
+      "upgrade-mode-DIFFERENCE": "Farkı Öde",
+      "upgrade-mode-FULL": "Tam Fiyatı Öde"
     },
     "payment-method": {
       "title": "{name} Ayarları",
@@ -998,7 +1070,16 @@
       "toast-code-exists": "Bu kod zaten kullanılıyor.",
       "toast-save-error": "Hediye kaydedilirken bir hata oluştu.",
       "toast-updated": "Hediye güncellendi.",
-      "toast-created": "Hediye oluşturuldu."
+      "toast-created": "Hediye oluşturuldu.",
+      "name": "Ad",
+      "redeem-limit": "Kullanım Limiti",
+      "redeem-limit-hint": "Boş bırakılırsa sınırsızdır.",
+      "customer-redeem-limit": "Müşteri Başına",
+      "field-errors": {
+        "TOO_LONG": "Metin çok uzun.",
+        "INVALID": "En az 1 olan bir tam sayı girin.",
+        "DATES_REVERSED": "Bitiş tarihi başlangıç tarihinden önce olamaz."
+      }
     },
     "discount": {
       "title-edit": "İndirimi Düzenle",
@@ -1328,6 +1409,26 @@
       "max-length": "En çok uzunluk",
       "min-value": "En düşük değer",
       "max-value": "En yüksek değer"
+    },
+    "delivery-filters": {
+      "title": "Teslimat Filtreleri",
+      "server": "Sunucu",
+      "action-type": "İşlem Türü"
+    },
+    "goal": {
+      "title-create": "Hedef Oluştur",
+      "title-edit": "Hedefi Düzenle",
+      "name": "Ad",
+      "description": "Açıklama",
+      "metric": "Ölçüt",
+      "products": "Ürünler",
+      "target": "Hedef",
+      "period": "Dönem",
+      "starts-at": "Başlangıç",
+      "ends-at": "Bitiş",
+      "show-on-store": "Mağazada Göster",
+      "toast-created": "Hedef oluşturuldu.",
+      "toast-updated": "Hedef güncellendi."
     }
   },
   "settings": {
@@ -1938,7 +2039,7 @@
       "COMPONENT_MISSING": "Sunucuda Pano eklentisi yok",
       "VERSION_MISMATCH": "Eklenti sürümü uyuşmuyor",
       "SERVER_REMOVED": "Sunucu silindi",
-      "UNKNOWN_OUTCOME": "Sonuç bilinmiyor",
+      "UNKNOWN_OUTCOME": "Çalışmış olabilir, yeniden çalıştırmadan önce kontrol edin",
       "ONLINE_WAIT_EXPIRED": "Oyuncu için çok beklendi",
       "COMMAND_ERROR": "Komut başarısız",
       "LUCKPERMS_MISSING": "LuckPerms yok",
@@ -1982,6 +2083,16 @@
       "STANDARD": "Standart",
       "BUNDLE": "Paket",
       "CREDIT_PACK": "Kredi Paketi"
+    },
+    "goal-metric": {
+      "REVENUE": "Gelir",
+      "ORDERS": "Siparişler",
+      "PRODUCT_SALES": "Ürün Satışları"
+    },
+    "goal-period": {
+      "ONE_TIME": "Tek Seferlik",
+      "WEEKLY": "Haftalık",
+      "MONTHLY": "Aylık"
     }
   },
   "alerts": {

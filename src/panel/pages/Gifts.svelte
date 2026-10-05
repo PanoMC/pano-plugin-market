@@ -61,7 +61,12 @@
   import { CardHeader, CardFilters, CardFiltersItem, NoContent, SearchInput, Pagination } from '@panomc/sdk/components/panel';
   import { base, goto, page } from '@panomc/sdk/svelte';
   import { _, showSuccessToast, showErrorToast } from '../../i18n';
+  import ConfirmModal from '../components/ConfirmModal.svelte';
   import CreateGiftModal from '../components/modals/CreateGiftModal.svelte';
+  import { sectionsFor } from '../navigation.js';
+  import { call, errorKey, marketPath } from '../utils/api.js';
+  import { usedCell } from '../utils/category-gift.js';
+  import { currentLocale } from '../utils/locale.js';
 
   let { data } = $props();
 
@@ -78,6 +83,8 @@
   let statusFilter = $derived($page.url.searchParams.get('status') || 'all'); // 'all' | 'ACTIVE' | 'INACTIVE'
 
   let isSearching = $state(false);
+  let confirmModal = $state(null);
+  const user = $derived($page.data?.user);
 
   let isEditModal = $state(false);
   let selectedGift = $state(null);
@@ -95,7 +102,7 @@
   // Epoch millis -> Turkish short date (e.g. "01 Ara 2024"); null when unset.
   function formatGiftDate(epoch) {
     if (!epoch) return null;
-    return new Date(epoch).toLocaleDateString('tr-TR', {
+    return new Date(epoch).toLocaleDateString(currentLocale(), {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
@@ -142,27 +149,28 @@
     }
   }
 
-  async function deleteGift(gift) {
-    if (!window.confirm($_('pages.gifts.confirm-delete', { values: { code: gift.code } }))) {
-      return;
-    }
-
-    try {
-      const result = await ApiUtil.delete({
-        path: `/api/panel/market/gifts/${gift.id}`,
-      });
-
-      if (result.error) throw result.error;
-
-      showSuccessToast($_('pages.gifts.toast-delete-success'));
-      // The deleted row may have been the last on this page; step back so the
-      // refetch does not request a now-out-of-range page (backend -> PAGE_NOT_FOUND).
-      const targetPage = gifts.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
-      await navigate({ page: targetPage });
-    } catch (e) {
-      console.error('[Market] Failed to delete gift', e);
-      showErrorToast($_('pages.gifts.toast-delete-error'));
-    }
+  function deleteGift(gift) {
+    confirmModal?.open({
+      icon: 'fa-solid fa-trash',
+      title: $_('pages.gifts.delete-title'),
+      description: $_('pages.gifts.confirm-delete', { values: { code: gift.code } }),
+      confirmLabel: $_('common.delete'),
+      variant: 'danger',
+      onConfirm: async () => {
+        const result = await call(ApiUtil.delete({ path: marketPath(`/gifts/${gift.id}`) }));
+        if (!result.ok) {
+          // A row that is already gone (404 NOT_FOUND) is toasted and the list refreshed.
+          showErrorToast($_(errorKey(result.error)));
+          if (result.error === 'NOT_FOUND') setTimeout(() => navigate(), 350);
+          return false;
+        }
+        showSuccessToast($_('pages.gifts.toast-delete-success'));
+        // The deleted row may have been the last on this page; step back so the refetch does not
+        // request a now-out-of-range page (backend -> PAGE_NOT_FOUND).
+        const targetPage = gifts.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
+        setTimeout(() => navigate({ page: targetPage }), 350);
+      },
+    });
   }
 
   function onPageClick(pageNum) {
@@ -170,7 +178,7 @@
   }
 </script>
 
-<MarketLayout>
+<MarketLayout area="discounts" sections={sectionsFor('discounts', user)} active="gifts">
   {#snippet right()}
     <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#createGiftModal" onclick={openCreateModal}>
       <i class="fa-solid fa-plus"></i>
@@ -210,9 +218,11 @@
           <thead>
             <tr>
               <th scope="col" style="width: 50px;"></th>
+              <th scope="col">{$_('pages.gifts.table.name')}</th>
               <th scope="col">{$_('pages.gifts.table.code')}</th>
               <th scope="col">{$_('pages.gifts.table.products')}</th>
               <th scope="col">{$_('common.status')}</th>
+              <th scope="col">{$_('pages.gifts.table.used')}</th>
               <th scope="col">{$_('pages.gifts.table.validity')}</th>
             </tr>
           </thead>
@@ -241,6 +251,7 @@
                     </div>
                   </div>
                 </th>
+                <td>{gift.name || '—'}</td>
                 <td>
                   <a href="#" class="font-monospace text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createGiftModal" onclick={(e) => { e.preventDefault(); openEditModal(gift); }}>
                     {gift.code}
@@ -264,6 +275,7 @@
                     <span class="badge text-bg-danger">{$_('common.inactive')}</span>
                   {/if}
                 </td>
+                <td class="text-nowrap">{usedCell(gift)}</td>
                 <td>
                   {#if !gift.expiryDate}
                     <span class="text-body-secondary font-monospace" style="font-size: 0.85rem;">{$_('pages.gifts.no-expiry')}</span>
@@ -291,4 +303,5 @@
   </div>
 </MarketLayout>
 
+<ConfirmModal bind:this={confirmModal} />
 <CreateGiftModal isEdit={isEditModal} gift={selectedGift} onSaved={refreshData} />

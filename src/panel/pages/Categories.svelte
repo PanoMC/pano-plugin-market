@@ -40,7 +40,11 @@
   import { flip } from 'svelte/animate';
   import { base, page, goto } from '@panomc/sdk/svelte';
   import { _, showSuccessToast, showErrorToast } from '../../i18n';
+  import ConfirmModal from '../components/ConfirmModal.svelte';
   import CreateCategoryModal from '../components/modals/CreateCategoryModal.svelte';
+  import { sectionsFor } from '../navigation.js';
+  import { call, errorKey, marketPath } from '../utils/api.js';
+  import { siblingMove } from '../utils/category-gift.js';
 
   let { data } = $props();
 
@@ -71,6 +75,8 @@
   let mappedCategories = $derived(categoriesData.map(mapCategory));
   let categories = $derived(optimisticCategories ?? mappedCategories);
 
+  let confirmModal = $state(null);
+  const user = $derived($page.data?.user);
   let isEditModal = $state(false);
   let selectedCategory = $state(null);
 
@@ -93,6 +99,8 @@
       icon: node.icon || 'fa-folder',
       color: node.color || '#0d6efd',
       status: (node.status || 'ACTIVE').toLowerCase(),
+      tiered: node.tiered === true,
+      upgradeMode: node.upgradeMode || 'DIFFERENCE',
       productsCount: node.productsCount ?? 0,
       parentId: node.parentId ?? null,
       position: node.position ?? 0,
@@ -150,24 +158,41 @@
     });
   }
 
-  async function deleteCategory(category) {
-    if (!window.confirm($_('pages.categories.confirm-delete', { values: { name: category.name } }))) {
-      return;
-    }
+  // A modal is hidden before the page is re-loaded; Bootstrap's fade takes 300 ms.
+  function afterModalHidden(run) {
+    setTimeout(run, 350);
+  }
 
-    try {
-      const result = await ApiUtil.delete({
-        path: `/api/panel/market/categories/${category.id}`,
-      });
+  function deleteCategory(category) {
+    confirmModal?.open({
+      icon: 'fa-solid fa-trash',
+      title: $_('pages.categories.delete-title'),
+      description: $_('pages.categories.confirm-delete', { values: { name: category.name } }),
+      confirmLabel: $_('common.delete'),
+      variant: 'danger',
+      onConfirm: async () => {
+        const result = await call(ApiUtil.delete({ path: marketPath(`/categories/${category.id}`) }));
+        if (!result.ok) {
+          // CATEGORY_IN_USE keeps the row; a missing row (404) or a stale tree is refreshed.
+          showErrorToast($_(errorKey(result.error)));
+          if (['NOT_FOUND', 'CATEGORY_IN_USE'].includes(result.error)) {
+            afterModalHidden(() => refreshData());
+          }
+          return false;
+        }
+        showSuccessToast($_('pages.categories.toast-delete-success'));
+        afterModalHidden(() => refreshData());
+      },
+    });
+  }
 
-      if (result.error) throw result.error;
-
-      showSuccessToast($_('pages.categories.toast-delete-success'));
-      await refreshData();
-    } catch (e) {
-      console.error('[Market] Failed to delete category', e);
-      showErrorToast($_('pages.categories.toast-delete-error'));
-    }
+  // Move Up / Move Down: the keyboard alternative to drag-and-drop (same POST /categories/sort).
+  async function moveCategory(category, dir) {
+    const body = siblingMove(categories, category.id, dir);
+    if (!body) return;
+    const result = await call(ApiUtil.post({ path: marketPath('/categories/sort'), body }));
+    if (!result.ok) showErrorToast($_(errorKey(result.error)));
+    await refreshData();
   }
 
   function onDragStart(e, id) {
@@ -502,13 +527,20 @@
   }
 </script>
 
-<MarketLayout>
+<MarketLayout area="catalog" sections={sectionsFor('catalog', user)} active="categories">
   {#snippet right()}
     <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={openCreateModal}>
       <i class="fa-solid fa-plus"></i>
       <span class="d-lg-inline d-none ms-2">{$_('pages.categories.add-category')}</span>
     </button>
   {/snippet}
+
+  {#if view === 'sort' && categories.length > 0}
+    <div class="alert alert-info d-flex align-items-center mb-0">
+      <i class="fas fa-info-circle me-3"></i>
+      {$_('pages.categories.sort-hint')}
+    </div>
+  {/if}
 
   <div class="card">
     <CardHeader>
@@ -586,7 +618,12 @@
                     <i class="fas {category.icon} fs-6" style="color: {category.color}"></i>
                   </div>
                   <div>
-                    <div class="">{category.name}</div>
+                    <div class="">
+                      {category.name}
+                      {#if category.tiered}
+                        <span class="badge text-bg-info ms-1">{$_('pages.categories.tiered')}</span>
+                      {/if}
+                    </div>
                     <div class="small text-truncate d-none d-md-block" style="max-width: 300px;">
                       {category.description || '-'}
                     </div>
@@ -612,10 +649,6 @@
     </div>
     {:else if view === 'sort'}
       <div class="card-body overflow-x-auto">
-        <div class="alert alert-info d-flex align-items-center mb-3">
-          <i class="fas fa-info-circle me-3"></i>
-          {$_('pages.categories.sort-hint')}
-        </div>
 
         {#snippet categoryRows(items)}
           {#each items as category (category.id)}
@@ -653,6 +686,16 @@
                     <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={() => openEditModal(category)}>
                       <i class="fas fa-pen me-2"></i> {$_('common.edit')}
                     </button>
+                    {#if siblingMove(categories, category.id, 'up')}
+                      <button type="button" class="dropdown-item" onclick={() => moveCategory(category, 'up')}>
+                        <i class="fas fa-arrow-up me-2"></i> {$_('common.move-up')}
+                      </button>
+                    {/if}
+                    {#if siblingMove(categories, category.id, 'down')}
+                      <button type="button" class="dropdown-item" onclick={() => moveCategory(category, 'down')}>
+                        <i class="fas fa-arrow-down me-2"></i> {$_('common.move-down')}
+                      </button>
+                    {/if}
                     <button type="button" class="dropdown-item text-danger" onclick={() => deleteCategory(category)}>
                       <i class="fas fa-trash me-2"></i> {$_('common.delete')}
                     </button>
@@ -682,7 +725,12 @@
                     <i class="fas {category.icon} fs-6" style="color: {category.color}"></i>
                   </div>
                   <div class="overflow-hidden">
-                    <div class="">{category.name}</div>
+                    <div class="">
+                      {category.name}
+                      {#if category.tiered}
+                        <span class="badge text-bg-info ms-1">{$_('pages.categories.tiered')}</span>
+                      {/if}
+                    </div>
                     <div class="small text-truncate d-none d-md-block" style="max-width: 300px;">
                       {category.description || '-'}
                     </div>
@@ -731,6 +779,7 @@
   </div>
 </MarketLayout>
 
+<ConfirmModal bind:this={confirmModal} />
 <CreateCategoryModal isEdit={isEditModal} category={selectedCategory} onSaved={refreshData} />
 
 <style>

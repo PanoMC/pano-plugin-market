@@ -4,6 +4,13 @@
   import ApiUtil from '@panomc/sdk/utils/api';
   import IconPicker from '../IconPicker.svelte';
   import { _, showSuccessToast, showErrorToast } from '../../../i18n';
+  import { call, errorKey, marketPath } from '../../utils/api.js';
+  import {
+    DEFAULT_UPGRADE_MODE,
+    UPGRADE_MODES,
+    changedCategoryFields,
+    formValue,
+  } from '../../utils/category-gift.js';
 
   let { isEdit = false, category = null, onSaved = () => {} } = $props();
 
@@ -15,10 +22,11 @@
   let iconClass = $state('fa-folder');
   let categoryColor = $state('#0d6efd');
   let categoryStatus = $state('active'); // 'active', 'inactive' or 'hidden'
+  let tiered = $state(false);
+  let upgradeMode = $state(DEFAULT_UPGRADE_MODE);
+  // CATEGORY_IN_USE (409): un-tiering a category with active entitlements; marks the switch.
+  let tieredInvalid = $state(false);
 
-  // Preserved on edit so PUT does not reparent/reorder the category.
-  let editParentId = $state(null);
-  let editPosition = $state(null);
 
   let fileInput = $state(null);
   let selectedFile = $state(null);
@@ -35,8 +43,11 @@
       categoryColor = category.color || '#0d6efd';
       categoryStatus = category.status || 'active';
       imageFileName = category.imageFileName || '';
-      editParentId = category.parentId ?? null;
-      editPosition = category.position ?? null;
+      tiered = category.tiered === true;
+      upgradeMode = UPGRADE_MODES.includes(category.upgradeMode)
+        ? category.upgradeMode
+        : DEFAULT_UPGRADE_MODE;
+      tieredInvalid = false;
       previewUrl = null;
       selectedFile = null;
       removeImage = false;
@@ -47,8 +58,9 @@
       categoryColor = '#0d6efd';
       categoryStatus = 'active';
       imageFileName = '';
-      editParentId = null;
-      editPosition = null;
+      tiered = false;
+      upgradeMode = DEFAULT_UPGRADE_MODE;
+      tieredInvalid = false;
       previewUrl = null;
       selectedFile = null;
       removeImage = false;
@@ -138,44 +150,61 @@
     }
 
     loading = true;
+    tieredInvalid = false;
 
     try {
+      const current = {
+        name: categoryName.trim(),
+        description: description || '',
+        icon: iconClass || 'fa-folder',
+        color: categoryColor || '#0d6efd',
+        status: STATUS_MAP[categoryStatus] || 'ACTIVE',
+        tiered,
+        upgradeMode,
+      };
       const formData = new FormData();
-      formData.append('name', categoryName.trim());
-      formData.append('description', description || '');
-      formData.append('icon', iconClass || 'fa-folder');
-      formData.append('color', categoryColor || '#0d6efd');
-      formData.append('status', STATUS_MAP[categoryStatus] || 'ACTIVE');
-
-      if (selectedFile) {
-        formData.append('image', selectedFile);
-      }
-
       let result;
       if (isEdit && category) {
-        // Preserve hierarchy: PUT treats a missing parentId as "move to root".
-        if (editParentId !== null && editParentId !== undefined) {
-          formData.append('parentId', editParentId);
+        // PUT is a partial update: only the changed keys are sent (parentId / position stay as
+        // they are on the server).
+        const original = {
+          name: category.name || '',
+          description: category.description || '',
+          icon: category.icon || 'fa-folder',
+          color: category.color || '#0d6efd',
+          status: STATUS_MAP[category.status] || 'ACTIVE',
+          tiered: category.tiered === true,
+          upgradeMode: category.upgradeMode,
+        };
+        for (const [key, value] of Object.entries(changedCategoryFields(original, current))) {
+          formData.append(key, formValue(value));
         }
-        if (editPosition !== null && editPosition !== undefined) {
-          formData.append('position', editPosition);
-        }
-        formData.append('removeImage', removeImage);
+        if (selectedFile) formData.append('image', selectedFile);
+        if (removeImage) formData.append('removeImage', 'true');
 
-        result = await ApiUtil.put({
-          path: `/api/panel/market/categories/${category.id}`,
-          body: formData,
-          headers: {},
-        });
+        result = await call(
+          ApiUtil.put({
+            path: marketPath(`/categories/${category.id}`),
+            body: formData,
+            headers: {},
+          }),
+        );
       } else {
-        result = await ApiUtil.post({
-          path: '/api/panel/market/categories',
-          body: formData,
-          headers: {},
-        });
+        for (const [key, value] of Object.entries(changedCategoryFields(null, current))) {
+          if (key === 'upgradeMode' && !tiered) continue;
+          formData.append(key, formValue(value));
+        }
+        if (selectedFile) formData.append('image', selectedFile);
+        result = await call(
+          ApiUtil.post({ path: marketPath('/categories'), body: formData, headers: {} }),
+        );
       }
 
-      if (result.error) throw result.error;
+      if (!result.ok) {
+        if (result.error === 'CATEGORY_IN_USE') tieredInvalid = true;
+        showErrorToast($_(errorKey(result.error)));
+        return;
+      }
 
       showSuccessToast(
         isEdit ? $_('modals.category.toast-updated') : $_('modals.category.toast-created'),
@@ -287,7 +316,7 @@
         </div>
 
         <!-- Status -->
-        <div class="form-floating mb-0">
+        <div class="form-floating mb-3">
           <select class="form-select" id="category-status" bind:value={categoryStatus}>
             <option value="active">{$_('common.active')}</option>
             <option value="inactive">{$_('common.inactive')}</option>
@@ -295,6 +324,36 @@
           </select>
           <label for="category-status">{$_('common.status')}</label>
         </div>
+
+        <!-- Tiered category -->
+        <div class="form-check form-switch" class:mb-3={tiered}>
+          <input
+            class="form-check-input"
+            class:is-invalid={tieredInvalid}
+            type="checkbox"
+            role="switch"
+            id="category-tiered"
+            bind:checked={tiered}
+            onchange={() => (tieredInvalid = false)} />
+          <label class="form-check-label" for="category-tiered">
+            {$_('modals.category.tiered')}
+          </label>
+          {#if tieredInvalid}
+            <div class="invalid-feedback d-block">{$_('errors.CATEGORY_IN_USE')}</div>
+          {/if}
+          <div class="form-text">{$_('modals.category.tiered-hint')}</div>
+        </div>
+
+        {#if tiered}
+          <div class="form-floating mb-0">
+            <select class="form-select" id="category-upgrade-mode" bind:value={upgradeMode}>
+              {#each UPGRADE_MODES as value (value)}
+                <option {value}>{$_(`modals.category.upgrade-mode-${value}`)}</option>
+              {/each}
+            </select>
+            <label for="category-upgrade-mode">{$_('modals.category.upgrade-mode')}</label>
+          </div>
+        {/if}
 
       </div>
       <div class="modal-footer p-3 pt-3">

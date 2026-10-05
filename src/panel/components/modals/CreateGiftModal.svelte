@@ -2,10 +2,15 @@
   import ApiUtil from '@panomc/sdk/utils/api';
   import ProductSelector from '../ProductSelector.svelte';
   import { _, showSuccessToast, showErrorToast } from '../../../i18n';
+  import { giftDatesReversed, validateGiftLimits } from '../../utils/category-gift.js';
 
   let { isEdit = false, gift = null, onSaved = () => {} } = $props();
 
   let giftCode = $state('');
+  let giftName = $state('');
+  let redeemLimit = $state('');
+  let customerRedeemLimit = $state(1);
+  let submitted = $state(false);
   let giftType = $state('product'); // 'product', 'credit', or 'random'
 
   let selectedProductId = $state('');
@@ -35,6 +40,10 @@
   function initForm() {
     if (isEdit && gift) {
       giftCode = gift.code || '';
+      giftName = gift.name || '';
+      redeemLimit = gift.redeemLimit ?? '';
+      customerRedeemLimit = gift.customerRedeemLimit ?? 1;
+      submitted = false;
       giftType = (gift.type || 'PRODUCT').toLowerCase();
       selectedProductId = gift.productId ?? '';
       creditAmount = gift.creditAmount ?? '';
@@ -45,6 +54,10 @@
       expiryDate = gift.expiryDate ? epochToDateInput(gift.expiryDate) : '';
     } else if (!isEdit) {
       giftCode = '';
+      giftName = '';
+      redeemLimit = '';
+      customerRedeemLimit = 1;
+      submitted = false;
       giftType = 'product';
       selectedProductId = '';
       creditAmount = '';
@@ -85,7 +98,18 @@
     }
   }
 
+  const limits = $derived(validateGiftLimits({ name: giftName, redeemLimit, customerRedeemLimit }));
+  const datesReversed = $derived(
+    !isExpiryUnlimited &&
+      startDate !== '' &&
+      expiryDate !== '' &&
+      giftDatesReversed(dateInputToEpoch(startDate), dateInputToEpoch(expiryDate)),
+  );
+
   async function saveGift() {
+    submitted = true;
+    if (Object.keys(limits.errors).length > 0 || datesReversed) return;
+
     if (!giftCode || giftCode.trim() === '') {
       showErrorToast($_('modals.gift.toast-code-required'));
       return;
@@ -113,6 +137,9 @@
         code: giftCode.trim(),
         type: typeEnum,
         status: status === 'active' ? 'ACTIVE' : 'INACTIVE',
+        name: limits.values.name,
+        redeemLimit: limits.values.redeemLimit,
+        customerRedeemLimit: limits.values.customerRedeemLimit,
       };
 
       if (typeEnum === 'PRODUCT') {
@@ -198,6 +225,46 @@
           </button>
         </div>
 
+        <!-- Name -->
+        <div class="mb-3">
+          <div class="form-floating">
+            <input type="text" class="form-control" class:is-invalid={submitted && limits.errors.name}
+                   id="giftNameInput" maxlength="255" bind:value={giftName} placeholder={$_('modals.gift.name')} />
+            <label for="giftNameInput">{$_('modals.gift.name')}</label>
+          </div>
+          {#if submitted && limits.errors.name}
+            <div class="invalid-feedback d-block">{$_('modals.gift.field-errors.TOO_LONG')}</div>
+          {/if}
+        </div>
+
+        <!-- Limits -->
+        <div class="row g-3 mb-3">
+          <div class="col-6">
+            <div class="form-floating">
+              <input type="number" min="1" step="1" class="form-control"
+                     class:is-invalid={submitted && limits.errors.redeemLimit}
+                     id="giftRedeemLimitInput" bind:value={redeemLimit} placeholder={$_('modals.gift.redeem-limit')} />
+              <label for="giftRedeemLimitInput">{$_('modals.gift.redeem-limit')}</label>
+            </div>
+            {#if submitted && limits.errors.redeemLimit}
+              <div class="invalid-feedback d-block">{$_('modals.gift.field-errors.INVALID')}</div>
+            {:else}
+              <div class="form-text">{$_('modals.gift.redeem-limit-hint')}</div>
+            {/if}
+          </div>
+          <div class="col-6">
+            <div class="form-floating">
+              <input type="number" min="1" step="1" class="form-control"
+                     class:is-invalid={submitted && limits.errors.customerRedeemLimit}
+                     id="giftCustomerLimitInput" bind:value={customerRedeemLimit} placeholder={$_('modals.gift.customer-redeem-limit')} />
+              <label for="giftCustomerLimitInput">{$_('modals.gift.customer-redeem-limit')}</label>
+            </div>
+            {#if submitted && limits.errors.customerRedeemLimit}
+              <div class="invalid-feedback d-block">{$_('modals.gift.field-errors.INVALID')}</div>
+            {/if}
+          </div>
+        </div>
+
         <!-- Gift Type -->
         <div class="mb-3">
           <div class="d-flex flex-column flex-sm-row gap-2 gap-sm-3 mb-3 mt-1">
@@ -251,11 +318,14 @@
               </div>
               <div class="col-6">
                 <div class="form-floating">
-                  <input type="date" class="form-control" id="giftExpiryInput" bind:value={expiryDate} placeholder={$_('modals.gift.end-date')} />
+                  <input type="date" class="form-control" class:is-invalid={datesReversed} id="giftExpiryInput" bind:value={expiryDate} placeholder={$_('modals.gift.end-date')} />
                   <label for="giftExpiryInput">{$_('modals.gift.end-date')}</label>
                 </div>
               </div>
             </div>
+            {#if datesReversed}
+              <div class="invalid-feedback d-block">{$_('modals.gift.field-errors.DATES_REVERSED')}</div>
+            {/if}
           {/if}
         </div>
 

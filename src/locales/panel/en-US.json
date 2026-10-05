@@ -71,7 +71,9 @@
       "toast-load-error": "An error occurred while loading categories.",
       "toast-delete-success": "Category deleted successfully.",
       "toast-delete-error": "An error occurred while deleting the category.",
-      "toast-sort-error": "Failed to save the order."
+      "toast-sort-error": "Failed to save the order.",
+      "tiered": "Tiered",
+      "delete-title": "Delete Category"
     },
     "products": {
       "title": "Products",
@@ -445,7 +447,9 @@
       "table": {
         "code": "Gift Code",
         "products": "Products",
-        "validity": "Validity Period"
+        "validity": "Validity Period",
+        "name": "Name",
+        "used": "Used"
       },
       "credit-amount": "{amount} Credits",
       "random-gift": "Random Gift ({count} Products Selected)",
@@ -455,7 +459,8 @@
       "confirm-delete": "Are you sure you want to delete the gift \"{code}\"?",
       "toast-delete-success": "Gift deleted successfully.",
       "toast-delete-error": "An error occurred while deleting the gift.",
-      "toast-load-error": "An error occurred while loading gifts."
+      "toast-load-error": "An error occurred while loading gifts.",
+      "delete-title": "Delete Gift"
     },
     "discounts": {
       "title": "Discounts",
@@ -815,6 +820,68 @@
         "recipient-same": "The recipient must differ from the buyer.",
         "email-invalid": "Enter a valid e-mail address."
       }
+    },
+    "deliveries": {
+      "title": "Deliveries",
+      "filters": "Filters",
+      "count": "{count} Deliveries",
+      "tab": {
+        "all": "All",
+        "waiting": "Waiting",
+        "failed": "Failed",
+        "done": "Done"
+      },
+      "phase": "Phase",
+      "phase-all": "All Phases",
+      "table": {
+        "order": "Order",
+        "player": "Player",
+        "product": "Product",
+        "action": "Action",
+        "server": "Server",
+        "attempts": "Attempts",
+        "last-error": "Last Error",
+        "when": "When"
+      },
+      "actions": {
+        "retry": "Retry",
+        "offer-again": "Offer Again Now",
+        "cancel": "Cancel",
+        "view-order": "View Order"
+      },
+      "cancel-requested": "Cancel requested",
+      "requires-online": "Needs the player to be online",
+      "scheduled-for": "Scheduled for",
+      "retry-title": "Retry Delivery",
+      "retry-description": "The delivery is queued again with the same key.",
+      "offer-again-title": "Offer Again Now",
+      "offer-again-description": "The same key is offered to the game server again. The server de-duplicates it, so nothing runs twice.",
+      "cancel-title": "Cancel Delivery",
+      "cancel-description": "If the game server already has the delivery, it shows as cancel requested until the server answers.",
+      "toast-retry": "The delivery was queued again.",
+      "toast-cancel": "The delivery was cancelled."
+    },
+    "goals": {
+      "title": "Goals",
+      "create-goal": "Create Goal",
+      "count": "{count} Goals",
+      "table": {
+        "name": "Name",
+        "metric": "Metric",
+        "progress": "Progress",
+        "period": "Period",
+        "ends": "Ends",
+        "on-store": "On Store"
+      },
+      "delete-title": "Delete Goal",
+      "confirm-delete": "Are you sure you want to delete the goal \"{name}\"?",
+      "toast-delete-success": "Goal deleted.",
+      "field-errors": {
+        "REQUIRED": "This field is required.",
+        "TOO_LONG": "The text is too long.",
+        "INVALID": "Enter a valid target (money above 0, or a whole number of at least 1).",
+        "BEFORE_START": "The end must be after the start."
+      }
     }
   },
   "common": {
@@ -962,7 +1029,12 @@
       "toast-name-required": "Category name is required.",
       "toast-updated": "Category updated.",
       "toast-created": "Category created.",
-      "toast-save-error": "An error occurred while saving the category."
+      "toast-save-error": "An error occurred while saving the category.",
+      "tiered": "Tiered Category",
+      "tiered-hint": "Buyers hold one product of the category at a time and can upgrade to a higher one.",
+      "upgrade-mode": "Upgrade Pricing",
+      "upgrade-mode-DIFFERENCE": "Pay The Difference",
+      "upgrade-mode-FULL": "Pay Full Price"
     },
     "payment-method": {
       "title": "{name} Settings",
@@ -998,7 +1070,16 @@
       "toast-code-exists": "This code is already in use.",
       "toast-save-error": "An error occurred while saving the gift.",
       "toast-updated": "Gift updated.",
-      "toast-created": "Gift created."
+      "toast-created": "Gift created.",
+      "name": "Name",
+      "redeem-limit": "Redeem Limit",
+      "redeem-limit-hint": "Empty means unlimited.",
+      "customer-redeem-limit": "Per Customer",
+      "field-errors": {
+        "TOO_LONG": "The text is too long.",
+        "INVALID": "Enter a whole number of at least 1.",
+        "DATES_REVERSED": "The end date must not be before the start date."
+      }
     },
     "discount": {
       "title-edit": "Edit Discount",
@@ -1328,6 +1409,26 @@
       "max-length": "Maximum length",
       "min-value": "Minimum value",
       "max-value": "Maximum value"
+    },
+    "delivery-filters": {
+      "title": "Delivery Filters",
+      "server": "Server",
+      "action-type": "Action Type"
+    },
+    "goal": {
+      "title-create": "Create Goal",
+      "title-edit": "Edit Goal",
+      "name": "Name",
+      "description": "Description",
+      "metric": "Metric",
+      "products": "Products",
+      "target": "Target",
+      "period": "Period",
+      "starts-at": "Starts At",
+      "ends-at": "Ends At",
+      "show-on-store": "Show On Store",
+      "toast-created": "Goal created.",
+      "toast-updated": "Goal updated."
     }
   },
   "settings": {
@@ -1938,7 +2039,7 @@
       "COMPONENT_MISSING": "Pano plugin missing on the server",
       "VERSION_MISMATCH": "Plugin version mismatch",
       "SERVER_REMOVED": "Server removed",
-      "UNKNOWN_OUTCOME": "Outcome unknown",
+      "UNKNOWN_OUTCOME": "May have run, check before re-running",
       "ONLINE_WAIT_EXPIRED": "Waited too long for the player",
       "COMMAND_ERROR": "Command failed",
       "LUCKPERMS_MISSING": "LuckPerms missing",
@@ -1982,6 +2083,16 @@
       "STANDARD": "Standard",
       "BUNDLE": "Bundle",
       "CREDIT_PACK": "Credit Pack"
+    },
+    "goal-metric": {
+      "REVENUE": "Revenue",
+      "ORDERS": "Orders",
+      "PRODUCT_SALES": "Product Sales"
+    },
+    "goal-period": {
+      "ONE_TIME": "One Time",
+      "WEEKLY": "Weekly",
+      "MONTHLY": "Monthly"
     }
   },
   "alerts": {
