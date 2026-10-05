@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.api.checkout
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.Main.Companion.applicationContext
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.auth.PermissionManager
@@ -84,7 +85,7 @@ internal class PlatformServerDirectory(private val databaseManager: () -> Databa
  * wiring of `checkout` (the transaction helper, the locks, the reservation, the order inserts); the quote needs none of it.
  */
 internal fun checkoutService(plugin: MarketPlugin, withCheckout: Boolean = false): CheckoutService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager = { context.getBean(DatabaseManager::class.java) }
     val wiring = paymentWiring(plugin)
     val deps = if (withCheckout) checkoutDeps(plugin, databaseManager) else null
@@ -127,7 +128,7 @@ internal fun checkoutService(plugin: MarketPlugin, withCheckout: Boolean = false
  * payment service. The credit hold and the pending subscription are refused until their services exist.
  */
 private fun checkoutDeps(plugin: MarketPlugin, databaseManager: () -> DatabaseManager): CheckoutDeps {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val clock = SystemClock
     val orderDao = context.getBean(MarketOrderDao::class.java)
     val redemptionDao = context.getBean(MarketRedemptionDao::class.java)

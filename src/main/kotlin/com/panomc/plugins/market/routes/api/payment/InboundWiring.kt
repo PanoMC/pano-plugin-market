@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.api.payment
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.abuse.Redactor
@@ -114,7 +115,7 @@ internal fun attemptContexts(plugin: MarketPlugin): PaymentContexts {
 }
 
 private fun buildContexts(plugin: MarketPlugin): PaymentContexts {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val wiring = paymentWiring(plugin)
     val databaseManager by lazy { context.getBean(DatabaseManager::class.java) }
     val db = MarketDb({ databaseManager.getSqlClient() as Pool }, SystemClock)
@@ -140,7 +141,7 @@ internal fun inboundEventStore(plugin: MarketPlugin): InboundEventStore {
 
     return synchronized(InboundWiringHolder) {
         cachedStore?.takeIf { it.first === plugin }?.second ?: run {
-            val context = plugin.applicationContext
+            val context = plugin.beans
             val databaseManager = { context.getBean(DatabaseManager::class.java) }
 
             DbInboundEventStore(context.getBean(MarketPaymentEventDao::class.java)) { databaseManager().getSqlClient() }.also { cachedStore = plugin to it }
@@ -159,7 +160,7 @@ internal fun inboundDispatcher(plugin: MarketPlugin): InboundDispatcher {
 }
 
 private fun inboundAttempts(plugin: MarketPlugin): PaymentInboundAttempts {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager = { context.getBean(DatabaseManager::class.java) }
     val orderDao = context.getBean(MarketOrderDao::class.java)
     val locks = Locks(orderDao, context.getBean(MarketOrderItemDao::class.java), context.getBean(MarketRedemptionDao::class.java), context.getBean(MarketCreditAccountDao::class.java))
@@ -171,7 +172,7 @@ private fun inboundAttempts(plugin: MarketPlugin): PaymentInboundAttempts {
 }
 
 private fun buildDispatcher(plugin: MarketPlugin): InboundDispatcher {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager = { context.getBean(DatabaseManager::class.java) }
     val wiring = paymentWiring(plugin)
     val attempts = inboundAttempts(plugin)

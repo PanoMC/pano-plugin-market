@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.user.cart
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
@@ -26,7 +27,7 @@ import io.vertx.sqlclient.Pool
 
 /** The service of the cart routes, built on the plugin's beans (stateless: a route keeps one). */
 internal fun cartService(plugin: MarketPlugin): CartService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager by lazy { context.getBean(DatabaseManager::class.java) }
 
     return CartService(

@@ -118,7 +118,7 @@ class MarketBootstrap(
         try {
             block()
         } catch (e: Exception) {
-            logger.error("Market bootstrap: step {} failed, continuing: {}", name, e.message)
+            logger.error("Market bootstrap: step {} failed, continuing: {}", name, e.message, e)
             errors += "$name: ${e.message}"
         }
     }

@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.shipment
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.time.SecureIds
@@ -28,7 +29,7 @@ import io.vertx.sqlclient.Pool
  * plugin instance, so checkout, the panel routes and (MK-134) the tracking job share one object.
  */
 internal fun fulfilmentDeps(plugin: MarketPlugin): FulfilmentDeps {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager = { context.getBean(DatabaseManager::class.java) }
     val orders = context.getBean(MarketOrderDao::class.java)
     val orderItems = context.getBean(MarketOrderItemDao::class.java)

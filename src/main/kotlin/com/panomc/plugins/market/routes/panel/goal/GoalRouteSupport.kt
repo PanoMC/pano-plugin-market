@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.goal
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.time.SystemClock
@@ -14,7 +15,7 @@ import io.vertx.core.json.JsonObject
 import io.vertx.sqlclient.Pool
 
 internal fun goalService(plugin: MarketPlugin): GoalService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager by lazy { context.getBean(DatabaseManager::class.java) }
 
     return GoalService(

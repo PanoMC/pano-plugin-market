@@ -36,7 +36,9 @@ class FakePayGateway(
     port: Int = 0,
     /** Where [sendWebhook] posts (`MARKET_E2E_URL/api/market/payments/<providerId>/webhook`); null = not configured. */
     private val webhookTarget: () -> String? = { null },
-    private val clock: () -> Long = System::currentTimeMillis
+    private val clock: () -> Long = System::currentTimeMillis,
+    /** Inserted into generated event ids (`evt_<prefix>_0001`) so two JVMs against one persistent instance database never reuse an event key (the E2E harness passes a per-run tag). */
+    private val eventPrefix: String = ""
 ) : AutoCloseable {
     /** The operations that can be scripted and inspected. */
     enum class Op(val method: String) { CREATE("POST"), QUERY("GET"), CANCEL("POST"), REFUND("POST"), QUERY_REFUND("GET"), CHARGE("POST"), CANCEL_SUBSCRIPTION("POST"), PING("GET") }
@@ -114,7 +116,7 @@ class FakePayGateway(
         p.paidAmount = if (status == "paid" || status == "review") (paidAmount ?: p.amount) else p.paidAmount
     }
 
-    fun nextEventId(): String = "evt_%04d".format(eventSeq.incrementAndGet())
+    fun nextEventId(): String = if (eventPrefix.isEmpty()) "evt_%04d".format(eventSeq.incrementAndGet()) else "evt_${eventPrefix}_%04d".format(eventSeq.incrementAndGet())
 
     /** Marks the payment paid and delivers one signed `payment.succeeded` webhook. */
     fun pay(reference: String, amount: BigDecimal? = null): List<HttpResponse<String>> {

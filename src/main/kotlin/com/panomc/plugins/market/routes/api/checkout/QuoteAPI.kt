@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.api.checkout
 
+import com.panomc.plugins.market.core.abuse.AbuseLimits
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.model.Path
@@ -65,7 +66,7 @@ class QuoteAPI(private val plugin: MarketPlugin) : MarketPublicMutationApi() {
 
         if (perMinute <= 0) return
 
-        val current = limiter?.takeIf { it.first == perMinute } ?: (perMinute to RateLimiter(perMinute, 60_000L / perMinute)).also { limiter = it }
+        val current = limiter?.takeIf { it.first == perMinute } ?: (perMinute to RateLimiter(perMinute, AbuseLimits.refillMs(perMinute)!!)).also { limiter = it }
 
         if (!current.second.tryAcquire(ip)) throw TooManyRequests(Math.ceil(60.0 / perMinute).toLong())
     }

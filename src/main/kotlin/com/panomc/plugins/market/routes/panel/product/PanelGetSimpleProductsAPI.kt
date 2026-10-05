@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.product
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.model.Path
@@ -28,7 +29,7 @@ class PanelGetSimpleProductsAPI(private val plugin: MarketPlugin) : MarketPanelA
 
     private val databaseManager: DatabaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 
-    private val products: MarketProductDao by lazy { plugin.applicationContext.getBean(MarketProductDao::class.java) }
+    private val products: MarketProductDao by lazy { plugin.beans.getBean(MarketProductDao::class.java) }
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository).build()

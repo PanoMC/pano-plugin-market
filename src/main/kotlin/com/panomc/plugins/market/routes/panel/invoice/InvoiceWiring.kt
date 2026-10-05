@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.invoice
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.config.ConfigManager
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
@@ -72,7 +73,7 @@ internal fun marketI18n(plugin: MarketPlugin): Pair<MarketI18n, MarketFormat> {
 }
 
 private fun buildWiring(plugin: MarketPlugin): InvoiceWiring {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager = { context.getBean(DatabaseManager::class.java) }
     val platformConfig = { runCatching { context.getBean(ConfigManager::class.java).config }.getOrNull() }
     val orders = context.getBean(MarketOrderDao::class.java)

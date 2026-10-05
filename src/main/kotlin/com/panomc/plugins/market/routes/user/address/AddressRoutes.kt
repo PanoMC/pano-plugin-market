@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.user.address
 
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.model.Path
@@ -29,7 +30,7 @@ import io.vertx.sqlclient.Pool
 
 /** The address book service of the routes, built on the plugin's beans (stateless: a route keeps one). */
 internal fun addressBookService(plugin: MarketPlugin): AddressBookService {
-    val context = plugin.applicationContext
+    val context = plugin.beans
     val databaseManager by lazy { context.getBean(DatabaseManager::class.java) }
 
     return AddressBookService(
