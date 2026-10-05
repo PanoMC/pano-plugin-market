@@ -5,6 +5,7 @@ import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.auth.PermissionManager
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
+import com.panomc.plugins.market.core.time.SecureIds
 import com.panomc.plugins.market.core.time.SystemClock
 import com.panomc.plugins.market.db.dao.MarketBundleItemDao
 import com.panomc.plugins.market.db.dao.MarketCartDao
@@ -17,25 +18,37 @@ import com.panomc.plugins.market.db.dao.MarketCurrencyRateDao
 import com.panomc.plugins.market.db.dao.MarketDiscountDao
 import com.panomc.plugins.market.db.dao.MarketEntitlementDao
 import com.panomc.plugins.market.db.dao.MarketOrderDao
+import com.panomc.plugins.market.db.dao.MarketOrderEventDao
+import com.panomc.plugins.market.db.dao.MarketOrderItemDao
+import com.panomc.plugins.market.db.dao.MarketPaymentDao
 import com.panomc.plugins.market.db.dao.MarketPaymentMethodDao
 import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.dao.MarketProductFieldDao
+import com.panomc.plugins.market.db.dao.MarketProductProviderMetaDao
 import com.panomc.plugins.market.db.dao.MarketProductPriceDao
 import com.panomc.plugins.market.db.dao.MarketProductVariantDao
 import com.panomc.plugins.market.db.dao.MarketRedemptionDao
 import com.panomc.plugins.market.db.dao.MarketSubscriptionDao
+import com.panomc.plugins.market.db.tx.Locks
+import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.permission.MarketPermissions
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
+import com.panomc.plugins.market.routes.user.cart.cartService
+import com.panomc.plugins.market.service.CheckoutDeps
 import com.panomc.plugins.market.service.CheckoutService
+import com.panomc.plugins.market.service.OrderService
+import com.panomc.plugins.market.service.RedemptionService
+import com.panomc.plugins.market.service.ReservationService
 import com.panomc.plugins.market.service.QuoteCaller
 import com.panomc.plugins.market.service.ClientIpResolver
 import com.panomc.plugins.market.service.platform.DirectoryUser
 import com.panomc.plugins.market.service.platform.ServerDirectory
 import com.panomc.plugins.market.service.platform.UserDirectory
 import io.vertx.ext.web.RoutingContext
+import io.vertx.sqlclient.Pool
 import io.vertx.sqlclient.SqlClient
 
 /** The platform's users and permissions behind the [UserDirectory] seam. */
@@ -63,11 +76,15 @@ internal class PlatformServerDirectory(private val databaseManager: () -> Databa
         databaseManager().serverDao.getAllByPermissionGranted(sqlClient).map { it.id }.filter { it in ids }.toSet()
 }
 
-/** The quote service on the plugin's beans (stateless: a route keeps one). */
-internal fun checkoutService(plugin: MarketPlugin): CheckoutService {
+/**
+ * The checkout service on the plugin's beans (stateless apart from the rate limiter: a route keeps one). [withCheckout] adds the
+ * wiring of `checkout` (the transaction helper, the locks, the reservation, the order inserts); the quote needs none of it.
+ */
+internal fun checkoutService(plugin: MarketPlugin, withCheckout: Boolean = false): CheckoutService {
     val context = plugin.applicationContext
     val databaseManager = { context.getBean(DatabaseManager::class.java) }
     val wiring = paymentWiring(plugin)
+    val deps = if (withCheckout) checkoutDeps(plugin, databaseManager) else null
 
     return CheckoutService(
         config = { currentConfig(plugin) },
@@ -95,7 +112,33 @@ internal fun checkoutService(plugin: MarketPlugin): CheckoutService {
         contexts = wiring.contexts,
         legal = legalTextService(plugin),
         users = PlatformUserDirectory(databaseManager),
-        servers = PlatformServerDirectory(databaseManager)
+        servers = PlatformServerDirectory(databaseManager),
+        checkout = deps
+    )
+}
+
+/** The pieces of `CheckoutService.checkout` on the plugin's beans. The credit hold and the pending subscription are refused until their services exist. */
+private fun checkoutDeps(plugin: MarketPlugin, databaseManager: () -> DatabaseManager): CheckoutDeps {
+    val context = plugin.applicationContext
+    val clock = SystemClock
+    val orderDao = context.getBean(MarketOrderDao::class.java)
+    val redemptionDao = context.getBean(MarketRedemptionDao::class.java)
+    val locks = Locks(orderDao, context.getBean(MarketOrderItemDao::class.java), redemptionDao, context.getBean(MarketCreditAccountDao::class.java))
+    val redemptions = RedemptionService(clock, locks, redemptionDao)
+    val paymentDao = context.getBean(MarketPaymentDao::class.java)
+    val cart = cartService(plugin)
+
+    return CheckoutDeps(
+        db = MarketDb({ databaseManager().getSqlClient() as Pool }, clock),
+        locks = locks,
+        reservations = ReservationService(clock, locks, redemptions, orderDao),
+        redemptions = redemptions,
+        orders = OrderService(
+            clock, SecureIds(), orderDao, context.getBean(MarketOrderItemDao::class.java), context.getBean(MarketOrderEventDao::class.java), paymentDao,
+            redemptions, { conn, userId -> cart.clearAfterCheckout(conn, userId) }
+        ),
+        payments = paymentDao,
+        providerMeta = context.getBean(MarketProductProviderMetaDao::class.java)
     )
 }
 

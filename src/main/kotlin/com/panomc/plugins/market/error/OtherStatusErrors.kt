@@ -76,8 +76,12 @@ class InvoiceRenderFailed : Error(500)
 
 // ---- 502 (never carries the gateway's own text)
 
-/** [code]: a `ProviderErrorCode`. */
-class PaymentProviderError(code: String) : Error(502, extras = mapOf("code" to code))
+/**
+ * [code]: a `ProviderErrorCode`. Checkout answers with the order that was created (it stays `PENDING`, 04 section 3): [order]
+ * is its `OrderView` and [orderToken] its access token, so the buyer can pick another method.
+ */
+class PaymentProviderError(code: String, order: Any? = null, orderToken: String? = null) :
+    Error(502, extras = extrasOf("code" to code, "order" to order, "orderToken" to orderToken))
 
 class ShippingProviderError(code: String, shipmentId: Long? = null) :
     Error(502, extras = extrasOf("code" to code, "shipmentId" to shipmentId))
