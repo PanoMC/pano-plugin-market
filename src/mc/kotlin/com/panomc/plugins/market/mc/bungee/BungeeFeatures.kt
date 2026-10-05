@@ -44,9 +44,18 @@ class BungeeFeatureHost(private val proxy: ProxyServer) : FeatureHost {
     override fun localeOf(username: String): String? = proxy.getPlayer(username)?.let { BungeeMessages.localeOf(it) }
 }
 
-class BungeeSender(private val sender: CommandSender) : McSender {
+/**
+ * The proxy console is a POSITIVE test (`sender === proxy.console`): any other sender that is not a player (a plugin's own
+ * `CommandSender`) is [supported] = false and refused, never treated as the console (19 section 7.4).
+ */
+class BungeeSender(
+    private val sender: CommandSender,
+    private val consoleOf: () -> CommandSender? = { ProxyServer.getInstance()?.console }
+) : McSender {
     override val name: String get() = sender.name
-    override val isConsole: Boolean get() = sender !is ProxiedPlayer
+    override val isConsole: Boolean get() = sender !is ProxiedPlayer && sender === consoleOf()
+
+    val supported: Boolean get() = sender is ProxiedPlayer || isConsole
     override val uuid: String? get() = (sender as? ProxiedPlayer)?.uniqueId?.toString()
     override val locale: String? get() = (sender as? ProxiedPlayer)?.let { BungeeMessages.localeOf(it) }
 
@@ -60,16 +69,18 @@ class MarketBungeeCommand(
     name: String,
     aliases: List<String>,
     private val features: MarketFeatures,
+    private val consoleOf: () -> CommandSender? = { ProxyServer.getInstance()?.console },
     private val active: () -> Boolean
 ) : Command(name, null, *aliases.toTypedArray()), TabExecutor {
     override fun execute(sender: CommandSender, args: Array<String>) {
-        val s = BungeeSender(sender)
+        val s = BungeeSender(sender, consoleOf)
+        if (!s.supported) return s.send(features.messages.text(Msg.COMMAND_NO_PERMISSION, null))
         if (!active()) return s.send(features.messages.text(Msg.COMMAND_UNAVAILABLE, s.locale))
         features.commands.execute(canonical, s, args.toList())
     }
 
     override fun onTabComplete(sender: CommandSender, args: Array<String>): Iterable<String> =
-        if (active()) features.commands.complete(canonical, BungeeSender(sender), args.toList()) else emptyList()
+        BungeeSender(sender, consoleOf).let { s -> if (active() && s.supported) features.commands.complete(canonical, s, args.toList()) else emptyList() }
 }
 
 /** Registers `/store`, `/credits` and `/panomarket` (with their aliases) on the proxy. */

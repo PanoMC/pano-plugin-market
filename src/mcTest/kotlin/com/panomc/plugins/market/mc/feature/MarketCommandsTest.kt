@@ -471,6 +471,76 @@ class MarketCommandsTest {
         }
     }
 
+    @Test
+    fun `before the first config answer every money op and purchases are closed, even for the console, and nothing is sent`() {
+        val r = rig(load = false)
+        assertNull(r.features.config.remote)
+        r.link.handler = adminOk()
+        val c = console()
+        val admin = player(admin, "Admin")
+        for (who in listOf(c, admin)) {
+            r.run("panomarket", who, "credits", "give", "Alex", "1")
+            r.run("panomarket", who, "credits", "take", "Alex", "1")
+            r.run("panomarket", who, "credits", "set", "Alex", "1")
+            r.run("panomarket", who, "grant", "Alex", "5")
+            r.run("panomarket", who, "purchases", "Alex")
+            assertEquals(5, who.lines.count { it.contains("Panel settings are not loaded yet") }, who.plain().toString())
+        }
+        assertTrue(r.link.requests.isEmpty(), "nothing reaches Pano while the panel settings are unknown: ${r.link.requests}")
+        assertEquals(0, r.control.syncs)
+        // A player without the node still gets the permission refusal first (the node is checked before the settings).
+        val mod = player(emptySet(), "Mod")
+        r.run("panomarket", mod, "credits", "give", "Alex", "1")
+        assertTrue(mod.said("do not have permission"))
+
+        // status and recover keep working: a lost store must stay recoverable.
+        r.run("panomarket", c, "status")
+        assertTrue(c.said("Pano Market status"))
+        r.control.preview = RecoveryPreview(1, "q", "corrupt", 2, false)
+        r.run("panomarket", c, "recover")
+        assertTrue(c.said("Up to 2 deliveries"))
+        r.run("panomarket", c, "recover", "confirm")
+        assertEquals(1, r.control.confirmed)
+    }
+
+    @Test
+    fun `once the panel settings arrive the same commands work, and a list the panel disabled still wins`() {
+        val r = rig(load = false)
+        r.link.handler = { MarketAdminMessage(true, null, true, "O", 1.0, "O", emptyList()) }
+        val c = console()
+        r.run("panomarket", c, "credits", "give", "Alex", "1")
+        assertTrue(r.link.requests.isEmpty())
+        r.loadConfig(panoConfig("h1", MarketMcSettings(mcAdminCommands = true, mcDisabledAdminCommands = listOf("take-credits"))))
+        r.run("panomarket", c, "credits", "give", "Alex", "1")
+        r.run("panomarket", c, "grant", "Alex", "5")
+        r.run("panomarket", c, "credits", "take", "Alex", "1")
+        assertEquals(listOf(AdminOp.GIVE_CREDITS, AdminOp.GRANT_PRODUCT), r.link.of(MarketAdminRequest::class.java).map { it.op })
+        assertTrue(c.said("switched off"))
+    }
+
+    @Test
+    fun `the panel switch is honoured from the first command after a restart, an unanswered or refused config never opens the commands`() {
+        val r = rig(load = false)
+        r.link.handler = adminOk()
+        // MARKET_CONFIG refused / unanswered: applyConfig keeps "no settings".
+        val refused = com.panomc.plugins.market.mc.core.wire.MarketConfigMessage(false, "RATE_LIMITED", null, null, emptyMap(), null, null, null, null)
+        r.link.handler = { req -> if (req is com.panomc.plugins.market.mc.core.wire.MarketConfigRequest) refused else adminOk()(req) }
+        r.features.callbacks.onConfigHashChanged("h1")
+        r.link.handler = { req -> if (req is com.panomc.plugins.market.mc.core.wire.MarketConfigRequest) null else adminOk()(req) }
+        r.features.callbacks.onConfigHashChanged("h1")
+        assertEquals(2, r.link.configRequests.size)
+        assertNull(r.features.config.remote)
+        assertTrue(r.features.config.adminCommandDisabled("give-credits"), "unknown settings: closed")
+        val c = console()
+        r.run("panomarket", c, "credits", "give", "Alex", "1")
+        assertTrue(r.link.requests.isEmpty())
+        // The panel had switched the admin commands off: when the answer finally arrives they stay off.
+        r.loadConfig(panoConfig("h1", MarketMcSettings(mcAdminCommands = false)))
+        r.run("panomarket", c, "credits", "give", "Alex", "1")
+        assertTrue(r.link.requests.isEmpty())
+        assertTrue(c.said("switched off"))
+    }
+
     // ---- status / recover ------------------------------------------------------------------------------------------
 
     @Test

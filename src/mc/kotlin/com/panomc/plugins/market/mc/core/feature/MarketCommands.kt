@@ -196,6 +196,11 @@ class MarketCommands(
             sender.send(t(sender, Msg.COMMAND_NO_PERMISSION))
             return false
         }
+        if (config.remote == null) {
+            // The panel settings are unknown (start-up, Pano unreachable, MARKET_CONFIG refused): money ops stay closed.
+            sender.send(t(sender, Msg.ADMIN_SETTINGS_NOT_LOADED))
+            return false
+        }
         if (!config.enabled(Feature.ADMIN_COMMANDS) || config.adminCommandDisabled(disabledName)) {
             sender.send(t(sender, Msg.COMMAND_DISABLED))
             return false

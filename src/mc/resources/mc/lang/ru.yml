@@ -49,6 +49,7 @@ admin.insufficientCredits: "&cУ игрока {player} недостаточно 
 admin.creditsDisabled: "&cКредиты в магазине отключены."
 admin.failed: "&cМагазин отклонил команду ({code})."
 admin.unknownOutcome: "&eМагазин не ответил. Команда могла быть применена или нет: проверьте баланс или покупки, прежде чем повторять."
+admin.settingsNotLoaded: "&eНастройки панели ещё не загружены, поэтому команда закрыта. Повторите через несколько секунд."
 admin.purchasesHeader: "&6Последние покупки игрока {player}:"
 admin.purchasesEmpty: "&7У игрока {player} нет покупок."
 

@@ -62,8 +62,9 @@ class MarketVelocityPlugin @Inject constructor(
                 dataDirectory, ResourceFiles.reader(MarketVelocityPlugin::class.java.classLoader), VelocityFeatureHost(server), link,
                 { name -> tracker.uuid(name) }, version, log
             )
-            if (!f.config.local.enabled) {
-                log.info("The Market component is switched off in config.yml (enabled: false).")
+            val offReason = f.offReason()
+            if (offReason != null) {
+                log.info(offReason)
                 link.close()
                 return
             }

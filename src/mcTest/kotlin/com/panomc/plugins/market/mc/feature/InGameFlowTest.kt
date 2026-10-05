@@ -271,13 +271,29 @@ class InGameFlowTest {
     }
 
     @Test
-    fun `a broken config yml keeps deliveries off, nothing runs`() {
+    fun `a broken config yml runs nothing and reports no result, the delivery waits and runs once the file is fixed`() {
         val r = Rig("deliveries: maybe\n")
         r.panoLink.queue(response(deliveries = listOf(delivery("k1", 1, "Steve")), pollAfterMs = 60_000))
-        component!!.start()
+        // The platform mains start the component only when offReason() is null (a broken file is the stay-off path).
+        val reason = r.feature.features.offReason()
+        assertTrue(reason != null && reason.contains("stays OFF"), reason)
         r.panoLink.up = true
-        await("result") { r.panoLink.requests.any { it.results.isNotEmpty() } }
-        assertEquals("DISABLED_LOCALLY", r.panoLink.requests.first { it.results.isNotEmpty() }.results.single().code)
+        Thread.sleep(300)
+        assertTrue(r.panoLink.requests.isEmpty(), "nothing is synced, so no delivery is consumed or answered FAILED / DISABLED_LOCALLY")
         assertTrue(r.platform.console.isEmpty(), "an unreadable config never lets a delivery run")
+        assertTrue(r.feature.features.config.local.error != null)
+        component = null
+
+        // The admin fixes the file: the same delivery (still queued on Pano) now runs and is confirmed, nothing was lost.
+        java.nio.file.Files.write(dir.resolve("config.yml"), "deliveries: true\n".toByteArray())
+        val fixed = Rig()
+        fixed.panoLink.queue(response(deliveries = listOf(delivery("k1", 1, "Steve")), pollAfterMs = 60_000))
+        assertTrue(fixed.feature.features.offReason() == null)
+        component!!.start()
+        fixed.panoLink.up = true
+        await("the delivery result") { fixed.panoLink.requests.any { it.results.isNotEmpty() } }
+        val result = fixed.panoLink.requests.first { it.results.isNotEmpty() }.results.single()
+        assertEquals("k1", result.key)
+        assertTrue(result.code != "DISABLED_LOCALLY", result.code)
     }
 }

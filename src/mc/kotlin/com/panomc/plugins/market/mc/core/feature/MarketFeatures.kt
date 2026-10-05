@@ -43,6 +43,17 @@ class MarketFeatures(
 
     val commands = MarketCommands(config, messages, link, { control }, componentVersion, clock)
 
+    /**
+     * Why the platform main must NOT start the component, or `null` when it may. A file that could not be read gives
+     * the same "stay off" as `enabled: false`, so nothing is synced and no delivery is answered DISABLED_LOCALLY.
+     */
+    fun offReason(): String? {
+        val local = config.local
+        if (local.enabled) return null
+        return local.error?.let { "The Market component stays OFF (not started, deliveries stay queued on Pano) because $it" }
+            ?: "The Market component is switched off in config.yml (enabled: false)."
+    }
+
     /** The live switches the delivery engine reads. */
     val settings: DeliverySettings get() = config.deliverySettings
 
@@ -224,11 +235,11 @@ class MarketFeatures(
                 }
                 val text = if (Files.exists(file)) String(Files.readAllBytes(file), Charsets.UTF_8) else resource(CONFIG_RESOURCE) ?: ""
                 val parsed = LocalConfig.parse(text)
-                parsed.error?.let { log.error("$it. The Market component stays OFF (deliveries and every feature) until config.yml is fixed.") }
+                parsed.error?.let { log.error("$it. The Market component stays OFF (not started, nothing synced, paid deliveries stay queued on Pano) until config.yml is fixed.") }
                 return parsed
             } catch (e: Exception) {
                 val message = "config.yml could not be read: ${e.message}"
-                log.error("$message. The Market component stays OFF (deliveries and every feature) until it can be read.")
+                log.error("$message. The Market component stays OFF (not started, nothing synced, paid deliveries stay queued on Pano) until it can be read.")
                 return LocalConfig.failedClosed(message)
             }
         }

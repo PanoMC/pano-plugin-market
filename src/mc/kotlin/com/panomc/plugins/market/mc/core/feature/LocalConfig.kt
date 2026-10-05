@@ -45,7 +45,7 @@ data class LocalConfig(
     val menuRows: Int = 6,
     /** Things in the file that were ignored (unknown key, bad alias, ...): logged once at start. */
     val warnings: List<String> = emptyList(),
-    /** Set when the file could not be read at all: every switch is OFF (fail closed) until the file is fixed. */
+    /** Set when the file could not be read at all: [enabled] is false and every switch is OFF until the file is fixed. */
     val error: String? = null
 ) {
     fun namesOf(command: String): List<String> = (listOf(command) + (commandAliases[command] ?: emptyList())).distinct()
@@ -63,12 +63,15 @@ data class LocalConfig(
         )
 
         /**
-         * A file that cannot be parsed (or whose switches are not booleans) fails CLOSED: deliveries and every feature
-         * are off and [error] says why. The admin may have disabled something in the part that cannot be read, and a
-         * silent default of "everything on" would switch it back on.
+         * A file that cannot be parsed (or whose switches are not booleans) fails CLOSED WITHOUT consuming deliveries:
+         * the component is `enabled = false` (the platform mains do not start it, nothing is synced, the paid deliveries
+         * stay queued on Pano and run once the file is fixed), every feature is off and [error] says why. DISABLED_LOCALLY
+         * is terminal (19 section 6.4) and reserved for an explicit `deliveries: false` (19 section 6.2, 9): a file that
+         * cannot be read is not that decision. The admin may have disabled something in the part that cannot be read, and
+         * a silent default of "everything on" would switch it back on.
          */
         fun failedClosed(error: String) = LocalConfig(
-            enabled = true, deliveries = false, features = LocalFeatures.ALL_OFF, error = error
+            enabled = false, deliveries = false, features = LocalFeatures.ALL_OFF, error = error
         )
 
         fun parse(text: String): LocalConfig {

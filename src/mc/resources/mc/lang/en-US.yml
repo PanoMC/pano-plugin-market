@@ -49,6 +49,7 @@ admin.insufficientCredits: "&c{player} does not have enough credits."
 admin.creditsDisabled: "&cCredits are switched off in the store."
 admin.failed: "&cThe store refused the command ({code})."
 admin.unknownOutcome: "&eNo answer from the store. The command may or may not have been applied: check the balance or the purchases before you repeat it."
+admin.settingsNotLoaded: "&ePanel settings are not loaded yet, so this command is closed. Try again in a few seconds."
 admin.purchasesHeader: "&6Latest purchases of {player}:"
 admin.purchasesEmpty: "&7{player} has no purchases."
 

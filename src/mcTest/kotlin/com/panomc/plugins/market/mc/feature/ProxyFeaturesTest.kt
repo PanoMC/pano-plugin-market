@@ -90,8 +90,10 @@ class BungeeFeaturesTest {
         assertTrue(p.hasPermission("panomarket.admin.grant"))
         assertFalse(p.hasPermission("panomarket.admin.credits.give"))
         assertEquals("tr-TR", p.locale)
-        val c = BungeeSender(console(out))
+        val theConsole = console(out)
+        val c = BungeeSender(theConsole) { theConsole }
         assertTrue(c.isConsole)
+        assertTrue(c.supported)
         assertNull(c.uuid)
         assertNull(c.locale)
         assertTrue(c.hasPermission("anything"))
@@ -125,16 +127,41 @@ class BungeeFeaturesTest {
     fun `the Bungee command checks the admin node and sends the console as console`() {
         val rig = wired()
         rig.link.handler = { MarketAdminMessage(true, null, true, null, 9.0) }
-        val cmd = MarketBungeeCommand("panomarket", "panomarket", emptyList(), rig.features) { true }
+        val theConsole = console(Out())
+        val cmd = MarketBungeeCommand("panomarket", "panomarket", emptyList(), rig.features, { theConsole }) { true }
         val denied = Out()
         cmd.execute(player(denied, "Mod", locale = null), arrayOf("credits", "give", "Alex", "5"))
         assertEquals(listOf("You do not have permission to use this command."), denied.plain())
         assertTrue(rig.link.requests.isEmpty())
         val ok = Out()
-        cmd.execute(console(ok), arrayOf("credits", "give", "Alex", "5"))
+        val consoleWithOut = console(ok)
+        MarketBungeeCommand("panomarket", "panomarket", emptyList(), rig.features, { consoleWithOut }) { true }
+            .execute(consoleWithOut, arrayOf("credits", "give", "Alex", "5"))
         assertEquals(listOf("Gave 5 credits to Alex. New balance: 9"), ok.plain())
         val req = rig.link.requests.single() as com.panomc.plugins.market.mc.core.wire.MarketAdminRequest
         assertTrue(req.actor.console)
+    }
+
+    @Test
+    fun `a sender that is neither a player nor the proxy console sends nothing over the link`() {
+        val rig = wired()
+        rig.link.handler = { MarketAdminMessage(true, null, true, "ORD-9", 25.0) }
+        val realConsole = console(Out())
+        val cmd = MarketBungeeCommand("panomarket", "panomarket", emptyList(), rig.features, { realConsole }) { true }
+        val out = Out()
+        val foreign = console(out) // another CommandSender implementation (a plugin's): not proxy.console
+        assertFalse(BungeeSender(foreign) { realConsole }.isConsole)
+        assertFalse(BungeeSender(foreign) { realConsole }.supported)
+        assertFalse(BungeeSender(foreign) { null }.isConsole, "no proxy console known: nobody is the console")
+        for (args in listOf(
+            arrayOf("credits", "give", "Alex", "5"), arrayOf("credits", "take", "Alex", "5"), arrayOf("credits", "set", "Alex", "5"),
+            arrayOf("grant", "Alex", "12", "1"), arrayOf("purchases", "Alex"), arrayOf("recover", "confirm")
+        )) cmd.execute(foreign, args)
+        assertEquals(6, out.plain().size)
+        assertTrue(out.plain().all { it == "You do not have permission to use this command." }, out.plain().toString())
+        assertTrue(rig.link.requests.isEmpty())
+        assertEquals(0, rig.control.confirmed)
+        assertEquals(emptyList<String>(), cmd.onTabComplete(foreign, arrayOf("")).toList())
     }
 
     @Test
@@ -217,6 +244,7 @@ class VelocityFeaturesTest {
         assertEquals("ru-RU", p.locale)
         val c = VelocitySender(console(out))
         assertTrue(c.isConsole)
+        assertTrue(c.supported)
         assertEquals("CONSOLE", c.name)
         assertNull(c.uuid)
         assertNull(c.locale)
@@ -255,6 +283,32 @@ class VelocityFeaturesTest {
         cmd.execute(invocation(console(ok), "credits", "give", "Alex", "5"))
         assertEquals(listOf("Gave 5 credits to Alex. New balance: 9"), ok.components.map { plain.serialize(it) })
         assertTrue((rig.link.requests.single() as com.panomc.plugins.market.mc.core.wire.MarketAdminRequest).actor.console)
+    }
+
+    @Test
+    fun `a source that is neither a player nor the console sends nothing over the link`() {
+        val rig = wired()
+        rig.link.handler = { MarketAdminMessage(true, null, true, "ORD-9", 25.0) }
+        val cmd = MarketVelocityCommand("panomarket", rig.features) { true }
+        val out = Out()
+        val foreign: CommandSource = proxyOf(CommandSource::class.java) { m, a ->
+            when (m.name) {
+                "sendMessage" -> { capture(out, a); null }
+                "hasPermission" -> true // even a source that claims every node is not the console
+                else -> throw UnsupportedOperationException("CommandSource.${m.name}")
+            }
+        }
+        assertFalse(VelocitySender(foreign).isConsole)
+        assertFalse(VelocitySender(foreign).supported)
+        for (args in listOf(
+            arrayOf("credits", "give", "Alex", "5"), arrayOf("credits", "take", "Alex", "5"), arrayOf("credits", "set", "Alex", "5"),
+            arrayOf("grant", "Alex", "12", "1"), arrayOf("purchases", "Alex"), arrayOf("recover", "confirm")
+        )) cmd.execute(invocation(foreign, *args))
+        assertEquals(6, out.components.size)
+        assertTrue(out.components.all { plain.serialize(it) == "You do not have permission to use this command." })
+        assertTrue(rig.link.requests.isEmpty())
+        assertEquals(0, rig.control.confirmed)
+        assertEquals(emptyList<String>(), cmd.suggest(invocation(foreign, "")))
     }
 
     @Test

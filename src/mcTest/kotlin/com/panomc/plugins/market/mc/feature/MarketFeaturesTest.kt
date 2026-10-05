@@ -158,9 +158,16 @@ class MarketFeaturesConfigTest {
 
         val broken = FeatureRig(dir.resolve("broken"), "enabled: true\n  oops: [\n")
         assertNotNull(broken.features.config.local.error)
+        assertFalse(broken.features.config.local.enabled, "a broken file is the stay-off path, not the deliveries-false path")
+        assertTrue(broken.features.offReason()!!.contains("stays OFF"), broken.features.offReason())
         assertFalse(broken.features.settings.deliveriesEnabled, "a broken file never leaves deliveries on")
         Feature.values().forEach { assertFalse(broken.features.config.enabled(it), "$it") }
         assertTrue(broken.log.has("stays OFF"))
+
+        assertNull(r.features.offReason(), "a good file lets the main start the component")
+        assertTrue(FeatureRig(dir.resolve("off"), "enabled: false\n").features.offReason()!!.contains("enabled: false"))
+        // An explicit deliveries: false is a decision of the admin: the component starts and answers DISABLED_LOCALLY (MC-U9).
+        assertNull(FeatureRig(dir.resolve("nodeliv"), "deliveries: false\n").features.offReason())
 
         val warned = FeatureRig(dir.resolve("warn"), "mystery: 1\n")
         assertTrue(warned.log.has("unknown key 'mystery'"))

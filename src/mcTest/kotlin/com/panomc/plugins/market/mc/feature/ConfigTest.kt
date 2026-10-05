@@ -173,7 +173,7 @@ class LocalConfigTest {
     }
 
     @Test
-    fun `a file that cannot be read fails closed, nothing is switched on by accident`() {
+    fun `a file that cannot be read fails closed without consuming deliveries, nothing is switched on by accident`() {
         listOf(
             "enabled: true\n  broken: indentation\n",
             "features:\n  broadcast: nope\n",
@@ -185,6 +185,7 @@ class LocalConfigTest {
         ).forEach { text ->
             val c = LocalConfig.parse(text)
             assertNotNull(c.error, "no error for: $text")
+            assertFalse(c.enabled, "the component is not started (deliveries stay queued on Pano, none is answered DISABLED_LOCALLY) for: $text")
             assertFalse(c.deliveries, "deliveries stay off for: $text")
             assertEquals(LocalFeatures.ALL_OFF, c.features, "features stay off for: $text")
             assertTrue(c.error!!.startsWith("config.yml"))
@@ -242,11 +243,17 @@ class EffectivePrecedenceTest {
     }
 
     @Test
-    fun `before the first config answer the built-in defaults apply, and an offered broadcast is not lost`() {
+    fun `before the first config answer the built-in defaults apply to the harmless features, an offered broadcast is not lost, admin commands stay closed`() {
         val e = EffectiveConfig(LocalConfig())
         assertNull(e.remote)
         assertTrue(e.enabled(Feature.STORE_COMMAND))
-        assertTrue(e.enabled(Feature.ADMIN_COMMANDS))
+        assertTrue(e.enabled(Feature.ADMIN_COMMANDS), "the feature switch alone is not the gate: MarketCommands also needs the settings")
+        for (name in listOf("give-credits", "take-credits", "set-credits", "grant-product", "purchases")) {
+            assertTrue(e.adminCommandDisabled(name), "$name must be closed while the panel settings are unknown")
+        }
+        val answered = EffectiveConfig(LocalConfig()).also { it.update(remote(MarketMcSettings(mcDisabledAdminCommands = listOf("take-credits")))) }
+        assertFalse(answered.adminCommandDisabled("give-credits"))
+        assertTrue(answered.adminCommandDisabled("TAKE-CREDITS"))
         assertFalse(e.enabled(Feature.VAULT), "Vault is off until the panel chooses a mode")
         assertTrue(e.enabled(Feature.BROADCAST), "Pano only offers broadcasts while mcBroadcast is on")
         assertFalse(EffectiveConfig(LocalConfig(features = LocalFeatures(broadcast = false))).enabled(Feature.BROADCAST), "local still wins before the first answer")
@@ -277,7 +284,7 @@ class EffectivePrecedenceTest {
     @Test
     fun `disabled admin sub-commands come from the panel list`() {
         val e = EffectiveConfig(LocalConfig())
-        assertFalse(e.adminCommandDisabled("give-credits"))
+        assertTrue(e.adminCommandDisabled("give-credits"), "closed until the panel settings are known")
         e.update(remote(MarketMcSettings(mcDisabledAdminCommands = listOf("give-credits", "purchases"))))
         assertTrue(e.adminCommandDisabled("give-credits"))
         assertTrue(e.adminCommandDisabled("PURCHASES"))

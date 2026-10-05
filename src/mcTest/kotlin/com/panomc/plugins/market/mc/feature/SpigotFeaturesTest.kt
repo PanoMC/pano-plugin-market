@@ -17,7 +17,10 @@ import net.md_5.bungee.api.chat.BaseComponent
 import net.md_5.bungee.api.chat.ClickEvent
 import org.bukkit.command.Command
 import org.bukkit.command.CommandMap
+import org.bukkit.command.BlockCommandSender
 import org.bukkit.command.CommandSender
+import org.bukkit.command.ConsoleCommandSender
+import org.bukkit.command.RemoteConsoleCommandSender
 import org.bukkit.entity.Player
 import org.bukkit.permissions.Permission
 import org.bukkit.permissions.PermissionDefault
@@ -100,14 +103,7 @@ class SpigotFeaturesTest {
     private fun sender(rec: Recorder, name: String = "CONSOLE", nodes: Set<String> = emptySet(), player: Boolean = false, spigot: Any? = null): CommandSender {
         val uuid = UUID.nameUUIDFromBytes(name.toByteArray())
         if (!player) {
-            return proxyOf(CommandSender::class.java) { m, a ->
-                when (m.name) {
-                    "getName" -> name
-                    "sendMessage" -> { if (a[0] is String) rec.record(a[0] as String) else (a[0] as Array<*>).forEach { rec.record(it as String) }; null }
-                    "hasPermission" -> a[0] in nodes
-                    else -> throw UnsupportedOperationException("CommandSender.${m.name}")
-                }
-            }
+            return senderOf(ConsoleCommandSender::class.java, rec, name, nodes)
         }
         return proxyOf(Player::class.java) { m, a ->
             when (m.name) {
@@ -119,6 +115,16 @@ class SpigotFeaturesTest {
                 "spigot" -> spigot ?: throw UnsupportedOperationException("no chat API")
                 else -> throw UnsupportedOperationException("Player.${m.name}")
             }
+        }
+    }
+
+    /** A non-player sender of the given Bukkit kind (console, command block, RCON, a plain `CommandSender`). */
+    private fun <T : CommandSender> senderOf(type: Class<T>, rec: Recorder, name: String, nodes: Set<String> = emptySet()): T = proxyOf(type) { m, a ->
+        when (m.name) {
+            "getName" -> name
+            "sendMessage" -> { if (a[0] is String) rec.record(a[0] as String) else (a[0] as Array<*>).forEach { rec.record(it as String) }; null }
+            "hasPermission" -> a[0] in nodes
+            else -> throw UnsupportedOperationException("${type.simpleName}.${m.name}")
         }
     }
 
@@ -330,5 +336,67 @@ class SpigotFeaturesTest {
         w.rig.features.callbacks.showBroadcast("&aSteve &7bought &fDiamonds")
         await("broadcast") { broadcasts.isNotEmpty() }
         assertEquals(listOf("§aSteve §7bought §fDiamonds"), broadcasts)
+    }
+
+    // ---- the console is a positive test (review fix: command blocks and other senders are not the console) ------------
+
+    private val moneyOps = listOf(
+        arrayOf("credits", "give", "Alex", "5"), arrayOf("credits", "take", "Alex", "5"), arrayOf("credits", "set", "Alex", "5"),
+        arrayOf("grant", "Alex", "12", "1"), arrayOf("purchases", "Alex"), arrayOf("recover", "confirm"), arrayOf("recover"), arrayOf("status")
+    )
+
+    private fun foreignSenders(rec: Recorder): Map<String, CommandSender> = mapOf(
+        "BlockCommandSender" to senderOf(BlockCommandSender::class.java, rec, "@"),
+        "plain non-player sender (entity through /execute as, minecart, ProxiedCommandSender)" to senderOf(CommandSender::class.java, rec, "Zombie"),
+        "op-like sender holding every node" to senderOf(CommandSender::class.java, rec, "Op", MarketCommands.NODES.toSet())
+    )
+
+    @Test
+    fun `a command block or any other non-player non-console sender sends nothing over the link`() {
+        val w = wire()
+        w.rig.link.handler = { MarketAdminMessage(true, null, true, "ORD-9", 25.0) }
+        for ((label, _) in foreignSenders(Recorder())) {
+            val rec = Recorder()
+            val foreign = foreignSenders(rec).getValue(label)
+            for (args in moneyOps) {
+                command("panomarket").execute(foreign, "panomarket", args)
+            }
+            await("$label refusals") { rec.lines.size >= moneyOps.size }
+            assertEquals(moneyOps.size, rec.lines.size, label)
+            assertTrue(rec.plain().all { it == "You do not have permission to use this command." }, "$label: ${rec.plain()}")
+            assertTrue(w.rig.link.requests.isEmpty(), "$label reached Pano: ${w.rig.link.requests}")
+            assertEquals(0, w.rig.control.confirmed, "$label confirmed a recovery")
+            assertEquals(0, w.rig.control.syncs, label)
+            assertEquals(emptyList<String>(), command("panomarket").tabComplete(foreign, "panomarket", arrayOf("")), label)
+        }
+    }
+
+    @Test
+    fun `a command block cannot run the store and credits commands either`() {
+        val w = wire()
+        val rec = Recorder()
+        val block = senderOf(BlockCommandSender::class.java, rec, "@")
+        command("store").execute(block, "store", arrayOf("history"))
+        command("credits").execute(block, "credits", arrayOf())
+        await("refusals") { rec.lines.size == 2 }
+        assertTrue(w.rig.link.requests.isEmpty())
+    }
+
+    @Test
+    fun `the real console and RCON still run the admin commands as the console actor`() {
+        val w = wire()
+        w.rig.link.handler = { MarketAdminMessage(true, null, true, null, 9.0) }
+        val rec = Recorder()
+        command("panomarket").execute(senderOf(ConsoleCommandSender::class.java, rec, "CONSOLE"), "panomarket", arrayOf("credits", "give", "Alex", "5"))
+        command("panomarket").execute(senderOf(RemoteConsoleCommandSender::class.java, rec, "Rcon"), "panomarket", arrayOf("credits", "give", "Alex", "5"))
+        await("both answers") { rec.lines.size == 2 }
+        val requests = w.rig.link.requests.map { it as com.panomc.plugins.market.mc.core.wire.MarketAdminRequest }
+        assertEquals(2, requests.size)
+        assertTrue(requests.all { it.actor.console })
+        assertTrue(SpigotSender(senderOf(ConsoleCommandSender::class.java, rec, "CONSOLE"), w.host).isConsole)
+        assertTrue(SpigotSender(senderOf(RemoteConsoleCommandSender::class.java, rec, "Rcon"), w.host).isConsole)
+        val block = SpigotSender(senderOf(BlockCommandSender::class.java, rec, "@"), w.host)
+        assertFalse(block.isConsole)
+        assertFalse(block.supported)
     }
 }

@@ -13,6 +13,8 @@ import org.bukkit.Bukkit
 import org.bukkit.command.Command
 import org.bukkit.command.CommandMap
 import org.bukkit.command.CommandSender
+import org.bukkit.command.ConsoleCommandSender
+import org.bukkit.command.RemoteConsoleCommandSender
 import org.bukkit.entity.Player
 import org.bukkit.permissions.Permission
 import org.bukkit.permissions.PermissionDefault
@@ -79,9 +81,18 @@ class SpigotFeatureHost(private val scheduler: MarketScheduler, private val log:
     override fun localeOf(username: String): String? = locales[username.lowercase()]
 }
 
+/**
+ * A command sender as the features see it. The console is a POSITIVE test: only the server console (and RCON, which is the
+ * console) is the console. A command block, a command minecart, an entity reached with `/execute as` or a proxied sender is
+ * neither a player nor the console ([supported] is false): the command refuses it, because the console skips the in-game
+ * node and Pano always allows a console actor (19 section 7.4), so such a sender must never be treated as one.
+ */
 class SpigotSender(private val sender: CommandSender, private val host: SpigotFeatureHost) : McSender {
     override val name: String get() = sender.name
-    override val isConsole: Boolean get() = sender !is Player
+    override val isConsole: Boolean get() = sender is ConsoleCommandSender || sender is RemoteConsoleCommandSender
+
+    /** A player or the console; anything else is refused by [MarketBukkitCommand]. */
+    val supported: Boolean get() = sender is Player || isConsole
     override val uuid: String? get() = (sender as? Player)?.uniqueId?.toString()
     override val locale: String? get() = if (sender is Player) host.localeOf(sender.name) else null
 
@@ -101,6 +112,10 @@ class MarketBukkitCommand(
 ) : Command(name, "Pano Market", "/$name", aliases) {
     override fun execute(sender: CommandSender, commandLabel: String, args: Array<String>): Boolean {
         val s = SpigotSender(sender, host)
+        if (!s.supported) {
+            s.send(features.messages.text(Msg.COMMAND_NO_PERMISSION, null))
+            return true
+        }
         if (!active()) {
             s.send(features.messages.text(Msg.COMMAND_UNAVAILABLE, s.locale))
             return true
@@ -110,7 +125,7 @@ class MarketBukkitCommand(
     }
 
     override fun tabComplete(sender: CommandSender, alias: String, args: Array<String>): List<String> =
-        if (active()) features.commands.complete(canonical, SpigotSender(sender, host), args.toList()) else emptyList()
+        SpigotSender(sender, host).let { s -> if (active() && s.supported) features.commands.complete(canonical, s, args.toList()) else emptyList() }
 }
 
 /**

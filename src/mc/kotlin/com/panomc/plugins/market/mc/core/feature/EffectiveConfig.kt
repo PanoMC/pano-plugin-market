@@ -31,7 +31,8 @@ data class RemoteConfig(
 )
 
 /**
- * [LocalConfig] + the last `MARKET_CONFIG`, read live. Until the first answer arrived the built-in panel defaults apply,
+ * [LocalConfig] + the last `MARKET_CONFIG`, read live. Until the first answer arrived the built-in panel defaults apply to
+ * the harmless features (never to the admin commands, see [adminCommandDisabled] and `MarketCommands.adminAllowed`),
  * with one exception: broadcasts. Pano only offers a broadcast while `mcBroadcast` is on for this server, so an offered
  * one is proof of the setting and must not be lost to a start-up race (the first sync runs before the first config pull).
  */
@@ -51,8 +52,15 @@ class EffectiveConfig(val local: LocalConfig) {
         return FeatureResolver.resolve(localOn, r.panel(feature), false)
     }
 
-    /** `mcDisabledAdminCommands`: `give-credits`, `take-credits`, `set-credits`, `grant-product`, `purchases`. */
-    fun adminCommandDisabled(name: String): Boolean = remote?.settings?.mcDisabledAdminCommands?.any { it.equals(name, true) } ?: false
+    /**
+     * `mcDisabledAdminCommands`: `give-credits`, `take-credits`, `set-credits`, `grant-product`, `purchases`. Fails CLOSED
+     * while the panel settings are unknown (no accepted `MARKET_CONFIG` yet, e.g. after a restart): a command the panel
+     * switched off must never slip through the start-up window (19 section 7.4 half 1, section 9).
+     */
+    fun adminCommandDisabled(name: String): Boolean {
+        val settings = remote?.settings ?: return true
+        return settings.mcDisabledAdminCommands.any { it.equals(name, true) }
+    }
 
     /** The live view the engine reads at call time. */
     val deliverySettings: DeliverySettings = object : DeliverySettings {

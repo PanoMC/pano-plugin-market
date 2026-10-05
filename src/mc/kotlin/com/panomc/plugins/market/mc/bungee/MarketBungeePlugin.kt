@@ -44,8 +44,9 @@ class MarketBungeePlugin : Plugin(), Listener {
                 dataFolder.toPath(), ResourceFiles.reader(MarketBungeePlugin::class.java.classLoader), BungeeFeatureHost(proxy), link,
                 { name -> tracker.uuid(name) }, description.version, log
             )
-            if (!f.config.local.enabled) {
-                log.info("The Market component is switched off in config.yml (enabled: false).")
+            val offReason = f.offReason()
+            if (offReason != null) {
+                log.info(offReason)
                 link.close()
                 return
             }

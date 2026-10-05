@@ -49,6 +49,7 @@ admin.insufficientCredits: "&c{player} oyuncusunun yeterli kredisi yok."
 admin.creditsDisabled: "&cMağazada krediler kapalı."
 admin.failed: "&cMağaza komutu reddetti ({code})."
 admin.unknownOutcome: "&eMağazadan yanıt gelmedi. Komut uygulanmış olabilir ya da olmayabilir: tekrar etmeden önce bakiyeyi veya satın alımları kontrol et."
+admin.settingsNotLoaded: "&ePanel ayarları henüz yüklenmedi, bu yüzden komut kapalı. Birkaç saniye sonra tekrar dene."
 admin.purchasesHeader: "&6{player} oyuncusunun son satın alımları:"
 admin.purchasesEmpty: "&7{player} oyuncusunun satın alımı yok."
 

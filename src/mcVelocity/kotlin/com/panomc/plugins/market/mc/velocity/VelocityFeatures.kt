@@ -7,6 +7,7 @@ import com.panomc.plugins.market.mc.core.feature.McSender
 import com.panomc.plugins.market.mc.core.feature.Msg
 import com.velocitypowered.api.command.CommandSource
 import com.velocitypowered.api.command.SimpleCommand
+import com.velocitypowered.api.proxy.ConsoleCommandSource
 import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ProxyServer
 import net.kyori.adventure.text.Component
@@ -41,9 +42,12 @@ class VelocityFeatureHost(private val server: ProxyServer) : FeatureHost {
     override fun localeOf(username: String): String? = server.getPlayer(username).orElse(null)?.let { VelocityMessages.localeOf(it) }
 }
 
+/** The console is a POSITIVE test (`ConsoleCommandSource`); any other non-player source is [supported] = false and refused (19 section 7.4). */
 class VelocitySender(private val source: CommandSource) : McSender {
     override val name: String get() = (source as? Player)?.username ?: "CONSOLE"
-    override val isConsole: Boolean get() = source !is Player
+    override val isConsole: Boolean get() = source is ConsoleCommandSource
+
+    val supported: Boolean get() = source is Player || isConsole
     override val uuid: String? get() = (source as? Player)?.uniqueId?.toString()
     override val locale: String? get() = (source as? Player)?.let { VelocityMessages.localeOf(it) }
 
@@ -60,12 +64,13 @@ class MarketVelocityCommand(
 ) : SimpleCommand {
     override fun execute(invocation: SimpleCommand.Invocation) {
         val s = VelocitySender(invocation.source())
+        if (!s.supported) return s.send(features.messages.text(Msg.COMMAND_NO_PERMISSION, null))
         if (!active()) return s.send(features.messages.text(Msg.COMMAND_UNAVAILABLE, s.locale))
         features.commands.execute(canonical, s, invocation.arguments().toList())
     }
 
     override fun suggest(invocation: SimpleCommand.Invocation): List<String> =
-        if (active()) features.commands.complete(canonical, VelocitySender(invocation.source()), invocation.arguments().toList()) else emptyList()
+        VelocitySender(invocation.source()).let { s -> if (active() && s.supported) features.commands.complete(canonical, s, invocation.arguments().toList()) else emptyList() }
 }
 
 /** Registers `/store`, `/credits` and `/panomarket` (with their aliases) on Velocity's command manager. */
