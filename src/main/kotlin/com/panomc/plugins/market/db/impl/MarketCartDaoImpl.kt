@@ -70,10 +70,56 @@ class MarketCartDaoImpl : MarketCartDao() {
             .coAwait()
             .rowCount() > 0
 
+    override suspend fun ensure(userId: Long, now: Long, sqlClient: SqlClient): Long {
+        val query =
+            "INSERT INTO `${prefix() + tableName}` (`userId`, `createdAt`, `updatedAt`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `id` = LAST_INSERT_ID(`id`)"
+        val result = sqlClient.preparedQuery(query).execute(Tuple.of(userId, now, now)).coAwait()
+        val id = result.property(MySQLClient.LAST_INSERTED_ID)
+
+        if (id != null && id > 0) return id
+
+        return getByUserId(userId, sqlClient)!!.id
+    }
+
+    override suspend fun getByIdForUpdate(id: Long, sqlClient: SqlClient): MarketCart? =
+        sqlClient
+            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `id` = ? FOR UPDATE")
+            .execute(Tuple.of(id))
+            .coAwait()
+            .toEntities()
+            .getOrNull(0)
+
+    override suspend fun updateFields(id: Long, changes: Map<String, Any?>, now: Long, sqlClient: SqlClient) {
+        require(changes.keys.all { it in UPDATABLE }) { "unknown cart column in ${changes.keys}" }
+
+        val columns = changes.keys.toList()
+        val set = (columns.map { "`$it` = ?" } + "`updatedAt` = ?").joinToString(", ")
+        val values = Tuple.tuple()
+
+        columns.forEach { values.addValue(changes[it]) }
+        values.addValue(now).addValue(id)
+
+        sqlClient.preparedQuery("UPDATE `${prefix() + tableName}` SET $set WHERE `id` = ?").execute(values).coAwait()
+    }
+
+    override suspend fun clearFields(id: Long, now: Long, sqlClient: SqlClient) {
+        sqlClient
+            .preparedQuery(
+                "UPDATE `${prefix() + tableName}` SET `couponCode` = NULL, `creatorCode` = NULL, `recipientUsername` = NULL, `giftMessage` = NULL, " +
+                    "`shippingAddressId` = NULL, `shippingMethodId` = NULL, `updatedAt` = ? WHERE `id` = ?"
+            )
+            .execute(Tuple.of(now, id))
+            .coAwait()
+    }
+
     override suspend fun uninstall(sqlClient: SqlClient) {
         sqlClient
             .query("DROP TABLE IF EXISTS `${prefix() + tableName}`")
             .execute()
             .coAwait()
+    }
+
+    private companion object {
+        val UPDATABLE = setOf("currency", "couponCode", "creatorCode", "recipientUsername", "giftMessage", "shippingAddressId", "shippingMethodId")
     }
 }

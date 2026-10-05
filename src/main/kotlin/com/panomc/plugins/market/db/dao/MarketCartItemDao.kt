@@ -14,4 +14,22 @@ abstract class MarketCartItemDao : MarketDao<MarketCartItem>(MarketCartItem::cla
     abstract suspend fun getByCartId(cartId: Long, sqlClient: SqlClient): List<MarketCartItem>
 
     abstract suspend fun deleteByCartId(cartId: Long, sqlClient: SqlClient): Int
+
+    /**
+     * One-statement insert that merges into an identical line (06 section 2.2):
+     * `ON DUPLICATE KEY UPDATE quantity = LEAST(quantity + VALUES(quantity), 999)`. Returns the id of the row (new or merged).
+     */
+    abstract suspend fun upsertAdd(item: MarketCartItem, sqlClient: SqlClient): Long
+
+    abstract suspend fun getByIdInCart(id: Long, cartId: Long, sqlClient: SqlClient): MarketCartItem?
+
+    abstract suspend fun getByCartIdAndLineKey(cartId: Long, lineKey: String, sqlClient: SqlClient): MarketCartItem?
+
+    abstract suspend fun countByCartId(cartId: Long, sqlClient: SqlClient): Long
+
+    /** Sets the quantity of a line of that cart; `false` when no such row. */
+    abstract suspend fun setQuantity(id: Long, cartId: Long, quantity: Int, now: Long, sqlClient: SqlClient): Boolean
+
+    /** Idempotent: a missing row is success; `true` when a row was removed. */
+    abstract suspend fun deleteByIdInCart(id: Long, cartId: Long, sqlClient: SqlClient): Boolean
 }

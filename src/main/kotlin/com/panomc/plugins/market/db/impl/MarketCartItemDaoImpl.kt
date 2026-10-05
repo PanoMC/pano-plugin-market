@@ -68,6 +68,67 @@ class MarketCartItemDaoImpl : MarketCartItemDao() {
             .coAwait()
             .rowCount()
 
+    override suspend fun upsertAdd(item: MarketCartItem, sqlClient: SqlClient): Long {
+        val query =
+            "INSERT INTO `${prefix() + tableName}` (`cartId`, `productId`, `variantId`, `quantity`, `fieldValues`, `targetServerId`, `lineKey`, `createdAt`, `updatedAt`) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+                "ON DUPLICATE KEY UPDATE `quantity` = LEAST(`quantity` + VALUES(`quantity`), 999), `updatedAt` = VALUES(`updatedAt`), `id` = LAST_INSERT_ID(`id`)"
+        val values = Tuple.tuple()
+            .addValue(item.cartId)
+            .addValue(item.productId)
+            .addValue(item.variantId)
+            .addValue(item.quantity)
+            .addValue(item.fieldValues)
+            .addValue(item.targetServerId)
+            .addValue(item.lineKey)
+            .addValue(item.createdAt)
+            .addValue(item.updatedAt)
+
+        val id = sqlClient.preparedQuery(query).execute(values).coAwait().property(MySQLClient.LAST_INSERTED_ID)
+
+        if (id != null && id > 0) return id
+
+        return getByCartIdAndLineKey(item.cartId, item.lineKey, sqlClient)!!.id
+    }
+
+    override suspend fun getByIdInCart(id: Long, cartId: Long, sqlClient: SqlClient): MarketCartItem? =
+        sqlClient
+            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `id` = ? AND `cartId` = ?")
+            .execute(Tuple.of(id, cartId))
+            .coAwait()
+            .toEntities()
+            .getOrNull(0)
+
+    override suspend fun getByCartIdAndLineKey(cartId: Long, lineKey: String, sqlClient: SqlClient): MarketCartItem? =
+        sqlClient
+            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `cartId` = ? AND `lineKey` = ?")
+            .execute(Tuple.of(cartId, lineKey))
+            .coAwait()
+            .toEntities()
+            .getOrNull(0)
+
+    override suspend fun countByCartId(cartId: Long, sqlClient: SqlClient): Long =
+        sqlClient
+            .preparedQuery("SELECT COUNT(*) AS c FROM `${prefix() + tableName}` WHERE `cartId` = ?")
+            .execute(Tuple.of(cartId))
+            .coAwait()
+            .first()
+            .getLong("c")
+
+    override suspend fun setQuantity(id: Long, cartId: Long, quantity: Int, now: Long, sqlClient: SqlClient): Boolean =
+        sqlClient
+            .preparedQuery("UPDATE `${prefix() + tableName}` SET `quantity` = ?, `updatedAt` = ? WHERE `id` = ? AND `cartId` = ?")
+            .execute(Tuple.of(quantity, now, id, cartId))
+            .coAwait()
+            .rowCount() > 0
+
+    override suspend fun deleteByIdInCart(id: Long, cartId: Long, sqlClient: SqlClient): Boolean =
+        sqlClient
+            .preparedQuery("DELETE FROM `${prefix() + tableName}` WHERE `id` = ? AND `cartId` = ?")
+            .execute(Tuple.of(id, cartId))
+            .coAwait()
+            .rowCount() > 0
+
     override suspend fun uninstall(sqlClient: SqlClient) {
         sqlClient
             .query("DROP TABLE IF EXISTS `${prefix() + tableName}`")
