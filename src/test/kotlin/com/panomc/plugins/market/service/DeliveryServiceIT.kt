@@ -192,7 +192,8 @@ internal class DeliveryWorld(val w: TestWiring, maxAttempts: Int = 5) {
         tier: Pair<Long, Int>? = null,
         lineTotal: Long = 1000,
         product: com.panomc.plugins.market.db.model.MarketProduct? = null,
-        subscriptionId: Long? = null
+        subscriptionId: Long? = null,
+        kind: OrderItemKind = OrderItemKind.PRODUCT
     ): Placed {
         val now = w.clock.now()
         val product = product ?: w.fixtures.product(actions = JsonArray(actions.map { it.toJson() }).encode())
@@ -214,7 +215,7 @@ internal class DeliveryWorld(val w: TestWiring, maxAttempts: Int = 5) {
         val itemId = w.orderItems.add(
             MarketOrderItem(
                 orderId = orderId, productId = product.id, productName = "VIP", quantity = quantity, unitPrice = lineTotal / quantity, lineTotal = lineTotal,
-                listUnitPrice = lineTotal / quantity, kind = OrderItemKind.PRODUCT, snapshot = snapshot.encode(), createdAt = now, updatedAt = now
+                listUnitPrice = lineTotal / quantity, kind = kind, snapshot = snapshot.encode(), createdAt = now, updatedAt = now
             ),
             w.pool
         )
@@ -223,6 +224,61 @@ internal class DeliveryWorld(val w: TestWiring, maxAttempts: Int = 5) {
         if (paid) com.panomc.plugins.market.support.MarketTestDb.sql(w.pool, "UPDATE `${com.panomc.plugins.market.support.MarketTestDb.TABLE_PREFIX}market_product` SET `soldCount` = `soldCount` + ? WHERE `id` = ?", quantity, product.id)
 
         return Placed(w.orders.getById(orderId, w.pool)!!, listOf(w.orderItems.getById(itemId, w.pool)!!), product)
+    }
+
+    /** One child of a bundle: its [actions], its quantity per bundle and the billing mode its snapshot carries. */
+    class ChildLine(
+        val actions: List<ProductAction>,
+        val perBundle: Int = 1,
+        val billing: String = "ONE_TIME",
+        val periodUnit: String? = null,
+        val periodCount: Int? = null,
+        val product: com.panomc.plugins.market.db.model.MarketProduct? = null
+    )
+
+    /**
+     * A paid bundle order for [user]: one `BUNDLE` line of [bundleQuantity] with [parentActions] and one `BUNDLE_CHILD` line per child, whose quantity is
+     * `bundleQuantity x perBundle` and whose `parentItemId` is the bundle line (08 section 5.2). `Placed.items` is the bundle line first, then the children.
+     */
+    suspend fun placeBundle(
+        user: TestUser,
+        parentActions: List<ProductAction>,
+        children: List<ChildLine>,
+        bundleQuantity: Int = 1,
+        billing: String = "ONE_TIME",
+        periodUnit: String? = null,
+        periodCount: Int? = null,
+        product: com.panomc.plugins.market.db.model.MarketProduct? = null
+    ): Placed {
+        val parent = place(
+            user = user, actions = parentActions, quantity = bundleQuantity, billing = billing, periodUnit = periodUnit, periodCount = periodCount, product = product,
+            kind = OrderItemKind.BUNDLE
+        )
+        val now = w.clock.now()
+        val items = ArrayList(parent.items)
+
+        for (c in children) {
+            val childProduct = c.product ?: w.fixtures.product(actions = JsonArray(c.actions.map { it.toJson() }).encode())
+            val quantity = bundleQuantity * c.perBundle
+            val snapshot = JsonObject()
+                .put("slug", childProduct.slug).put("billingMode", c.billing).put("periodUnit", c.periodUnit).put("periodCount", c.periodCount)
+                .put("actions", JsonArray(c.actions.map { it.toJson() }))
+            val id = w.orderItems.add(
+                MarketOrderItem(
+                    orderId = parent.order.id, productId = childProduct.id, productName = "child", quantity = quantity, unitPrice = 0, lineTotal = 0, listUnitPrice = 0,
+                    kind = OrderItemKind.BUNDLE_CHILD, parentItemId = parent.items[0].id, snapshot = snapshot.encode(), createdAt = now, updatedAt = now
+                ),
+                w.pool
+            )
+
+            // I17: the units of a paid order are in the product's soldCount
+            com.panomc.plugins.market.support.MarketTestDb.sql(
+                w.pool, "UPDATE `${com.panomc.plugins.market.support.MarketTestDb.TABLE_PREFIX}market_product` SET `soldCount` = `soldCount` + ? WHERE `id` = ?", quantity, childProduct.id
+            )
+            items += w.orderItems.getById(id, w.pool)!!
+        }
+
+        return Placed(parent.order, items, parent.product)
     }
 
     /** The two foreign effects of O2 inside one transaction under the order lock (what `OrderService.transition` does at O2). */
@@ -910,8 +966,16 @@ class DeliveryServiceIT : MarketDaoITBase() {
         assertEquals(100L, w.fixtures.creditBalance(u))
     }
 
+    /** `planRevoke` of [units] in one transaction under the order lock (the caller of 08 section 11.2: the refund / revoke service). */
+    private suspend fun partialRevoke(placed: Placed, units: Map<Long, IntRange>, before: Map<Long, Set<Int>> = emptyMap()): DeliveryService.EndPlan =
+        w.db.txRestartingOnOrderChange { conn ->
+            d.locks.forOrder(conn, placed.order.id, OrderLockScope.COMMIT) { locked ->
+                d.service.planRevoke(conn, locked.order, locked.items, units, revokedBefore = before)
+            }
+        }
+
     @Test
-    fun `a partial revoke cancels only the per unit rows it covers and leaves a whole-line row alone`(): Unit = runBlocking {
+    fun `a partial revoke cancels the rows it covers, a per unit row by its unit and a whole-line row as a whole with the units left planned again`(): Unit = runBlocking {
         val u = steve()
 
         d.roster.granted = listOf(7L)
@@ -924,19 +988,335 @@ class DeliveryServiceIT : MarketDaoITBase() {
 
         assertEquals(4, d.rows(placed.order.id).size)
 
-        val plan = w.db.txRestartingOnOrderChange { conn ->
-            d.locks.forOrder(conn, placed.order.id, OrderLockScope.COMMIT) { locked ->
-                d.service.planRevoke(conn, locked.order, locked.items, mapOf(locked.items[0].id to (1..1)))
-            }
-        }
+        val plan = partialRevoke(placed, mapOf(placed.items[0].id to (1..1)))
 
-        assertEquals(1, plan.cancelled)
+        // c1 unit 1 and the whole-line c2 row (it stands for units 0..2, so it overlaps unit 1)
+        assertEquals(2, plan.cancelled)
+        assertEquals(0, plan.cancelRequested)
         assertEquals(0, plan.inserted.size)
+        // the buyer keeps units 0 and 2: two new whole-line rows of one unit each, attempt group 1
+        assertEquals(2, plan.replanned.size)
 
         val byAction = d.rows(placed.order.id).groupBy { it.actionId }
 
         assertEquals(listOf(DeliveryStatus.PENDING, DeliveryStatus.CANCELLED, DeliveryStatus.PENDING), byAction.getValue("c1").sortedBy { it.unitIndex }.map { it.status })
-        assertEquals(listOf(DeliveryStatus.PENDING), byAction.getValue("c2").map { it.status })
+
+        val c2 = byAction.getValue("c2").sortedWith(compareBy({ it.attemptGroup }, { it.unitIndex }))
+
+        assertEquals(listOf(DeliveryStatus.CANCELLED, DeliveryStatus.PENDING, DeliveryStatus.PENDING), c2.map { it.status })
+        assertEquals(listOf(0 to 0, 1 to 0, 1 to 2), c2.map { it.attemptGroup to it.unitIndex })
+        assertEquals(listOf("say 1", "say 1"), c2.drop(1).map { JsonObject(it.payload).getJsonArray("commands").getString(0) })
+        assertEquals(DeliveryError.ORDER_REVOKED, c2[0].lastErrorCode)
+    }
+
+    // ===== review fixes: bundle phases and end-flow ranges, partial refunds of whole-line rows ====================================
+
+    @Test
+    fun `a bundle plans the rows of the bundle line and of its child, both in the GRANT phase`(): Unit = runBlocking {
+        val u = steve()
+        val placed = d.placeBundle(u, listOf(credit("a1", 100)), listOf(DeliveryWorld.ChildLine(listOf(credit("c1", 50)))))
+        val parent = placed.items[0]
+        val child = placed.items[1]
+
+        d.pay(placed)
+
+        val rows = d.rows(placed.order.id)
+
+        assertEquals(2, rows.size)
+        assertEquals(setOf(DeliveryPhase.GRANT), rows.map { it.phase }.toSet())
+        assertEquals(setOf("${parent.id}:a1:0:0:GRANT:0", "${child.id}:c1:0:0:GRANT:0"), rows.map { it.idempotencyKey }.toSet())
+        assertEquals(1, w.entitlements.getByOrderItemId(parent.id, pool).size)
+        assertEquals(1, w.entitlements.getByOrderItemId(child.id, pool).size)
+
+        assertEquals(2, d.runInline())
+        assertEquals(150L, w.fixtures.creditBalance(u))
+        assertEquals(FulfillmentStatus.FULFILLED, d.order(placed.order.id).fulfillmentStatus)
+    }
+
+    @Test
+    fun `a bundle child that extends an owned timed chain is planned as RENEW while the bundle line is GRANT, neither is dropped`(): Unit = runBlocking {
+        val u = steve()
+        val day = 86_400_000L
+        val timed = listOf(permission("p1", "group.timed"), credit("c1", 50))
+        val childProduct = w.fixtures.product(actions = JsonArray(timed.map { it.toJson() }).encode())
+        val t0 = w.clock.now()
+
+        // the owner already holds an active 30 day chain of the child product
+        val owned = d.place(user = u, actions = timed, billing = "TIMED", periodUnit = "DAY", periodCount = 30, product = childProduct)
+
+        d.pay(owned)
+        d.runInline()
+        assertEquals(t0 + 30 * day, d.permissionStore.of(u.id).single().expiresAt)
+
+        val placed = d.placeBundle(
+            u, listOf(credit("a1", 100)), listOf(DeliveryWorld.ChildLine(timed, billing = "TIMED", periodUnit = "DAY", periodCount = 30, product = childProduct))
+        )
+        val parent = placed.items[0]
+        val child = placed.items[1]
+
+        d.pay(placed)
+
+        val childEntitlement = w.entitlements.getByOrderItemId(child.id, pool).single()
+
+        assertTrue(EntitlementService.isExtension(childEntitlement))
+        assertEquals(t0 + 60 * day, childEntitlement.expiresAt)
+        assertFalse(EntitlementService.isExtension(w.entitlements.getByOrderItemId(parent.id, pool).single()))
+
+        val rows = d.rows(placed.order.id)
+        val byItem = rows.groupBy { it.orderItemId }
+
+        // the bundle line is a plain GRANT, the child line extends its chain: RENEW, with the permission as EXTEND to the new chain end
+        assertEquals(listOf(DeliveryPhase.GRANT to "a1"), byItem.getValue(parent.id).map { it.phase to it.actionId })
+        assertEquals(setOf(DeliveryPhase.RENEW to "p1", DeliveryPhase.RENEW to "c1"), byItem.getValue(child.id).map { it.phase to it.actionId }.toSet())
+
+        val extend = byItem.getValue(child.id).single { it.actionId == "p1" }
+
+        assertEquals("EXTEND", JsonObject(extend.payload).getString("op"))
+        assertEquals(t0 + 60 * day, JsonObject(extend.payload).getLong("expiresAt"))
+        assertTrue(rows.all { it.status == DeliveryStatus.PENDING })
+
+        assertEquals(3, d.runInline())
+        assertEquals(t0 + 60 * day, d.permissionStore.of(u.id).single().expiresAt)
+        // 50 (first purchase) + 100 (bundle line) + 50 (child line)
+        assertEquals(200L, w.fixtures.creditBalance(u))
+        assertEquals(FulfillmentStatus.FULFILLED, d.order(placed.order.id).fulfillmentStatus)
+    }
+
+    @Test
+    fun `a bundle line that extends an owned chain is RENEW while its child is GRANT, neither is dropped (the mirror case)`(): Unit = runBlocking {
+        val u = steve()
+        val parentActions = listOf(credit("a1", 100))
+        val parentProduct = w.fixtures.product(actions = JsonArray(parentActions.map { it.toJson() }).encode())
+
+        // the bundle line of the second order is timed on purpose: the planner does not care what the catalogue allows
+        val owned = d.place(user = u, actions = parentActions, billing = "TIMED", periodUnit = "DAY", periodCount = 30, product = parentProduct)
+
+        d.pay(owned)
+        d.runInline()
+
+        val placed = d.placeBundle(
+            u, parentActions, listOf(DeliveryWorld.ChildLine(listOf(credit("c1", 50)))), billing = "TIMED", periodUnit = "DAY", periodCount = 30, product = parentProduct
+        )
+        val parent = placed.items[0]
+        val child = placed.items[1]
+
+        d.pay(placed)
+
+        assertTrue(EntitlementService.isExtension(w.entitlements.getByOrderItemId(parent.id, pool).single()))
+        assertFalse(EntitlementService.isExtension(w.entitlements.getByOrderItemId(child.id, pool).single()))
+
+        val byItem = d.rows(placed.order.id).groupBy { it.orderItemId }
+
+        assertEquals(listOf(DeliveryPhase.RENEW to "a1"), byItem.getValue(parent.id).map { it.phase to it.actionId })
+        assertEquals(listOf(DeliveryPhase.GRANT to "c1"), byItem.getValue(child.id).map { it.phase to it.actionId })
+
+        assertEquals(2, d.runInline())
+        assertEquals(250L, w.fixtures.creditBalance(u))
+    }
+
+    @Test
+    fun `a partial refund of an unsent credit grant plans the units the buyer keeps and the balance ends at the kept units`(): Unit = runBlocking {
+        val u = steve()
+        val placed = d.place(user = u, actions = listOf(ProductAction(id = "a1", type = DeliveryActionType.CREDIT, credit = 100, delaySeconds = 3600)), quantity = 5)
+        val item = placed.items[0]
+
+        d.pay(placed)
+
+        val original = d.rows(placed.order.id).single()
+
+        assertEquals(DeliveryStatus.SCHEDULED, original.status)
+        assertEquals(500L, JsonObject(original.payload).getLong("credits"))
+
+        // refund of units 0..1 with revoke: the grant covers them, so it is cancelled (D16); nothing was delivered, so no reversal is planned
+        val plan = partialRevoke(placed, mapOf(item.id to (0..1)))
+
+        assertEquals(1, plan.cancelled)
+        assertEquals(0, plan.cancelRequested)
+        assertEquals(0, plan.inserted.size)
+        assertEquals(1, plan.replanned.size)
+        assertEquals(DeliveryStatus.CANCELLED, d.row(original.id).status)
+
+        // what the buyer keeps: 3 units, a new attempt group, the schedule of the grant that was cancelled (the delay does not start again)
+        val kept = d.rows(placed.order.id).single { it.id != original.id }
+
+        assertEquals("${item.id}:a1:0:2:GRANT:1", kept.idempotencyKey)
+        assertEquals(DeliveryStatus.SCHEDULED, kept.status)
+        assertEquals(original.runAfter, kept.runAfter)
+        assertEquals(original.runAfter, kept.nextAttemptAt)
+        assertEquals(300L, JsonObject(kept.payload).getLong("credits"))
+
+        w.clock.advance(3_601_000)
+
+        assertEquals(1, d.service.promote())
+        assertEquals(1, d.runInline())
+        assertEquals(300L, w.fixtures.creditBalance(u))
+        assertEquals(0L, count("market_credit_tx", "`type` = 'ACTION_REVERSAL'"))
+    }
+
+    @Test
+    fun `successive partial refunds of an unsent credit grant keep exactly the units that are left`(): Unit = runBlocking {
+        val u = steve()
+        val placed = d.place(user = u, actions = listOf(ProductAction(id = "a1", type = DeliveryActionType.CREDIT, credit = 100, delaySeconds = 3600)), quantity = 5)
+        val item = placed.items[0]
+
+        d.pay(placed)
+
+        // 0..1, then 2..3 (the caller reports the 2 units revoked before), then the last unit
+        assertEquals(1, partialRevoke(placed, mapOf(item.id to (0..1))).replanned.size)
+
+        val second = partialRevoke(placed, mapOf(item.id to (2..3)), mapOf(item.id to setOf(0, 1)))
+
+        assertEquals(1, second.cancelled)
+        assertEquals(1, second.replanned.size)
+
+        val live = d.rows(placed.order.id).single { it.status == DeliveryStatus.SCHEDULED }
+
+        assertEquals(4, live.unitIndex)
+        assertEquals(2, live.attemptGroup)
+        assertEquals(100L, JsonObject(live.payload).getLong("credits"))
+
+        val last = partialRevoke(placed, mapOf(item.id to (4..4)), mapOf(item.id to setOf(0, 1, 2, 3)))
+
+        assertEquals(1, last.cancelled)
+        assertEquals(0, last.replanned.size)
+        assertEquals(setOf(DeliveryStatus.CANCELLED), d.rows(placed.order.id).map { it.status }.toSet())
+
+        w.clock.advance(3_601_000)
+
+        assertEquals(0, d.service.promote())
+        assertEquals(0, d.runInline())
+        assertEquals(0L, w.fixtures.creditBalance(u))
+    }
+
+    @Test
+    fun `a credit grant in flight at a partial refund is asked to cancel and a retryable failure never lets the full grant run (D17, D4, D22)`(): Unit = runBlocking {
+        val u = steve()
+        val placed = d.place(user = u, actions = listOf(credit("a1", 100)), quantity = 5)
+        val item = placed.items[0]
+
+        d.pay(placed)
+
+        val claimed = d.service.claimDue().single()
+
+        val plan = partialRevoke(placed, mapOf(item.id to (0..1)))
+
+        // the grant is in flight: D17, not D16; the reversal of the 2 revoked units is planned and held by the gate
+        assertEquals(0, plan.cancelled)
+        assertEquals(1, plan.cancelRequested)
+        assertEquals(1, plan.inserted.size)
+        assertEquals(0, plan.replanned.size)
+        assertNotNull(d.row(claimed.id).cancelRequestedAt)
+        assertEquals(DeliveryStatus.SENDING, d.row(claimed.id).status)
+
+        // the executor fails with a retryable error: with the cancel pending the row ends CANCELLED instead of going back to PENDING (D4)
+        w.db.txRestartingOnOrderChange { conn ->
+            d.locks.forOrder(conn, placed.order.id, OrderLockScope.PAYMENT) {
+                d.service.apply(conn, claimed.id, com.panomc.plugins.market.core.delivery.DeliveryEvent.InlineFailed(DeliveryError.DB_ERROR, "the database went away", true), claimed.claimToken)
+            }
+        }
+
+        assertEquals(DeliveryStatus.CANCELLED, d.row(claimed.id).status)
+
+        // nothing executed, so the reversal is cancelled (D22), and no grant comes back 30 s later
+        assertEquals(0, d.service.claimDue().size)
+        assertEquals(DeliveryStatus.CANCELLED, d.rows(placed.order.id).single { it.phase == DeliveryPhase.REVOKE }.status)
+
+        w.clock.advance(120_000)
+
+        assertEquals(0, d.runInline())
+        assertEquals(0L, w.fixtures.creditBalance(u))
+        assertEquals(0L, count("market_credit_tx", "`type` IN ('ACTION','ACTION_REVERSAL')"))
+    }
+
+    @Test
+    fun `a credit grant in flight at a partial refund that does execute is reversed for the refunded units only`(): Unit = runBlocking {
+        val u = steve()
+        val placed = d.place(user = u, actions = listOf(credit("a1", 100)), quantity = 5)
+        val item = placed.items[0]
+
+        d.pay(placed)
+
+        val claimed = d.service.claimDue().single()
+
+        assertEquals(1, partialRevoke(placed, mapOf(item.id to (0..1))).cancelRequested)
+
+        assertEquals(DeliveryStatus.CONFIRMED, d.service.execute(claimed))
+        assertEquals(500L, w.fixtures.creditBalance(u))
+
+        assertEquals(1, d.runInline())
+        assertEquals(300L, w.fixtures.creditBalance(u))
+    }
+
+    @Test
+    fun `a whole-line command waiting for its server is cancelled by a partial refund and planned again for the kept units`(): Unit = runBlocking {
+        val u = steve()
+
+        d.roster.granted = listOf(7L)
+
+        val whole = ProductAction(id = "c1", type = DeliveryActionType.COMMAND, commands = listOf("give {username} diamond {quantity}"))
+        val placed = d.place(user = u, actions = listOf(whole), quantity = 5)
+        val item = placed.items[0]
+
+        d.pay(placed)
+
+        val original = d.rows(placed.order.id).single()
+
+        assertEquals("give Steve diamond 5", JsonObject(original.payload).getJsonArray("commands").getString(0))
+
+        val plan = partialRevoke(placed, mapOf(item.id to (0..1)))
+
+        assertEquals(1, plan.cancelled)
+        assertEquals(1, plan.replanned.size)
+        assertEquals(DeliveryStatus.CANCELLED, d.row(original.id).status)
+
+        val kept = d.rows(placed.order.id).single { it.id != original.id }
+
+        assertEquals(DeliveryStatus.PENDING, kept.status)
+        assertEquals(7L, kept.serverId)
+        assertEquals(2, kept.unitIndex)
+        assertEquals(1, kept.attemptGroup)
+        assertEquals("give Steve diamond 3", JsonObject(kept.payload).getJsonArray("commands").getString(0))
+    }
+
+    @Test
+    fun `a refund of one bundle names the range on the bundle line only and cancels exactly the scaled units of the children`(): Unit = runBlocking {
+        val u = steve()
+
+        d.roster.granted = listOf(7L)
+
+        val apple = ProductAction(id = "k1", type = DeliveryActionType.COMMAND, commands = listOf("give {username} apple {unit}"), perUnit = true)
+        val placed = d.placeBundle(
+            u, listOf(credit("a1", 100)), listOf(DeliveryWorld.ChildLine(listOf(apple, credit("c2", 10)), perBundle = 3)), bundleQuantity = 2
+        )
+        val parent = placed.items[0]
+        val child = placed.items[1]
+
+        assertEquals(2, parent.quantity)
+        assertEquals(6, child.quantity)
+
+        d.pay(placed)
+
+        // bundle line: credit x200 (one row); child line: 6 per unit rows and credit x60 (one row)
+        assertEquals(8, d.rows(placed.order.id).size)
+
+        // the second of the two bundles is refunded: the range is given on the bundle line only, the children follow it (units 3..5)
+        val plan = partialRevoke(placed, mapOf(parent.id to (1..1)))
+
+        assertEquals(5, plan.cancelled)
+        assertEquals(0, plan.cancelRequested)
+        assertEquals(0, plan.inserted.size)
+        assertEquals(2, plan.replanned.size)
+
+        val childRows = d.rows(placed.order.id).filter { it.orderItemId == child.id && it.actionId == "k1" }.sortedBy { it.unitIndex }
+
+        assertEquals(List(3) { DeliveryStatus.PENDING } + List(3) { DeliveryStatus.CANCELLED }, childRows.map { it.status })
+
+        // the first bundle stays owned: its credit (100) and the child's credit of its 3 units (30), planned again from unit 0
+        val live = d.rows(placed.order.id).filter { it.status == DeliveryStatus.PENDING && it.actionType == DeliveryActionType.CREDIT }
+
+        assertEquals(setOf(100L, 30L), live.map { JsonObject(it.payload).getLong("credits") }.toSet())
+        assertEquals(setOf(1), live.map { it.attemptGroup }.toSet())
+        assertEquals(setOf(0), live.map { it.unitIndex }.toSet())
     }
 
     @Test
