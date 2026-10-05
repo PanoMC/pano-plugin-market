@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   DEFAULT_FILTER,
   canonicalQuery,
+  createSequencer,
   categoryIds,
   flattenCategories,
   indentClass,
@@ -10,6 +11,7 @@ import {
   listQuery,
   normalizeSearch,
   pagerItems,
+  storeSearch,
   parseCurrency,
   parseFilter,
   withChange,
@@ -260,5 +262,71 @@ describe('misc', () => {
     );
     expect(withoutPageParam('/store?page=9')).toBe('/store');
     expect(withoutPageParam('/store')).toBe('/store');
+  });
+});
+
+describe('createSequencer', () => {
+  test('a filter change during a currency reload keeps the store refresh', () => {
+    const seq = createSequencer();
+    const reload = seq.beginReload();
+    const filterTicket = seq.beginGrid(); // category click while the reload is in flight
+
+    expect(seq.isStoreLatest(reload.store)).toBe(true); // settings, cards, first page still apply
+    expect(seq.isGridLatest(reload.grid)).toBe(false); // the reload no longer owns the grid
+    expect(seq.isGridLatest(filterTicket)).toBe(true);
+  });
+
+  test('an older reload is dropped completely', () => {
+    const seq = createSequencer();
+    const first = seq.beginReload();
+    const second = seq.beginReload();
+
+    expect(seq.isStoreLatest(first.store)).toBe(false);
+    expect(seq.isGridLatest(first.grid)).toBe(false);
+    expect(seq.isStoreLatest(second.store)).toBe(true);
+    expect(seq.isGridLatest(second.grid)).toBe(true);
+  });
+
+  test('a reload supersedes an older filter request', () => {
+    const seq = createSequencer();
+    const filterTicket = seq.beginGrid();
+    const reload = seq.beginReload();
+
+    expect(seq.isGridLatest(filterTicket)).toBe(false);
+    expect(seq.isGridLatest(reload.grid)).toBe(true);
+  });
+
+  test('a newer filter request supersedes an older one', () => {
+    const seq = createSequencer();
+    const a = seq.beginGrid();
+    const b = seq.beginGrid();
+
+    expect(seq.isGridLatest(a)).toBe(false);
+    expect(seq.isGridLatest(b)).toBe(true);
+  });
+
+  test('invalidate drops everything in flight', () => {
+    const seq = createSequencer();
+    const reload = seq.beginReload();
+    const filterTicket = seq.beginGrid();
+    seq.invalidate();
+
+    expect(seq.isStoreLatest(reload.store)).toBe(false);
+    expect(seq.isGridLatest(filterTicket)).toBe(false);
+  });
+});
+
+describe('storeSearch', () => {
+  const filter = { category: 3, search: 'rank', sort: 'newest', page: 2 };
+
+  test('keeps ?currency= while the URL pins it', () => {
+    expect(storeSearch(filter, 'EUR')).toBe('category=3&search=rank&sort=newest&page=2&currency=EUR');
+    expect(storeSearch({ ...DEFAULT_FILTER }, 'EUR')).toBe('currency=EUR');
+  });
+
+  test('a changed currency (urlCurrency null) removes the currency parameter', () => {
+    expect(storeSearch(filter, null)).toBe('category=3&search=rank&sort=newest&page=2');
+    expect(storeSearch({ ...DEFAULT_FILTER }, null)).toBe('');
+    expect(storeSearch({ ...DEFAULT_FILTER }, undefined)).toBe('');
   });
 });

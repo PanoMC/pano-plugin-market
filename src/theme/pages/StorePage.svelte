@@ -190,11 +190,11 @@
   import {
     DEFAULT_FILTER,
     SEARCH_DEBOUNCE_MS,
-    canonicalQuery,
+    createSequencer,
     flattenCategories,
     isDefaultFilter,
-    isLatest,
     normalizeSearch,
+    storeSearch,
     withChange,
   } from '../lib/storeFilter.js';
   import { cart } from '../stores/cart.js';
@@ -231,7 +231,7 @@
   let urlCurrency = $state(null);
   let headingElement = $state();
 
-  let seq = 0;
+  const seq = createSequencer();
   let searchTimer;
   let saleTimer;
   const handledSaleEnds = {};
@@ -262,9 +262,7 @@
 
   function writeUrl() {
     try {
-      const query = canonicalQuery(filter);
-      const currency = urlCurrency ? `currency=${encodeURIComponent(urlCurrency)}` : '';
-      const search = [query, currency].filter(Boolean).join('&');
+      const search = storeSearch(filter, urlCurrency);
 
       window.history.replaceState(
         window.history.state,
@@ -288,7 +286,7 @@
   /** Applies a changed filter: the first page of load is reused for the default filter, else one request. */
   async function applyFilter(next, { scroll = false } = {}) {
     filter = next;
-    const mine = ++seq;
+    const mine = seq.beginGrid();
 
     if (isDefaultFilter(next)) {
       grid = { ...firstPage, state: 'READY' };
@@ -299,12 +297,12 @@
     grid = { ...grid, state: 'LOADING' };
 
     let res = await call('GET', LIST_PATH, { query: listQuery(next, currentCurrency()) });
-    if (!isLatest(mine, seq)) return;
+    if (!seq.isGridLatest(mine)) return;
 
     if (!res.ok && res.code === 'PAGE_NOT_FOUND' && next.page !== 1) {
       filter = next = { ...next, page: 1 };
       res = await call('GET', LIST_PATH, { query: listQuery(next, currentCurrency()) });
-      if (!isLatest(mine, seq)) return;
+      if (!seq.isGridLatest(mine)) return;
     }
 
     grid = res.ok ? readGrid(res) : { ...grid, state: 'ERROR' };
@@ -314,7 +312,7 @@
 
   /** Everything the currency changes: settings, trees, cards and the current grid. */
   async function reloadAll(currency) {
-    const mine = ++seq;
+    const mine = seq.beginReload();
     const fetchGrid = !isDefaultFilter(filter);
 
     grid = { ...grid, state: 'LOADING' };
@@ -323,10 +321,12 @@
       call('GET', '/api/market/store', { query: { currency } }),
       fetchGrid ? call('GET', LIST_PATH, { query: listQuery(filter, currency) }) : null,
     ]);
-    if (!isLatest(mine, seq)) return;
+    // a newer reload covers this one; a filter change only supersedes the grid part (the store part still applies)
+    if (!seq.isStoreLatest(mine.store)) return;
+    const gridCurrent = seq.isGridLatest(mine.grid);
 
     if (!store.ok || (list && !list.ok)) {
-      grid = { ...grid, state: 'ERROR' };
+      if (gridCurrent) grid = { ...grid, state: 'ERROR' };
       return;
     }
 
@@ -338,7 +338,9 @@
     comparisonProducts = store.comparisonProducts || [];
     totalCount = store.productCount ?? totalCount;
     firstPage = readGrid(store);
-    grid = list ? readGrid(list) : { ...firstPage };
+    if (gridCurrent) grid = list ? readGrid(list) : { ...firstPage };
+    // the filter went back to the default meanwhile (no request pending then): show the refreshed first page
+    else if (isDefaultFilter(filter)) grid = { ...firstPage };
     setSettings(settings);
   }
 
@@ -377,6 +379,7 @@
   function onCurrencyChange(code) {
     setPreferred(code);
     urlCurrency = null;
+    writeUrl();
     cart.setCurrency(code);
     reloadAll(code);
   }
@@ -398,7 +401,7 @@
     return () => {
       clearTimeout(searchTimer);
       clearTimeout(saleTimer);
-      seq++; // a response arriving after unmount is dropped
+      seq.invalidate(); // a response arriving after unmount is dropped
     };
   });
 

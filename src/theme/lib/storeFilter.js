@@ -139,6 +139,45 @@ export function isLatest(seq, latest) {
 }
 
 /**
+ * Request sequencing of the /store page. Two counters: `grid` guards only the product grid (every filter
+ * change and every reload takes a ticket), `store` guards the store part of a reload (settings, trees,
+ * cards, first page). A filter change therefore never discards a currency reload's store refresh.
+ */
+export function createSequencer() {
+  let grid = 0;
+  let store = 0;
+
+  return {
+    /** Ticket of a filter change: supersedes every older grid request. */
+    beginGrid() {
+      return ++grid;
+    },
+    /** Tickets of a full reload: supersedes older grid requests and older reloads. */
+    beginReload() {
+      return { grid: ++grid, store: ++store };
+    },
+    isGridLatest(ticket) {
+      return isLatest(ticket, grid);
+    },
+    isStoreLatest(ticket) {
+      return isLatest(ticket, store);
+    },
+    /** Drops everything in flight (unmount). */
+    invalidate() {
+      grid++;
+      store++;
+    },
+  };
+}
+
+/** Query string (without '?') of the address bar: the canonical filter plus ?currency= only while it is pinned by the URL. */
+export function storeSearch(filter, urlCurrency) {
+  const currency = urlCurrency ? `currency=${encodeURIComponent(urlCurrency)}` : '';
+
+  return [canonicalQuery(filter), currency].filter(Boolean).join('&');
+}
+
+/**
  * Pager items: previous, 1, gap, window of +-2 around the current page, gap, last, next.
  * Items: { type: 'prev'|'next', page, disabled } | { type: 'page', page, current } | { type: 'gap' }.
  * A gap that would hide a single page shows that page instead.
