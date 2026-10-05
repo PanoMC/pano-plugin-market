@@ -11,6 +11,7 @@ import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.dao.MarketPaymentDao
 import com.panomc.plugins.market.db.dao.MarketRedemptionDao
 import com.panomc.plugins.market.db.dao.MarketShipmentDao
+import com.panomc.plugins.market.routes.panel.server.mcSyncService
 import com.panomc.plugins.market.routes.panel.shipping.shippingService
 import com.panomc.plugins.market.db.tx.Locks
 import com.panomc.plugins.market.db.tx.MarketDb
@@ -236,7 +237,7 @@ internal object MarketJobs {
             MarketScheduler.Job("payment-reconcile", MarketScheduler.PAYMENT_RECONCILE_MS) { reconcile.runOnce() },
             MarketScheduler.Job("webhook", MarketScheduler.WEBHOOK_MS) { webhooks.tick() },
             inboundRetry(inboundEventRetryJob(plugin)),
-            delivery(DeliveryJob(deliveryService(plugin), SystemClock)),
+            delivery(DeliveryJob(deliveryService(plugin), SystemClock, servers = mcSyncService(plugin))),
             shipmentTracking(ShipmentTrackingJob(SystemClock, context.getBean(MarketShipmentDao::class.java), shippingService(plugin), sqlClient))
         )
     }
