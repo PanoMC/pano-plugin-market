@@ -38,7 +38,31 @@
     },
     "errors": {
       "NETWORK": "İstek tamamlanamadı. Lütfen tekrar deneyin.",
-      "GENERIC": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
+      "GENERIC": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
+      "PRODUCT_UNAVAILABLE": "Bu ürün artık mevcut değil.",
+      "VARIANT_REQUIRED": "Bu ürün için bir seçenek seçin.",
+      "VARIANT_UNAVAILABLE": "Seçilen seçenek mevcut değil.",
+      "OUT_OF_STOCK": "Bu ürün stokta yok.",
+      "QUANTITY_REDUCED": "Adet, mevcut stoğa göre azaltıldı.",
+      "MAX_QUANTITY": "Bu ürün için en yüksek adede ulaştınız.",
+      "PURCHASE_LIMIT_REACHED": "Bu ürün için satın alma sınırına ulaştınız.",
+      "COOLDOWN_ACTIVE": "Bu ürünü daha sonra tekrar satın alabilirsiniz.",
+      "REQUIREMENT_NOT_MET": "Bu ürünün gereksinimlerini karşılamıyorsunuz.",
+      "PERMISSION_REQUIRED": "Bu ürünü satın alma yetkiniz yok.",
+      "ALREADY_OWNED": "Bu ürüne zaten sahipsiniz.",
+      "FIELD_REQUIRED": "Bu ürünün zorunlu bir alanı boş.",
+      "FIELD_INVALID": "Bu ürünün bir alanı geçersiz.",
+      "SERVER_REQUIRED": "Bu ürün için bir sunucu seçin.",
+      "SERVER_UNAVAILABLE": "Seçilen sunucu kullanılamıyor.",
+      "GIFT_NOT_ALLOWED": "Bu ürün hediye olarak gönderilemez.",
+      "LOGIN_REQUIRED": "Bu ürünü satın almak için giriş yapın.",
+      "NOT_IN_CURRENCY": "Bu ürün seçilen para biriminde satılmıyor.",
+      "CREDITS_ONLY": "Bu ürün yalnızca kredi ile ödenebilir.",
+      "NOT_PAYABLE_WITH_CREDITS": "Bu ürün kredi ile ödenemez.",
+      "PHYSICAL_NOT_SUPPORTED": "Fiziksel ürünler bu ödeme yöntemiyle desteklenmiyor.",
+      "RECURRING_NOT_SUPPORTED": "Abonelikler bu ödeme yöntemiyle desteklenmiyor.",
+      "BUYER_BLOCKED": "Bu ürünü satın alamazsınız.",
+      "SUBSCRIPTION_MUST_BE_ALONE": "Abonelik tek başına satın alınmalıdır."
     },
     "common": {
       "retry": "Tekrar dene",
@@ -47,7 +71,9 @@
       "copied": "Kopyalandı",
       "cancel": "Vazgeç",
       "confirm": "Onayla",
-      "close": "Kapat"
+      "close": "Kapat",
+      "yes": "Evet",
+      "no": "Hayır"
     },
     "period": {
       "DAY": "{count} gün",
@@ -57,7 +83,26 @@
     },
     "cart": {
       "merge-dropped": "Tarayıcı sepetindeki bazı ürünler artık mevcut değil ve hesap sepetine eklenmedi.",
-      "too-many-lines": "Sepet dolu. Başka bir ürün eklemeden önce bir ürünü kaldırın."
+      "too-many-lines": "Sepet dolu. Başka bir ürün eklemeden önce bir ürünü kaldırın.",
+      "title": "Sepetiniz",
+      "empty": "Sepetiniz boş.",
+      "browse": "Mağazaya göz at",
+      "subtotal": "Ara toplam",
+      "fees-at-checkout": "Vergi, kargo ve ücretler ödeme sırasında hesaplanır.",
+      "checkout": "Ödemeye geç",
+      "clear": "Sepeti temizle",
+      "clear-title": "Sepet temizlensin mi?",
+      "clear-message": "Sepetinizdeki tüm ürünler kaldırılacak.",
+      "remove-item": "{name} ürününü sepetten kaldır",
+      "increase": "Adedi artır",
+      "decrease": "Adedi azalt",
+      "quantity": "Adet",
+      "quantity-short": "Adet: {count}",
+      "server": "Sunucu #{id}",
+      "items-in-cart": "{count, plural, =0 {sepette ürün yok} other {sepette # ürün var}}",
+      "replace-title": "Sepet değiştirilsin mi?",
+      "replace-message": "Abonelik tek başına satın alınır. Sepetin içeriği değiştirilsin mi?",
+      "replace-confirm": "Sepeti değiştir"
     }
   }
 }

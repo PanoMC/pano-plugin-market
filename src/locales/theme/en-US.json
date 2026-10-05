@@ -38,7 +38,31 @@
     },
     "errors": {
       "NETWORK": "The request could not be completed. Please try again.",
-      "GENERIC": "Something went wrong. Please try again."
+      "GENERIC": "Something went wrong. Please try again.",
+      "PRODUCT_UNAVAILABLE": "This product is no longer available.",
+      "VARIANT_REQUIRED": "Choose an option for this product.",
+      "VARIANT_UNAVAILABLE": "The chosen option is not available.",
+      "OUT_OF_STOCK": "This product is out of stock.",
+      "QUANTITY_REDUCED": "The quantity was reduced to what is available.",
+      "MAX_QUANTITY": "You reached the maximum quantity for this product.",
+      "PURCHASE_LIMIT_REACHED": "You reached the purchase limit for this product.",
+      "COOLDOWN_ACTIVE": "You can buy this product again later.",
+      "REQUIREMENT_NOT_MET": "You do not meet the requirements for this product.",
+      "PERMISSION_REQUIRED": "You do not have the permission to buy this product.",
+      "ALREADY_OWNED": "You already own this product.",
+      "FIELD_REQUIRED": "A required field of this product is empty.",
+      "FIELD_INVALID": "A field of this product is invalid.",
+      "SERVER_REQUIRED": "Choose a server for this product.",
+      "SERVER_UNAVAILABLE": "The chosen server is not available.",
+      "GIFT_NOT_ALLOWED": "This product cannot be sent as a gift.",
+      "LOGIN_REQUIRED": "Log in to buy this product.",
+      "NOT_IN_CURRENCY": "This product is not sold in the selected currency.",
+      "CREDITS_ONLY": "This product can only be paid with credits.",
+      "NOT_PAYABLE_WITH_CREDITS": "This product cannot be paid with credits.",
+      "PHYSICAL_NOT_SUPPORTED": "Physical products are not supported by this payment method.",
+      "RECURRING_NOT_SUPPORTED": "Subscriptions are not supported by this payment method.",
+      "BUYER_BLOCKED": "You cannot buy this product.",
+      "SUBSCRIPTION_MUST_BE_ALONE": "A subscription must be bought on its own."
     },
     "common": {
       "retry": "Retry",
@@ -47,7 +71,9 @@
       "copied": "Copied",
       "cancel": "Cancel",
       "confirm": "Confirm",
-      "close": "Close"
+      "close": "Close",
+      "yes": "Yes",
+      "no": "No"
     },
     "period": {
       "DAY": "{count, plural, one {# day} other {# days}}",
@@ -57,7 +83,26 @@
     },
     "cart": {
       "merge-dropped": "Some items of your browser cart are no longer available and were not added to your account cart.",
-      "too-many-lines": "The cart is full. Remove an item before adding another one."
+      "too-many-lines": "The cart is full. Remove an item before adding another one.",
+      "title": "Your cart",
+      "empty": "Your cart is empty.",
+      "browse": "Browse the store",
+      "subtotal": "Subtotal",
+      "fees-at-checkout": "Taxes, shipping and fees are calculated at checkout.",
+      "checkout": "Checkout",
+      "clear": "Clear cart",
+      "clear-title": "Clear the cart?",
+      "clear-message": "All items will be removed from your cart.",
+      "remove-item": "Remove {name} from the cart",
+      "increase": "Increase quantity",
+      "decrease": "Decrease quantity",
+      "quantity": "Quantity",
+      "quantity-short": "Quantity: {count}",
+      "server": "Server #{id}",
+      "items-in-cart": "{count, plural, =0 {no items in the cart} one {# item in the cart} other {# items in the cart}}",
+      "replace-title": "Replace the cart?",
+      "replace-message": "A subscription is bought on its own. Replace the cart content?",
+      "replace-confirm": "Replace cart"
     }
   }
 }
