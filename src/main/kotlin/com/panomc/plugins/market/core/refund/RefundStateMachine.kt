@@ -4,15 +4,32 @@ import com.panomc.plugins.market.db.model.RefundOrigin
 import com.panomc.plugins.market.db.model.RefundStatus
 import com.panomc.plugins.market.spi.payment.RefundState
 
-/** What the machine needs to know about a refund row: its status, and whether a `revokeFirst` row still waits for its undo. */
+/**
+ * What the machine needs to know about a refund row: its status, and which kind of `REQUESTED` row it is. A `REQUESTED` row is one of
+ * three things, and the machine cannot tell them apart from the status alone:
+ * - **in flight** (neither flag): tx1 is done and the provider call is running right now (up to the 30 s deadline, 21 section 3.3);
+ *   it may still answer `Succeeded` or `Pending`, so it can be neither re-sent (a gateway without idempotency keys would refund
+ *   twice) nor cancelled (the reservation would be released while money may be on its way);
+ * - **waiting** ([revokeFirstWaiting]): nothing was sent;
+ * - **outcome unknown** ([outcomeUnknown]): the call timed out or the process died after tx1 (stale).
+ */
 data class RefundRowState(
     val status: RefundStatus,
     /**
      * `revokeFirst = 1` and the gateway call has not been released yet (21 section 3.5): the row waits in `REQUESTED`, nothing
      * was sent. Such a row is not an "unknown outcome" (retry makes no sense) and is the only one the 24 h timeout cancels.
      */
-    val revokeFirstWaiting: Boolean = false
+    val revokeFirstWaiting: Boolean = false,
+    /**
+     * A `REQUESTED` row that is not [revokeFirstWaiting] and is stale (21 section 3.3: older than 60 s, `nextQueryAt` due, no
+     * call running): the outcome at the gateway is unknown, the panel shows "outcome unknown, retry or cancel". The service computes
+     * it. Ignored for every other status; [revokeFirstWaiting] wins if both are set.
+     */
+    val outcomeUnknown: Boolean = false
 )
+
+/** A `REQUESTED` row nothing is running for: it waits for its undo, or it is stale. Only such a row may be cancelled by an admin or by O11. */
+private val RefundRowState.idle: Boolean get() = revokeFirstWaiting || outcomeUnknown
 
 /** Every trigger of the table in 21 section 3.7 (plus the O11 side effect on unsent refunds, 21 section 5.2 step 4). */
 sealed class RefundEvent {
@@ -93,7 +110,8 @@ sealed class RefundTransition {
  * | `PENDING` | `Reported(SUCCEEDED)` | `SUCCEEDED` and O10 |
  * | `PENDING` | `Reported(CANCELLED)` | `CANCELLED` |
  * | `FAILED` | retry | `REQUESTED` |
- * | `REQUESTED` (any), `FAILED` | cancel, `revokeFirst` timeout (waiting rows), O11 | `CANCELLED` |
+ * | `REQUESTED` (outcome unknown) | retry | `REQUESTED`, same key sent again |
+ * | `REQUESTED` (unsent / waiting, i.e. not in flight), `FAILED` | cancel, `revokeFirst` timeout (waiting rows), O11 | `CANCELLED` |
  * | `FAILED`, `CANCELLED` | `Reported(SUCCEEDED)` (late truth) | `SUCCEEDED` and O10: the gateway's word about money that left wins |
  * | `SUCCEEDED` | anything | unchanged |
  *
@@ -101,8 +119,12 @@ sealed class RefundTransition {
  * reorder notifications) and [RefundTransition.Rejected] (`INVALID_STATE`) for an admin action, so the panel can answer 409.
  * A refund the gateway confirmed is never moved to `FAILED` or `CANCELLED`: `SUCCEEDED` ignores every event.
  *
- * A `REQUESTED` row without `revokeFirst` waiting is either unsent (crash between tx1 and the call) or of unknown outcome
- * (timeout); both may be retried with the same key and both may be cancelled, because a later `Reported(SUCCEEDED)` still wins.
+ * A `REQUESTED` row is in flight (the call runs, neither [RefundRowState] flag), waiting (`revokeFirst`) or of unknown outcome (stale:
+ * timeout, or a crash between tx1 and the call). Retry (21 section 3.3: "from `FAILED` or unknown-outcome `REQUESTED`") needs
+ * an unknown outcome and re-sends the same key; cancel (21 section 3.3, 3.7: "not yet sent, or `revokeFirst`-waiting") and O11
+ * (21 section 5.2 step 4: "`REQUESTED` (unsent)") need a waiting or unknown-outcome row, because a later `Reported(SUCCEEDED)`
+ * still wins over a cancel of a row nothing is running for. A row in flight is rejected for the admin (`INVALID_STATE`) and a
+ * no-op for O11: its call is about to settle it.
  * Not in the table, decided here: a gateway `CANCELLED` for a `REQUESTED` row is ignored (the table lists it for `PENDING` only,
  * and the row stays visible for the admin), and so is a late `PENDING` or `FAILED` for a row that already failed or was cancelled.
  */
@@ -141,13 +163,13 @@ object RefundStateMachine {
             RefundEvent.AdminRetry -> when {
                 status == RefundStatus.FAILED ->
                     RefundTransition.Move(RefundStatus.REQUESTED, listOf(RefundEffect.ClearFailure, RefundEffect.ResendToGateway))
-                status == RefundStatus.REQUESTED && !row.revokeFirstWaiting ->
+                status == RefundStatus.REQUESTED && row.outcomeUnknown && !row.revokeFirstWaiting ->
                     RefundTransition.Move(RefundStatus.REQUESTED, listOf(RefundEffect.ResendToGateway))
                 else -> RefundTransition.Rejected(INVALID_STATE, status)
             }
 
             RefundEvent.AdminCancel ->
-                if (status == RefundStatus.REQUESTED || status == RefundStatus.FAILED)
+                if (status == RefundStatus.FAILED || (status == RefundStatus.REQUESTED && row.idle))
                     RefundTransition.Move(RefundStatus.CANCELLED, listOf(RefundEffect.ClearQuery))
                 else RefundTransition.Rejected(INVALID_STATE, status)
 
@@ -160,7 +182,7 @@ object RefundStateMachine {
                 else RefundTransition.NoOp
 
             RefundEvent.ChargebackOpened ->
-                if (status == RefundStatus.REQUESTED)
+                if (status == RefundStatus.REQUESTED && row.idle)
                     RefundTransition.Move(RefundStatus.CANCELLED, listOf(RefundEffect.RecordFailure(CHARGEBACK, null), RefundEffect.ClearQuery))
                 else RefundTransition.NoOp
         }

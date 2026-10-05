@@ -29,8 +29,15 @@ import java.util.Random
 class RefundStateMachineTest {
     private val statuses = RefundStatus.values().toList()
 
-    private fun decide(status: RefundStatus, event: RefundEvent, waiting: Boolean = false) =
-        RefundStateMachine.decide(RefundRowState(status, waiting), event)
+    private fun decide(status: RefundStatus, event: RefundEvent, waiting: Boolean = false, unknown: Boolean = false) =
+        RefundStateMachine.decide(RefundRowState(status, waiting, unknown), event)
+
+    /** The three kinds of `REQUESTED` row: the provider call is running, a `revokeFirst` row waits, the outcome is unknown (stale). */
+    private val requestedKinds = listOf(
+        "in flight" to RefundRowState(REQUESTED),
+        "waiting" to RefundRowState(REQUESTED, revokeFirstWaiting = true),
+        "outcome unknown" to RefundRowState(REQUESTED, outcomeUnknown = true)
+    )
 
     private fun reported(state: RefundState, code: String? = null, message: String? = null) = RefundEvent.Reported(state, code, message)
 
@@ -45,8 +52,17 @@ class RefundStateMachineTest {
         for (s in listOf(REQUESTED, PENDING)) {
             assertEquals(Move(SUCCEEDED, succeeded), decide(s, reported(RefundState.SUCCEEDED)), s.name)
         }
-        // a waiting revokeFirst row can be settled too (a gateway-side refund that raced it)
-        assertEquals(Move(SUCCEEDED, succeeded), decide(REQUESTED, reported(RefundState.SUCCEEDED), waiting = true))
+        // every kind of REQUESTED row settles: the call that is running answers, a stale row learns the truth, a waiting
+        // revokeFirst row can be settled too (a gateway-side refund that raced it)
+        for ((name, row) in requestedKinds) {
+            assertEquals(Move(SUCCEEDED, succeeded), RefundStateMachine.decide(row, reported(RefundState.SUCCEEDED)), name)
+            assertEquals(Move(PENDING, pendingQuery), RefundStateMachine.decide(row, reported(RefundState.PENDING)), name)
+            assertEquals(
+                Move(FAILED, listOf(RecordFailure("X", "m"), ClearQuery)),
+                RefundStateMachine.decide(row, reported(RefundState.FAILED, "X", "m")),
+                name
+            )
+        }
     }
 
     @Test
@@ -92,20 +108,37 @@ class RefundStateMachineTest {
     @Test
     fun `retry sends FAILED back to REQUESTED and re-sends an unknown outcome with the same key`() {
         assertEquals(Move(REQUESTED, listOf(ClearFailure, ResendToGateway)), decide(FAILED, RefundEvent.AdminRetry))
-        // unsent or unknown outcome: the row stays REQUESTED and the call goes out again
-        assertEquals(Move(REQUESTED, listOf(ResendToGateway)), decide(REQUESTED, RefundEvent.AdminRetry))
-        // a revokeFirst row that still waits has nothing to re-send; a PENDING one is the gateway's; the others are over
+        // an unknown outcome: the row stays REQUESTED and the call goes out again with the same key
+        assertEquals(Move(REQUESTED, listOf(ResendToGateway)), decide(REQUESTED, RefundEvent.AdminRetry, unknown = true))
+        // a call that is running right now must not be sent a second time (a gateway without idempotency keys refunds twice)
+        assertEquals(Rejected("INVALID_STATE", REQUESTED), decide(REQUESTED, RefundEvent.AdminRetry))
+        // a revokeFirst row that still waits has nothing to re-send (also when the flags are both set: waiting wins)
         assertEquals(Rejected("INVALID_STATE", REQUESTED), decide(REQUESTED, RefundEvent.AdminRetry, waiting = true))
+        assertEquals(Rejected("INVALID_STATE", REQUESTED), decide(REQUESTED, RefundEvent.AdminRetry, waiting = true, unknown = true))
+        // a PENDING one is the gateway's; the others are over
         for (s in listOf(PENDING, CANCELLED, SUCCEEDED)) assertEquals(Rejected("INVALID_STATE", s), decide(s, RefundEvent.AdminRetry), s.name)
     }
 
     @Test
-    fun `cancel works from REQUESTED and FAILED only, a PENDING row cannot be cancelled by market`() {
-        for (waiting in listOf(false, true)) {
-            assertEquals(Move(CANCELLED, listOf(ClearQuery)), decide(REQUESTED, RefundEvent.AdminCancel, waiting))
-        }
+    fun `cancel works from FAILED and from a REQUESTED row nothing is running for, never while the call is in flight`() {
+        // not yet sent (waiting) or stale (unknown outcome): cancelled; a later gateway Succeeded still wins
+        assertEquals(Move(CANCELLED, listOf(ClearQuery)), decide(REQUESTED, RefundEvent.AdminCancel, waiting = true))
+        assertEquals(Move(CANCELLED, listOf(ClearQuery)), decide(REQUESTED, RefundEvent.AdminCancel, unknown = true))
+        // the call is running: it may still answer Succeeded or Pending, so the reservation stays
+        assertEquals(Rejected("INVALID_STATE", REQUESTED), decide(REQUESTED, RefundEvent.AdminCancel))
         assertEquals(Move(CANCELLED, listOf(ClearQuery)), decide(FAILED, RefundEvent.AdminCancel))
+        // a PENDING row cannot be cancelled by market
         for (s in listOf(PENDING, CANCELLED, SUCCEEDED)) assertEquals(Rejected("INVALID_STATE", s), decide(s, RefundEvent.AdminCancel), s.name)
+    }
+
+    @Test
+    fun `a cancelled in-flight row cannot happen, so a live gateway refund is always reserved or polled`() {
+        // the failure the review found: cancel on a running call released the reservation and Reported(PENDING) on CANCELLED is a no-op
+        val inFlight = RefundRowState(REQUESTED)
+        assertEquals(Rejected("INVALID_STATE", REQUESTED), RefundStateMachine.decide(inFlight, RefundEvent.AdminCancel))
+        assertEquals(RefundTransition.NoOp, RefundStateMachine.decide(inFlight, RefundEvent.ChargebackOpened))
+        assertEquals(RefundTransition.NoOp, RefundStateMachine.decide(inFlight, RefundEvent.RevokeTimeout))
+        assertEquals(Move(PENDING, pendingQuery), RefundStateMachine.decide(inFlight, reported(RefundState.PENDING)))
     }
 
     @Test
@@ -121,8 +154,11 @@ class RefundStateMachineTest {
 
     @Test
     fun `a dispute cancels the refunds that were not executed`() {
-        assertEquals(Move(CANCELLED, listOf(RecordFailure("CHARGEBACK", null), ClearQuery)), decide(REQUESTED, RefundEvent.ChargebackOpened))
+        // unsent (waiting) and stale (unknown outcome) rows are cancelled
         assertEquals(Move(CANCELLED, listOf(RecordFailure("CHARGEBACK", null), ClearQuery)), decide(REQUESTED, RefundEvent.ChargebackOpened, waiting = true))
+        assertEquals(Move(CANCELLED, listOf(RecordFailure("CHARGEBACK", null), ClearQuery)), decide(REQUESTED, RefundEvent.ChargebackOpened, unknown = true))
+        // a call that is running right now is about to settle the row: not touched (21 section 5.2 step 4 names "REQUESTED (unsent)")
+        assertEquals(NoOp, decide(REQUESTED, RefundEvent.ChargebackOpened))
         // a refund the gateway holds (PENDING) or has done is not touched; failed and cancelled rows are over
         for (s in statuses - REQUESTED) assertEquals(NoOp, decide(s, RefundEvent.ChargebackOpened), s.name)
     }
@@ -149,9 +185,22 @@ class RefundStateMachineTest {
         val p = RefundState.PENDING
         val f = RefundState.FAILED
         val c = RefundState.CANCELLED
-        // (status, waiting) -> event -> expected; everything the table does not list is NoOp (events) or Rejected (admin)
-        val grid = linkedMapOf<Pair<RefundStatus, Boolean>, Map<RefundEvent, RefundTransition>>()
-        grid[REQUESTED to false] = mapOf(
+        val inFlight = RefundRowState(REQUESTED)
+        val waiting = RefundRowState(REQUESTED, revokeFirstWaiting = true)
+        val unknown = RefundRowState(REQUESTED, outcomeUnknown = true)
+        // row state -> event -> expected; everything the table does not list is NoOp (events) or Rejected (admin)
+        val grid = linkedMapOf<RefundRowState, Map<RefundEvent, RefundTransition>>()
+        // REQUESTED, the provider call is running right now (between tx1 and tx2): neither re-sent nor cancelled
+        grid[inFlight] = mapOf(
+            reported(s) to Move(SUCCEEDED, succeeded), reported(p) to Move(PENDING, pendingQuery),
+            reported(f) to Move(FAILED, listOf(RecordFailure(null, null), ClearQuery)), reported(c) to NoOp,
+            RefundEvent.AdminRetry to Rejected("INVALID_STATE", REQUESTED),
+            RefundEvent.AdminCancel to Rejected("INVALID_STATE", REQUESTED),
+            RefundEvent.RevokeTimeout to NoOp,
+            RefundEvent.ChargebackOpened to NoOp
+        )
+        // REQUESTED, unknown outcome (timeout, crash between tx1 and tx2, stale): retry with the same key, cancel
+        grid[unknown] = mapOf(
             reported(s) to Move(SUCCEEDED, succeeded), reported(p) to Move(PENDING, pendingQuery),
             reported(f) to Move(FAILED, listOf(RecordFailure(null, null), ClearQuery)), reported(c) to NoOp,
             RefundEvent.AdminRetry to Move(REQUESTED, listOf(ResendToGateway)),
@@ -159,7 +208,8 @@ class RefundStateMachineTest {
             RefundEvent.RevokeTimeout to NoOp,
             RefundEvent.ChargebackOpened to Move(CANCELLED, listOf(RecordFailure("CHARGEBACK", null), ClearQuery))
         )
-        grid[REQUESTED to true] = mapOf(
+        // REQUESTED, revokeFirst waiting: nothing was sent
+        grid[waiting] = mapOf(
             reported(s) to Move(SUCCEEDED, succeeded), reported(p) to Move(PENDING, pendingQuery),
             reported(f) to Move(FAILED, listOf(RecordFailure(null, null), ClearQuery)), reported(c) to NoOp,
             RefundEvent.AdminRetry to Rejected("INVALID_STATE", REQUESTED),
@@ -167,40 +217,49 @@ class RefundStateMachineTest {
             RefundEvent.RevokeTimeout to Move(CANCELLED, listOf(RecordFailure("REVOKE_TIMEOUT", null), ClearQuery, PanelAlert("REVOKE_TIMEOUT"))),
             RefundEvent.ChargebackOpened to Move(CANCELLED, listOf(RecordFailure("CHARGEBACK", null), ClearQuery))
         )
-        grid[PENDING to false] = mapOf(
+        grid[RefundRowState(PENDING)] = mapOf(
             reported(s) to Move(SUCCEEDED, succeeded), reported(p) to NoOp,
             reported(f) to Move(FAILED, listOf(RecordFailure(null, null), ClearQuery)),
             reported(c) to Move(CANCELLED, listOf(ClearQuery)),
             RefundEvent.AdminRetry to Rejected("INVALID_STATE", PENDING), RefundEvent.AdminCancel to Rejected("INVALID_STATE", PENDING),
             RefundEvent.RevokeTimeout to NoOp, RefundEvent.ChargebackOpened to NoOp
         )
-        grid[FAILED to false] = mapOf(
+        grid[RefundRowState(FAILED)] = mapOf(
             reported(s) to Move(SUCCEEDED, succeededLate), reported(p) to NoOp, reported(f) to NoOp, reported(c) to NoOp,
             RefundEvent.AdminRetry to Move(REQUESTED, listOf(ClearFailure, ResendToGateway)),
             RefundEvent.AdminCancel to Move(CANCELLED, listOf(ClearQuery)),
             RefundEvent.RevokeTimeout to NoOp, RefundEvent.ChargebackOpened to NoOp
         )
-        grid[CANCELLED to false] = mapOf(
+        grid[RefundRowState(CANCELLED)] = mapOf(
             reported(s) to Move(SUCCEEDED, succeededLate), reported(p) to NoOp, reported(f) to NoOp, reported(c) to NoOp,
             RefundEvent.AdminRetry to Rejected("INVALID_STATE", CANCELLED), RefundEvent.AdminCancel to Rejected("INVALID_STATE", CANCELLED),
             RefundEvent.RevokeTimeout to NoOp, RefundEvent.ChargebackOpened to NoOp
         )
-        grid[SUCCEEDED to false] = mapOf(
+        grid[RefundRowState(SUCCEEDED)] = mapOf(
             reported(s) to NoOp, reported(p) to NoOp, reported(f) to NoOp, reported(c) to NoOp,
             RefundEvent.AdminRetry to Rejected("INVALID_STATE", SUCCEEDED), RefundEvent.AdminCancel to Rejected("INVALID_STATE", SUCCEEDED),
             RefundEvent.RevokeTimeout to NoOp, RefundEvent.ChargebackOpened to NoOp
         )
         var cells = 0
-        for ((key, row) in grid) {
-            assertEquals(8, row.size, "row $key must cover all eight events")
+        for ((state, row) in grid) {
+            assertEquals(8, row.size, "row $state must cover all eight events")
             for ((event, expected) in row) {
-                assertEquals(expected, decide(key.first, event, key.second), "${key.first} waiting=${key.second} on $event")
+                assertEquals(expected, RefundStateMachine.decide(state, event), "$state on $event")
                 cells++
             }
         }
-        assertEquals(48, cells)
+        // 7 row states x 8 events: the three kinds of REQUESTED row and one row for each other status
+        assertEquals(56, cells)
         // the grid covers every status
-        assertEquals(statuses.toSet(), grid.keys.map { it.first }.toSet())
+        assertEquals(statuses.toSet(), grid.keys.map { it.status }.toSet())
+        // the flags mean nothing outside REQUESTED: every status gives the same answer whatever the flags say
+        for (status in statuses - REQUESTED) {
+            for (w in listOf(false, true)) for (u in listOf(false, true)) {
+                for ((event, expected) in grid.getValue(RefundRowState(status))) {
+                    assertEquals(expected, RefundStateMachine.decide(RefundRowState(status, w, u), event), "$status w=$w u=$u on $event")
+                }
+            }
+        }
     }
 
     // ---------------------------------------------------------------- properties over random histories
@@ -222,12 +281,18 @@ class RefundStateMachineTest {
         repeat(20000) {
             var status = REQUESTED
             var waiting = rnd.nextBoolean()
+            var unknown = !waiting && rnd.nextBoolean()
             var runs = 0
             repeat(1 + rnd.nextInt(12)) {
                 val e = events[rnd.nextInt(events.size)]
-                when (val t = RefundStateMachine.decide(RefundRowState(status, waiting), e)) {
+                val row = RefundRowState(status, waiting, unknown)
+                when (val t = RefundStateMachine.decide(row, e)) {
                     is Move -> {
                         assertTrue(status != SUCCEEDED, "a SUCCEEDED row moved on $e")
+                        if (status == REQUESTED && !waiting && !unknown) {
+                            // a call that is running: only its own answer moves it, never a retry, a cancel or O11
+                            assertTrue(e is RefundEvent.Reported, "an in-flight row moved on $e")
+                        }
                         assertTrue((status to t.to) in allowed, "$status -> ${t.to} on $e")
                         if (RunOrderEffects in t.effects) {
                             runs++
@@ -236,6 +301,8 @@ class RefundStateMachineTest {
                             assertEquals(RunOrderEffects, t.effects.last())
                         }
                         waiting = false
+                        // a re-sent row is in flight again; every other new status makes the flag meaningless
+                        unknown = false
                         status = t.to
                     }
                     is Rejected -> assertEquals(status, t.state)
@@ -256,11 +323,11 @@ class RefundStateMachineTest {
             reported(RefundState.SUCCEEDED), reported(RefundState.PENDING), reported(RefundState.FAILED, "E"), reported(RefundState.CANCELLED),
             RefundEvent.RevokeTimeout, RefundEvent.ChargebackOpened
         )
-        for (status in statuses) for (waiting in listOf(false, true)) for (e in events) {
-            val first = RefundStateMachine.decide(RefundRowState(status, waiting), e)
+        for (status in statuses) for (waiting in listOf(false, true)) for (unknown in listOf(false, true)) for (e in events) {
+            val first = RefundStateMachine.decide(RefundRowState(status, waiting, unknown), e)
             if (first is Move && first.to != REQUESTED) {
                 // an event of the outside world is idempotent: the same event on the new status changes nothing
-                assertEquals(NoOp, RefundStateMachine.decide(RefundRowState(first.to, false), e), "$status waiting=$waiting $e")
+                assertEquals(NoOp, RefundStateMachine.decide(RefundRowState(first.to, false), e), "$status waiting=$waiting unknown=$unknown $e")
             }
         }
     }
