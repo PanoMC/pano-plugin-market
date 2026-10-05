@@ -339,6 +339,44 @@ class MarketSchemaIT : MarketDbTestBase() {
     }
 
     @Test
+    fun `a one-shot fixup without its marker row is unfixed in the verdict until it ran`(): Unit = runBlocking {
+        withProbeTables {
+            var fail = true
+            val oneShot = MarketSchema.Fixup("backfill", requires = listOf("market_zz_fixup_probe"), oneShot = true) { client, p ->
+                client.query("UPDATE `${p}market_zz_fixup_probe` SET `v` = `v` + 10").execute().coAwait()
+                if (fail) error("boom")
+            }
+            val verify = { runBlocking { SchemaVerifier.verify(pool, prefix, emptyList(), listOf(oneShot), "market_zz_marker") } }
+
+            // never ran: unfixed
+            assertEquals(mapOf("backfill" to 1L), verify().unfixed)
+            assertFalse(verify().ok)
+
+            // failed and rolled back: still unfixed
+            assertEquals(1, oneShotEnsure(oneShot).fixupErrors.size)
+            assertEquals(mapOf("backfill" to 1L), verify().unfixed)
+            assertTrue(verify().describe().any { it.contains("backfill") })
+
+            // succeeded: marker row exists, verdict ok
+            fail = false
+            assertEquals(listOf("backfill"), oneShotEnsure(oneShot).fixupsRun)
+            assertTrue(verify().ok)
+        }
+    }
+
+    @Test
+    fun `a one-shot fixup whose marker table is missing is a finding`(): Unit = runBlocking {
+        val oneShot = MarketSchema.Fixup("backfill", oneShot = true) { _, _ -> }
+        val report = MarketSchema.ensure(pool, prefix, emptyList(), listOf(oneShot), "market_zz_marker")
+        assertEquals(listOf("backfill"), report.fixupsSkipped)
+
+        val result = SchemaVerifier.verify(pool, prefix, emptyList(), listOf(oneShot), "market_zz_marker")
+        assertFalse(result.ok)
+        assertEquals(listOf("${prefix}market_zz_marker"), result.missingTables())
+        assertEquals(mapOf("backfill" to 1L), result.unfixed)
+    }
+
+    @Test
     fun `the fixup list is empty for the ten tables and a predicate-less fixup must be one-shot`() {
         assertTrue(MarketSchema.fixups().isEmpty())
         val failure = runCatching { MarketSchema.Fixup("x", pendingSql = null, oneShot = false) { _, _ -> } }

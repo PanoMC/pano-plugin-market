@@ -30,7 +30,8 @@ class MarketBootstrap(
     private val seeds: suspend () -> Unit = {},
     private val armScheduler: suspend () -> Unit = {},
     private val tables: List<MarketSchema.Table> = MarketSchema.tables,
-    private val fixups: () -> List<MarketSchema.Fixup> = { MarketSchema.fixups() }
+    private val fixups: () -> List<MarketSchema.Fixup> = { MarketSchema.fixups() },
+    private val markerTable: String = MarketSchema.ONE_SHOT_MARKER_TABLE
 ) {
     private val started = AtomicBoolean(false)
 
@@ -79,7 +80,7 @@ class MarketBootstrap(
         }
 
         try {
-            val report = MarketSchema.ensure(client, p, tables, fixups())
+            val report = MarketSchema.ensure(client, p, tables, fixups(), markerTable)
             errors += report.ddlErrors
             errors += report.fixupErrors
         } catch (e: Exception) {
@@ -89,7 +90,7 @@ class MarketBootstrap(
 
         var verification: SchemaVerifier.Result? = null
         try {
-            verification = SchemaVerifier.verify(client, p, tables, fixups())
+            verification = SchemaVerifier.verify(client, p, tables, fixups(), markerTable)
             if (!verification.ok) {
                 logger.error("Market schema verification failed, running in degraded mode: {}", verification.describe())
             }

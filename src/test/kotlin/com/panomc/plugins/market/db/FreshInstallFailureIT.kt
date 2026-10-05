@@ -194,6 +194,41 @@ class FreshInstallFailureIT : MarketDbTestBase() {
     }
 
     @Test
+    fun `a failing one-shot fixup ends DEGRADED and the next start with it succeeding is READY`(): Unit = runBlocking {
+        val markerName = "market_zz_marker"
+        val physicalMarker = "${prefix}$markerName"
+        try {
+            MarketTestDb.dropAllTables(pool)
+            sql("CREATE TABLE `$physicalMarker` (`name` VARCHAR(64) NOT NULL, `value` BIGINT NOT NULL, PRIMARY KEY (`name`)) ENGINE=InnoDB")
+            var fail = true
+            val backfill = MarketSchema.Fixup("backfill", oneShot = true) { client, _ ->
+                if (fail) error("counter backfill dies")
+            }
+            fun runner() = MarketBootstrap(
+                prefix = { prefix },
+                pool = { pool },
+                initDatabase = { daoInits(pool) },
+                fixups = { listOf(backfill) },
+                markerTable = markerName
+            )
+
+            val first = runner()
+            assertEquals(MarketRuntime.State.DEGRADED, first.run())
+            assertFalse(MarketRuntime.isReady)
+            val problems = MarketRuntime.health().problems
+            assertTrue(problems.any { it.contains("backfill") }, problems.toString())
+
+            MarketRuntime.stopped()
+            fail = false
+            assertEquals(MarketRuntime.State.READY, runner().run())
+            assertTrue(MarketRuntime.isReady)
+            assertTrue(MarketRuntime.health().problems.isEmpty())
+        } finally {
+            runCatching { sql("DROP TABLE IF EXISTS `$physicalMarker`") }
+        }
+    }
+
+    @Test
     fun `a closed pool still ends DEGRADED and never throws`(): Unit = runBlocking {
         val closed = MarketTestDb.pool(databaseName, 1)
         closed.close().coAwait()

@@ -2,12 +2,14 @@ package com.panomc.plugins.market.db
 
 import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.sqlclient.SqlClient
+import io.vertx.sqlclient.Tuple
 
 /**
  * Compares the live database with what [MarketSchema] declares (01 section 14.1 rule 3): every table (as a base table,
  * a view of the same name does not count), every column with its `DATA_TYPE`, `CHARACTER_MAXIMUM_LENGTH` and
  * nullability (so a failed `MODIFY status VARCHAR(24)` is caught), every index with its columns and uniqueness (the
- * unique keys of 00 section 8.1 among them), and one `COUNT` per fixup predicate (non-zero = unfixed rows).
+ * unique keys of 00 section 8.1 among them), and one `COUNT` per fixup predicate (non-zero = unfixed rows) and one marker-row lookup per one-shot fixup (no row =
+ * unfixed).
  *
  * Objects the schema does not declare (extra columns, extra indexes, extra tables) are never reported. Never throws
  * for a database error either: a failed query is a [Kind.CHECK_FAILED] finding, because "could not verify" must not
@@ -55,11 +57,17 @@ object SchemaVerifier {
     suspend fun verify(client: SqlClient, prefix: String): Result =
         verify(client, prefix, MarketSchema.tables, MarketSchema.fixups())
 
+    /**
+     * A one-shot fixup has no predicate, so its state is its marker row `fixup:<id>` in [markerTable]: a missing row
+     * (the fixup failed, was rolled back or was skipped) is reported as `unfixed[id] = 1`, and as soon as any one-shot
+     * fixup is declared a missing marker table is a [Kind.MISSING_TABLE] finding (01 section 14.1 rule 3).
+     */
     suspend fun verify(
         client: SqlClient,
         prefix: String,
         tables: List<MarketSchema.Table>,
-        fixups: List<MarketSchema.Fixup>
+        fixups: List<MarketSchema.Fixup>,
+        markerTable: String = MarketSchema.ONE_SHOT_MARKER_TABLE
     ): Result {
         val findings = ArrayList<Finding>()
         val unfixed = LinkedHashMap<String, Long>()
@@ -80,8 +88,11 @@ object SchemaVerifier {
         }
 
         for (fixup in fixups) {
-            if (fixup.pendingSql == null) continue
             try {
+                if (fixup.oneShot) {
+                    verifyOneShot(client, prefix, fixup, markerTable, findings, unfixed)
+                    continue
+                }
                 if (!MarketSchema.tablesExist(client, prefix, fixup.requires)) continue
                 val count = MarketSchema.pendingCount(client, fixup, prefix)
                 if (count > 0) unfixed[fixup.id] = count
@@ -91,6 +102,28 @@ object SchemaVerifier {
         }
 
         return Result(findings, unfixed)
+    }
+
+    private suspend fun verifyOneShot(
+        client: SqlClient,
+        prefix: String,
+        fixup: MarketSchema.Fixup,
+        markerTable: String,
+        findings: MutableList<Finding>,
+        unfixed: MutableMap<String, Long>
+    ) {
+        val physicalMarker = prefix + markerTable
+        if (!MarketSchema.tablesExist(client, prefix, listOf(markerTable))) {
+            // Without the marker table the fixup cannot have run (ensure skips it): never "verified".
+            if (findings.none { it.kind == Kind.MISSING_TABLE && it.target == physicalMarker }) {
+                findings += Finding(Kind.MISSING_TABLE, physicalMarker, "marker table of the one-shot fixups, '${fixup.id}' cannot be recorded")
+            }
+            unfixed[fixup.id] = 1
+            return
+        }
+        val rows = client.preparedQuery("SELECT COUNT(*) FROM `$physicalMarker` WHERE `name` = ?")
+            .execute(Tuple.of("fixup:${fixup.id}")).coAwait()
+        if (rows.first().getLong(0) == 0L) unfixed[fixup.id] = 1
     }
 
     private class ActualColumn(val dataType: String, val charLength: Long?, val nullable: Boolean) {

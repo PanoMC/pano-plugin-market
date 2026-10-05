@@ -161,6 +161,10 @@ class PanelUpdateProductAPI(
 
         marketProductDao.update(product, sqlClient)
 
+        // update() no longer writes the stock counter (00 section 8.3); until MK-050's guarded SET / ADJUST replaces this
+        // route's stock field, an edited stock is written explicitly on the same client.
+        if (existingProduct.stock != stock) marketProductDao.setStock(id, stock, sqlClient)
+
         val userId = authProvider.getUserIdFromRoutingContext(context)
         val username = databaseManager.userDao.getUsernameFromUserId(userId, sqlClient)!!
 
