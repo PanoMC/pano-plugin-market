@@ -16,30 +16,41 @@
     "discounts": "İndirim ara...",
     "coupons": "Kupon ara...",
     "creator-codes": "Oyuncu veya kod ara...",
-    "payment-methods": "Yöntem ara..."
+    "payment-methods": "Yöntem ara...",
+    "orders": "Sipariş ara..."
   },
   "pages": {
     "orders": {
       "title": "Siparişler",
       "count": "{count} Sipariş",
-      "status-completed": "Başarılı",
-      "status-refunded": "İade",
-      "status-pending": "Bekliyor",
-      "status-failed": "Başarısız",
-      "toast-load-error": "Siparişler yüklenirken bir hata oluştu.",
-      "load-error": "Siparişler yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin.",
-      "empty": "Aradığınız kriterlere uygun sipariş bulunamadı.",
+      "create-order": "Sipariş Oluştur",
+      "export-csv": "CSV Dışa Aktar",
+      "filters": "Filtreler",
+      "gift": "Hediye",
+      "tab": {
+        "all": "Tümü",
+        "pending": "Bekleyen",
+        "review": "İncelemede",
+        "completed": "Tamamlanan",
+        "refunded": "İade Edilen",
+        "failed": "Başarısız",
+        "chargeback": "Ters İbraz"
+      },
       "table": {
-        "order-id": "Sipariş ID",
+        "order": "Sipariş",
         "player": "Oyuncu",
-        "product": "Ürün",
-        "price": "Fiyat",
-        "payment-method": "Ödeme Yöntemi",
+        "products": "Ürünler",
+        "total": "Toplam",
+        "payment": "Ödeme",
+        "delivery": "Teslimat",
+        "shipping": "Kargo",
         "date": "Tarih"
       },
-      "title-copy": "Kopyala",
-      "title-view": "Görüntüle",
-      "detail": "Detay"
+      "actions": {
+        "view": "Görüntüle",
+        "copy-id": "Sipariş ID Kopyala",
+        "rerun": "Teslimatı Yeniden Çalıştır"
+      }
     },
     "categories": {
       "title": "Kategoriler",
@@ -486,25 +497,62 @@
       "no-limit": "Limitsiz",
       "usage-limit": "Kullanım Limiti"
     },
-    "order-detail": {
-      "title": "Sipariş Detayı",
-      "items": "Ürünler",
-      "total": "Toplam",
-      "stats-section": "İstatistik Karşılığı",
-      "exchange-rate": "Döviz Kuru",
-      "exchange-rate-auto": "otomatik",
-      "stats-value": "İstatistik Değeri",
-      "rate-line": "1 {salesSymbol} = {rate} {statsSymbol}",
-      "manual-rate-label": "Kuru elle düzelt",
-      "rate-input-placeholder": "Döviz kuru",
-      "fetch-rate": "Bu tarihin kurunu çek",
-      "load-error": "Sipariş detayı yüklenemedi. Lütfen tekrar deneyin.",
-      "toast-load-error": "Sipariş detayı yüklenirken bir hata oluştu.",
-      "toast-invalid-rate": "Lütfen geçerli bir döviz kuru girin.",
-      "toast-rate-updated": "Döviz kuru güncellendi.",
-      "toast-rate-refreshed": "Döviz kuru bu tarihe göre yenilendi.",
-      "toast-rate-error": "Döviz kuru güncellenirken bir hata oluştu.",
-      "toast-fetch-failed": "Döviz kuru sağlayıcısına ulaşılamadı. Lütfen daha sonra tekrar deneyin."
+    "order-filters": {
+      "title": "Siparişleri Filtrele",
+      "payment-method": "Ödeme yöntemi",
+      "fulfillment": "Teslimat durumu",
+      "shipping": "Kargo durumu",
+      "source": "Kaynak",
+      "test-mode": "Test modu",
+      "test-mode-all": "Canlı ve test siparişleri",
+      "test-mode-live": "Yalnızca canlı siparişler",
+      "test-mode-test": "Yalnızca test siparişleri",
+      "sources": {
+        "STOREFRONT": "Mağaza",
+        "PANEL": "Panel",
+        "GIFT_CODE": "Hediye kodu",
+        "RENEWAL": "Yenileme",
+        "EXTERNAL": "Harici"
+      }
+    },
+    "export-orders": {
+      "title": "Siparişleri Dışa Aktar",
+      "delimiter": "Ayraç",
+      "delimiters": {
+        "comma": "Virgül (,)",
+        "semicolon": "Noktalı virgül (;)",
+        "tab": "Sekme"
+      },
+      "columns": {
+        "orderId": "Sipariş ID",
+        "publicId": "Herkese açık ID",
+        "createdAt": "Oluşturulma",
+        "paidAt": "Ödeme",
+        "status": "Durum",
+        "source": "Kaynak",
+        "playerUsername": "Oyuncu",
+        "recipientUsername": "Alıcı",
+        "email": "E-posta",
+        "productName": "Ürün",
+        "variantName": "Varyant",
+        "sku": "SKU",
+        "quantity": "Adet",
+        "unitPrice": "Birim fiyat",
+        "lineTotal": "Satır toplamı",
+        "currency": "Para birimi",
+        "orderTotal": "Sipariş toplamı",
+        "couponCode": "Kupon kodu",
+        "creatorCode": "Yaratıcı kodu",
+        "paymentMethod": "Ödeme yöntemi",
+        "gatewayTransactionId": "Ödeme altyapısı işlem ID",
+        "gatewayAmount": "Ödeme altyapısı tutarı",
+        "creditValue": "Kredi değeri",
+        "refundedTotal": "İade toplamı",
+        "fulfillmentStatus": "Teslimat durumu",
+        "shippingStatus": "Kargo durumu",
+        "country": "Ülke",
+        "testMode": "Test modu"
+      }
     }
   },
   "settings": {
@@ -1006,6 +1054,17 @@
       "WEEK": "{count, plural, other {# hafta}}",
       "MONTH": "{count, plural, other {# ay}}",
       "YEAR": "{count, plural, other {# yıl}}"
+    },
+    "review-reason": {
+      "UNDERPAID": "Eksik ödeme",
+      "OVERPAID": "Fazla ödeme",
+      "LATE": "Geç ödeme",
+      "WRONG_ASSET": "Yanlış varlık",
+      "AMOUNT_MISMATCH": "Tutar uyuşmazlığı",
+      "CURRENCY_MISMATCH": "Para birimi uyuşmazlığı",
+      "FRAUD_REVIEW": "Dolandırıcılık incelemesi",
+      "BLOCKED_BUYER": "Engelli alıcı",
+      "OTHER": "Diğer"
     }
   },
   "alerts": {

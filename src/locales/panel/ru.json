@@ -16,30 +16,41 @@
     "discounts": "Поиск скидок...",
     "coupons": "Поиск купонов...",
     "creator-codes": "Поиск игрока или кода...",
-    "payment-methods": "Поиск способов оплаты..."
+    "payment-methods": "Поиск способов оплаты...",
+    "orders": "Поиск заказов..."
   },
   "pages": {
     "orders": {
       "title": "Заказы",
       "count": "Заказов: {count}",
-      "status-completed": "Успешно",
-      "status-refunded": "Возврат",
-      "status-pending": "В ожидании",
-      "status-failed": "Не удалось",
-      "toast-load-error": "Произошла ошибка при загрузке заказов.",
-      "load-error": "Не удалось загрузить заказы. Пожалуйста, обновите страницу и попробуйте снова.",
-      "empty": "Заказы, соответствующие вашим критериям, не найдены.",
+      "create-order": "Создать заказ",
+      "export-csv": "Экспорт в CSV",
+      "filters": "Фильтры",
+      "gift": "Подарок",
+      "tab": {
+        "all": "Все",
+        "pending": "Ожидают",
+        "review": "На проверке",
+        "completed": "Завершённые",
+        "refunded": "Возвращённые",
+        "failed": "Неудачные",
+        "chargeback": "Чарджбэк"
+      },
       "table": {
-        "order-id": "ID заказа",
+        "order": "Заказ",
         "player": "Игрок",
-        "product": "Товар",
-        "price": "Цена",
-        "payment-method": "Способ оплаты",
+        "products": "Товары",
+        "total": "Итого",
+        "payment": "Оплата",
+        "delivery": "Выдача",
+        "shipping": "Доставка",
         "date": "Дата"
       },
-      "title-copy": "Копировать",
-      "title-view": "Просмотреть",
-      "detail": "Детали"
+      "actions": {
+        "view": "Просмотр",
+        "copy-id": "Копировать ID заказа",
+        "rerun": "Повторить выдачу"
+      }
     },
     "categories": {
       "title": "Категории",
@@ -486,25 +497,62 @@
       "no-limit": "Без лимита",
       "usage-limit": "Лимит использования"
     },
-    "order-detail": {
-      "title": "Детали заказа",
-      "items": "Товары",
-      "total": "Итого",
-      "stats-section": "Эквивалент в статистике",
-      "exchange-rate": "Обменный курс",
-      "exchange-rate-auto": "автоматически",
-      "stats-value": "Значение в статистике",
-      "rate-line": "1 {salesSymbol} = {rate} {statsSymbol}",
-      "manual-rate-label": "Скорректировать курс вручную",
-      "rate-input-placeholder": "Обменный курс",
-      "fetch-rate": "Получить курс на эту дату",
-      "load-error": "Не удалось загрузить детали заказа. Попробуйте снова.",
-      "toast-load-error": "Произошла ошибка при загрузке деталей заказа.",
-      "toast-invalid-rate": "Пожалуйста, введите корректный обменный курс.",
-      "toast-rate-updated": "Обменный курс обновлён.",
-      "toast-rate-refreshed": "Обменный курс обновлён на эту дату.",
-      "toast-rate-error": "Произошла ошибка при обновлении обменного курса.",
-      "toast-fetch-failed": "Не удалось связаться с поставщиком обменного курса. Попробуйте позже."
+    "order-filters": {
+      "title": "Фильтр заказов",
+      "payment-method": "Способ оплаты",
+      "fulfillment": "Статус выдачи",
+      "shipping": "Статус доставки",
+      "source": "Источник",
+      "test-mode": "Тестовый режим",
+      "test-mode-all": "Обычные и тестовые заказы",
+      "test-mode-live": "Только обычные заказы",
+      "test-mode-test": "Только тестовые заказы",
+      "sources": {
+        "STOREFRONT": "Магазин",
+        "PANEL": "Панель",
+        "GIFT_CODE": "Подарочный код",
+        "RENEWAL": "Продление",
+        "EXTERNAL": "Внешний"
+      }
+    },
+    "export-orders": {
+      "title": "Экспорт заказов",
+      "delimiter": "Разделитель",
+      "delimiters": {
+        "comma": "Запятая (,)",
+        "semicolon": "Точка с запятой (;)",
+        "tab": "Табуляция"
+      },
+      "columns": {
+        "orderId": "ID заказа",
+        "publicId": "Публичный ID",
+        "createdAt": "Создан",
+        "paidAt": "Оплачен",
+        "status": "Статус",
+        "source": "Источник",
+        "playerUsername": "Игрок",
+        "recipientUsername": "Получатель",
+        "email": "E-mail",
+        "productName": "Товар",
+        "variantName": "Вариант",
+        "sku": "SKU",
+        "quantity": "Количество",
+        "unitPrice": "Цена за единицу",
+        "lineTotal": "Сумма строки",
+        "currency": "Валюта",
+        "orderTotal": "Сумма заказа",
+        "couponCode": "Код купона",
+        "creatorCode": "Код автора",
+        "paymentMethod": "Способ оплаты",
+        "gatewayTransactionId": "ID транзакции шлюза",
+        "gatewayAmount": "Сумма шлюза",
+        "creditValue": "Стоимость кредитов",
+        "refundedTotal": "Возвращено",
+        "fulfillmentStatus": "Статус выдачи",
+        "shippingStatus": "Статус доставки",
+        "country": "Страна",
+        "testMode": "Тестовый режим"
+      }
     }
   },
   "settings": {
@@ -1006,6 +1054,17 @@
       "WEEK": "{count, plural, one {# неделя} few {# недели} many {# недель} other {# недели}}",
       "MONTH": "{count, plural, one {# месяц} few {# месяца} many {# месяцев} other {# месяца}}",
       "YEAR": "{count, plural, one {# год} few {# года} many {# лет} other {# года}}"
+    },
+    "review-reason": {
+      "UNDERPAID": "Недоплата",
+      "OVERPAID": "Переплата",
+      "LATE": "Поздний платёж",
+      "WRONG_ASSET": "Неверный актив",
+      "AMOUNT_MISMATCH": "Несовпадение суммы",
+      "CURRENCY_MISMATCH": "Несовпадение валюты",
+      "FRAUD_REVIEW": "Проверка на мошенничество",
+      "BLOCKED_BUYER": "Заблокированный покупатель",
+      "OTHER": "Другое"
     }
   },
   "alerts": {

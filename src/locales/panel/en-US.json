@@ -16,30 +16,41 @@
     "discounts": "Search discounts...",
     "coupons": "Search coupons...",
     "creator-codes": "Search player or code...",
-    "payment-methods": "Search methods..."
+    "payment-methods": "Search methods...",
+    "orders": "Search orders..."
   },
   "pages": {
     "orders": {
       "title": "Orders",
       "count": "{count} Orders",
-      "status-completed": "Successful",
-      "status-refunded": "Refunded",
-      "status-pending": "Pending",
-      "status-failed": "Failed",
-      "toast-load-error": "An error occurred while loading orders.",
-      "load-error": "Failed to load orders. Please refresh the page and try again.",
-      "empty": "No orders found matching your criteria.",
+      "create-order": "Create Order",
+      "export-csv": "Export CSV",
+      "filters": "Filters",
+      "gift": "Gift",
+      "tab": {
+        "all": "All",
+        "pending": "Pending",
+        "review": "Review",
+        "completed": "Completed",
+        "refunded": "Refunded",
+        "failed": "Failed",
+        "chargeback": "Chargeback"
+      },
       "table": {
-        "order-id": "Order ID",
+        "order": "Order",
         "player": "Player",
-        "product": "Product",
-        "price": "Price",
-        "payment-method": "Payment Method",
+        "products": "Products",
+        "total": "Total",
+        "payment": "Payment",
+        "delivery": "Delivery",
+        "shipping": "Shipping",
         "date": "Date"
       },
-      "title-copy": "Copy",
-      "title-view": "View",
-      "detail": "Details"
+      "actions": {
+        "view": "View",
+        "copy-id": "Copy Order Id",
+        "rerun": "Re-run Delivery"
+      }
     },
     "categories": {
       "title": "Categories",
@@ -486,25 +497,62 @@
       "no-limit": "Unlimited",
       "usage-limit": "Usage Limit"
     },
-    "order-detail": {
-      "title": "Order Details",
-      "items": "Products",
-      "total": "Total",
-      "stats-section": "Statistics Equivalent",
-      "exchange-rate": "Exchange Rate",
-      "exchange-rate-auto": "automatic",
-      "stats-value": "Statistics Value",
-      "rate-line": "1 {salesSymbol} = {rate} {statsSymbol}",
-      "manual-rate-label": "Manually correct the rate",
-      "rate-input-placeholder": "Exchange rate",
-      "fetch-rate": "Fetch the rate for this date",
-      "load-error": "Failed to load order details. Please try again.",
-      "toast-load-error": "An error occurred while loading the order details.",
-      "toast-invalid-rate": "Please enter a valid exchange rate.",
-      "toast-rate-updated": "Exchange rate updated.",
-      "toast-rate-refreshed": "Exchange rate refreshed for this date.",
-      "toast-rate-error": "An error occurred while updating the exchange rate.",
-      "toast-fetch-failed": "Could not reach the exchange rate provider. Please try again later."
+    "order-filters": {
+      "title": "Filter Orders",
+      "payment-method": "Payment method",
+      "fulfillment": "Delivery status",
+      "shipping": "Shipping status",
+      "source": "Source",
+      "test-mode": "Test mode",
+      "test-mode-all": "Live and test orders",
+      "test-mode-live": "Live orders only",
+      "test-mode-test": "Test orders only",
+      "sources": {
+        "STOREFRONT": "Storefront",
+        "PANEL": "Panel",
+        "GIFT_CODE": "Gift code",
+        "RENEWAL": "Renewal",
+        "EXTERNAL": "External"
+      }
+    },
+    "export-orders": {
+      "title": "Export Orders",
+      "delimiter": "Delimiter",
+      "delimiters": {
+        "comma": "Comma (,)",
+        "semicolon": "Semicolon (;)",
+        "tab": "Tab"
+      },
+      "columns": {
+        "orderId": "Order ID",
+        "publicId": "Public ID",
+        "createdAt": "Created",
+        "paidAt": "Paid",
+        "status": "Status",
+        "source": "Source",
+        "playerUsername": "Player",
+        "recipientUsername": "Recipient",
+        "email": "E-mail",
+        "productName": "Product",
+        "variantName": "Variant",
+        "sku": "SKU",
+        "quantity": "Quantity",
+        "unitPrice": "Unit price",
+        "lineTotal": "Line total",
+        "currency": "Currency",
+        "orderTotal": "Order total",
+        "couponCode": "Coupon code",
+        "creatorCode": "Creator code",
+        "paymentMethod": "Payment method",
+        "gatewayTransactionId": "Gateway transaction ID",
+        "gatewayAmount": "Gateway amount",
+        "creditValue": "Credit value",
+        "refundedTotal": "Refunded total",
+        "fulfillmentStatus": "Delivery status",
+        "shippingStatus": "Shipping status",
+        "country": "Country",
+        "testMode": "Test mode"
+      }
     }
   },
   "settings": {
@@ -1006,6 +1054,17 @@
       "WEEK": "{count, plural, one {# week} other {# weeks}}",
       "MONTH": "{count, plural, one {# month} other {# months}}",
       "YEAR": "{count, plural, one {# year} other {# years}}"
+    },
+    "review-reason": {
+      "UNDERPAID": "Underpaid",
+      "OVERPAID": "Overpaid",
+      "LATE": "Late payment",
+      "WRONG_ASSET": "Wrong asset",
+      "AMOUNT_MISMATCH": "Amount mismatch",
+      "CURRENCY_MISMATCH": "Currency mismatch",
+      "FRAUD_REVIEW": "Fraud review",
+      "BLOCKED_BUYER": "Blocked buyer",
+      "OTHER": "Other"
     }
   },
   "alerts": {
