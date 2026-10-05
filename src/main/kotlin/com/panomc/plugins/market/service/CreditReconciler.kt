@@ -339,15 +339,19 @@ class CreditReconciler(
             )
         }
 
-        // O5: gatewayAmount + creditValue = totalPrice, and a credit part exists exactly when it has a value
+        // O5: gatewayAmount + creditValue = totalPrice, and a credit part and its money value belong together. Not an equivalence: a full-credit order has
+        // creditValue = totalPrice, so a credits-only product (price 0, creditPrice > 0: 05 section 17 row 53) or a FIXED discount that zeroes the money run
+        // but not the credit run is a credit part worth 0 on a total of 0. What can really be wrong is a value without a credit part, and a credit part
+        // without a value on an order that has a money total (a mixed order never has a credit part worth 0).
         for (row in rows(
             sql,
             "SELECT o.`id`, o.`totalPrice`, o.`gatewayAmount`, o.`creditValue`, o.`creditAmount` FROM $orders o WHERE o.`pricingMode` = 'MARKET' AND o.`source` <> 'LEGACY' " +
-                "AND o.`updatedAt` >= ? AND (o.`gatewayAmount` + o.`creditValue` <> o.`totalPrice` OR (o.`creditAmount` > 0) <> (o.`creditValue` > 0))",
+                "AND o.`updatedAt` >= ? AND (o.`gatewayAmount` + o.`creditValue` <> o.`totalPrice` " +
+                "OR (o.`creditValue` > 0 AND o.`creditAmount` = 0) OR (o.`creditAmount` > 0 AND o.`creditValue` = 0 AND o.`totalPrice` > 0))",
             since
         )) {
             found += CreditProblem(
-                "O5", "order", row.getLong("id"), "gateway + credit value = total, credit part <=> credit value",
+                "O5", "order", row.getLong("id"), "gateway + credit value = total, a credit value needs a credit part, a credit part needs a value unless the total is 0",
                 "gateway ${row.getLong("gatewayAmount")} + credit value ${row.getLong("creditValue")} vs total ${row.getLong("totalPrice")}, credit part ${row.getLong("creditAmount")}"
             )
         }
