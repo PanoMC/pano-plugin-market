@@ -27,12 +27,15 @@ import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.money.Conversions
 import com.panomc.plugins.market.db.dao.MarketCreditAccountDao
 import com.panomc.plugins.market.db.dao.MarketCurrencyRateDao
+import com.panomc.plugins.market.db.dao.MarketEntitlementDao
 import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.db.dao.MarketOrderEventDao
 import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.dao.MarketPaymentDao
 import com.panomc.plugins.market.db.dao.MarketPaymentMethodDao
+import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.dao.isDuplicateKey
+import com.panomc.plugins.market.db.model.BillingMode
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.db.model.MarketOrderEvent
 import com.panomc.plugins.market.db.model.MarketOrderItem
@@ -79,6 +82,7 @@ import com.panomc.plugins.market.spi.payment.PaymentEvent
 import com.panomc.plugins.market.spi.payment.PaymentProvider
 import com.panomc.plugins.market.spi.payment.QueryPaymentRequest
 import com.panomc.plugins.market.spi.payment.QueryReason
+import com.panomc.plugins.market.spi.payment.ReviewReason
 import com.panomc.plugins.market.spi.payment.StartPaymentRequest
 import com.panomc.plugins.market.spi.payment.StartPaymentResult
 import com.panomc.plugins.market.spi.common.TestModeSupport
@@ -99,7 +103,6 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
 import java.math.BigDecimal
-import java.util.concurrent.ConcurrentHashMap
 
 /** A panel alert for an order that waits for a human (06 section 11, O3 / O9). The notification itself is the platform's; this is the seam. */
 fun interface PanelAlerts {
@@ -109,6 +112,100 @@ fun interface PanelAlerts {
         private val logger = LoggerFactory.getLogger(PanelAlerts::class.java)
 
         val LOG_ONLY = PanelAlerts { orderId, reason -> logger.warn("order {} waits for review ({})", orderId, reason) }
+    }
+}
+
+/**
+ * Why a verified payment does not complete the order (06 section 9.4, first row): O2 is diverted to O3. [reason] is the order's `reviewReason`,
+ * [note] the text of the `STATUS_CHANGED` row of the timeline (06 section 6.4: "recipient limit").
+ */
+class PaidDiversion(val reason: ReviewReason, val note: String)
+
+/**
+ * A check that runs under the `COMMIT` locks right before an order that is `PENDING` is told `Paid` (O2) by a payment event; the first guard
+ * that answers a [PaidDiversion] turns O2 into O3 (`REVIEW`): nothing is captured, committed or delivered, the money is recorded on the order.
+ * `locked` holds the order, its items, and the product / credit rows of 06 section 13.2 (scope `COMMIT` or wider), so a guard may count
+ * against them without taking more locks. [PaymentService] always runs [RecipientLimitGuard] first, then the guards it was given.
+ *
+ * Open seams: MK-151 adds the blocked-buyer check (06 section 6.8, `reviewReason = BLOCKED_BUYER`; the SPI `ReviewReason` has no such value
+ * yet, see the MK-076 evidence) and MK-121 the late renewal of a terminal subscription (09 section 8.5, `LATE`).
+ */
+fun interface PaidGuard {
+    suspend fun divert(conn: SqlConnection, locked: LockedOrder, order: MarketOrder): PaidDiversion?
+}
+
+/**
+ * The recipient limit of a gift (06 section 6.4, review-log M-6). An order whose payer is not its recipient is left out of the recipient's
+ * `limitPerPlayer` and cooldown while it is pending (`MarketOrderDao.usageByProduct`), so nobody can use up a victim's allowance with unpaid
+ * gifts. That is safe only because this check runs when the gift is paid: under the product locks it counts what the recipient holds or has
+ * on hold, adds this order's own units, and sends an order that would exceed the limit, or that falls inside the cooldown, to
+ * `REVIEW (OTHER)` with the note "recipient limit". An order the buyer places for themselves was judged at checkout under the same locks and
+ * is not judged again. A `TIMED` product the recipient already owns is an extension, never a second holding: the limit does not apply to it,
+ * the cooldown does.
+ */
+internal class RecipientLimitGuard(
+    private val orders: MarketOrderDao,
+    private val products: MarketProductDao,
+    private val entitlements: MarketEntitlementDao,
+    private val clock: Clock
+) : PaidGuard {
+    override suspend fun divert(conn: SqlConnection, locked: LockedOrder, order: MarketOrder): PaidDiversion? {
+        if (order.buyerKey == order.recipientKey) return null
+
+        // every unit of the order, bundle children included, per product: the units `usageByProduct` counts for a recipient
+        val units = HashMap<Long, Long>()
+
+        for (item in locked.items) {
+            val productId = item.productId ?: continue
+
+            units.merge(productId, (item.quantity - item.refundedQuantity).toLong(), Long::plus)
+        }
+
+        if (units.isEmpty()) return null
+
+        val rules = products.getByIds(units.keys.toList(), conn).filter { it.limitPerPlayer != null || (it.cooldownSeconds ?: 0L) > 0L }
+
+        if (rules.isEmpty()) return null
+
+        val keys = recipientKeys(order)
+        val usage = orders.usageByProduct(keys, rules.map { it.id }, conn)
+        val now = clock.now()
+        var owned: Set<Long>? = null
+
+        suspend fun ownsActive(productId: Long): Boolean {
+            val ids = owned ?: keys.flatMap { entitlements.getActiveByOwner(it, now, conn) }.map { it.productId }.toSet().also { owned = it }
+
+            return productId in ids
+        }
+
+        for (product in rules.sortedBy { it.id }) {
+            val limit = product.limitPerPlayer
+
+            if (limit != null) {
+                val used = usage[product.id]?.used ?: 0L
+                val extension = product.billingMode == BillingMode.TIMED && ownsActive(product.id)
+
+                if (!extension && used + (units[product.id] ?: 0L) > limit) return PaidDiversion(ReviewReason.OTHER, NOTE)
+            }
+
+            val seconds = product.cooldownSeconds ?: 0L
+            val last = usage[product.id]?.lastOrderAt
+
+            if (seconds > 0 && last != null && now < last + seconds * 1000) return PaidDiversion(ReviewReason.OTHER, NOTE)
+        }
+
+        return null
+    }
+
+    companion object {
+        const val NOTE = "recipient limit"
+
+        /** `K` of 06 section 6.2: the recipient's key and, for a registered player, the `g:<name>` twin of rows written before the rewrite job. */
+        fun recipientKeys(order: MarketOrder): List<String> {
+            val guestKey = "g:${order.recipientUsername.lowercase(java.util.Locale.ROOT)}"
+
+            return if (order.recipientUsername.isBlank() || order.recipientKey == guestKey) listOf(order.recipientKey) else listOf(order.recipientKey, guestKey)
+        }
     }
 }
 
@@ -141,7 +238,14 @@ class AttemptFacts(
     val expiresAt: Long? = null,
     val failureCode: String? = null,
     val failureMessage: String? = null,
-    val adminMessage: String? = null
+    val adminMessage: String? = null,
+    /**
+     * What a `NeedsReview` event says the gateway received (`PaymentEvent.NeedsReview.received`: a partial, an excess, a late or a wrong-asset
+     * payment). It becomes the attempt's `paidAmount` / `paidCurrency` when the attempt moves to `REVIEW`, so that the order records it and a
+     * rejection with a refund returns it (06 section 9.4). `null` when the event states no amount.
+     */
+    val receivedAmount: Long? = null,
+    val receivedCurrency: String? = null
 ) {
     companion object {
         val NONE = AttemptFacts()
@@ -149,13 +253,18 @@ class AttemptFacts(
         /** The facts of a provider event (the encrypted `providerData` needs [cipher]). */
         fun of(event: PaymentEvent, cipher: SecretCipher): AttemptFacts {
             val succeeded = event as? PaymentEvent.Succeeded
+            val received = (event as? PaymentEvent.NeedsReview)?.received
+            val failed = event as? PaymentEvent.Failed
 
             return AttemptFacts(
                 gatewayTransactionId = event.gatewayTransactionId, gatewayRefs = event.gatewayRefs,
                 providerData = event.providerData?.let { cipher.encrypt(it.encode()) },
                 gatewayFee = succeeded?.gatewayFee?.amount, net = succeeded?.net?.amount, settlementCurrency = succeeded?.settlementCurrency,
                 settlementAmount = succeeded?.settlementAmount, installments = succeeded?.installments, methodDetail = succeeded?.methodDetail,
-                adminMessage = event.note
+                // a gateway failure keeps its code (17 section 5.5: `card_declined` surfaces as `failureCode`); its text is the admin's, the buyer gets market's generic key
+                failureCode = failed?.code?.take(PaymentService.FAILURE_CODE_MAX), failureMessage = failed?.let { PaymentService.PAYMENT_FAILED_TEXT },
+                adminMessage = listOfNotNull(event.note, failed?.message).filter { it.isNotBlank() }.joinToString("; ").takeIf { it.isNotEmpty() }?.take(PaymentService.ADMIN_MESSAGE_MAX),
+                receivedAmount = received?.amount, receivedCurrency = received?.currency
             )
         }
     }
@@ -212,12 +321,19 @@ class PaymentService(
     private val site: () -> SiteInfo,
     /** Reads outside a transaction (provider resolution after a commit, the view of an order). */
     private val readClient: suspend () -> SqlClient,
+    /** The limits and cooldown of the products and the entitlements of a recipient, for the check of a paid gift ([RecipientLimitGuard]). */
+    products: MarketProductDao,
+    entitlements: MarketEntitlementDao,
     private val alerts: PanelAlerts = PanelAlerts.LOG_ONLY,
     private val startTimeoutMs: Long = START_TIMEOUT_MS,
     private val cancelTimeoutMs: Long = CANCEL_TIMEOUT_MS,
     private val statusWaitMs: Long = STATUS_WAIT_MS,
-    private val sanitizeHtml: (String) -> String = { HtmlSanitizer.sanitize(it) }
+    private val sanitizeHtml: (String) -> String = { HtmlSanitizer.sanitize(it) },
+    /** Checks run after [RecipientLimitGuard] before an O2 (MK-151: blocked buyer, MK-121: late renewal). */
+    extraPaidGuards: List<PaidGuard> = emptyList()
 ) : PaymentStarter {
+
+    private val paidGuards: List<PaidGuard> = listOf(RecipientLimitGuard(orders, products, entitlements, clock)) + extraPaidGuards
 
     private fun table(name: String) = "`${orders.prefix()}$name`"
 
@@ -356,12 +472,19 @@ class PaymentService(
     /**
      * 3. tx2: stores a start result. The attempt must still be `CREATED` (a start) or `PENDING` ([continued]: the next step of an embedded
      * form); then a buyer-facing result is stored encrypted and the attempt becomes `PENDING`, a `Completed` applies its success event.
-     * An attempt that moved on (an event won the race, `/pay` cancelled it) only merges the provider ids it lacks.
+     * A buyer-facing result for an attempt that moved on (an event won the race, `/pay` cancelled it) only merges the provider ids it lacks.
+     *
+     * A `Completed` is money the provider already collected, so it is never dropped: it is applied as a `Succeeded` event whatever state the
+     * attempt is in now (06 section 9.2 step 3, section 9.4): a late success on a `CANCELLED` / `FAILED` / `EXPIRED` attempt is O2 when its tender
+     * still equals the order's and `REVIEW (AMOUNT_MISMATCH)` when the buyer changed it, a `PROCESSING` attempt completes, a `SUCCEEDED` one only
+     * merges ids. The built-ins `free` and `credits` are the exception: no real money moved, so the result of an attempt that is no longer
+     * current is dropped like a buyer-facing one (the order was re-tendered, the credits are not captured for a superseded attempt).
      */
     private suspend fun storeResult(order: MarketOrder, attempt: MarketPayment, resolved: Resolved, result: StartPaymentResult, continued: Boolean): JsonObject? {
         val completed = result as? StartPaymentResult.Completed
         val scope = if (completed != null) OrderLockScope.COMMIT else OrderLockScope.PAYMENT
         val expect = if (continued) PaymentStatus.PENDING else PaymentStatus.CREATED
+        val builtIn = resolved.provider.id == OrderTimings.FREE_PROVIDER || resolved.provider.id == OrderTimings.CREDITS_PROVIDER
         val after = ArrayList<AfterCommit>()
 
         val start = db.txRestartingOnOrderChange { conn ->
@@ -372,28 +495,28 @@ class PaymentService(
 
                 val current = payments.getById(attempt.id, conn) ?: throw NoSuchElementException("attempt ${attempt.id} does not exist")
                 val now = clock.now()
+                val awaited = current.status == expect
 
-                if (current.status != expect) {
-                    mergeRefs(conn, current, result.gatewayTransactionId, result.gatewayRefs, onlyIfEmpty = true)
-
-                    return@forOrder null
-                }
-
-                if (completed != null) {
+                if (completed != null && (awaited || !builtIn)) {
                     val facts = AttemptFacts.of(completed.event, cipher).let { f ->
                         AttemptFacts(
                             f.gatewayTransactionId ?: result.gatewayTransactionId, f.gatewayRefs + result.gatewayRefs, f.providerData, f.gatewayFee, f.net,
-                            f.settlementCurrency, f.settlementAmount, f.installments, f.methodDetail, startKind = "COMPLETED", startedAt = now,
-                            adminMessage = f.adminMessage
+                            f.settlementCurrency, f.settlementAmount, f.installments, f.methodDetail, startKind = if (awaited) "COMPLETED" else null,
+                            startedAt = if (awaited) now else null, adminMessage = f.adminMessage
                         )
                     }
                     val applied = applyIn(
                         conn, locked, attempt.id, PaymentEventMapper.attemptEvent(completed.event)!!, facts, resolved.policy,
-                        if (resolved.provider.id == OrderTimings.FREE_PROVIDER || resolved.provider.id == OrderTimings.CREDITS_PROVIDER) OrderActor.SYSTEM else OrderActor.GATEWAY,
-                        after
+                        if (builtIn) OrderActor.SYSTEM else OrderActor.GATEWAY, after
                     )
 
                     return@forOrder if (applied.orderStatus == OrderStatus.COMPLETED) JsonObject().put("kind", "COMPLETED") else null
+                }
+
+                if (!awaited) {
+                    mergeRefs(conn, current, result.gatewayTransactionId, result.gatewayRefs, onlyIfEmpty = true)
+
+                    return@forOrder null
                 }
 
                 val expiresAt = result.expiresAt?.let { OrderTimings.attemptExpiresAt(now, 0, 0, it) } ?: current.expiresAt
@@ -712,9 +835,9 @@ class PaymentService(
         facts.startedAt?.let { sets["startedAt"] = it }
         facts.nextQueryAt?.let { sets["nextQueryAt"] = it }
         facts.expiresAt?.let { sets["expiresAt"] = it }
-        facts.failureCode?.let { sets["failureCode"] = it }
+        facts.failureCode?.let { sets["failureCode"] = it.take(FAILURE_CODE_MAX) }
         facts.failureMessage?.let { sets["failureMessage"] = it }
-        facts.adminMessage?.let { sets["adminMessage"] = it }
+        facts.adminMessage?.let { sets["adminMessage"] = it.take(ADMIN_MESSAGE_MAX) }
 
         var duplicate = attempt.duplicate
 
@@ -741,10 +864,25 @@ class PaymentService(
                     sets["duplicate"] = true
                 }
 
-                is PaymentEffect.RecordReviewReason -> sets["adminMessage"] = (facts.adminMessage?.let { "$it; " } ?: "") + "REVIEW " + effect.reason.name
+                is PaymentEffect.RecordReviewReason -> {
+                    val reviewNote = "REVIEW " + effect.reason.name
+
+                    // the column holds ADMIN_MESSAGE_MAX characters: the gateway's text gives way to the reason
+                    sets["adminMessage"] = (facts.adminMessage?.take(ADMIN_MESSAGE_MAX - reviewNote.length - 2)?.let { "$it; " } ?: "") + reviewNote
+                }
 
                 else -> Unit
             }
+        }
+
+        // a NeedsReview that says what the gateway received (a partial, an excess, a late or a wrong-asset payment): the money is recorded on the
+        // attempt, so that the order carries it (O3 / O9 record `paymentId` / `paidAmount`) and a rejection with a refund returns it (06 section 9.4)
+        val received = facts.receivedAmount?.takeIf { decision.to == PaymentStatus.REVIEW && event is PaymentAttemptEvent.NeedsReview }
+
+        if (received != null) {
+            sets["paidAmount"] = received
+            sets["paidCurrency"] = facts.receivedCurrency ?: attempt.currency
+            sets["paidAt"] = now
         }
 
         if (!updateAttempt(conn, attemptId, sets, whereStatus = attempt.status)) throw com.panomc.plugins.market.db.tx.OrderChangedException(orderId, "attempt $attemptId moved under the lock")
@@ -767,7 +905,23 @@ class PaymentService(
                 is PaymentEffect.PanelAlert -> after += AfterCommit.PanelAlert(orderId, order.reviewReason)
 
                 is PaymentEffect.NotifyOrder -> {
-                    val moved = orderService.transition(conn, locked, effect.event, message = null)
+                    var orderEvent = effect.event
+                    var note: String? = null
+                    val paidEvent = orderEvent as? OrderEvent.Paid
+
+                    // O2 or O3 (06 section 9.4): a guard may divert a payment that would complete a PENDING order into a review
+                    if (paidEvent != null && order.status == OrderStatus.PENDING) {
+                        val diversion = divertPaid(conn, locked, order)
+
+                        if (diversion != null) {
+                            logger.warn("order {} is paid but waits for review: {}", orderId, diversion.note)
+
+                            orderEvent = OrderEvent.NeedsReview(diversion.reason, paidEvent.attemptId, paidEvent.actor)
+                            note = diversion.note
+                        }
+                    }
+
+                    val moved = orderService.transition(conn, locked, orderEvent, message = note)
 
                     after += moved.after
 
@@ -778,7 +932,23 @@ class PaymentService(
             }
         }
 
+        // the order already waits for a human and the gateway reports money it cannot use: the order records it and the panel is told
+        if (received != null && order.status == OrderStatus.REVIEW && decision.effects.none { it is PaymentEffect.RecordPaymentOnOrder }) {
+            recordPaymentOnOrder(conn, order, attemptId)
+
+            after += AfterCommit.PanelAlert(orderId, order.reviewReason)
+        }
+
         return AppliedEvent(decision.to, orderStatus, changed = true, duplicate = duplicate)
+    }
+
+    /** The first [PaidGuard] that diverts O2, `null` when the payment may complete the order. The caller holds the `COMMIT` locks (or wider). */
+    private suspend fun divertPaid(conn: SqlConnection, locked: LockedOrder, order: MarketOrder): PaidDiversion? {
+        check(locked.scope == OrderLockScope.COMMIT || locked.scope == OrderLockScope.RELEASE) { "O2 runs under the COMMIT locks, not ${locked.scope}" }
+
+        for (guard in paidGuards) guard.divert(conn, locked, order)?.let { return it }
+
+        return null
     }
 
     private suspend fun timeline(
@@ -831,7 +1001,8 @@ class PaymentService(
      * `POST /api/market/orders/:publicId/pay` (06 section 9.3, 07 section 6.4): a new attempt for a `PENDING` order, with the fee and the
      * credit part re-priced for the new method (items, discounts and shipping never change). [order] is the owner's order as
      * `OrderAccess` resolved it; everything is read again under the order lock. Returns the `PaymentStart`, or `null` when another request took
-     * the attempt over before the provider answered.
+     * the attempt over before the provider answered. A provider that fails, is unavailable or misses the 30 s deadline answers 502
+     * `PAYMENT_PROVIDER_ERROR {code, order, orderToken}` (06 section 9.2 steps 4 and 5; `GATEWAY_UNREACHABLE` for the deadline), as in checkout.
      */
     suspend fun pay(order: MarketOrder, request: PayRequest, caller: PayCaller, sqlClient: SqlClient): JsonObject? {
         val after = ArrayList<AfterCommit>()
@@ -843,7 +1014,13 @@ class PaymentService(
 
         runAfter(after, sqlClient)
 
-        return startAttempt(order.id, plan.attemptId, plan.cancelled, sqlClient)
+        return try {
+            startAttempt(order.id, plan.attemptId, plan.cancelled, sqlClient)
+        } catch (e: PaymentStartFailed) {
+            logger.warn("the payment of order {} could not be started: {}", order.id, e.code)
+
+            throw PaymentProviderError(e.code, orderService.ownerView(orders.getById(order.id, sqlClient) ?: order, sqlClient), order.accessToken)
+        }
     }
 
     private suspend fun payTx(conn: SqlConnection, locked: LockedOrder, request: PayRequest, caller: PayCaller): PayPlan {
@@ -1047,42 +1224,65 @@ class PaymentService(
 
     // ================================================================================================= continue
 
-    private val attemptLocks = ConcurrentHashMap<Long, Mutex>()
+    /** The in-JVM lock of the embedded form of one order, counted so that it exists only while a call holds or waits for it. */
+    private class AttemptLock {
+        val mutex = Mutex()
+        var users = 0
+    }
+
+    private val attemptLocks = HashMap<Long, AttemptLock>()
+
+    /** How many attempt locks a running call holds or awaits right now; `0` when no `continue` is in flight (a hook for the tests). */
+    internal fun attemptLocksInUse(): Int = synchronized(attemptLocks) { attemptLocks.size }
 
     /**
-     * `POST /orders/:publicId/payment/continue` (06 section 9.3): the second step of an embedded form. The newest attempt must be `PENDING`
-     * with `startKind = EMBEDDED` (else 409 `ORDER_NOT_PAYABLE`); the provider is called under the attempt lock (30 s) and the result is
-     * stored like a start. A provider error answers 502 and leaves the attempt as it is, so the buyer can enter the step again.
+     * Runs [block] holding the lock of the open attempt of [orderId]. An order has at most one open attempt (I10) and `continue` only ever
+     * addresses the newest one, so the order is the key; the attempt itself is read inside the lock, never before. The entry is removed when the
+     * last call that holds or waits for it leaves, so the map holds only the calls that are running right now.
      */
-    suspend fun continuePayment(order: MarketOrder, values: JsonObject, caller: PayCaller, sqlClient: SqlClient): JsonObject? {
+    private suspend fun <T> underAttemptLock(orderId: Long, block: suspend () -> T): T {
+        val entry = synchronized(attemptLocks) { attemptLocks.getOrPut(orderId) { AttemptLock() }.also { it.users++ } }
+
+        try {
+            return entry.mutex.withLock { block() }
+        } finally {
+            synchronized(attemptLocks) { if (--entry.users == 0) attemptLocks.remove(orderId) }
+        }
+    }
+
+    /**
+     * `POST /orders/:publicId/payment/continue` (06 section 9.3): the second step of an embedded form. Under the attempt lock the order and
+     * its newest attempt are read again and must be `PENDING` with `startKind = EMBEDDED` (else 409 `ORDER_NOT_PAYABLE`); the provider is
+     * called with that fresh row (30 s) and the result is stored like a start before the lock is released, so the next waiter sees the stored
+     * step (or `COMPLETED`) and answers 409 instead of calling the provider a second time. A provider error answers 502 and leaves the attempt
+     * as it is, so the buyer can enter the step again.
+     */
+    suspend fun continuePayment(order: MarketOrder, values: JsonObject, caller: PayCaller, sqlClient: SqlClient): JsonObject? = underAttemptLock(order.id) {
+        val current = orders.getById(order.id, sqlClient) ?: throw OrderNotPayable()
         val attempt = payments.getByOrderId(order.id, sqlClient).lastOrNull()
 
-        if (order.status != OrderStatus.PENDING || attempt == null || attempt.status != PaymentStatus.PENDING || attempt.startKind != "EMBEDDED") throw OrderNotPayable()
+        if (current.status != OrderStatus.PENDING || attempt == null || attempt.status != PaymentStatus.PENDING || attempt.startKind != "EMBEDDED") throw OrderNotPayable()
 
         val resolved = resolve(attempt.providerId, sqlClient) ?: throw OrderNotPayable()
-        val publicId = order.publicId ?: ""
+        val publicId = current.publicId ?: ""
         val ctx = contexts.create(resolved.provider, resolved.settings, attempt.testMode)
         val request = ContinuePaymentRequest(
-            attemptView(attempt, publicId), values, buyerOf(order, attempt.clientIp, attempt.userAgent, order.billingInfo?.let { runCatching { JsonObject(it) }.getOrNull() }, order.locale ?: site().defaultLocale),
+            attemptView(attempt, publicId), values, buyerOf(current, attempt.clientIp, attempt.userAgent, current.billingInfo?.let { runCatching { JsonObject(it) }.getOrNull() }, current.locale ?: site().defaultLocale),
             urlsFor(attempt, publicId, resolved.provider.id)
         )
-        val mutex = attemptLocks.computeIfAbsent(attempt.id) { Mutex() }
-
-        val result = mutex.withLock {
-            try {
-                withTimeout(startTimeoutMs) { resolved.provider.continuePayment(ctx, request) }
-            } catch (e: TimeoutCancellationException) {
-                throw PaymentProviderError(ProviderErrorCode.GATEWAY_UNREACHABLE.name, orderService.ownerView(order, sqlClient), order.accessToken)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: ProviderException) {
-                throw PaymentProviderError(e.code.name, orderService.ownerView(order, sqlClient), order.accessToken)
-            } catch (e: Throwable) {
-                throw PaymentProviderError(ProviderErrorCode.INTERNAL.name, orderService.ownerView(order, sqlClient), order.accessToken)
-            }
+        val result = try {
+            withTimeout(startTimeoutMs) { resolved.provider.continuePayment(ctx, request) }
+        } catch (e: TimeoutCancellationException) {
+            throw PaymentProviderError(ProviderErrorCode.GATEWAY_UNREACHABLE.name, orderService.ownerView(current, sqlClient), current.accessToken)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: ProviderException) {
+            throw PaymentProviderError(e.code.name, orderService.ownerView(current, sqlClient), current.accessToken)
+        } catch (e: Throwable) {
+            throw PaymentProviderError(ProviderErrorCode.INTERNAL.name, orderService.ownerView(current, sqlClient), current.accessToken)
         }
 
-        return storeResult(order, attempt, resolved, result, continued = true)
+        storeResult(current, attempt, resolved, result, continued = true)
     }
 
     // ================================================================================================= cancel (O7)
@@ -1246,10 +1446,16 @@ class PaymentService(
         const val STATUS_WAIT_MS = 8_000L
         const val STATUS_QUERY_FIRST_MS = 60_000L
         const val STATUS_QUERY_MIN_GAP_MS = 10_000L
-        const val ADMIN_MESSAGE_MAX = 1000
+
+        /** `market_payment.adminMessage` is `VARCHAR(512)`; `failureCode` is `VARCHAR(64)`. */
+        const val ADMIN_MESSAGE_MAX = 512
+        const val FAILURE_CODE_MAX = 64
 
         /** The generic text key a failed start stores for the buyer (the gateway's own text is the admin's, 02 section 6). */
         const val START_FAILED_TEXT = "payment.start-failed"
+
+        /** The generic text key of a payment the gateway reported as `Failed` (06 section 9.4: `failureMessage` is buyer-safe). */
+        const val PAYMENT_FAILED_TEXT = "payment.failed"
 
         const val METHOD_NOT_OFFERED = "METHOD_NOT_OFFERED"
         const val METHOD_LOCKED = "METHOD_LOCKED"

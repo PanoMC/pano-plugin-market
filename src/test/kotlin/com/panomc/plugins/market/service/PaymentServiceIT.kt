@@ -3,6 +3,12 @@ package com.panomc.plugins.market.service
 import com.panomc.platform.model.Error
 import com.panomc.plugins.market.core.order.OrderEffect
 import com.panomc.plugins.market.core.payment.PaymentAttemptEvent
+import com.panomc.plugins.market.db.model.EntitlementStatus
+import com.panomc.plugins.market.db.model.MarketEntitlement
+import com.panomc.plugins.market.db.tx.OrderLockScope
+import com.panomc.plugins.market.spi.payment.ReviewReason
+import com.panomc.plugins.market.support.Race
+import java.util.concurrent.atomic.AtomicInteger
 import com.panomc.plugins.market.db.MarketDaoITBase
 import com.panomc.plugins.market.db.model.CreditSystemKey
 import com.panomc.plugins.market.db.model.CreditTxType
@@ -200,7 +206,7 @@ internal class PaymentHarness(val w: TestWiring, val vertx: Vertx, private val l
         rebuild()
     }
 
-    fun rebuild(startTimeoutMs: Long = PaymentService.START_TIMEOUT_MS, statusWaitMs: Long = PaymentService.STATUS_WAIT_MS) {
+    fun rebuild(startTimeoutMs: Long = PaymentService.START_TIMEOUT_MS, statusWaitMs: Long = PaymentService.STATUS_WAIT_MS, extraGuards: List<PaidGuard> = emptyList()) {
         db = MarketDb({ w.pool }, w.clock, lockWaitSeconds)
         locks = Locks(w.orders, w.orderItems, w.redemptions, w.creditAccounts)
 
@@ -217,8 +223,9 @@ internal class PaymentHarness(val w: TestWiring, val vertx: Vertx, private val l
             db = db, locks = locks, clock = w.clock, ids = w.ids, config = { h.config.toConfig() }, orders = w.orders, orderItems = w.orderItems, orderEvents = w.orderEvents,
             payments = w.payments, methods = w.paymentMethods, creditAccounts = w.creditAccounts, currencyRates = w.currencyRates, lookup = lookup, cipher = cipher,
             contexts = PaymentContexts { provider, settings, testMode -> TestContexts.payment(provider.id, settings, vertx, testMode) },
-            orderService = orderService, site = { TestContexts.defaultSite() }, readClient = { w.pool },
-            alerts = PanelAlerts { orderId, reason -> alerts += orderId to reason }, startTimeoutMs = startTimeoutMs, statusWaitMs = statusWaitMs
+            orderService = orderService, site = { TestContexts.defaultSite() }, readClient = { w.pool }, products = w.products, entitlements = w.entitlements,
+            alerts = PanelAlerts { orderId, reason -> alerts += orderId to reason }, startTimeoutMs = startTimeoutMs, statusWaitMs = statusWaitMs,
+            extraPaidGuards = extraGuards
         )
 
         h.useStarter(payments)
@@ -1263,7 +1270,8 @@ class PaymentServiceIT : MarketDaoITBase() {
         )
         val service = PaymentService(
             ph.db, ph.locks, w.clock, w.ids, { h.config.toConfig() }, w.orders, w.orderItems, w.orderEvents, w.payments, w.paymentMethods, w.creditAccounts, w.currencyRates,
-            ph.lookup, ph.cipher, PaymentContexts { p, s, t -> TestContexts.payment(p.id, s, vertx, t) }, plain, { TestContexts.defaultSite() }, { pool }
+            ph.lookup, ph.cipher, PaymentContexts { p, s, t -> TestContexts.payment(p.id, s, vertx, t) }, plain, { TestContexts.defaultSite() }, { pool },
+            w.products, w.entitlements
         )
 
         expect("CREDITS_DISABLED", 409) { service.pay(before, PayRequest("fake", 4_000, null), PayCaller(), pool) }
@@ -1575,6 +1583,839 @@ class PaymentServiceIT : MarketDaoITBase() {
         assertEquals(OrderRole.LIMITED, access.resolve(order.publicId, null, "wrong", null, true, "198.51.100.2", pool).role)
         assertEquals(OrderRole.LIMITED, access.resolve(order.publicId, null, null, null, true, "198.51.100.1", pool).role)
         assertEquals(OrderRole.OWNER, access.resolve(order.publicId, null, order.accessToken, null, true, "198.51.100.1", pool).role, "the right token of an exhausted address is not charged")
+    }
+
+    // ================================================================================== review fixes (MK-076)
+
+    // ---- /pay answers a provider failure as 502 (06 section 9.2 steps 4 and 5)
+
+    @Test
+    fun `a provider error in pay answers 502 with the order and the token, fails the new attempt and keeps the order PENDING`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+        fake.caps = PaymentCapabilities().also { it.cancelPending = true }
+
+        val order = orderOf(buy(fx.product(price = 1000)))
+
+        fake.failNext(FakePaymentProvider.Op.START, ProviderException(ProviderErrorCode.GATEWAY_REJECTED, "rejected", adminMessage = "merchant 7 is blocked"))
+
+        val body = expect("PAYMENT_PROVIDER_ERROR", 502) { pay(order) }
+        val attempts = ph.attempts(order.id)
+
+        assertEquals("GATEWAY_REJECTED", body.getString("code"))
+        assertEquals(order.publicId, body.getJsonObject("order").getString("publicId"))
+        assertEquals(order.accessToken, body.getString("orderToken"))
+        assertFalse(body.encode().contains("merchant 7"), "the gateway's text is not in the response")
+        assertEquals(listOf(PaymentStatus.CANCELLED, PaymentStatus.FAILED), attempts.map { it.status }, "the old attempt was cancelled by the pay, the new one failed")
+        assertEquals("GATEWAY_REJECTED", attempts.last().failureCode)
+        assertEquals(PaymentService.START_FAILED_TEXT, attempts.last().failureMessage)
+        assertEquals("merchant 7 is blocked", attempts.last().adminMessage)
+        assertNotNull(attempts.last().closedAt)
+        assertEquals(OrderStatus.PENDING, ph.order(order.id).status)
+        assertEquals(ReservationState.HELD, ph.order(order.id).reservationState)
+        assertEquals("GATEWAY_REJECTED", w.paymentMethods.getByMethodId("fake", pool)!!.lastError)
+        assertTrue(w.orderEvents.getByOrderId(order.id, pool).any { it.type == OrderEventType.PAYMENT_FAILED })
+
+        // the buyer picks the method again and gets through
+        val start = pay(ph.order(order.id))
+
+        assertEquals("REDIRECT", start!!.getString("kind"))
+        assertEquals(PaymentStatus.PENDING, ph.attempts(order.id).last().status)
+    }
+
+    @Test
+    fun `an unexpected exception in pay is an INTERNAL 502 that never leaks its text`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val order = orderOf(buy(fx.product(price = 1000)))
+
+        fake.onStart = { throw IllegalStateException("boom with secret-token-9") }
+
+        val internal = expect("PAYMENT_PROVIDER_ERROR", 502) { pay(order) }
+
+        assertEquals("INTERNAL", internal.getString("code"))
+        assertFalse(internal.encode().contains("secret-token-9"))
+        assertEquals("INTERNAL", ph.attempts(order.id).last().failureCode)
+        assertEquals(order.publicId, internal.getJsonObject("order").getString("publicId"))
+        assertEquals(OrderStatus.PENDING, ph.order(order.id).status)
+    }
+
+    @Test
+    fun `a provider that misses the deadline in pay leaves the new attempt CREATED with TIMEOUT and answers GATEWAY_UNREACHABLE`(): Unit = runBlocking {
+        ph.rebuild(startTimeoutMs = 300)
+        fx.paymentMethod("fake")
+
+        val order = orderOf(buy(fx.product(price = 1000)))
+
+        fake.delay(FakePaymentProvider.Op.START, 5_000)
+
+        val body = expect("PAYMENT_PROVIDER_ERROR", 502) { pay(order) }
+        val attempts = ph.attempts(order.id)
+
+        assertEquals("GATEWAY_UNREACHABLE", body.getString("code"))
+        assertEquals(order.publicId, body.getJsonObject("order").getString("publicId"))
+        assertEquals(order.accessToken, body.getString("orderToken"))
+        assertEquals(listOf(PaymentStatus.CANCELLED, PaymentStatus.CREATED), attempts.map { it.status }, "the outcome is unknown: the new attempt stays CREATED")
+        assertEquals("TIMEOUT", attempts.last().failureCode)
+        assertEquals(OrderStatus.PENDING, ph.order(order.id).status)
+
+        // a late success of the new attempt still completes the order
+        ph.succeed(order.id, attempts.last())
+
+        assertEquals(OrderStatus.COMPLETED, ph.order(order.id).status)
+    }
+
+    @Test
+    fun `a long gateway text is clipped to the column instead of failing the failure`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+        fake.failNext(FakePaymentProvider.Op.START, ProviderException(ProviderErrorCode.GATEWAY_REJECTED, "rejected", adminMessage = "a".repeat(900)))
+
+        expect("PAYMENT_PROVIDER_ERROR", 502) { buy(fx.product(price = 1000)) }
+
+        val attempt = ph.attempts(onlyOrder().id).single()
+
+        assertEquals(PaymentStatus.FAILED, attempt.status)
+        assertEquals(PaymentService.ADMIN_MESSAGE_MAX, attempt.adminMessage!!.length)
+    }
+
+    // ---- a Completed start result is money already collected: never dropped (06 section 9.2 step 3)
+
+    @Test
+    fun `a Completed start result of an attempt that a concurrent pay cancelled completes the order, the newer attempt is cancelled`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val product = fx.product(price = 1000, stock = 3)
+        val calls = AtomicInteger()
+
+        fake.onStart = { req ->
+            if (calls.incrementAndGet() == 1) {
+                // while this charge runs, the buyer presses pay again: the attempt of this call is cancelled, a second one starts
+                runBlocking { pay(ph.order(req.order.id)) }
+
+                result(req)
+            } else {
+                StartPaymentResult.Redirect("https://gateway.invalid/second")
+            }
+        }
+
+        val response = buy(product)
+        val order = orderOf(response)
+        val attempts = ph.attempts(order.id)
+
+        assertEquals(2, attempts.size)
+        assertEquals(PaymentStatus.SUCCEEDED, attempts[0].status, "the money was collected for the first attempt")
+        assertEquals(attempts[0].amount, attempts[0].paidAmount)
+        assertEquals(PaymentStatus.CANCELLED, attempts[1].status, "O2 cancels the newer open attempt")
+        assertEquals(OrderStatus.COMPLETED, order.status)
+        assertEquals(attempts[0].id, order.paymentId)
+        assertEquals(ReservationState.COMMITTED, order.reservationState)
+        assertEquals("COMPLETED", response.payment!!.getString("kind"))
+        assertEquals(1, ph.effects.of(order.id).count { it == "IssueInvoice" })
+        assertEquals(1, w.products.getById(product.id, pool)!!.soldCount)
+    }
+
+    @Test
+    fun `a Completed start result whose attempt lost the tender to a pay is a review, never lost`(): Unit = runBlocking {
+        h.config = h.config.copy(allowMixedCreditPayment = true)
+
+        val (alex, caller) = user("Alex", credit = 8_000)
+
+        fx.paymentMethod("fake")
+
+        val calls = AtomicInteger()
+
+        fake.onStart = { req ->
+            if (calls.incrementAndGet() == 1) {
+                // the buyer drops the credits while the 20.00 charge of the first attempt is running
+                runBlocking { pay(ph.order(req.order.id), credits = 0) }
+
+                result(req)
+            } else {
+                StartPaymentResult.Redirect("https://gateway.invalid/second")
+            }
+        }
+
+        buy(fx.product(price = 10_000), "fake", 1, caller, "useCredits" to 80)
+
+        val order = onlyOrder()
+        val attempts = ph.attempts(order.id)
+
+        assertEquals(2_000, attempts[0].amount)
+        assertEquals(PaymentStatus.SUCCEEDED, attempts[0].status)
+        assertEquals(2_000, attempts[0].paidAmount, "what the gateway took is on record")
+        assertEquals(OrderStatus.REVIEW, order.status)
+        assertEquals("AMOUNT_MISMATCH", order.reviewReason)
+        assertEquals(attempts[0].id, order.paymentId)
+        assertEquals(2_000, order.paidAmount)
+        assertEquals(PaymentStatus.CANCELLED, attempts[1].status)
+        assertTrue(ph.ledger.captures.isEmpty(), "nothing is captured")
+        assertTrue(ph.effects.of(order.id).isEmpty(), "nothing is delivered")
+        assertEquals(ReservationState.HELD, order.reservationState)
+        assertEquals(8_000, fx.creditBalance(alex), "the credits the buyer released stay released")
+    }
+
+    @Test
+    fun `a Completed start result of an attempt that became PROCESSING completes it`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+        fake.onStart = { req ->
+            runBlocking { ph.payments.applyEvent(req.order.id, req.attempt.id, PaymentAttemptEvent.Pending) }
+
+            result(req)
+        }
+
+        val response = buy(fx.product(price = 1000))
+        val order = orderOf(response)
+        val attempt = ph.attempts(order.id).single()
+
+        assertEquals(PaymentStatus.SUCCEEDED, attempt.status)
+        assertEquals(attempt.amount, attempt.paidAmount)
+        assertEquals(OrderStatus.COMPLETED, order.status)
+        assertEquals("COMPLETED", response.payment!!.getString("kind"))
+        assertNotNull(attempt.closedAt)
+    }
+
+    @Test
+    fun `a Completed step of continue on an attempt that became PROCESSING completes the order`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+        fake.onStart = { StartPaymentResult.Embedded(JsonObject().put("step", 1)) }
+
+        val order = orderOf(buy(fx.product(price = 1000)))
+
+        ph.continuable.onContinue = { req ->
+            runBlocking { ph.payments.applyEvent(order.id, req.attempt.id, PaymentAttemptEvent.Pending) }
+
+            StartPaymentResult.Completed(PaymentEvent.Succeeded(PaymentTarget.Attempt(req.attempt.id), Money(req.attempt.amount.amount, req.attempt.amount.currency)))
+        }
+
+        val done = ph.payments.continuePayment(order, JsonObject(), PayCaller(), pool)
+
+        assertEquals("COMPLETED", done!!.getString("kind"))
+        assertEquals(PaymentStatus.SUCCEEDED, ph.attempts(order.id).single().status)
+        assertEquals(OrderStatus.COMPLETED, ph.order(order.id).status)
+    }
+
+    @Test
+    fun `a Completed step of continue for an attempt that a pay cancelled meanwhile is applied as a late success`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+        fake.onStart = { StartPaymentResult.Embedded(JsonObject().put("step", 1)) }
+
+        val order = orderOf(buy(fx.product(price = 1000)))
+        val first = ph.attempts(order.id).single()
+
+        ph.continuable.onContinue = { req ->
+            runBlocking { pay(ph.order(order.id)) }
+
+            StartPaymentResult.Completed(PaymentEvent.Succeeded(PaymentTarget.Attempt(req.attempt.id), Money(req.attempt.amount.amount, req.attempt.amount.currency)))
+        }
+
+        ph.payments.continuePayment(order, JsonObject(), PayCaller(), pool)
+
+        assertEquals(PaymentStatus.SUCCEEDED, ph.attempts(order.id).first { it.id == first.id }.status)
+        assertEquals(OrderStatus.COMPLETED, ph.order(order.id).status, "same tender: O2")
+        assertEquals(PaymentStatus.CANCELLED, ph.attempts(order.id).last().status)
+    }
+
+    @Test
+    fun `the Completed result of a built-in for an attempt that is no longer current is dropped, no real money moved`(): Unit = runBlocking {
+        val (alex, caller) = user("Alex", credit = 5_000)
+        val product = fx.product(price = 3000, creditPrice = 2500)
+
+        h.useStarter(PaymentStarter.NONE)
+
+        val order = orderOf(h.checkout(h.body("items" to listOf(h.line(product)), "paymentMethodId" to "credits", "payWithCredits" to true), caller = caller))
+        val attempt = ph.attempts(order.id).single()
+
+        // the attempt was superseded before the built-in's start ran
+        sql("UPDATE `pano_market_payment` SET `status` = 'CANCELLED', `closedAt` = ? WHERE `id` = ?", w.clock.now(), attempt.id)
+
+        assertNull(ph.payments.startAttempt(order.id, attempt.id, emptyList(), pool), "nothing to show: the attempt is not the current one")
+        assertEquals(OrderStatus.PENDING, ph.order(order.id).status)
+        assertTrue(ph.ledger.captures.isEmpty())
+        assertEquals(PaymentStatus.CANCELLED, ph.attempts(order.id).single().status)
+        assertEquals(2_500, fx.creditBalance(alex), "the hold is untouched")
+    }
+
+    // ---- continue serialises on the attempt (06 section 9.3)
+
+    @Test
+    fun `two concurrent continue calls reach the provider once, the other one answers 409`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+        fake.onStart = { StartPaymentResult.Embedded(JsonObject().put("step", 1)) }
+
+        val order = orderOf(buy(fx.product(price = 1000)))
+
+        ph.continuable.onContinue = {
+            Thread.sleep(500)
+
+            StartPaymentResult.Redirect("https://gateway.invalid/step2")
+        }
+
+        val results = Race.run(2) { ph.payments.continuePayment(order, JsonObject(), PayCaller(), pool) }
+
+        assertEquals(1, ph.continuable.continued.size, "the second call never reaches the provider")
+        assertEquals(1, results.count { it.isSuccess })
+
+        val refused = results.single { it.isFailure }.exceptionOrNull() as Error
+
+        assertEquals("ORDER_NOT_PAYABLE", refused.getErrorCode())
+        assertEquals(409, refused.getStatusCode())
+        assertEquals("REDIRECT", ph.attempts(order.id).single().startKind)
+        assertEquals(0, ph.payments.attemptLocksInUse(), "no lock outlives its calls")
+    }
+
+    @Test
+    fun `a second continue call is built from the step the first one stored, not from the row it read before waiting`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+        fake.onStart = { StartPaymentResult.Embedded(JsonObject().put("step", 0)) }
+
+        val order = orderOf(buy(fx.product(price = 1000)))
+        val counter = AtomicInteger()
+
+        ph.continuable.onContinue = {
+            Thread.sleep(300)
+
+            val n = counter.incrementAndGet()
+
+            StartPaymentResult.Embedded(JsonObject().put("step", n)).also { e -> e.providerData = JsonObject().put("n", n) }
+        }
+
+        val results = Race.run(2) { ph.payments.continuePayment(order, JsonObject(), PayCaller(), pool) }
+
+        assertTrue(results.all { it.isSuccess }, "the form is still EMBEDDED after the first step, so both go through, one after the other")
+
+        val seen = ph.continuable.continued.map { it.attempt.providerData?.getInteger("n") }
+
+        assertEquals(listOf(null, 1), seen, "the second request carries the provider data the first call stored")
+        assertEquals(2, JsonObject(ph.cipher.decrypt(ph.attempts(order.id).single().providerData!!)!!).getInteger("n"))
+        assertEquals(0, ph.payments.attemptLocksInUse())
+    }
+
+    // ---- NeedsReview keeps the money the gateway reports (06 section 9.4)
+
+    private suspend fun needsReview(orderId: Long, attempt: MarketPayment, reason: ReviewReason, received: Long? = null, currency: String = attempt.currency): AppliedEvent {
+        val event = PaymentEvent.NeedsReview(PaymentTarget.Attempt(attempt.id), reason).also { e -> if (received != null) e.received = Money(received, currency) }
+
+        return ph.payments.applyEvent(orderId, attempt.id, PaymentEventMapper.attemptEvent(event)!!, AttemptFacts.of(event, ph.cipher))
+    }
+
+    @Test
+    fun `a NeedsReview that reports what was received records it on the attempt and the order, nothing is captured or delivered`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val order = orderOf(buy(fx.product(price = 1000, stock = 3)))
+        val attempt = ph.attempts(order.id).single()
+        val applied = needsReview(order.id, attempt, ReviewReason.UNDERPAID, received = 600)
+
+        assertTrue(applied.changed)
+        assertEquals(PaymentStatus.REVIEW, applied.attemptStatus)
+        assertEquals(OrderStatus.REVIEW, applied.orderStatus)
+
+        val reviewed = ph.attempts(order.id).single()
+        val moved = ph.order(order.id)
+
+        assertEquals(600, reviewed.paidAmount)
+        assertEquals("EUR", reviewed.paidCurrency)
+        assertNotNull(reviewed.paidAt)
+        assertEquals(OrderStatus.REVIEW, moved.status)
+        assertEquals("UNDERPAID", moved.reviewReason)
+        assertEquals(attempt.id, moved.paymentId)
+        assertEquals(600, moved.paidAmount, "a rejection with a refund returns what really arrived")
+        assertEquals(ReservationState.HELD, moved.reservationState)
+        assertNull(moved.expiresAt, "expiry is paused")
+        assertTrue(ph.ledger.captures.isEmpty())
+        assertTrue(ph.effects.of(order.id).isEmpty())
+        assertTrue(ph.alerts.any { it.first == order.id && it.second == "UNDERPAID" })
+        assertTrue(w.orderEvents.getByOrderId(order.id, pool).any { it.type == OrderEventType.REVIEW_OPENED })
+    }
+
+    @Test
+    fun `a NeedsReview on a cancelled order is O9 and carries the received money`(): Unit = runBlocking {
+        val product = fx.product(price = 1000, stock = 3)
+
+        fx.paymentMethod("fake")
+
+        val order = orderOf(buy(product))
+        val attempt = ph.attempts(order.id).single()
+
+        ph.payments.cancel(order, pool)
+
+        needsReview(order.id, attempt, ReviewReason.UNDERPAID, received = 600)
+
+        val late = ph.order(order.id)
+
+        assertEquals(OrderStatus.REVIEW, late.status)
+        assertEquals("UNDERPAID", late.reviewReason)
+        assertEquals(attempt.id, late.paymentId)
+        assertEquals(600, late.paidAmount)
+        assertEquals(ReservationState.RELEASED, late.reservationState, "the stock stays back")
+        assertEquals(3, w.products.getById(product.id, pool)!!.stock)
+        assertEquals(600, ph.attempts(order.id).single().paidAmount)
+        assertTrue(ph.effects.of(order.id).isEmpty())
+        assertTrue(ph.alerts.any { it.first == order.id && it.second == "UNDERPAID" })
+    }
+
+    @Test
+    fun `a NeedsReview without an amount leaves the paid amount unset`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val order = orderOf(buy(fx.product(price = 1000)))
+        val attempt = ph.attempts(order.id).single()
+
+        needsReview(order.id, attempt, ReviewReason.WRONG_ASSET)
+
+        assertNull(ph.attempts(order.id).single().paidAmount)
+        assertNull(ph.attempts(order.id).single().paidAt)
+        assertEquals(OrderStatus.REVIEW, ph.order(order.id).status)
+        assertEquals("WRONG_ASSET", ph.order(order.id).reviewReason)
+        assertEquals(attempt.id, ph.order(order.id).paymentId)
+        assertEquals(0, ph.order(order.id).paidAmount)
+    }
+
+    @Test
+    fun `money reported for a second attempt of an order already in review is added to what the order holds`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val order = orderOf(buy(fx.product(price = 1000)))
+        val first = ph.attempts(order.id).single()
+
+        pay(order)
+
+        val second = ph.attempts(order.id).last()
+
+        needsReview(order.id, first, ReviewReason.UNDERPAID, received = 600)
+
+        assertEquals(PaymentStatus.CANCELLED, ph.attempts(order.id).last().status, "the review cancels the newer open attempt")
+        assertEquals(600, ph.order(order.id).paidAmount)
+
+        val applied = needsReview(order.id, second, ReviewReason.UNDERPAID, received = 400)
+
+        assertTrue(applied.changed)
+        assertEquals(PaymentStatus.REVIEW, applied.attemptStatus)
+        assertEquals(1000, ph.order(order.id).paidAmount, "all of it is refunded by a rejection")
+        assertEquals(first.id, ph.order(order.id).paymentId, "the order keeps the first payment")
+        assertEquals(400, ph.attempts(order.id).last().paidAmount)
+        assertEquals(2, ph.alerts.count { it.first == order.id }, "the panel is told about the second payment too")
+    }
+
+    @Test
+    fun `a gateway Failed keeps its code, the buyer gets the generic text and the gateway's text is the admin's`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val order = orderOf(buy(fx.product(price = 1000)))
+        val attempt = ph.attempts(order.id).single()
+        val event = PaymentEvent.Failed(PaymentTarget.Attempt(attempt.id), "card_declined", "Declined by issuer 4242").also { it.note = "webhook 1" }
+
+        ph.payments.applyEvent(order.id, attempt.id, PaymentEventMapper.attemptEvent(event)!!, AttemptFacts.of(event, ph.cipher))
+
+        val failed = ph.attempts(order.id).single()
+
+        assertEquals(PaymentStatus.FAILED, failed.status)
+        assertEquals("card_declined", failed.failureCode)
+        assertEquals(PaymentService.PAYMENT_FAILED_TEXT, failed.failureMessage)
+        assertEquals("webhook 1; Declined by issuer 4242", failed.adminMessage)
+        assertFalse(JsonObject(ph.payments.viewFor(ph.order(order.id), OrderRole.OWNER, PayCaller(), pool).encode()).encode().contains("4242"))
+    }
+
+    // ---- the rows of the table of 06 section 9.4 that move an attempt without paying it
+
+    private fun statusEvents(orderId: Long, type: OrderEventType, attemptId: Long) =
+        runBlocking { w.orderEvents.getByOrderId(orderId, pool) }.filter { it.type == type && it.data?.let { data -> JsonObject(data).getLong("paymentId") } == attemptId }
+
+    @Test
+    fun `Failed, Cancelled and Expired close a PENDING or a PROCESSING attempt, the order stays PENDING and can be paid again`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        class Case(val to: PaymentStatus, val timeline: OrderEventType, val event: PaymentAttemptEvent, val facts: (MarketPayment) -> AttemptFacts = { AttemptFacts.NONE })
+
+        val cases = listOf(
+            Case(PaymentStatus.FAILED, OrderEventType.PAYMENT_FAILED, PaymentAttemptEvent.Failed(false)) { a ->
+                AttemptFacts.of(PaymentEvent.Failed(PaymentTarget.Attempt(a.id), "insufficient_funds", null), ph.cipher)
+            },
+            Case(PaymentStatus.CANCELLED, OrderEventType.PAYMENT_CANCELLED, PaymentAttemptEvent.Cancelled),
+            Case(PaymentStatus.EXPIRED, OrderEventType.PAYMENT_FAILED, PaymentAttemptEvent.Expired)
+        )
+
+        for (processing in listOf(false, true)) {
+            for (case in cases) {
+                val label = "${case.to} from ${if (processing) "PROCESSING" else "PENDING"}"
+                val product = fx.product(price = 1000, stock = 3)
+                val order = orderOf(buy(product))
+                val attempt = ph.attempts(order.id).single()
+
+                if (processing) {
+                    ph.payments.applyEvent(order.id, attempt.id, PaymentAttemptEvent.Pending)
+
+                    assertEquals(PaymentStatus.PROCESSING, ph.attempts(order.id).single().status, label)
+                }
+
+                val applied = ph.payments.applyEvent(order.id, attempt.id, case.event, case.facts(attempt))
+                val closed = ph.attempts(order.id).single()
+
+                assertTrue(applied.changed, label)
+                assertEquals(case.to, applied.attemptStatus, label)
+                assertEquals(OrderStatus.PENDING, applied.orderStatus, label)
+                assertEquals(case.to, closed.status, label)
+                assertNotNull(closed.closedAt, label)
+                assertNull(closed.startPayload, "$label: the stored start is gone")
+                assertEquals(if (case.to == PaymentStatus.FAILED) "insufficient_funds" else null, closed.failureCode, label)
+
+                val rows = statusEvents(order.id, case.timeline, attempt.id)
+
+                assertEquals(1, rows.size, "$label: one timeline row")
+                assertEquals(case.to.name, JsonObject(rows.single().data!!).getString("to"), label)
+                assertEquals(OrderActorType.GATEWAY, rows.single().actorType, label)
+                assertEquals(OrderStatus.PENDING, ph.order(order.id).status, label)
+                assertEquals(ReservationState.HELD, ph.order(order.id).reservationState, "$label: the reservation stays")
+                assertEquals(2, w.products.getById(product.id, pool)!!.stock, label)
+                assertTrue(ph.effects.of(order.id).isEmpty(), label)
+
+                // the same event again changes nothing (the attempt is closed)
+                val again = ph.payments.applyEvent(order.id, attempt.id, case.event, case.facts(attempt))
+
+                assertFalse(again.changed, "$label: a replay")
+                assertEquals(1, statusEvents(order.id, case.timeline, attempt.id).size, "$label: no second row")
+
+                // and the buyer may pay again
+                val start = pay(ph.order(order.id))
+
+                assertEquals("REDIRECT", start!!.getString("kind"), label)
+                assertEquals(PaymentStatus.PENDING, ph.attempts(order.id).last().status, label)
+                assertEquals(2, ph.attempts(order.id).size, label)
+            }
+        }
+    }
+
+    @Test
+    fun `the lock set of an event is the one its worst effect needs`() {
+        assertEquals(OrderLockScope.RELEASE, ph.payments.scopeFor(PaymentAttemptEvent.Failed(final = true)), "a final failure can end the order, O8")
+        assertEquals(OrderLockScope.PAYMENT, ph.payments.scopeFor(PaymentAttemptEvent.Failed(final = false)))
+        assertEquals(OrderLockScope.COMMIT, ph.payments.scopeFor(PaymentAttemptEvent.Succeeded(1, "EUR")))
+        assertEquals(OrderLockScope.COMMIT, ph.payments.scopeFor(PaymentAttemptEvent.NeedsReview(ReviewReason.OTHER)))
+        assertEquals(OrderLockScope.PAYMENT, ph.payments.scopeFor(PaymentAttemptEvent.Pending))
+        assertEquals(OrderLockScope.PAYMENT, ph.payments.scopeFor(PaymentAttemptEvent.Cancelled))
+        assertEquals(OrderLockScope.PAYMENT, ph.payments.scopeFor(PaymentAttemptEvent.Expired))
+    }
+
+    @Test
+    fun `a final failure before the order window ends only fails the attempt`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val product = fx.product(price = 1000, stock = 3)
+        val order = orderOf(buy(product))
+        val attempt = ph.attempts(order.id).single()
+        val applied = ph.payments.applyEvent(order.id, attempt.id, PaymentAttemptEvent.Failed(final = true))
+
+        assertTrue(applied.changed)
+        assertEquals(PaymentStatus.FAILED, applied.attemptStatus)
+        assertEquals(OrderStatus.PENDING, applied.orderStatus, "the window is open: the buyer may retry")
+        assertEquals(OrderStatus.PENDING, ph.order(order.id).status)
+        assertEquals(ReservationState.HELD, ph.order(order.id).reservationState)
+        assertEquals(2, w.products.getById(product.id, pool)!!.stock)
+    }
+
+    @Test
+    fun `a final failure after the order window is O8, the reservation goes back without a gateway cancel, a later success is a late payment`(): Unit = runBlocking {
+        val coupon = fx.coupon("FIN", DiscountUnit.PERCENT, 1000)
+        val product = fx.product(price = 1000, stock = 4)
+
+        fx.paymentMethod("fake")
+        fake.caps = PaymentCapabilities().also { it.cancelPending = true }
+
+        val order = orderOf(buy(product, "fake", 2, QuoteCaller.GUEST, "couponCode" to "FIN"))
+        val attempt = ph.attempts(order.id).single()
+
+        assertEquals(2, w.products.getById(product.id, pool)!!.stock)
+        assertEquals(1, w.coupons.getById(coupon.id, pool)!!.usedCount)
+
+        w.clock.advance(61 * 60_000L)
+
+        val applied = ph.payments.applyEvent(order.id, attempt.id, PaymentAttemptEvent.Failed(final = true))
+        val failed = ph.order(order.id)
+
+        assertTrue(applied.changed)
+        assertEquals(PaymentStatus.FAILED, applied.attemptStatus)
+        assertEquals(OrderStatus.FAILED, applied.orderStatus)
+        assertEquals(OrderStatus.FAILED, failed.status)
+        assertEquals(ReservationState.RELEASED, failed.reservationState)
+        assertEquals(4, w.products.getById(product.id, pool)!!.stock, "the stock is back")
+        assertEquals(0, w.coupons.getById(coupon.id, pool)!!.usedCount, "the coupon use is back")
+        assertEquals(RedemptionState.RELEASED, w.redemptions.getByOrderId(order.id, pool).single().state)
+        assertEquals(PaymentStatus.FAILED, ph.attempts(order.id).single().status, "the gateway's own failure is left as it is")
+        assertTrue(fake.calls(FakePaymentProvider.Op.CANCEL).isEmpty(), "the gateway reported the failure: no cancel is sent back")
+        assertTrue(w.orderEvents.getByOrderId(order.id, pool).any { it.type == OrderEventType.STATUS_CHANGED && it.toStatus == "FAILED" && it.actorType == OrderActorType.GATEWAY })
+
+        // a replay is a no-op
+        assertFalse(ph.payments.applyEvent(order.id, attempt.id, PaymentAttemptEvent.Failed(final = true)).changed)
+        assertEquals(4, w.products.getById(product.id, pool)!!.stock)
+
+        // the gateway took the money after all
+        ph.succeed(order.id, attempt)
+
+        val late = ph.order(order.id)
+
+        assertEquals(OrderStatus.REVIEW, late.status)
+        assertEquals("LATE", late.reviewReason)
+        assertEquals(ReservationState.RELEASED, late.reservationState)
+        assertEquals(attempt.id, late.paymentId)
+        assertTrue(ph.effects.of(order.id).isEmpty())
+    }
+
+    @Test
+    fun `a final failure after the window releases the credit hold of a mixed order once`(): Unit = runBlocking {
+        h.config = h.config.copy(allowMixedCreditPayment = true)
+
+        val (alex, caller) = user("Alex", credit = 8_000)
+
+        fx.paymentMethod("fake")
+
+        val order = orderOf(buy(fx.product(price = 10_000), "fake", 1, caller, "useCredits" to 80))
+        val attempt = ph.attempts(order.id).single()
+
+        assertEquals(0, fx.creditBalance(alex))
+
+        w.clock.advance(61 * 60_000L)
+        ph.payments.applyEvent(order.id, attempt.id, PaymentAttemptEvent.Failed(final = true))
+
+        assertEquals(OrderStatus.FAILED, ph.order(order.id).status)
+        assertEquals(listOf(order.id), ph.ledger.releases, "released exactly once")
+        assertEquals(8_000, fx.creditBalance(alex))
+        assertEquals(0, w.creditAccounts.getBySystemKey(CreditSystemKey.HOLD, pool)!!.balance)
+
+        ph.payments.applyEvent(order.id, attempt.id, PaymentAttemptEvent.Failed(final = true))
+
+        assertEquals(listOf(order.id), ph.ledger.releases, "a replay does not release again")
+        assertEquals(8_000, fx.creditBalance(alex))
+    }
+
+    @Test
+    fun `any event on an attempt that already succeeded only merges the ids it lacks`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val order = orderOf(buy(fx.product(price = 1000)))
+        val attempt = ph.attempts(order.id).single()
+
+        ph.succeed(order.id, attempt)
+
+        val paid = ph.attempts(order.id).single()
+        val events = listOf(
+            PaymentAttemptEvent.Failed(false), PaymentAttemptEvent.Failed(true), PaymentAttemptEvent.Cancelled, PaymentAttemptEvent.Expired, PaymentAttemptEvent.Pending,
+            PaymentAttemptEvent.Replaced, PaymentAttemptEvent.NeedsReview(ReviewReason.UNDERPAID), PaymentAttemptEvent.Succeeded(paid.amount, paid.currency)
+        )
+
+        for (event in events) {
+            val applied = ph.payments.applyEvent(order.id, attempt.id, event, AttemptFacts(gatewayTransactionId = "tx-1", gatewayRefs = mapOf("ref" to "r1")))
+
+            assertFalse(applied.changed, "$event")
+            assertEquals(PaymentStatus.SUCCEEDED, applied.attemptStatus, "$event")
+            assertEquals(OrderStatus.COMPLETED, applied.orderStatus, "$event")
+        }
+
+        val after = ph.attempts(order.id).single()
+
+        assertEquals(PaymentStatus.SUCCEEDED, after.status)
+        assertEquals(paid.closedAt, after.closedAt)
+        assertEquals(paid.paidAmount, after.paidAmount)
+        assertEquals("tx-1", after.gatewayTransactionId, "the id the attempt lacked is merged")
+        assertEquals("r1", JsonObject(after.gatewayRefs!!).getString("ref"))
+
+        ph.payments.applyEvent(order.id, attempt.id, PaymentAttemptEvent.Failed(false), AttemptFacts(gatewayTransactionId = "tx-2", gatewayRefs = mapOf("ref" to "r2", "other" to "o")))
+
+        val again = ph.attempts(order.id).single()
+
+        assertEquals("tx-1", again.gatewayTransactionId, "an id that is there is never overwritten")
+        assertEquals("r1", JsonObject(again.gatewayRefs!!).getString("ref"))
+        assertEquals("o", JsonObject(again.gatewayRefs!!).getString("other"), "a ref it lacked is added")
+        assertEquals(OrderStatus.COMPLETED, ph.order(order.id).status)
+        assertEquals(0, statusEvents(order.id, OrderEventType.PAYMENT_FAILED, attempt.id).size)
+        assertEquals(0, statusEvents(order.id, OrderEventType.PAYMENT_CANCELLED, attempt.id).size)
+        assertEquals(10, ph.effects.of(order.id).size, "the effects of O2 ran once")
+    }
+
+    // ---- the recipient limit of a paid gift (06 section 6.4, test 63, review-log M-6)
+
+    private suspend fun gift(product: MarketProduct, payer: QuoteCaller, to: String = "Bob"): MarketOrder =
+        orderOf(h.checkout(h.body("items" to listOf(h.line(product)), "paymentMethodId" to "fake", "recipientUsername" to to), caller = payer))
+
+    @Test
+    fun `a pending gift does not use up the recipient's allowance, and when it is paid after he bought the product himself it waits for review`(): Unit = runBlocking {
+        h.config = h.config.copy(allowGiftPurchase = true)
+        fx.paymentMethod("fake")
+
+        val product = fx.product(price = 1000, stock = 5, columns = mapOf("limitPerPlayer" to 1))
+        val (_, alex) = user("Alex")
+        val (bob, bobCaller) = user("Bob")
+        val gift = gift(product, alex)
+
+        assertTrue(gift.isGift)
+        assertEquals("u:${bob.id}", gift.recipientKey)
+
+        // the unpaid gift counts for nothing: Bob buys the product himself and pays it
+        val own = orderOf(buy(product, "fake", 1, bobCaller))
+
+        ph.succeed(own.id, ph.attempts(own.id).single())
+
+        assertEquals(OrderStatus.COMPLETED, ph.order(own.id).status)
+
+        // now the gift is paid: it would be Bob's second unit
+        val applied = ph.succeed(gift.id, ph.attempts(gift.id).single())
+        val held = ph.order(gift.id)
+
+        assertEquals(PaymentStatus.SUCCEEDED, applied.attemptStatus, "the money arrived and is recorded")
+        assertEquals(OrderStatus.REVIEW, applied.orderStatus)
+        assertEquals(OrderStatus.REVIEW, held.status)
+        assertEquals("OTHER", held.reviewReason)
+        assertEquals(ReservationState.HELD, held.reservationState, "nothing is committed: the stock stays on hold")
+        assertEquals(3, w.products.getById(product.id, pool)!!.stock, "both orders keep their unit on hold")
+        assertEquals(1, w.products.getById(product.id, pool)!!.soldCount, "only Bob's own order is sold")
+        assertEquals(ph.attempts(gift.id).single().id, held.paymentId)
+        assertEquals(1000, held.paidAmount, "the payer's money is on the order, a rejection refunds it")
+        assertTrue(ph.effects.of(gift.id).isEmpty(), "nothing is delivered")
+        assertTrue(ph.ledger.captures.isEmpty())
+        assertNull(held.expiresAt, "expiry is paused while a human decides")
+        assertTrue(ph.alerts.any { it.first == gift.id && it.second == "OTHER" })
+        assertTrue(w.orderEvents.getByOrderId(gift.id, pool).any { it.type == OrderEventType.STATUS_CHANGED && it.toStatus == "REVIEW" && it.message == "recipient limit" })
+        assertEquals(0, ph.effects.of(gift.id).size)
+    }
+
+    @Test
+    fun `a paid gift that stays inside the recipient's limit completes like any order`(): Unit = runBlocking {
+        h.config = h.config.copy(allowGiftPurchase = true)
+        fx.paymentMethod("fake")
+
+        val product = fx.product(price = 1000, stock = 5, columns = mapOf("limitPerPlayer" to 1, "cooldownSeconds" to 3600))
+        val (_, alex) = user("Alex")
+
+        user("Bob")
+
+        val gift = gift(product, alex)
+
+        ph.succeed(gift.id, ph.attempts(gift.id).single())
+
+        assertEquals(OrderStatus.COMPLETED, ph.order(gift.id).status)
+        assertEquals(ReservationState.COMMITTED, ph.order(gift.id).reservationState)
+        assertEquals(10, ph.effects.of(gift.id).size)
+    }
+
+    @Test
+    fun `a paid gift inside the recipient's cooldown waits for review, one after it completes`(): Unit = runBlocking {
+        h.config = h.config.copy(allowGiftPurchase = true)
+        fx.paymentMethod("fake")
+
+        val product = fx.product(price = 1000, stock = 9, columns = mapOf("cooldownSeconds" to 3600))
+        val (_, alex) = user("Alex")
+        val (_, bobCaller) = user("Bob")
+        val early = gift(product, alex)
+        val late = gift(product, alex)
+
+        // neither pending gift started a cooldown: Bob buys now and his pending order starts it
+        val own = orderOf(buy(product, "fake", 1, bobCaller))
+
+        ph.succeed(early.id, ph.attempts(early.id).single())
+
+        assertEquals(OrderStatus.REVIEW, ph.order(early.id).status, "inside the cooldown of Bob's own order")
+        assertEquals("OTHER", ph.order(early.id).reviewReason)
+        assertEquals(ReservationState.HELD, ph.order(early.id).reservationState)
+
+        w.clock.advance(3_601_000L)
+        ph.succeed(late.id, ph.attempts(late.id).single())
+
+        assertEquals(OrderStatus.COMPLETED, ph.order(late.id).status, "the cooldown of ${own.id} is over")
+    }
+
+    @Test
+    fun `a TIMED product the recipient already owns is an extension, the gift is not held for a limit of one`(): Unit = runBlocking {
+        h.config = h.config.copy(allowGiftPurchase = true)
+        fx.paymentMethod("fake")
+
+        val product = fx.product(price = 1000, stock = 9, columns = mapOf("billingMode" to "TIMED", "limitPerPlayer" to 1))
+        val (_, alex) = user("Alex")
+        val (bob, bobCaller) = user("Bob")
+        val first = gift(product, alex)
+        val second = gift(product, alex)
+        val own = orderOf(buy(product, "fake", 1, bobCaller))
+
+        ph.succeed(own.id, ph.attempts(own.id).single())
+
+        // Bob holds one unit now, without an entitlement the gift would be his second one
+        ph.succeed(first.id, ph.attempts(first.id).single())
+
+        assertEquals(OrderStatus.REVIEW, ph.order(first.id).status)
+
+        // with the entitlement the second gift extends it
+        w.entitlements.add(
+            MarketEntitlement(
+                userId = bob.id, playerUsername = "Bob", ownerKey = "u:${bob.id}", productId = product.id, orderId = own.id,
+                orderItemId = w.orderItems.getByOrderIds(listOf(own.id), pool).single().id, status = EntitlementStatus.ACTIVE, startsAt = w.clock.now() - 1_000
+            ),
+            pool
+        )
+
+        ph.succeed(second.id, ph.attempts(second.id).single())
+
+        assertEquals(OrderStatus.COMPLETED, ph.order(second.id).status)
+    }
+
+    @Test
+    fun `an order the buyer places for himself is not judged again at payment`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val product = fx.product(price = 1000, stock = 5, columns = mapOf("limitPerPlayer" to 1))
+        val (_, bobCaller) = user("Bob")
+        val own = orderOf(buy(product, "fake", 1, bobCaller))
+
+        ph.succeed(own.id, ph.attempts(own.id).single())
+
+        assertEquals(OrderStatus.COMPLETED, ph.order(own.id).status, "it was counted at checkout, its own units are not a second holding")
+    }
+
+    @Test
+    fun `an injected guard diverts O2 under the COMMIT locks and leaves other orders alone`(): Unit = runBlocking {
+        val scopes = CopyOnWriteArrayList<OrderLockScope>()
+        val divert = java.util.concurrent.atomic.AtomicBoolean(true)
+
+        ph.rebuild(
+            extraGuards = listOf(
+                PaidGuard { _, locked, _ ->
+                    scopes += locked.scope
+
+                    if (divert.get()) PaidDiversion(ReviewReason.FRAUD_REVIEW, "risk score 97") else null
+                }
+            )
+        )
+        fx.paymentMethod("fake")
+
+        val held = orderOf(buy(fx.product(price = 1000, stock = 3)))
+
+        ph.succeed(held.id, ph.attempts(held.id).single())
+
+        assertEquals(OrderStatus.REVIEW, ph.order(held.id).status)
+        assertEquals("FRAUD_REVIEW", ph.order(held.id).reviewReason)
+        assertEquals(ReservationState.HELD, ph.order(held.id).reservationState)
+        assertTrue(ph.effects.of(held.id).isEmpty())
+        assertTrue(w.orderEvents.getByOrderId(held.id, pool).any { it.type == OrderEventType.STATUS_CHANGED && it.message == "risk score 97" })
+        assertEquals(listOf(OrderLockScope.COMMIT), scopes.toList(), "the guard sees the locks of 06 section 13.2")
+
+        divert.set(false)
+
+        val free = orderOf(buy(fx.product(price = 1000, stock = 3)))
+
+        ph.succeed(free.id, ph.attempts(free.id).single())
+
+        assertEquals(OrderStatus.COMPLETED, ph.order(free.id).status)
+        assertEquals(2, scopes.size)
+
+        // an order that is not PENDING when its payment arrives never reaches a guard (a duplicate of a paid order, a late payment)
+        ph.succeed(held.id, ph.attempts(held.id).single())
+
+        assertEquals(2, scopes.size)
+    }
+
+    @Test
+    fun `the recipient key set is the key and the guest twin of a registered player`() {
+        fun order(key: String, name: String) = MarketOrder(recipientKey = key, recipientUsername = name)
+
+        assertEquals(listOf("u:7", "g:steve"), RecipientLimitGuard.recipientKeys(order("u:7", "Steve")))
+        assertEquals(listOf("g:steve"), RecipientLimitGuard.recipientKeys(order("g:steve", "Steve")))
+        assertEquals(listOf("u:7"), RecipientLimitGuard.recipientKeys(order("u:7", "")))
     }
 
     // ===================================================================================== the pay request parser
