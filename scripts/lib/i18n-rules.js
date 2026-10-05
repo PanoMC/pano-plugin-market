@@ -19,7 +19,10 @@ export function compareLocales(maps, label) {
     for (const k of m.keys())
       if (!base.has(k)) problems.push(`${label}: key '${k}' in ${lang} but not in en-US`);
     for (const [k, v] of m) {
-      if (typeof v !== 'string' || v.trim() === '') {
+      // a separator value may be pure whitespace (ru group-separator is U+00A0, 12 §6); never empty
+      const blank =
+        typeof v === 'string' && (v === '' || (v.trim() === '' && !k.endsWith('-separator')));
+      if (typeof v !== 'string' || blank) {
         problems.push(`${label}: empty or non-string value at '${k}' in ${lang}`);
         continue;
       }
