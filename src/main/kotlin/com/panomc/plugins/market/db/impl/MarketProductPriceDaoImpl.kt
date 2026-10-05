@@ -129,4 +129,15 @@ class MarketProductPriceDaoImpl : MarketProductPriceDao() {
             .execute()
             .coAwait()
     }
+
+    override suspend fun getAll(sqlClient: SqlClient): List<MarketProductPrice> {
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery(
+                "SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` ORDER BY `productId` ASC, `variantId` ASC, `currency` ASC"
+            )
+            .execute()
+            .coAwait()
+
+        return rows.toEntities()
+    }
 }

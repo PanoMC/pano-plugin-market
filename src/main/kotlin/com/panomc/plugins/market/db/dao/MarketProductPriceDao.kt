@@ -28,4 +28,7 @@ abstract class MarketProductPriceDao : MarketDao<MarketProductPrice>(MarketProdu
     abstract suspend fun getByProductId(productId: Long, sqlClient: SqlClient): List<MarketProductPrice>
 
     abstract suspend fun getByProductAndVariant(productId: Long, variantId: Long, sqlClient: SqlClient): List<MarketProductPrice>
+
+    /** Every price row of every product (the storefront listing prices all visible products at once). */
+    abstract suspend fun getAll(sqlClient: SqlClient): List<MarketProductPrice>
 }

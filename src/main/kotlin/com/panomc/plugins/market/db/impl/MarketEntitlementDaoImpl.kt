@@ -90,4 +90,15 @@ class MarketEntitlementDaoImpl : MarketEntitlementDao() {
             .execute()
             .coAwait()
     }
+
+    override suspend fun getActiveByOwner(ownerKey: String, now: Long, sqlClient: SqlClient): List<MarketEntitlement> {
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery(
+                "SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `ownerKey` = ? AND `status` = ? AND (`expiresAt` IS NULL OR `expiresAt` > ?) ORDER BY `id` ASC"
+            )
+            .execute(Tuple.of(ownerKey, EntitlementStatus.ACTIVE.name, now))
+            .coAwait()
+
+        return rows.toEntities()
+    }
 }

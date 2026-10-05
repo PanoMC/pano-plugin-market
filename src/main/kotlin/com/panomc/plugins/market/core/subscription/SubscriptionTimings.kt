@@ -15,6 +15,13 @@ object SubscriptionTimings {
     /** Retry after a technical failure (09 section 9.1). */
     const val TECHNICAL_RETRY_MS = HOUR_MS
 
+    /**
+     * How far past `graceEndsAt` a retry candidate may lie and still count as the last scheduled retry of the grace
+     * period (the 60 s job tick, the charge call and a short job outage, 09 section 9.2). Far below the shortest retry
+     * gap of one day, so it can never admit a further retry.
+     */
+    const val RETRY_LATENCY_TOLERANCE_MS = HOUR_MS
+
     /** Step D waits for an in-flight attempt at most this long after `graceEndsAt` (09 section 9.4). */
     const val PROCESSING_WAIT_CAP_MS = 7 * DAY_MS
 }

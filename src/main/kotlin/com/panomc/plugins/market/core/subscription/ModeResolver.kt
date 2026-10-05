@@ -114,11 +114,24 @@ object ModeResolver {
      * Mode after a paid renewal (09 section 8.4 step 4). A `GATEWAY` subscription stays `GATEWAY` whatever the
      * paying attempt carried: the gateway keeps billing it, so switching it to a stored method would bill the buyer
      * twice. Otherwise a stored method from a `MERCHANT_INITIATED` provider => `MERCHANT` (how a buyer replaces a
-     * card by paying the pending renewal order by hand), and without a stored method `MERCHANT` / `MANUAL` => `MANUAL`.
+     * card by paying the pending renewal order by hand).
+     *
+     * [chargedWithStoredMethod] is true when the paying attempt was market's own merchant-initiated charge made with
+     * the row's existing stored method (`SubscriptionJob` step A, `chargeRecurring`, 09 section 8.3). A token gateway
+     * answers such a charge with a plain `Succeeded` that carries no new stored method, so "no stored method came
+     * back" cannot tell it from a payment by hand: a `MERCHANT` row paid that way keeps `MERCHANT` and its token and
+     * the next charge is scheduled (09 section 16 test 34). `MANUAL` remains for a `MERCHANT` / `MANUAL` row paid by
+     * hand without a stored method.
      */
-    fun atRenewal(current: SubscriptionMode, caps: PaymentCapabilities, hasStoredMethod: Boolean): SubscriptionMode = when {
+    fun atRenewal(
+        current: SubscriptionMode,
+        caps: PaymentCapabilities,
+        hasStoredMethod: Boolean,
+        chargedWithStoredMethod: Boolean
+    ): SubscriptionMode = when {
         current == SubscriptionMode.GATEWAY -> SubscriptionMode.GATEWAY
         hasStoredMethod && caps.recurring == RecurringSupport.MERCHANT_INITIATED -> SubscriptionMode.MERCHANT
+        current == SubscriptionMode.MERCHANT && chargedWithStoredMethod -> SubscriptionMode.MERCHANT
         else -> SubscriptionMode.MANUAL
     }
 

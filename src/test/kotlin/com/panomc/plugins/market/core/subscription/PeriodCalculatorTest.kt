@@ -372,6 +372,117 @@ class PeriodCalculatorTest {
         )
     }
 
+    // ---------------------------------------------------------------- off-grid starts (review fix: no sliver periods)
+
+    private val halfMonthMs = 2_629_746_000L / 2
+
+    @Test
+    fun `a gateway period that ends shortly before the grid point never buys a sliver`() {
+        // 09 section 4.4 step 4: the gateway's own period is stored while the anchor is paidAt.
+        val c = calc(utc, PeriodUnit.MONTH)
+        val anchor = at("2026-01-15T14:23:07Z")
+        val grid1 = at("2026-02-15T14:23:07Z")
+        val grid2 = at("2026-03-15T14:23:07Z")
+        for ((label, e) in listOf("4 s" to grid1 - 4_000L, "4 h 23 min" to at("2026-02-15T10:00:00Z"), "just under half" to grid1 - (halfMonthMs - 1))) {
+            val now = e + 60_000L
+            val expected = BillingPeriod(e, grid2)
+            // The event carries no period at all, only its start, or an end that is not after the start.
+            assertEquals(expected, c.gatewayRenewalPeriod(anchor, e, now, null, null), "no period, $label before the grid point")
+            assertEquals(expected, c.gatewayRenewalPeriod(anchor, e, now, e, null), "start only, $label")
+            assertEquals(expected, c.gatewayRenewalPeriod(anchor, e, now, e, e), "end = start, $label")
+            assertEquals(expected, c.gatewayRenewalPeriod(anchor, e, now, e, e - 1), "end before start, $label")
+            // The plain renewal of a MERCHANT / MANUAL row with the same off-grid end.
+            assertEquals(expected, c.renewalPeriod(anchor, e, now), "renewalPeriod, $label")
+            assertTrue(expected.end - expected.start >= halfMonthMs, label)
+        }
+    }
+
+    @Test
+    fun `a period that starts 4 s before the first grid point is not a sliver either`() {
+        val c = calc(utc, PeriodUnit.MONTH)
+        val anchor = at("2026-01-15T14:23:07Z")
+        // Before the anchor the first boundary is a whole interval away.
+        val before = c.gatewayRenewalPeriod(anchor, anchor + 1_000L, anchor + 2_000L, anchor - 4_000L, null)
+        assertEquals(BillingPeriod(anchor - 4_000L, at("2026-02-15T14:23:07Z")), before)
+        // 4 s before the next grid point, given as the event's start.
+        val grid1 = at("2026-02-15T14:23:07Z")
+        val sliver = c.gatewayRenewalPeriod(anchor, grid1, grid1 + 1_000L, grid1 - 4_000L, null)
+        assertEquals(BillingPeriod(grid1 - 4_000L, at("2026-03-15T14:23:07Z")), sliver)
+    }
+
+    @Test
+    fun `a MERCHANT row whose store zone changed from Berlin to UTC buys one long period, not one hour`() {
+        val anchor = at("2026-01-10T11:00:00Z") // 12:00 in Berlin
+        val berlinCalc = calc(berlin, PeriodUnit.MONTH)
+        val utcCalc = calc(utc, PeriodUnit.MONTH)
+        val e = berlinCalc.boundary(anchor, 3) // 2026-04-10T12:00 CEST = 10:00Z, written while the store was in Berlin
+        assertEquals(at("2026-04-10T10:00:00Z"), e)
+        assertEquals(at("2026-04-10T11:00:00Z"), utcCalc.boundary(anchor, 3), "the UTC grid is one hour later")
+        val p = utcCalc.renewalPeriod(anchor, e, now = e + 60_000L)
+        assertEquals(BillingPeriod(e, at("2026-05-10T11:00:00Z")), p, "the one hour sliver is skipped")
+        assertTrue(p.end - p.start >= halfMonthMs)
+        // The period after it is back on the (new) grid: a whole month, no second charge an hour later.
+        assertEquals(BillingPeriod(p.end, at("2026-06-10T11:00:00Z")), utcCalc.renewalPeriod(anchor, p.end, p.end + 1_000L))
+        // The other way round (UTC -> Berlin): the end lies one hour after the Berlin grid point, so the next grid
+        // point is a whole month away and nothing is skipped.
+        val eUtc = utcCalc.boundary(anchor, 3)
+        val back = berlinCalc.renewalPeriod(anchor, eUtc, eUtc + 60_000L)
+        assertEquals(BillingPeriod(eUtc, berlinCalc.boundary(anchor, 4)), back)
+        assertTrue(back.end - back.start >= halfMonthMs, "$back")
+    }
+
+    @Test
+    fun `an off grid start gets at least half an interval for every unit and zone, on-grid starts are unchanged`() {
+        val zones = listOf(utc, berlin, istanbul)
+        for (zone in zones) for (unit in PeriodUnit.values()) for (count in listOf(1, 2)) {
+            val c = calc(zone, unit, count)
+            val anchor = ZonedDateTime.of(2026, 1, 31, 14, 23, 7, 0, berlin).toInstant().toEpochMilli()
+            val nominal = when (unit) {
+                PeriodUnit.MINUTE -> 60_000L
+                PeriodUnit.HOUR -> hourMs
+                PeriodUnit.DAY -> 86_400_000L
+                PeriodUnit.WEEK -> 7 * 86_400_000L
+                PeriodUnit.MONTH -> 2_629_746_000L
+                PeriodUnit.YEAR -> 31_556_952_000L
+            } * count
+            for (n in 1L..14L) {
+                val grid = c.boundary(anchor, n)
+                // On the grid: the period is exactly the next grid interval (unchanged behaviour).
+                assertEquals(BillingPeriod(grid, c.boundary(anchor, n + 1)), c.renewalPeriod(anchor, grid, grid + 1000), "on grid $zone $unit x$count n=$n")
+                assertEquals(BillingPeriod(grid, c.boundary(anchor, n + 1)), c.gatewayRenewalPeriod(anchor, grid, grid + 1000, null, null))
+                // Off the grid, from a few milliseconds up to nearly a whole interval before the next grid point.
+                for (behind in listOf(1L, 1000L, 4_000L, nominal / 10, nominal / 3, nominal / 2 - 1, nominal / 2, nominal / 2 + 1, nominal - 1)) {
+                    if (behind < 1) continue
+                    val start = c.boundary(anchor, n + 1) - behind
+                    if (start <= grid) continue // not between two grid points of this scan
+                    val r = c.renewalPeriod(anchor, start, start + 1)
+                    assertEquals(start, r.start)
+                    assertTrue(r.end - r.start >= nominal / 2 - 1, "renewalPeriod $zone $unit x$count n=$n behind=$behind -> $r")
+                    assertEquals(r.end, c.boundary(anchor, c.boundaryIndex(anchor, r.end)), "ends on the grid")
+                    val g = c.gatewayRenewalPeriod(anchor, start, start + 1, start, null)
+                    assertEquals(r, g, "gateway fallback agrees with the normal row")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `exactly half an interval before the grid point is kept, one millisecond less skips it`() {
+        val c = calc(utc, PeriodUnit.DAY)
+        val anchor = at("2026-01-01T00:00:00Z")
+        val half = at("2026-01-05T12:00:00Z")
+        assertEquals(BillingPeriod(half, at("2026-01-06T00:00:00Z")), c.renewalPeriod(anchor, half, half + 1))
+        val under = half + 1
+        assertEquals(BillingPeriod(under, at("2026-01-07T00:00:00Z")), c.renewalPeriod(anchor, under, under + 1))
+    }
+
+    /** Index `n` of a grid point (test helper: the exact boundary the search found). */
+    private fun PeriodCalculator.boundaryIndex(anchor: Long, target: Long): Long {
+        var n = 0L
+        while (this.boundary(anchor, n) < target) n++
+        return n
+    }
+
     // ---------------------------------------------------------------- helpers
 
     @Test

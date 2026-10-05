@@ -223,15 +223,47 @@ class ModeResolverTest {
         val noneCaps = caps(RecurringSupport.NONE)
 
         // A buyer replaces the card by paying the pending renewal order by hand: stored method + merchant provider.
-        assertEquals(SubscriptionMode.MERCHANT, ModeResolver.atRenewal(SubscriptionMode.MANUAL, merchantCaps, true))
-        assertEquals(SubscriptionMode.MERCHANT, ModeResolver.atRenewal(SubscriptionMode.MERCHANT, merchantCaps, true))
-        // No stored method came back: MERCHANT and MANUAL end up MANUAL.
-        assertEquals(SubscriptionMode.MANUAL, ModeResolver.atRenewal(SubscriptionMode.MERCHANT, merchantCaps, false))
-        assertEquals(SubscriptionMode.MANUAL, ModeResolver.atRenewal(SubscriptionMode.MANUAL, noneCaps, false))
-        assertEquals(SubscriptionMode.MANUAL, ModeResolver.atRenewal(SubscriptionMode.MANUAL, gatewayCaps, true), "a gateway-managed provider is used as a plain one-off payment")
+        assertEquals(SubscriptionMode.MERCHANT, ModeResolver.atRenewal(SubscriptionMode.MANUAL, merchantCaps, true, false))
+        assertEquals(SubscriptionMode.MERCHANT, ModeResolver.atRenewal(SubscriptionMode.MERCHANT, merchantCaps, true, false))
+        // Paid by hand and no stored method came back: MERCHANT and MANUAL end up MANUAL.
+        assertEquals(SubscriptionMode.MANUAL, ModeResolver.atRenewal(SubscriptionMode.MERCHANT, merchantCaps, false, false))
+        assertEquals(SubscriptionMode.MANUAL, ModeResolver.atRenewal(SubscriptionMode.MANUAL, noneCaps, false, false))
+        assertEquals(SubscriptionMode.MANUAL, ModeResolver.atRenewal(SubscriptionMode.MANUAL, gatewayCaps, true, false), "a gateway-managed provider is used as a plain one-off payment")
         // GATEWAY stays GATEWAY, always (the gateway keeps billing; a stored method would bill twice).
-        for (stored in listOf(true, false)) for (c in listOf(merchantCaps, gatewayCaps, noneCaps)) {
-            assertEquals(SubscriptionMode.GATEWAY, ModeResolver.atRenewal(SubscriptionMode.GATEWAY, c, stored))
+        for (stored in listOf(true, false)) for (charged in listOf(true, false)) for (c in listOf(merchantCaps, gatewayCaps, noneCaps)) {
+            assertEquals(SubscriptionMode.GATEWAY, ModeResolver.atRenewal(SubscriptionMode.GATEWAY, c, stored, charged))
+        }
+    }
+
+    @Test
+    fun `the automatic merchant charge keeps the MERCHANT mode and its token although no new stored method came back`() {
+        // Review fix: chargeRecurring answers with a plain Succeeded (FakeProvider, a token gateway's POST /v1/charges), so
+        // "no stored method came back" used to turn every MERCHANT row into MANUAL after its first automatic renewal.
+        val merchantCaps = caps(RecurringSupport.MERCHANT_INITIATED)
+        assertEquals(SubscriptionMode.MERCHANT, ModeResolver.atRenewal(SubscriptionMode.MERCHANT, merchantCaps, hasStoredMethod = false, chargedWithStoredMethod = true))
+        // The same payment by hand (no token involved) still downgrades.
+        assertEquals(SubscriptionMode.MANUAL, ModeResolver.atRenewal(SubscriptionMode.MERCHANT, merchantCaps, hasStoredMethod = false, chargedWithStoredMethod = false))
+        // A provider that also returns a refreshed stored method stays MERCHANT either way.
+        assertEquals(SubscriptionMode.MERCHANT, ModeResolver.atRenewal(SubscriptionMode.MERCHANT, merchantCaps, hasStoredMethod = true, chargedWithStoredMethod = true))
+        // Only a MERCHANT row can have been charged with its stored method: a MANUAL row has no token.
+        assertEquals(SubscriptionMode.MANUAL, ModeResolver.atRenewal(SubscriptionMode.MANUAL, merchantCaps, hasStoredMethod = false, chargedWithStoredMethod = true))
+    }
+
+    @Test
+    fun `mode after a paid renewal obeys the invariants for every combination`() {
+        for (current in SubscriptionMode.values()) for (support in RecurringSupport.values()) for (stored in listOf(true, false)) for (charged in listOf(true, false)) {
+            val result = ModeResolver.atRenewal(current, caps(support), stored, charged)
+            val label = "$current $support stored=$stored charged=$charged -> $result"
+            // GATEWAY if and only if it was GATEWAY: a renewal never creates a gateway subscription.
+            assertEquals(current == SubscriptionMode.GATEWAY, result == SubscriptionMode.GATEWAY, label)
+            if (current != SubscriptionMode.GATEWAY && result == SubscriptionMode.MERCHANT) {
+                // MERCHANT needs a token: a fresh one from a merchant-initiated provider, or the row's own that was just used.
+                val freshToken = stored && support == RecurringSupport.MERCHANT_INITIATED
+                val usedToken = current == SubscriptionMode.MERCHANT && charged
+                assertTrue(freshToken || usedToken, label)
+            }
+            // A MERCHANT row that was charged with its token never loses it.
+            if (current == SubscriptionMode.MERCHANT && charged) assertEquals(SubscriptionMode.MERCHANT, result, label)
         }
     }
 
