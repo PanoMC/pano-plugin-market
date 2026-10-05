@@ -79,7 +79,45 @@ class Redactor(secretValues: Set<String> = emptySet()) {
 
     private fun maskCards(text: String): String = CARD_RUN.replace(text) { m ->
         val digits = m.value.filter { it.isDigit() }
-        if (digits.length in 13..19 && luhn(digits)) "*".repeat(digits.length - 4) + digits.takeLast(4) else m.value
+        if (digits.length in 13..19 && luhn(digits)) "*".repeat(digits.length - 4) + digits.takeLast(4) else maskWindows(m.value)
+    }
+
+    /**
+     * The whole run is not a card number, but a card number may sit inside it next to other digits (a CVV, an expiry,
+     * an order number behind a single space or dash). Scans the digit positions for Luhn valid windows of 13 up to 19
+     * digits and masks all but the last four digits of the shortest one found at each start (so a card number is not
+     * widened over a neighbouring CVV by a chance Luhn match), then continues after it.
+     * A window starts at the beginning of a digit group (run start or after a separator) and ends at the end of one
+     * (run end or before a separator), so a single failing number such as `4111111111111112` is never cut into pieces.
+     * Separators and the digits outside a window stay as they are.
+     */
+    private fun maskWindows(run: String): String {
+        val positions = run.indices.filter { run[it].isDigit() }
+        val n = positions.size
+        if (n < 13) return run
+        val chars = run.toCharArray()
+        var start = 0
+        fun groupStart(i: Int) = i == 0 || positions[i] - positions[i - 1] > 1
+        fun groupEnd(i: Int) = i == n - 1 || positions[i + 1] - positions[i] > 1
+        while (start <= n - 13) {
+            var matched = 0
+            for (len in 13..(if (groupStart(start)) minOf(19, n - start) else 0)) {
+                if (!groupEnd(start + len - 1)) continue
+                val window = StringBuilder(len)
+                for (i in start until start + len) window.append(run[positions[i]])
+                if (luhn(window.toString())) {
+                    matched = len
+                    break
+                }
+            }
+            if (matched == 0) {
+                start++
+            } else {
+                for (i in start until start + matched - 4) chars[positions[i]] = '*'
+                start += matched
+            }
+        }
+        return String(chars)
     }
 
     private fun redactKeys(text: String): String {

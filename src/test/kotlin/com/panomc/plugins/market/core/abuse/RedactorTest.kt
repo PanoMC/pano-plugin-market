@@ -98,6 +98,39 @@ class RedactorTest {
     }
 
     @Test
+    fun `a card number next to other digits is still masked`() {
+        val pan = "4111111111111111"
+        val cases = listOf(
+            "card 4111 1111 1111 1111 123 ok", // PAN + CVV
+            "pan 4111111111111111 12/26", // PAN + expiry
+            "order 42 4111111111111111", // order number in front
+            "order 42-4111111111111111-7 x",
+            "4111111111111111 5555555555554444" // two cards behind one space
+        )
+        for (text in cases) {
+            val out = Redactor.NONE.redact(text)
+            val digits = out.filter { it.isDigit() }
+            assertFalse(out.contains("4111111111"), out)
+            assertFalse(out.contains("4111 1111 1111"), out)
+            assertFalse(out.contains("5555555555"), out)
+            assertTrue(out.contains("*"), out)
+            assertFalse(digits.contains(pan.substring(0, 12)), out)
+        }
+        // the context outside the window is kept, the last four digits of the card are kept
+        assertEquals("pan ************1111 12/26", Redactor.NONE.redact("pan 4111111111111111 12/26"))
+        val prefixed = Redactor.NONE.redact("order 42 4111111111111111")
+        assertTrue(prefixed.startsWith("order ") && prefixed.endsWith("*1111"), prefixed) // may also mask the order number
+        // inside a window the separators stay, the CVV next to the card is not part of it
+        assertEquals("card **** **** **** 1111 123 ok", Redactor.NONE.redact("card 4111 1111 1111 1111 123 ok"))
+        // two cards separated by one space: both masked down to their last four digits
+        val two = Redactor.NONE.redact("4111111111111111 5555555555554444")
+        assertTrue(two.contains("1111") && two.contains("4444"), two)
+        assertEquals(8, two.count { it.isDigit() }, two)
+        // a long digit run with no Luhn valid window of 13 to 19 digits stays untouched
+        assertEquals("1234 5678 9123 4567", Redactor.NONE.redact("1234 5678 9123 4567"))
+    }
+
+    @Test
     fun `luhn check matches the known vectors`() {
         for (ok in listOf("4111111111111111", "5500005555555559", "378282246310005", "6011111111111117", "3530111333300000")) assertTrue(Redactor.luhn(ok), ok)
         for (bad in listOf("4111111111111112", "1234567812345678", "0000000000000001")) assertFalse(Redactor.luhn(bad), bad)
