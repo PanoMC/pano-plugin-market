@@ -285,6 +285,251 @@
         "currencies": "Выручка по валютам",
         "week-label": "Неделя {week}"
       }
+    },
+    "order-detail": {
+      "title": "Заказ",
+      "back": "Заказы",
+      "expires": "Истекает",
+      "duplicate": "Дубликат",
+      "stale": "Устарел",
+      "copy-link": "Копировать ссылку",
+      "cancel-requested": "Запрошена отмена",
+      "needs-online": "Игрок должен быть в сети",
+      "may-have-run": "Могла выполниться, проверьте перед повтором",
+      "scheduled-for": "Запланирована на",
+      "external-pricing": "Внешняя цена",
+      "external-pricing-tip": "Цену этого заказа определяет платёжный провайдер.",
+      "note-placeholder": "Внутренняя заметка о заказе",
+      "cards": {
+        "items": "Товаров: {count}",
+        "totals": "Итоги",
+        "payments": "Попыток оплаты: {count}",
+        "refunds": "Возвратов: {count}",
+        "deliveries": "Доставок: {count}",
+        "shipments": "Отправлений: {count}",
+        "disputes": "Споров: {count}",
+        "mails": "Писем: {count}",
+        "timeline": "История",
+        "customer": "Покупатель",
+        "billing": "Платёжные данные",
+        "shipping-address": "Адрес доставки",
+        "subscription": "Подписка",
+        "invoices": "Счета",
+        "note": "Заметка"
+      },
+      "table": {
+        "product": "Товар",
+        "qty": "Кол-во",
+        "unit-price": "Цена за ед.",
+        "vat": "НДС",
+        "total": "Итого",
+        "delivery": "Доставка",
+        "method": "Способ",
+        "amount": "Сумма",
+        "transaction": "Транзакция",
+        "message": "Сообщение",
+        "date": "Дата",
+        "reason": "Причина",
+        "origin": "Источник",
+        "buyer-link": "Ссылка для покупателя",
+        "opened": "Открыт",
+        "resolved": "Закрыт",
+        "action": "Действие",
+        "server": "Сервер",
+        "attempts": "Попытки",
+        "last-error": "Последняя ошибка",
+        "when": "Когда",
+        "recipient": "Получатель",
+        "carrier": "Перевозчик",
+        "tracking": "Трекинг",
+        "shipped": "Отправлено",
+        "delivered": "Доставлено",
+        "kind": "Тип",
+        "sent": "Отправлено"
+      },
+      "totals": {
+        "subtotal": "Подытог",
+        "discounts": "Скидки",
+        "coupon": "Купон",
+        "creator-code": "Код автора",
+        "upgrade": "Апгрейд",
+        "shipping": "Доставка",
+        "payment-fee": "Комиссия за оплату",
+        "vat": "НДС",
+        "vat-included": "включён",
+        "total": "Итого",
+        "paid-credits": "Оплачено кредитами",
+        "paid-gateway": "Оплачено через провайдера",
+        "collected": "Получено",
+        "refunded": "Возвращено",
+        "refunded-gateway": "Провайдер",
+        "refunded-credits": "Кредиты",
+        "display": "Показано покупателю в"
+      },
+      "exchange-rate": {
+        "title": "Курс для статистики",
+        "placeholder": "Курс, например 32.50",
+        "refresh": "Обновить курс с рынка",
+        "stats-value": "Значение в статистике"
+      },
+      "customer": {
+        "player": "Игрок",
+        "recipient": "Получатель",
+        "gift-message": "Сообщение к подарку",
+        "email": "E-mail",
+        "source": "Источник",
+        "locale": "Язык",
+        "ip": "IP-адрес",
+        "legal": "Условия приняты"
+      },
+      "address": {
+        "type": "Тип",
+        "taxOffice": "Налоговая",
+        "taxNumber": "ИНН",
+        "identityNumber": "Номер документа"
+      },
+      "subscription": {
+        "period-end": "Конец периода",
+        "open": "Открыть подписку"
+      },
+      "invoice-type": {
+        "INVOICE": "Счёт",
+        "CREDIT_NOTE": "Кредит-нота"
+      },
+      "delivery-state": {
+        "fulfilled": "Выполнено",
+        "failed": "Ошибка",
+        "pending": "Ожидает"
+      },
+      "revoke-alert": {
+        "title": "Отзыв требует внимания",
+        "body": "Неподтверждённых отзывов: {pending}, с ошибкой: {failed}. Покупатель мог сохранить товары."
+      },
+      "actions": {
+        "markPaid": "Отметить оплаченным",
+        "cancel": "Отменить заказ",
+        "markFailed": "Отметить неудачным",
+        "review": "Проверить...",
+        "approveTransfer": "Подтвердить перевод",
+        "rejectTransfer": "Отклонить перевод",
+        "refund": "Вернуть деньги...",
+        "dispute": "Открыть спор...",
+        "rerunDelivery": "Повторить доставку...",
+        "revoke": "Отозвать...",
+        "editShippingAddress": "Изменить адрес доставки...",
+        "runChargebackActions": "Выполнить действия при чарджбэке",
+        "anonymize": "Анонимизировать...",
+        "createShipment": "Создать отправление...",
+        "resendMail": "Отправить письмо повторно...",
+        "rerun": "Повторить доставку",
+        "rerun-all": "Повторить все",
+        "revoke-all": "Отозвать все",
+        "create-shipment": "Создать отправление",
+        "events": "События",
+        "check-status": "Проверить статус",
+        "retry": "Повторить",
+        "offer-again": "Предложить снова сейчас",
+        "track": "Отследить сейчас",
+        "label": "Скачать этикетку",
+        "generic-label": "Общая этикетка",
+        "regenerate": "Создать заново",
+        "dispute-WON": "Отметить выигранным",
+        "dispute-LOST": "Отметить проигранным",
+        "dispute-CLOSED": "Закрыть",
+        "cancel-row": "Отменить",
+        "revoke-item": "Отозвать"
+      },
+      "confirm": {
+        "revoke-all": {
+          "title": "Отозвать все товары этого заказа?",
+          "description": "Для каждого товара будут поставлены в очередь отзывы. Деньги не возвращаются.",
+          "cta": "Отозвать все"
+        },
+        "revoke-item": {
+          "title": "Отозвать этот товар?",
+          "description": "Товар {name} будет отозван у игрока без возврата денег.",
+          "cta": "Отозвать"
+        },
+        "chargeback": {
+          "title": "Выполнить отложенные действия чарджбэка?",
+          "description": "Действия будут выполнены для игрока {player}, получателя заказа.",
+          "cta": "Выполнить"
+        },
+        "anonymize": {
+          "title": "Анонимизировать заказ?",
+          "description": "E-mail, адреса и IP-адрес будут стёрты. Это нельзя отменить.",
+          "cta": "Анонимизировать"
+        },
+        "invoice-regenerate": {
+          "title": "Создать счета заново?",
+          "description": "Документы будут созданы заново из сохранённых данных. Номера не изменятся.",
+          "cta": "Создать заново"
+        },
+        "refund-retry": {
+          "title": "Повторить этот возврат?",
+          "description": "Возврат будет снова отправлен платёжному провайдеру.",
+          "cta": "Повторить"
+        },
+        "refund-cancel": {
+          "title": "Отменить этот возврат?",
+          "description": "Запрос на возврат будет отменён. Покупателю ничего не отправляется.",
+          "cta": "Отменить возврат"
+        },
+        "delivery-retry": {
+          "title": "Повторить эту доставку?",
+          "description": "Та же доставка будет выполнена снова с тем же ключом.",
+          "cta": "Повторить"
+        },
+        "delivery-offer-again": {
+          "title": "Предложить эту доставку снова сейчас?",
+          "description": "Безопасно: игровой сервер узнает тот же ключ и выполнит доставку только один раз.",
+          "cta": "Предложить снова"
+        },
+        "delivery-cancel": {
+          "title": "Отменить эту доставку?",
+          "description": "Доставка не будет выполнена. Если она уже на игровом сервере, отмена сработает после ответа сервера.",
+          "cta": "Отменить доставку"
+        },
+        "dispute-WON": {
+          "title": "Отметить спор выигранным?",
+          "description": "Спор будет закрыт в вашу пользу.",
+          "cta": "Выигран"
+        },
+        "dispute-LOST": {
+          "title": "Отметить спор проигранным?",
+          "description": "Деньги потеряны, заказ перейдёт в статус чарджбэка.",
+          "cta": "Проигран"
+        },
+        "dispute-CLOSED": {
+          "title": "Закрыть этот спор?",
+          "description": "Спор будет закрыт без результата.",
+          "cta": "Закрыть спор"
+        },
+        "shipment-cancel": {
+          "title": "Отменить это отправление?",
+          "description": "Отправление будет отменено у перевозчика, если это возможно.",
+          "cta": "Отменить отправление"
+        }
+      },
+      "toast": {
+        "rate-saved": "Курс сохранён.",
+        "rate-refreshed": "Курс обновлён.",
+        "note-saved": "Заметка сохранена.",
+        "chargeback": "{count, plural, one {Создано # действие чарджбэка.} few {Создано # действия чарджбэка.} many {Создано # действий чарджбэка.} other {Создано # действия чарджбэка.}}",
+        "anonymized": "Заказ анонимизирован.",
+        "revoked": "{count, plural, one {В очередь поставлен # отзыв.} few {В очередь поставлено # отзыва.} many {В очередь поставлено # отзывов.} other {В очередь поставлено # отзыва.}}",
+        "payment-queried": "Статус платежа проверен.",
+        "refund-retried": "Возврат отправлен повторно.",
+        "refund-cancelled": "Возврат отменён.",
+        "delivery-retried": "Доставка снова поставлена в очередь.",
+        "delivery-cancelled": "Доставка отменена.",
+        "dispute-resolved": "Спор обновлён.",
+        "mail-retried": "Письмо отправлено повторно.",
+        "shipment-tracked": "Трекинг отправления обновлён.",
+        "shipment-retried": "Отправление создано повторно.",
+        "shipment-cancelled": "Отправление отменено.",
+        "invoice-regenerated": "Счета созданы заново."
+      }
     }
   },
   "common": {
@@ -553,6 +798,92 @@
         "country": "Страна",
         "testMode": "Тестовый режим"
       }
+    },
+    "order-status": {
+      "title": {
+        "markPaid": "Отметить оплаченным",
+        "cancel": "Отменить заказ",
+        "markFailed": "Отметить неудачным",
+        "approveTransfer": "Подтвердить перевод",
+        "rejectTransfer": "Отклонить перевод"
+      },
+      "cta": {
+        "markPaid": "Отметить оплаченным",
+        "cancel": "Отменить заказ",
+        "markFailed": "Отметить неудачным",
+        "approveTransfer": "Подтвердить",
+        "rejectTransfer": "Отклонить"
+      },
+      "toast": {
+        "markPaid": "Заказ отмечен оплаченным.",
+        "cancel": "Заказ отменён.",
+        "markFailed": "Заказ отмечен неудачным.",
+        "approveTransfer": "Перевод подтверждён.",
+        "rejectTransfer": "Перевод отклонён."
+      },
+      "note": "Заметка (необязательно)"
+    },
+    "review": {
+      "title": "Проверка заказа",
+      "decision": {
+        "ACCEPT": "Принять заказ",
+        "REJECT": "Отклонить заказ"
+      },
+      "cta": {
+        "ACCEPT": "Принять",
+        "REJECT": "Отклонить"
+      },
+      "refund": "Вернуть полученный платёж",
+      "force": "Принять всё равно (игнорировать склад и лимиты)",
+      "note": "Заметка (необязательно)",
+      "toast": {
+        "ACCEPT": "Заказ принят.",
+        "REJECT": "Заказ отклонён."
+      }
+    },
+    "dispute": {
+      "title": "Открыть спор",
+      "amount": "Сумма (по умолчанию: полученная)",
+      "reason": "Причина",
+      "cta": "Открыть спор",
+      "toast": "Спор открыт."
+    },
+    "rerun": {
+      "title": "Повторить доставку",
+      "scope": {
+        "all": "Всё",
+        "items": "Выбранные товары",
+        "deliveries": "Выбранные доставки"
+      },
+      "phase": "Этап",
+      "grant-again-title": "Повторная выдача",
+      "grant-again": "Выдача повторится (кредиты, товары): в выборе есть доставки, которые уже выполнились.",
+      "cta": "Повторить",
+      "toast": "{count, plural, one {В очередь поставлена # доставка.} few {В очередь поставлено # доставки.} many {В очередь поставлено # доставок.} other {В очередь поставлено # доставки.}}",
+      "toast-skipped": "В очереди: {count}, пропущено: {skipped} (ещё не завершены).",
+      "toast-none": "Ничего не поставлено в очередь."
+    },
+    "resend-mail": {
+      "title": "Отправить письмо повторно",
+      "kind": "Тип письма",
+      "shipment": "Отправление",
+      "recipient": "E-mail получателя (необязательно)",
+      "cta": "Отправить",
+      "toast": "Письмо поставлено в очередь."
+    },
+    "payment-events": {
+      "title": "События платежа",
+      "table": {
+        "date": "Дата",
+        "direction": "Направление",
+        "channel": "Канал",
+        "event": "Событие",
+        "verified": "Проверено",
+        "response": "Ответ",
+        "ip": "IP"
+      },
+      "headers": "Заголовки",
+      "body": "Тело"
     }
   },
   "settings": {
@@ -1065,6 +1396,116 @@
       "FRAUD_REVIEW": "Проверка на мошенничество",
       "BLOCKED_BUYER": "Заблокированный покупатель",
       "OTHER": "Другое"
+    },
+    "order-event": {
+      "CREATED": "Заказ создан",
+      "STATUS_CHANGED": "Статус изменён",
+      "PAYMENT_STARTED": "Оплата начата",
+      "PAYMENT_SUCCEEDED": "Оплата прошла",
+      "PAYMENT_FAILED": "Оплата не удалась",
+      "PAYMENT_CANCELLED": "Оплата отменена",
+      "BANK_TRANSFER_NOTIFIED": "Сообщено о банковском переводе",
+      "REVIEW_OPENED": "Открыта проверка",
+      "REFUND_REQUESTED": "Запрошен возврат",
+      "REFUND_SUCCEEDED": "Возврат выполнен",
+      "REFUND_FAILED": "Возврат не удался",
+      "DISPUTE_INQUIRY": "Запрос по спору",
+      "DISPUTE_OPENED": "Спор открыт",
+      "DISPUTE_CLOSED": "Спор закрыт",
+      "BLOCK_CREATED": "Покупатель заблокирован",
+      "BLOCK_REMOVED": "Блокировка снята",
+      "CLAWBACK_SHORTFALL": "Недостаток при списании кредитов",
+      "DELIVERY_RERUN": "Доставка повторена",
+      "DELIVERY_FAILED": "Доставка не удалась",
+      "DELIVERY_REVOKED": "Доставка отозвана",
+      "SHIPMENT_CREATED": "Отправление создано",
+      "SHIPMENT_UPDATED": "Отправление обновлено",
+      "SHIPMENT_CANCELLED": "Отправление отменено",
+      "SUBSCRIPTION_STARTED": "Подписка начата",
+      "SUBSCRIPTION_RENEWED": "Подписка продлена",
+      "SUBSCRIPTION_PAST_DUE": "Подписка просрочена",
+      "SUBSCRIPTION_CHARGE_FAILED": "Списание по подписке не удалось",
+      "SUBSCRIPTION_CANCEL_REQUESTED": "Запрошена отмена подписки",
+      "SUBSCRIPTION_RESUMED": "Подписка возобновлена",
+      "SUBSCRIPTION_ENDED": "Подписка завершена",
+      "SUBSCRIPTION_REMOTE_CANCEL_FAILED": "Не удалось отменить подписку у провайдера",
+      "MAIL_QUEUED": "Письмо поставлено в очередь",
+      "NOTE": "Заметка"
+    },
+    "actor": {
+      "SYSTEM": "Система",
+      "BUYER": "Покупатель",
+      "ADMIN": "Администратор",
+      "GATEWAY": "Платёжный провайдер"
+    },
+    "refund-origin": {
+      "PANEL": "Панель",
+      "GATEWAY": "Платёжный провайдер",
+      "SYSTEM": "Система"
+    },
+    "dispute-origin": {
+      "GATEWAY": "Платёжный провайдер",
+      "MANUAL": "Вручную"
+    },
+    "order-source": {
+      "STOREFRONT": "Магазин",
+      "PANEL": "Панель",
+      "GIFT_CODE": "Подарочный код",
+      "RENEWAL": "Продление",
+      "EXTERNAL": "Внешний",
+      "INGAME": "В игре",
+      "LEGACY": "Устаревший"
+    },
+    "mail-kind": {
+      "ORDER_RECEIVED": "Заказ получен",
+      "ORDER_CONFIRMATION": "Подтверждение заказа",
+      "ORDER_DELIVERED": "Заказ доставлен",
+      "GIFT_RECEIVED": "Подарок получен",
+      "BANK_TRANSFER_INSTRUCTIONS": "Инструкции по банковскому переводу",
+      "ORDER_REFUNDED": "Возврат по заказу",
+      "SUBSCRIPTION_REMINDER": "Напоминание о подписке",
+      "SUBSCRIPTION_PAYMENT_FAILED": "Платёж по подписке не прошёл",
+      "SUBSCRIPTION_CANCELLED": "Подписка отменена",
+      "SUBSCRIPTION_ENDED": "Подписка завершена",
+      "EXPIRY_REMINDER": "Напоминание об окончании",
+      "SHIPMENT_SHIPPED": "Отправление отправлено",
+      "SHIPMENT_DELIVERED": "Отправление доставлено"
+    },
+    "action-type": {
+      "CREDIT": "Кредиты",
+      "PERMISSION": "Право",
+      "COMMAND": "Команда",
+      "WEBHOOK": "Вебхук"
+    },
+    "phase": {
+      "GRANT": "Выдача",
+      "RENEW": "Продление",
+      "EXPIRE": "Окончание",
+      "REVOKE": "Отзыв"
+    },
+    "delivery-error": {
+      "RENDER_ERROR": "Не удалось собрать действие",
+      "NO_TARGET_SERVER": "Нет целевого сервера",
+      "INVALID_PLAYER": "Недопустимый игрок",
+      "NO_ACCOUNT": "У игрока нет аккаунта",
+      "NEEDS_CONFIRMATION": "Требуется подтверждение",
+      "DB_ERROR": "Ошибка базы данных",
+      "SERVER_OFFLINE": "Сервер не в сети",
+      "COMPONENT_MISSING": "На сервере нет плагина Pano",
+      "VERSION_MISMATCH": "Версия плагина не совпадает",
+      "SERVER_REMOVED": "Сервер удалён",
+      "UNKNOWN_OUTCOME": "Результат неизвестен",
+      "ONLINE_WAIT_EXPIRED": "Слишком долгое ожидание игрока",
+      "COMMAND_ERROR": "Команда завершилась ошибкой",
+      "LUCKPERMS_MISSING": "LuckPerms отсутствует",
+      "DISABLED_LOCALLY": "Отключено на сервере",
+      "INVALID_PAYLOAD": "Недопустимые данные",
+      "REJECTED": "Отклонено сервером",
+      "WEBHOOK_DEAD": "Вебхук исчерпал попытки",
+      "CANCELLED_BY_ADMIN": "Отменено администратором",
+      "ORDER_REVOKED": "Заказ отозван",
+      "ENTITLEMENT_ENDED": "Право закончилось",
+      "NOTHING_TO_REVOKE": "Нечего отзывать"
     }
   },
   "alerts": {

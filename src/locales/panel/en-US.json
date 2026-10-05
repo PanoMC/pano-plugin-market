@@ -285,6 +285,251 @@
         "currencies": "Revenue by Currency",
         "week-label": "Week {week}"
       }
+    },
+    "order-detail": {
+      "title": "Order",
+      "back": "Orders",
+      "expires": "Expires",
+      "duplicate": "Duplicate",
+      "stale": "Stale",
+      "copy-link": "Copy Link",
+      "cancel-requested": "Cancel Requested",
+      "needs-online": "Needs the player online",
+      "may-have-run": "May have run, check before re-running",
+      "scheduled-for": "Scheduled for",
+      "external-pricing": "External Pricing",
+      "external-pricing-tip": "The payment provider is the price authority for this order.",
+      "note-placeholder": "Internal note about this order",
+      "cards": {
+        "items": "{count} Items",
+        "totals": "Totals",
+        "payments": "{count} Payment Attempts",
+        "refunds": "{count} Refunds",
+        "deliveries": "{count} Deliveries",
+        "shipments": "{count} Shipments",
+        "disputes": "{count} Disputes",
+        "mails": "{count} Mails",
+        "timeline": "Timeline",
+        "customer": "Customer",
+        "billing": "Billing",
+        "shipping-address": "Shipping Address",
+        "subscription": "Subscription",
+        "invoices": "Invoices",
+        "note": "Note"
+      },
+      "table": {
+        "product": "Product",
+        "qty": "Qty",
+        "unit-price": "Unit Price",
+        "vat": "VAT",
+        "total": "Total",
+        "delivery": "Delivery",
+        "method": "Method",
+        "amount": "Amount",
+        "transaction": "Transaction",
+        "message": "Message",
+        "date": "Date",
+        "reason": "Reason",
+        "origin": "Origin",
+        "buyer-link": "Buyer Link",
+        "opened": "Opened",
+        "resolved": "Resolved",
+        "action": "Action",
+        "server": "Server",
+        "attempts": "Attempts",
+        "last-error": "Last Error",
+        "when": "When",
+        "recipient": "Recipient",
+        "carrier": "Carrier",
+        "tracking": "Tracking",
+        "shipped": "Shipped",
+        "delivered": "Delivered",
+        "kind": "Kind",
+        "sent": "Sent"
+      },
+      "totals": {
+        "subtotal": "Subtotal",
+        "discounts": "Discounts",
+        "coupon": "Coupon",
+        "creator-code": "Creator Code",
+        "upgrade": "Upgrade",
+        "shipping": "Shipping",
+        "payment-fee": "Payment Fee",
+        "vat": "VAT",
+        "vat-included": "included",
+        "total": "Total",
+        "paid-credits": "Paid With Credits",
+        "paid-gateway": "Paid Via Gateway",
+        "collected": "Collected",
+        "refunded": "Refunded",
+        "refunded-gateway": "Gateway",
+        "refunded-credits": "Credits",
+        "display": "Shown To Buyer In"
+      },
+      "exchange-rate": {
+        "title": "Statistics exchange rate",
+        "placeholder": "Rate, e.g. 32.50",
+        "refresh": "Refresh rate from the market",
+        "stats-value": "Statistics value"
+      },
+      "customer": {
+        "player": "Player",
+        "recipient": "Recipient",
+        "gift-message": "Gift Message",
+        "email": "E-mail",
+        "source": "Source",
+        "locale": "Language",
+        "ip": "IP Address",
+        "legal": "Terms Accepted"
+      },
+      "address": {
+        "type": "Type",
+        "taxOffice": "Tax Office",
+        "taxNumber": "Tax Number",
+        "identityNumber": "Identity Number"
+      },
+      "subscription": {
+        "period-end": "Period End",
+        "open": "Open Subscription"
+      },
+      "invoice-type": {
+        "INVOICE": "Invoice",
+        "CREDIT_NOTE": "Credit Note"
+      },
+      "delivery-state": {
+        "fulfilled": "Fulfilled",
+        "failed": "Failed",
+        "pending": "Pending"
+      },
+      "revoke-alert": {
+        "title": "Revoke Needs Attention",
+        "body": "{pending} revoke deliveries are not confirmed yet and {failed} failed. The buyer may still hold the goods."
+      },
+      "actions": {
+        "markPaid": "Mark As Paid",
+        "cancel": "Cancel Order",
+        "markFailed": "Mark As Failed",
+        "review": "Review...",
+        "approveTransfer": "Approve Transfer",
+        "rejectTransfer": "Reject Transfer",
+        "refund": "Refund...",
+        "dispute": "Open Dispute...",
+        "rerunDelivery": "Re-run Delivery...",
+        "revoke": "Revoke...",
+        "editShippingAddress": "Edit Shipping Address...",
+        "runChargebackActions": "Run Chargeback Actions",
+        "anonymize": "Anonymise...",
+        "createShipment": "Create Shipment...",
+        "resendMail": "Resend E-mail...",
+        "rerun": "Re-run Delivery",
+        "rerun-all": "Re-run All",
+        "revoke-all": "Revoke All",
+        "create-shipment": "Create Shipment",
+        "events": "Events",
+        "check-status": "Check Status",
+        "retry": "Retry",
+        "offer-again": "Offer Again Now",
+        "track": "Track Now",
+        "label": "Download Label",
+        "generic-label": "Generic Label",
+        "regenerate": "Regenerate",
+        "dispute-WON": "Mark Won",
+        "dispute-LOST": "Mark Lost",
+        "dispute-CLOSED": "Close",
+        "cancel-row": "Cancel",
+        "revoke-item": "Revoke"
+      },
+      "confirm": {
+        "revoke-all": {
+          "title": "Revoke all items of this order?",
+          "description": "Revoke deliveries are queued for every item. The order is not refunded.",
+          "cta": "Revoke All"
+        },
+        "revoke-item": {
+          "title": "Revoke this item?",
+          "description": "Revokes {name} from the player without a refund.",
+          "cta": "Revoke"
+        },
+        "chargeback": {
+          "title": "Run the held chargeback actions?",
+          "description": "The actions will run against the player {player}, the recipient of this order.",
+          "cta": "Run Actions"
+        },
+        "anonymize": {
+          "title": "Anonymise this order?",
+          "description": "The e-mail, addresses and IP address are blanked. This cannot be undone.",
+          "cta": "Anonymise"
+        },
+        "invoice-regenerate": {
+          "title": "Regenerate the invoices?",
+          "description": "The documents are rendered again from the stored order data. Numbers stay the same.",
+          "cta": "Regenerate"
+        },
+        "refund-retry": {
+          "title": "Retry this refund?",
+          "description": "The refund is sent to the payment provider again.",
+          "cta": "Retry"
+        },
+        "refund-cancel": {
+          "title": "Cancel this refund?",
+          "description": "The refund request is cancelled. Nothing is sent to the buyer.",
+          "cta": "Cancel Refund"
+        },
+        "delivery-retry": {
+          "title": "Retry this delivery?",
+          "description": "The same delivery is run again with the same key.",
+          "cta": "Retry"
+        },
+        "delivery-offer-again": {
+          "title": "Offer this delivery again now?",
+          "description": "Safe: the game server recognises the same key and runs it only once.",
+          "cta": "Offer Again"
+        },
+        "delivery-cancel": {
+          "title": "Cancel this delivery?",
+          "description": "The delivery will not run. A delivery already on the game server is cancelled when it answers.",
+          "cta": "Cancel Delivery"
+        },
+        "dispute-WON": {
+          "title": "Mark this dispute as won?",
+          "description": "The dispute is resolved in your favour.",
+          "cta": "Mark Won"
+        },
+        "dispute-LOST": {
+          "title": "Mark this dispute as lost?",
+          "description": "The money is lost and the order moves to chargeback.",
+          "cta": "Mark Lost"
+        },
+        "dispute-CLOSED": {
+          "title": "Close this dispute?",
+          "description": "The dispute is closed without a result.",
+          "cta": "Close Dispute"
+        },
+        "shipment-cancel": {
+          "title": "Cancel this shipment?",
+          "description": "The shipment is cancelled at the carrier when possible.",
+          "cta": "Cancel Shipment"
+        }
+      },
+      "toast": {
+        "rate-saved": "Exchange rate saved.",
+        "rate-refreshed": "Exchange rate refreshed.",
+        "note-saved": "Note saved.",
+        "chargeback": "{count, plural, one {# chargeback action created.} other {# chargeback actions created.}}",
+        "anonymized": "Order anonymised.",
+        "revoked": "{count, plural, one {# revoke delivery queued.} other {# revoke deliveries queued.}}",
+        "payment-queried": "Payment status checked.",
+        "refund-retried": "Refund sent again.",
+        "refund-cancelled": "Refund cancelled.",
+        "delivery-retried": "Delivery queued again.",
+        "delivery-cancelled": "Delivery cancelled.",
+        "dispute-resolved": "Dispute updated.",
+        "mail-retried": "Mail sent again.",
+        "shipment-tracked": "Shipment tracking updated.",
+        "shipment-retried": "Shipment retried.",
+        "shipment-cancelled": "Shipment cancelled.",
+        "invoice-regenerated": "Invoices regenerated."
+      }
     }
   },
   "common": {
@@ -553,6 +798,92 @@
         "country": "Country",
         "testMode": "Test mode"
       }
+    },
+    "order-status": {
+      "title": {
+        "markPaid": "Mark As Paid",
+        "cancel": "Cancel Order",
+        "markFailed": "Mark As Failed",
+        "approveTransfer": "Approve Transfer",
+        "rejectTransfer": "Reject Transfer"
+      },
+      "cta": {
+        "markPaid": "Mark As Paid",
+        "cancel": "Cancel Order",
+        "markFailed": "Mark As Failed",
+        "approveTransfer": "Approve",
+        "rejectTransfer": "Reject"
+      },
+      "toast": {
+        "markPaid": "Order marked as paid.",
+        "cancel": "Order cancelled.",
+        "markFailed": "Order marked as failed.",
+        "approveTransfer": "Transfer approved.",
+        "rejectTransfer": "Transfer rejected."
+      },
+      "note": "Note (optional)"
+    },
+    "review": {
+      "title": "Review Order",
+      "decision": {
+        "ACCEPT": "Accept the order",
+        "REJECT": "Reject the order"
+      },
+      "cta": {
+        "ACCEPT": "Accept",
+        "REJECT": "Reject"
+      },
+      "refund": "Refund The Received Payment",
+      "force": "Accept Anyway (Ignore Stock And Limits)",
+      "note": "Note (optional)",
+      "toast": {
+        "ACCEPT": "Order accepted.",
+        "REJECT": "Order rejected."
+      }
+    },
+    "dispute": {
+      "title": "Open Dispute",
+      "amount": "Amount (default: collected)",
+      "reason": "Reason",
+      "cta": "Open Dispute",
+      "toast": "Dispute opened."
+    },
+    "rerun": {
+      "title": "Re-run Delivery",
+      "scope": {
+        "all": "Everything",
+        "items": "Selected Items",
+        "deliveries": "Selected Deliveries"
+      },
+      "phase": "Phase",
+      "grant-again-title": "This Grants Again",
+      "grant-again": "This grants again (credits, items): the selection includes deliveries that already took effect.",
+      "cta": "Re-run",
+      "toast": "{count, plural, one {# delivery queued.} other {# deliveries queued.}}",
+      "toast-skipped": "{count} queued, {skipped} skipped because they are still open.",
+      "toast-none": "Nothing was queued."
+    },
+    "resend-mail": {
+      "title": "Resend E-mail",
+      "kind": "E-mail kind",
+      "shipment": "Shipment",
+      "recipient": "Recipient e-mail (optional)",
+      "cta": "Resend",
+      "toast": "E-mail queued."
+    },
+    "payment-events": {
+      "title": "Payment Events",
+      "table": {
+        "date": "Date",
+        "direction": "Direction",
+        "channel": "Channel",
+        "event": "Event",
+        "verified": "Verified",
+        "response": "Response",
+        "ip": "IP"
+      },
+      "headers": "Headers",
+      "body": "Body"
     }
   },
   "settings": {
@@ -1065,6 +1396,116 @@
       "FRAUD_REVIEW": "Fraud review",
       "BLOCKED_BUYER": "Blocked buyer",
       "OTHER": "Other"
+    },
+    "order-event": {
+      "CREATED": "Order created",
+      "STATUS_CHANGED": "Status changed",
+      "PAYMENT_STARTED": "Payment started",
+      "PAYMENT_SUCCEEDED": "Payment succeeded",
+      "PAYMENT_FAILED": "Payment failed",
+      "PAYMENT_CANCELLED": "Payment cancelled",
+      "BANK_TRANSFER_NOTIFIED": "Bank transfer reported",
+      "REVIEW_OPENED": "Review opened",
+      "REFUND_REQUESTED": "Refund requested",
+      "REFUND_SUCCEEDED": "Refund succeeded",
+      "REFUND_FAILED": "Refund failed",
+      "DISPUTE_INQUIRY": "Dispute inquiry",
+      "DISPUTE_OPENED": "Dispute opened",
+      "DISPUTE_CLOSED": "Dispute closed",
+      "BLOCK_CREATED": "Buyer blocked",
+      "BLOCK_REMOVED": "Block removed",
+      "CLAWBACK_SHORTFALL": "Credit clawback shortfall",
+      "DELIVERY_RERUN": "Delivery re-run",
+      "DELIVERY_FAILED": "Delivery failed",
+      "DELIVERY_REVOKED": "Delivery revoked",
+      "SHIPMENT_CREATED": "Shipment created",
+      "SHIPMENT_UPDATED": "Shipment updated",
+      "SHIPMENT_CANCELLED": "Shipment cancelled",
+      "SUBSCRIPTION_STARTED": "Subscription started",
+      "SUBSCRIPTION_RENEWED": "Subscription renewed",
+      "SUBSCRIPTION_PAST_DUE": "Subscription past due",
+      "SUBSCRIPTION_CHARGE_FAILED": "Subscription charge failed",
+      "SUBSCRIPTION_CANCEL_REQUESTED": "Subscription cancel requested",
+      "SUBSCRIPTION_RESUMED": "Subscription resumed",
+      "SUBSCRIPTION_ENDED": "Subscription ended",
+      "SUBSCRIPTION_REMOTE_CANCEL_FAILED": "Remote subscription cancel failed",
+      "MAIL_QUEUED": "E-mail queued",
+      "NOTE": "Note"
+    },
+    "actor": {
+      "SYSTEM": "System",
+      "BUYER": "Buyer",
+      "ADMIN": "Admin",
+      "GATEWAY": "Payment provider"
+    },
+    "refund-origin": {
+      "PANEL": "Panel",
+      "GATEWAY": "Payment provider",
+      "SYSTEM": "System"
+    },
+    "dispute-origin": {
+      "GATEWAY": "Payment provider",
+      "MANUAL": "Manual"
+    },
+    "order-source": {
+      "STOREFRONT": "Store",
+      "PANEL": "Panel",
+      "GIFT_CODE": "Gift code",
+      "RENEWAL": "Renewal",
+      "EXTERNAL": "External",
+      "INGAME": "In-game",
+      "LEGACY": "Legacy"
+    },
+    "mail-kind": {
+      "ORDER_RECEIVED": "Order received",
+      "ORDER_CONFIRMATION": "Order confirmation",
+      "ORDER_DELIVERED": "Order delivered",
+      "GIFT_RECEIVED": "Gift received",
+      "BANK_TRANSFER_INSTRUCTIONS": "Bank transfer instructions",
+      "ORDER_REFUNDED": "Order refunded",
+      "SUBSCRIPTION_REMINDER": "Subscription reminder",
+      "SUBSCRIPTION_PAYMENT_FAILED": "Subscription payment failed",
+      "SUBSCRIPTION_CANCELLED": "Subscription cancelled",
+      "SUBSCRIPTION_ENDED": "Subscription ended",
+      "EXPIRY_REMINDER": "Expiry reminder",
+      "SHIPMENT_SHIPPED": "Shipment shipped",
+      "SHIPMENT_DELIVERED": "Shipment delivered"
+    },
+    "action-type": {
+      "CREDIT": "Credits",
+      "PERMISSION": "Permission",
+      "COMMAND": "Command",
+      "WEBHOOK": "Webhook"
+    },
+    "phase": {
+      "GRANT": "Grant",
+      "RENEW": "Renew",
+      "EXPIRE": "Expire",
+      "REVOKE": "Revoke"
+    },
+    "delivery-error": {
+      "RENDER_ERROR": "Could not build the action",
+      "NO_TARGET_SERVER": "No target server",
+      "INVALID_PLAYER": "Invalid player",
+      "NO_ACCOUNT": "Player has no account",
+      "NEEDS_CONFIRMATION": "Needs confirmation",
+      "DB_ERROR": "Database error",
+      "SERVER_OFFLINE": "Server offline",
+      "COMPONENT_MISSING": "Pano plugin missing on the server",
+      "VERSION_MISMATCH": "Plugin version mismatch",
+      "SERVER_REMOVED": "Server removed",
+      "UNKNOWN_OUTCOME": "Outcome unknown",
+      "ONLINE_WAIT_EXPIRED": "Waited too long for the player",
+      "COMMAND_ERROR": "Command failed",
+      "LUCKPERMS_MISSING": "LuckPerms missing",
+      "DISABLED_LOCALLY": "Disabled on the server",
+      "INVALID_PAYLOAD": "Invalid payload",
+      "REJECTED": "Rejected by the server",
+      "WEBHOOK_DEAD": "Webhook gave up",
+      "CANCELLED_BY_ADMIN": "Cancelled by an admin",
+      "ORDER_REVOKED": "Order revoked",
+      "ENTITLEMENT_ENDED": "Entitlement ended",
+      "NOTHING_TO_REVOKE": "Nothing to revoke"
     }
   },
   "alerts": {

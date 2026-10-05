@@ -285,6 +285,251 @@
         "currencies": "Para Birimine Göre Gelir",
         "week-label": "{week}. Hafta"
       }
+    },
+    "order-detail": {
+      "title": "Sipariş",
+      "back": "Siparişler",
+      "expires": "Bitiş",
+      "duplicate": "Mükerrer",
+      "stale": "Eski",
+      "copy-link": "Bağlantıyı Kopyala",
+      "cancel-requested": "İptal İstendi",
+      "needs-online": "Oyuncunun çevrimiçi olması gerekir",
+      "may-have-run": "Çalışmış olabilir, yeniden çalıştırmadan önce kontrol edin",
+      "scheduled-for": "Planlanan",
+      "external-pricing": "Harici Fiyatlandırma",
+      "external-pricing-tip": "Bu siparişin fiyatını ödeme sağlayıcısı belirler.",
+      "note-placeholder": "Bu sipariş hakkında iç not",
+      "cards": {
+        "items": "{count} Ürün",
+        "totals": "Toplamlar",
+        "payments": "{count} Ödeme Denemesi",
+        "refunds": "{count} İade",
+        "deliveries": "{count} Teslimat",
+        "shipments": "{count} Kargo",
+        "disputes": "{count} İtiraz",
+        "mails": "{count} E-posta",
+        "timeline": "Zaman Çizelgesi",
+        "customer": "Müşteri",
+        "billing": "Fatura",
+        "shipping-address": "Teslimat Adresi",
+        "subscription": "Abonelik",
+        "invoices": "Faturalar",
+        "note": "Not"
+      },
+      "table": {
+        "product": "Ürün",
+        "qty": "Adet",
+        "unit-price": "Birim Fiyat",
+        "vat": "KDV",
+        "total": "Toplam",
+        "delivery": "Teslimat",
+        "method": "Yöntem",
+        "amount": "Tutar",
+        "transaction": "İşlem",
+        "message": "Mesaj",
+        "date": "Tarih",
+        "reason": "Neden",
+        "origin": "Kaynak",
+        "buyer-link": "Alıcı Bağlantısı",
+        "opened": "Açılış",
+        "resolved": "Çözüm",
+        "action": "İşlem",
+        "server": "Sunucu",
+        "attempts": "Deneme",
+        "last-error": "Son Hata",
+        "when": "Zaman",
+        "recipient": "Alıcı",
+        "carrier": "Kargo Firması",
+        "tracking": "Takip",
+        "shipped": "Gönderim",
+        "delivered": "Teslim",
+        "kind": "Tür",
+        "sent": "Gönderildi"
+      },
+      "totals": {
+        "subtotal": "Ara Toplam",
+        "discounts": "İndirimler",
+        "coupon": "Kupon",
+        "creator-code": "Yayıncı Kodu",
+        "upgrade": "Yükseltme",
+        "shipping": "Kargo",
+        "payment-fee": "Ödeme Ücreti",
+        "vat": "KDV",
+        "vat-included": "dahil",
+        "total": "Toplam",
+        "paid-credits": "Kredi İle Ödenen",
+        "paid-gateway": "Ödeme Sağlayıcısı İle Ödenen",
+        "collected": "Tahsil Edilen",
+        "refunded": "İade Edilen",
+        "refunded-gateway": "Sağlayıcı",
+        "refunded-credits": "Kredi",
+        "display": "Alıcıya Gösterilen"
+      },
+      "exchange-rate": {
+        "title": "İstatistik döviz kuru",
+        "placeholder": "Kur, örn. 32,50",
+        "refresh": "Kuru piyasadan yenile",
+        "stats-value": "İstatistik değeri"
+      },
+      "customer": {
+        "player": "Oyuncu",
+        "recipient": "Alıcı",
+        "gift-message": "Hediye Mesajı",
+        "email": "E-posta",
+        "source": "Kaynak",
+        "locale": "Dil",
+        "ip": "IP Adresi",
+        "legal": "Şartlar Kabul Edildi"
+      },
+      "address": {
+        "type": "Tür",
+        "taxOffice": "Vergi Dairesi",
+        "taxNumber": "Vergi Numarası",
+        "identityNumber": "Kimlik Numarası"
+      },
+      "subscription": {
+        "period-end": "Dönem Sonu",
+        "open": "Aboneliği Aç"
+      },
+      "invoice-type": {
+        "INVOICE": "Fatura",
+        "CREDIT_NOTE": "İade Faturası"
+      },
+      "delivery-state": {
+        "fulfilled": "Teslim Edildi",
+        "failed": "Başarısız",
+        "pending": "Bekliyor"
+      },
+      "revoke-alert": {
+        "title": "Geri Alma İlgi Bekliyor",
+        "body": "{pending} geri alma teslimatı henüz onaylanmadı, {failed} tanesi başarısız oldu. Alıcıda ürünler hâlâ kalmış olabilir."
+      },
+      "actions": {
+        "markPaid": "Ödendi Olarak İşaretle",
+        "cancel": "Siparişi İptal Et",
+        "markFailed": "Başarısız Olarak İşaretle",
+        "review": "İncele...",
+        "approveTransfer": "Havaleyi Onayla",
+        "rejectTransfer": "Havaleyi Reddet",
+        "refund": "İade Et...",
+        "dispute": "İtiraz Aç...",
+        "rerunDelivery": "Teslimatı Yeniden Çalıştır...",
+        "revoke": "Geri Al...",
+        "editShippingAddress": "Teslimat Adresini Düzenle...",
+        "runChargebackActions": "Chargeback İşlemlerini Çalıştır",
+        "anonymize": "Anonimleştir...",
+        "createShipment": "Kargo Oluştur...",
+        "resendMail": "E-postayı Yeniden Gönder...",
+        "rerun": "Teslimatı Yeniden Çalıştır",
+        "rerun-all": "Tümünü Yeniden Çalıştır",
+        "revoke-all": "Tümünü Geri Al",
+        "create-shipment": "Kargo Oluştur",
+        "events": "Olaylar",
+        "check-status": "Durumu Sorgula",
+        "retry": "Yeniden Dene",
+        "offer-again": "Şimdi Tekrar Sun",
+        "track": "Şimdi Takip Et",
+        "label": "Etiketi İndir",
+        "generic-label": "Genel Etiket",
+        "regenerate": "Yeniden Oluştur",
+        "dispute-WON": "Kazanıldı Olarak İşaretle",
+        "dispute-LOST": "Kaybedildi Olarak İşaretle",
+        "dispute-CLOSED": "Kapat",
+        "cancel-row": "İptal Et",
+        "revoke-item": "Geri Al"
+      },
+      "confirm": {
+        "revoke-all": {
+          "title": "Bu siparişin tüm ürünleri geri alınsın mı?",
+          "description": "Her ürün için geri alma teslimatları sıraya alınır. Sipariş iade edilmez.",
+          "cta": "Tümünü Geri Al"
+        },
+        "revoke-item": {
+          "title": "Bu ürün geri alınsın mı?",
+          "description": "{name} ürünü iade yapılmadan oyuncudan geri alınır.",
+          "cta": "Geri Al"
+        },
+        "chargeback": {
+          "title": "Bekletilen chargeback işlemleri çalıştırılsın mı?",
+          "description": "İşlemler bu siparişin alıcısı olan {player} oyuncusu üzerinde çalışır.",
+          "cta": "İşlemleri Çalıştır"
+        },
+        "anonymize": {
+          "title": "Bu sipariş anonimleştirilsin mi?",
+          "description": "E-posta, adresler ve IP adresi silinir. Bu işlem geri alınamaz.",
+          "cta": "Anonimleştir"
+        },
+        "invoice-regenerate": {
+          "title": "Faturalar yeniden oluşturulsun mu?",
+          "description": "Belgeler kayıtlı sipariş verisinden yeniden oluşturulur. Numaralar değişmez.",
+          "cta": "Yeniden Oluştur"
+        },
+        "refund-retry": {
+          "title": "Bu iade yeniden denensin mi?",
+          "description": "İade ödeme sağlayıcısına tekrar gönderilir.",
+          "cta": "Yeniden Dene"
+        },
+        "refund-cancel": {
+          "title": "Bu iade iptal edilsin mi?",
+          "description": "İade talebi iptal edilir. Alıcıya hiçbir şey gönderilmez.",
+          "cta": "İadeyi İptal Et"
+        },
+        "delivery-retry": {
+          "title": "Bu teslimat yeniden denensin mi?",
+          "description": "Aynı teslimat aynı anahtarla yeniden çalıştırılır.",
+          "cta": "Yeniden Dene"
+        },
+        "delivery-offer-again": {
+          "title": "Bu teslimat şimdi tekrar sunulsun mu?",
+          "description": "Güvenli: oyun sunucusu aynı anahtarı tanır ve yalnızca bir kez çalıştırır.",
+          "cta": "Tekrar Sun"
+        },
+        "delivery-cancel": {
+          "title": "Bu teslimat iptal edilsin mi?",
+          "description": "Teslimat çalıştırılmaz. Oyun sunucusuna ulaşmış bir teslimat sunucu yanıt verdiğinde iptal edilir.",
+          "cta": "Teslimatı İptal Et"
+        },
+        "dispute-WON": {
+          "title": "Bu itiraz kazanıldı olarak işaretlensin mi?",
+          "description": "İtiraz sizin lehinize sonuçlanmış olur.",
+          "cta": "Kazanıldı"
+        },
+        "dispute-LOST": {
+          "title": "Bu itiraz kaybedildi olarak işaretlensin mi?",
+          "description": "Para kaybedilir ve sipariş chargeback durumuna geçer.",
+          "cta": "Kaybedildi"
+        },
+        "dispute-CLOSED": {
+          "title": "Bu itiraz kapatılsın mı?",
+          "description": "İtiraz sonuçsuz kapatılır.",
+          "cta": "İtirazı Kapat"
+        },
+        "shipment-cancel": {
+          "title": "Bu kargo iptal edilsin mi?",
+          "description": "Mümkünse kargo, kargo firması nezdinde iptal edilir.",
+          "cta": "Kargoyu İptal Et"
+        }
+      },
+      "toast": {
+        "rate-saved": "Döviz kuru kaydedildi.",
+        "rate-refreshed": "Döviz kuru yenilendi.",
+        "note-saved": "Not kaydedildi.",
+        "chargeback": "{count} chargeback işlemi oluşturuldu.",
+        "anonymized": "Sipariş anonimleştirildi.",
+        "revoked": "{count} geri alma teslimatı sıraya alındı.",
+        "payment-queried": "Ödeme durumu sorgulandı.",
+        "refund-retried": "İade tekrar gönderildi.",
+        "refund-cancelled": "İade iptal edildi.",
+        "delivery-retried": "Teslimat yeniden sıraya alındı.",
+        "delivery-cancelled": "Teslimat iptal edildi.",
+        "dispute-resolved": "İtiraz güncellendi.",
+        "mail-retried": "E-posta tekrar gönderildi.",
+        "shipment-tracked": "Kargo takibi güncellendi.",
+        "shipment-retried": "Kargo yeniden denendi.",
+        "shipment-cancelled": "Kargo iptal edildi.",
+        "invoice-regenerated": "Faturalar yeniden oluşturuldu."
+      }
     }
   },
   "common": {
@@ -553,6 +798,92 @@
         "country": "Ülke",
         "testMode": "Test modu"
       }
+    },
+    "order-status": {
+      "title": {
+        "markPaid": "Ödendi Olarak İşaretle",
+        "cancel": "Siparişi İptal Et",
+        "markFailed": "Başarısız Olarak İşaretle",
+        "approveTransfer": "Havaleyi Onayla",
+        "rejectTransfer": "Havaleyi Reddet"
+      },
+      "cta": {
+        "markPaid": "Ödendi Olarak İşaretle",
+        "cancel": "Siparişi İptal Et",
+        "markFailed": "Başarısız Olarak İşaretle",
+        "approveTransfer": "Onayla",
+        "rejectTransfer": "Reddet"
+      },
+      "toast": {
+        "markPaid": "Sipariş ödendi olarak işaretlendi.",
+        "cancel": "Sipariş iptal edildi.",
+        "markFailed": "Sipariş başarısız olarak işaretlendi.",
+        "approveTransfer": "Havale onaylandı.",
+        "rejectTransfer": "Havale reddedildi."
+      },
+      "note": "Not (isteğe bağlı)"
+    },
+    "review": {
+      "title": "Siparişi İncele",
+      "decision": {
+        "ACCEPT": "Siparişi kabul et",
+        "REJECT": "Siparişi reddet"
+      },
+      "cta": {
+        "ACCEPT": "Kabul Et",
+        "REJECT": "Reddet"
+      },
+      "refund": "Alınan Ödemeyi İade Et",
+      "force": "Yine De Kabul Et (Stok Ve Limitleri Yoksay)",
+      "note": "Not (isteğe bağlı)",
+      "toast": {
+        "ACCEPT": "Sipariş kabul edildi.",
+        "REJECT": "Sipariş reddedildi."
+      }
+    },
+    "dispute": {
+      "title": "İtiraz Aç",
+      "amount": "Tutar (varsayılan: tahsil edilen)",
+      "reason": "Neden",
+      "cta": "İtiraz Aç",
+      "toast": "İtiraz açıldı."
+    },
+    "rerun": {
+      "title": "Teslimatı Yeniden Çalıştır",
+      "scope": {
+        "all": "Tümü",
+        "items": "Seçili Ürünler",
+        "deliveries": "Seçili Teslimatlar"
+      },
+      "phase": "Aşama",
+      "grant-again-title": "Bu Yeniden Verir",
+      "grant-again": "Bu işlem yeniden verir (kredi, ürün): seçimde zaten çalışmış teslimatlar var.",
+      "cta": "Yeniden Çalıştır",
+      "toast": "{count} teslimat sıraya alındı.",
+      "toast-skipped": "{count} sıraya alındı, {skipped} tanesi hâlâ açık olduğu için atlandı.",
+      "toast-none": "Hiçbir şey sıraya alınmadı."
+    },
+    "resend-mail": {
+      "title": "E-postayı Yeniden Gönder",
+      "kind": "E-posta türü",
+      "shipment": "Kargo",
+      "recipient": "Alıcı e-posta (isteğe bağlı)",
+      "cta": "Yeniden Gönder",
+      "toast": "E-posta sıraya alındı."
+    },
+    "payment-events": {
+      "title": "Ödeme Olayları",
+      "table": {
+        "date": "Tarih",
+        "direction": "Yön",
+        "channel": "Kanal",
+        "event": "Olay",
+        "verified": "Doğrulandı",
+        "response": "Yanıt",
+        "ip": "IP"
+      },
+      "headers": "Başlıklar",
+      "body": "Gövde"
     }
   },
   "settings": {
@@ -1065,6 +1396,116 @@
       "FRAUD_REVIEW": "Dolandırıcılık incelemesi",
       "BLOCKED_BUYER": "Engelli alıcı",
       "OTHER": "Diğer"
+    },
+    "order-event": {
+      "CREATED": "Sipariş oluşturuldu",
+      "STATUS_CHANGED": "Durum değişti",
+      "PAYMENT_STARTED": "Ödeme başlatıldı",
+      "PAYMENT_SUCCEEDED": "Ödeme başarılı",
+      "PAYMENT_FAILED": "Ödeme başarısız",
+      "PAYMENT_CANCELLED": "Ödeme iptal edildi",
+      "BANK_TRANSFER_NOTIFIED": "Havale bildirildi",
+      "REVIEW_OPENED": "İnceleme açıldı",
+      "REFUND_REQUESTED": "İade talep edildi",
+      "REFUND_SUCCEEDED": "İade başarılı",
+      "REFUND_FAILED": "İade başarısız",
+      "DISPUTE_INQUIRY": "İtiraz ön bildirimi",
+      "DISPUTE_OPENED": "İtiraz açıldı",
+      "DISPUTE_CLOSED": "İtiraz kapandı",
+      "BLOCK_CREATED": "Alıcı engellendi",
+      "BLOCK_REMOVED": "Engel kaldırıldı",
+      "CLAWBACK_SHORTFALL": "Kredi geri alma eksiği",
+      "DELIVERY_RERUN": "Teslimat yeniden çalıştırıldı",
+      "DELIVERY_FAILED": "Teslimat başarısız",
+      "DELIVERY_REVOKED": "Teslimat geri alındı",
+      "SHIPMENT_CREATED": "Kargo oluşturuldu",
+      "SHIPMENT_UPDATED": "Kargo güncellendi",
+      "SHIPMENT_CANCELLED": "Kargo iptal edildi",
+      "SUBSCRIPTION_STARTED": "Abonelik başladı",
+      "SUBSCRIPTION_RENEWED": "Abonelik yenilendi",
+      "SUBSCRIPTION_PAST_DUE": "Abonelik ödemesi gecikti",
+      "SUBSCRIPTION_CHARGE_FAILED": "Abonelik tahsilatı başarısız",
+      "SUBSCRIPTION_CANCEL_REQUESTED": "Abonelik iptali istendi",
+      "SUBSCRIPTION_RESUMED": "Abonelik devam ettirildi",
+      "SUBSCRIPTION_ENDED": "Abonelik sona erdi",
+      "SUBSCRIPTION_REMOTE_CANCEL_FAILED": "Uzak abonelik iptali başarısız",
+      "MAIL_QUEUED": "E-posta sıraya alındı",
+      "NOTE": "Not"
+    },
+    "actor": {
+      "SYSTEM": "Sistem",
+      "BUYER": "Alıcı",
+      "ADMIN": "Yönetici",
+      "GATEWAY": "Ödeme sağlayıcısı"
+    },
+    "refund-origin": {
+      "PANEL": "Panel",
+      "GATEWAY": "Ödeme sağlayıcısı",
+      "SYSTEM": "Sistem"
+    },
+    "dispute-origin": {
+      "GATEWAY": "Ödeme sağlayıcısı",
+      "MANUAL": "Manuel"
+    },
+    "order-source": {
+      "STOREFRONT": "Mağaza",
+      "PANEL": "Panel",
+      "GIFT_CODE": "Hediye kodu",
+      "RENEWAL": "Yenileme",
+      "EXTERNAL": "Harici",
+      "INGAME": "Oyun içi",
+      "LEGACY": "Eski"
+    },
+    "mail-kind": {
+      "ORDER_RECEIVED": "Sipariş alındı",
+      "ORDER_CONFIRMATION": "Sipariş onayı",
+      "ORDER_DELIVERED": "Sipariş teslim edildi",
+      "GIFT_RECEIVED": "Hediye alındı",
+      "BANK_TRANSFER_INSTRUCTIONS": "Havale talimatları",
+      "ORDER_REFUNDED": "Sipariş iade edildi",
+      "SUBSCRIPTION_REMINDER": "Abonelik hatırlatması",
+      "SUBSCRIPTION_PAYMENT_FAILED": "Abonelik ödemesi başarısız",
+      "SUBSCRIPTION_CANCELLED": "Abonelik iptal edildi",
+      "SUBSCRIPTION_ENDED": "Abonelik sona erdi",
+      "EXPIRY_REMINDER": "Bitiş hatırlatması",
+      "SHIPMENT_SHIPPED": "Kargo gönderildi",
+      "SHIPMENT_DELIVERED": "Kargo teslim edildi"
+    },
+    "action-type": {
+      "CREDIT": "Kredi",
+      "PERMISSION": "Yetki",
+      "COMMAND": "Komut",
+      "WEBHOOK": "Webhook"
+    },
+    "phase": {
+      "GRANT": "Verme",
+      "RENEW": "Yenileme",
+      "EXPIRE": "Sona Erme",
+      "REVOKE": "Geri Alma"
+    },
+    "delivery-error": {
+      "RENDER_ERROR": "Eylem oluşturulamadı",
+      "NO_TARGET_SERVER": "Hedef sunucu yok",
+      "INVALID_PLAYER": "Geçersiz oyuncu",
+      "NO_ACCOUNT": "Oyuncunun hesabı yok",
+      "NEEDS_CONFIRMATION": "Onay gerekiyor",
+      "DB_ERROR": "Veritabanı hatası",
+      "SERVER_OFFLINE": "Sunucu çevrimdışı",
+      "COMPONENT_MISSING": "Sunucuda Pano eklentisi yok",
+      "VERSION_MISMATCH": "Eklenti sürümü uyuşmuyor",
+      "SERVER_REMOVED": "Sunucu silindi",
+      "UNKNOWN_OUTCOME": "Sonuç bilinmiyor",
+      "ONLINE_WAIT_EXPIRED": "Oyuncu için çok beklendi",
+      "COMMAND_ERROR": "Komut başarısız",
+      "LUCKPERMS_MISSING": "LuckPerms yok",
+      "DISABLED_LOCALLY": "Sunucuda devre dışı",
+      "INVALID_PAYLOAD": "Geçersiz veri",
+      "REJECTED": "Sunucu reddetti",
+      "WEBHOOK_DEAD": "Webhook vazgeçti",
+      "CANCELLED_BY_ADMIN": "Yönetici iptal etti",
+      "ORDER_REVOKED": "Sipariş geri alındı",
+      "ENTITLEMENT_ENDED": "Hak sona erdi",
+      "NOTHING_TO_REVOKE": "Geri alınacak bir şey yok"
     }
   },
   "alerts": {
