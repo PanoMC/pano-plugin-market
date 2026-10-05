@@ -58,12 +58,17 @@ class QuoteCaller(val userId: Long?, val canUseTestMode: Boolean = false, val cl
     }
 }
 
-class QuoteMessage(val code: String, val level: String, val lineKey: String? = null) {
-    fun toJson(): JsonObject = JsonObject().put("code", code).put("level", level).apply { lineKey?.let { put("lineKey", it) } }
+class QuoteMessage(val code: String, val level: String, val lineKey: String? = null, val fields: List<String>? = null, val reason: String? = null) {
+    fun toJson(): JsonObject = JsonObject().put("code", code).put("level", level).apply {
+        lineKey?.let { put("lineKey", it) }
+        fields?.let { put("fields", JsonArray(it)) }
+        reason?.let { put("reason", it) }
+    }
 
-    override fun equals(other: Any?): Boolean = other is QuoteMessage && other.code == code && other.level == level && other.lineKey == lineKey
+    override fun equals(other: Any?): Boolean =
+        other is QuoteMessage && other.code == code && other.level == level && other.lineKey == lineKey && other.fields == fields && other.reason == reason
 
-    override fun hashCode(): Int = (code.hashCode() * 31 + level.hashCode()) * 31 + (lineKey?.hashCode() ?: 0)
+    override fun hashCode(): Int = (((code.hashCode() * 31 + level.hashCode()) * 31 + (lineKey?.hashCode() ?: 0)) * 31 + (fields?.hashCode() ?: 0)) * 31 + (reason?.hashCode() ?: 0)
 }
 
 /** `QuoteLine` (04 section 2). A bundle child has `kind = BUNDLE_CHILD`, its bundle's key in [parentLineKey] and every amount 0. */
