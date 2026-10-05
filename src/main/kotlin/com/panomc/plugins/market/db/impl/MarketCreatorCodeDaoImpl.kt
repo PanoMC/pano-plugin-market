@@ -95,7 +95,7 @@ class MarketCreatorCodeDaoImpl : MarketCreatorCodeDao() {
 
     override suspend fun getByCode(code: String, sqlClient: SqlClient): MarketCreatorCode? {
         val rows: RowSet<Row> = sqlClient
-            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `code` = ?")
+            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `code` = ? AND `deletedAt` IS NULL")
             .execute(Tuple.of(code))
             .coAwait()
 

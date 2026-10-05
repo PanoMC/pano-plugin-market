@@ -539,6 +539,41 @@ class ManualOrderIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `shippingPrice is gross also in a VAT-exclusive store, shippingTotal equals the typed price`(): Unit = runBlocking {
+        rig.config = rig.config(showVat = false)
+
+        val shirt = fx.product("shirt-vat-${System.nanoTime()}", price = 2500, stock = 50, columns = mapOf("physical" to true, "weightGrams" to 500))
+
+        // the method carries its own 20 percent VAT; the admin types the gross amount
+        rig.shippingResult = ShippingQuote(
+            ShippingCharge(500, 2000), methodId = 9, address = address(), methodName = "Standard", snapshot = JsonObject().put("zoneId", 1), weightGrams = 500
+        )
+
+        val items = order(create(request(line(shirt), player = "Stranger", shippingAddress = address(), markPaid = true)).id).totalPrice
+
+        assertTrue(items > 2500, "the VAT-exclusive store adds VAT on top of the item basis")
+
+        for (typed in listOf(300L, 360L, 301L, 1L, 7L, 1200L)) {
+            val o = order(create(request(line(shirt), player = "Stranger", shippingAddress = address(), shippingMethodId = 9, shippingPrice = typed, markPaid = true)).id)
+
+            assertEquals(typed, o.shippingTotal, "shippingTotal is the typed gross price $typed")
+            assertEquals(items + typed, o.totalPrice, "totalPrice = items + shippingPrice for $typed")
+            assertEquals(o.totalPrice, o.paidAmount, "the paid amount is the gross total for $typed")
+        }
+
+        // 999 gross has no 20 percent basis (832 -> 998, 833 -> 1000): the nearest grossing basis is used, never more than one minor unit away
+        val odd = order(create(request(line(shirt), player = "Stranger", shippingAddress = address(), shippingMethodId = 9, shippingPrice = 999, markPaid = true)).id)
+
+        assertTrue(Math.abs(odd.shippingTotal - 999) <= 1, "unreachable gross 999 is within one minor unit, was ${odd.shippingTotal}")
+        assertEquals(items + odd.shippingTotal, odd.totalPrice)
+
+        // no override: the engine's figure is a basis and VAT is added on top
+        val quoted = order(create(request(line(shirt), player = "Stranger", shippingAddress = address(), shippingMethodId = 9, markPaid = true)).id)
+
+        assertEquals(600, quoted.shippingTotal)
+    }
+
+    @Test
     fun `a digital order ignores the shipping fields`(): Unit = runBlocking {
         val product = fx.product(price = 100, stock = 5)
         val order = order(create(request(line(product), shippingAddress = address(), shippingMethodId = 9, shippingPrice = 700, markPaid = true)).id)

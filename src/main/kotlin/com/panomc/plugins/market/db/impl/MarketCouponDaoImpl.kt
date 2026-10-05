@@ -101,7 +101,7 @@ class MarketCouponDaoImpl : MarketCouponDao() {
 
     override suspend fun getByCode(code: String, sqlClient: SqlClient): MarketCoupon? {
         val rows: RowSet<Row> = sqlClient
-            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `code` = ?")
+            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `code` = ? AND `deletedAt` IS NULL")
             .execute(Tuple.of(code))
             .coAwait()
 

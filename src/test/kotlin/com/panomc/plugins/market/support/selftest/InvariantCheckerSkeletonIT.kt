@@ -33,7 +33,8 @@ class InvariantCheckerSkeletonIT : MarketDbTestBase() {
         sql("INSERT INTO `$variant` VALUES (1, 0)")
         InvariantChecker.assertAll(pool)
         assertEquals(listOf("I5", "I5"), InvariantChecker.lastRun.ran)
-        assertTrue(InvariantChecker.lastRun.skipped.isEmpty())
+        // the other invariants (I1 to I22) are complete now and need tables the two probe tables do not have: skipped, never failed
+        assertTrue("I5" !in InvariantChecker.lastRun.skipped, "I5 was not skipped")
         InvariantChecker.assertAll(pool, true)
     }
 
@@ -64,7 +65,7 @@ class InvariantCheckerSkeletonIT : MarketDbTestBase() {
             sql("INSERT INTO `$product` VALUES (1, 1)")
             InvariantChecker.assertAll(pool)
             assertEquals(listOf("I5"), InvariantChecker.lastRun.ran)
-            assertEquals(listOf("I5"), InvariantChecker.lastRun.skipped)
+            assertTrue("I5" in InvariantChecker.lastRun.skipped, "the I5 shape that needs the dropped variant table is skipped, skipped=${InvariantChecker.lastRun.skipped}")
         } finally {
             pool.query("CREATE TABLE `$variant` (`id` BIGINT PRIMARY KEY, `stock` INT NOT NULL) ENGINE=InnoDB").execute().coAwait()
         }

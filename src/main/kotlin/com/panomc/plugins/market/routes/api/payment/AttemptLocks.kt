@@ -3,6 +3,7 @@ package com.panomc.plugins.market.routes.api.payment
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
@@ -41,6 +42,32 @@ class AttemptLocks {
 
         try {
             return entry.mutex.withLock { withContext(Held(held + attemptId)) { block() } }
+        } finally {
+            synchronized(entries) { if (--entry.users == 0) entries.remove(attemptId) }
+        }
+    }
+
+    /**
+     * [with] that waits at most [waitMs] for the lock: `null` (and [block] never ran, nothing changed) when another call still holds it after that.
+     * Reentrant like [with]. A timed-out wait leaves no trace in the registry.
+     */
+    suspend fun <T> withOrNull(attemptId: Long, waitMs: Long, block: suspend () -> T): T? {
+        val held = coroutineContext[Held]?.ids ?: emptySet()
+
+        if (attemptId in held) return block()
+
+        val entry = synchronized(entries) { entries.getOrPut(attemptId) { Entry() }.also { it.users++ } }
+
+        try {
+            val acquired = withTimeoutOrNull(waitMs.coerceAtLeast(1)) { entry.mutex.lock(); true } ?: false
+
+            if (!acquired) return null
+
+            try {
+                return withContext(Held(held + attemptId)) { block() }
+            } finally {
+                entry.mutex.unlock()
+            }
         } finally {
             synchronized(entries) { if (--entry.users == 0) entries.remove(attemptId) }
         }

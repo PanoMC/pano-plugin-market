@@ -60,27 +60,7 @@ class PaymentInboundAttempts(
 
     override suspend fun publicIdOf(orderId: Long): String? = orders.getById(orderId, client())?.publicId
 
-    override suspend fun resolve(providerId: String, target: PaymentTarget): MarketPayment? {
-        val sql = client()
-        val found = when (target) {
-            is PaymentTarget.Attempt -> payments.getById(target.attemptId, sql)
-            is PaymentTarget.Reference -> payments.getByReference(target.reference, sql)
-            is PaymentTarget.GatewayTransaction -> payments.getByProviderTransaction(providerId, target.gatewayTransactionId, sql)
-            is PaymentTarget.GatewayRef -> byGatewayRef(providerId, target.name, target.value, sql)
-            is PaymentTarget.Subscription -> null
-        }
-
-        return found?.takeIf { it.providerId == providerId }
-    }
-
-    private suspend fun byGatewayRef(providerId: String, name: String, value: String, sql: SqlClient): MarketPayment? {
-        val path = "$.\"" + name.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-        val id = sql.preparedQuery(
-            "SELECT `id` FROM ${table("market_payment")} WHERE `providerId` = ? AND JSON_UNQUOTE(JSON_EXTRACT(`gatewayRefs`, ?)) = ? ORDER BY `id` DESC LIMIT 1"
-        ).execute(Tuple.of(providerId, path, value)).coAwait().firstOrNull()?.getLong("id") ?: return null
-
-        return payments.getById(id, sql)
-    }
+    override suspend fun resolve(providerId: String, target: PaymentTarget): MarketPayment? = resolveAttemptTarget(payments, orders, providerId, target, client())
 
     override fun view(attempt: MarketPayment, publicId: String): PaymentAttemptView = attemptViewOf(attempt, publicId, cipher)
 
@@ -165,4 +145,30 @@ class AttemptLookup(
     }
 
     override suspend fun subscriptionByGatewayId(gatewaySubscriptionId: String): SubscriptionView? = null
+}
+
+/**
+ * The attempt of provider [providerId] that [target] names (`null` for an unknown one, and for one of another provider: a provider only ever reaches its
+ * own attempts; `PaymentTarget.Subscription` is never resolved here). The one rule of every channel: the inbound pipeline ([PaymentInboundAttempts]) and the
+ * status / reconcile query of [PaymentService].
+ */
+suspend fun resolveAttemptTarget(payments: MarketPaymentDao, orders: MarketOrderDao, providerId: String, target: PaymentTarget, sql: SqlClient): MarketPayment? {
+    val found = when (target) {
+        is PaymentTarget.Attempt -> payments.getById(target.attemptId, sql)
+        is PaymentTarget.Reference -> payments.getByReference(target.reference, sql)
+        is PaymentTarget.GatewayTransaction -> payments.getByProviderTransaction(providerId, target.gatewayTransactionId, sql)
+        is PaymentTarget.GatewayRef -> attemptByGatewayRef(payments, orders, providerId, target.name, target.value, sql)
+        is PaymentTarget.Subscription -> null
+    }
+
+    return found?.takeIf { it.providerId == providerId }
+}
+
+private suspend fun attemptByGatewayRef(payments: MarketPaymentDao, orders: MarketOrderDao, providerId: String, name: String, value: String, sql: SqlClient): MarketPayment? {
+    val path = "$.\"" + name.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+    val id = sql.preparedQuery(
+        "SELECT `id` FROM `${orders.prefix()}market_payment` WHERE `providerId` = ? AND JSON_UNQUOTE(JSON_EXTRACT(`gatewayRefs`, ?)) = ? ORDER BY `id` DESC LIMIT 1"
+    ).execute(Tuple.of(providerId, path, value)).coAwait().firstOrNull()?.getLong("id") ?: return null
+
+    return payments.getById(id, sql)
 }

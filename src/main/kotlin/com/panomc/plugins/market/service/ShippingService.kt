@@ -930,6 +930,13 @@ class ShippingService(
         return next
     }
 
+    /**
+     * The `StartShipping` effect of O2 / O4 (06 section 11, 10 section 7.3), inside the transition's transaction and under the order lock: the derived
+     * `shippingStatus` of the paid order (`PENDING` when it has a shippable line nothing has been handed over for, `NOT_REQUIRED` otherwise). Idempotent;
+     * returns the new value, or `null` when it did not change. The order's own writes of the transition (`paidAt`) are read fresh.
+     */
+    suspend fun startShipping(conn: SqlConnection, orderId: Long): ShippingStatus? = rederive(conn, orderId)
+
     /** `itemsReleased = 1` and the units of the shipment are shippable again (10 section 9.6). A released shipment is left alone. */
     private suspend fun release(conn: SqlConnection, shipment: MarketShipment) {
         if (shipment.itemsReleased) return
