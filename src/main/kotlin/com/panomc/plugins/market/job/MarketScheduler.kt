@@ -14,6 +14,7 @@ import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.routes.api.order.orderService
 import com.panomc.plugins.market.routes.api.order.paymentService
 import com.panomc.plugins.market.routes.api.order.webhookService
+import com.panomc.plugins.market.routes.api.payment.inboundEventRetryJob
 import com.panomc.plugins.market.runtime.MarketRuntime
 import io.vertx.core.Vertx
 import io.vertx.kotlin.coroutines.dispatcher
@@ -186,6 +187,9 @@ class MarketScheduler(
         const val WEBHOOK_MS = TICK_MS
         const val MAIL_OUTBOX_MS = 15_000L
 
+        /** `InboundEventRetryJob` (02 section 7.3 step 7: every 60 s). */
+        const val INBOUND_RETRY_MS = 60_000L
+
         private val logger = LoggerFactory.getLogger(MarketScheduler::class.java)
     }
 }
@@ -198,7 +202,7 @@ class MarketScheduler(
  * - `MailOutboxJob` is not registered: its `MailComposition` is `UnwiredMailComposition` until MK-142 / MK-146 land (armed now it would end every row
  *   `FAILED RENDER_ERROR`). They add `Job("mail-outbox", MarketScheduler.MAIL_OUTBOX_MS) { mailJob.runOnce() }` to [jobs].
  * - The other workers of 00 section 8.5 (`RefundReconcileJob`, `DeliveryJob`, `EntitlementExpiryJob`, `SubscriptionJob`, `ShipmentTrackingJob`,
- *   `InboundEventRetryJob`, `HousekeepingJob`) belong to the slices that build them; each adds one `Job` here.
+ *   `HousekeepingJob`) belong to the slices that build them; each adds one `Job` here (`InboundEventRetryJob` is MK-077's, registered below).
  */
 internal object MarketJobs {
     fun scheduler(plugin: MarketPlugin): MarketScheduler = MarketScheduler(SystemClock, jobs(plugin), enabled = { MarketRuntime.isReady })
@@ -220,7 +224,11 @@ internal object MarketJobs {
         return listOf(
             MarketScheduler.Job("order-expiry", MarketScheduler.ORDER_EXPIRY_MS) { expiry.runOnce() },
             MarketScheduler.Job("payment-reconcile", MarketScheduler.PAYMENT_RECONCILE_MS) { reconcile.runOnce() },
-            MarketScheduler.Job("webhook", MarketScheduler.WEBHOOK_MS) { webhooks.tick() }
+            MarketScheduler.Job("webhook", MarketScheduler.WEBHOOK_MS) { webhooks.tick() },
+            inboundRetry(inboundEventRetryJob(plugin))
         )
     }
+
+    /** The retry of inbound payment traffic as a scheduler job (MK-077): FAILED and crashed `RECEIVED` rows are run again from their stored raw request. */
+    fun inboundRetry(job: InboundEventRetryJob): MarketScheduler.Job = MarketScheduler.Job("inbound-retry", MarketScheduler.INBOUND_RETRY_MS) { job.runOnce() }
 }

@@ -29,6 +29,7 @@ import com.panomc.plugins.market.error.TooManyRequests
 import com.panomc.plugins.market.routes.api.OrderAccess
 import com.panomc.plugins.market.routes.api.OrderAccessResult
 import com.panomc.plugins.market.routes.api.checkout.quoteCaller
+import com.panomc.plugins.market.routes.api.payment.attemptContexts
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
@@ -146,7 +147,7 @@ private fun buildPaymentService(plugin: MarketPlugin): PaymentService {
         config = { currentConfig(plugin) }, orders = orderDao, orderItems = context.getBean(MarketOrderItemDao::class.java),
         orderEvents = context.getBean(MarketOrderEventDao::class.java), payments = context.getBean(MarketPaymentDao::class.java),
         methods = context.getBean(MarketPaymentMethodDao::class.java), creditAccounts = context.getBean(MarketCreditAccountDao::class.java),
-        currencyRates = context.getBean(MarketCurrencyRateDao::class.java), lookup = providerLookup(plugin), cipher = wiring.cipher, contexts = wiring.contexts,
+        currencyRates = context.getBean(MarketCurrencyRateDao::class.java), lookup = providerLookup(plugin), cipher = wiring.cipher, contexts = attemptContexts(plugin),
         orderService = orderService(plugin), site = wiring.site, readClient = { databaseManager().getSqlClient() },
         products = context.getBean(MarketProductDao::class.java), entitlements = context.getBean(MarketEntitlementDao::class.java)
     )
