@@ -151,15 +151,17 @@ class DeliveryService(
      * The end flow of an entitlement that expired ([DeliveryPhase.EXPIRE]) or of a revoke ([planRevoke]), 08 section 11.1 steps 1 to 3: GRANT / RENEW
      * rows that were not sent yet are cancelled (D16), rows in flight get a cancel request (D17), then the `EXPIRE` rows are planned; the predecessor
      * gate (11.4) holds them until the in-flight rows resolved. The entitlement itself (step 4, coverage of step 5) is [EntitlementService]'s (MK-107).
-     * The caller holds the order lock. [reason] is `ENTITLEMENT_ENDED` (expiry) or `ORDER_REVOKED`.
+     * The caller holds the order lock. [reason] is `ENTITLEMENT_ENDED` (expiry) or `ORDER_REVOKED`. Without [units] every item given is ended whole; a caller
+     * that ends one line of a bundle names the range of each line (an empty range switches the bundle line itself off, MK-107).
      */
     suspend fun planEnd(
         conn: SqlConnection,
         order: MarketOrder,
         items: List<MarketOrderItem>,
         reason: String = DeliveryError.ENTITLEMENT_ENDED,
-        coverage: Map<Long, Coverage> = emptyMap()
-    ): EndPlan = endFlow(conn, order, items, DeliveryPhase.EXPIRE, reason, emptyMap(), emptyMap(), coverage, 0)
+        coverage: Map<Long, Coverage> = emptyMap(),
+        units: Map<Long, IntRange> = emptyMap()
+    ): EndPlan = endFlow(conn, order, items, DeliveryPhase.EXPIRE, reason, units, emptyMap(), coverage, 0)
 
     /**
      * `REVOKE` of the units [units] of items (refund, chargeback, manual revoke; 08 section 11.2). [revokedBefore] are the units that non-cancelled
@@ -863,7 +865,7 @@ class DeliveryService(
                 } else {
                     val userId = resolvePermissionUser(conn, row)
                     val tuples = nodes.map { PermissionGrantService.Tuple(it, DeliveryPlanner.nodeContext(it, scope)) }
-                    val granted = permissions.grant(userId, tuples, expiresAt, extend = op == "EXTEND", heldElsewhere = { heldElsewhere(conn, row, it) }, sqlClient = conn)
+                    val granted = permissions.grant(userId, tuples, expiresAt, extend = op == "EXTEND", heldElsewhere = { heldElsewhere(conn, row, it, lowerTo = expiresAt) }, sqlClient = conn)
 
                     changed = granted.changed
 
@@ -925,9 +927,13 @@ class DeliveryService(
     /**
      * Does another confirmed, still-active market grant of the same player hold [tuple]? (08 section 7.2: buying two ranks that share a node and
      * refunding one must not remove the shared node.) Rows of the same order item never count: they are the grant being undone.
+     *
+     * [lowerTo] is set when an `EXTEND` would lower the node's expiry to that instant (the coverage correction of 08 section 11.1 step 5): a grant whose
+     * entitlement ends at or before it does not need the later expiry, so only entitlements that run past [lowerTo] (or never end) hold the node. Without it
+     * the other links of the same timed chain would always protect the later expiry and the correction could never lower anything (MK-107).
      */
-    private suspend fun heldElsewhere(conn: SqlClient, row: MarketDelivery, tuple: PermissionGrantService.Tuple): Boolean {
-        val now = clock.now()
+    private suspend fun heldElsewhere(conn: SqlClient, row: MarketDelivery, tuple: PermissionGrantService.Tuple, lowerTo: Long? = null): Boolean {
+        val now = maxOf(clock.now(), lowerTo ?: Long.MIN_VALUE)
         val payloads = conn.preparedQuery(
             "SELECT d.`payload` AS p FROM $deliveryTable d JOIN ${table("market_entitlement")} e ON e.`id` = d.`entitlementId` " +
                 "WHERE d.`status` = 'CONFIRMED' AND d.`actionType` = 'PERMISSION' AND d.`transport` = 'INLINE' AND d.`phase` IN ('GRANT','RENEW') " +

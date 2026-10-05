@@ -6,6 +6,9 @@ import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.core.time.SystemClock
 import com.panomc.plugins.market.db.dao.MarketCreditAccountDao
+import com.panomc.plugins.market.db.dao.MarketEntitlementDao
+import com.panomc.plugins.market.db.dao.MarketMailOutboxDao
+import com.panomc.plugins.market.db.dao.MarketOrderEventDao
 import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.dao.MarketPaymentDao
@@ -14,7 +17,11 @@ import com.panomc.plugins.market.db.dao.MarketShipmentDao
 import com.panomc.plugins.market.routes.panel.shipping.shippingService
 import com.panomc.plugins.market.db.tx.Locks
 import com.panomc.plugins.market.db.tx.MarketDb
+import com.panomc.plugins.market.routes.api.checkout.PlatformUserDirectory
 import com.panomc.plugins.market.routes.api.order.deliveryService
+import com.panomc.plugins.market.routes.api.order.entitlementService
+import com.panomc.plugins.market.routes.panel.settings.currentConfig
+import com.panomc.plugins.market.service.MailOutboxService
 import com.panomc.plugins.market.routes.api.order.orderService
 import com.panomc.plugins.market.routes.api.order.paymentService
 import com.panomc.plugins.market.routes.api.order.webhookService
@@ -200,6 +207,9 @@ class MarketScheduler(
         /** `DeliveryJob` (08 section 17: every tick; its D22 classification keeps its own 30 s cadence). */
         const val DELIVERY_MS = TICK_MS
 
+        /** `EntitlementExpiryJob` (08 section 10.3: every 30 s). */
+        const val ENTITLEMENT_EXPIRY_MS = 30_000L
+
         private val logger = LoggerFactory.getLogger(MarketScheduler::class.java)
     }
 }
@@ -237,12 +247,32 @@ internal object MarketJobs {
             MarketScheduler.Job("webhook", MarketScheduler.WEBHOOK_MS) { webhooks.tick() },
             inboundRetry(inboundEventRetryJob(plugin)),
             delivery(DeliveryJob(deliveryService(plugin), SystemClock)),
+            entitlementExpiry(entitlementExpiryJob(plugin)),
             shipmentTracking(ShipmentTrackingJob(SystemClock, context.getBean(MarketShipmentDao::class.java), shippingService(plugin), sqlClient))
         )
     }
 
     /** The inline delivery worker (MK-102): promote, claim and execute CREDIT / PERMISSION rows, stale claims, re-assertion, D22. */
     fun delivery(job: DeliveryJob): MarketScheduler.Job = MarketScheduler.Job("delivery", MarketScheduler.DELIVERY_MS) { job.runOnce() }
+
+    /** `EntitlementExpiryJob` on the beans of the plugin; its reminder mail goes through the same outbox as every other mail (`MailOutboxJob` sends it). */
+    private fun entitlementExpiryJob(plugin: MarketPlugin): EntitlementExpiryJob {
+        val context = plugin.beans
+        val databaseManager = { context.getBean(DatabaseManager::class.java) }
+        val orderDao = context.getBean(MarketOrderDao::class.java)
+        val locks = Locks(orderDao, context.getBean(MarketOrderItemDao::class.java), context.getBean(MarketRedemptionDao::class.java), context.getBean(MarketCreditAccountDao::class.java))
+        val config = { currentConfig(plugin) }
+
+        return EntitlementExpiryJob(
+            clock = SystemClock, db = MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock), locks = locks, service = entitlementService(plugin),
+            delivery = deliveryService(plugin), entitlements = context.getBean(MarketEntitlementDao::class.java), config = config,
+            mail = MailOutboxService(config, SystemClock, context.getBean(MarketMailOutboxDao::class.java), context.getBean(MarketOrderEventDao::class.java)),
+            users = PlatformUserDirectory(databaseManager)
+        )
+    }
+
+    /** The end of timed entitlements (MK-107): `EXPIRED` and the `EXPIRE` rows at expiry, the expiry reminder mail. */
+    fun entitlementExpiry(job: EntitlementExpiryJob): MarketScheduler.Job = MarketScheduler.Job("entitlement-expiry", MarketScheduler.ENTITLEMENT_EXPIRY_MS) { job.runOnce() }
 
     /** Polling of the carriers for the shipments that are due (MK-134). */
     fun shipmentTracking(job: ShipmentTrackingJob): MarketScheduler.Job = MarketScheduler.Job("shipment-tracking", MarketScheduler.SHIPMENT_TRACKING_MS) { job.runOnce() }
