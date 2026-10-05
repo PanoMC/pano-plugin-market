@@ -6,6 +6,8 @@ import com.panomc.plugins.market.core.cart.CartLine
 import com.panomc.plugins.market.db.MarketDaoITBase
 import com.panomc.plugins.market.db.impl.MarketThrottleDaoImpl
 import com.panomc.plugins.market.error.TooManyRequests
+import com.panomc.plugins.market.routes.user.gift.GiftRedeemService
+import com.panomc.plugins.market.util.GiftType
 import com.panomc.plugins.market.spi.payment.PaymentCapabilities
 import com.panomc.plugins.market.support.TestWiring
 import io.vertx.core.Vertx
@@ -412,6 +414,139 @@ class RateLimitIT : MarketDaoITBase() {
         h.checkout(body(big, 11), caller = alice)
 
         assertEquals(5L, count("market_order"))
+    }
+
+    @Test
+    fun `L4 the held-unit cap sums a product over lines that differ in field values, and every contributing line is named`(): Unit = runBlocking {
+        val limited = fx.product("limited-lines", price = 100, stock = 100)
+
+        fx.field(limited, key = "note")
+        fx.paymentMethod("fake")
+        h.fake.caps = PaymentCapabilities().apply { longPending = true }
+
+        // a guest: the harness copies the body of a logged-in caller, which turns nested field values into JsonObjects the parser refuses
+        val guest = QuoteCaller.GUEST
+        val a = h.line(limited, 6, values = mapOf("note" to "a"))
+        val b = h.line(limited, 5, values = mapOf("note" to "b"))
+
+        // 6 + 5 = 11 units of one stock subject on one unpaid offline order: both lines are over
+        val e = fails { h.checkout(h.body("items" to listOf(a, b), "paymentMethodId" to "fake"), caller = guest) }
+
+        assertEquals("INVALID_CART", e.getErrorCode())
+
+        val errors = JsonObject(e.encode()).getJsonObject("lineErrors")
+
+        assertEquals(2, errors.size(), "both lines of the subject are named")
+        errors.forEach { (_, codes) -> assertEquals(listOf("MAX_QUANTITY"), (codes as io.vertx.core.json.JsonArray).list) }
+        assertEquals(0L, count("market_order"))
+
+        // 6 + 4 = 10 is the cap itself
+        h.checkout(h.body("items" to listOf(a, h.line(limited, 4, values = mapOf("note" to "b"))), "paymentMethodId" to "fake"), caller = guest)
+        assertEquals(1L, count("market_order"))
+    }
+
+    @Test
+    fun `L4 the held-unit cap counts the stock-limited children of a bundle with its own unlimited parent`(): Unit = runBlocking {
+        val child = fx.product("limited-child", price = 100, stock = 100)
+        val free = fx.product("unlimited-child", price = 100)
+        val bundle = fx.bundle(child to 6, free to 1, slug = "mixed-bundle")
+
+        fx.paymentMethod("fake")
+        h.fake.caps = PaymentCapabilities().apply { longPending = true }
+
+        val alice = user("Alice")
+
+        fun body(quantity: Int) = h.body("items" to listOf(h.line(bundle, quantity)), "paymentMethodId" to "fake")
+
+        // 2 bundles x 6 = 12 units of the child on one unpaid offline order
+        val e = fails { h.checkout(body(2), caller = alice) }
+
+        assertEquals("INVALID_CART", e.getErrorCode())
+        assertEquals(listOf("MAX_QUANTITY"), JsonObject(e.encode()).getJsonObject("lineErrors").getJsonArray(CartLine(bundle.id, 0, 2, emptyMap(), null).lineKey).list)
+        assertEquals(0L, count("market_order"))
+
+        // 1 bundle x 6 = 6 units is fine, and an online method is not touched
+        h.checkout(body(1), caller = alice)
+        h.fake.caps = PaymentCapabilities()
+        h.checkout(body(2), caller = alice)
+        assertEquals(2L, count("market_order"))
+    }
+
+    @Test
+    fun `L4 a bundle and a plain line of the same limited product add up`(): Unit = runBlocking {
+        val child = fx.product("shared-child", price = 100, stock = 100)
+        val bundle = fx.bundle(child to 4, slug = "shared-bundle")
+
+        fx.paymentMethod("fake")
+        h.fake.caps = PaymentCapabilities().apply { longPending = true }
+
+        val e = fails { h.checkout(h.body("items" to listOf(h.line(bundle, 2), h.line(child, 3)), "paymentMethodId" to "fake"), caller = user("Alice")) }
+
+        assertEquals("INVALID_CART", e.getErrorCode())
+        assertEquals(2, JsonObject(e.encode()).getJsonObject("lineErrors").size(), "8 + 3 = 11 units: the bundle line and the plain line are both named")
+    }
+
+    @Test
+    fun `L4 a variant is the stock subject, an unlimited variant is never capped and a limited one is, whatever the product row says`(): Unit = runBlocking {
+        val product = fx.product("with-variants", price = 100, stock = 100)
+        val unlimited = fx.variant(product, name = "Unlimited")
+        val limited = fx.variant(product, name = "Limited", stock = 100)
+
+        fx.paymentMethod("fake")
+        h.fake.caps = PaymentCapabilities().apply { longPending = true }
+
+        val alice = user("Alice")
+
+        // the product row's own stock is ignored by the reservation, so a NULL-stock variant is unlimited here too
+        h.checkout(h.body("items" to listOf(h.line(product, 11, variant = unlimited.id)), "paymentMethodId" to "fake"), caller = alice)
+        assertEquals(1L, count("market_order"))
+
+        val e = fails { h.checkout(h.body("items" to listOf(h.line(product, 11, variant = limited.id)), "paymentMethodId" to "fake"), caller = alice) }
+
+        assertEquals("INVALID_CART", e.getErrorCode())
+        assertEquals(1L, count("market_order"))
+
+        h.checkout(h.body("items" to listOf(h.line(product, 10, variant = limited.id)), "paymentMethodId" to "fake"), caller = alice)
+        assertEquals(2L, count("market_order"))
+    }
+
+    // ================================================================================================================ L1 on gift redeem
+
+    @Test
+    fun `L1 the fourth gift redeem within the minute is 429 TOO_MANY_REQUESTS before any lookup, and 0 disables it`(): Unit = runBlocking {
+        val c = CreditHarness(w, vertx)
+        var perMinute = 3
+        val limits = MarketRateLimits { MarketConfig(checkoutRateLimitPerMinute = perMinute) }
+        val redeemer = GiftRedeemService(
+            c.service, RedemptionService(w.clock, c.ph.locks, w.redemptions), { pool }, w.clock,
+            guard = { com.panomc.plugins.market.routes.user.gift.GiftCodeGuard.NONE },
+            limit = { caller -> limits.checkout(caller.clientIp, "u:${caller.userId}") }
+        )
+        val alice = user("Alice", "203.0.113.50")
+
+        repeat(4) { fx.gift("CREDITS-$it", GiftType.CREDIT, creditAmount = 100, redeemLimit = 1) }
+        repeat(3) { redeemer.redeem("CREDITS-$it", null, emptyMap(), alice, "en-US") }
+
+        val e = fails { redeemer.redeem("CREDITS-3", null, emptyMap(), alice, "en-US") }
+
+        assertEquals("TOO_MANY_REQUESTS", e.getErrorCode())
+        assertEquals(429, e.getStatusCode())
+        assertEquals(20, retryAfter(e), "60 s / 3 per minute")
+        assertEquals(3L, count("market_order"), "the refused request redeemed nothing")
+
+        // the IP bucket alone also refuses another account of the same address
+        assertEquals("TOO_MANY_REQUESTS", fails { redeemer.redeem("CREDITS-3", null, emptyMap(), user("Bob", "203.0.113.50"), "en-US") }.getErrorCode())
+
+        perMinute = 0
+        redeemer.redeem("CREDITS-3", null, emptyMap(), alice, "en-US")
+        assertEquals(4L, count("market_order"))
+    }
+
+    @Test
+    fun `L1 the redeem route hands MarketRateLimits to the redeem service`() {
+        val source = java.io.File("src/main/kotlin/com/panomc/plugins/market/routes/user/gift/RedeemGiftAPI.kt").readText()
+
+        assertTrue(Regex("""limit\s*=\s*\{[^}]*rateLimits\.checkout\(""").containsMatchIn(source), "RedeemGiftAPI must wire L1 into GiftRedeemService")
     }
 
     @Test
