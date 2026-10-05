@@ -1,13 +1,16 @@
 package com.panomc.plugins.market.db.dao
 
-import com.panomc.platform.db.Dao
+import com.panomc.plugins.market.db.MarketDao
 import com.panomc.plugins.market.db.model.MarketProduct
 import io.vertx.sqlclient.SqlClient
 
-abstract class MarketProductDao : Dao<MarketProduct>(MarketProduct::class.java) {
+abstract class MarketProductDao : MarketDao<MarketProduct>(MarketProduct::class.java) {
     abstract suspend fun add(product: MarketProduct, sqlClient: SqlClient): Long
 
     abstract suspend fun update(product: MarketProduct, sqlClient: SqlClient)
+
+    /** Sets `stock` explicitly (`null` = unlimited): the manual adjustment path; `update` no longer writes it. */
+    abstract suspend fun setStock(id: Long, stock: Int?, sqlClient: SqlClient)
 
     abstract suspend fun deleteById(id: Long, sqlClient: SqlClient)
 

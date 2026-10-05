@@ -1,6 +1,7 @@
 package com.panomc.plugins.market.db.impl
 
 import com.panomc.platform.annotation.Dao
+import com.panomc.plugins.market.db.MarketSchema
 import com.panomc.plugins.market.db.dao.MarketPaymentMethodDao
 import com.panomc.plugins.market.db.model.MarketPaymentMethod
 import io.vertx.kotlin.coroutines.coAwait
@@ -16,33 +17,18 @@ import org.springframework.context.annotation.Scope
 class MarketPaymentMethodDaoImpl : MarketPaymentMethodDao() {
 
     override suspend fun init(sqlClient: SqlClient) {
-        sqlClient
-            .query(
-                """
-                    CREATE TABLE IF NOT EXISTS `${getTablePrefix() + tableName}` (
-                      `id` bigint NOT NULL AUTO_INCREMENT,
-                      `methodId` VARCHAR(64) NOT NULL,
-                      `enabled` tinyint(1) NOT NULL DEFAULT 0,
-                      `settings` MEDIUMTEXT,
-                      `createdAt` BIGINT(20) NOT NULL,
-                      `updatedAt` BIGINT(20) NOT NULL,
-                      PRIMARY KEY (`id`),
-                      UNIQUE KEY `unique_method_id` (`methodId`)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Market payment methods table.';
-                """
-            )
-            .execute()
-            .coAwait()
+        // Never throws (01 section 14.1 rule 3): a failed CREATE is logged and left to MarketSchema.ensure / SchemaVerifier.
+        MarketSchema.installTable(sqlClient, MarketSchema.PAYMENT_METHOD, prefix())
     }
 
     override suspend fun getAll(sqlClient: SqlClient): List<MarketPaymentMethod> {
-        val query = "SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}`"
+        val query = "SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}`"
         val rows = sqlClient.query(query).execute().coAwait()
         return rows.toEntities()
     }
 
     override suspend fun getByMethodId(methodId: String, sqlClient: SqlClient): MarketPaymentMethod? {
-        val query = "SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}` WHERE `methodId` = ?"
+        val query = "SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `methodId` = ?"
         val rows = sqlClient.preparedQuery(query).execute(Tuple.of(methodId)).coAwait()
         return rows.toEntities().getOrNull(0)
     }
@@ -55,7 +41,7 @@ class MarketPaymentMethodDaoImpl : MarketPaymentMethodDao() {
     ) {
         val now = System.currentTimeMillis()
         val query = """
-            INSERT INTO `${getTablePrefix() + tableName}` (`methodId`, `enabled`, `settings`, `createdAt`, `updatedAt`)
+            INSERT INTO `${prefix() + tableName}` (`methodId`, `enabled`, `settings`, `createdAt`, `updatedAt`)
             VALUES (?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE `enabled` = VALUES(`enabled`), `settings` = VALUES(`settings`), `updatedAt` = VALUES(`updatedAt`)
         """.trimIndent()
@@ -63,6 +49,6 @@ class MarketPaymentMethodDaoImpl : MarketPaymentMethodDao() {
     }
 
     override suspend fun uninstall(sqlClient: SqlClient) {
-        sqlClient.query("DROP TABLE IF EXISTS `${getTablePrefix() + tableName}`").execute().coAwait()
+        sqlClient.query("DROP TABLE IF EXISTS `${prefix() + tableName}`").execute().coAwait()
     }
 }

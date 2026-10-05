@@ -3,12 +3,17 @@ package com.panomc.plugins.market
 import com.panomc.platform.api.PanoPlugin
 import com.panomc.platform.api.PluginDatabaseManager
 import com.panomc.platform.api.config.PluginConfigManager
+import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.setup.SetupManager
 import com.panomc.plugins.market.config.MarketConfig
+import com.panomc.plugins.market.db.MarketTables
+import com.panomc.plugins.market.runtime.MarketBootstrap
+import com.panomc.plugins.market.runtime.MarketRuntime
 import com.panomc.plugins.market.service.ExchangeRateService
 import com.panomc.plugins.market.util.ExchangeRateMode
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.dispatcher
+import io.vertx.sqlclient.Pool
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.io.File
@@ -23,6 +28,14 @@ class MarketPlugin : PanoPlugin() {
         applicationContext.getBean(SetupManager::class.java)
     }
 
+    private val databaseManager by lazy {
+        applicationContext.getBean(DatabaseManager::class.java)
+    }
+
+    // Created by startPlugin(); runs the start-up order of 01 section 14.4 exactly once.
+    @Volatile
+    private var bootstrap: MarketBootstrap? = null
+
     val uploadsDir: File by lazy {
         File(pluginDataFolder, "uploads")
     }
@@ -33,6 +46,15 @@ class MarketPlugin : PanoPlugin() {
 
     private var isInitialized = false
 
+    /**
+     * `true` between `onStart` and `onStop` / `onDisable`. `SetupEventHandler` asks this instead of `pluginState`:
+     * the host copies the PF4J state into `PanoPlugin.pluginState` once, when the instance is created, so it never
+     * reads `STARTED` and a plugin started before the setup would never initialise when the setup finishes (01 section 14.4).
+     */
+    @Volatile
+    var isRunning = false
+        private set
+
     // Base tick cadence for the auto-refresh checker; the actual per-refresh interval comes from
     // config (min 1h) and is evaluated on every tick so config edits take effect without a restart.
     private val exchangeRateTickIntervalMs = 60L * 60L * 1000L
@@ -41,6 +63,9 @@ class MarketPlugin : PanoPlugin() {
 
     override suspend fun onStart() {
         logger.info("Starting...")
+        isRunning = true
+
+        MarketRuntime.probeHostCapabilities(MarketPlugin::class.java.classLoader)
 
         startPlugin()
 
@@ -49,6 +74,8 @@ class MarketPlugin : PanoPlugin() {
         // Re-arm it from the still-registered beans; startExchangeRateScheduler() no-ops when the
         // timer is already live, so the first-ever start path is unaffected.
         if (isInitialized && setupManager.isSetupDone()) {
+            bootstrap?.resume()
+
             @Suppress("UNCHECKED_CAST")
             val configManager =
                 pluginBeanContext.getBean(PluginConfigManager::class.java) as PluginConfigManager<MarketConfig>
@@ -74,15 +101,25 @@ class MarketPlugin : PanoPlugin() {
         val exchangeRateService = ExchangeRateService(this)
         pluginBeanContext.beanFactory.registerSingleton(ExchangeRateService::class.java.name, exchangeRateService)
 
-        pluginDatabaseManager.initialize(this)
-
         if (!thumbnailsDir.exists()) {
             thumbnailsDir.mkdirs()
         }
 
-        startExchangeRateScheduler(configManager, exchangeRateService)
+        val runner = MarketBootstrap(
+            prefix = { MarketTables.prefixOverride ?: databaseManager.getTablePrefix() },
+            pool = { databaseManager.getSqlClient() as Pool },
+            initDatabase = { pluginDatabaseManager.initialize(this) },
+            armScheduler = { startExchangeRateScheduler(configManager, exchangeRateService) }
+        ).also { bootstrap = it }
 
-        logger.info("Started!")
+        val state = runner.run()
+
+        if (state == MarketRuntime.State.READY) {
+            logger.info("Started!")
+        } else {
+            logger.warn("Started in {} mode: the store is unavailable, see the market health endpoint", state)
+            logger.info("Started!")
+        }
     }
 
     /**
@@ -137,10 +174,14 @@ class MarketPlugin : PanoPlugin() {
     }
 
     override suspend fun onStop() {
+        isRunning = false
+        MarketRuntime.stopped()
         stopExchangeRateScheduler()
     }
 
     override suspend fun onDisable() {
+        isRunning = false
+        MarketRuntime.stopped()
         stopExchangeRateScheduler()
         isInitialized = false
     }

@@ -1,6 +1,7 @@
 package com.panomc.plugins.market.db.impl
 
 import com.panomc.platform.annotation.Dao
+import com.panomc.plugins.market.db.MarketSchema
 import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.util.OrderStatus
@@ -19,37 +20,16 @@ import org.springframework.context.annotation.Scope
 @Scope(value = ConfigurableBeanFactory.SCOPE_SINGLETON)
 class MarketOrderDaoImpl : MarketOrderDao() {
 
-    private val itemTableName get() = getTablePrefix() + "market_order_item"
+    private val itemTableName get() = prefix() + "market_order_item"
 
     override suspend fun init(sqlClient: SqlClient) {
-        sqlClient
-            .query(
-                """
-                            CREATE TABLE IF NOT EXISTS `${getTablePrefix() + tableName}` (
-                              `id` bigint NOT NULL AUTO_INCREMENT,
-                              `userId` bigint,
-                              `playerUsername` VARCHAR(64) NOT NULL,
-                              `totalPrice` BIGINT NOT NULL,
-                              `currency` VARCHAR(8) NOT NULL DEFAULT 'TRY',
-                              `paymentMethodId` VARCHAR(64) NOT NULL DEFAULT '',
-                              `paymentLabel` VARCHAR(255) NOT NULL DEFAULT '',
-                              `status` VARCHAR(16) NOT NULL DEFAULT 'PENDING',
-                              `createdAt` BIGINT(20) NOT NULL,
-                              `updatedAt` BIGINT(20) NOT NULL,
-                              `exchangeRate` DOUBLE,
-                              PRIMARY KEY (`id`),
-                              INDEX (`userId`),
-                              INDEX (`status`, `createdAt`)
-                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Market order table.';
-                        """
-            )
-            .execute()
-            .coAwait()
+        // Never throws (01 section 14.1 rule 3): a failed CREATE is logged and left to MarketSchema.ensure / SchemaVerifier.
+        MarketSchema.installTable(sqlClient, MarketSchema.ORDER, prefix())
     }
 
     override suspend fun add(order: MarketOrder, sqlClient: SqlClient): Long {
         val query =
-            "INSERT INTO `${getTablePrefix() + tableName}` (`userId`, `playerUsername`, `totalPrice`, `currency`, `paymentMethodId`, `paymentLabel`, `status`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO `${prefix() + tableName}` (`userId`, `playerUsername`, `totalPrice`, `currency`, `paymentMethodId`, `paymentLabel`, `status`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
@@ -73,7 +53,7 @@ class MarketOrderDaoImpl : MarketOrderDao() {
 
     override suspend fun getAllPaged(page: Long, search: String?, status: OrderStatus?, sqlClient: SqlClient): List<MarketOrder> {
         val offset = (page - 1) * 10
-        val query = StringBuilder("SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}` o WHERE 1=1")
+        val query = StringBuilder("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` o WHERE 1=1")
         val params = Tuple.tuple()
 
         appendFilters(query, params, search, status)
@@ -90,7 +70,7 @@ class MarketOrderDaoImpl : MarketOrderDao() {
     }
 
     override suspend fun count(search: String?, status: OrderStatus?, sqlClient: SqlClient): Long {
-        val query = StringBuilder("SELECT COUNT(`id`) FROM `${getTablePrefix() + tableName}` o WHERE 1=1")
+        val query = StringBuilder("SELECT COUNT(`id`) FROM `${prefix() + tableName}` o WHERE 1=1")
         val params = Tuple.tuple()
 
         appendFilters(query, params, search, status)
@@ -125,7 +105,7 @@ class MarketOrderDaoImpl : MarketOrderDao() {
     }
 
     override suspend fun getById(id: Long, sqlClient: SqlClient): MarketOrder? {
-        val query = "SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}` WHERE `id` = ?"
+        val query = "SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `id` = ?"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
@@ -136,7 +116,7 @@ class MarketOrderDaoImpl : MarketOrderDao() {
     }
 
     override suspend fun updateStatus(id: Long, status: OrderStatus, sqlClient: SqlClient) {
-        val query = "UPDATE `${getTablePrefix() + tableName}` SET `status` = ?, `updatedAt` = ? WHERE `id` = ?"
+        val query = "UPDATE `${prefix() + tableName}` SET `status` = ?, `updatedAt` = ? WHERE `id` = ?"
 
         sqlClient
             .preparedQuery(query)
@@ -145,7 +125,7 @@ class MarketOrderDaoImpl : MarketOrderDao() {
     }
 
     override suspend fun updateExchangeRate(id: Long, exchangeRate: Double, sqlClient: SqlClient) {
-        val query = "UPDATE `${getTablePrefix() + tableName}` SET `exchangeRate` = ?, `updatedAt` = ? WHERE `id` = ?"
+        val query = "UPDATE `${prefix() + tableName}` SET `exchangeRate` = ?, `updatedAt` = ? WHERE `id` = ?"
 
         sqlClient
             .preparedQuery(query)
@@ -154,7 +134,7 @@ class MarketOrderDaoImpl : MarketOrderDao() {
     }
 
     override suspend fun anonymizeByUserId(userId: Long, sqlClient: SqlClient) {
-        val query = "UPDATE `${getTablePrefix() + tableName}` SET `userId` = NULL WHERE `userId` = ?"
+        val query = "UPDATE `${prefix() + tableName}` SET `userId` = NULL WHERE `userId` = ?"
 
         sqlClient
             .preparedQuery(query)
@@ -170,7 +150,7 @@ class MarketOrderDaoImpl : MarketOrderDao() {
 
     override suspend fun countAndRevenueBetween(from: Long, to: Long, statsCurrency: String, salesCurrency: String, exchangeRate: Double, sqlClient: SqlClient): Pair<Long, Double> {
         val query =
-            "SELECT COUNT(`id`), COALESCE(SUM(`totalPrice` * $conversionFactor), 0) AS revenue FROM `${getTablePrefix() + tableName}` WHERE `status` = ? AND `createdAt` >= ? AND `createdAt` < ?"
+            "SELECT COUNT(`id`), COALESCE(SUM(`totalPrice` * $conversionFactor), 0) AS revenue FROM `${prefix() + tableName}` WHERE `status` = ? AND `createdAt` >= ? AND `createdAt` < ?"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
@@ -193,7 +173,7 @@ class MarketOrderDaoImpl : MarketOrderDao() {
     private suspend fun revenueGrouped(format: String, from: Long, to: Long, statsCurrency: String, salesCurrency: String, exchangeRate: Double, sqlClient: SqlClient): Map<String, Double> {
         val query =
             "SELECT DATE_FORMAT(FROM_UNIXTIME(`createdAt` / 1000), '$format') AS bucket, COALESCE(SUM(`totalPrice` * $conversionFactor), 0) AS revenue" +
-                    " FROM `${getTablePrefix() + tableName}` WHERE `status` = ? AND `createdAt` >= ? AND `createdAt` < ?" +
+                    " FROM `${prefix() + tableName}` WHERE `status` = ? AND `createdAt` >= ? AND `createdAt` < ?" +
                     " GROUP BY bucket ORDER BY bucket ASC"
 
         val rows: RowSet<Row> = sqlClient
@@ -208,7 +188,7 @@ class MarketOrderDaoImpl : MarketOrderDao() {
 
     override suspend fun paymentMethodDistribution(sqlClient: SqlClient): Map<String, Long> {
         val query =
-            "SELECT `paymentLabel` AS bucket, COUNT(`id`) AS cnt FROM `${getTablePrefix() + tableName}` WHERE `status` = ? GROUP BY `paymentLabel` ORDER BY cnt DESC"
+            "SELECT `paymentLabel` AS bucket, COUNT(`id`) AS cnt FROM `${prefix() + tableName}` WHERE `status` = ? GROUP BY `paymentLabel` ORDER BY cnt DESC"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
@@ -222,7 +202,7 @@ class MarketOrderDaoImpl : MarketOrderDao() {
 
     override suspend fun uninstall(sqlClient: SqlClient) {
         sqlClient
-            .query("DROP TABLE IF EXISTS `${getTablePrefix() + tableName}`")
+            .query("DROP TABLE IF EXISTS `${prefix() + tableName}`")
             .execute()
             .coAwait()
     }

@@ -1,6 +1,7 @@
 package com.panomc.plugins.market.db.impl
 
 import com.panomc.platform.annotation.Dao
+import com.panomc.plugins.market.db.MarketSchema
 import com.panomc.plugins.market.db.dao.MarketCategoryDao
 import com.panomc.plugins.market.db.model.MarketCategory
 import io.vertx.kotlin.coroutines.coAwait
@@ -21,33 +22,13 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
     private val productTableName = "market_product"
 
     override suspend fun init(sqlClient: SqlClient) {
-        sqlClient
-            .query(
-                """
-                            CREATE TABLE IF NOT EXISTS `${getTablePrefix() + tableName}` (
-                              `id` bigint NOT NULL AUTO_INCREMENT,
-                              `name` VARCHAR(255) NOT NULL,
-                              `description` MEDIUMTEXT,
-                              `icon` VARCHAR(64) NOT NULL DEFAULT 'fa-folder',
-                              `color` VARCHAR(16) NOT NULL DEFAULT '#0d6efd',
-                              `status` VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
-                              `parentId` bigint,
-                              `position` int NOT NULL DEFAULT 0,
-                              `imageFileName` VARCHAR(255),
-                              `createdAt` BIGINT(20) NOT NULL,
-                              `updatedAt` BIGINT(20) NOT NULL,
-                              PRIMARY KEY (`id`),
-                              INDEX (`parentId`, `position`)
-                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Market category table.';
-                        """
-            )
-            .execute()
-            .coAwait()
+        // Never throws (01 section 14.1 rule 3): a failed CREATE is logged and left to MarketSchema.ensure / SchemaVerifier.
+        MarketSchema.installTable(sqlClient, MarketSchema.CATEGORY, prefix())
     }
 
     override suspend fun add(category: MarketCategory, sqlClient: SqlClient): Long {
         val query =
-            "INSERT INTO `${getTablePrefix() + tableName}` (`name`, `description`, `icon`, `color`, `status`, `parentId`, `position`, `imageFileName`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO `${prefix() + tableName}` (`name`, `description`, `icon`, `color`, `status`, `parentId`, `position`, `imageFileName`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
@@ -72,7 +53,7 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
 
     override suspend fun update(category: MarketCategory, sqlClient: SqlClient) {
         val query =
-            "UPDATE `${getTablePrefix() + tableName}` SET `name` = ?, `description` = ?, `icon` = ?, `color` = ?, `status` = ?, `parentId` = ?, `position` = ?, `imageFileName` = ?, `updatedAt` = ? WHERE `id` = ?"
+            "UPDATE `${prefix() + tableName}` SET `name` = ?, `description` = ?, `icon` = ?, `color` = ?, `status` = ?, `parentId` = ?, `position` = ?, `imageFileName` = ?, `updatedAt` = ? WHERE `id` = ?"
 
         sqlClient
             .preparedQuery(query)
@@ -94,7 +75,7 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
     }
 
     override suspend fun deleteById(id: Long, sqlClient: SqlClient) {
-        val query = "DELETE FROM `${getTablePrefix() + tableName}` WHERE `id` = ?"
+        val query = "DELETE FROM `${prefix() + tableName}` WHERE `id` = ?"
 
         sqlClient
             .preparedQuery(query)
@@ -103,7 +84,7 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
     }
 
     override suspend fun getById(id: Long, sqlClient: SqlClient): MarketCategory? {
-        val query = "SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}` WHERE `id` = ?"
+        val query = "SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `id` = ?"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
@@ -114,7 +95,7 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
     }
 
     override suspend fun getByImageFileName(imageFileName: String, sqlClient: SqlClient): MarketCategory? {
-        val query = "SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}` WHERE `imageFileName` = ?"
+        val query = "SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `imageFileName` = ?"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
@@ -125,7 +106,7 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
     }
 
     override suspend fun getAll(search: String?, sqlClient: SqlClient): List<MarketCategory> {
-        val query = StringBuilder("SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}` WHERE 1=1")
+        val query = StringBuilder("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE 1=1")
         val params = Tuple.tuple()
 
         if (!search.isNullOrBlank()) {
@@ -147,7 +128,7 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
         if (ids.isEmpty()) return emptyMap()
 
         val placeholders = ids.joinToString(", ") { "?" }
-        val query = "SELECT `id`, `name` FROM `${getTablePrefix() + tableName}` WHERE `id` IN ($placeholders)"
+        val query = "SELECT `id`, `name` FROM `${prefix() + tableName}` WHERE `id` IN ($placeholders)"
 
         val params = Tuple.tuple()
         ids.forEach { params.addLong(it) }
@@ -164,7 +145,7 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
 
     override suspend fun getMaxPosition(parentId: Long?, sqlClient: SqlClient): Int {
         val query =
-            "SELECT MAX(`position`) FROM `${getTablePrefix() + tableName}` WHERE `parentId` <=> ?"
+            "SELECT MAX(`position`) FROM `${prefix() + tableName}` WHERE `parentId` <=> ?"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
@@ -176,7 +157,7 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
 
     override suspend fun updateParentAndPosition(id: Long, parentId: Long?, position: Int, sqlClient: SqlClient) {
         val query =
-            "UPDATE `${getTablePrefix() + tableName}` SET `parentId` = ?, `position` = ?, `updatedAt` = ? WHERE `id` = ?"
+            "UPDATE `${prefix() + tableName}` SET `parentId` = ?, `position` = ?, `updatedAt` = ? WHERE `id` = ?"
 
         sqlClient
             .preparedQuery(query)
@@ -186,7 +167,7 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
 
     override suspend fun reparentChildren(fromParentId: Long, toParentId: Long?, sqlClient: SqlClient) {
         val query =
-            "UPDATE `${getTablePrefix() + tableName}` SET `parentId` = ? WHERE `parentId` = ?"
+            "UPDATE `${prefix() + tableName}` SET `parentId` = ? WHERE `parentId` = ?"
 
         sqlClient
             .preparedQuery(query)
@@ -196,7 +177,7 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
 
     override suspend fun clearProductsCategory(categoryId: Long, sqlClient: SqlClient) {
         val query =
-            "UPDATE `${getTablePrefix() + productTableName}` SET `categoryId` = NULL WHERE `categoryId` = ?"
+            "UPDATE `${prefix() + productTableName}` SET `categoryId` = NULL WHERE `categoryId` = ?"
 
         sqlClient
             .preparedQuery(query)
@@ -206,7 +187,7 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
 
     override suspend fun getProductCountsByCategory(sqlClient: SqlClient): Map<Long, Long> {
         val query =
-            "SELECT `categoryId`, COUNT(*) FROM `${getTablePrefix() + productTableName}` WHERE `categoryId` IS NOT NULL GROUP BY `categoryId`"
+            "SELECT `categoryId`, COUNT(*) FROM `${prefix() + productTableName}` WHERE `categoryId` IS NOT NULL GROUP BY `categoryId`"
 
         val rows: RowSet<Row> = sqlClient
             .query(query)
@@ -218,7 +199,7 @@ class MarketCategoryDaoImpl : MarketCategoryDao() {
 
     override suspend fun uninstall(sqlClient: SqlClient) {
         sqlClient
-            .query("DROP TABLE IF EXISTS `${getTablePrefix() + tableName}`")
+            .query("DROP TABLE IF EXISTS `${prefix() + tableName}`")
             .execute()
             .coAwait()
     }

@@ -1,11 +1,11 @@
 package com.panomc.plugins.market.db.dao
 
-import com.panomc.platform.db.Dao
+import com.panomc.plugins.market.db.MarketDao
 import com.panomc.plugins.market.db.model.MarketComparison
 import com.panomc.plugins.market.util.MarketStatus
 import io.vertx.sqlclient.SqlClient
 
-abstract class MarketComparisonDao : Dao<MarketComparison>(MarketComparison::class.java) {
+abstract class MarketComparisonDao : MarketDao<MarketComparison>(MarketComparison::class.java) {
     abstract suspend fun add(comparison: MarketComparison, sqlClient: SqlClient): Long
 
     abstract suspend fun update(comparison: MarketComparison, sqlClient: SqlClient)

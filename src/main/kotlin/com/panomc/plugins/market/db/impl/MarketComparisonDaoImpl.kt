@@ -1,6 +1,7 @@
 package com.panomc.plugins.market.db.impl
 
 import com.panomc.platform.annotation.Dao
+import com.panomc.plugins.market.db.MarketSchema
 import com.panomc.plugins.market.db.dao.MarketComparisonDao
 import com.panomc.plugins.market.db.model.MarketComparison
 import com.panomc.plugins.market.util.MarketStatus
@@ -20,30 +21,13 @@ import org.springframework.context.annotation.Scope
 class MarketComparisonDaoImpl : MarketComparisonDao() {
 
     override suspend fun init(sqlClient: SqlClient) {
-        sqlClient
-            .query(
-                """
-                            CREATE TABLE IF NOT EXISTS `${getTablePrefix() + tableName}` (
-                              `id` bigint NOT NULL AUTO_INCREMENT,
-                              `name` VARCHAR(255) NOT NULL,
-                              `status` VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
-                              `priority` INT NOT NULL DEFAULT 0,
-                              `productIds` MEDIUMTEXT,
-                              `features` MEDIUMTEXT,
-                              `cellValues` MEDIUMTEXT,
-                              `createdAt` BIGINT(20) NOT NULL,
-                              `updatedAt` BIGINT(20) NOT NULL,
-                              PRIMARY KEY (`id`)
-                            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Market comparison table.';
-                        """
-            )
-            .execute()
-            .coAwait()
+        // Never throws (01 section 14.1 rule 3): a failed CREATE is logged and left to MarketSchema.ensure / SchemaVerifier.
+        MarketSchema.installTable(sqlClient, MarketSchema.COMPARISON, prefix())
     }
 
     override suspend fun add(comparison: MarketComparison, sqlClient: SqlClient): Long {
         val query =
-            "INSERT INTO `${getTablePrefix() + tableName}` (`name`, `status`, `priority`, `productIds`, `features`, `cellValues`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO `${prefix() + tableName}` (`name`, `status`, `priority`, `productIds`, `features`, `cellValues`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
@@ -66,7 +50,7 @@ class MarketComparisonDaoImpl : MarketComparisonDao() {
 
     override suspend fun update(comparison: MarketComparison, sqlClient: SqlClient) {
         val query =
-            "UPDATE `${getTablePrefix() + tableName}` SET `name` = ?, `status` = ?, `priority` = ?, `productIds` = ?, `features` = ?, `cellValues` = ?, `updatedAt` = ? WHERE `id` = ?"
+            "UPDATE `${prefix() + tableName}` SET `name` = ?, `status` = ?, `priority` = ?, `productIds` = ?, `features` = ?, `cellValues` = ?, `updatedAt` = ? WHERE `id` = ?"
 
         sqlClient
             .preparedQuery(query)
@@ -86,7 +70,7 @@ class MarketComparisonDaoImpl : MarketComparisonDao() {
     }
 
     override suspend fun deleteById(id: Long, sqlClient: SqlClient) {
-        val query = "DELETE FROM `${getTablePrefix() + tableName}` WHERE `id` = ?"
+        val query = "DELETE FROM `${prefix() + tableName}` WHERE `id` = ?"
 
         sqlClient
             .preparedQuery(query)
@@ -95,7 +79,7 @@ class MarketComparisonDaoImpl : MarketComparisonDao() {
     }
 
     override suspend fun getById(id: Long, sqlClient: SqlClient): MarketComparison? {
-        val query = "SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}` WHERE `id` = ?"
+        val query = "SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `id` = ?"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
@@ -107,7 +91,7 @@ class MarketComparisonDaoImpl : MarketComparisonDao() {
 
     override suspend fun getAllPaged(page: Long, status: MarketStatus?, search: String?, sqlClient: SqlClient): List<MarketComparison> {
         val offset = (page - 1) * 10
-        val query = StringBuilder("SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}` WHERE 1=1")
+        val query = StringBuilder("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE 1=1")
         val params = Tuple.tuple()
 
         if (status != null) {
@@ -133,7 +117,7 @@ class MarketComparisonDaoImpl : MarketComparisonDao() {
 
     override suspend fun getAllByStatus(status: MarketStatus, sqlClient: SqlClient): List<MarketComparison> {
         val query =
-            "SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}` WHERE `status` = ? ORDER BY `priority` DESC, `id` DESC"
+            "SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `status` = ? ORDER BY `priority` DESC, `id` DESC"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
@@ -144,7 +128,7 @@ class MarketComparisonDaoImpl : MarketComparisonDao() {
     }
 
     override suspend fun count(status: MarketStatus?, search: String?, sqlClient: SqlClient): Long {
-        val query = StringBuilder("SELECT COUNT(`id`) FROM `${getTablePrefix() + tableName}` WHERE 1=1")
+        val query = StringBuilder("SELECT COUNT(`id`) FROM `${prefix() + tableName}` WHERE 1=1")
         val params = Tuple.tuple()
 
         if (status != null) {
@@ -170,7 +154,7 @@ class MarketComparisonDaoImpl : MarketComparisonDao() {
         if (ids.isEmpty()) return emptyMap()
 
         val placeholders = ids.joinToString(", ") { "?" }
-        val query = "SELECT `id`, `name` FROM `${getTablePrefix()}market_product` WHERE `id` IN ($placeholders)"
+        val query = "SELECT `id`, `name` FROM `${prefix()}market_product` WHERE `id` IN ($placeholders)"
 
         val params = Tuple.tuple()
         ids.forEach { params.addLong(it) }
@@ -187,7 +171,7 @@ class MarketComparisonDaoImpl : MarketComparisonDao() {
 
     override suspend fun uninstall(sqlClient: SqlClient) {
         sqlClient
-            .query("DROP TABLE IF EXISTS `${getTablePrefix() + tableName}`")
+            .query("DROP TABLE IF EXISTS `${prefix() + tableName}`")
             .execute()
             .coAwait()
     }

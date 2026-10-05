@@ -3,7 +3,6 @@ package com.panomc.plugins.market.event
 import com.panomc.platform.api.annotation.EventListener
 import com.panomc.platform.api.event.SetupEventListener
 import com.panomc.plugins.market.MarketPlugin
-import org.pf4j.PluginState
 
 @EventListener
 class SetupEventHandler(private val plugin: MarketPlugin) : SetupEventListener {
@@ -12,7 +11,8 @@ class SetupEventHandler(private val plugin: MarketPlugin) : SetupEventListener {
     }
 
     override suspend fun onSetupFinished() {
-        if (plugin.pluginState == PluginState.STARTED) {
+        // plugin.pluginState is a snapshot taken at instance creation and never reads STARTED (see MarketPlugin.isRunning).
+        if (plugin.isRunning) {
             logger.info("Setup finished! Initializing plugin...")
 
             plugin.startPlugin()

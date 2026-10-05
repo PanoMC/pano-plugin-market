@@ -1,11 +1,11 @@
 package com.panomc.plugins.market.db.dao
 
-import com.panomc.platform.db.Dao
+import com.panomc.plugins.market.db.MarketDao
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.sqlclient.SqlClient
 
-abstract class MarketOrderDao : Dao<MarketOrder>(MarketOrder::class.java) {
+abstract class MarketOrderDao : MarketDao<MarketOrder>(MarketOrder::class.java) {
     abstract suspend fun add(order: MarketOrder, sqlClient: SqlClient): Long
 
     abstract suspend fun getAllPaged(page: Long, search: String?, status: OrderStatus?, sqlClient: SqlClient): List<MarketOrder>

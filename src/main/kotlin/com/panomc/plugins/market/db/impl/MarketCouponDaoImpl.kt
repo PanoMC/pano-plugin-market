@@ -1,6 +1,7 @@
 package com.panomc.plugins.market.db.impl
 
 import com.panomc.platform.annotation.Dao
+import com.panomc.plugins.market.db.MarketSchema
 import com.panomc.plugins.market.db.dao.MarketCouponDao
 import com.panomc.plugins.market.db.model.MarketCoupon
 import io.vertx.core.json.JsonArray
@@ -19,35 +20,13 @@ import org.springframework.context.annotation.Scope
 @Scope(value = ConfigurableBeanFactory.SCOPE_SINGLETON)
 class MarketCouponDaoImpl : MarketCouponDao() {
     override suspend fun init(sqlClient: SqlClient) {
-        sqlClient.query(
-            """
-                CREATE TABLE IF NOT EXISTS `${getTablePrefix() + tableName}` (
-                    `id` bigint NOT NULL AUTO_INCREMENT,
-                    `name` VARCHAR(255) NOT NULL DEFAULT '',
-                    `code` VARCHAR(64) NOT NULL,
-                    `scope` VARCHAR(16) NOT NULL DEFAULT 'ALL',
-                    `productIds` MEDIUMTEXT,
-                    `discount` BIGINT NOT NULL,
-                    `unit` VARCHAR(8) NOT NULL DEFAULT 'PERCENT',
-                    `minPaymentAmount` BIGINT,
-                    `startDate` BIGINT,
-                    `expiryDate` BIGINT,
-                    `redeemLimit` INT,
-                    `customerRedeemLimit` INT,
-                    `usedCount` INT NOT NULL DEFAULT 0,
-                    `status` VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
-                    `createdAt` BIGINT(20) NOT NULL,
-                    `updatedAt` BIGINT(20) NOT NULL,
-                    PRIMARY KEY (`id`),
-                    UNIQUE KEY `unique_code` (`code`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Market coupons table.';
-            """
-        ).execute().coAwait()
+        // Never throws (01 section 14.1 rule 3): a failed CREATE is logged and left to MarketSchema.ensure / SchemaVerifier.
+        MarketSchema.installTable(sqlClient, MarketSchema.COUPON, prefix())
     }
 
     override suspend fun add(coupon: MarketCoupon, sqlClient: SqlClient): Long {
         val query =
-            "INSERT INTO `${getTablePrefix() + tableName}` (`name`, `code`, `scope`, `productIds`, `discount`, `unit`, `minPaymentAmount`, `startDate`, `expiryDate`, `redeemLimit`, `customerRedeemLimit`, `usedCount`, `status`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO `${prefix() + tableName}` (`name`, `code`, `scope`, `productIds`, `discount`, `unit`, `minPaymentAmount`, `startDate`, `expiryDate`, `redeemLimit`, `customerRedeemLimit`, `usedCount`, `status`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
@@ -75,9 +54,11 @@ class MarketCouponDaoImpl : MarketCouponDao() {
         return rows.property(MySQLClient.LAST_INSERTED_ID)
     }
 
+    // The counters (usedCount) are not written by the generic update (00 section 8.3, bug 2 of the backend map):
+    // they change only through guarded atomic statements, never from a stale read.
     override suspend fun update(coupon: MarketCoupon, sqlClient: SqlClient) {
         val query =
-            "UPDATE `${getTablePrefix() + tableName}` SET `name` = ?, `code` = ?, `scope` = ?, `productIds` = ?, `discount` = ?, `unit` = ?, `minPaymentAmount` = ?, `startDate` = ?, `expiryDate` = ?, `redeemLimit` = ?, `customerRedeemLimit` = ?, `usedCount` = ?, `status` = ?, `updatedAt` = ? WHERE `id` = ?"
+            "UPDATE `${prefix() + tableName}` SET `name` = ?, `code` = ?, `scope` = ?, `productIds` = ?, `discount` = ?, `unit` = ?, `minPaymentAmount` = ?, `startDate` = ?, `expiryDate` = ?, `redeemLimit` = ?, `customerRedeemLimit` = ?, `status` = ?, `updatedAt` = ? WHERE `id` = ?"
 
         sqlClient
             .preparedQuery(query)
@@ -94,7 +75,6 @@ class MarketCouponDaoImpl : MarketCouponDao() {
                     coupon.expiryDate,
                     coupon.redeemLimit,
                     coupon.customerRedeemLimit,
-                    coupon.usedCount,
                     coupon.status.name,
                     coupon.updatedAt,
                     coupon.id
@@ -105,14 +85,14 @@ class MarketCouponDaoImpl : MarketCouponDao() {
 
     override suspend fun deleteById(id: Long, sqlClient: SqlClient) {
         sqlClient
-            .preparedQuery("DELETE FROM `${getTablePrefix() + tableName}` WHERE `id` = ?")
+            .preparedQuery("DELETE FROM `${prefix() + tableName}` WHERE `id` = ?")
             .execute(Tuple.of(id))
             .coAwait()
     }
 
     override suspend fun getById(id: Long, sqlClient: SqlClient): MarketCoupon? {
         val rows: RowSet<Row> = sqlClient
-            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}` WHERE `id` = ?")
+            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `id` = ?")
             .execute(Tuple.of(id))
             .coAwait()
 
@@ -121,7 +101,7 @@ class MarketCouponDaoImpl : MarketCouponDao() {
 
     override suspend fun getByCode(code: String, sqlClient: SqlClient): MarketCoupon? {
         val rows: RowSet<Row> = sqlClient
-            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}` WHERE `code` = ?")
+            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `code` = ?")
             .execute(Tuple.of(code))
             .coAwait()
 
@@ -130,7 +110,7 @@ class MarketCouponDaoImpl : MarketCouponDao() {
 
     override suspend fun getAll(page: Long, search: String?, status: String?, sqlClient: SqlClient): List<MarketCoupon> {
         val offset = (page - 1) * 10
-        val query = StringBuilder("SELECT ${fields.toTableQuery()} FROM `${getTablePrefix() + tableName}` WHERE 1=1")
+        val query = StringBuilder("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE 1=1")
         val params = Tuple.tuple()
 
         if (!status.isNullOrBlank()) {
@@ -153,7 +133,7 @@ class MarketCouponDaoImpl : MarketCouponDao() {
     }
 
     override suspend fun count(search: String?, status: String?, sqlClient: SqlClient): Long {
-        val query = StringBuilder("SELECT COUNT(`id`) FROM `${getTablePrefix() + tableName}` WHERE 1=1")
+        val query = StringBuilder("SELECT COUNT(`id`) FROM `${prefix() + tableName}` WHERE 1=1")
         val params = Tuple.tuple()
 
         if (!status.isNullOrBlank()) {
@@ -175,6 +155,6 @@ class MarketCouponDaoImpl : MarketCouponDao() {
     }
 
     override suspend fun uninstall(sqlClient: SqlClient) {
-        sqlClient.query("DROP TABLE IF EXISTS `${getTablePrefix() + tableName}`").execute().coAwait()
+        sqlClient.query("DROP TABLE IF EXISTS `${prefix() + tableName}`").execute().coAwait()
     }
 }

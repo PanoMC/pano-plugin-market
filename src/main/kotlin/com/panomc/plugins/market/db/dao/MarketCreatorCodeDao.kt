@@ -1,10 +1,10 @@
 package com.panomc.plugins.market.db.dao
 
-import com.panomc.platform.db.Dao
+import com.panomc.plugins.market.db.MarketDao
 import com.panomc.plugins.market.db.model.MarketCreatorCode
 import io.vertx.sqlclient.SqlClient
 
-abstract class MarketCreatorCodeDao : Dao<MarketCreatorCode>(MarketCreatorCode::class.java) {
+abstract class MarketCreatorCodeDao : MarketDao<MarketCreatorCode>(MarketCreatorCode::class.java) {
     abstract suspend fun add(creatorCode: MarketCreatorCode, sqlClient: SqlClient): Long
     abstract suspend fun update(creatorCode: MarketCreatorCode, sqlClient: SqlClient)
     abstract suspend fun deleteById(id: Long, sqlClient: SqlClient)
