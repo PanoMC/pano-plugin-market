@@ -434,9 +434,10 @@ print_exports() {
   fi
 }
 
-preflight_ports() {
-  local p
-  for p in "$HTTP_PORT" "$GW_PORT" $UI_THEME_PORT $UI_PANEL_PORT; do
+preflight_ports() { # $1 = fresh | keep; the gateway port belongs to the test JVM's FakePayGateway, so it is only checked on a fresh start
+  local p ports="$HTTP_PORT $UI_THEME_PORT $UI_PANEL_PORT"
+  [ "$1" = fresh ] && ports="$ports $GW_PORT"
+  for p in $ports; do
     port_in_use "$p" && die 10 "port $p is in use"
   done
   local pid; pid=$(recorded_pid)
@@ -447,7 +448,7 @@ preflight_ports() {
 cmd_start() { # $1 = fresh | keep
   default_ports
   [ "$1" = keep ] && load_ports
-  preflight_ports
+  preflight_ports "$1"
   resolve_jars
   check_pano_jar
   check_plugin_jars
@@ -488,7 +489,7 @@ cmd_kill() {
   local kids; kids=$(descendants "$pid")
   kill -KILL "$pid" 2>/dev/null
   wait_gone "$pid" 20 || die 19 "PID $pid survived SIGKILL"
-  rm -f "$PIDFILE"
+  # the PID file stays: restart must find the dead PID (stop_recorded removes a file whose PID is gone)
   echo "$kids" | reap
   say "killed (PID $pid)"
 }
@@ -515,7 +516,7 @@ cmd_status() {
 
 cmd_install_legacy() {
   default_ports
-  preflight_ports
+  preflight_ports fresh
   resolve_jars
   check_pano_jar
   check_plugin_jars
