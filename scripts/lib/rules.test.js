@@ -41,6 +41,16 @@ describe('locale comparison', () => {
     expect(p).toContain('empty or non-string value');
     expect(p).toContain("placeholders of 'a'");
   });
+  test('a whitespace-only separator passes, an empty one and other blanks fail', () => {
+    const maps = (sep, other) => ({
+      tr: m({ 'server-format.group-separator': '.', x: 'a' }),
+      'en-US': m({ 'server-format.group-separator': ',', x: 'a' }),
+      ru: m({ 'server-format.group-separator': sep, x: other }),
+    });
+    expect(compareLocales(maps('\u00a0', 'a'), 'f')).toEqual([]);
+    expect(compareLocales(maps('', 'a'), 'f').join('\n')).toContain('empty or non-string');
+    expect(compareLocales(maps('\u00a0', ' '), 'f').join('\n')).toContain('empty or non-string');
+  });
   test('used keys', () => {
     const src = "$_('a.b') $_(`x.${y}`) $_('dyn.' + k) $_('plugins.pano-plugin-market.c', {})";
     expect(usedKeys(src).map((k) => k.key)).toEqual(['a.b', 'c']);
