@@ -26,6 +26,12 @@ abstract class MarketShipmentDao : MarketDao<MarketShipment>(MarketShipment::cla
     /** Shipments in [statuses] whose `nextPollAt` is due (`idx_poll`), oldest first. */
     abstract suspend fun getDueForPoll(statuses: List<ShipmentStatus>, now: Long, limit: Int, sqlClient: SqlClient): List<MarketShipment>
 
+    /** Shipments of one [providerId] in [statuses] whose `nextPollAt` is due, oldest first, at most [limit]. */
+    abstract suspend fun getDueForPoll(statuses: List<ShipmentStatus>, now: Long, limit: Int, providerId: String, sqlClient: SqlClient): List<MarketShipment>
+
+    /** The providers that own at least one due shipment in [statuses], the one with the oldest due shipment first. */
+    abstract suspend fun getDueProviderIds(statuses: List<ShipmentStatus>, now: Long, sqlClient: SqlClient): List<String>
+
     /** Compare-and-set of the status: `true` when the row was in [from]. */
     abstract suspend fun transition(id: Long, from: ShipmentStatus, to: ShipmentStatus, now: Long, sqlClient: SqlClient): Boolean
 

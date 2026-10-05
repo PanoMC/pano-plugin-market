@@ -222,6 +222,37 @@ class ShipmentTrackingJobIT : ShippingTrackingITBase() {
     }
 
     @Test
+    fun `210 due shipments of a provider that is not registered do not starve the shipment of a registered carrier`(): Unit = runBlocking {
+        val o = order("Shirt" to 1)
+        val real = shipCarrier(o)
+        val now = w.clock.now()
+
+        // the carrier plugin of "ghost" was removed after sales: 210 open, due shipments that are older than the real one
+        repeat(210) { n ->
+            w.shipments.add(
+                com.panomc.plugins.market.db.model.MarketShipment(
+                    orderId = o.id, providerId = "ghost", status = ShipmentStatus.IN_TRANSIT, merchantReference = "ghost-ref-$n", carrierReference = "GHOST-$n",
+                    trackingNumber = "GH$n", nextPollAt = now - day + n, createdAt = now - 2 * day, updatedAt = now - 2 * day
+                ),
+                pool
+            )
+        }
+
+        carrier.onTrack = { listOf(updateFor(real, event(Spi.IN_TRANSIT, w.clock.now(), "e-starve"))) }
+        w.clock.advance(2 * hour)
+
+        assertEquals(1, job().runOnce(), "only the registered carrier's shipment is polled")
+        assertEquals(1, carrier.tracks.size)
+        assertEquals(listOf(real.id), carrier.tracks.single().shipments.map { it.id })
+        assertEquals(1, shipmentNow(real.id).pollCount)
+        assertEquals(ShipmentStatus.IN_TRANSIT, shipmentNow(real.id).status)
+
+        val ghosts = sql("SELECT COUNT(*) AS c FROM `pano_market_shipment` WHERE `providerId` = 'ghost' AND `pollCount` = 0 AND `nextPollAt` <= ?", w.clock.now())
+
+        assertEquals(210L, ghosts.single().getLong("c"), "the skipped provider's shipments keep nextPollAt and pollCount")
+    }
+
+    @Test
     fun `a manual shipment is never polled`(): Unit = runBlocking {
         val o = order("Shirt" to 1)
         val body = io.vertx.core.json.JsonObject().put("providerId", "manual").put("parcels", io.vertx.core.json.JsonArray().add(io.vertx.core.json.JsonObject().put("weightGrams", 500)))

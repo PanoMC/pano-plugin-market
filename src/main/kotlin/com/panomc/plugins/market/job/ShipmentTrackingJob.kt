@@ -19,9 +19,10 @@ import org.slf4j.LoggerFactory
  * are due. Polling is mandatory for most carriers (DHL Express has no push, FedEx push is paid, most Turkish carriers have none).
  *
  * ```
- * select: status NOT IN (DELIVERED, RETURNED, CANCELLED, LOST) AND nextPollAt <= now  ORDER BY nextPollAt LIMIT 200
- * group by providerId; skip the groups whose provider is not registered / not enabled / has no trackingPull (nextPollAt untouched)
- * per group: chunks of capabilities.trackBatchSize, at most 50 shipments per provider per run
+ * providers: distinct providerId of status NOT IN (DELIVERED, RETURNED, CANCELLED, LOST) AND nextPollAt <= now
+ * skip the providers that are not registered / not enabled / have no trackingPull (nextPollAt untouched) BEFORE any shipment is selected, so that
+ *   a provider that can never be asked (carrier plugin removed after sales) cannot fill the window and starve the healthy ones
+ * per pollable provider: its oldest 50 due shipments (ORDER BY nextPollAt LIMIT 50), in chunks of capabilities.trackBatchSize
  *   claim each: UPDATE ... SET nextPollAt = now + 10 min WHERE id = ? AND nextPollAt = :seen   (0 rows: somebody else has it)
  *   provider.track(chunk), 30 s
  *   success: applyUpdate(..., POLL) per update that names a shipment of the chunk
@@ -38,7 +39,6 @@ class ShipmentTrackingJob(
     private val service: ShippingService,
     private val client: suspend () -> SqlClient,
     private val trackTimeoutMs: Long = TRACK_TIMEOUT_MS,
-    private val dueLimit: Int = DUE_LIMIT,
     private val perProvider: Int = PER_PROVIDER
 ) {
     /** The shipments this call polled (claimed and bookkept). */
@@ -46,15 +46,11 @@ class ShipmentTrackingJob(
         try {
             val sql = client()
             val now = clock.now()
-            val due = shipments.getDueForPoll(POLLED_STATUSES, now, dueLimit, sql)
-
-            if (due.isEmpty()) return 0
-
             var handled = 0
 
-            for ((providerId, group) in due.groupBy { it.providerId }) {
+            for (providerId in shipments.getDueProviderIds(POLLED_STATUSES, now, sql)) {
                 try {
-                    handled += pollProvider(providerId, group.take(perProvider), sql)
+                    handled += pollProvider(providerId, sql)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (t: Throwable) {
@@ -73,8 +69,9 @@ class ShipmentTrackingJob(
         }
     }
 
-    private suspend fun pollProvider(providerId: String, group: List<MarketShipment>, sql: SqlClient): Int {
+    private suspend fun pollProvider(providerId: String, sql: SqlClient): Int {
         val access = service.pollAccess(providerId, sql) ?: return 0
+        val group = shipments.getDueForPoll(POLLED_STATUSES, clock.now(), perProvider, providerId, sql)
         var handled = 0
 
         for (chunk in group.chunked(access.trackBatchSize)) {
@@ -147,7 +144,6 @@ class ShipmentTrackingJob(
         /** 10 section 10.2: `provider.track` deadline. */
         const val TRACK_TIMEOUT_MS = 30_000L
 
-        const val DUE_LIMIT = 200
         const val PER_PROVIDER = 50
 
         /** The claim: a due shipment is not due again for 10 minutes. */

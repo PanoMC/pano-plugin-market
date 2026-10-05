@@ -174,6 +174,36 @@ class MarketShipmentDaoImpl : MarketShipmentDao() {
         return many("`status` IN ($marks) AND `nextPollAt` IS NOT NULL AND `nextPollAt` <= ?", "`nextPollAt` ASC, `id` ASC LIMIT $limit", values, sqlClient)
     }
 
+    override suspend fun getDueForPoll(statuses: List<ShipmentStatus>, now: Long, limit: Int, providerId: String, sqlClient: SqlClient): List<MarketShipment> {
+        if (statuses.isEmpty()) return emptyList()
+        val marks = statuses.joinToString(", ") { "?" }
+        val values = Tuple.tuple()
+        statuses.forEach { values.addValue(it.name) }
+        values.addValue(now)
+        values.addValue(providerId)
+        return many(
+            "`status` IN ($marks) AND `nextPollAt` IS NOT NULL AND `nextPollAt` <= ? AND `providerId` = ?",
+            "`nextPollAt` ASC, `id` ASC LIMIT $limit", values, sqlClient
+        )
+    }
+
+    override suspend fun getDueProviderIds(statuses: List<ShipmentStatus>, now: Long, sqlClient: SqlClient): List<String> {
+        if (statuses.isEmpty()) return emptyList()
+        val marks = statuses.joinToString(", ") { "?" }
+        val values = Tuple.tuple()
+        statuses.forEach { values.addValue(it.name) }
+        values.addValue(now)
+
+        return sqlClient
+            .preparedQuery(
+                "SELECT `providerId` FROM `${prefix() + tableName}` WHERE `status` IN ($marks) AND `nextPollAt` IS NOT NULL AND `nextPollAt` <= ? " +
+                    "GROUP BY `providerId` ORDER BY MIN(`nextPollAt`) ASC, `providerId` ASC"
+            )
+            .execute(values)
+            .coAwait()
+            .map { it.getString(0) }
+    }
+
     override suspend fun transition(id: Long, from: ShipmentStatus, to: ShipmentStatus, now: Long, sqlClient: SqlClient): Boolean =
         change("`status` = ?, `updatedAt` = ?", "`id` = ? AND `status` = ?", Tuple.of(to.name, now, id, from.name), sqlClient) > 0
 

@@ -435,6 +435,154 @@ class ShippingWebhookIT : ShippingTrackingITBase() {
         assertTrue(rows().all { it.status == PaymentEventStatus.PROCESSED })
     }
 
+    // ================================================================================================ delivery key rules (02 section 7.3 step 5)
+
+    /** A dispatcher whose service has no fulfilment half: every update that has to be resolved and applied fails (market's own failure, step 6). */
+    private fun unwiredDispatcher() = ShippingInboundDispatcher(
+        store, w.shippingCarriers,
+        com.panomc.plugins.market.service.ShippingService(
+            clock = w.clock, zones = w.shippingZones, methods = w.shippingMethods, rates = w.shippingRates, carriers = w.shippingCarriers, currencyRates = w.currencyRates,
+            addresses = w.addresses, lookup = lookup, cipher = com.panomc.plugins.market.provider.SecretCipher(ByteArray(32) { (it + 5).toByte() }),
+            contexts = com.panomc.plugins.market.service.ShippingContexts { provider, settings, testMode ->
+                com.panomc.plugins.market.spi.testkit.TestContexts.shipping(provider.id, settings, vertx, testMode)
+            }
+        ),
+        { pool }, w.clock, w.ids, { state }
+    )
+
+    /** A keyed delivery that fails in step 6: the row is `FAILED` and holds `e:<eventKey>`. */
+    private suspend fun failedKeyed(payload: String): MarketPaymentEvent {
+        assertEquals(503, unwiredDispatcher().handle(call(payload), TOKEN).status)
+
+        val failed = rows().single()
+
+        assertEquals(PaymentEventStatus.FAILED, failed.status)
+
+        return failed
+    }
+
+    @Test
+    fun `a keyed delivery that failed is applied when the carrier delivers it again - the FAILED holder is SUPERSEDED and the new row takes the key`(): Unit = runBlocking {
+        numbering()
+
+        val o = order("Shirt" to 1)
+        val s = shipCarrier(o)
+        val keyed = body(update("carrier", s.carrierReference!!, "IN_TRANSIT", w.clock.now() + 1, "k1"), eventKey = "kd-1")
+        val failed = failedKeyed(keyed)
+
+        assertEquals("e:kd-1", failed.eventKey)
+        assertEquals(0, shipmentEvents(s.id).size)
+
+        assertEquals(200, post(keyed).status)
+
+        val log = rows()
+
+        assertEquals(listOf(PaymentEventStatus.SUPERSEDED, PaymentEventStatus.PROCESSED), log.map { it.status })
+        assertEquals("e:kd-1:${failed.id}", log[0].eventKey, "the old row keeps its key plus its id")
+        assertEquals("e:kd-1", log[1].eventKey, "the new row holds the delivery key")
+        assertEquals(listOf("k1"), shipmentEvents(s.id).map { it.third }, "applied once")
+        assertEquals(ShipmentStatus.IN_TRANSIT, shipmentNow(s.id).status)
+
+        // the delivery is settled now: another copy is a DUPLICATE and applies nothing
+        post(keyed)
+
+        assertEquals(PaymentEventStatus.DUPLICATE, rows().last().status)
+        assertEquals(1, rows().first { it.eventKey == "e:kd-1" }.duplicateCount)
+        assertEquals(listOf("k1"), shipmentEvents(s.id).map { it.third })
+    }
+
+    @Test
+    fun `a FAILED keyed row that is run again through retry owns its key, is PROCESSED and applies the update`(): Unit = runBlocking {
+        numbering()
+
+        val o = order("Shirt" to 1)
+        val s = shipCarrier(o)
+        val failed = failedKeyed(body(update("carrier", s.carrierReference!!, "IN_TRANSIT", w.clock.now() + 1, "k2"), eventKey = "kd-2"))
+
+        assertEquals("e:kd-2", failed.eventKey)
+        assertEquals(0, shipmentEvents(s.id).size)
+
+        assertTrue(dispatcher.retry(failed))
+
+        val done = rows().single()
+
+        assertEquals(failed.id, done.id)
+        assertEquals(PaymentEventStatus.PROCESSED, done.status)
+        assertEquals("e:kd-2", done.eventKey, "unchanged: the row finds its own key and is neither a DUPLICATE nor superseded")
+        assertEquals(2, done.attempts)
+        assertEquals(0, done.duplicateCount)
+        assertEquals(listOf("k2"), shipmentEvents(s.id).map { it.third })
+        assertEquals(ShipmentStatus.IN_TRANSIT, shipmentNow(s.id).status)
+    }
+
+    @Test
+    fun `a holder that is still RECEIVED and younger than 60 seconds makes the new row a DUPLICATE, but its updates are applied`(): Unit = runBlocking {
+        numbering()
+
+        val o = order("Shirt" to 1)
+        val s = shipCarrier(o)
+        val holder = failedKeyed(body(update("carrier", s.carrierReference!!, "IN_TRANSIT", w.clock.now() + 1, "k3"), eventKey = "kd-3"))
+
+        // the first copy is "in flight": received just now, its run has not settled
+        sql("UPDATE `pano_market_payment_event` SET `status` = 'RECEIVED', `nextAttemptAt` = NULL, `createdAt` = ? WHERE `id` = ?", w.clock.now(), holder.id)
+
+        val reply = post(body(update("carrier", s.carrierReference!!, "IN_TRANSIT", w.clock.now() + 2, "k3b"), eventKey = "kd-3"))
+
+        assertEquals(200, reply.status)
+
+        val log = rows()
+
+        assertEquals(listOf(PaymentEventStatus.RECEIVED, PaymentEventStatus.DUPLICATE), log.map { it.status })
+        assertEquals("e:kd-3", log[0].eventKey, "the holder keeps the key")
+        assertEquals(1, log[0].duplicateCount)
+        assertTrue(log[1].eventKey.startsWith("r:"))
+        assertEquals(listOf("k3b"), shipmentEvents(s.id).map { it.third }, "the events still go through step 6")
+        assertEquals(ShipmentStatus.IN_TRANSIT, shipmentNow(s.id).status)
+    }
+
+    @Test
+    fun `an in-flight holder and a failure of market's own processing - the row is DUPLICATE with the error and the carrier gets 503`(): Unit = runBlocking {
+        numbering()
+
+        val o = order("Shirt" to 1)
+        val s = shipCarrier(o)
+        val keyed = body(update("carrier", s.carrierReference!!, "IN_TRANSIT", w.clock.now() + 1, "k4"), eventKey = "kd-4")
+        val holder = failedKeyed(keyed)
+
+        sql("UPDATE `pano_market_payment_event` SET `status` = 'RECEIVED', `nextAttemptAt` = NULL, `createdAt` = ? WHERE `id` = ?", w.clock.now(), holder.id)
+
+        val reply = unwiredDispatcher().handle(call(keyed), TOKEN)
+
+        assertEquals(503, reply.status)
+
+        val log = rows()
+
+        assertEquals(listOf(PaymentEventStatus.RECEIVED, PaymentEventStatus.DUPLICATE), log.map { it.status })
+        assertEquals(1, log[0].duplicateCount)
+        assertNotNull(log[1].error, "the failure is recorded on this row")
+        assertEquals(0, shipmentEvents(s.id).size)
+    }
+
+    @Test
+    fun `a RECEIVED holder older than 60 seconds is a crashed run - it is SUPERSEDED and the new request is applied`(): Unit = runBlocking {
+        numbering()
+
+        val o = order("Shirt" to 1)
+        val s = shipCarrier(o)
+        val holder = failedKeyed(body(update("carrier", s.carrierReference!!, "IN_TRANSIT", w.clock.now() + 1, "k5"), eventKey = "kd-5"))
+
+        sql("UPDATE `pano_market_payment_event` SET `status` = 'RECEIVED', `nextAttemptAt` = NULL, `createdAt` = ? WHERE `id` = ?", w.clock.now() - 61_000, holder.id)
+
+        assertEquals(200, post(body(update("carrier", s.carrierReference!!, "IN_TRANSIT", w.clock.now() + 2, "k5b"), eventKey = "kd-5")).status)
+
+        val log = rows()
+
+        assertEquals(listOf(PaymentEventStatus.SUPERSEDED, PaymentEventStatus.PROCESSED), log.map { it.status })
+        assertEquals("e:kd-5:${holder.id}", log[0].eventKey)
+        assertEquals("e:kd-5", log[1].eventKey)
+        assertEquals(listOf("k5b"), shipmentEvents(s.id).map { it.third })
+    }
+
     // ================================================================================================ failures and retry
 
     @Test
