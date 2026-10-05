@@ -35,9 +35,9 @@ import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.routes.user.cart.cartService
+import com.panomc.plugins.market.service.DuplicateRefundPolicy
 import com.panomc.plugins.market.service.ForeignEffects
 import com.panomc.plugins.market.service.InvoiceEffects
-import com.panomc.plugins.market.service.DuplicateRefundPolicy
 import com.panomc.plugins.market.service.OrderService
 import com.panomc.plugins.market.service.OutboundHttp
 import com.panomc.plugins.market.service.PayCaller
