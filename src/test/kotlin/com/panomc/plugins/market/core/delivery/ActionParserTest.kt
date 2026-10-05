@@ -256,21 +256,82 @@ class ActionParserTest {
         val first = ok(source)
         val again = ok(ActionParser.toJson(first).encode())
         assertEquals(first, again)
-        assertEquals(first, ActionParser.parseStored(ActionParser.toJson(first).encode()))
+        val stored = ActionParser.parseStored(ActionParser.toJson(first).encode())
+        assertEquals(first, stored.actions)
+        assertTrue(stored.dropped.isEmpty())
     }
 
     @Test
-    fun `parseStored is lenient with legacy rows and drops only broken actions`() {
+    fun `parseStored is lenient with legacy rows and reports every dropped action`() {
         val stored = ActionParser.parseStored(
             """[{"type":"COMMAND","value":["/give {username} dirt"]},{"type":"NOPE"},"x",{"id":"a2","type":"CREDIT","value":2},{"type":"CREDIT","value":0},
                 {"type":"COMMAND","value":["z"],"phase":"EXPIRE","perUnit":true,"targetServers":[99]}]"""
         )
-        assertEquals(listOf("a3", "a2", "a6"), stored.map { it.id })
-        assertEquals(listOf("give {username} dirt"), stored[0].commands)
-        assertEquals(DeliveryPhase.EXPIRE, stored[2].phase)
-        assertTrue(stored[2].perUnit)
-        assertTrue(ActionParser.parseStored(null).isEmpty())
-        assertTrue(ActionParser.parseStored("{broken").isEmpty())
-        assertEquals(JsonArray().size(), ActionParser.parseStored("[]").size)
+        assertEquals(listOf("a3", "a2", "a6"), stored.actions.map { it.id })
+        assertEquals(listOf("give {username} dirt"), stored.actions[0].commands)
+        assertEquals(DeliveryPhase.EXPIRE, stored.actions[2].phase)
+        assertTrue(stored.actions[2].perUnit)
+
+        assertEquals(listOf(1, 2, 4), stored.dropped.map { it.index })
+        assertEquals(listOf("INVALID", "INVALID", "INVALID_VALUE"), stored.dropped.map { it.code })
+        assertEquals(listOf("actions.1.type", "actions.2", "actions.4.value"), stored.dropped.map { it.path })
+        assertEquals(listOf(null, null, null), stored.dropped.map { it.id })
+
+        val empty = ActionParser.parseStored(null)
+        assertTrue(empty.actions.isEmpty() && empty.dropped.isEmpty())
+        assertTrue(ActionParser.parseStored("[]").let { it.actions.isEmpty() && it.dropped.isEmpty() })
+
+        val broken = ActionParser.parseStored("{broken")
+        assertTrue(broken.actions.isEmpty())
+        assertEquals(listOf(-1), broken.dropped.map { it.index })
+        assertEquals(listOf("INVALID"), broken.dropped.map { it.code })
+    }
+
+    @Test
+    fun `parseStored keeps legacy values that only break the v2 save-time limits`() {
+        val longCommand = "say " + "x".repeat(596)
+        val manyNodes = (1..25).joinToString(",") { "\"Odd Node $it!\"" }
+        val manyCommands = (1..25).joinToString(",") { "\"say $it\"" }
+        val manyServers = (1..150).joinToString(",")
+        val stored = ActionParser.parseStored(
+            """[{"id":"c1","type":"CREDIT","value":2500000},{"id":"k1","type":"COMMAND","value":["$longCommand"]},
+                {"id":"n1","type":"PERMISSION","value":[$manyNodes]},{"id":"m1","type":"COMMAND","value":[$manyCommands],"targetServers":[$manyServers]},
+                {"id":"t1","type":"COMMAND","value":["say\u0007bell"]}]"""
+        )
+        assertEquals(emptyList<Int>(), stored.dropped.map { it.index })
+        assertEquals(listOf("c1", "k1", "n1", "m1", "t1"), stored.actions.map { it.id })
+        assertEquals(250_000_000L, stored.actions[0].credit)
+        assertEquals(600, stored.actions[1].commands.single().length)
+        assertEquals(25, stored.actions[2].nodes.size)
+        assertEquals("odd node 1!", stored.actions[2].nodes[0])
+        assertEquals(25, stored.actions[3].commands.size)
+        assertEquals(150, stored.actions[3].targetServers.size)
+        assertEquals(listOf("say\u0007bell"), stored.actions[4].commands)
+
+        // the same values are refused on save
+        assertEquals(mapOf("actions.0.value" to "INVALID_VALUE"), errors("""[{"type":"CREDIT","value":2500000}]"""))
+        assertEquals(mapOf("actions.0.value" to "INVALID_VALUE"), errors("""[{"type":"COMMAND","value":["$longCommand"]}]"""))
+        assertEquals(mapOf("actions.0.value" to "INVALID_VALUE"), errors("""[{"type":"PERMISSION","value":[$manyNodes]}]"""))
+    }
+
+    @Test
+    fun `parseStored still refuses what a safe conversion needs and says why`() {
+        val stored = ActionParser.parseStored(
+            """[{"id":"a1","type":"COMMAND","value":["say hi\nop me"]},{"id":"a2","type":"COMMAND","value":["say a\u0000b"]},
+                {"id":"a3","type":"CREDIT","value":-5},{"id":"a4","type":"CREDIT","value":1.005},{"id":"a5","type":"CREDIT","value":1e300},
+                {"id":"a6","type":"CREDIT","value":"abc"},{"id":"a7","type":"PERMISSION","value":[" "]},{"id":"A 8","type":"CREDIT","value":1},
+                {"id":"a9","type":"CREDIT","value":1},{"id":"a9","type":"CREDIT","value":2},{"id":"b1","type":"WEBHOOK","value":{"url":"ftp://x.test"}},
+                {"id":"b2","type":"CREDIT","value":1,"phase":"EXPIRE"}]"""
+        )
+        assertEquals(listOf("a9"), stored.actions.map { it.id })
+        assertEquals(1L, stored.actions.single().credit?.div(100))
+        assertEquals(listOf(0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11), stored.dropped.map { it.index })
+        assertEquals(
+            listOf("INVALID_VALUE", "INVALID_VALUE", "INVALID_VALUE", "INVALID_VALUE", "INVALID_VALUE", "INVALID_VALUE", "INVALID_VALUE", "INVALID", "DUPLICATE_ID", "INVALID_WEBHOOK_URL", "INVALID_PHASE"),
+            stored.dropped.map { it.code }
+        )
+        assertEquals("a1", stored.dropped[0].id)
+        assertEquals("actions.7.id", stored.dropped[7].path)
+        assertEquals("actions.10.value.url", stored.dropped[9].path)
     }
 }

@@ -76,29 +76,43 @@ object ActionParser {
     }
 
     /**
-     * Reads a stored list (a product, its order item snapshot, `chargebackActions`, a payout): structural problems drop
-     * the one action, rules that depend on the current catalogue (servers, fields, limits, billing mode, URL policy,
-     * counts) are not applied. Legacy actions without an `id` get `a<n>` (the rule of `ProductActions.view`).
+     * One action of a stored list that could not be converted. [index] is its position in the stored array (`-1` = the
+     * whole text is not a JSON array, [path] `actions`), [id] the id it carried (`null` if none or not a string), [path]
+     * and [code] the first rule it broke (`actions.<i>.<key>`, the codes of 08 section 2.2). The delivery planner
+     * (MK-101) turns each one into a `FAILED` row so an admin can see and retry it; nothing is dropped silently.
      */
-    fun parseStored(raw: String?, kind: Kind = Kind.PRODUCT): List<ProductAction> {
-        if (raw.isNullOrBlank()) return emptyList()
+    class Dropped(val index: Int, val id: String?, val path: String, val code: String)
+
+    /** Outcome of [parseStored]: the actions that converted and the ones that did not (in stored order). */
+    class Stored(val actions: List<ProductAction>, val dropped: List<Dropped>)
+
+    /**
+     * Reads a stored list (a product, its order item snapshot, `chargebackActions`, a payout). Rules that depend on the
+     * current catalogue (servers, fields, billing mode, URL policy) and the save-time limits of v2 (credit ceiling,
+     * command length, node alphabet, list and target counts) are not applied: an older save path accepted such values and
+     * a paid snapshot must still deliver them. What stays is what a safe conversion needs: a finite positive credit with
+     * an exact x100 value, string lists, no CR / LF / NUL in a command, valid ids and enums, a sane delay. Every action
+     * that still fails is reported in [Stored.dropped], never skipped without a trace. Legacy actions without an `id` get
+     * `a<n>` (the rule of `ProductActions.view`).
+     */
+    fun parseStored(raw: String?, kind: Kind = Kind.PRODUCT): Stored {
+        if (raw.isNullOrBlank()) return Stored(emptyList(), emptyList())
 
         val input = try {
             JsonArray(raw)
         } catch (e: Exception) {
-            return emptyList()
+            return Stored(emptyList(), listOf(Dropped(-1, null, "actions", "INVALID")))
         }
 
-        val bad = HashSet<Int>()
-        val ctx = Context(kind = kind, lenient = true)
-        val parsed = parseAll(input, ctx, linkedMapOf(), bad)
+        val dropped = ArrayList<Dropped>()
+        val parsed = parseAll(input, Context(kind = kind, lenient = true), linkedMapOf(), dropped)
 
-        return parsed
+        return Stored(parsed, dropped)
     }
 
     fun toJson(actions: List<ProductAction>): JsonArray = JsonArray(actions.map { it.toJson() })
 
-    private fun parseAll(input: JsonArray, ctx: Context, errors: MutableMap<String, String>, dropped: MutableSet<Int>?): List<ProductAction> {
+    private fun parseAll(input: JsonArray, ctx: Context, errors: MutableMap<String, String>, dropped: MutableList<Dropped>?): List<ProductAction> {
         val lenient = ctx.lenient
 
         if (!lenient && input.size() > MAX_ACTIONS) {
@@ -129,7 +143,8 @@ object ActionParser {
             }
 
             if (raw !is JsonObject) {
-                errors[path] = "INVALID"
+                if (dropped != null) dropped.add(Dropped(index, null, path, "INVALID")) else errors[path] = "INVALID"
+
                 return@forEachIndexed
             }
 
@@ -155,7 +170,7 @@ object ActionParser {
 
             if (type != null) {
                 action = when (type) {
-                    DeliveryActionType.CREDIT -> action.copy(credit = parseCredit(raw, ::err))
+                    DeliveryActionType.CREDIT -> action.copy(credit = parseCredit(raw, ctx, ::err))
                     DeliveryActionType.PERMISSION -> parsePermission(raw, ctx, action, ::err)
                     DeliveryActionType.COMMAND -> parseCommand(raw, ctx, action, ::err)
                     DeliveryActionType.WEBHOOK -> parseWebhook(raw, ctx, action, ::err)
@@ -165,7 +180,9 @@ object ActionParser {
             if (local.isEmpty()) {
                 out.add(action)
             } else if (dropped != null) {
-                dropped.add(index)
+                val first = local.entries.first()
+
+                dropped.add(Dropped(index, (raw.getValue("id") as? String)?.takeIf { it.isNotEmpty() }, first.key, first.value))
             } else {
                 errors.putAll(local)
             }
@@ -216,7 +233,7 @@ object ActionParser {
         return seconds
     }
 
-    private fun parseCredit(raw: JsonObject, err: (String, String) -> Unit): Long? {
+    private fun parseCredit(raw: JsonObject, ctx: Context, err: (String, String) -> Unit): Long? {
         val value: BigDecimal? = try {
             when (val v = raw.getValue("value")) {
                 is Double -> if (v.isNaN() || v.isInfinite()) null else BigDecimal.valueOf(v)
@@ -229,7 +246,10 @@ object ActionParser {
             null
         }
 
-        if (value == null || value.signum() <= 0 || value > BigDecimal(MAX_CREDIT) || value.stripTrailingZeros().scale() > 2) {
+        // The ceiling is save-time policy; a stored value only has to convert exactly (x100 into a Long).
+        val ceiling = if (ctx.lenient) BigDecimal(Long.MAX_VALUE).movePointLeft(2) else BigDecimal(MAX_CREDIT)
+
+        if (value == null || value.signum() <= 0 || value > ceiling || value.stripTrailingZeros().scale() > 2) {
             err("value", "INVALID_VALUE")
             return null
         }
@@ -238,10 +258,10 @@ object ActionParser {
     }
 
     private fun parsePermission(raw: JsonObject, ctx: Context, base: ProductAction, err: (String, String) -> Unit): ProductAction {
-        val list = stringList(raw.getValue("value"), MAX_NODES)
+        val list = stringList(raw.getValue("value"), if (ctx.lenient) Int.MAX_VALUE else MAX_NODES)
         val nodes = list?.map { it.trim().lowercase(Locale.ROOT) }
 
-        if (nodes == null || nodes.any { !NODE.matches(it) }) err("value", "INVALID_VALUE")
+        if (nodes == null || nodes.any { if (ctx.lenient) it.isEmpty() else !NODE.matches(it) }) err("value", "INVALID_VALUE")
 
         val via = parseVia(raw, err)
         val scope = parseServers(raw, ctx, base.copy(via = via), err)
@@ -259,10 +279,17 @@ object ActionParser {
     }
 
     private fun parseCommand(raw: JsonObject, ctx: Context, base: ProductAction, err: (String, String) -> Unit): ProductAction {
-        val list = stringList(raw.getValue("value"), MAX_COMMANDS)
+        val list = stringList(raw.getValue("value"), if (ctx.lenient) Int.MAX_VALUE else MAX_COMMANDS)
         val commands = list?.map { it.trim().removePrefix("/").trim() }
 
-        if (commands == null || commands.any { it.isEmpty() || it.length > MAX_COMMAND_LENGTH || it.any { c -> Character.isISOControl(c) } }) {
+        // Stored commands only need the line-break rule (it would smuggle a second command); length and the other
+        // control characters are save-time policy.
+        val badCommand = { c: String ->
+            c.isEmpty() || if (ctx.lenient) c.any { it == '\r' || it == '\n' || it == '\u0000' }
+            else c.length > MAX_COMMAND_LENGTH || c.any { Character.isISOControl(it) }
+        }
+
+        if (commands == null || commands.any(badCommand)) {
             err("value", "INVALID_VALUE")
         } else if (!ctx.lenient) {
             val unusable = commands.any { command ->
@@ -343,7 +370,7 @@ object ActionParser {
                     }
                 }
 
-                if (ids.any { it == null || it < 1 } || ids.size > MAX_TARGET_SERVERS) err("targetServers", "INVALID") else targets = ids.filterNotNull().distinct()
+                if (ids.any { it == null || it < 1 } || (!ctx.lenient && ids.size > MAX_TARGET_SERVERS)) err("targetServers", "INVALID") else targets = ids.filterNotNull().distinct()
             }
 
             else -> err("targetServers", "INVALID")
