@@ -83,6 +83,46 @@ object Msg {
     const val RECOVER_CONFIRM_HINT = "recover.confirmHint"
     const val RECOVER_DONE = "recover.done"
 
+    const val MENU_TITLE = "menu.title"
+    const val MENU_LOADING = "menu.loading"
+    const val MENU_ALL = "menu.all"
+    const val MENU_EMPTY = "menu.empty"
+    const val MENU_NAV_PREV = "menu.nav.prev"
+    const val MENU_NAV_NEXT = "menu.nav.next"
+    const val MENU_NAV_BACK = "menu.nav.back"
+    const val MENU_NAV_CLOSE = "menu.nav.close"
+    const val MENU_NAV_PAGE = "menu.nav.page"
+    const val MENU_PRODUCT_PRICE = "menu.product.price"
+    const val MENU_PRODUCT_MONEY = "menu.product.money"
+    const val MENU_PRODUCT_STOCK = "menu.product.stock"
+    const val MENU_PRODUCT_BUY = "menu.product.buy"
+    const val MENU_PRODUCT_WEB = "menu.product.web"
+    const val MENU_PRODUCT_UNAVAILABLE = "menu.product.unavailable"
+    const val MENU_CONFIRM_TITLE = "menu.confirm.title"
+    const val MENU_CONFIRM_BALANCE = "menu.confirm.balance"
+    const val MENU_CONFIRM_AFTER = "menu.confirm.after"
+    const val MENU_CONFIRM_YES = "menu.confirm.yes"
+    const val MENU_CONFIRM_NO = "menu.confirm.no"
+    const val MENU_CONFIRM_SHORT = "menu.confirm.short"
+    const val MENU_CONFIRM_PROCESSING = "menu.confirm.processing"
+    const val MENU_CONFIRM_LEGAL = "menu.confirm.legal"
+    const val MENU_BUSY = "menu.busy"
+    const val MENU_WEB_LINK = "menu.webLink"
+    const val MENU_BOUGHT = "menu.bought"
+    const val MENU_UNKNOWN_OUTCOME = "menu.unknownOutcome"
+    const val MENU_LEGAL_NEEDED = "menu.legalNeeded"
+    const val MENU_REGISTER = "menu.register"
+    const val MENU_ERR_BLOCKED = "menu.err.blocked"
+    const val MENU_ERR_STOCK = "menu.err.outOfStock"
+    const val MENU_ERR_LIMIT = "menu.err.limit"
+    const val MENU_ERR_COOLDOWN = "menu.err.cooldown"
+    const val MENU_ERR_REQUIREMENT = "menu.err.requirement"
+    const val MENU_ERR_NOT_PAYABLE = "menu.err.notPayable"
+    const val MENU_ERR_INSUFFICIENT = "menu.err.insufficient"
+    const val MENU_ERR_UNAVAILABLE = "menu.err.unavailable"
+    const val MENU_ERR_CREDITS_OFF = "menu.err.creditsOff"
+    const val MENU_ERR_OTHER = "menu.err.other"
+
     val ALL: List<String> = listOf(
         COMMAND_DISABLED, COMMAND_PLAYER_ONLY, COMMAND_NO_PERMISSION, COMMAND_COOLDOWN, COMMAND_UNAVAILABLE,
         ERROR_NOT_CONNECTED, ERROR_TIMEOUT, ERROR_RATE_LIMITED, ERROR_NOT_READY, ERROR_VERSION, ERROR_REFUSED,
@@ -96,6 +136,12 @@ object Msg {
         STATUS_HEADER, STATUS_COMPONENT, STATUS_CONNECTION_UP, STATUS_CONNECTION_DOWN, STATUS_VERSION_UNKNOWN, STATUS_VERSION_OK,
         STATUS_VERSION_REFUSED, STATUS_QUEUE, STATUS_STORE_OK, STATUS_STORE_BROKEN, STATUS_STORE_FAILED, STATUS_RECOVERY,
         STATUS_SYNC_NEVER, STATUS_SYNC_AGO, STATUS_CONFIG_LOADED, STATUS_CONFIG_WAITING, STATUS_CONFIG_ERROR,
-        RECOVER_CONSOLE_ONLY, RECOVER_NOT_NEEDED, RECOVER_PREVIEW, RECOVER_CONFIRM_HINT, RECOVER_DONE
+        RECOVER_CONSOLE_ONLY, RECOVER_NOT_NEEDED, RECOVER_PREVIEW, RECOVER_CONFIRM_HINT, RECOVER_DONE,
+        MENU_TITLE, MENU_LOADING, MENU_ALL, MENU_EMPTY, MENU_NAV_PREV, MENU_NAV_NEXT, MENU_NAV_BACK, MENU_NAV_CLOSE, MENU_NAV_PAGE, MENU_PRODUCT_PRICE,
+        MENU_PRODUCT_MONEY, MENU_PRODUCT_STOCK, MENU_PRODUCT_BUY, MENU_PRODUCT_WEB, MENU_PRODUCT_UNAVAILABLE, MENU_CONFIRM_TITLE, MENU_CONFIRM_BALANCE,
+        MENU_CONFIRM_AFTER, MENU_CONFIRM_YES, MENU_CONFIRM_NO, MENU_CONFIRM_SHORT, MENU_CONFIRM_PROCESSING, MENU_CONFIRM_LEGAL, MENU_BUSY,
+        MENU_WEB_LINK, MENU_BOUGHT, MENU_UNKNOWN_OUTCOME, MENU_LEGAL_NEEDED, MENU_REGISTER, MENU_ERR_BLOCKED, MENU_ERR_STOCK, MENU_ERR_LIMIT,
+        MENU_ERR_COOLDOWN, MENU_ERR_REQUIREMENT, MENU_ERR_NOT_PAYABLE, MENU_ERR_INSUFFICIENT, MENU_ERR_UNAVAILABLE, MENU_ERR_CREDITS_OFF,
+        MENU_ERR_OTHER
     )
 }

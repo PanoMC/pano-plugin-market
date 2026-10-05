@@ -25,7 +25,8 @@
         "purchasable": {
           "ok": true
         },
-        "needsWeb": false
+        "needsWeb": false,
+        "slug": "diamonds"
       },
       {
         "id": 11,

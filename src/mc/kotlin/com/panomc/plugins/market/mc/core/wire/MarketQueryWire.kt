@@ -7,7 +7,9 @@ import java.util.UUID
 
 /** `usernames` (at most 100, online players only) for `PLACEHOLDERS`. */
 data class QueryArgs(
-    val usernames: List<String>? = null
+    val usernames: List<String>? = null,
+    /** `CATALOG` only (MC-06): the products of this category; absent = every visible product. */
+    val categoryId: Long? = null
 )
 
 class MarketQueryRequest(
@@ -50,7 +52,9 @@ data class QueryProduct(
     val stockLeft: Int? = null,
     val icon: String? = null,
     val purchasable: QueryPurchasable = QueryPurchasable(),
-    val needsWeb: Boolean = false
+    val needsWeb: Boolean = false,
+    /** The store path segment of the product (`storeUrl/store/<slug>`) for the link of a product that needs the web. */
+    val slug: String? = null
 )
 
 data class QueryGift(
