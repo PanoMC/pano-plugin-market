@@ -6,7 +6,19 @@ import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.sqlclient.SqlClient
 
 abstract class MarketOrderDao : MarketDao<MarketOrder>(MarketOrder::class.java) {
+    /** Inserts every column of [order]; the new id. A duplicate `(buyerKey, idempotencyKey)` or `publicId` throws. */
     abstract suspend fun add(order: MarketOrder, sqlClient: SqlClient): Long
+
+    /**
+     * Like [add], but answers `null` instead of throwing when a unique key already holds the row: `uq_buyer_idem`
+     * (the checkout replay of 00 section 8.1) or `uq_publicId`. The caller looks the first order up by
+     * [getByBuyerAndIdempotencyKey] and, when there is none, draws a new public id.
+     */
+    abstract suspend fun tryAdd(order: MarketOrder, sqlClient: SqlClient): Long?
+
+    abstract suspend fun getByPublicId(publicId: String, sqlClient: SqlClient): MarketOrder?
+
+    abstract suspend fun getByBuyerAndIdempotencyKey(buyerKey: String, idempotencyKey: String, sqlClient: SqlClient): MarketOrder?
 
     abstract suspend fun getAllPaged(page: Long, search: String?, status: OrderStatus?, sqlClient: SqlClient): List<MarketOrder>
 

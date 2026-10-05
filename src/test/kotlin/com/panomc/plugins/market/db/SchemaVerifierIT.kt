@@ -136,12 +136,12 @@ class SchemaVerifierIT : MarketDbTestBase() {
     @Test
     fun `a failed widening of a column length is caught`(): Unit = runBlocking {
         try {
-            // the order status stays VARCHAR(16) here; the declared type is checked by length and nullability
+            // the order status is VARCHAR(24) since scheme version 5; the declared type is checked by length and nullability
             sql("ALTER TABLE `pano_market_order` MODIFY `status` VARCHAR(8) NOT NULL DEFAULT 'PENDING'")
             val finding = verify().findings.single()
             assertEquals(Kind.COLUMN_MISMATCH, finding.kind)
             assertEquals("pano_market_order.status", finding.target)
-            assertTrue(finding.detail.contains("varchar(16)") && finding.detail.contains("varchar(8)"), finding.detail)
+            assertTrue(finding.detail.contains("varchar(24)") && finding.detail.contains("varchar(8)"), finding.detail)
         } finally {
             rebuild()
         }

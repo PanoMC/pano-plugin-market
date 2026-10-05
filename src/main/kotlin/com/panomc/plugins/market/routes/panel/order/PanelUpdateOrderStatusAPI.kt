@@ -66,7 +66,9 @@ class PanelUpdateOrderStatusAPI(
         val allowedTransitions = when (order.status) {
             OrderStatus.PENDING -> setOf(OrderStatus.COMPLETED, OrderStatus.FAILED, OrderStatus.REFUNDED)
             OrderStatus.COMPLETED -> setOf(OrderStatus.REFUNDED)
-            OrderStatus.FAILED, OrderStatus.REFUNDED -> emptySet()
+            // FAILED, REFUNDED and the statuses of scheme version 5 (REVIEW, CHARGEBACK, ...) are not handled by this
+            // legacy endpoint; the order state machine re-implements it.
+            else -> emptySet()
         }
 
         if (status !in allowedTransitions) {

@@ -1,6 +1,9 @@
 package com.panomc.plugins.market.db
 
+import com.panomc.plugins.market.core.time.Ids
+import com.panomc.plugins.market.core.time.SecureIds
 import com.panomc.plugins.market.core.time.SystemClock
+import com.panomc.plugins.market.db.dao.isDuplicateKey
 import com.panomc.plugins.market.db.tx.MarketDb
 import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.sqlclient.Pool
@@ -111,16 +114,16 @@ object MarketSchema {
             columns += Column(name, "VARCHAR($length)", nullable, default?.let { "'$it'" })
         }
 
-        fun char(name: String, length: Int) {
-            columns += Column(name, "CHAR($length)")
+        fun char(name: String, length: Int, nullable: Boolean = false) {
+            columns += Column(name, "CHAR($length)", nullable)
         }
 
         fun text(name: String, nullable: Boolean = true) {
             columns += Column(name, "MEDIUMTEXT", nullable)
         }
 
-        fun decimal(name: String, precision: Int, scale: Int, nullable: Boolean = false) {
-            columns += Column(name, "DECIMAL($precision,$scale)", nullable)
+        fun decimal(name: String, precision: Int, scale: Int, nullable: Boolean = false, default: Int? = null) {
+            columns += Column(name, "DECIMAL($precision,$scale)", nullable, default?.toString())
         }
 
         fun bigint(name: String, nullable: Boolean = false, default: Long? = null) {
@@ -139,9 +142,10 @@ object MarketSchema {
             columns += Column(name, "DOUBLE", nullable)
         }
 
-        fun timestamps() {
-            columns += Column("createdAt", "BIGINT(20)")
-            columns += Column("updatedAt", "BIGINT(20)")
+        /** [defaults] gives both columns `DEFAULT 0`, for a table raw SQL inserts into (the one-shot fixup markers). */
+        fun timestamps(defaults: Boolean = false) {
+            columns += Column("createdAt", "BIGINT(20)", default = if (defaults) "0" else null)
+            columns += Column("updatedAt", "BIGINT(20)", default = if (defaults) "0" else null)
         }
 
         fun key(name: String, vararg columns: String) {
@@ -316,13 +320,98 @@ object MarketSchema {
         str("currency", 8, "TRY")
         str("paymentMethodId", 64, "")
         str("paymentLabel", 255, "")
-        str("status", 16, "PENDING")
+        str("status", 24, "PENDING") // VARCHAR(16) until scheme version 5 (01 section 5.1), widened by the MODIFY below
         timestamps()
         double("exchangeRate")
         key("userId", "userId")
         key("status", "status", "createdAt")
         // Version 1 -> 2: tables created by plugin versions before the exchange rate column existed.
         alter("ALTER TABLE {t} ADD COLUMN IF NOT EXISTS `exchangeRate` DOUBLE")
+        // Scheme version 5 (01 section 5.1): the status column is widened (widening only, idempotent) and 70 columns
+        // and 10 indexes are added. Enum columns are VARCHAR(24), JSON columns MEDIUMTEXT, money BIGINT (x100).
+        added {
+            alter("ALTER TABLE {t} MODIFY COLUMN `status` VARCHAR(24) NOT NULL DEFAULT 'PENDING'")
+            char("publicId", 20, nullable = true)
+            char("accessToken", 40, nullable = true)
+            str("source", 24, "STOREFRONT")
+            str("buyerKey", 80, "")
+            str("idempotencyKey", 64, nullable = true)
+            char("idempotencyHash", 64, nullable = true)
+            str("email", 255, nullable = true)
+            str("locale", 16, nullable = true)
+            str("clientIp", 45, nullable = true)
+            str("userAgent", 255, nullable = true)
+            str("recipientUsername", 64, "")
+            bigint("recipientUserId", nullable = true)
+            str("recipientKey", 80, "")
+            flag("isGift", 0)
+            str("giftMessage", 255, nullable = true)
+            flag("hideFromBroadcast", 0)
+            str("reservationState", 24, "NONE")
+            bigint("expiresAt", nullable = true)
+            str("baseCurrency", 8, "")
+            decimal("fxRate", 20, 10, default = 1)
+            str("displayCurrency", 8, nullable = true)
+            decimal("displayRate", 20, 10, nullable = true)
+            str("pricingMode", 24, "MARKET")
+            flag("pricesIncludeVat", 1)
+            bigint("subtotal", default = 0)
+            bigint("discountTotal", default = 0)
+            bigint("couponDiscount", default = 0)
+            bigint("creatorDiscount", default = 0)
+            bigint("upgradeDiscount", default = 0)
+            bigint("shippingTotal", default = 0)
+            bigint("shippingVatPercent", default = 0)
+            bigint("shippingVatAmount", default = 0)
+            bigint("paymentFee", default = 0)
+            bigint("paymentFeeVatPercent", default = 0)
+            bigint("paymentFeeVatAmount", default = 0)
+            bigint("vatTotal", default = 0)
+            bigint("creditAmount", default = 0)
+            bigint("creditValue", default = 0)
+            bigint("gatewayAmount", default = 0)
+            bigint("paidAmount", default = 0)
+            bigint("refundedTotal", default = 0)
+            bigint("refundedGatewayAmount", default = 0)
+            bigint("refundedCreditAmount", default = 0)
+            bigint("couponId", nullable = true)
+            bigint("creatorCodeId", nullable = true)
+            bigint("giftId", nullable = true)
+            str("couponCode", 64, nullable = true)
+            str("creatorCode", 64, nullable = true)
+            bigint("paymentId", nullable = true)
+            bigint("paidAt", nullable = true)
+            flag("testMode", 0)
+            str("statusBeforeDispute", 24, nullable = true)
+            str("disputeStatus", 24, "NONE")
+            str("reviewReason", 32, nullable = true)
+            str("fulfillmentStatus", 24, "NONE")
+            str("fulfillmentBy", 24, "MARKET")
+            flag("requiresShipping", 0)
+            str("shippingStatus", 24, "NOT_REQUIRED")
+            text("shippingAddress")
+            bigint("shippingMethodId", nullable = true)
+            str("shippingMethodName", 255, nullable = true)
+            text("shippingQuote")
+            int("shippingWeightGrams", nullable = true)
+            text("billingInfo")
+            bigint("legalTextId", nullable = true)
+            bigint("legalAcceptedAt", nullable = true)
+            bigint("subscriptionId", nullable = true)
+            bigint("invoiceId", nullable = true)
+            text("note")
+            bigint("createdBy", nullable = true)
+            unique("uq_publicId", "publicId")
+            unique("uq_buyer_idem", "buyerKey", "idempotencyKey")
+            key("idx_recipient", "recipientKey")
+            key("idx_expiry", "status", "expiresAt")
+            key("idx_paidAt", "paidAt")
+            key("idx_email", "email")
+            key("idx_player", "playerUsername")
+            key("idx_subscription", "subscriptionId")
+            key("idx_coupon", "couponId")
+            key("idx_creator", "creatorCodeId")
+        }
     }
 
     val ORDER_ITEM = table("market_order_item", "Market order item table.") {
@@ -335,6 +424,34 @@ object MarketSchema {
         timestamps()
         key("orderId", "orderId")
         key("productId", "productId")
+        // Scheme version 5 (01 section 5.2).
+        added {
+            str("kind", 24, "PRODUCT")
+            bigint("parentItemId", nullable = true)
+            bigint("variantId", nullable = true)
+            str("variantName", 255, nullable = true)
+            str("sku", 64, nullable = true)
+            bigint("listUnitPrice", default = 0)
+            bigint("discountAmount", default = 0)
+            bigint("upgradeAmount", default = 0)
+            bigint("couponAmount", default = 0)
+            bigint("vatPercent", default = 0)
+            bigint("vatAmount", default = 0)
+            bigint("lineTotal", default = 0)
+            bigint("creditUnitPrice", nullable = true)
+            bigint("creditAmount", nullable = true)
+            text("fieldValues")
+            bigint("targetServerId", nullable = true)
+            text("snapshot")
+            flag("physical", 0)
+            int("stockReserved", default = 0)
+            int("refundedQuantity", default = 0)
+            bigint("refundedAmount", default = 0)
+            int("shippedQuantity", default = 0)
+            str("gatewayItemRef", 128, nullable = true)
+            bigint("gatewayLineAmount", nullable = true)
+            bigint("upgradeFromEntitlementId", nullable = true)
+        }
     }
 
     val PAYMENT_METHOD = table("market_payment_method", "Market payment methods table.") {
@@ -558,11 +675,55 @@ object MarketSchema {
         unique("uq_idem", "idempotencyKey")
     }
 
+    // --- scheme version 5: orders (01 sections 5.3, 5.4 and 6.7) -------------------------------------------------
+
+    val ORDER_EVENT = table("market_order_event", "Market order timeline table.") {
+        id()
+        bigint("orderId")
+        str("type", 48)
+        str("fromStatus", 24, nullable = true)
+        str("toStatus", 24, nullable = true)
+        str("actorType", 24)
+        bigint("actorUserId", nullable = true)
+        str("message", 512, nullable = true)
+        text("data")
+        timestamps()
+        key("idx_order", "orderId", "id")
+    }
+
+    val LEGAL_TEXT = table("market_legal_text", "Market legal text version table.") {
+        id()
+        int("version")
+        str("locale", 16)
+        str("title", 255)
+        text("content", nullable = false)
+        char("contentHash", 64)
+        flag("active", 0)
+        bigint("createdBy", nullable = true)
+        timestamps()
+        unique("uq_version_locale", "version", "locale")
+        key("idx_active", "active", "locale")
+    }
+
+    /**
+     * Named counters (01 section 6.7). The marker rows `fixup:<id>` of the one-shot data fixups live here, so the table
+     * arrives with the first one-shot fixup; the invoice slice adds its DAO methods. Raw marker inserts name only
+     * `name` and `value`, hence the timestamp defaults.
+     */
+    val SEQUENCE = table("market_sequence", "Market named counters and fixup markers.") {
+        id()
+        str("name", 64)
+        bigint("value", default = 0)
+        timestamps(defaults = true)
+        unique("uq_name", "name")
+    }
+
     /** Every table the plugin owns, in creation order. Later migration slices append their tables here. */
     val tables: List<Table> = listOf(
         CATEGORY, COMPARISON, COUPON, CREATOR_CODE, DISCOUNT, GIFT, ORDER, ORDER_ITEM, PAYMENT_METHOD, PRODUCT,
         PRODUCT_VARIANT, PRODUCT_PRICE, PRODUCT_FIELD, BUNDLE_ITEM, PRODUCT_PROVIDER_META, CURRENCY_RATE,
-        REDEMPTION, CREATOR_EARNING, CREATOR_PAYOUT
+        REDEMPTION, CREATOR_EARNING, CREATOR_PAYOUT,
+        ORDER_EVENT, LEGAL_TEXT, SEQUENCE
     )
 
     /** The table declared under [name] (without prefix), or an error naming it. */
@@ -592,10 +753,131 @@ object MarketSchema {
     }
 
     /**
-     * The fixups of the schema, in order. None exist for the ten tables of scheme version 2 (the legacy order
-     * conversion arrives with the order migration slice, which appends here).
+     * The fixups of the schema, in order (01 section 14.2): the conversion of the rows an install carried before scheme
+     * version 5. [ids] supplies `publicId` and `accessToken` (never SQL `UUID()`, 01 section 14.1 rule 7).
+     *
+     * Every fixup selects only unfixed rows, so a fixup that failed once simply runs again. The `LEGACY` marker has to
+     * be set before the others look at `source = 'LEGACY'`; since a failing marker statement must not let a later
+     * fixup fill `publicId` or `buyerKey` (the marker's own predicate would then never match again), every dependent
+     * fixup runs the same marker `UPDATE` first and aborts when it fails.
      */
-    fun fixups(): List<Fixup> = emptyList()
+    fun fixups(ids: Ids = SecureIds()): List<Fixup> {
+        val order = listOf("market_order")
+        val buyerKeySql = "CASE WHEN `userId` IS NOT NULL THEN CONCAT('u:', `userId`) ELSE CONCAT('g:', LOWER(`playerUsername`)) END"
+        val legacyOrder = "`orderId` IN (SELECT `id` FROM `{o}` WHERE `source` = 'LEGACY')"
+
+        /** A fixup of one `UPDATE`: [where] is both the pending predicate and the `UPDATE`'s `WHERE`. */
+        fun sqlFixup(id: String, table: String, where: String, set: String, extra: List<String> = emptyList()) = Fixup(
+            id = id,
+            requires = listOf(table) + extra,
+            pendingSql = { prefix -> "SELECT COUNT(*) FROM `${prefix}$table` WHERE ${bind(where, prefix)}" },
+            apply = { client, prefix ->
+                markLegacyOrders(client, prefix)
+                client.query("UPDATE `${prefix}$table` SET ${bind(set, prefix)} WHERE ${bind(where, prefix)}").execute().coAwait()
+            }
+        )
+
+        return listOf(
+            Fixup(
+                id = "legacy-order-marker",
+                requires = order,
+                pendingSql = { prefix -> "SELECT COUNT(*) FROM `${prefix}market_order` WHERE $LEGACY_WHERE" },
+                apply = { client, prefix -> markLegacyOrders(client, prefix) }
+            ),
+            Fixup(
+                id = "order-public-ids",
+                requires = order,
+                pendingSql = { prefix -> "SELECT COUNT(*) FROM `${prefix}market_order` WHERE `publicId` IS NULL" },
+                apply = { client, prefix -> fillOrderIds(client, prefix, ids) }
+            ),
+            sqlFixup("order-buyer-key", "market_order", "`buyerKey` = ''", "`buyerKey` = $buyerKeySql"),
+            sqlFixup(
+                "order-recipient-username", "market_order", "`recipientUsername` = '' AND `playerUsername` <> ''",
+                "`recipientUsername` = `playerUsername`"
+            ),
+            // The payer of a version 2 order is also its recipient: the player named on the order.
+            sqlFixup(
+                "order-recipient-key", "market_order", "`recipientKey` = ''",
+                "`recipientKey` = $buyerKeySql, `recipientUserId` = COALESCE(`recipientUserId`, `userId`)"
+            ),
+            sqlFixup("order-base-currency", "market_order", "`baseCurrency` = '' AND `currency` <> ''", "`baseCurrency` = `currency`"),
+            sqlFixup(
+                "order-legacy-totals", "market_order", "`source` = 'LEGACY' AND `subtotal` = 0 AND `totalPrice` > 0",
+                "`subtotal` = `totalPrice`, `gatewayAmount` = `totalPrice`"
+            ),
+            // Only the items of LEGACY orders: a later order may legitimately carry a priced line that totals 0 (gift code).
+            sqlFixup(
+                "order-item-money", "market_order_item", "`lineTotal` = 0 AND `unitPrice` > 0 AND $legacyOrder",
+                "`listUnitPrice` = `unitPrice`, `lineTotal` = `unitPrice` * `quantity`", extra = order
+            ),
+            sqlFixup(
+                "legacy-paid-orders", "market_order",
+                "`source` = 'LEGACY' AND `status` IN ('COMPLETED', 'REFUNDED') AND `paidAt` IS NULL",
+                "`paidAt` = `updatedAt`, `paidAmount` = `totalPrice`, `reservationState` = 'COMMITTED'"
+            ),
+            Fixup(
+                id = "soldCount",
+                requires = listOf("market_order", "market_order_item", "market_product"),
+                oneShot = true,
+                apply = { client, prefix ->
+                    markLegacyOrders(client, prefix)
+                    client.query(
+                        "UPDATE `${prefix}market_product` p JOIN (" +
+                            "SELECT i.`productId` AS pid, SUM(i.`quantity`) AS sold FROM `${prefix}market_order_item` i " +
+                            "JOIN `${prefix}market_order` o ON o.`id` = i.`orderId` " +
+                            "WHERE o.`source` = 'LEGACY' AND o.`status` = 'COMPLETED' AND i.`productId` IS NOT NULL GROUP BY i.`productId`" +
+                            ") s ON s.pid = p.`id` SET p.`soldCount` = s.sold"
+                    ).execute().coAwait()
+                }
+            ),
+            Fixup(
+                id = "legacyUsedCount",
+                requires = listOf("market_discount", "market_coupon", "market_creator_code"),
+                oneShot = true,
+                apply = { client, prefix ->
+                    for (table in listOf("market_discount", "market_coupon", "market_creator_code")) {
+                        client.query("UPDATE `${prefix}$table` SET `legacyUsedCount` = `usedCount`").execute().coAwait()
+                    }
+                }
+            )
+        )
+    }
+
+    private const val LEGACY_WHERE = "`publicId` IS NULL AND `buyerKey` = '' AND `source` <> 'LEGACY'"
+
+    private fun bind(sql: String, prefix: String) = sql.replace("{o}", "${prefix}market_order")
+
+    /** The first fixup of 01 section 14.2: rows with neither a public id nor a payer key predate scheme version 5. */
+    private suspend fun markLegacyOrders(client: SqlClient, prefix: String) {
+        client.query("UPDATE `${prefix}market_order` SET `source` = 'LEGACY' WHERE $LEGACY_WHERE").execute().coAwait()
+    }
+
+    /** Fills `publicId` and `accessToken` of every order without one, in chunks; a colliding public id is drawn again. */
+    private suspend fun fillOrderIds(client: SqlClient, prefix: String, ids: Ids) {
+        markLegacyOrders(client, prefix)
+        while (true) {
+            val rows = client.query("SELECT `id` FROM `${prefix}market_order` WHERE `publicId` IS NULL ORDER BY `id` LIMIT 500")
+                .execute().coAwait().map { it.getLong("id") }
+            if (rows.isEmpty()) return
+            for (id in rows) {
+                var attempts = 0
+                while (true) {
+                    try {
+                        client.preparedQuery(
+                            "UPDATE `${prefix}market_order` SET `publicId` = ?, `accessToken` = ? WHERE `id` = ? AND `publicId` IS NULL"
+                        ).execute(Tuple.of(ids.publicId(), ids.hexToken(ACCESS_TOKEN_BYTES), id)).coAwait()
+                        break
+                    } catch (e: Exception) {
+                        // ER_DUP_ENTRY on uq_publicId: 100 random bits colliding is practically impossible, but never fatal.
+                        if (++attempts >= 5 || !e.isDuplicateKey()) throw e
+                    }
+                }
+            }
+        }
+    }
+
+    /** 160 bits, 40 hex characters (01 section 5.1 `accessToken`). */
+    private const val ACCESS_TOKEN_BYTES = 20
 
     /** Marker table of the one-shot fixups (`market_sequence`, 01 section 5.6, arrives with the sequence slice). */
     const val ONE_SHOT_MARKER_TABLE = "market_sequence"

@@ -3,6 +3,7 @@ package com.panomc.plugins.market.db.impl
 import com.panomc.platform.annotation.Dao
 import com.panomc.plugins.market.db.MarketSchema
 import com.panomc.plugins.market.db.dao.MarketOrderDao
+import com.panomc.plugins.market.db.dao.isDuplicateKey
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.kotlin.coroutines.coAwait
@@ -27,28 +28,128 @@ class MarketOrderDaoImpl : MarketOrderDao() {
         MarketSchema.installTable(sqlClient, MarketSchema.ORDER, prefix())
     }
 
-    override suspend fun add(order: MarketOrder, sqlClient: SqlClient): Long {
-        val query =
-            "INSERT INTO `${prefix() + tableName}` (`userId`, `playerUsername`, `totalPrice`, `currency`, `paymentMethodId`, `paymentLabel`, `status`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    override suspend fun add(order: MarketOrder, sqlClient: SqlClient): Long = insert(order, sqlClient)
 
-        val rows: RowSet<Row> = sqlClient
-            .preparedQuery(query)
-            .execute(
-                Tuple.of(
-                    order.userId,
-                    order.playerUsername,
-                    order.totalPrice,
-                    order.currency,
-                    order.paymentMethodId,
-                    order.paymentLabel,
-                    order.status.name,
-                    order.createdAt,
-                    order.updatedAt
-                )
-            )
-            .coAwait()
+    override suspend fun tryAdd(order: MarketOrder, sqlClient: SqlClient): Long? =
+        try {
+            insert(order, sqlClient)
+        } catch (e: Exception) {
+            if (e.isDuplicateKey()) null else throw e
+        }
+
+    private suspend fun insert(order: MarketOrder, sqlClient: SqlClient): Long {
+        val columns = columnValues(order)
+        val query =
+            "INSERT INTO `${prefix() + tableName}` (${columns.joinToString(", ") { "`${it.first}`" }}) VALUES (${columns.joinToString(", ") { "?" }})"
+
+        val values = Tuple.tuple()
+        columns.forEach { values.addValue(it.second) }
+
+        val rows: RowSet<Row> = sqlClient.preparedQuery(query).execute(values).coAwait()
 
         return rows.property(MySQLClient.LAST_INSERTED_ID)
+    }
+
+    /** Column name to bound value, in the order of the table (enums by name). */
+    private fun columnValues(o: MarketOrder): List<Pair<String, Any?>> = listOf(
+        "userId" to o.userId,
+        "playerUsername" to o.playerUsername,
+        "totalPrice" to o.totalPrice,
+        "currency" to o.currency,
+        "paymentMethodId" to o.paymentMethodId,
+        "paymentLabel" to o.paymentLabel,
+        "status" to o.status.name,
+        "createdAt" to o.createdAt,
+        "updatedAt" to o.updatedAt,
+        "exchangeRate" to o.exchangeRate,
+        "publicId" to o.publicId,
+        "accessToken" to o.accessToken,
+        "source" to o.source.name,
+        "buyerKey" to o.buyerKey,
+        "idempotencyKey" to o.idempotencyKey,
+        "idempotencyHash" to o.idempotencyHash,
+        "email" to o.email,
+        "locale" to o.locale,
+        "clientIp" to o.clientIp,
+        "userAgent" to o.userAgent,
+        "recipientUsername" to o.recipientUsername,
+        "recipientUserId" to o.recipientUserId,
+        "recipientKey" to o.recipientKey,
+        "isGift" to o.isGift,
+        "giftMessage" to o.giftMessage,
+        "hideFromBroadcast" to o.hideFromBroadcast,
+        "reservationState" to o.reservationState.name,
+        "expiresAt" to o.expiresAt,
+        "baseCurrency" to o.baseCurrency,
+        "fxRate" to o.fxRate,
+        "displayCurrency" to o.displayCurrency,
+        "displayRate" to o.displayRate,
+        "pricingMode" to o.pricingMode.name,
+        "pricesIncludeVat" to o.pricesIncludeVat,
+        "subtotal" to o.subtotal,
+        "discountTotal" to o.discountTotal,
+        "couponDiscount" to o.couponDiscount,
+        "creatorDiscount" to o.creatorDiscount,
+        "upgradeDiscount" to o.upgradeDiscount,
+        "shippingTotal" to o.shippingTotal,
+        "shippingVatPercent" to o.shippingVatPercent,
+        "shippingVatAmount" to o.shippingVatAmount,
+        "paymentFee" to o.paymentFee,
+        "paymentFeeVatPercent" to o.paymentFeeVatPercent,
+        "paymentFeeVatAmount" to o.paymentFeeVatAmount,
+        "vatTotal" to o.vatTotal,
+        "creditAmount" to o.creditAmount,
+        "creditValue" to o.creditValue,
+        "gatewayAmount" to o.gatewayAmount,
+        "paidAmount" to o.paidAmount,
+        "refundedTotal" to o.refundedTotal,
+        "refundedGatewayAmount" to o.refundedGatewayAmount,
+        "refundedCreditAmount" to o.refundedCreditAmount,
+        "couponId" to o.couponId,
+        "creatorCodeId" to o.creatorCodeId,
+        "giftId" to o.giftId,
+        "couponCode" to o.couponCode,
+        "creatorCode" to o.creatorCode,
+        "paymentId" to o.paymentId,
+        "paidAt" to o.paidAt,
+        "testMode" to o.testMode,
+        "statusBeforeDispute" to o.statusBeforeDispute?.name,
+        "disputeStatus" to o.disputeStatus.name,
+        "reviewReason" to o.reviewReason,
+        "fulfillmentStatus" to o.fulfillmentStatus.name,
+        "fulfillmentBy" to o.fulfillmentBy.name,
+        "requiresShipping" to o.requiresShipping,
+        "shippingStatus" to o.shippingStatus.name,
+        "shippingAddress" to o.shippingAddress,
+        "shippingMethodId" to o.shippingMethodId,
+        "shippingMethodName" to o.shippingMethodName,
+        "shippingQuote" to o.shippingQuote,
+        "shippingWeightGrams" to o.shippingWeightGrams,
+        "billingInfo" to o.billingInfo,
+        "legalTextId" to o.legalTextId,
+        "legalAcceptedAt" to o.legalAcceptedAt,
+        "subscriptionId" to o.subscriptionId,
+        "invoiceId" to o.invoiceId,
+        "note" to o.note,
+        "createdBy" to o.createdBy,
+    )
+
+    override suspend fun getByPublicId(publicId: String, sqlClient: SqlClient): MarketOrder? {
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `publicId` = ?")
+            .execute(Tuple.of(publicId))
+            .coAwait()
+
+        return rows.toEntities().getOrNull(0)
+    }
+
+    override suspend fun getByBuyerAndIdempotencyKey(buyerKey: String, idempotencyKey: String, sqlClient: SqlClient): MarketOrder? {
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `buyerKey` = ? AND `idempotencyKey` = ?")
+            .execute(Tuple.of(buyerKey, idempotencyKey))
+            .coAwait()
+
+        return rows.toEntities().getOrNull(0)
     }
 
     override suspend fun getAllPaged(page: Long, search: String?, status: OrderStatus?, sqlClient: SqlClient): List<MarketOrder> {

@@ -7,6 +7,8 @@ import io.vertx.sqlclient.SqlClient
 abstract class MarketOrderItemDao : MarketDao<MarketOrderItem>(MarketOrderItem::class.java) {
     abstract suspend fun add(orderItem: MarketOrderItem, sqlClient: SqlClient): Long
 
+    abstract suspend fun getById(id: Long, sqlClient: SqlClient): MarketOrderItem?
+
     abstract suspend fun getByOrderIds(orderIds: List<Long>, sqlClient: SqlClient): List<MarketOrderItem>
 
     /**

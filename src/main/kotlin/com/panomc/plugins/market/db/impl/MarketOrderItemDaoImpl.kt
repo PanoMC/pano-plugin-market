@@ -28,25 +28,61 @@ class MarketOrderItemDaoImpl : MarketOrderItemDao() {
     }
 
     override suspend fun add(orderItem: MarketOrderItem, sqlClient: SqlClient): Long {
+        val columns = columnValues(orderItem)
         val query =
-            "INSERT INTO `${prefix() + tableName}` (`orderId`, `productId`, `productName`, `quantity`, `unitPrice`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO `${prefix() + tableName}` (${columns.joinToString(", ") { "`${it.first}`" }}) VALUES (${columns.joinToString(", ") { "?" }})"
 
-        val rows: RowSet<Row> = sqlClient
-            .preparedQuery(query)
-            .execute(
-                Tuple.of(
-                    orderItem.orderId,
-                    orderItem.productId,
-                    orderItem.productName,
-                    orderItem.quantity,
-                    orderItem.unitPrice,
-                    orderItem.createdAt,
-                    orderItem.updatedAt
-                )
-            )
-            .coAwait()
+        val values = Tuple.tuple()
+        columns.forEach { values.addValue(it.second) }
+
+        val rows: RowSet<Row> = sqlClient.preparedQuery(query).execute(values).coAwait()
 
         return rows.property(MySQLClient.LAST_INSERTED_ID)
+    }
+
+    /** Column name to bound value, in the order of the table (enums by name). */
+    private fun columnValues(i: MarketOrderItem): List<Pair<String, Any?>> = listOf(
+        "orderId" to i.orderId,
+        "productId" to i.productId,
+        "productName" to i.productName,
+        "quantity" to i.quantity,
+        "unitPrice" to i.unitPrice,
+        "createdAt" to i.createdAt,
+        "updatedAt" to i.updatedAt,
+        "kind" to i.kind.name,
+        "parentItemId" to i.parentItemId,
+        "variantId" to i.variantId,
+        "variantName" to i.variantName,
+        "sku" to i.sku,
+        "listUnitPrice" to i.listUnitPrice,
+        "discountAmount" to i.discountAmount,
+        "upgradeAmount" to i.upgradeAmount,
+        "couponAmount" to i.couponAmount,
+        "vatPercent" to i.vatPercent,
+        "vatAmount" to i.vatAmount,
+        "lineTotal" to i.lineTotal,
+        "creditUnitPrice" to i.creditUnitPrice,
+        "creditAmount" to i.creditAmount,
+        "fieldValues" to i.fieldValues,
+        "targetServerId" to i.targetServerId,
+        "snapshot" to i.snapshot,
+        "physical" to i.physical,
+        "stockReserved" to i.stockReserved,
+        "refundedQuantity" to i.refundedQuantity,
+        "refundedAmount" to i.refundedAmount,
+        "shippedQuantity" to i.shippedQuantity,
+        "gatewayItemRef" to i.gatewayItemRef,
+        "gatewayLineAmount" to i.gatewayLineAmount,
+        "upgradeFromEntitlementId" to i.upgradeFromEntitlementId,
+    )
+
+    override suspend fun getById(id: Long, sqlClient: SqlClient): MarketOrderItem? {
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `id` = ?")
+            .execute(Tuple.of(id))
+            .coAwait()
+
+        return rows.toEntities().getOrNull(0)
     }
 
     override suspend fun getByOrderIds(orderIds: List<Long>, sqlClient: SqlClient): List<MarketOrderItem> {

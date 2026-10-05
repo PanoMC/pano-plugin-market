@@ -3,6 +3,7 @@ package com.panomc.plugins.market.db
 import com.panomc.platform.db.DatabaseMigration
 import com.panomc.plugins.market.db.migration.MarketMigration2to3
 import com.panomc.plugins.market.db.migration.MarketMigration3to4
+import com.panomc.plugins.market.db.migration.MarketMigration4to5
 import com.panomc.plugins.market.support.MarketMigrationTestBase
 import com.panomc.plugins.market.support.MarketTestDb
 import io.vertx.kotlin.coroutines.coAwait
@@ -17,10 +18,10 @@ import org.junit.jupiter.api.Test
  * The migration chain from the frozen scheme-version-2 install (17 section 11.3 `MigrationChainIT`, 01 section 14.1
  * rule 6): the resulting schema equals the schema of a fresh `ensure()` (table, column, type, default and index
  * sets), the seed rows are unchanged in their existing columns, and a step is idempotent and survives being
- * interrupted half-way. Each later migration slice appends its step to [chain]; `2 -> 3` and `3 -> 4` are in.
+ * interrupted half-way. Each later migration slice appends its step to [chain]; `2 -> 3`, `3 -> 4` and `4 -> 5` (orders) are in.
  */
 class MigrationChainIT : MarketMigrationTestBase() {
-    private val chain: List<() -> DatabaseMigration> = listOf({ MarketMigration2to3() }, { MarketMigration3to4() })
+    private val chain: List<() -> DatabaseMigration> = listOf({ MarketMigration2to3() }, { MarketMigration3to4() }, { MarketMigration4to5() })
 
     private suspend fun runChain(client: SqlClient = pool) {
         for (step in chain) step().migrate(client)
@@ -76,10 +77,13 @@ class MigrationChainIT : MarketMigrationTestBase() {
         runChain()
         val migrated = SchemaSnapshot.take(pool)
         val fresh = freshSchema()
-        assertEquals(19, migrated.tables.size)
+        assertEquals(22, migrated.tables.size)
         assertEquals(fresh.tables, migrated.tables)
         assertEquals(fresh.columns, migrated.columns)
         assertEquals(fresh.keys, migrated.keys)
+        // the schema is complete, the legacy rows are not converted yet: that is the job of the fixups run by ensure()
+        assertEquals(emptyList<SchemaVerifier.Finding>(), SchemaVerifier.verify(pool, prefix).findings)
+        assertTrue(MarketSchema.ensure(pool, prefix).clean)
         val verdict = SchemaVerifier.verify(pool, prefix)
         assertTrue(verdict.ok, verdict.describe().toString())
     }
@@ -124,10 +128,13 @@ class MigrationChainIT : MarketMigrationTestBase() {
         runChain()
         assertEquals(schema, SchemaSnapshot.take(pool))
         assertEquals(data, dump(columns))
-        // ensure on top of the migrated schema is a no-op as well
+        // ensure on top of the migrated schema changes no object; its fixups convert the legacy order rows, once
         assertTrue(MarketSchema.ensure(pool, prefix).clean)
         assertEquals(schema, SchemaSnapshot.take(pool))
-        assertEquals(data, dump(columns))
+        val converted = dump(columns)
+        assertTrue(MarketSchema.ensure(pool, prefix).fixupsRun.isEmpty())
+        assertEquals(schema, SchemaSnapshot.take(pool))
+        assertEquals(converted, dump(columns))
     }
 
     @Test
@@ -164,6 +171,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         try {
             MarketMigration2to3().migrate(pool) // does not throw
             MarketMigration3to4().migrate(pool)
+            MarketMigration4to5().migrate(pool)
 
             val findings = SchemaVerifier.verify(pool, prefix).findings
             assertEquals(listOf("pano_market_product_variant"), findings.map { it.target })
@@ -176,6 +184,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
             closed.close().coAwait()
             MarketMigration2to3().migrate(closed) // a dead connection does not throw either
             MarketMigration3to4().migrate(closed)
+            MarketMigration4to5().migrate(closed)
         } finally {
             sql("DROP VIEW IF EXISTS `pano_market_product_variant`")
         }
@@ -230,6 +239,88 @@ class MigrationChainIT : MarketMigrationTestBase() {
             MarketMigration3to4().migrate(pool)
             assertEquals(expected, SchemaSnapshot.take(pool), "interrupted after $stopAfter handlers")
             MarketMigration3to4().migrate(pool)
+            assertEquals(expected, SchemaSnapshot.take(pool))
+            assertTrue(SchemaVerifier.verify(pool, prefix).ok)
+        }
+    }
+
+    @Test
+    fun `the step declares 4 to 5 with one handler per statement and no data statement`() {
+        val migration = MarketMigration4to5()
+        assertEquals(4, migration.from)
+        assertEquals(5, migration.to)
+        assertTrue(migration.isMigratable(4) && !migration.isMigratable(3))
+        // order: MODIFY status + 70 columns + 10 indexes; item: 25 columns; CREATE order_event, legal_text, sequence
+        assertEquals(1 + 70 + 10 + 25 + 3, migration.handlers.size)
+        // the table carries the version 1 -> 2 exchangeRate alter in front of the 81 statements of this step
+        assertEquals(1 + 1 + 70 + 10, MarketSchema.ORDER.alters.size)
+        assertEquals(25, MarketSchema.ORDER_ITEM.alters.size)
+        assertEquals(1 + 2 + 10, MarketSchema.ORDER.keys.size) // PRIMARY + userId + status + the ten new ones
+        val all = MarketSchema.ORDER.alters + MarketSchema.ORDER_ITEM.alters
+        assertTrue(all.none { it.trim().startsWith("UPDATE", ignoreCase = true) || it.trim().startsWith("INSERT", ignoreCase = true) }, "no backfill statement")
+        assertTrue(all.filter { !it.contains("MODIFY COLUMN") }.all { it.contains("IF NOT EXISTS") })
+        assertTrue(all.single { it.contains("MODIFY COLUMN") }.contains("`status` VARCHAR(24) NOT NULL DEFAULT 'PENDING'"))
+    }
+
+    @Test
+    fun `step 4 to 5 widens status, adds the order columns with their defaults and does not convert a legacy row`(): Unit = runBlocking {
+        MarketMigration2to3().migrate(pool)
+        MarketMigration3to4().migrate(pool)
+        val columns = columnsOfCurrentTables()
+        val before = dump(columns)
+        assertEquals(3, before.getValue("pano_market_order").size)
+        suspend fun statusLength() = sql(
+            "SELECT CHARACTER_MAXIMUM_LENGTH AS l FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pano_market_order' AND COLUMN_NAME = 'status'"
+        ).single().getLong("l")
+        assertEquals(16L, statusLength())
+
+        MarketMigration4to5().migrate(pool)
+
+        assertEquals(24L, statusLength())
+        assertEquals(before, dump(columns)) // existing columns of every existing row unchanged, in particular status
+        // the 70 + 25 new columns carry their declared defaults on the seeded rows; the legacy conversion is the fixups' job
+        assertEquals(
+            3L,
+            count(
+                "market_order",
+                "`publicId` IS NULL AND `accessToken` IS NULL AND `source` = 'STOREFRONT' AND `buyerKey` = '' AND `idempotencyKey` IS NULL AND `recipientKey` = '' " +
+                    "AND `reservationState` = 'NONE' AND `baseCurrency` = '' AND `fxRate` = 1 AND `pricingMode` = 'MARKET' AND `pricesIncludeVat` = 1 AND `subtotal` = 0 " +
+                    "AND `gatewayAmount` = 0 AND `paidAt` IS NULL AND `disputeStatus` = 'NONE' AND `fulfillmentStatus` = 'NONE' AND `fulfillmentBy` = 'MARKET' " +
+                    "AND `shippingStatus` = 'NOT_REQUIRED' AND `testMode` = 0 AND `isGift` = 0"
+            )
+        )
+        assertEquals(
+            5L,
+            count("market_order_item", "`kind` = 'PRODUCT' AND `listUnitPrice` = 0 AND `lineTotal` = 0 AND `stockReserved` = 0 AND `physical` = 0 AND `snapshot` IS NULL")
+        )
+        for (t in listOf("order_event", "legal_text", "sequence")) assertEquals(0L, count("market_$t"), t)
+        val keys = sql("SELECT DISTINCT INDEX_NAME AS n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pano_market_order'").map { it.getString("n") }.toSet()
+        assertTrue(
+            keys.containsAll(
+                listOf("userId", "status", "uq_publicId", "uq_buyer_idem", "idx_recipient", "idx_expiry", "idx_paidAt", "idx_email", "idx_player", "idx_subscription", "idx_coupon", "idx_creator")
+            ),
+            keys.toString()
+        )
+        // a longer status now fits
+        sql("UPDATE `pano_market_order` SET `status` = 'PARTIALLY_REFUNDED' WHERE `id` = 2")
+        assertEquals("PARTIALLY_REFUNDED", sql("SELECT `status` FROM `pano_market_order` WHERE `id` = 2").single().getString("status"))
+    }
+
+    @Test
+    fun `step 4 to 5 survives an interruption and runs twice`(): Unit = runBlocking {
+        runChain()
+        val expected = SchemaSnapshot.take(pool)
+        val total = MarketMigration4to5().handlers.size
+        for (stopAfter in listOf(total / 2, 1, total - 1)) {
+            resetState()
+            MarketMigration2to3().migrate(pool)
+            MarketMigration3to4().migrate(pool)
+            for (handler in MarketMigration4to5().handlers.take(stopAfter)) handler(pool)
+            assertTrue(SchemaSnapshot.take(pool) != expected, "interrupted after $stopAfter handlers is partial")
+            assertTrue(MarketSchema.ensure(pool, prefix).clean)
+            MarketMigration4to5().migrate(pool)
+            assertEquals(expected, SchemaSnapshot.take(pool), "interrupted after $stopAfter handlers")
+            MarketMigration4to5().migrate(pool)
             assertEquals(expected, SchemaSnapshot.take(pool))
             assertTrue(SchemaVerifier.verify(pool, prefix).ok)
         }

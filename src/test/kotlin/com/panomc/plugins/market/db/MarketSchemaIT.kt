@@ -10,7 +10,9 @@ import com.panomc.plugins.market.db.impl.MarketCreatorCodeDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCurrencyRateDaoImpl
 import com.panomc.plugins.market.db.impl.MarketDiscountDaoImpl
 import com.panomc.plugins.market.db.impl.MarketGiftDaoImpl
+import com.panomc.plugins.market.db.impl.MarketLegalTextDaoImpl
 import com.panomc.plugins.market.db.impl.MarketOrderDaoImpl
+import com.panomc.plugins.market.db.impl.MarketOrderEventDaoImpl
 import com.panomc.plugins.market.db.impl.MarketOrderItemDaoImpl
 import com.panomc.plugins.market.db.impl.MarketPaymentMethodDaoImpl
 import com.panomc.plugins.market.db.impl.MarketProductDaoImpl
@@ -19,6 +21,7 @@ import com.panomc.plugins.market.db.impl.MarketProductPriceDaoImpl
 import com.panomc.plugins.market.db.impl.MarketProductProviderMetaDaoImpl
 import com.panomc.plugins.market.db.impl.MarketProductVariantDaoImpl
 import com.panomc.plugins.market.db.impl.MarketRedemptionDaoImpl
+import com.panomc.plugins.market.db.impl.MarketSequenceDaoImpl
 import com.panomc.plugins.market.db.model.MarketCoupon
 import com.panomc.plugins.market.db.model.MarketCreatorCode
 import com.panomc.plugins.market.db.model.MarketDiscount
@@ -50,7 +53,9 @@ class MarketSchemaIT : MarketDbTestBase() {
         // scheme version 3 (MK-023)
         "product_variant", "product_price", "product_field", "bundle_item", "product_provider_meta", "currency_rate",
         // scheme version 4 (MK-024)
-        "redemption", "creator_earning", "creator_payout"
+        "redemption", "creator_earning", "creator_payout",
+        // scheme version 5 (MK-025)
+        "order_event", "legal_text", "sequence"
     ).map { "pano_market_$it" }.sorted()
 
     /** Drops every table and runs `ensure` again: the way a test that damaged the schema puts it back. */
@@ -62,7 +67,7 @@ class MarketSchemaIT : MarketDbTestBase() {
     // --- ensure ------------------------------------------------------------------------------------------------
 
     @Test
-    fun `ensure on an empty database creates the nineteen tables`(): Unit = runBlocking {
+    fun `ensure on an empty database creates the twenty-two tables`(): Unit = runBlocking {
         MarketTestDb.dropAllTables(pool)
         val report = MarketSchema.ensure(pool, prefix)
         assertTrue(report.clean, report.ddlErrors.toString())
@@ -80,7 +85,7 @@ class MarketSchemaIT : MarketDbTestBase() {
         val after = SchemaSnapshot.take(pool)
         assertTrue(first.clean && second.clean)
         assertEquals(before, after)
-        assertTrue(before.columns.isNotEmpty() && before.keys.isNotEmpty() && before.tables.size == 19)
+        assertTrue(before.columns.isNotEmpty() && before.keys.isNotEmpty() && before.tables.size == 22)
     }
 
     @Test
@@ -104,7 +109,7 @@ class MarketSchemaIT : MarketDbTestBase() {
 
             val expected = SchemaSnapshot.take(pool)
             val actual = SchemaSnapshot.take(referencePool)
-            assertEquals(19, expected.tables.size)
+            assertEquals(22, expected.tables.size)
             assertEquals(expected.tables, actual.tables)
             assertEquals(expected.columns, actual.columns)
             assertEquals(expected.keys, actual.keys)
@@ -164,16 +169,19 @@ class MarketSchemaIT : MarketDbTestBase() {
         { c -> MarketProductFieldDaoImpl().init(c) }, { c -> MarketBundleItemDaoImpl().init(c) },
         { c -> MarketProductProviderMetaDaoImpl().init(c) }, { c -> MarketCurrencyRateDaoImpl().init(c) },
         { c -> MarketRedemptionDaoImpl().init(c) }, { c -> MarketCreatorEarningDaoImpl().init(c) },
-        { c -> MarketCreatorPayoutDaoImpl().init(c) }
+        { c -> MarketCreatorPayoutDaoImpl().init(c) },
+        { c -> MarketOrderEventDaoImpl().init(c) }, { c -> MarketLegalTextDaoImpl().init(c) },
+        { c -> MarketSequenceDaoImpl().init(c) }
     )
 
     @Test
-    fun `the nineteen Dao init calls create the same schema as ensure`(): Unit = runBlocking {
+    fun `the twenty-two Dao init calls create the same schema as ensure`(): Unit = runBlocking {
         MarketTestDb.dropAllTables(pool)
         allDaoInits().forEach { it(pool) }
         allDaoInits().forEach { it(pool) } // twice: idempotent
         assertEquals(expectedTables, MarketTestDb.marketTables(pool))
-        assertTrue(SchemaVerifier.verify(pool, prefix).ok)
+        // the schema is complete; the data fixups only run in ensure(), so the verdict still lists them as unfixed
+        assertEquals(emptyList<SchemaVerifier.Finding>(), SchemaVerifier.verify(pool, prefix).findings)
 
         val viaDao = SchemaSnapshot.take(pool)
         MarketTestDb.dropAllTables(pool)
@@ -400,8 +408,17 @@ class MarketSchemaIT : MarketDbTestBase() {
     }
 
     @Test
-    fun `the fixup list is empty for the catalogue tables and a predicate-less fixup must be one-shot`() {
-        assertTrue(MarketSchema.fixups().isEmpty())
+    fun `the fixup list is the legacy order conversion and a predicate-less fixup must be one-shot`() {
+        val ids = MarketSchema.fixups().map { it.id }
+        assertEquals(
+            listOf(
+                "legacy-order-marker", "order-public-ids", "order-buyer-key", "order-recipient-username",
+                "order-recipient-key", "order-base-currency", "order-legacy-totals", "order-item-money",
+                "legacy-paid-orders", "soldCount", "legacyUsedCount"
+            ),
+            ids
+        )
+        assertEquals(listOf("soldCount", "legacyUsedCount"), MarketSchema.fixups().filter { it.oneShot }.map { it.id })
         val failure = runCatching { MarketSchema.Fixup("x", pendingSql = null, oneShot = false) { _, _ -> } }
         assertTrue(failure.exceptionOrNull() is IllegalArgumentException)
         assertNotNull(MarketSchema.table("market_coupon"))
