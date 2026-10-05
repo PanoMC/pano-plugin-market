@@ -159,6 +159,47 @@ class PaymentRaceIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `six gifts to one recipient paid at the same moment complete exactly limitPerPlayer of them, the rest wait for review`(): Unit = runBlocking {
+        ph.h.config = ph.h.config.copy(allowGiftPurchase = true)
+        fx.paymentMethod("fake")
+
+        val alex = fx.user("Alex")
+        val bob = fx.user("Bob")
+
+        ph.h.emails[alex.id] = "alex@example.com"
+        ph.h.emails[bob.id] = "bob@example.com"
+
+        repeat(Race.rounds) { round ->
+            // an unpaid gift counts for nothing, so six of them can be opened against a limit of two (06 section 6.4) ...
+            val product = fx.product(price = 1000, stock = 20, columns = mapOf("limitPerPlayer" to 2))
+            val gifts = (1..6).map {
+                val result = ph.h.checkout(
+                    ph.h.body("items" to listOf(ph.h.line(product)), "paymentMethodId" to "fake", "recipientUsername" to "Bob"), caller = QuoteCaller(alex.id)
+                )
+
+                ph.order(result.order.getString("publicId"))
+            }
+            val attempts = gifts.map { ph.attempts(it.id).single() }
+
+            // ... and the limit is enforced when they are paid, under the product lock
+            val results = Race.run(gifts.size) { i -> ph.succeed(gifts[i].id, attempts[i]) }
+
+            assertTrue(results.all { it.isSuccess }, "round $round: ${results.mapNotNull { it.exceptionOrNull() }}")
+
+            val after = gifts.map { ph.order(it.id) }
+
+            assertEquals(2, after.count { it.status == OrderStatus.COMPLETED }, "round $round: exactly limitPerPlayer orders complete")
+            assertEquals(4, after.count { it.status == OrderStatus.REVIEW }, "round $round: the others wait for a human")
+            assertTrue(after.filter { it.status == OrderStatus.REVIEW }.all { it.reviewReason == "OTHER" && it.reservationState == ReservationState.HELD && it.paymentId != null }, "round $round")
+            assertTrue(after.filter { it.status == OrderStatus.COMPLETED }.all { it.reservationState == ReservationState.COMMITTED }, "round $round")
+            assertEquals(2, w.products.getById(product.id, pool)!!.soldCount, "round $round: two units sold")
+            assertEquals(20 - 6, w.products.getById(product.id, pool)!!.stock, "round $round: every order keeps its unit, the reviewed ones on hold")
+            assertEquals(10 * 2, after.filter { it.status == OrderStatus.COMPLETED }.sumOf { ph.effects.of(it.id).size }, "round $round: only the completed ones are delivered")
+            assertTrue(after.filter { it.status == OrderStatus.REVIEW }.all { ph.effects.of(it.id).isEmpty() }, "round $round: nothing is delivered for a reviewed one")
+        }
+    }
+
+    @Test
     fun `two paid attempts of one order leave one non-duplicate success and one duplicate`(): Unit = runBlocking {
         fx.paymentMethod("fake")
 
