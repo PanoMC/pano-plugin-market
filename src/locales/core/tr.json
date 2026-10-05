@@ -67,5 +67,12 @@
     "UPDATED_MARKET_ORDER_EXCHANGE_RATE": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin döviz kurunu <b>{exchangeRate}</b> olarak güncelledi.",
     "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> market döviz kurunu <b>{exchangeRate}</b> olarak yeniledi.",
     "CREATED_MARKET_LEGAL_TEXT": "<b>{username}</b> yasal metnin <b>{version}</b>. sürümünü ({locale}) yayınladı."
+  },
+  "server-format": {
+    "date": "dd.MM.yyyy",
+    "date-time": "dd.MM.yyyy HH:mm",
+    "decimal-separator": ",",
+    "group-separator": ".",
+    "money": "{amount} {symbol}"
   }
 }
