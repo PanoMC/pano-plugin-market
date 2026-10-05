@@ -2,6 +2,7 @@ package com.panomc.plugins.market.service
 
 import com.panomc.plugins.market.core.payment.PaymentAttemptEvent
 import com.panomc.plugins.market.db.MarketDaoITBase
+import com.panomc.plugins.market.error.OrderNotPayable
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.db.model.MarketPayment
 import com.panomc.plugins.market.db.model.MarketProduct
@@ -24,6 +25,7 @@ import com.panomc.plugins.market.spi.payment.PaymentCapabilities
 import com.panomc.plugins.market.spi.payment.PaymentEvent
 import com.panomc.plugins.market.spi.payment.PaymentQueryResult
 import com.panomc.plugins.market.spi.payment.PaymentTarget
+import com.panomc.plugins.market.spi.payment.PaymentAttemptView
 import com.panomc.plugins.market.spi.payment.StartPaymentResult
 import com.panomc.plugins.market.spi.testkit.TestContexts
 import com.panomc.plugins.market.support.Await
@@ -43,6 +45,7 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -106,7 +109,7 @@ class Wire1IT : MarketDaoITBase() {
     }
 
     /** The order service and the payment service as the composition root builds them: `StartShipping` to [ShippingEffects], the rest to [effects]. */
-    private fun rebuild() {
+    private fun rebuild(statusWaitMs: Long = PaymentService.STATUS_WAIT_MS) {
         val db = MarketDb({ w.pool }, w.clock)
         val redemptions = RedemptionService(w.clock, locks, w.redemptions)
         val orderService = OrderService(
@@ -124,7 +127,7 @@ class Wire1IT : MarketDaoITBase() {
             lookup = StaticProviderLookup(listOf(continuable, FreeProvider(), CreditsProvider(), BankTransferProvider())), cipher = SecretCipher(ByteArray(32) { (it + 9).toByte() }),
             contexts = PaymentContexts { provider, settings, testMode -> TestContexts.payment(provider.id, settings, vertx, testMode) },
             orderService = orderService, site = { TestContexts.defaultSite() }, readClient = { w.pool }, products = w.products, entitlements = w.entitlements,
-            attemptLocks = attemptLocks
+            attemptLocks = attemptLocks, statusWaitMs = statusWaitMs
         )
 
         h.useStarter(payments)
@@ -337,6 +340,329 @@ class Wire1IT : MarketDaoITBase() {
         assertEquals(1, continuable.continued.size)
         assertEquals(0, attemptLocks.inUse())
         assertEquals(0, payments.attemptLocksInUse())
+    }
+
+    @Test
+    fun `a continue that finds a newer attempt after the lock wait is refused and touches nothing`(): Unit = runBlocking {
+        fake.onStart = { StartPaymentResult.Embedded(JsonObject().put("step", 1)) }
+
+        val order = buyDigital()
+        val a = attempt(order.id)
+
+        assertEquals("EMBEDDED", a.startKind)
+
+        val held = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val holder = async { attemptLocks.with(a.id) { held.complete(Unit); release.await() } }
+
+        held.await()
+
+        val next = async { runCatching { payments.continuePayment(order, JsonObject().put("phone", "5551234567"), PayCaller(), pool) } }
+
+        delay(300)
+
+        assertFalse(next.isCompleted)
+
+        // while the call waits, a newer embedded attempt B takes over the order (A is cancelled, as a retry of /pay does)
+        sql("UPDATE `pano_market_payment` SET `status` = 'CANCELLED' WHERE `id` = ?", a.id)
+
+        val now = w.clock.now()
+        val bId = w.payments.add(
+            MarketPayment(
+                orderId = order.id, providerId = a.providerId, methodLabel = a.methodLabel, status = PaymentStatus.PENDING, reference = "B".repeat(20), token = "b".repeat(40),
+                amount = a.amount, currency = a.currency, startKind = "EMBEDDED", createdAt = now, updatedAt = now
+            ),
+            pool
+        )!!
+
+        release.complete(Unit)
+        holder.await()
+
+        assertTrue(next.await().exceptionOrNull() is OrderNotPayable, "the continue is refused with ORDER_NOT_PAYABLE")
+        assertTrue(continuable.continued.isEmpty(), "the provider's continue never ran")
+
+        val b = w.payments.getById(bId, pool)!!
+
+        assertEquals(PaymentStatus.PENDING, b.status)
+        assertEquals("EMBEDDED", b.startKind)
+        assertNull(b.gatewayTransactionId)
+        assertNull(b.startedAt)
+        assertEquals(OrderStatus.PENDING, order(order.id).status)
+        assertEquals(0, attemptLocks.inUse())
+        assertEquals(0, payments.attemptLocksInUse())
+    }
+
+    @Test
+    fun `cancelPayment takes the attempt lock and runs only after it is released`(): Unit = runBlocking {
+        fake.caps = PaymentCapabilities().also { it.cancelPending = true }
+
+        val order = buyDigital()
+        val attempt = attempt(order.id)
+        val held = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val holder = async { attemptLocks.with(attempt.id) { held.complete(Unit); release.await() } }
+
+        held.await()
+
+        val cancel = async { payments.cancel(order, pool) }
+
+        delay(400)
+
+        assertTrue(fake.calls(FakePaymentProvider.Op.CANCEL).isEmpty(), "the gateway was not told while another call holds the attempt")
+        assertFalse(cancel.isCompleted)
+
+        release.complete(Unit)
+        holder.await()
+
+        assertEquals(OrderStatus.CANCELLED, cancel.await())
+        assertEquals(1, fake.calls(FakePaymentProvider.Op.CANCEL).size)
+        assertEquals(PaymentStatus.CANCELLED, attempt(order.id).status)
+        assertEquals(0, attemptLocks.inUse())
+    }
+
+    @Test
+    fun `a cancel that runs while the same coroutine holds the attempt lock does not wait for itself`(): Unit = runBlocking {
+        fake.caps = PaymentCapabilities().also { it.cancelPending = true }
+
+        val order = buyDigital()
+        val attempt = attempt(order.id)
+
+        // the after-commit gateway cancel of a call that holds this attempt (a query that applies an event, a handleInbound) takes the lock again: reentrant
+        val moved = kotlinx.coroutines.withTimeout(10_000) { attemptLocks.with(attempt.id) { payments.cancel(order, pool) } }
+
+        assertEquals(OrderStatus.CANCELLED, moved)
+        assertEquals(1, fake.calls(FakePaymentProvider.Op.CANCEL).size)
+        assertEquals(0, attemptLocks.inUse())
+    }
+
+    @Test
+    fun `a status query that waited for the lock reads the attempt again - a settled attempt is not asked, attached ids reach the provider`(): Unit = runBlocking {
+        queryable()
+
+        // (a) the call that held the lock settled the attempt: the waiting query asks nobody and claims nothing
+        val settled = buyDigital()
+        val settledAttempt = attempt(settled.id)
+        val seen = java.util.concurrent.CopyOnWriteArrayList<PaymentAttemptView>()
+
+        fake.onQuery = { request -> seen += request.attempt; PaymentQueryResult.unknown() }
+
+        var held = CompletableDeferred<Unit>()
+        var release = CompletableDeferred<Unit>()
+        var holder = async { attemptLocks.with(settledAttempt.id) { held.complete(Unit); release.await() } }
+
+        held.await()
+
+        val waiting = async { payments.status(settled, owner = true, pool) }
+
+        delay(300)
+
+        payments.applyEvent(settled.id, settledAttempt.id, PaymentAttemptEvent.Succeeded(settledAttempt.amount, settledAttempt.currency))
+        release.complete(Unit)
+        holder.await()
+
+        assertEquals("COMPLETED", waiting.await().getString("status"))
+        assertTrue(fake.calls(FakePaymentProvider.Op.QUERY).isEmpty(), "a SUCCEEDED attempt is not queried")
+        assertNull(attempt(settled.id).lastQueriedAt, "the claim was not used up")
+
+        // (b) the call that held the lock attached the gateway ids: the waiting query hands them to the provider
+        val attached = buyDigital()
+        val attachedAttempt = attempt(attached.id)
+
+        assertNull(attachedAttempt.gatewayTransactionId)
+
+        held = CompletableDeferred()
+        release = CompletableDeferred()
+        holder = async { attemptLocks.with(attachedAttempt.id) { held.complete(Unit); release.await() } }
+        held.await()
+
+        val waitingAttached = async { payments.status(attached, owner = true, pool) }
+
+        delay(300)
+
+        sql("UPDATE `pano_market_payment` SET `gatewayTransactionId` = 'txn-attached', `gatewayRefs` = '{\"session\":\"cs-attached\"}' WHERE `id` = ?", attachedAttempt.id)
+        release.complete(Unit)
+        holder.await()
+        waitingAttached.await()
+
+        assertEquals(1, seen.size)
+        assertEquals("txn-attached", seen[0].gatewayTransactionId)
+        assertEquals("cs-attached", seen[0].gatewayRefs["session"])
+        assertEquals(0, attemptLocks.inUse())
+    }
+
+    @Test
+    fun `a reconcile query that waited for the lock reads the attempt again`(): Unit = runBlocking {
+        queryable()
+
+        val settled = buyDigital()
+        val settledAttempt = attempt(settled.id)
+
+        fake.onQuery = { PaymentQueryResult.unknown() }
+
+        var held = CompletableDeferred<Unit>()
+        var release = CompletableDeferred<Unit>()
+        var holder = async { attemptLocks.with(settledAttempt.id) { held.complete(Unit); release.await() } }
+
+        held.await()
+
+        // the caller still holds the pre-wait snapshot (PENDING)
+        val waiting = async { payments.reconcileQuery(order(settled.id), settledAttempt, pool) }
+
+        delay(300)
+
+        payments.applyEvent(settled.id, settledAttempt.id, PaymentAttemptEvent.Succeeded(settledAttempt.amount, settledAttempt.currency))
+        release.complete(Unit)
+        holder.await()
+
+        assertTrue(waiting.await() is PaymentService.ReconcileQuery.Unknown)
+        assertTrue(fake.calls(FakePaymentProvider.Op.QUERY).isEmpty(), "a SUCCEEDED attempt is not queried")
+        assertEquals(PaymentStatus.SUCCEEDED, attempt(settled.id).status)
+
+        val attached = buyDigital()
+        val attachedAttempt = attempt(attached.id)
+        val seen = java.util.concurrent.CopyOnWriteArrayList<PaymentAttemptView>()
+
+        fake.onQuery = { request -> seen += request.attempt; PaymentQueryResult.unknown() }
+        held = CompletableDeferred()
+        release = CompletableDeferred()
+        holder = async { attemptLocks.with(attachedAttempt.id) { held.complete(Unit); release.await() } }
+        held.await()
+
+        val waitingAttached = async { payments.reconcileQuery(order(attached.id), attachedAttempt, pool) }
+
+        delay(300)
+
+        sql("UPDATE `pano_market_payment` SET `gatewayTransactionId` = 'txn-attached', `gatewayRefs` = '{\"session\":\"cs-attached\"}' WHERE `id` = ?", attachedAttempt.id)
+        release.complete(Unit)
+        holder.await()
+        waitingAttached.await()
+
+        assertEquals(1, seen.size)
+        assertEquals("txn-attached", seen[0].gatewayTransactionId)
+        assertEquals("cs-attached", seen[0].gatewayRefs["session"])
+        assertEquals(0, attemptLocks.inUse())
+    }
+
+    @Test
+    fun `the status poll waits for the attempt lock at most statusWaitMs and then answers the current state`(): Unit = runBlocking {
+        rebuild(statusWaitMs = 500)
+        queryable()
+
+        val order = buyDigital()
+        val attempt = attempt(order.id)
+
+        fake.onQuery = { PaymentQueryResult.of(succeeded(attempt)) }
+
+        val held = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val holder = async { attemptLocks.with(attempt.id) { held.complete(Unit); release.await() } }
+
+        held.await()
+
+        val body = kotlinx.coroutines.withTimeout(10_000) { payments.status(order, owner = true, pool) }
+
+        // answered while the holder still holds the lock
+        assertFalse(release.isCompleted)
+        assertEquals("PENDING", body.getString("status"))
+        assertEquals("PENDING", body.getString("paymentStatus"))
+        assertTrue(fake.calls(FakePaymentProvider.Op.QUERY).isEmpty(), "the provider was not asked")
+        assertEquals(1, attemptLocks.inUse(), "only the holder is left in the registry")
+        assertNull(attempt(order.id).lastQueriedAt, "a wait that timed out did not use up the claim")
+
+        release.complete(Unit)
+        holder.await()
+
+        assertEquals(0, attemptLocks.inUse())
+
+        // the next poll is not held back by the failed wait
+        assertEquals("COMPLETED", payments.status(order, owner = true, pool).getString("status"))
+        assertEquals(1, fake.calls(FakePaymentProvider.Op.QUERY).size)
+    }
+
+    /**
+     * An event of a query names a row by [PaymentTarget] kind; only the row of the queried attempt may take it (the inbound pipeline's rule,
+     * `PaymentInboundAttempts.resolve`). [other] is an attempt of the same provider on another order of the same amount.
+     */
+    private fun targetsOf(own: MarketPayment, other: MarketPayment): Map<String, PaymentTarget> = mapOf(
+        "foreign reference" to PaymentTarget.Reference(other.reference),
+        "unknown reference" to PaymentTarget.Reference("Z".repeat(20)),
+        "foreign gateway transaction" to PaymentTarget.GatewayTransaction("txn-other"),
+        "unknown gateway transaction" to PaymentTarget.GatewayTransaction("txn-nobody"),
+        "foreign gateway ref" to PaymentTarget.GatewayRef("session", "cs-other"),
+        "unknown gateway ref" to PaymentTarget.GatewayRef("session", "cs-nobody"),
+        "subscription" to PaymentTarget.Subscription("sub_1")
+    )
+
+    @Test
+    fun `an event of a query that names another row - by reference, transaction, gateway ref or subscription - never completes the queried attempt`(): Unit = runBlocking {
+        queryable()
+
+        val other = buyDigital()
+        val otherAttempt = attempt(other.id)
+
+        sql("UPDATE `pano_market_payment` SET `gatewayTransactionId` = 'txn-other', `gatewayRefs` = '{\"session\":\"cs-other\"}' WHERE `id` = ?", otherAttempt.id)
+
+        val names = targetsOf(otherAttempt, otherAttempt).keys
+
+        for (name in names) {
+            // by the status query
+            val viaStatus = buyDigital()
+            val statusAttempt = attempt(viaStatus.id)
+            val statusTarget = targetsOf(statusAttempt, otherAttempt).getValue(name)
+
+            fake.onQuery = { PaymentQueryResult.of(PaymentEvent.Succeeded(statusTarget, Money(statusAttempt.amount, statusAttempt.currency))) }
+            payments.status(viaStatus, owner = true, pool)
+
+            assertEquals(OrderStatus.PENDING, order(viaStatus.id).status, "status query, $name")
+            assertEquals(PaymentStatus.PENDING, attempt(viaStatus.id).status, "status query, $name")
+            assertNull(attempt(viaStatus.id).gatewayTransactionId, "status query, $name")
+
+            // by the reconcile query
+            val viaReconcile = buyDigital()
+            val reconcileAttempt = attempt(viaReconcile.id)
+            val reconcileTarget = targetsOf(reconcileAttempt, otherAttempt).getValue(name)
+
+            fake.onQuery = { PaymentQueryResult.of(PaymentEvent.Succeeded(reconcileTarget, Money(reconcileAttempt.amount, reconcileAttempt.currency)).also { it.gatewayTransactionId = "txn-foreign-$name" }) }
+
+            val result = payments.reconcileQuery(order(viaReconcile.id), reconcileAttempt, pool)
+
+            assertTrue(result is PaymentService.ReconcileQuery.Unknown, "reconcile query, $name: $result")
+            assertEquals(OrderStatus.PENDING, order(viaReconcile.id).status, "reconcile query, $name")
+            assertEquals(PaymentStatus.PENDING, attempt(viaReconcile.id).status, "reconcile query, $name")
+            assertNull(attempt(viaReconcile.id).gatewayTransactionId, "reconcile query, $name")
+        }
+
+        // the attempt the target names in the end is untouched too
+        assertEquals(OrderStatus.PENDING, order(other.id).status)
+        assertEquals(PaymentStatus.PENDING, attempt(other.id).status)
+        assertEquals(0, attemptLocks.inUse())
+    }
+
+    @Test
+    fun `a target of a query that resolves to the queried attempt itself is applied, by every kind`(): Unit = runBlocking {
+        queryable()
+
+        val kinds = listOf<Pair<String, (MarketPayment) -> PaymentTarget>>(
+            "attempt" to { a -> PaymentTarget.Attempt(a.id) },
+            "reference" to { a -> PaymentTarget.Reference(a.reference) },
+            "gateway transaction" to { a -> PaymentTarget.GatewayTransaction("txn-own-${a.id}") },
+            "gateway ref" to { a -> PaymentTarget.GatewayRef("session", "cs-own-${a.id}") }
+        )
+
+        for ((name, target) in kinds) {
+            for (channel in listOf("status", "reconcile")) {
+                val order = buyDigital()
+                val a = attempt(order.id)
+
+                sql("UPDATE `pano_market_payment` SET `gatewayTransactionId` = ?, `gatewayRefs` = ? WHERE `id` = ?", "txn-own-${a.id}", "{\"session\":\"cs-own-${a.id}\"}", a.id)
+
+                fake.onQuery = { PaymentQueryResult.of(PaymentEvent.Succeeded(target(a), Money(a.amount, a.currency))) }
+
+                if (channel == "status") payments.status(order, owner = true, pool) else payments.reconcileQuery(order(order.id), a, pool)
+
+                assertEquals(OrderStatus.COMPLETED, order(order.id).status, "$channel query, $name")
+            }
+        }
     }
 
     @Test

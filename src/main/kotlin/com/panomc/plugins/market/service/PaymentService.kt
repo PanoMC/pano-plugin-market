@@ -5,6 +5,7 @@ import com.panomc.plugins.market.core.order.BillingSnapshot
 import com.panomc.plugins.market.core.order.OrderActor
 import com.panomc.plugins.market.routes.api.payment.AttemptLocks
 import com.panomc.plugins.market.routes.api.payment.PaymentEventApplier
+import com.panomc.plugins.market.routes.api.payment.resolveAttemptTarget
 import com.panomc.plugins.market.routes.api.payment.withReceived
 import com.panomc.plugins.market.core.order.OrderEvent
 import com.panomc.plugins.market.core.order.OrderTimings
@@ -728,9 +729,15 @@ class PaymentService(
         if (!resolved.caps.cancelPending) return
 
         try {
-            val ctx = contexts.create(resolved.provider, resolved.settings, attempt.testMode)
+            // 02 section 10 guarantee 3: a cancel is one of the calls serialised per attempt; the lock is reentrant, so a cancel that runs after a commit made
+            // under this attempt's lock (a query, an inbound event) does not wait for itself. The attempt is read again inside it: the view carries the ids
+            // a call that held the lock before this one attached.
+            attemptLocks.with(attempt.id) {
+                val fresh = payments.getById(attempt.id, sqlClient) ?: attempt
+                val ctx = contexts.create(resolved.provider, resolved.settings, fresh.testMode)
 
-            withTimeout(cancelTimeoutMs) { resolved.provider.cancelPayment(ctx, CancelPaymentRequest(attemptView(attempt, publicId))) }
+                withTimeout(cancelTimeoutMs) { resolved.provider.cancelPayment(ctx, CancelPaymentRequest(attemptView(fresh, publicId))) }
+            }
         } catch (e: TimeoutCancellationException) {
             logger.warn("cancelPayment of attempt {} timed out, ignored", attempt.id)
         } catch (e: CancellationException) {
@@ -1374,41 +1381,65 @@ class PaymentService(
     private suspend fun queryOnce(order: MarketOrder, sqlClient: SqlClient) {
         val attempt = payments.getByOrderId(order.id, sqlClient).lastOrNull() ?: return
 
-        if (attempt.status != PaymentStatus.CREATED && attempt.status != PaymentStatus.PENDING && attempt.status != PaymentStatus.PROCESSING) return
+        if (!isOpen(attempt)) return
 
         val resolved = resolve(attempt.providerId, sqlClient) ?: return
 
         if (!resolved.caps.statusQuery) return
 
-        val now = clock.now()
-        val claimed = sqlClient.preparedQuery(
-            "UPDATE ${table("market_payment")} SET `lastQueriedAt` = ?, `queryCount` = `queryCount` + 1 WHERE `id` = ? AND (`lastQueriedAt` IS NULL OR `lastQueriedAt` <= ?)"
-        ).execute(Tuple.of(now, attempt.id, now - STATUS_QUERY_MIN_GAP_MS)).coAwait().rowCount()
+        val startedNs = System.nanoTime()
 
-        if (claimed != 1) return
+        // the provider query and what it reports are one unit under the attempt lock of the inbound pipeline (a `handleInbound` of this attempt waits).
+        // The wait is part of the poll's budget (06 section 10.4): a lock that stays held past it changes nothing and the caller answers the current state;
+        // the per-attempt claim is taken inside the lock, so a wait that timed out does not use up the 10 s slot.
+        attemptLocks.withOrNull(attempt.id, statusWaitMs) {
+            // what the call that held the lock before this one did (an event applied, ids attached) is read now, never from the snapshot taken before the wait
+            val fresh = payments.getById(attempt.id, sqlClient) ?: return@withOrNull
 
-        // the provider query and what it reports are one unit under the attempt lock of the inbound pipeline (a `handleInbound` of this attempt waits)
-        attemptLocks.with(attempt.id) {
-            val ctx = contexts.create(resolved.provider, resolved.settings, attempt.testMode)
+            if (!isOpen(fresh)) return@withOrNull
+
+            val now = clock.now()
+            val claimed = sqlClient.preparedQuery(
+                "UPDATE ${table("market_payment")} SET `lastQueriedAt` = ?, `queryCount` = `queryCount` + 1 WHERE `id` = ? AND (`lastQueriedAt` IS NULL OR `lastQueriedAt` <= ?)"
+            ).execute(Tuple.of(now, fresh.id, now - STATUS_QUERY_MIN_GAP_MS)).coAwait().rowCount()
+
+            if (claimed != 1) return@withOrNull
+
+            val remainingMs = statusWaitMs - (System.nanoTime() - startedNs) / 1_000_000
+            val ctx = contexts.create(resolved.provider, resolved.settings, fresh.testMode)
             val events = try {
-                withTimeoutOrNull(statusWaitMs) {
-                    resolved.provider.queryPayment(ctx, QueryPaymentRequest(attemptView(attempt, order.publicId ?: ""), QueryReason.RETURN_PAGE)).events
+                withTimeoutOrNull(remainingMs.coerceAtLeast(1)) {
+                    resolved.provider.queryPayment(ctx, QueryPaymentRequest(attemptView(fresh, order.publicId ?: ""), QueryReason.RETURN_PAGE)).events
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                logger.warn("status query of attempt {} failed: {}", attempt.id, e.javaClass.simpleName)
+                logger.warn("status query of attempt {} failed: {}", fresh.id, e.javaClass.simpleName)
 
                 null
             }
 
-            if (events != null) applyQueried(order, attempt, events, resolved.policy)
+            if (events != null) applyQueried(order, fresh, events, resolved.policy)
         }
+    }
+
+    private fun isOpen(attempt: MarketPayment) = attempt.status == PaymentStatus.CREATED || attempt.status == PaymentStatus.PENDING || attempt.status == PaymentStatus.PROCESSING
+
+    /**
+     * Whether [target] names [attempt], resolved the way the inbound pipeline resolves it ([resolveAttemptTarget]: provider-scoped, a subscription target
+     * resolves to nothing). The attempt's own id and reference need no lookup; any other target must resolve to the very row.
+     */
+    private suspend fun namesAttempt(attempt: MarketPayment, target: PaymentTarget): Boolean = when {
+        target is PaymentTarget.Attempt -> target.attemptId == attempt.id
+        target is PaymentTarget.Reference && target.reference == attempt.reference -> true
+        target is PaymentTarget.Subscription -> false
+        else -> resolveAttemptTarget(payments, orders, attempt.providerId, target, readClient())?.id == attempt.id
     }
 
     /**
      * The events a provider reported on a query ([QueryReason.RETURN_PAGE] / [QueryReason.RECONCILE]), judged like the inbound pipeline judges them
-     * (`PaymentEventApplier`, 02 section 7.3 step 6): an event that names another attempt is skipped, an event of another environment than the attempt's is
+     * (`PaymentEventApplier`, 02 section 7.3 step 6): an event whose target does not resolve to this very attempt (any [PaymentTarget] kind, scoped to the
+     * provider; a subscription target never does) is skipped, an event of another environment than the attempt's is
      * skipped unless it is a `Succeeded` (which the attempt machine turns into a review, with the note "environment mismatch" and the money it names);
      * everything else is applied through [applyEvent]. Returns how many events were applied.
      */
@@ -1418,8 +1449,8 @@ class PaymentService(
         for (event in events) {
             val target = event.target
 
-            if (target is PaymentTarget.Attempt && target.attemptId != attempt.id) {
-                logger.warn("a query of attempt {} answered a {} for attempt {}, skipped", attempt.id, event.javaClass.simpleName, target.attemptId)
+            if (!namesAttempt(attempt, target)) {
+                logger.warn("a query of attempt {} answered a {} for a target that is not this attempt, skipped", attempt.id, event.javaClass.simpleName)
 
                 continue
             }
@@ -1478,7 +1509,12 @@ class PaymentService(
 
         if (!resolved.caps.statusQuery) return ReconcileQuery.Unsupported
 
-        return attemptLocks.with(attempt.id) { reconcileLocked(order, attempt, resolved) }
+        return attemptLocks.with(attempt.id) {
+            // the row as the call that held the lock before this one left it: settled meanwhile = nothing to ask, new ids attached = they reach the provider
+            val fresh = payments.getById(attempt.id, sqlClient)
+
+            if (fresh == null || !isOpen(fresh)) ReconcileQuery.Unknown(null) else reconcileLocked(order, fresh, resolved)
+        }
     }
 
     private suspend fun reconcileLocked(order: MarketOrder, attempt: MarketPayment, resolved: Resolved): ReconcileQuery {
