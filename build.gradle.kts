@@ -1,5 +1,10 @@
 import java.net.URL
 
+buildscript {
+    repositories { mavenCentral() }
+    dependencies { classpath("com.google.code.gson:gson:2.11.0") }
+}
+
 plugins {
     kotlin("jvm") version "2.2.21"
     kotlin("kapt") version "2.2.21"
@@ -203,7 +208,66 @@ tasks.named("build") {
     }
 }
 
+// Locale sources are fragments (src/locales/{core,panel,theme}/<lang>.json); the platform wants one
+// file per language, so this deep-merges them into the git-ignored src/main/resources/locales/.
+val mergeLocales by tasks.registering {
+    val srcDir = layout.projectDirectory.dir("src/locales")
+    val outDir = layout.projectDirectory.dir("src/main/resources/locales")
+    inputs.dir(srcDir)
+    outputs.dir(outDir)
+
+    doLast {
+        val gson = com.google.gson.GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create()
+        val langs = listOf("tr", "en-US", "ru")
+        val fragments = srcDir.asFile.listFiles { f -> f.isDirectory }!!.sortedBy { it.name }
+        val merged = mutableMapOf<String, com.google.gson.JsonObject>()
+
+        fun leaves(e: com.google.gson.JsonElement, path: String, out: MutableSet<String>) {
+            if (e.isJsonObject) e.asJsonObject.entrySet().forEach { leaves(it.value, if (path.isEmpty()) it.key else "$path.${it.key}", out) }
+            else out.add(path)
+        }
+
+        fun merge(into: com.google.gson.JsonObject, from: com.google.gson.JsonObject, path: String, where: String) {
+            for ((k, v) in from.entrySet()) {
+                val p = if (path.isEmpty()) k else "$path.$k"
+                val existing = into.get(k)
+                when {
+                    existing == null -> into.add(k, v)
+                    existing.isJsonObject && v.isJsonObject -> merge(existing.asJsonObject, v.asJsonObject, p, where)
+                    else -> throw GradleException("mergeLocales: duplicate leaf key '$p' ($where)")
+                }
+            }
+        }
+
+        for (lang in langs) {
+            val root = com.google.gson.JsonObject()
+            for (dir in fragments) {
+                val f = File(dir, "$lang.json")
+                if (!f.exists()) throw GradleException("mergeLocales: missing ${dir.name}/$lang.json")
+                merge(root, com.google.gson.JsonParser.parseString(f.readText()).asJsonObject, "", "${dir.name}/$lang.json")
+            }
+            merged[lang] = root
+        }
+
+        val keySets = langs.associateWith { l -> mutableSetOf<String>().also { leaves(merged[l]!!, "", it) } }
+        val base = keySets.getValue(langs.first())
+        for (l in langs.drop(1)) {
+            val missing = base - keySets.getValue(l)
+            val extra = keySets.getValue(l) - base
+            if (missing.isNotEmpty() || extra.isNotEmpty()) {
+                throw GradleException(
+                    "mergeLocales: key set of $l differs from ${langs.first()}: missing=${missing.sorted().take(20)} extra=${extra.sorted().take(20)}"
+                )
+            }
+        }
+
+        outDir.asFile.mkdirs()
+        langs.forEach { File(outDir.asFile, "$it.json").writeText(gson.toJson(merged[it]) + "\n") }
+    }
+}
+
 tasks.named("processResources") {
+    dependsOn(mergeLocales)
     if (!noui) {
         dependsOn("zipPluginUI")
     }

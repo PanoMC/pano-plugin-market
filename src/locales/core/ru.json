@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "MANAGE_MARKET": {
+      "title": "Управление маркетом",
+      "description": "Может управлять категориями, товарами, сравнениями, подарками, скидками, купонами, кодами авторов, заказами и настройками маркета."
+    }
+  },
+  "activity-logs": {
+    "CREATED_MARKET_CATEGORY": "<b>{username}</b> создал категорию маркета \"{name}\".",
+    "UPDATED_MARKET_CATEGORY": "<b>{username}</b> обновил категорию маркета \"{name}\".",
+    "DELETED_MARKET_CATEGORY": "<b>{username}</b> удалил категорию маркета \"{name}\".",
+    "CREATED_MARKET_PRODUCT": "<b>{username}</b> создал товар \"{name}\".",
+    "UPDATED_MARKET_PRODUCT": "<b>{username}</b> обновил товар \"{name}\".",
+    "DELETED_MARKET_PRODUCT": "<b>{username}</b> удалил товар \"{name}\".",
+    "CREATED_MARKET_COMPARISON": "<b>{username}</b> создал сравнение \"{name}\".",
+    "UPDATED_MARKET_COMPARISON": "<b>{username}</b> обновил сравнение \"{name}\".",
+    "DELETED_MARKET_COMPARISON": "<b>{username}</b> удалил сравнение \"{name}\".",
+    "CREATED_MARKET_GIFT": "<b>{username}</b> создал подарок \"{name}\".",
+    "UPDATED_MARKET_GIFT": "<b>{username}</b> обновил подарок \"{name}\".",
+    "DELETED_MARKET_GIFT": "<b>{username}</b> удалил подарок \"{name}\".",
+    "CREATED_MARKET_DISCOUNT": "<b>{username}</b> создал скидку \"{name}\".",
+    "UPDATED_MARKET_DISCOUNT": "<b>{username}</b> обновил скидку \"{name}\".",
+    "DELETED_MARKET_DISCOUNT": "<b>{username}</b> удалил скидку \"{name}\".",
+    "CREATED_MARKET_COUPON": "<b>{username}</b> создал купон \"{name}\".",
+    "UPDATED_MARKET_COUPON": "<b>{username}</b> обновил купон \"{name}\".",
+    "DELETED_MARKET_COUPON": "<b>{username}</b> удалил купон \"{name}\".",
+    "CREATED_MARKET_CREATOR_CODE": "<b>{username}</b> создал код автора \"{name}\".",
+    "UPDATED_MARKET_CREATOR_CODE": "<b>{username}</b> обновил код автора \"{name}\".",
+    "DELETED_MARKET_CREATOR_CODE": "<b>{username}</b> удалил код автора \"{name}\".",
+    "SORTED_MARKET_CATEGORIES": "<b>{username}</b> изменил позицию категории маркета \"{name}\".",
+    "UPDATED_MARKET_SETTINGS": "<b>{username}</b> обновил настройки маркета.",
+    "UPDATED_MARKET_PAYMENT_METHOD": "<b>{username}</b> обновил способ оплаты \"{name}\".",
+    "REVEALED_MARKET_PAYMENT_SECRET": "<b>{username}</b> раскрыл секретные ключи способа оплаты \"{name}\".",
+    "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> изменил статус заказа <b>#{orderId}</b> на \"{status}\".",
+    "UPDATED_MARKET_ORDER_EXCHANGE_RATE": "<b>{username}</b> обновил обменный курс заказа <b>#{orderId}</b> на <b>{exchangeRate}</b>.",
+    "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> обновил обменный курс маркета до <b>{exchangeRate}</b>."
+  }
+}

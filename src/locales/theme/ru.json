@@ -1,0 +1,40 @@
+{
+  "nav-store": "Магазин",
+  "theme": {
+    "store": {
+      "title": "Магазин",
+      "title-with-name": "{storeName}",
+      "subtitle": "{storeDescription}",
+      "search-placeholder": "Поиск товаров...",
+      "categories": "Категории",
+      "all-products": "Все товары",
+      "products-count": "{count, plural, one {# товар} few {# товара} many {# товаров} other {# товара}}",
+      "credits": "Кредиты",
+      "empty": "Товары не найдены.",
+      "featured": "Рекомендуемые",
+      "featured-badge": "Рекомендуем",
+      "bestsellers": "Хиты продаж",
+      "add-to-cart": "В корзину",
+      "sold-out": "Нет в наличии",
+      "in-stock": "В наличии",
+      "stock-count": "В наличии: {count}",
+      "close": "Закрыть",
+      "added-to-cart": "Добавлено в корзину.",
+      "comparisons": "Сравнение",
+      "comparison-feature": "Характеристика",
+      "comparison-yes": "Да",
+      "comparison-no": "Нет",
+      "cart": {
+        "title": "Корзина",
+        "empty": "Ваша корзина пуста.",
+        "total": "Итого",
+        "remove": "Удалить",
+        "increase": "Увеличить количество",
+        "decrease": "Уменьшить количество",
+        "checkout": "Оформить заказ",
+        "checkout-soon": "Оплата появится в ближайшее время.",
+        "clear": "Очистить корзину"
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "nav-store": "Store",
+  "theme": {
+    "store": {
+      "title": "Store",
+      "title-with-name": "{storeName}",
+      "subtitle": "{storeDescription}",
+      "search-placeholder": "Search products...",
+      "categories": "Categories",
+      "all-products": "All Products",
+      "products-count": "{count, plural, one {# product} other {# products}}",
+      "credits": "Credits",
+      "empty": "No products found.",
+      "featured": "Featured",
+      "featured-badge": "Featured",
+      "bestsellers": "Bestsellers",
+      "add-to-cart": "Add to Cart",
+      "sold-out": "Sold Out",
+      "in-stock": "In Stock",
+      "stock-count": "{count} in stock",
+      "close": "Close",
+      "added-to-cart": "Added to cart.",
+      "comparisons": "Comparison",
+      "comparison-feature": "Feature",
+      "comparison-yes": "Yes",
+      "comparison-no": "No",
+      "cart": {
+        "title": "Your Cart",
+        "empty": "Your cart is empty.",
+        "total": "Total",
+        "remove": "Remove",
+        "increase": "Increase quantity",
+        "decrease": "Decrease quantity",
+        "checkout": "Checkout",
+        "checkout-soon": "Payment is coming soon.",
+        "clear": "Clear Cart"
+      }
+    }
+  }
+}

@@ -1,40 +1,4 @@
 {
-  "permissions": {
-    "MANAGE_MARKET": {
-      "title": "Manage Market",
-      "description": "Can manage market categories, products, comparisons, gifts, discounts, coupons, creator codes, orders and settings."
-    }
-  },
-  "activity-logs": {
-    "CREATED_MARKET_CATEGORY": "<b>{username}</b> created the \"{name}\" market category.",
-    "UPDATED_MARKET_CATEGORY": "<b>{username}</b> updated the \"{name}\" market category.",
-    "DELETED_MARKET_CATEGORY": "<b>{username}</b> deleted the \"{name}\" market category.",
-    "CREATED_MARKET_PRODUCT": "<b>{username}</b> created the \"{name}\" market product.",
-    "UPDATED_MARKET_PRODUCT": "<b>{username}</b> updated the \"{name}\" market product.",
-    "DELETED_MARKET_PRODUCT": "<b>{username}</b> deleted the \"{name}\" market product.",
-    "CREATED_MARKET_COMPARISON": "<b>{username}</b> created the \"{name}\" market comparison.",
-    "UPDATED_MARKET_COMPARISON": "<b>{username}</b> updated the \"{name}\" market comparison.",
-    "DELETED_MARKET_COMPARISON": "<b>{username}</b> deleted the \"{name}\" market comparison.",
-    "CREATED_MARKET_GIFT": "<b>{username}</b> created the \"{name}\" market gift.",
-    "UPDATED_MARKET_GIFT": "<b>{username}</b> updated the \"{name}\" market gift.",
-    "DELETED_MARKET_GIFT": "<b>{username}</b> deleted the \"{name}\" market gift.",
-    "CREATED_MARKET_DISCOUNT": "<b>{username}</b> created the \"{name}\" market discount.",
-    "UPDATED_MARKET_DISCOUNT": "<b>{username}</b> updated the \"{name}\" market discount.",
-    "DELETED_MARKET_DISCOUNT": "<b>{username}</b> deleted the \"{name}\" market discount.",
-    "CREATED_MARKET_COUPON": "<b>{username}</b> created the \"{name}\" market coupon.",
-    "UPDATED_MARKET_COUPON": "<b>{username}</b> updated the \"{name}\" market coupon.",
-    "DELETED_MARKET_COUPON": "<b>{username}</b> deleted the \"{name}\" market coupon.",
-    "CREATED_MARKET_CREATOR_CODE": "<b>{username}</b> created the \"{name}\" creator code.",
-    "UPDATED_MARKET_CREATOR_CODE": "<b>{username}</b> updated the \"{name}\" creator code.",
-    "DELETED_MARKET_CREATOR_CODE": "<b>{username}</b> deleted the \"{name}\" creator code.",
-    "SORTED_MARKET_CATEGORIES": "<b>{username}</b> changed the position of the \"{name}\" market category.",
-    "UPDATED_MARKET_SETTINGS": "<b>{username}</b> updated the market settings.",
-    "UPDATED_MARKET_PAYMENT_METHOD": "<b>{username}</b> updated the \"{name}\" payment method.",
-    "REVEALED_MARKET_PAYMENT_SECRET": "<b>{username}</b> revealed the secrets of the \"{name}\" payment method.",
-    "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> changed the status of order <b>#{orderId}</b> to \"{status}\".",
-    "UPDATED_MARKET_ORDER_EXCHANGE_RATE": "<b>{username}</b> updated the exchange rate of order <b>#{orderId}</b> to <b>{exchangeRate}</b>.",
-    "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> refreshed the market exchange rate to <b>{exchangeRate}</b>."
-  },
   "nav-market": "Market",
   "nav-stats": "Statistics",
   "nav-orders": "Orders",
@@ -757,44 +721,6 @@
       "no-expiry": "No Expiry",
       "start-date": "Start: {date}",
       "end-date": "End: {date}"
-    }
-  },
-  "nav-store": "Store",
-  "theme": {
-    "store": {
-      "title": "Store",
-      "title-with-name": "{storeName}",
-      "subtitle": "{storeDescription}",
-      "search-placeholder": "Search products...",
-      "categories": "Categories",
-      "all-products": "All Products",
-      "products-count": "{count, plural, one {# product} other {# products}}",
-      "credits": "Credits",
-      "empty": "No products found.",
-      "featured": "Featured",
-      "featured-badge": "Featured",
-      "bestsellers": "Bestsellers",
-      "add-to-cart": "Add to Cart",
-      "sold-out": "Sold Out",
-      "in-stock": "In Stock",
-      "stock-count": "{count} in stock",
-      "close": "Close",
-      "added-to-cart": "Added to cart.",
-      "comparisons": "Comparison",
-      "comparison-feature": "Feature",
-      "comparison-yes": "Yes",
-      "comparison-no": "No",
-      "cart": {
-        "title": "Your Cart",
-        "empty": "Your cart is empty.",
-        "total": "Total",
-        "remove": "Remove",
-        "increase": "Increase quantity",
-        "decrease": "Decrease quantity",
-        "checkout": "Checkout",
-        "checkout-soon": "Payment is coming soon.",
-        "clear": "Clear Cart"
-      }
     }
   }
 }

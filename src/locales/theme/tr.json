@@ -1,0 +1,40 @@
+{
+  "nav-store": "Market",
+  "theme": {
+    "store": {
+      "title": "Mağaza",
+      "title-with-name": "{storeName}",
+      "subtitle": "{storeDescription}",
+      "search-placeholder": "Ürün ara...",
+      "categories": "Kategoriler",
+      "all-products": "Tüm Ürünler",
+      "products-count": "{count} ürün",
+      "credits": "Kredi",
+      "empty": "Ürün bulunamadı.",
+      "featured": "Öne Çıkanlar",
+      "featured-badge": "Öne Çıkan",
+      "bestsellers": "Çok Satanlar",
+      "add-to-cart": "Sepete Ekle",
+      "sold-out": "Tükendi",
+      "in-stock": "Stokta var",
+      "stock-count": "Stokta {count} adet",
+      "close": "Kapat",
+      "added-to-cart": "Ürün sepete eklendi.",
+      "comparisons": "Karşılaştırma",
+      "comparison-feature": "Özellik",
+      "comparison-yes": "Var",
+      "comparison-no": "Yok",
+      "cart": {
+        "title": "Sepetim",
+        "empty": "Sepetiniz boş.",
+        "total": "Toplam",
+        "remove": "Kaldır",
+        "increase": "Adedi artır",
+        "decrease": "Adedi azalt",
+        "checkout": "Ödemeye Geç",
+        "checkout-soon": "Ödeme sistemi yakında eklenecek.",
+        "clear": "Sepeti Temizle"
+      }
+    }
+  }
+}

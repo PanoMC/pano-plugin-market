@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "MANAGE_MARKET": {
+      "title": "Marketi Yönet",
+      "description": "Market kategorilerini, ürünleri, karşılaştırmaları, hediyeleri, indirimleri, kuponları, yaratıcı kodlarını, siparişleri ve ayarları yönetebilir."
+    }
+  },
+  "activity-logs": {
+    "CREATED_MARKET_CATEGORY": "<b>{username}</b> \"{name}\" market kategorisini oluşturdu.",
+    "UPDATED_MARKET_CATEGORY": "<b>{username}</b> \"{name}\" market kategorisini güncelledi.",
+    "DELETED_MARKET_CATEGORY": "<b>{username}</b> \"{name}\" market kategorisini sildi.",
+    "CREATED_MARKET_PRODUCT": "<b>{username}</b> \"{name}\" market ürününü oluşturdu.",
+    "UPDATED_MARKET_PRODUCT": "<b>{username}</b> \"{name}\" market ürününü güncelledi.",
+    "DELETED_MARKET_PRODUCT": "<b>{username}</b> \"{name}\" market ürününü sildi.",
+    "CREATED_MARKET_COMPARISON": "<b>{username}</b> \"{name}\" market karşılaştırmasını oluşturdu.",
+    "UPDATED_MARKET_COMPARISON": "<b>{username}</b> \"{name}\" market karşılaştırmasını güncelledi.",
+    "DELETED_MARKET_COMPARISON": "<b>{username}</b> \"{name}\" market karşılaştırmasını sildi.",
+    "CREATED_MARKET_GIFT": "<b>{username}</b> \"{name}\" market hediyesini oluşturdu.",
+    "UPDATED_MARKET_GIFT": "<b>{username}</b> \"{name}\" market hediyesini güncelledi.",
+    "DELETED_MARKET_GIFT": "<b>{username}</b> \"{name}\" market hediyesini sildi.",
+    "CREATED_MARKET_DISCOUNT": "<b>{username}</b> \"{name}\" market indirimini oluşturdu.",
+    "UPDATED_MARKET_DISCOUNT": "<b>{username}</b> \"{name}\" market indirimini güncelledi.",
+    "DELETED_MARKET_DISCOUNT": "<b>{username}</b> \"{name}\" market indirimini sildi.",
+    "CREATED_MARKET_COUPON": "<b>{username}</b> \"{name}\" market kuponunu oluşturdu.",
+    "UPDATED_MARKET_COUPON": "<b>{username}</b> \"{name}\" market kuponunu güncelledi.",
+    "DELETED_MARKET_COUPON": "<b>{username}</b> \"{name}\" market kuponunu sildi.",
+    "CREATED_MARKET_CREATOR_CODE": "<b>{username}</b> \"{name}\" yaratıcı kodunu oluşturdu.",
+    "UPDATED_MARKET_CREATOR_CODE": "<b>{username}</b> \"{name}\" yaratıcı kodunu güncelledi.",
+    "DELETED_MARKET_CREATOR_CODE": "<b>{username}</b> \"{name}\" yaratıcı kodunu sildi.",
+    "SORTED_MARKET_CATEGORIES": "<b>{username}</b> \"{name}\" market kategorisinin konumunu değiştirdi.",
+    "UPDATED_MARKET_SETTINGS": "<b>{username}</b> market ayarlarını güncelledi.",
+    "UPDATED_MARKET_PAYMENT_METHOD": "<b>{username}</b> \"{name}\" ödeme yöntemini güncelledi.",
+    "REVEALED_MARKET_PAYMENT_SECRET": "<b>{username}</b> \"{name}\" ödeme yönteminin gizli anahtarlarını görüntüledi.",
+    "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin durumunu \"{status}\" olarak değiştirdi.",
+    "UPDATED_MARKET_ORDER_EXCHANGE_RATE": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin döviz kurunu <b>{exchangeRate}</b> olarak güncelledi.",
+    "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> market döviz kurunu <b>{exchangeRate}</b> olarak yeniledi."
+  }
+}
