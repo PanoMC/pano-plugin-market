@@ -143,6 +143,7 @@ function harness(opts = {}) {
     states: [],
     answers: [],
     onRefetch: () => {},
+    refetchResult: undefined,
     sig: opts.sig ?? null,
   };
   h.poller = createPoller({
@@ -157,6 +158,8 @@ function harness(opts = {}) {
     refetch: async () => {
       h.refetchCalls += 1;
       h.onRefetch();
+      if (h.refetchResult instanceof Error) throw h.refetchResult;
+      return h.refetchResult;
     },
     now: () => h.clock,
     setTimer: (fn, ms) => {
@@ -252,6 +255,52 @@ describe('runner', () => {
     expect(h.refetchCalls).toBe(1);
     expect(h.live()[0].ms).toBe(2000); // back in the fast phase
   });
+
+  test('seeded from the order on screen (updatedAt unknown): the first poll learns it, a later updatedAt-only change re-fetches', async () => {
+    const order = {
+      status: 'PENDING',
+      payment: { status: 'PENDING' },
+      fulfillmentStatus: 'NONE',
+      shippingStatus: 'NOT_REQUIRED',
+    };
+    const h = harness({ sig: signatureOfOrder(order) });
+    h.answers = [ok({ updatedAt: 5 }), ok({ updatedAt: 6 }), ok({ updatedAt: 6 })];
+    h.poller.start();
+    await h.fire();
+    expect(h.refetchCalls).toBe(0);
+    await h.fire();
+    expect(h.refetchCalls).toBe(1);
+    await h.fire();
+    expect(h.refetchCalls).toBe(1); // 6 was adopted after the successful re-fetch
+  });
+
+  for (const [label, failure] of [
+    ['resolves false', false],
+    ['throws', new Error('boom')],
+  ])
+    test(`a re-fetch that ${label} keeps the change unseen: the next poll re-fetches again and the elapsed time is not restarted`, async () => {
+      const h = harness({ state: 'CONFIRMING', sig: statusSignature(ok()) });
+      h.answers = [
+        ok({ status: 'COMPLETED' }),
+        ok({ status: 'COMPLETED' }),
+        ok({ status: 'COMPLETED' }),
+        ok({ status: 'COMPLETED' }),
+      ];
+      h.refetchResult = failure;
+      h.poller.start();
+      const startedAt = h.clock;
+      await h.fire();
+      expect(h.refetchCalls).toBe(1);
+      expect(h.live()[0].ms).toBe(2000); // still the fast phase, elapsed measured from the start
+      await h.fire();
+      expect(h.refetchCalls).toBe(2);
+      expect(h.clock - startedAt).toBe(4000);
+      h.refetchResult = undefined; // now it works
+      await h.fire();
+      expect(h.refetchCalls).toBe(3);
+      await h.fire();
+      expect(h.refetchCalls).toBe(3); // seen
+    });
 
   test('after the change the state decides: settled stops the runner', async () => {
     const h = harness({ state: 'AWAITING_PAYMENT', inPage: true, sig: statusSignature(ok()) });

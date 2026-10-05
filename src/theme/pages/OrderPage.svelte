@@ -123,6 +123,7 @@
     hasOrderParams,
     orderExtras,
     stripOrderParams,
+    tokenAfterRefetch,
     viewState,
   } from '../lib/orderState.js';
   import { createPoller, signatureOfOrder } from '../lib/polling.js';
@@ -224,13 +225,16 @@
   onMount(() => {
     mountedAt = Date.now();
 
-    // 1. a mail-link token moves to sessionStorage and leaves the address bar
+    // 1. a mail-link token moves to sessionStorage and leaves the address bar (a good stored token is remembered
+    // so a bogus link token cannot destroy it)
+    const stored = orderTokens.get(id);
+
     if (init.urlToken) orderTokens.save(id, init.urlToken);
 
     if (hasOrderParams(location.href))
       history.replaceState(history.state, '', stripOrderParams(location.href));
 
-    token = init.urlToken || orderTokens.get(id);
+    token = init.urlToken || stored;
 
     const inPage = () => ['IFRAME', 'EMBEDDED'].includes(currentOrder?.payment?.start?.kind);
 
@@ -256,9 +260,18 @@
     (async () => {
       // 2. a limited view with a known token is fetched again with the header
       if (currentOrder.limited === true && token) {
-        await fetchOrder();
+        let ok = await fetchOrder();
+        let verdict = tokenAfterRefetch({ ok, limited: currentOrder.limited === true });
 
-        if (currentOrder.limited === true) {
+        // the link token did not unlock the order: try the token that was stored before it once
+        if (verdict === 'DROP' && stored && stored !== token) {
+          orderTokens.save(id, stored);
+          token = stored;
+          ok = await fetchOrder();
+          verdict = tokenAfterRefetch({ ok, limited: currentOrder.limited === true });
+        }
+
+        if (verdict === 'DROP') {
           orderTokens.remove(id);
           token = null;
         }

@@ -95,6 +95,15 @@ export function isUsableToken(value) {
 }
 
 /**
+ * What to do with the access token after the order was fetched again with it (14 §11.2 step 2). `ok` = the server
+ * answered, `limited` = the answer is still the limited view. Only a server answer that is still limited proves
+ * the token wrong; a failed fetch (NETWORK, 429, 5xx) says nothing, so the token is kept. -> 'DROP' | 'KEEP'.
+ */
+export function tokenAfterRefetch({ ok, limited } = {}) {
+  return ok === true && limited === true ? 'DROP' : 'KEEP';
+}
+
+/**
  * Result of the page load. `res` = ApiResult of GET orders/:publicId (the SSR load never forwards the token),
  * `id` = the validated id, `token` = `?token=`, `returnHint` = parseReturnHint(...).
  * -> `{ notFound: true }` (the page throws a 404) or `{ data, pageTitle, meta? }`.

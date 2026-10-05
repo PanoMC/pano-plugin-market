@@ -19,6 +19,7 @@ import {
   safeTrackingUrl,
   shipmentBadge,
   stripOrderParams,
+  tokenAfterRefetch,
   totalsRows,
   viewState,
 } from '../orderState.js';
@@ -792,5 +793,22 @@ describe('address bar clean-up', () => {
     expect(hasOrderParams('/x?return=success')).toBe(true);
     expect(hasOrderParams('/x?a=1')).toBe(false);
     expect(hasOrderParams('/x')).toBe(false);
+  });
+});
+
+describe('tokenAfterRefetch (14 §11.2 step 2)', () => {
+  test('the server answered and the view is still limited: the token is wrong, drop it', () => {
+    expect(tokenAfterRefetch({ ok: true, limited: true })).toBe('DROP');
+  });
+
+  test('the server answered with the full view: keep it', () => {
+    expect(tokenAfterRefetch({ ok: true, limited: false })).toBe('KEEP');
+  });
+
+  test('a failed fetch (NETWORK, 429, 5xx) proves nothing: keep it, even when the old view is limited', () => {
+    expect(tokenAfterRefetch({ ok: false, limited: true })).toBe('KEEP');
+    expect(tokenAfterRefetch({ ok: false, limited: false })).toBe('KEEP');
+    expect(tokenAfterRefetch({})).toBe('KEEP');
+    expect(tokenAfterRefetch()).toBe('KEEP');
   });
 });

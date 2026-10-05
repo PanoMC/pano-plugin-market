@@ -82,7 +82,8 @@ export function signatureOfOrder(order) {
  * The runner. Dependencies (all required except where defaulted):
  *  - `viewState()` -> the current view state id, `inPage()` -> boolean
  *  - `fetchStatus()` -> Promise<ApiResult> of GET orders/:id/status
- *  - `refetch()` -> Promise (loads the full order; the runner then restarts the elapsed time)
+ *  - `refetch()` -> Promise<boolean|void> (loads the full order; `false` or a throw = failed, the change stays
+ *    unseen and the next poll tries again; otherwise the runner restarts the elapsed time)
  *  - `now()` -> epoch ms, `setTimer(fn, ms)` -> handle, `clearTimer(handle)`, `isHidden()` -> boolean
  *  - `onState({ status, offline })` where status is RUNNING | PAUSED | SETTLED | STOPPED | NOT_FOUND
  *  - `signature()` -> the signature of the order on screen (default: none, first answer counts as a change)
@@ -189,16 +190,26 @@ export function createPoller(deps) {
       const next = statusSignature(res);
 
       if (statusChanged(last, next)) {
-        last = next;
+        let done = false;
 
         try {
-          await refetch();
+          done = (await refetch()) !== false;
         } catch (e) {
-          // the order is kept as it is; the next poll tries again
+          done = false;
         }
 
         if (mine !== generation || !running) return;
-        startedAt = now();
+
+        // the change counts as seen only once the order was loaded again; otherwise `last` stays and the
+        // next poll detects the same change again (and the elapsed time keeps running)
+        if (done) {
+          last = next;
+          startedAt = now();
+        }
+      } else {
+        // always adopt the answer: the first poll teaches `updatedAt` (an OrderView carries none), every later
+        // poll compares it
+        last = next;
       }
     }
 
