@@ -45,7 +45,7 @@ object InvariantChecker {
          * unconverted (`publicId IS NULL AND buyerKey = ''`) and `LEGACY` orders alone (they carry no market pricing).
          */
         val legacy: Boolean = false,
-        /** "Now" for the age based checks I18 and I19; `null` = [nowProvider]. */
+        /** "Now" for the age based checks I18 and I19; `null` = the clock registered with [useClock] for the pool, else the system clock. */
         val nowMs: Long? = null,
         /** `MarketConfig.revokeOnRefund` / `revokeOnChargeback`, read by I20. */
         val revokeOnRefund: Boolean = true,
@@ -238,9 +238,22 @@ object InvariantChecker {
     var lastRun: Run = Run(emptyList(), emptyList())
         private set
 
-    /** "Now" of I18 and I19 when a run does not pass one: `TestWiring` points it at its `FakeClock`. */
-    @Volatile
-    var nowProvider: () -> Long = { System.currentTimeMillis() }
+    private val clocks = java.util.concurrent.ConcurrentHashMap<Pool, () -> Long>()
+
+    /**
+     * "Now" of I18 and I19 for [pool] when a run does not pass one: `TestWiring` registers its `FakeClock` here. The clock
+     * belongs to the pool (one test class), not to the JVM, so the `@AfterEach` check of the base class still sees the
+     * clock of a wiring that was already closed, and a wiring on another pool never changes it. A new wiring on the same
+     * pool replaces the entry.
+     */
+    fun useClock(pool: Pool, now: () -> Long) {
+        clocks[pool] = now
+    }
+
+    /** Forgets the clock of [pool] (back to the system clock); tests of the checker itself use it. */
+    fun clearClock(pool: Pool) {
+        clocks.remove(pool)
+    }
 
     suspend fun assertAll(pool: Pool) = assertAll(pool, Options())
 
@@ -259,7 +272,7 @@ object InvariantChecker {
         val prefix = MarketTestDb.TABLE_PREFIX
         val existing = pool.query("SELECT `table_name` AS t FROM information_schema.tables WHERE table_schema = DATABASE()")
             .execute().coAwait().map { it.getString("t").lowercase() }.toSet()
-        val context = Context(options, options.nowMs ?: nowProvider())
+        val context = Context(options, options.nowMs ?: clocks[pool]?.invoke() ?: System.currentTimeMillis())
         val ran = ArrayList<String>()
         val skipped = ArrayList<String>()
         val violations = ArrayList<InvariantViolation>()

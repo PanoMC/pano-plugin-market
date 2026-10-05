@@ -3,13 +3,20 @@ package com.panomc.plugins.market.db
 import com.panomc.plugins.market.db.impl.MarketCouponDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCreatorCodeDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCreditAccountDaoImpl
+import com.panomc.plugins.market.db.dao.MarketCouponDao
+import com.panomc.plugins.market.db.dao.MarketCreatorCodeDao
+import com.panomc.plugins.market.db.dao.MarketDiscountDao
+import com.panomc.plugins.market.db.dao.MarketGiftDao
+import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.impl.MarketDiscountDaoImpl
+import com.panomc.plugins.market.db.impl.MarketGiftDaoImpl
 import com.panomc.plugins.market.db.impl.MarketGoalDaoImpl
 import com.panomc.plugins.market.db.impl.MarketProductDaoImpl
 import com.panomc.plugins.market.db.impl.MarketProductVariantDaoImpl
 import com.panomc.plugins.market.db.model.MarketCoupon
 import com.panomc.plugins.market.db.model.MarketCreatorCode
 import com.panomc.plugins.market.db.model.MarketDiscount
+import com.panomc.plugins.market.db.model.MarketGift
 import com.panomc.plugins.market.db.model.MarketGoal
 import com.panomc.plugins.market.db.model.MarketProduct
 import com.panomc.plugins.market.db.model.MarketProductVariant
@@ -28,12 +35,29 @@ import org.junit.jupiter.api.Test
  * `progress` and `earnings` change only through conditional statements that report 0 rows when their guard fails, and
  * the generic `update()` of the DAOs never writes them.
  *
- * Where the DAO already has the guarded method (variant stock, credit balance, goal progress) the test goes through it;
- * for the counters whose guarded method belongs to a later slice (product stock reserve, code `usedCount`, `soldCount`,
- * `earnings`) the statement of 00 section 8.3 itself is executed, which proves the guard semantics on MariaDB (matched
- * rows, not changed rows) and gives the later DAO method its acceptance statement. Each one is also raced.
+ * Where the DAO already has the guarded method (variant stock, credit balance, goal progress) the test goes through it.
+ * For the counters whose guarded method belongs to a later slice (product stock reserve, coupon / gift / discount /
+ * creator code `usedCount`, `soldCount`, `earnings`) only the SHAPE of the statement of 00 section 8.3 is proven: it is
+ * kept in one named constant of [Statements] and executed on MariaDB (matched rows, not changed rows), which gives the
+ * later DAO method its acceptance statement. This does NOT prove the statement the later slice ships. The
+ * `a guarded method added to a DAO ...` cases fail as soon as one of those DAOs gains a method, so the owning slice must
+ * route the test through its real DAO method instead of leaving the constant to drift. Each guard is also raced.
  */
 class AtomicCounterIT : MarketDaoITBase() {
+    /** Statement shapes of 00 section 8.3 for counters whose DAO method does not exist yet (see the class comment). */
+    private object Statements {
+        const val PRODUCT_STOCK_TAKE = "UPDATE `pano_market_product` SET `stock` = `stock` - ? WHERE `id` = ? AND `stock` IS NOT NULL AND `stock` >= ?"
+        const val COUPON_USE = "UPDATE `pano_market_coupon` SET `usedCount` = `usedCount` + 1 WHERE `id` = ? AND (`redeemLimit` IS NULL OR `usedCount` < `redeemLimit`)"
+        const val GIFT_USE = "UPDATE `pano_market_gift` SET `usedCount` = `usedCount` + 1 WHERE `id` = ? AND (`redeemLimit` IS NULL OR `usedCount` < `redeemLimit`)"
+        const val GIFT_RELEASE = "UPDATE `pano_market_gift` SET `usedCount` = `usedCount` - 1 WHERE `id` = ? AND `usedCount` > 0"
+        const val DISCOUNT_USE = "UPDATE `pano_market_discount` SET `usedCount` = `usedCount` + 1 WHERE `id` = ? AND (`usageLimit` IS NULL OR `usedCount` < `usageLimit`)"
+        const val CREATOR_USE = "UPDATE `pano_market_creator_code` SET `usedCount` = `usedCount` + 1 WHERE `id` = ? AND (`redeemLimit` IS NULL OR `usedCount` < `redeemLimit`)"
+        const val SOLD_COUNT_ADJUST = "UPDATE `pano_market_product` SET `soldCount` = `soldCount` + ? WHERE `id` = ? AND `soldCount` + ? >= 0"
+        const val EARNINGS_ADJUST = "UPDATE `pano_market_creator_code` SET `earnings` = `earnings` + ? WHERE `id` = ? AND `earnings` + ? >= 0"
+    }
+
+    private val gifts = MarketGiftDaoImpl()
+
     private val variants = MarketProductVariantDaoImpl()
     private val products = MarketProductDaoImpl()
     private val accounts = MarketCreditAccountDaoImpl()
@@ -92,7 +116,7 @@ class AtomicCounterIT : MarketDaoITBase() {
     @Test
     fun `product stock guarded decrement of 00 section 8-3 reports 0 rows when the guard fails`(): Unit = runBlocking {
         val id = product(stock = 3)
-        val take = "UPDATE `pano_market_product` SET `stock` = `stock` - ? WHERE `id` = ? AND `stock` IS NOT NULL AND `stock` >= ?"
+        val take = Statements.PRODUCT_STOCK_TAKE
         assertEquals(0, rows(take, 4, id, 4))
         assertEquals(3, stockOf("market_product", id))
         assertEquals(1, rows(take, 3, id, 3))
@@ -155,7 +179,7 @@ class AtomicCounterIT : MarketDaoITBase() {
 
     @Test
     fun `usedCount guarded increment reports 0 rows at the limit and when the code is unlimited it always counts`(): Unit = runBlocking {
-        val use = "UPDATE `pano_market_coupon` SET `usedCount` = `usedCount` + 1 WHERE `id` = ? AND (`redeemLimit` IS NULL OR `usedCount` < `redeemLimit`)"
+        val use = Statements.COUPON_USE
         val limited = coupons.add(MarketCoupon(name = "l", code = "L1", redeemLimit = 2), pool)
         assertEquals(1, rows(use, limited))
         assertEquals(1, rows(use, limited))
@@ -169,7 +193,7 @@ class AtomicCounterIT : MarketDaoITBase() {
 
     @Test
     fun `twenty racers on a coupon limited to three redeem exactly three`(): Unit = runBlocking {
-        val use = "UPDATE `pano_market_coupon` SET `usedCount` = `usedCount` + 1 WHERE `id` = ? AND (`redeemLimit` IS NULL OR `usedCount` < `redeemLimit`)"
+        val use = Statements.COUPON_USE
         repeat(Race.rounds) {
             val id = coupons.add(MarketCoupon(name = "r", code = "R$it", redeemLimit = 3), pool)
             val won = Race.run(20) { rows(use, id) }.count { r -> r.getOrThrow() == 1 }
@@ -181,8 +205,8 @@ class AtomicCounterIT : MarketDaoITBase() {
     @Test
     fun `gift usedCount guard and the release that never goes below zero`(): Unit = runBlocking {
         val id = Fixtures.insertRaw(pool, "market_gift", mapOf("code" to "G1", "type" to "PRODUCT", "redeemLimit" to 1, "createdAt" to 1, "updatedAt" to 1))
-        val use = "UPDATE `pano_market_gift` SET `usedCount` = `usedCount` + 1 WHERE `id` = ? AND (`redeemLimit` IS NULL OR `usedCount` < `redeemLimit`)"
-        val release = "UPDATE `pano_market_gift` SET `usedCount` = `usedCount` - 1 WHERE `id` = ? AND `usedCount` > 0"
+        val use = Statements.GIFT_USE
+        val release = Statements.GIFT_RELEASE
         assertEquals(1, rows(use, id))
         assertEquals(0, rows(use, id))
         assertEquals(1, rows(release, id))
@@ -226,7 +250,7 @@ class AtomicCounterIT : MarketDaoITBase() {
     @Test
     fun `soldCount guarded decrement reports 0 rows below zero and the generic update does not write it`(): Unit = runBlocking {
         val id = product(soldCount = 2)
-        val add = "UPDATE `pano_market_product` SET `soldCount` = `soldCount` + ? WHERE `id` = ? AND `soldCount` + ? >= 0"
+        val add = Statements.SOLD_COUNT_ADJUST
         assertEquals(0, rows(add, -3, id, -3))
         assertEquals(2, sql("SELECT `soldCount` FROM `pano_market_product` WHERE `id` = ?", id).single().getInteger(0))
         assertEquals(1, rows(add, -2, id, -2))
@@ -251,7 +275,7 @@ class AtomicCounterIT : MarketDaoITBase() {
     @Test
     fun `creator earnings guarded adjustment reports 0 rows when it would go negative`(): Unit = runBlocking {
         val id = creators.add(MarketCreatorCode(creator = "s", code = "S1", earnings = 100), pool)
-        val adjust = "UPDATE `pano_market_creator_code` SET `earnings` = `earnings` + ? WHERE `id` = ? AND `earnings` + ? >= 0"
+        val adjust = Statements.EARNINGS_ADJUST
         assertEquals(0, rows(adjust, -150, id, -150))
         assertEquals(100L, creators.getById(id, pool)!!.earnings)
         assertEquals(1, rows(adjust, -100, id, -100))
@@ -260,5 +284,91 @@ class AtomicCounterIT : MarketDaoITBase() {
         val won = Race.run(10) { rows(adjust, -10, id, -10) }.count { r -> r.getOrThrow() == 1 }
         assertEquals(4, won)
         assertEquals(0L, creators.getById(id, pool)!!.earnings)
+    }
+
+    // --- remaining guards and generic-update isolation ---
+
+    @Test
+    fun `the generic updates of gift and goal never write usedCount or progress`(): Unit = runBlocking {
+        val gift = gifts.add(MarketGift(code = "G9"), pool)
+        sql("UPDATE `pano_market_gift` SET `usedCount` = 4 WHERE `id` = ?", gift)
+        gifts.update(MarketGift(id = gift, code = "G9b", creditAmount = 5, updatedAt = 99), pool)
+        assertEquals("G9b", gifts.getById(gift, pool)!!.code)
+        assertEquals(4, usedCount("market_gift", gift))
+
+        val goal = goals.add(MarketGoal(name = "g", target = 100000), pool)
+        assertTrue(goals.addProgress(goal, 40, 1, pool))
+        assertTrue(goals.update(MarketGoal(id = goal, name = "renamed", target = 200000, progress = 999, updatedAt = 99), pool))
+        val read = goals.getById(goal, pool)!!
+        assertEquals("renamed", read.name)
+        assertEquals(40L, read.progress)
+    }
+
+    @Test
+    fun `discount usedCount guarded increment reports 0 rows at the usage limit and is unlimited when null`(): Unit = runBlocking {
+        val use = Statements.DISCOUNT_USE
+        val limited = discounts.add(MarketDiscount(name = "l", usageLimit = 2), pool)
+        assertEquals(1, rows(use, limited))
+        assertEquals(1, rows(use, limited))
+        assertEquals(0, rows(use, limited))
+        assertEquals(2, usedCount("market_discount", limited))
+        val unlimited = discounts.add(MarketDiscount(name = "u", usageLimit = null), pool)
+        repeat(3) { assertEquals(1, rows(use, unlimited)) }
+        assertEquals(3, usedCount("market_discount", unlimited))
+        assertEquals(0, rows(use, 9999))
+        repeat(Race.rounds) {
+            val raced = discounts.add(MarketDiscount(name = "r$it", usageLimit = 3), pool)
+            val won = Race.run(20) { rows(use, raced) }.count { r -> r.getOrThrow() == 1 }
+            assertEquals(3, won)
+            assertEquals(3, usedCount("market_discount", raced))
+        }
+    }
+
+    @Test
+    fun `creator code usedCount guarded increment reports 0 rows at the redeem limit and is unlimited when null`(): Unit = runBlocking {
+        val use = Statements.CREATOR_USE
+        val limited = creators.add(MarketCreatorCode(creator = "s", code = "LIM", redeemLimit = 2), pool)
+        assertEquals(1, rows(use, limited))
+        assertEquals(1, rows(use, limited))
+        assertEquals(0, rows(use, limited))
+        assertEquals(2, usedCount("market_creator_code", limited))
+        val unlimited = creators.add(MarketCreatorCode(creator = "s", code = "UNL", redeemLimit = null), pool)
+        repeat(3) { assertEquals(1, rows(use, unlimited)) }
+        assertEquals(3, usedCount("market_creator_code", unlimited))
+        assertEquals(0, rows(use, 9999))
+        repeat(Race.rounds) {
+            val raced = creators.add(MarketCreatorCode(creator = "s", code = "RC$it", redeemLimit = 3), pool)
+            val won = Race.run(20) { rows(use, raced) }.count { r -> r.getOrThrow() == 1 }
+            assertEquals(3, won)
+            assertEquals(3, usedCount("market_creator_code", raced))
+        }
+    }
+
+    // --- drift guard: the owning slice has to route the cases above through its real statement ---
+
+    /** Methods the DAO classes below have today. Any new one fails the drift guard case below. */
+    private val knownMethods: Map<Class<*>, Set<String>> = mapOf(
+        MarketProductDao::class.java to setOf(
+            "add", "update", "setStock", "deleteById", "getById", "getBySlug", "getVisibleProducts", "getByImageFileName",
+            "getAllPaged", "count", "getAllSimple", "getByIds", "clearCategory"
+        ),
+        MarketCouponDao::class.java to setOf("add", "update", "deleteById", "getById", "getByCode", "getAll", "count"),
+        MarketGiftDao::class.java to setOf("add", "update", "deleteById", "getById", "getByCode", "getAll", "count"),
+        MarketCreatorCodeDao::class.java to setOf("add", "update", "deleteById", "getById", "getByCode", "getAll", "count"),
+        MarketDiscountDao::class.java to setOf("add", "update", "deleteById", "getById", "getAll", "count")
+    )
+
+    @Test
+    fun `a guarded method added to a DAO must replace the statement constant of this test`() {
+        knownMethods.forEach { (dao, known) ->
+            val declared = dao.declaredMethods.filter { !it.isSynthetic && !it.isBridge }.map { it.name }.toSet()
+            val added = declared - known
+            assertTrue(
+                added.isEmpty(),
+                "${dao.simpleName} gained $added: switch this case to the DAO method (replace the matching Statements constant " +
+                    "of AtomicCounterIT by a call of the real guarded method) and then add the name to knownMethods"
+            )
+            assertTrue(known.all { it in declared }, "${dao.simpleName} lost a method of knownMethods: update this test")
+        }
     }
 }

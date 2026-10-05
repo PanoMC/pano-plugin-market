@@ -1,10 +1,12 @@
 package com.panomc.plugins.market.support
 
 import com.panomc.plugins.market.support.InvariantChecker.Options
+import io.vertx.kotlin.coroutines.coAwait
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 /**
@@ -22,6 +24,10 @@ class InvariantCheckerSelfIT : MarketDbTestBase() {
 
     /** The tests seed violations on purpose; each one runs the checker itself. */
     override suspend fun assertInvariants() {}
+
+    /** The clock registration is per pool and survives a closed wiring: every test starts on the system clock. */
+    @BeforeEach
+    fun resetClock() = InvariantChecker.clearClock(pool)
 
     // --- seeding helpers ---
 
@@ -515,6 +521,55 @@ class InvariantCheckerSelfIT : MarketDbTestBase() {
         assertEquals(listOf("I18"), violatedIds(Options(nowMs = now + 61_000)))
         TestWiring(pool, FakeClock(now + 61_000)).use { assertEquals(listOf("I18"), InvariantChecker.violations(pool).map { v -> v.id }) }
         assertEquals(emptyList<String>(), InvariantChecker.violations(pool, Options(nowMs = now)).map { it.id })
+    }
+
+    @Test
+    fun `I18 the clock of a closed wiring still judges the check after the block`(): Unit = runBlocking {
+        val clock = FakeClock()
+        TestWiring(pool, clock).use {
+            // a young RECEIVED event under the wiring's clock; judged by the wall clock (a year later) it would be stuck
+            inbound("r:1", "status" to "RECEIVED", "createdAt" to clock.now())
+        }
+        InvariantChecker.assertAll(pool) // the @AfterEach pattern: no violation
+        assertEquals(emptyList<String>(), InvariantChecker.violations(pool).map { it.id })
+        // the same row IS stuck for a pool without a registered clock: the case above is not vacuous
+        InvariantChecker.clearClock(pool)
+        assertEquals(listOf("I18"), InvariantChecker.violations(pool).map { it.id })
+    }
+
+    @Test
+    fun `I19 the clock of a closed wiring still judges a SENDING delivery after the block`(): Unit = runBlocking {
+        val clock = FakeClock()
+        TestWiring(pool, clock).use {
+            val o = order("status" to "PENDING")
+            delivery(o, "k1", "SENDING", "GRANT", 0, "claimedUntil" to clock.now() + 30_000)
+        }
+        InvariantChecker.assertAll(pool)
+        InvariantChecker.clearClock(pool)
+        assertEquals(listOf("I19"), InvariantChecker.violations(pool).map { it.id })
+    }
+
+    @Test
+    fun `a wiring on another pool does not change the clock used for this pool`(): Unit = runBlocking {
+        val other = MarketTestDb.pool(databaseName, 2)
+        try {
+            val mine = FakeClock()
+            TestWiring(pool, mine).use {
+                inbound("r:1", "status" to "RECEIVED", "createdAt" to mine.now())
+                // a wiring of another pool whose clock is a day ahead
+                TestWiring(other, FakeClock(mine.now() + 86_400_000)).use {
+                    assertEquals(emptyList<String>(), InvariantChecker.violations(pool).map { v -> v.id })
+                    assertEquals(listOf("I18"), InvariantChecker.violations(other).map { v -> v.id })
+                }
+            }
+            assertEquals(emptyList<String>(), InvariantChecker.violations(pool).map { it.id })
+            // a new wiring on the same pool replaces its entry
+            TestWiring(pool, FakeClock(mine.now() + 86_400_000))
+            assertEquals(listOf("I18"), InvariantChecker.violations(pool).map { it.id })
+        } finally {
+            InvariantChecker.clearClock(other)
+            other.close().coAwait()
+        }
     }
 
     @Test

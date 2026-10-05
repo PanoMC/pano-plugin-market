@@ -18,8 +18,9 @@ import java.util.concurrent.atomic.AtomicLong
  * read the table prefix through `MarketTables.prefixOverride`, which `MarketDbTestBase` sets for the class, so
  * constructing a wiring needs nothing else.
  *
- * Constructing a wiring points [InvariantChecker.nowProvider] at its clock (the age based invariants I18 and I19 must
- * judge rows written with the fake clock by that clock); [close] restores the system clock.
+ * Constructing a wiring registers its clock for its pool with [InvariantChecker.useClock] (the age based invariants I18
+ * and I19 must judge rows written with the fake clock by that clock, also in the `@AfterEach` check after the wiring was
+ * closed). [close] leaves the registration alone: the pool belongs to one test class, a new wiring on it replaces the entry.
  */
 class TestWiring(
     val pool: Pool,
@@ -93,7 +94,7 @@ class TestWiring(
     val fixtures: Fixtures = Fixtures(this)
 
     init {
-        InvariantChecker.nowProvider = clock::now
+        InvariantChecker.useClock(pool, clock::now)
     }
 
     /** Applies [change] to the current config and installs the result (`MarketConfig` is immutable: build a new one). */
@@ -113,9 +114,8 @@ class TestWiring(
         )
     )
 
-    override fun close() {
-        InvariantChecker.nowProvider = { System.currentTimeMillis() }
-    }
+    /** Nothing to release; the clock registration stays so the invariant check after the test sees this wiring's clock. */
+    override fun close() {}
 
     companion object {
         /** The store of 17 section 5.6: base currency EUR, VAT 20 % shown in the price, credit value 1.0, time zone UTC. */
