@@ -6,6 +6,28 @@
 export const STORABLE = (field) => field.type !== 'READONLY' && field.type !== 'NOTICE';
 export const SECRET_MASK = '********';
 
+/** A secret field: flagged `secret`, or one of the two secret input types (13 §16.3). */
+export const isSecretField = (field) =>
+  field?.secret === true || field?.type === 'PASSWORD' || field?.type === 'SECRET_TEXTAREA';
+
+/** Mask protocol (13 §16.3): focus on a masked value empties the input so typing replaces it. */
+export const secretOnFocus = (value) => (value === SECRET_MASK ? '' : value);
+
+/** Mask protocol: blur with nothing typed restores the mask when the field was masked before. */
+export const secretOnBlur = (value, hadMask) =>
+  hadMask && (value === '' || value === null || value === undefined) ? SECRET_MASK : value;
+
+/**
+ * Typed value of a secret input: a mask prefix is never part of a new secret (paste over a masked
+ * value, a browser autofill), so `********abc` becomes `abc` and the bare mask stays the mask.
+ */
+export const secretOnInput = (value) => {
+  const text = String(value ?? '');
+  return text !== SECRET_MASK && text.startsWith(SECRET_MASK)
+    ? text.slice(SECRET_MASK.length)
+    : text;
+};
+
 /**
  * `LocalizedText` -> string. `{key, fallback}` asks `rawTranslate(key)` (a provider's keys live under
  * its own `plugins.<pluginId>.*`); `{default, translations}` picks the locale, then its language, then
@@ -53,8 +75,7 @@ const isEmpty = (value) => value === '' || value === null || value === undefined
 /** null when the value is acceptable, otherwise a code of 13 §16.3. */
 export function validateField(field, value, visible = true) {
   if (!visible || !STORABLE(field)) return null;
-  const secret =
-    field.secret === true || field.type === 'PASSWORD' || field.type === 'SECRET_TEXTAREA';
+  const secret = isSecretField(field);
   if (field.type === 'SWITCH') return null;
   if (isEmpty(value)) return field.required ? 'REQUIRED' : null;
   if (secret && value === SECRET_MASK) return null;

@@ -5,16 +5,15 @@
     {#if action.id}
       <span class="badge text-bg-secondary font-monospace">{action.id}</span>
     {/if}
-    {#if !disabled}
-      <button
-        type="button"
-        class="btn btn-sm btn-link link-danger"
-        aria-label={$_('components.action-editor.remove')}
-        use:tooltip={[$_('components.action-editor.remove')]}
-        onclick={() => onRemove()}>
-        <i class="fa-solid fa-trash" aria-hidden="true"></i>
-      </button>
-    {/if}
+    <!-- removing an action needs no extra right (11 §14.4): the button stays on a locked row -->
+    <button
+      type="button"
+      class="btn btn-sm btn-link link-danger"
+      aria-label={$_('components.action-editor.remove')}
+      use:tooltip={[$_('components.action-editor.remove')]}
+      onclick={() => onRemove()}>
+      <i class="fa-solid fa-trash" aria-hidden="true"></i>
+    </button>
   </div>
 
   <fieldset class="card-body" {disabled}>

@@ -5,8 +5,12 @@ import {
   buildProviderMeta,
   groupFields,
   initialValues,
+  isSecretField,
   isVisible,
   resolveText,
+  secretOnBlur,
+  secretOnFocus,
+  secretOnInput,
   validateField,
   validateProviderMeta,
   validateSchema,
@@ -167,5 +171,48 @@ describe('groupFields', () => {
     });
     expect(grouped.map((g) => g.key)).toEqual([null, 'g1']);
     expect(grouped[0].fields.map((f) => f.key)).toEqual(['a', 'c']);
+  });
+});
+
+describe('secret mask protocol (13 §16.3)', () => {
+  test('isSecretField: secret flag, PASSWORD and SECRET_TEXTAREA', () => {
+    expect(isSecretField({ type: 'TEXT', secret: true })).toBe(true);
+    expect(isSecretField({ type: 'PASSWORD' })).toBe(true);
+    expect(isSecretField({ type: 'SECRET_TEXTAREA' })).toBe(true);
+    expect(isSecretField({ type: 'TEXT' })).toBe(false);
+    expect(isSecretField(null)).toBe(false);
+  });
+
+  test('focus on a masked value empties it, any other value is kept', () => {
+    expect(secretOnFocus(SECRET_MASK)).toBe('');
+    expect(secretOnFocus('abc')).toBe('abc');
+    expect(secretOnFocus('')).toBe('');
+  });
+
+  test('blur with nothing typed restores the mask only when the field was masked', () => {
+    expect(secretOnBlur('', true)).toBe(SECRET_MASK);
+    expect(secretOnBlur('', false)).toBe('');
+    expect(secretOnBlur('typed', true)).toBe('typed');
+  });
+
+  test('a typed secret replaces the mask and the mask is never concatenated', () => {
+    let value = secretOnFocus(SECRET_MASK);
+    value = secretOnInput(value + 'abc');
+    expect(value).toBe('abc');
+    // a paste or autofill that kept the mask in front of the new secret
+    expect(secretOnInput(SECRET_MASK + 'abc')).toBe('abc');
+    expect(secretOnInput(SECRET_MASK)).toBe(SECRET_MASK);
+    expect(secretOnInput('')).toBe('');
+  });
+
+  test('focus, type and build never send a mask-prefixed secret', () => {
+    const secretSchema = { fields: [{ key: 'token', type: 'PASSWORD' }] };
+    const typed = secretOnInput(secretOnFocus(SECRET_MASK) + 'newsecret');
+    const meta = buildMeta(secretSchema, { token: typed });
+    expect(meta.token).toBe('newsecret');
+    expect(meta.token.startsWith(SECRET_MASK)).toBe(false);
+    // untouched: focus + blur round trip keeps the mask, i.e. "keep the stored secret"
+    const back = secretOnBlur(secretOnFocus(SECRET_MASK), true);
+    expect(buildMeta(secretSchema, { token: back }).token).toBe(SECRET_MASK);
   });
 });

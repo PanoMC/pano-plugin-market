@@ -68,6 +68,7 @@
       {#each group.items as item (item.index)}
         <ActionEditor
           bind:action={product.actions[item.index]}
+          disabled={actionLocked(item.action, user)}
           {servers}
           serverChoices={product.serverChoices}
           {phases}
@@ -94,7 +95,7 @@
       </div>
       <div class="modal-body">
         <div class="row g-2">
-          {#each ACTION_TYPES as type (type)}
+          {#each addableTypes as type (type)}
             <div class="col-6">
               <button
                 type="button"
@@ -116,11 +117,13 @@
 
 <script>
   import { CardHeader, NoContent } from '@panomc/sdk/components/panel';
+  import { page } from '@panomc/sdk/svelte';
   import { _ } from '../../../i18n';
   import {
-    ACTION_TYPES,
     MAX_ACTIONS,
     actionErrorKey,
+    actionLocked,
+    addableActionTypes,
     allowedPhases,
     groupByPhase,
     newAction,
@@ -142,6 +145,11 @@
   };
 
   let modalElement = $state(null);
+
+  // Rows the caller could not save are disabled and the Add Action modal offers only the types they
+  // could save (11 §14.4); cosmetic, the server's ActionGuard decides.
+  const user = $derived($page.data?.user);
+  const addableTypes = $derived(addableActionTypes(user));
 
   const phases = $derived(allowedPhases(product.billingMode));
   const groups = $derived(groupByPhase(product.actions));

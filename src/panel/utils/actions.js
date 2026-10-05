@@ -1,6 +1,7 @@
 // Pure model of a product action (13 §8.9, 08 §2.2, 01 §2.2): defaults, phases, normalisation,
 // validation and the wire form. Used by the product form (ActionsTab / ActionEditor), by the creator
 // payout modal (`phases = ['GRANT']`) and by the chargeback actions of the settings. No Svelte, no SDK.
+import { canNode } from './permissions.js';
 import { FIELD_KEY_PATTERN } from './validate.js';
 
 export const ACTION_TYPES = ['CREDIT', 'PERMISSION', 'COMMAND', 'WEBHOOK'];
@@ -17,6 +18,11 @@ export const MAX_COMMAND_LENGTH = 512;
 export const MAX_DELAY_SECONDS = 2_592_000;
 export const MAX_CREDIT = 1_000_000;
 export const SECRET_MASK = '********';
+
+// Platform nodes the ActionGuard asks for (11 §14.4): `PanelPermission.toString()` of
+// ManagePermissionGroupsPermission / ManageServerConsolePermission.
+export const NODE_MANAGE_PERMISSION_GROUPS = 'pano.panel.manage.permission.groups';
+export const NODE_MANAGE_SERVER_CONSOLE = 'pano.panel.manage.server.console';
 
 export const NODE_PATTERN = /^[A-Za-z0-9_.*-]{1,128}$/;
 // eslint-disable-next-line no-control-regex
@@ -130,6 +136,33 @@ export function actionFromApi(action) {
   if (hasPerUnit(out.type)) out.perUnit ??= false;
   return out;
 }
+
+/**
+ * True when the caller could not save this action (11 §14.4, mirrors the server's ActionGuard as far as
+ * the panel can see it): the editor row is then disabled; removing it stays allowed. Cosmetic only, the
+ * server decides. `user` = `$page.data.user` (`{ admin, permissions[] }`). COMMAND needs the console
+ * node (a global grant; a per-server scope is only known to the server), PERMISSION needs the permission
+ * groups node and, for `*` or a `pano.` node, the `*` grant. CREDIT / WEBHOOK are never locked.
+ */
+export function actionLocked(action, user) {
+  const type = action?.type;
+  if (type !== 'COMMAND' && type !== 'PERMISSION') return false;
+  if (!user) return true;
+  if (user.admin) return false;
+  const holdsAll = (user.permissions ?? []).some((p) => String(p).trim() === '*');
+  if (holdsAll) return false;
+  if (type === 'COMMAND') return !canNode(user, NODE_MANAGE_SERVER_CONSOLE);
+  if (!canNode(user, NODE_MANAGE_PERMISSION_GROUPS)) return true;
+  const nodes = Array.isArray(action.value) ? action.value : [];
+  return nodes.some((node) => {
+    const text = String(node ?? '').trim();
+    return text === '*' || text.startsWith('pano.');
+  });
+}
+
+/** The action types the caller could save as a new action (the Add Action modal offers only these). */
+export const addableActionTypes = (user) =>
+  ACTION_TYPES.filter((type) => !actionLocked({ type, value: [] }, user));
 
 /** The id of a loaded action (a non-empty string) or null. */
 export const actionId = (action) =>

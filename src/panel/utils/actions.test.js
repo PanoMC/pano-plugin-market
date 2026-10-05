@@ -1,9 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  ACTION_TYPES,
   MAX_ACTIONS,
+  NODE_MANAGE_PERMISSION_GROUPS,
+  NODE_MANAGE_SERVER_CONSOLE,
   SECRET_MASK,
   actionErrorKey,
   actionId,
+  actionLocked,
+  addableActionTypes,
   allowedPhases,
   generateSecret,
   groupByPhase,
@@ -458,5 +463,60 @@ describe('variables', () => {
     });
     expect(unknownVariables(action, rich).sort()).toEqual(['field.nope', 'variant.shape']);
     expect(unknownVariables({ type: 'CREDIT', value: 1 }, rich)).toEqual([]);
+  });
+});
+
+describe('actionLocked (11 §14.4)', () => {
+  const admin = { admin: true, permissions: [] };
+  const star = { admin: false, permissions: ['*'] };
+  const groups = { admin: false, permissions: [NODE_MANAGE_PERMISSION_GROUPS] };
+  const console_ = { admin: false, permissions: [NODE_MANAGE_SERVER_CONSOLE.toUpperCase()] };
+  const editor = {
+    admin: false,
+    permissions: ['pano.plugin.pano-plugin-market.manage.market.catalog'],
+  };
+  const command = newAction('COMMAND');
+  const permission = (...nodes) => ({ ...newAction('PERMISSION'), value: nodes });
+
+  test('CREDIT and WEBHOOK are never locked', () => {
+    for (const user of [admin, editor, null]) {
+      expect(actionLocked(newAction('CREDIT'), user)).toBe(false);
+      expect(actionLocked(newAction('WEBHOOK'), user)).toBe(false);
+    }
+  });
+
+  test('admin and a holder of * can save everything', () => {
+    for (const user of [admin, star]) {
+      expect(actionLocked(command, user)).toBe(false);
+      expect(actionLocked(permission('vip'), user)).toBe(false);
+      expect(actionLocked(permission('*', 'pano.panel.x'), user)).toBe(false);
+    }
+  });
+
+  test('COMMAND needs the server console node', () => {
+    expect(actionLocked(command, editor)).toBe(true);
+    expect(actionLocked(command, null)).toBe(true);
+    expect(actionLocked(command, console_)).toBe(false);
+    expect(actionLocked(command, groups)).toBe(true);
+  });
+
+  test('PERMISSION needs the permission groups node', () => {
+    expect(actionLocked(permission('vip'), editor)).toBe(true);
+    expect(actionLocked(permission('vip'), groups)).toBe(false);
+    expect(actionLocked(permission(), groups)).toBe(false);
+    expect(actionLocked(permission('vip'), console_)).toBe(true);
+  });
+
+  test('a * or pano. node needs * even with the permission groups node', () => {
+    expect(actionLocked(permission('*'), groups)).toBe(true);
+    expect(actionLocked(permission('vip', 'pano.panel.manage.users'), groups)).toBe(true);
+    expect(actionLocked(permission('panoramic.vip'), groups)).toBe(false);
+  });
+
+  test('the Add Action modal offers only the types the caller could save', () => {
+    expect(addableActionTypes(admin)).toEqual(ACTION_TYPES);
+    expect(addableActionTypes(editor)).toEqual(['CREDIT', 'WEBHOOK']);
+    expect(addableActionTypes(groups)).toEqual(['CREDIT', 'PERMISSION', 'WEBHOOK']);
+    expect(addableActionTypes(console_)).toEqual(['CREDIT', 'COMMAND', 'WEBHOOK']);
   });
 });

@@ -64,7 +64,10 @@
                         placeholder={label(field)}
                         style="height: 100px;"
                         value={values[field.key] ?? ''}
-                        oninput={(e) => set(entry, field, e.currentTarget.value)}></textarea>
+                        autocomplete={isSecretField(field) ? 'off' : undefined}
+                        onfocus={(e) => onFocus(entry, field, e.currentTarget)}
+                        onblur={(e) => onBlur(entry, field, e.currentTarget)}
+                        oninput={(e) => onInput(entry, field, e.currentTarget.value)}></textarea>
                     {:else if field.type === 'SELECT'}
                       <select
                         class="form-select"
@@ -82,13 +85,17 @@
                         class="form-control"
                         class:is-invalid={code}
                         {id}
-                        type={INPUT_TYPE[field.type] ?? 'text'}
+                        type={isSecretField(field)
+                          ? 'password'
+                          : (INPUT_TYPE[field.type] ?? 'text')}
                         inputmode={field.type === 'NUMBER' ? 'numeric' : undefined}
                         autocomplete="off"
                         data-field="providerMeta.{entry.providerId}.{field.key}"
                         placeholder={label(field)}
                         value={values[field.key] ?? ''}
-                        oninput={(e) => set(entry, field, e.currentTarget.value)} />
+                        onfocus={(e) => onFocus(entry, field, e.currentTarget)}
+                        onblur={(e) => onBlur(entry, field, e.currentTarget)}
+                        oninput={(e) => onInput(entry, field, e.currentTarget.value)} />
                     {/if}
                     <label for={id}>{label(field)}</label>
                   </div>
@@ -120,9 +127,13 @@
   import {
     groupFields,
     initialValues,
+    isSecretField,
     isVisible,
     metaErrorKey,
     resolveText,
+    secretOnBlur,
+    secretOnFocus,
+    secretOnInput,
   } from './provider-meta.js';
 
   // One card per provider that declares a per-product schema (`ctx.productMetaSchemas`), the form
@@ -150,5 +161,35 @@
       ...product.providerMeta,
       [entry.providerId]: { ...valuesOf(entry), ...current, [field.key]: value },
     };
+  }
+
+  // Mask protocol (13 §16.3): a secret that was stored comes back as the mask. Focus on the mask
+  // empties the input (typing then replaces the secret instead of appending to the mask), blur with
+  // nothing typed puts the mask back (= keep the stored secret). `hadMask` remembers per
+  // providerId + key that the field started as the mask.
+  const hadMask = new Set();
+  const maskId = (entry, field) => `${entry.providerId}:${field.key}`;
+
+  function onFocus(entry, field, element) {
+    if (!isSecretField(field)) return;
+    const current = valuesOf(entry)[field.key];
+    const next = secretOnFocus(current);
+    if (next === current) return;
+    hadMask.add(maskId(entry, field));
+    element.value = next;
+    set(entry, field, next);
+  }
+
+  function onBlur(entry, field, element) {
+    if (!isSecretField(field)) return;
+    const current = valuesOf(entry)[field.key] ?? '';
+    const next = secretOnBlur(current, hadMask.has(maskId(entry, field)));
+    if (next === current) return;
+    element.value = next;
+    set(entry, field, next);
+  }
+
+  function onInput(entry, field, value) {
+    set(entry, field, isSecretField(field) ? secretOnInput(value) : value);
   }
 </script>
