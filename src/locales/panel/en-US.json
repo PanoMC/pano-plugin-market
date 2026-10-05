@@ -1189,6 +1189,27 @@
         "cancelled": "Shipment cancelled.",
         "updated": "Shipment updated."
       }
+    },
+    "player-market": {
+      "title": "Market",
+      "stat": {
+        "orders": "Orders",
+        "spent": "Spent",
+        "refunded": "Refunded",
+        "credits": "Credits"
+      },
+      "orders": "{count} Latest Orders",
+      "all-orders": "All Orders",
+      "create-order": "Create Order",
+      "block": "Block Player",
+      "entitlements": "{count} Owned Products",
+      "subscriptions": "{count} Subscriptions",
+      "blocks": "{count} Blocks",
+      "table": {
+        "product": "Product",
+        "starts": "Starts",
+        "expires": "Expires"
+      }
     }
   },
   "common": {

@@ -1189,6 +1189,27 @@
         "cancelled": "Gönderi iptal edildi.",
         "updated": "Gönderi güncellendi."
       }
+    },
+    "player-market": {
+      "title": "Market",
+      "stat": {
+        "orders": "Siparişler",
+        "spent": "Harcanan",
+        "refunded": "İade Edilen",
+        "credits": "Krediler"
+      },
+      "orders": "{count} Son Siparişler",
+      "all-orders": "Tüm Siparişler",
+      "create-order": "Sipariş Oluştur",
+      "block": "Oyuncuyu Engelle",
+      "entitlements": "{count} Sahip Olunan Ürünler",
+      "subscriptions": "{count} Abonelikler",
+      "blocks": "{count} Engeller",
+      "table": {
+        "product": "Ürün",
+        "starts": "Başlangıç",
+        "expires": "Bitiş"
+      }
     }
   },
   "common": {

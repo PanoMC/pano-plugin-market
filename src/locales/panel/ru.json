@@ -1189,6 +1189,27 @@
         "cancelled": "Отправление отменено.",
         "updated": "Отправление обновлено."
       }
+    },
+    "player-market": {
+      "title": "Магазин",
+      "stat": {
+        "orders": "Заказы",
+        "spent": "Потрачено",
+        "refunded": "Возвращено",
+        "credits": "Кредиты"
+      },
+      "orders": "{count} Последние заказы",
+      "all-orders": "Все заказы",
+      "create-order": "Создать заказ",
+      "block": "Заблокировать игрока",
+      "entitlements": "{count} Приобретённые товары",
+      "subscriptions": "{count} Подписки",
+      "blocks": "{count} Блокировки",
+      "table": {
+        "product": "Товар",
+        "starts": "Начало",
+        "expires": "Окончание"
+      }
     }
   },
   "common": {
