@@ -28,7 +28,7 @@ describe('registerTheme', () => {
     const pano = fakePano();
     registerTheme(pano);
     expect(host.getPano()).toBe(pano);
-    expect(pano.calls.pages.map((p) => p.path)).toEqual(['/store']);
+    expect(pano.calls.pages.map((p) => p.path)).toEqual(['/store', '/store/[slug]']);
     expect(pano.calls.nav[0][0].href).toBe('/store');
     expect(pano.calls.nav[0][0].text).toBe('plugins.pano-plugin-market.nav-store');
   });

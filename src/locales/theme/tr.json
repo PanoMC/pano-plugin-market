@@ -124,6 +124,27 @@
       "replace-title": "Sepet değiştirilsin mi?",
       "replace-message": "Abonelik tek başına satın alınır. Sepetin içeriği değiştirilsin mi?",
       "replace-confirm": "Sepeti değiştir"
+    },
+    "product": {
+      "load-error": "Bu ürün yüklenemedi. Lütfen tekrar deneyin.",
+      "variant-label": "Seçenek",
+      "variant-placeholder": "Bir seçenek seçin",
+      "server-label": "Sunucu",
+      "server-placeholder": "Bir sunucu seçin",
+      "server-fixed": "{server} sunucusuna teslim edilir",
+      "quantity": "Adet",
+      "quantity-decrease": "Adedi azalt",
+      "quantity-increase": "Adedi artır",
+      "subscribe": "Abone ol",
+      "buy-now": "Hemen al",
+      "sign-in-to-buy": "Satın almak için giriş yapın",
+      "upgrade": "{fromName} ürününe sahipsiniz. Bu yükseltmenin fiyatından {deduction} düşülecek.",
+      "requires-one": "Bu ürünlerden birine sahip olmanız gerekir",
+      "requires-all": "Bu ürünlerin hepsine sahip olmanız gerekir",
+      "bundle-contents": "Bu paketin içeriği",
+      "gift-available": "Hediye olarak satın alınabilir",
+      "ships": "Adresinize kargolanır",
+      "limit-per-player": "Sınır: oyuncu başına {count}"
     }
   }
 }

@@ -124,6 +124,27 @@
       "replace-title": "Replace the cart?",
       "replace-message": "A subscription is bought on its own. Replace the cart content?",
       "replace-confirm": "Replace cart"
+    },
+    "product": {
+      "load-error": "This product could not be loaded. Please try again.",
+      "variant-label": "Option",
+      "variant-placeholder": "Choose an option",
+      "server-label": "Server",
+      "server-placeholder": "Choose a server",
+      "server-fixed": "Delivered on {server}",
+      "quantity": "Quantity",
+      "quantity-decrease": "Decrease quantity",
+      "quantity-increase": "Increase quantity",
+      "subscribe": "Subscribe",
+      "buy-now": "Buy now",
+      "sign-in-to-buy": "Sign in to buy",
+      "upgrade": "You own {fromName}. {deduction} will be deducted from the price of this upgrade.",
+      "requires-one": "Requires one of these products",
+      "requires-all": "Requires all of these products",
+      "bundle-contents": "This bundle contains",
+      "gift-available": "Can be bought as a gift",
+      "ships": "Shipped to your address",
+      "limit-per-player": "Limit: {count} per player"
     }
   }
 }
