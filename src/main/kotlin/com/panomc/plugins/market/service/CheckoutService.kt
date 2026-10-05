@@ -2,6 +2,7 @@ package com.panomc.plugins.market.service
 
 import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NotLoggedIn
+import com.panomc.platform.model.Error as PanoError
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.cart.CartLimits
 import com.panomc.plugins.market.core.cart.CartLine
@@ -79,6 +80,7 @@ import com.panomc.plugins.market.db.dao.MarketProductVariantDao
 import com.panomc.plugins.market.db.dao.MarketRedemptionDao
 import com.panomc.plugins.market.db.dao.MarketSubscriptionDao
 import com.panomc.plugins.market.db.model.BillingMode
+import com.panomc.plugins.market.db.model.FulfillmentBy
 import com.panomc.plugins.market.db.model.MarketCart
 import com.panomc.plugins.market.db.model.MarketCategory
 import com.panomc.plugins.market.db.model.MarketOrder
@@ -135,6 +137,7 @@ import com.panomc.plugins.market.spi.common.ProviderSettings
 import com.panomc.plugins.market.spi.common.TestModeSupport
 import com.panomc.plugins.market.spi.payment.BuyerInfo
 import com.panomc.plugins.market.spi.payment.CheckoutSnapshot
+import com.panomc.plugins.market.spi.payment.FulfillmentAuthority
 import com.panomc.plugins.market.spi.payment.IntervalUnit
 import com.panomc.plugins.market.spi.payment.OrderLine
 import com.panomc.plugins.market.spi.payment.OrderSnapshot
@@ -209,7 +212,7 @@ fun interface BuyerBlocks {
 }
 
 /** `POST /api/market/checkout` after parsing (04 section 3): the `CartInput`, the consent total and the legal acceptance. */
-class CheckoutRequest(
+data class CheckoutRequest(
     val input: QuoteInput,
     /** `expectedTotal` x 100: the total of the quote the buyer confirmed; `null` = the buyer did not state one. */
     val expectedTotal: Long?,
@@ -219,7 +222,13 @@ class CheckoutRequest(
     /** The `Idempotency-Key` header, already checked against `^[A-Za-z0-9_-]{16,64}$`. */
     val idempotencyKey: String,
     /** `RequestFingerprint.hash` of the whole body. */
-    val bodyHash: String
+    val bodyHash: String,
+    /**
+     * The locale of the order (06 section 5.4), resolved by the route: the body `locale` when it is an installed platform locale, else the
+     * user's stored locale, else the first installed match of `Accept-Language`, else the site default. `null` (a caller that resolved
+     * nothing) = [CheckoutService.DEFAULT_LOCALE]; the body's own `locale` is never stored.
+     */
+    val orderLocale: String? = null
 )
 
 /** The answer of a checkout: the order (owner view), its access token (returned only here) and the payment start. */
@@ -327,10 +336,11 @@ class CheckoutService(
      * transaction: the payment method and the shipping option of phase A are reused, no provider, carrier or block
      * list call is made while the locks are held (06 section 13.1 rule 1).
      */
-    private suspend fun assess(input: QuoteInput, caller: QuoteCaller, sqlClient: SqlClient, strict: Boolean, frozen: Frozen?): Assessment {
+    private suspend fun assess(input: QuoteInput, caller: QuoteCaller, sqlClient: SqlClient, strict: Boolean, frozen: Frozen?, orderLocale: String? = null): Assessment {
         val c = config()
         val now = clock.now()
-        val locale = input.locale?.trim()?.takeIf { it.isNotEmpty() }?.take(16) ?: DEFAULT_LOCALE
+        // checkout names the locale of the order itself (06 section 5.4, resolved by the route, never the raw body value); the quote takes what the client asked for
+        val locale = (orderLocale ?: input.locale)?.trim()?.takeIf { it.isNotEmpty() }?.take(16) ?: DEFAULT_LOCALE
         val messages = ArrayList<QuoteMessage>()
         val loggedIn = caller.loggedIn
 
@@ -558,7 +568,8 @@ class CheckoutService(
         val distinct = messages.distinct()
         val requiredFields = RequiredBuyerFields.of(
             c.billingInfoMode, selected?.caps?.requiredBuyerFields.orEmpty(),
-            input.billingInfo?.getString("type").equals("COMPANY", ignoreCase = true), input.billingInfo?.getString("country"), items.requiresShipping
+            BillingSnapshot.cleanText(input.billingInfo?.getValue("type")).equals("COMPANY", ignoreCase = true),
+            BillingSnapshot.cleanText(input.billingInfo?.getValue("country")), items.requiresShipping
         )
         val canCheckout = quoteLines.isNotEmpty() &&
             quoteLines.all { it.errors.isEmpty() } &&
@@ -628,6 +639,7 @@ class CheckoutService(
         val deps = checkout ?: throw IllegalStateException("this CheckoutService was built without the checkout wiring")
         val c = config()
         val input = request.input
+        val locale = request.orderLocale ?: DEFAULT_LOCALE
         val payer = resolvePayer(input, caller, c, sqlClient)
 
         limitIp(caller, c)
@@ -642,22 +654,33 @@ class CheckoutService(
 
         var attempts = 0
         var placed: CreatedOrder? = null
+        var duplicate: MarketOrder? = null
 
-        while (placed == null) {
+        while (placed == null && duplicate == null) {
             attempts++
 
-            val plan = phaseA(request, caller, sqlClient)
-            val verified = verify(plan, request, caller)
-
             try {
-                placed = phaseB(request, caller, payer, plan, verified, deps)
-            } catch (e: IdempotentReplay) {
-                return replay(e.order, request, deps, sqlClient)
-            } catch (e: QuoteChanged) {
-                // the second change in a row is the buyer's to confirm: the fresh quote goes back with 409 PRICE_CHANGED
-                if (attempts >= 2) throw PriceChanged(assess(input, caller, sqlClient, strict = false, frozen = null).quote.toJson())
+                val plan = phaseA(request, caller, sqlClient)
+                val verified = verify(plan, request, caller)
+
+                try {
+                    placed = phaseB(request, caller, payer, plan, verified, deps)
+                } catch (e: IdempotentReplay) {
+                    duplicate = e.order
+                } catch (e: QuoteChanged) {
+                    // the second change in a row is the buyer's to confirm: the fresh quote goes back with 409 PRICE_CHANGED
+                    if (attempts >= 2) {
+                        throw PriceChanged(assess(input, caller, sqlClient, strict = false, frozen = null, orderLocale = locale).quote.toJson())
+                    }
+                }
+            } catch (e: PanoError) {
+                // a business error of this request may be the first request's own doing (its cart emptied, its last unit taken, its limit or
+                // cooldown, its coupon use): when that request has committed, this one is its replay, not a failure (06 section 5.1)
+                duplicate = orders.getByBuyerAndIdempotencyKey(payer.key, request.idempotencyKey, sqlClient) ?: throw e
             }
         }
+
+        duplicate?.let { return replay(it, request, deps, sqlClient) }
 
         return finish(checkNotNull(placed), deps, sqlClient)
     }
@@ -703,7 +726,7 @@ class CheckoutService(
     // ----- phase A
 
     private suspend fun phaseA(request: CheckoutRequest, caller: QuoteCaller, sqlClient: SqlClient): Assessment {
-        val a = assess(request.input, caller, sqlClient, strict = true, frozen = null)
+        val a = assess(request.input, caller, sqlClient, strict = true, frozen = null, orderLocale = request.orderLocale ?: DEFAULT_LOCALE)
 
         if (a.topUp == null && a.lines.isEmpty()) throw EmptyCart()
 
@@ -713,6 +736,11 @@ class CheckoutService(
     /** The A1 to A12 table of 06 section 5.2 in its order; throws the first failure. Phase B runs it again on the locked rows. */
     private fun failOn(a: Assessment, request: CheckoutRequest, caller: QuoteCaller, frozen: Boolean) {
         val messages = a.messages
+
+        // PT-5 (11 section 4.1): a currency the store does not offer is refused here; the quote only warns and prices in the base currency
+        if (a.items.messages.any { it.code == PricingCode.CURRENCY_NOT_SUPPORTED }) {
+            throw InvalidCart(mapOf("cart" to listOf(PricingCode.CURRENCY_NOT_SUPPORTED.name)))
+        }
 
         // A1
         if (messages.any { it.code == INVALID_RECIPIENT }) throw InvalidRecipient()
@@ -899,7 +927,7 @@ class CheckoutService(
             orders.getByBuyerAndIdempotencyKey(payer.key, request.idempotencyKey, conn)?.let { throw IdempotentReplay(it) }
 
             // B5 to B7: the whole price and every rule again, on rows nobody can change now
-            val a = assess(request.input, caller, conn, strict = true, frozen = frozen)
+            val a = assess(request.input, caller, conn, strict = true, frozen = frozen, orderLocale = request.orderLocale ?: DEFAULT_LOCALE)
 
             if (a.topUp == null && a.lines.isEmpty()) throw QuoteChanged("the cart is empty")
 
@@ -1051,6 +1079,9 @@ class CheckoutService(
         val testMode = a.c.testMode || a.selected?.testMode == true
         val coupon = a.items.coupon?.takeIf { it.valid }
         val creator = a.items.creatorCode?.takeIf { it.valid }
+        // 02 section 5.1 / 01 section 5.1: a provider that delivers by itself (`fulfillment = GATEWAY`) is stored at O1, so no market delivery is planned next to it
+        val chosen = a.selected?.takeIf { it.id == methodId }
+        val fulfillmentBy = if (chosen?.caps?.fulfillment == FulfillmentAuthority.GATEWAY) FulfillmentBy.GATEWAY else FulfillmentBy.MARKET
 
         check(b.gatewayAmount + b.creditValue == b.total) { "gateway ${b.gatewayAmount} + credit value ${b.creditValue} != total ${b.total}" }
 
@@ -1062,7 +1093,7 @@ class CheckoutService(
                 email = a.orderEmail?.lowercase(Locale.ROOT), locale = a.locale, clientIp = caller.clientIp, userAgent = caller.userAgent?.take(255),
                 recipientUsername = recipient.username, recipientUserId = recipient.userId, recipientKey = recipient.key, isGift = recipient.isGift,
                 giftMessage = if (recipient.isGift) recipient.giftMessage else null, hideFromBroadcast = request.hideFromBroadcast,
-                reservationState = ReservationState.HELD,
+                reservationState = ReservationState.HELD, fulfillmentBy = fulfillmentBy,
                 expiresAt = OrderTimings.orderExpiresAtOnCreate(now, methodId, windowMinutes, timings),
                 baseCurrency = a.items.baseCurrency, fxRate = a.items.fxRate, displayCurrency = a.items.display?.currency, displayRate = a.items.display?.rate,
                 pricingMode = DbPricingMode.valueOf(a.items.pricingMode.name), pricesIncludeVat = a.items.pricesIncludeVat, subtotal = b.subtotal,

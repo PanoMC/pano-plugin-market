@@ -32,6 +32,8 @@ import com.panomc.plugins.market.error.MarketBusyException
 import com.panomc.plugins.market.error.PaymentMethodUnavailable
 import com.panomc.plugins.market.provider.ProviderLookup
 import com.panomc.plugins.market.provider.SecretCipher
+import com.panomc.plugins.market.routes.api.checkout.InstalledLocale
+import com.panomc.plugins.market.routes.api.checkout.OrderLocale
 import com.panomc.plugins.market.routes.api.checkout.parseCheckoutRequest
 import com.panomc.plugins.market.service.platform.DirectoryUser
 import com.panomc.plugins.market.service.platform.ServerDirectory
@@ -65,6 +67,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -1737,6 +1740,200 @@ class CheckoutServiceIT : MarketDaoITBase() {
 
     // -------------------------------------------------------------------------------------------------- polling helper
 
+    // ======================================================================== order locale, currency, fulfilment, hardening (MK-075 follow-up)
+
+    @Test
+    fun `the order locale is the body locale when installed, else the stored locale, else Accept-Language, else the site default, never a client string`(): Unit = runBlocking {
+        val p = fx.product(price = 100, stock = 50)
+
+        fx.paymentMethod("fake")
+
+        val localeOf = { r: CheckoutResult -> runBlocking { order(r.order.getString("publicId")).locale } }
+
+        assertEquals("tr", localeOf(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "locale" to "tr"))))
+        assertEquals("en-US", localeOf(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "locale" to "EN-us"))), "the installed spelling is stored")
+        assertEquals("tr", localeOf(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "locale" to "tr-TR"))), "a derivative of an installed locale")
+        assertEquals("ru", localeOf(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "locale" to "de"), userLocale = "ru", acceptLanguage = "tr")), "not installed: the stored locale")
+        assertEquals("tr", localeOf(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake"), userLocale = "de", acceptLanguage = "de;q=0.9, tr-TR;q=0.8")), "stored one is not installed: Accept-Language")
+        assertEquals("en-US", localeOf(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake"))), "nothing to go by: the site default")
+
+        for (hostile in listOf("../etc", "<b>x</b>", "tr\u0000", "x".repeat(16))) {
+            assertEquals("en-US", localeOf(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "locale" to hostile))), "'$hostile' never reaches the order")
+        }
+
+        // a string past the parser's length bound is refused before anything is read
+        assertThrows(com.panomc.plugins.market.error.RequestValueException::class.java) { runBlocking { h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "locale" to "x".repeat(17))) } }
+
+        assertEquals(10, rows("market_order"), "every request above created its order")
+    }
+
+    @Test
+    fun `the legal text and the stored locale follow the resolved locale, not the raw body value`(): Unit = runBlocking {
+        val p = fx.product(price = 700)
+
+        fx.paymentMethod("fake")
+        h.config = h.config.copy(legalTextRequired = true)
+
+        val en = h.legal.publish("en-US", "Terms", "<p>en</p>", null)
+        val tr = h.legal.publish("tr", "Sartlar", "<p>tr</p>", null)
+
+        val extras = expect("LEGAL_ACCEPTANCE_REQUIRED", 400) { h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "locale" to "de"), acceptLanguage = "tr") }
+
+        assertEquals(tr.id, extras.getLong("legalTextId"), "Accept-Language tr selects the Turkish text although the body asked for an uninstalled locale")
+
+        val order = order(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "locale" to "de", "acceptLegal" to true, "legalTextId" to tr.id), acceptLanguage = "tr").order.getString("publicId"))
+
+        assertEquals("tr", order.locale)
+        assertEquals(tr.id, order.legalTextId)
+        assertNotNull(en.id)
+    }
+
+    @Test
+    fun `PT-5 a currency the store does not offer is INVALID_CART at checkout, the base currency in any spelling is fine`(): Unit = runBlocking {
+        val p = fx.product(price = 1000, stock = 9)
+
+        fx.paymentMethod("fake")
+
+        val lineErrors = expect("INVALID_CART", 400) { h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "currency" to "USD")) }.getJsonObject("lineErrors")
+
+        assertEquals(listOf("CURRENCY_NOT_SUPPORTED"), lineErrors.getJsonArray("cart").list)
+        expect("INVALID_CART", 400) { h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "currency" to "ZZZ")) }
+        nothingWritten()
+        assertEquals(9, stockOf(p))
+
+        assertEquals("EUR", order(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "currency" to "eur")).order.getString("publicId")).currency)
+        assertEquals("EUR", order(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake")).order.getString("publicId")).currency)
+        assertEquals(2, rows("market_order"))
+    }
+
+    @Test
+    fun `a billing type with padding is the type that is stored, so the fields it requires are checked`(): Unit = runBlocking {
+        val p = fx.product(price = 700)
+
+        fx.paymentMethod("fake")
+        h.config = h.config.copy(billingInfoMode = BillingInfoMode.REQUIRED)
+
+        val address = mapOf("firstName" to "Ada", "lastName" to "L", "country" to " tr ", "city" to "Ankara", "line1" to "Cankaya 1")
+        val extras = expect("BUYER_INFO_REQUIRED", 400) {
+            h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "billingInfo" to address + mapOf("type" to "COMPANY ")))
+        }
+
+        assertEquals(setOf("billingInfo.company", "billingInfo.taxNumber"), extras.getJsonArray("fields").map { it.toString() }.toSet(), "a padded COMPANY is a company")
+        nothingWritten()
+
+        val ok = order(
+            h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "billingInfo" to address + mapOf("type" to "COMPANY ", "company" to "Acme", "taxNumber" to "1234567890"))).order.getString("publicId")
+        )
+
+        assertEquals("COMPANY", JsonObject(ok.billingInfo!!).getString("type"))
+        assertEquals("TR", JsonObject(ok.billingInfo!!).getString("country"))
+
+        // an object or an array is no value: it does not satisfy a required path
+        for (value in listOf(emptyList<Any>(), emptyMap<String, Any>(), listOf(1))) {
+            val bad = expect("BUYER_INFO_REQUIRED", 400) {
+                h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "billingInfo" to address + mapOf("city" to value)))
+            }
+
+            assertEquals(listOf("billingInfo.city"), bad.getJsonArray("fields").map { it.toString() }, "city: $value")
+        }
+    }
+
+    @Test
+    fun `an order is fulfilled by the market unless the chosen provider delivers by itself, then it is GATEWAY from the first row`(): Unit = runBlocking {
+        val p = fx.product(price = 1000, stock = 9)
+
+        fx.paymentMethod("fake")
+
+        val market = order(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake")).order.getString("publicId"))
+
+        assertEquals(com.panomc.plugins.market.db.model.FulfillmentBy.MARKET, market.fulfillmentBy)
+
+        h.fake.caps = PaymentCapabilities().apply { fulfillment = com.panomc.plugins.market.spi.payment.FulfillmentAuthority.GATEWAY }
+
+        val gateway = order(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake")).order.getString("publicId"))
+
+        assertEquals(com.panomc.plugins.market.db.model.FulfillmentBy.GATEWAY, gateway.fulfillmentBy)
+
+        // a free order has no provider: the market delivers it
+        val free = fx.product(slug = "free", price = 0, stock = 9)
+        val freeOrder = order(h.checkout(json("items" to listOf(line(free)), "paymentMethodId" to "fake")).order.getString("publicId"))
+
+        assertEquals(com.panomc.plugins.market.db.model.FulfillmentBy.MARKET, freeOrder.fulfillmentBy)
+    }
+
+    @Test
+    fun `a business error caused by the first request of the same key is answered as that request's replay, a different body is IDEMPOTENCY_CONFLICT`(): Unit = runBlocking {
+        val p = fx.product(price = 1000, stock = 1)
+
+        fx.paymentMethod("fake")
+
+        val (_, caller) = user("Alice")
+        val body = json("items" to listOf(line(p)), "paymentMethodId" to "fake")
+        var first: CheckoutResult? = null
+        val fired = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        // the second request has passed the replay lookup (it is the block-list call, which comes after it) when the first one commits the last unit
+        h.blocked = { _, _, _, _, _ ->
+            if (fired.compareAndSet(false, true)) first = runBlocking { h.checkout(body, key = "race-key-000000001", caller = caller) }
+
+            false
+        }
+
+        val second = h.checkout(body, key = "race-key-000000001", caller = caller)
+
+        assertNotNull(first)
+        assertEquals(first!!.order.getString("publicId"), second.order.getString("publicId"), "OUT_OF_STOCK was the first request's own doing")
+        assertEquals(first!!.orderToken, second.orderToken)
+        assertEquals(1, rows("market_order"))
+        assertEquals(0, stockOf(p))
+        assertEquals(1, h.starter.started.size, "one attempt at the gateway")
+
+        // another body under the same key is not a replay: the conflict wins over the stock error
+        val other = fx.product(slug = "other", price = 500, stock = 1)
+        val fired2 = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        h.blocked = { _, _, _, _, _ ->
+            if (fired2.compareAndSet(false, true)) runBlocking { h.checkout(json("items" to listOf(line(other)), "paymentMethodId" to "fake"), key = "race-key-000000002", caller = caller) }
+
+            false
+        }
+        expect("IDEMPOTENCY_CONFLICT", 409) { h.checkout(json("items" to listOf(line(other, 2)), "paymentMethodId" to "fake"), key = "race-key-000000002", caller = caller) }
+        assertEquals(2, rows("market_order"))
+        assertEquals(0, stockOf(other))
+    }
+
+    @Test
+    fun `a server cart that the first request of the same key emptied is not an EMPTY_CART for its replay`(): Unit = runBlocking {
+        val p = fx.product(price = 1000, stock = 5)
+
+        fx.paymentMethod("fake")
+
+        val (alice, caller) = user("Alice")
+
+        h.cart.addItem(alice.id, CartLine(p.id, 0, 2, emptyMap(), null))
+
+        val body = json("paymentMethodId" to "fake")
+        var first: CheckoutResult? = null
+        val fired = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        h.blocked = { _, _, _, _, _ ->
+            if (fired.compareAndSet(false, true)) first = runBlocking { h.checkout(body, key = "cart-key-000000001", caller = caller) }
+
+            false
+        }
+
+        val second = h.checkout(body, key = "cart-key-000000001", caller = caller)
+
+        assertEquals(first!!.order.getString("publicId"), second.order.getString("publicId"))
+        assertEquals(1, rows("market_order"))
+        assertEquals(3, stockOf(p))
+
+        // with no first request behind it the empty cart stays what it is
+        h.blocked = { _, _, _, _, _ -> false }
+        expect("EMPTY_CART", 400) { h.checkout(body, key = "cart-key-000000002", caller = caller) }
+        assertEquals(1, rows("market_order"))
+    }
+
     private suspend fun awaitRows(table: String, expected: Long) {
         val deadline = System.nanoTime() + 10_000_000_000L
 
@@ -1953,8 +2150,21 @@ internal class CheckoutHarness(val w: TestWiring, private val vertx: Vertx) {
 
     fun nextKey(): String = "key-" + keys.incrementAndGet().toString().padStart(16, '0')
 
-    suspend fun checkout(body: JsonObject, key: String = nextKey(), caller: QuoteCaller = QuoteCaller.GUEST): CheckoutResult =
-        service.checkout(parseCheckoutRequest(if (caller.loggedIn) body.copy().also { it.remove("guest") } else body, key), caller, w.pool)
+    /** The platform locales installed in the test, what the route reads from the locale table (06 section 5.4). */
+    val installedLocales = listOf(InstalledLocale("tr", listOf("tr-tr")), InstalledLocale("en-US"), InstalledLocale("ru"))
+
+    /**
+     * What the route does: parses the body, resolves the order locale (body locale, the user's stored locale, `Accept-Language`,
+     * the site default `en-US`) and calls the service. [userLocale] and [acceptLanguage] stand in for the stored locale and the header.
+     */
+    suspend fun checkout(
+        body: JsonObject, key: String = nextKey(), caller: QuoteCaller = QuoteCaller.GUEST, userLocale: String? = null, acceptLanguage: String? = null
+    ): CheckoutResult {
+        val request = parseCheckoutRequest(if (caller.loggedIn) body.copy().also { it.remove("guest") } else body, key)
+        val locale = OrderLocale.resolve(body.getValue("locale") as? String, userLocale, acceptLanguage, installedLocales, "en-US")
+
+        return service.checkout(request.copy(orderLocale = locale), caller, w.pool)
+    }
 
     suspend fun quoteTotal(product: MarketProduct): Double =
         service.quote(QuoteInput(items = listOf(CartLine(product.id, 0, 1, emptyMap(), null)), guest = GuestInput("Steve", "steve@example.com")), QuoteCaller.GUEST, w.pool).total / 100.0
