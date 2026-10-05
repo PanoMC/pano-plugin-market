@@ -18,7 +18,8 @@
     "creator-codes": "Search player or code...",
     "payment-methods": "Search methods...",
     "orders": "Search orders...",
-    "credit-accounts": "Search player..."
+    "credit-accounts": "Search player...",
+    "creator-report": "Search player or code..."
   },
   "pages": {
     "orders": {
@@ -932,6 +933,30 @@
       "table": {
         "balance-after": "Balance After"
       }
+    },
+    "creator-detail": {
+      "title": "Creator Earnings",
+      "creator-id": "Creator #{id}",
+      "available": "Available: {amount}",
+      "earning-count": "{count} Earnings",
+      "payout-count": "{count} Payouts",
+      "table": {
+        "order": "Order",
+        "base-amount": "Base Amount",
+        "commission": "Commission",
+        "amount": "Amount",
+        "state": "State",
+        "date": "Date",
+        "method": "Method",
+        "note": "Note",
+        "paid-by": "Paid By",
+        "paid-at": "Paid At"
+      },
+      "cancel": "Cancel",
+      "cancel-title": "Cancel Payout",
+      "cancel-description": "The pending payout of {amount} will be cancelled and the amount becomes available again.",
+      "cancel-confirm": "Cancel Payout",
+      "toast-cancelled": "Payout cancelled."
     }
   },
   "common": {
@@ -1135,63 +1160,33 @@
       "title-edit": "Edit Discount",
       "title-create": "Create Discount",
       "name-label": "Discount Name",
-      "value-placeholder": "Value",
       "value-label": "Discount Value",
-      "unit-percent": "Percent (%)",
-      "unit-fixed": "Fixed ({symbol})",
-      "unit-label": "Unit",
       "min-payment": "Min Cart Amount",
       "scope-all": "All Products",
       "scope-products": "Selected Products",
       "scope-categories": "Selected Categories",
-      "category-search-placeholder": "Search category...",
-      "no-results": "No results found.",
-      "expiry-unlimited": "Unlimited",
-      "start-date": "Start Date",
-      "expiry-date": "End Date",
-      "limit-unlimited": "Unlimited",
       "usage-limit": "Usage Limit",
-      "toast-name-required": "Discount name is required.",
-      "toast-value-required": "Discount value is required.",
       "toast-updated": "Discount updated.",
       "toast-created": "Discount created.",
-      "toast-save-error": "An error occurred while saving the discount."
+      "show-badge": "Show Sale Badge"
     },
     "coupon": {
-      "toast-code-required": "Coupon code is required.",
-      "toast-discount-required": "Discount value is required.",
-      "toast-code-exists": "This code is already in use.",
-      "toast-save-error": "An error occurred while saving the coupon.",
       "toast-updated": "Coupon updated.",
       "toast-created": "Coupon created.",
       "edit-heading": "Edit Coupon Code",
       "create-heading": "Create Coupon Code",
       "name": "Coupon Name",
       "code": "Coupon Code",
-      "code-placeholder": "Enter coupon code",
       "generate-code": "Generate Code",
       "all-products": "All Products",
       "selected-products": "Selected Products",
       "discount-value": "Discount Value",
-      "unit-percent": "Percentage (%)",
-      "unit-fixed": "Fixed ({symbol})",
-      "unit": "Unit",
       "min-cart-amount": "Min Cart Amount",
-      "no-expiry": "Unlimited",
-      "start-date": "Start Date",
-      "end-date": "End Date",
-      "no-limit": "Unlimited",
       "usage-limit": "Usage Limit",
       "per-customer-unlimited": "Unlimited Per Customer",
       "per-customer-limit": "Per Customer Limit"
     },
     "creator-code": {
-      "toast-creator-required": "Referral player is required.",
-      "toast-code-required": "Coupon code is required.",
-      "toast-discount-required": "Discount value is required.",
-      "toast-commission-range": "Commission rate must be between 0 and 100.",
-      "toast-code-exists": "This code is already in use.",
-      "toast-save-error": "An error occurred while saving the referral code.",
       "toast-updated": "Referral code updated.",
       "toast-created": "Referral code created.",
       "heading-edit": "Edit Referral Code",
@@ -1201,14 +1196,9 @@
       "code-label": "Coupon Code",
       "generate-title": "Generate Code",
       "discount-label": "Discount Value",
-      "unit-percent": "Percentage (%)",
-      "unit-fixed": "Fixed ({symbol})",
-      "unit-label": "Unit",
-      "no-expiry": "No Expiry",
-      "start-date": "Start Date",
-      "end-date": "End Date",
-      "no-limit": "Unlimited",
-      "usage-limit": "Usage Limit"
+      "usage-limit": "Usage Limit",
+      "account-found": "This player has a Pano account.",
+      "account-missing": "No Pano account: no profile earnings and no credit payouts."
     },
     "order-filters": {
       "title": "Filter Orders",
@@ -1503,6 +1493,53 @@
         "note-TOO_SHORT": "The reason needs at least 3 characters.",
         "note-TOO_LONG": "The reason can be at most 255 characters."
       }
+    },
+    "discount-form": {
+      "start-date": "Start Date",
+      "end-date": "End Date",
+      "unit": "Unit",
+      "unit-percent": "Percent (%)",
+      "unit-fixed": "Fixed",
+      "unlimited-dates": "No Date Limit",
+      "unlimited-usage": "Unlimited Uses",
+      "category-search": "Search category...",
+      "no-results": "No results found.",
+      "error": {
+        "REQUIRED": "This field is required.",
+        "INVALID": "Enter a valid number.",
+        "TOO_LARGE": "The value is too large (maximum 100%).",
+        "TOO_LONG": "The text is too long.",
+        "DATES_REVERSED": "The end date must not be before the start date.",
+        "TAKEN": "This code is already in use."
+      }
+    },
+    "redemptions": {
+      "title": "Redemptions of {code}",
+      "guest": "Guest",
+      "table": {
+        "order": "Order",
+        "player": "Player",
+        "amount": "Amount",
+        "state": "State",
+        "date": "Date"
+      }
+    },
+    "payout": {
+      "title": "Pay Out Creator",
+      "available": "Available: {amount}",
+      "amount": "Amount",
+      "credits": "Pays {credits}",
+      "credits-unknown": "The credit value is unknown.",
+      "note": "Note (optional)",
+      "submit": "Pay Out",
+      "toast-paid": "Payout recorded.",
+      "error": {
+        "REQUIRED": "Enter an amount.",
+        "INVALID": "Enter an amount greater than 0 with at most 2 decimals.",
+        "EXCEEDS_AVAILABLE": "The amount is higher than the available balance.",
+        "NOTHING_AVAILABLE": "Nothing is available to pay out.",
+        "TOO_MANY": "Too many actions."
+      }
     }
   },
   "settings": {
@@ -1706,7 +1743,8 @@
       "other-products": "Other Products",
       "no-expiry": "No expiry",
       "start-label": "Start: {date}",
-      "end-label": "End: {date}"
+      "end-label": "End: {date}",
+      "delete-title": "Delete Discount"
     },
     "coupons": {
       "toast-load-error": "An error occurred while loading coupons.",
@@ -1722,7 +1760,9 @@
       },
       "validity-none": "No expiry",
       "validity-start": "Start: {date}",
-      "validity-end": "End: {date}"
+      "validity-end": "End: {date}",
+      "delete-title": "Delete Coupon Code",
+      "redemptions": "Redemptions"
     },
     "creators": {
       "toast-load-error": "An error occurred while loading creator codes.",
@@ -1741,7 +1781,26 @@
       },
       "no-expiry": "No Expiry",
       "start-date": "Start: {date}",
-      "end-date": "End: {date}"
+      "end-date": "End: {date}",
+      "delete-title": "Delete Creator Code",
+      "redemptions": "Redemptions",
+      "view-earnings": "View Earnings"
+    },
+    "payouts": {
+      "count": "{count} Creators",
+      "date-range": "Date Range",
+      "export-csv": "Export CSV",
+      "view-earnings": "View Earnings",
+      "pay-out": "Pay Out",
+      "table": {
+        "creator": "Creator",
+        "code": "Code",
+        "uses": "Uses",
+        "revenue": "Revenue",
+        "earned": "Earned",
+        "paid-out": "Paid Out",
+        "available": "Available"
+      }
     }
   },
   "nav-overview": "Overview",
@@ -2184,6 +2243,16 @@
       "CREATOR_PAYOUT": "Creator payout",
       "EXTERNAL_IN": "Server deposit",
       "EXTERNAL_OUT": "Server withdrawal"
+    },
+    "redemption": {
+      "HELD": "Held",
+      "APPLIED": "Applied",
+      "RELEASED": "Released"
+    },
+    "payout-method": {
+      "CREDIT": "Credits",
+      "ACTION": "Actions",
+      "MANUAL": "Manual"
     }
   },
   "alerts": {

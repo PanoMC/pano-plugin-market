@@ -18,7 +18,8 @@
     "creator-codes": "Oyuncu veya kod ara...",
     "payment-methods": "Yöntem ara...",
     "orders": "Sipariş ara...",
-    "credit-accounts": "Oyuncu ara..."
+    "credit-accounts": "Oyuncu ara...",
+    "creator-report": "Oyuncu veya kod ara..."
   },
   "pages": {
     "orders": {
@@ -932,6 +933,30 @@
       "table": {
         "balance-after": "Sonraki Bakiye"
       }
+    },
+    "creator-detail": {
+      "title": "İçerik Üretici Kazançları",
+      "creator-id": "İçerik Üretici #{id}",
+      "available": "Kullanılabilir: {amount}",
+      "earning-count": "{count} Kazanç",
+      "payout-count": "{count} Ödeme",
+      "table": {
+        "order": "Sipariş",
+        "base-amount": "Baz Tutar",
+        "commission": "Komisyon",
+        "amount": "Tutar",
+        "state": "Durum",
+        "date": "Tarih",
+        "method": "Yöntem",
+        "note": "Not",
+        "paid-by": "Ödeyen",
+        "paid-at": "Ödeme Tarihi"
+      },
+      "cancel": "İptal Et",
+      "cancel-title": "Ödemeyi İptal Et",
+      "cancel-description": "Bekleyen {amount} tutarındaki ödeme iptal edilecek ve tutar tekrar kullanılabilir olacak.",
+      "cancel-confirm": "Ödemeyi İptal Et",
+      "toast-cancelled": "Ödeme iptal edildi."
     }
   },
   "common": {
@@ -1135,63 +1160,33 @@
       "title-edit": "İndirimi Düzenle",
       "title-create": "İndirim Oluştur",
       "name-label": "İndirim Adı",
-      "value-placeholder": "Değer",
       "value-label": "İndirim Değeri",
-      "unit-percent": "Yüzde (%)",
-      "unit-fixed": "Sabit ({symbol})",
-      "unit-label": "Birim",
       "min-payment": "Min Sepet Tutarı",
       "scope-all": "Tüm Ürünler",
       "scope-products": "Seçili Ürünler",
       "scope-categories": "Seçili Kategoriler",
-      "category-search-placeholder": "Kategori ara...",
-      "no-results": "Sonuç bulunamadı.",
-      "expiry-unlimited": "Süresiz",
-      "start-date": "Başlangıç Tarihi",
-      "expiry-date": "Bitiş Tarihi",
-      "limit-unlimited": "Limitsiz",
       "usage-limit": "Kullanım Limiti",
-      "toast-name-required": "İndirim adı zorunludur.",
-      "toast-value-required": "İndirim değeri zorunludur.",
       "toast-updated": "İndirim güncellendi.",
       "toast-created": "İndirim oluşturuldu.",
-      "toast-save-error": "İndirim kaydedilirken bir hata oluştu."
+      "show-badge": "İndirim Rozetini Göster"
     },
     "coupon": {
-      "toast-code-required": "Kupon kodu zorunludur.",
-      "toast-discount-required": "İndirim değeri zorunludur.",
-      "toast-code-exists": "Bu kod zaten kullanılıyor.",
-      "toast-save-error": "Kupon kaydedilirken bir hata oluştu.",
       "toast-updated": "Kupon güncellendi.",
       "toast-created": "Kupon oluşturuldu.",
       "edit-heading": "Kupon Kodu Düzenle",
       "create-heading": "Kupon Kodu Oluştur",
       "name": "Kupon Adı",
       "code": "Kupon Kodu",
-      "code-placeholder": "Kupon kodunu girin",
       "generate-code": "Kodu Oluştur",
       "all-products": "Tüm Ürünler",
       "selected-products": "Seçili Ürünler",
       "discount-value": "İndirim Değeri",
-      "unit-percent": "Yüzde (%)",
-      "unit-fixed": "Sabit ({symbol})",
-      "unit": "Birim",
       "min-cart-amount": "Min Sepet Tutarı",
-      "no-expiry": "Süresiz",
-      "start-date": "Başlangıç Tarihi",
-      "end-date": "Bitiş Tarihi",
-      "no-limit": "Limitsiz",
       "usage-limit": "Kullanım Limiti",
       "per-customer-unlimited": "Kişi Başı Sınırsız",
       "per-customer-limit": "Kişi Başı Limit"
     },
     "creator-code": {
-      "toast-creator-required": "Referans oyuncu zorunludur.",
-      "toast-code-required": "Kupon kodu zorunludur.",
-      "toast-discount-required": "İndirim değeri zorunludur.",
-      "toast-commission-range": "Komisyon oranı 0 ile 100 arasında olmalıdır.",
-      "toast-code-exists": "Bu kod zaten kullanılıyor.",
-      "toast-save-error": "Referans kodu kaydedilirken bir hata oluştu.",
       "toast-updated": "Referans kodu güncellendi.",
       "toast-created": "Referans kodu oluşturuldu.",
       "heading-edit": "Referans Kodu Düzenle",
@@ -1201,14 +1196,9 @@
       "code-label": "Kupon Kodu",
       "generate-title": "Kodu Oluştur",
       "discount-label": "İndirim Değeri",
-      "unit-percent": "Yüzde (%)",
-      "unit-fixed": "Sabit ({symbol})",
-      "unit-label": "Birim",
-      "no-expiry": "Süresiz",
-      "start-date": "Başlangıç Tarihi",
-      "end-date": "Bitiş Tarihi",
-      "no-limit": "Limitsiz",
-      "usage-limit": "Kullanım Limiti"
+      "usage-limit": "Kullanım Limiti",
+      "account-found": "Bu oyuncunun bir Pano hesabı var.",
+      "account-missing": "Pano hesabı yok: profilde kazanç ve kredi ödemesi olmaz."
     },
     "order-filters": {
       "title": "Siparişleri Filtrele",
@@ -1503,6 +1493,53 @@
         "note-TOO_SHORT": "Gerekçe en az 3 karakter olmalı.",
         "note-TOO_LONG": "Gerekçe en fazla 255 karakter olabilir."
       }
+    },
+    "discount-form": {
+      "start-date": "Başlangıç Tarihi",
+      "end-date": "Bitiş Tarihi",
+      "unit": "Birim",
+      "unit-percent": "Yüzde (%)",
+      "unit-fixed": "Sabit",
+      "unlimited-dates": "Tarih Sınırı Yok",
+      "unlimited-usage": "Sınırsız Kullanım",
+      "category-search": "Kategori ara...",
+      "no-results": "Sonuç bulunamadı.",
+      "error": {
+        "REQUIRED": "Bu alan zorunludur.",
+        "INVALID": "Geçerli bir sayı girin.",
+        "TOO_LARGE": "Değer çok büyük (en fazla %100).",
+        "TOO_LONG": "Metin çok uzun.",
+        "DATES_REVERSED": "Bitiş tarihi başlangıç tarihinden önce olamaz.",
+        "TAKEN": "Bu kod zaten kullanılıyor."
+      }
+    },
+    "redemptions": {
+      "title": "{code} Kullanımları",
+      "guest": "Misafir",
+      "table": {
+        "order": "Sipariş",
+        "player": "Oyuncu",
+        "amount": "Tutar",
+        "state": "Durum",
+        "date": "Tarih"
+      }
+    },
+    "payout": {
+      "title": "İçerik Üreticiye Ödeme Yap",
+      "available": "Kullanılabilir: {amount}",
+      "amount": "Tutar",
+      "credits": "{credits} ödenecek",
+      "credits-unknown": "Kredi değeri bilinmiyor.",
+      "note": "Not (isteğe bağlı)",
+      "submit": "Ödeme Yap",
+      "toast-paid": "Ödeme kaydedildi.",
+      "error": {
+        "REQUIRED": "Bir tutar girin.",
+        "INVALID": "0'dan büyük, en fazla 2 ondalıklı bir tutar girin.",
+        "EXCEEDS_AVAILABLE": "Tutar kullanılabilir bakiyeden yüksek.",
+        "NOTHING_AVAILABLE": "Ödenebilecek tutar yok.",
+        "TOO_MANY": "Çok fazla aksiyon var."
+      }
     }
   },
   "settings": {
@@ -1706,7 +1743,8 @@
       "other-products": "Diğer Ürünler",
       "no-expiry": "Süresiz",
       "start-label": "Bşl: {date}",
-      "end-label": "Bti: {date}"
+      "end-label": "Bti: {date}",
+      "delete-title": "İndirimi Sil"
     },
     "coupons": {
       "toast-load-error": "Kuponlar yüklenirken bir hata oluştu.",
@@ -1722,7 +1760,9 @@
       },
       "validity-none": "Süresiz",
       "validity-start": "Bşl: {date}",
-      "validity-end": "Bti: {date}"
+      "validity-end": "Bti: {date}",
+      "delete-title": "Kupon Kodunu Sil",
+      "redemptions": "Kullanımlar"
     },
     "creators": {
       "toast-load-error": "Referans kodları yüklenirken bir hata oluştu.",
@@ -1741,7 +1781,26 @@
       },
       "no-expiry": "Süresiz",
       "start-date": "Bşl: {date}",
-      "end-date": "Bti: {date}"
+      "end-date": "Bti: {date}",
+      "delete-title": "İçerik Üretici Kodunu Sil",
+      "redemptions": "Kullanımlar",
+      "view-earnings": "Kazançları Görüntüle"
+    },
+    "payouts": {
+      "count": "{count} İçerik Üretici",
+      "date-range": "Tarih Aralığı",
+      "export-csv": "CSV Dışa Aktar",
+      "view-earnings": "Kazançları Görüntüle",
+      "pay-out": "Ödeme Yap",
+      "table": {
+        "creator": "İçerik Üretici",
+        "code": "Kod",
+        "uses": "Kullanım",
+        "revenue": "Gelir",
+        "earned": "Kazanılan",
+        "paid-out": "Ödenen",
+        "available": "Kullanılabilir"
+      }
     }
   },
   "nav-overview": "Genel Bakış",
@@ -2184,6 +2243,16 @@
       "CREATOR_PAYOUT": "İçerik üretici ödemesi",
       "EXTERNAL_IN": "Sunucudan yükleme",
       "EXTERNAL_OUT": "Sunucuya çekme"
+    },
+    "redemption": {
+      "HELD": "Beklemede",
+      "APPLIED": "Uygulandı",
+      "RELEASED": "Serbest Bırakıldı"
+    },
+    "payout-method": {
+      "CREDIT": "Kredi",
+      "ACTION": "Aksiyon",
+      "MANUAL": "Manuel"
     }
   },
   "alerts": {

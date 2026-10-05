@@ -1,8 +1,9 @@
 <script>
   import { CardHeader, CardFilters, CardFiltersItem, SearchInput, Pagination, NoContent } from '@panomc/sdk/components/panel';
   import { base, goto } from '@panomc/sdk/svelte';
-  import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
-  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
+  import { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { _ } from '../../../i18n';
+  import { currentLocale, fmt } from '../../utils/locale.js';
 
   // All view state (page/search/status) is URL-driven: the page load() reads the
   // query params and passes the resulting list + the current filter values down as
@@ -17,17 +18,18 @@
     search = '',
     status = 'all', // 'all' | 'ACTIVE' | 'INACTIVE'
     section = 'general',
-    currencySymbol = '', // dynamic SALES-currency symbol from GET /settings
+    ctx = null, // GET /context (currency code)
+    onDelete = () => {},
     onEdit = () => {},
   } = $props();
 
   // Reflects the in-flight goto() so SearchInput keeps showing its spinner.
   let isSearching = $state(false);
 
-  // Epoch millis -> Turkish short date (e.g. "01 Haz 2026"); '-' when unset.
+  // Epoch millis -> localized short date (e.g. "01 Haz 2026"); '-' when unset.
   function formatDate(epoch) {
     if (!epoch) return '-';
-    return new Date(epoch).toLocaleDateString('tr-TR', {
+    return new Date(epoch).toLocaleDateString(currentLocale(), {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
@@ -60,29 +62,6 @@
     navigate({ status: value, page: 1 });
   }
 
-  async function deleteDiscount(discount) {
-    if (!window.confirm($_('discounts.general.confirm-delete', { values: { name: discount.name } }))) {
-      return;
-    }
-
-    try {
-      const result = await ApiUtil.delete({
-        path: `/api/panel/market/discounts/${discount.id}`,
-      });
-
-      if (result.error) throw result.error;
-
-      showSuccessToast($_('discounts.general.toast-delete-success'));
-      // The deleted row may have been the last on this page; step back so the
-      // reload does not request a now-out-of-range page (backend -> PAGE_NOT_FOUND).
-      const targetPage = discounts.length === 1 && page > 1 ? page - 1 : page;
-      await navigate({ page: targetPage });
-    } catch (e) {
-      console.error('[Market] Failed to delete discount', e);
-      showErrorToast($_('discounts.general.toast-delete-error'));
-    }
-  }
-
   function onPageClick(pageNum) {
     navigate({ page: pageNum });
   }
@@ -113,6 +92,7 @@
       <SearchInput
         initialValue={search}
         searching={isSearching}
+        autofocus
         placeholderKey="plugins.pano-plugin-market.search.discounts"
         onchange={onSearchChange} />
     </div>
@@ -124,7 +104,7 @@
   </CardHeader>
 
   {#if discounts.length === 0}
-    <NoContent />
+    <NoContent icon="" />
   {:else}
     <div class="table-responsive">
       <table class="table table-hover align-middle text-nowrap">
@@ -158,7 +138,7 @@
                       <i class="fas fa-pen me-2"></i>
                       {$_('common.edit')}
                     </button>
-                    <button type="button" class="dropdown-item text-danger" onclick={() => deleteDiscount(discount)}>
+                    <button type="button" class="dropdown-item text-danger" onclick={() => onDelete(discount)}>
                       <i class="fas fa-trash me-2"></i>
                       {$_('common.delete')}
                     </button>
@@ -166,16 +146,16 @@
                 </div>
               </th>
               <td>
-                <a href="#" class="text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createDiscountModal" onclick={(e) => { e.preventDefault(); onEdit(discount); }}>
+                <button type="button" class="btn btn-link p-0 border-0 align-baseline text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createDiscountModal" onclick={() => onEdit(discount)}>
                   {discount.name}
-                </a>
+                </button>
               </td>
               <td>
                 <span class="font-monospace">
                   {#if discount.unit === 'PERCENT'}
                     %{discount.value}
                   {:else}
-                    {discount.value} {currencySymbol}
+                    {fmt.money(discount.value, ctx?.currency)}
                   {/if}
                 </span>
               </td>
@@ -184,17 +164,17 @@
                   {#if discount.minPaymentAmount == null}
                     -
                   {:else}
-                    {discount.minPaymentAmount} {currencySymbol}
+                    {fmt.money(discount.minPaymentAmount, ctx?.currency)}
                   {/if}
                 </span>
               </td>
               <td class="cursor-pointer" data-bs-toggle="modal" data-bs-target="#createDiscountModal" onclick={() => onEdit(discount)}>
                 <div class="d-flex align-items-center gap-1 flex-nowrap" style="max-width: 250px;">
                   {#if !discount.products || discount.products.includes('all') || discount.products.length === 0}
-                    <a href="#" class="badge text-bg-primary text-truncate text-decoration-none focus-ring" title={$_('common.edit')} onclick={(e) => e.preventDefault()}>{$_('discounts.general.all-products')}</a>
+                    <span class="badge text-bg-primary text-truncate text-decoration-none focus-ring">{$_('discounts.general.all-products')}</span>
                   {:else}
-                    {#each discount.products.slice(0, 2) as pName}
-                      <a href="#" class="badge text-bg-primary text-truncate text-decoration-none focus-ring" style="max-width: 100px;" title={$_('common.edit')} onclick={(e) => e.preventDefault()}>{pName}</a>
+                    {#each discount.products.slice(0, 2) as pName (pName)}
+                      <span class="badge text-bg-primary text-truncate text-decoration-none focus-ring" style="max-width: 100px;">{pName}</span>
                     {/each}
                     {#if discount.products.length > 2}
                       <span
@@ -203,8 +183,7 @@
                         data-bs-trigger="hover focus"
                         data-bs-placement="top"
                         data-bs-content={discount.products.slice(2).join(', ')}
-                        title={$_('discounts.general.other-products')}
-                        onclick={(e) => e.stopPropagation()}>
+                        title={$_('discounts.general.other-products')}>
                         +{discount.products.length - 2}
                       </span>
                     {/if}
@@ -242,6 +221,7 @@
         </tbody>
       </table>
     </div>
+    {#if totalPage > 1}
     <div class="card-footer">
        <Pagination
           {page}
@@ -250,5 +230,6 @@
           on:lastPageClick={() => onPageClick(totalPage)}
           on:pageLinkClick={(event) => onPageClick(event.detail.page)} />
     </div>
+    {/if}
   {/if}
 </div>

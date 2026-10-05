@@ -1,266 +1,269 @@
 <script module>
   import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { marketPath } from '../utils/api.js';
+  import { loadContext } from '../utils/context.js';
+  import { loadList } from '../utils/list.js';
 
-  // Each discount sub-section maps to its own list endpoint + safe empty shape.
-  const SECTION_CONFIG = {
-    general: {
-      path: '/api/panel/market/discounts',
-      empty: { discounts: [], discountCount: 0 },
-    },
-    coupons: {
-      path: '/api/panel/market/coupons',
-      empty: { coupons: [], couponCount: 0 },
-    },
-    creators: {
-      path: '/api/panel/market/creator-codes',
-      empty: { creatorCodes: [], creatorCodeCount: 0 },
-    },
+  // Each discount section maps to its own list endpoint + the empty-row key of a failed load.
+  const LISTS = {
+    general: { path: '/discounts', emptyKey: 'discounts' },
+    coupons: { path: '/coupons', emptyKey: 'coupons' },
+    creators: { path: '/creator-codes', emptyKey: 'creatorCodes' },
   };
+  const SECTION_KEYS = ['general', 'coupons', 'creators', 'payouts'];
 
   /**
    * @type {import("@sveltejs/kit").PageLoad}
    */
   export async function load(event) {
-    const {
-      parent,
-      url: { searchParams },
-    } = event;
-    const { pageTitle } = await parent();
+    const sectionParam = event.url.searchParams.get('section');
+    const section = SECTION_KEYS.includes(sectionParam) ? sectionParam : 'general';
 
-    pageTitle.set('plugins.pano-plugin-market.pages.discounts.title');
-
-    const sectionParam = searchParams.get('section');
-    const section = SECTION_CONFIG[sectionParam] ? sectionParam : 'general';
-
-    const pageNum = parseInt(searchParams.get('page')) || 1;
-    const search = searchParams.get('search');
-    const statusParam = searchParams.get('status');
-
-    const { path, empty } = SECTION_CONFIG[section];
-
-    const fetchPage = (p) =>
-      ApiUtil.get({
-        path:
-          path +
-          buildQueryParams({
-            page: p === 1 ? null : p,
-            search,
-            status: statusParam,
-          }),
-        request: event,
-      });
-
-    let effectivePage = pageNum;
-    // Fetch the section list and the market settings in parallel; settings carries
-    // the dynamic SALES-currency symbol shown by every money value on this page.
-    let [body, settingsRes] = await Promise.all([
-      fetchPage(pageNum),
-      ApiUtil.get({ path: '/api/panel/market/settings', request: event }),
-    ]);
-
-    // Empty string when settings fail so money renders without a symbol (never ₺).
-    const currencySymbol =
-      settingsRes && !settingsRes.error ? settingsRes.currencySymbol || '' : '';
-
-    // A stale ?page= (bookmark / back-button after deletes) points past the last
-    // page; fall back to page 1 with the same filters instead of faking an empty store.
-    if (body?.error === 'PAGE_NOT_FOUND' && pageNum > 1) {
-      effectivePage = 1;
-      body = await fetchPage(1);
-    }
-
-    if (!body || body.error) {
+    if (section === 'payouts') {
+      const { pageTitle } = await event.parent();
+      pageTitle?.set?.('plugins.pano-plugin-market.pages.discounts.title');
+      const params = event.url.searchParams;
+      const filters = { from: params.get('from'), to: params.get('to') };
+      const [body, ctx] = await Promise.all([
+        ApiUtil.get({
+          path: marketPath('/creator-codes/report') + buildQueryParams(filters),
+          request: event,
+        }),
+        loadContext(event),
+      ]);
+      if (!body || typeof body !== 'object' || body.error)
+        return {
+          data: {
+            section,
+            creators: [],
+            currency: ctx?.currency ?? '',
+            filters,
+            ctx,
+            error: (body && typeof body === 'object' && body.error) || 'NETWORK_ERROR',
+          },
+        };
       return {
-        data: { ...empty, totalPage: 1, page: 1, currencySymbol, error: body?.error || 'NETWORK_ERROR' },
+        data: {
+          section,
+          creators: body.creators ?? [],
+          currency: body.currency ?? ctx?.currency ?? '',
+          filters,
+          ctx,
+        },
       };
     }
 
-    body.page = effectivePage;
-    body.currencySymbol = currencySymbol;
-    return { data: body };
+    const result = await loadList(event, {
+      path: LISTS[section].path,
+      params: ['search', 'status'],
+      nodes: ['DISC'],
+      emptyKey: LISTS[section].emptyKey,
+      title: 'pages.discounts.title',
+    });
+    result.data.section = section;
+    return result;
   }
 </script>
 
 <script>
-  import { page, base, goto } from '@panomc/sdk/svelte';
-  import { _ } from '../../i18n.js';
+  import { base, goto, invalidateAll, page } from '@panomc/sdk/svelte';
+  import { _, showSuccessToast } from '../../i18n';
   import MarketLayout from '../layouts/MarketLayout.svelte';
-  import GeneralDiscounts from '../components/discounts/GeneralDiscounts.svelte';
+  import ConfirmModal from '../components/ConfirmModal.svelte';
+  import LoadError from '../components/LoadError.svelte';
   import CouponCodes from '../components/discounts/CouponCodes.svelte';
   import CreatorCodes from '../components/discounts/CreatorCodes.svelte';
-  import CreateDiscountModal from '../components/modals/CreateDiscountModal.svelte';
+  import CreatorPayouts from '../components/discounts/CreatorPayouts.svelte';
+  import GeneralDiscounts from '../components/discounts/GeneralDiscounts.svelte';
   import CreateCouponModal from '../components/modals/CreateCouponModal.svelte';
   import CreateCreatorCodeModal from '../components/modals/CreateCreatorCodeModal.svelte';
-
-  const SECTIONS = [
-    { key: 'general', label: 'pages.discounts.sections.general' },
-    { key: 'coupons', label: 'pages.discounts.sections.coupons' },
-    { key: 'creators', label: 'pages.discounts.sections.creators' }
-  ];
+  import CreateDiscountModal from '../components/modals/CreateDiscountModal.svelte';
+  import PayoutModal from '../components/modals/PayoutModal.svelte';
+  import RedemptionsModal from '../components/modals/RedemptionsModal.svelte';
+  import { sectionsFor } from '../navigation.js';
+  import { call } from '../utils/api.js';
+  import { toastError } from '../utils/toast.js';
 
   let { data } = $props();
 
-  // The active section AND every list filter (page/search/status) live in the URL
-  // search params; load() reads them and fetches the active section's list. Tabs,
-  // filter pills, search and pagination all navigate via goto() so the address bar
-  // stays deep-linkable and the back button is correct. The panel host remounts the
-  // whole plugin page on every load() re-run ({#key data}); that remount is the
-  // accepted cost of URL-driven navigation here.
-  let section = $derived.by(() => {
-    const s = $page.url.searchParams.get('section');
-    return SECTIONS.some((item) => item.key === s) ? s : 'general';
-  });
-  let currentPage = $derived(data.page || 1);
-  let currentSearch = $derived($page.url.searchParams.get('search') || '');
-  let currentStatus = $derived($page.url.searchParams.get('status') || 'all');
-  let loadError = $derived(data.error || null);
+  const user = $derived($page.data?.user);
+  const ctx = $derived(data.ctx ?? null);
+  const section = $derived(SECTION_KEYS.includes(data.section) ? data.section : 'general');
+  const currentPage = $derived(data.page || 1);
+  const currentSearch = $derived($page.url.searchParams.get('search') || '');
+  const currentStatus = $derived($page.url.searchParams.get('status') || 'all');
+  const loadError = $derived(data.error || null);
 
-  // Dynamic SALES-currency symbol from GET /settings (load()); threaded down to the
-  // section lists and the create/edit modals so no money value hardcodes ₺.
-  let currencySymbol = $derived(data.currencySymbol || '');
+  let confirmModal = $state(null);
+  let redemptionsModal = $state(null);
+  let payoutModal = $state(null);
 
-  // Called after create/update/save mutations from the shared modals: re-run load()
-  // for the current section + page/search/status so the list reflects the change.
+  // Called after a mutation from the modals (already hidden); a modal is hidden before the page is
+  // re-loaded (13 §1.4), Bootstrap's fade takes 300 ms.
   function refresh() {
-    const params = $page.url.searchParams;
-    const queryParams = buildQueryParams({
-      // Default section ('general') is omitted so the URL stays minimal.
-      section: params.get('section') === 'general' ? null : params.get('section'),
-      page: params.get('page'),
-      search: params.get('search'),
-      status: params.get('status'),
-    });
-    return goto(`${base}/market/discounts${queryParams}`, { invalidateAll: true });
-  }
-
-  // Switching tabs resets pagination/search/filters back to the section defaults;
-  // the default section ('general') is omitted so it yields a clean /market/discounts.
-  function goToSection(key) {
-    const queryParams = buildQueryParams({ section: key === 'general' ? null : key });
-    return goto(`${base}/market/discounts${queryParams}`, { invalidateAll: true });
+    setTimeout(() => invalidateAll(), 350);
   }
 
   // Modal state owned by the page; passed down to the shared Bootstrap modals.
   let discountEdit = $state(false);
   let selectedDiscount = $state(null);
-
   let couponEdit = $state(false);
   let selectedCoupon = $state(null);
-
   let creatorEdit = $state(false);
   let selectedCreator = $state(null);
 
-  function openDiscountCreate() {
-    discountEdit = false;
-    selectedDiscount = null;
-  }
-  function openDiscountEdit(discount) {
-    discountEdit = true;
-    selectedDiscount = { ...discount };
+  const openDiscountCreate = () => ((discountEdit = false), (selectedDiscount = null));
+  const openDiscountEdit = (row) => ((discountEdit = true), (selectedDiscount = { ...row }));
+  const openCouponCreate = () => ((couponEdit = false), (selectedCoupon = null));
+  const openCouponEdit = (row) => ((couponEdit = true), (selectedCoupon = { ...row }));
+  const openCreatorCreate = () => ((creatorEdit = false), (selectedCreator = null));
+  const openCreatorEdit = (row) => ((creatorEdit = true), (selectedCreator = { ...row }));
+
+  // kind -> endpoint, row count of the page and the locale group of its texts.
+  const DELETE = {
+    discount: { path: '/discounts', group: 'general', label: (row) => row.name },
+    coupon: { path: '/coupons', group: 'coupons', label: (row) => row.code },
+    creator: { path: '/creator-codes', group: 'creators', label: (row) => row.code },
+  };
+
+  function remove(kind, row, count) {
+    const config = DELETE[kind];
+    confirmModal?.open({
+      icon: 'fa-solid fa-trash',
+      title: $_(`discounts.${config.group}.delete-title`),
+      description: $_(`discounts.${config.group}.confirm-delete`, {
+        values: { name: config.label(row), code: config.label(row) },
+      }),
+      confirmLabel: $_('common.delete'),
+      variant: 'danger',
+      onConfirm: async () => {
+        const result = await call(ApiUtil.delete({ path: marketPath(`${config.path}/${row.id}`) }));
+        if (!result.ok) {
+          // A row that is already gone (404 NOT_FOUND) is toasted and the list refreshed.
+          toastError($_, result);
+          if (result.error === 'NOT_FOUND') refreshStepBack(count);
+          return false;
+        }
+        showSuccessToast($_(`discounts.${config.group}.toast-delete-success`));
+        refreshStepBack(count);
+      },
+    });
   }
 
-  function openCouponCreate() {
-    couponEdit = false;
-    selectedCoupon = null;
-  }
-  function openCouponEdit(coupon) {
-    couponEdit = true;
-    selectedCoupon = { ...coupon };
+  // The deleted row may have been the last on this page; step back so the refetch does not request
+  // a now-out-of-range page (backend -> PAGE_NOT_FOUND).
+  function refreshStepBack(count) {
+    const target = count === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
+    const query = buildQueryParams({
+      section: section === 'general' ? null : section,
+      page: target > 1 ? target : null,
+      search: currentSearch || null,
+      status: currentStatus === 'all' ? null : currentStatus,
+    });
+    setTimeout(() => goto(`${base}/market/discounts${query}`, { invalidateAll: true }), 350);
   }
 
-  function openCreatorCreate() {
-    creatorEdit = false;
-    selectedCreator = null;
+  function openRedemptions(kind, row) {
+    redemptionsModal?.open({ kind, id: row.id, code: row.code });
   }
-  function openCreatorEdit(creatorCode) {
-    creatorEdit = true;
-    selectedCreator = { ...creatorCode };
+
+  function openPayout(row) {
+    payoutModal?.open({ creator: row, currency: data.currency });
   }
 </script>
 
-<MarketLayout>
+<MarketLayout area="discounts" sections={sectionsFor('discounts', user)} active={section}>
   {#snippet right()}
     {#if section === 'general'}
-      <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#createDiscountModal" onclick={openDiscountCreate}>
-        <i class="fa-solid fa-plus"></i>
+      <button
+        type="button"
+        class="btn btn-secondary"
+        data-bs-toggle="modal"
+        data-bs-target="#createDiscountModal"
+        onclick={openDiscountCreate}>
+        <i class="fa-solid fa-plus" aria-hidden="true"></i>
         <span class="d-lg-inline d-none ms-2">{$_('pages.discounts.create-discount')}</span>
       </button>
     {:else if section === 'coupons'}
-      <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#createCouponModal" onclick={openCouponCreate}>
-        <i class="fa-solid fa-plus"></i>
+      <button
+        type="button"
+        class="btn btn-secondary"
+        data-bs-toggle="modal"
+        data-bs-target="#createCouponModal"
+        onclick={openCouponCreate}>
+        <i class="fa-solid fa-plus" aria-hidden="true"></i>
         <span class="d-lg-inline d-none ms-2">{$_('pages.discounts.create-coupon')}</span>
       </button>
     {:else if section === 'creators'}
-      <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#createCreatorCodeModal" onclick={openCreatorCreate}>
-        <i class="fa-solid fa-plus"></i>
+      <button
+        type="button"
+        class="btn btn-secondary"
+        data-bs-toggle="modal"
+        data-bs-target="#createCreatorCodeModal"
+        onclick={openCreatorCreate}>
+        <i class="fa-solid fa-plus" aria-hidden="true"></i>
         <span class="d-lg-inline d-none ms-2">{$_('pages.discounts.create-creator-code')}</span>
       </button>
     {/if}
   {/snippet}
 
-  <div class="row g-3">
-    <aside class="col-12 col-md-3">
-      <div class="nav flex-column nav-pills sticky-md-top" role="tablist" aria-orientation="vertical" aria-label={$_('pages.discounts.menu-label')}>
-        {#each SECTIONS as item (item.key)}
-          <button
-            type="button"
-            class="nav-link text-start"
-            class:active={section === item.key}
-            role="tab"
-            aria-selected={section === item.key}
-            onclick={() => goToSection(item.key)}>
-            {$_(item.label)}
-          </button>
-        {/each}
-      </div>
-    </aside>
-
-    <div class="col-12 col-md-9">
-      {#if loadError}
-        <div class="card">
-          <div class="card-body text-center text-body-secondary py-5">
-            <i class="fas fa-triangle-exclamation mb-2 fs-3"></i>
-            <div>{$_('pages.discounts.load-error')}</div>
-          </div>
-        </div>
-      {:else if section === 'general'}
-        <GeneralDiscounts
-          discounts={data.discounts}
-          discountCount={data.discountCount}
-          page={currentPage}
-          totalPage={data.totalPage}
-          search={currentSearch}
-          status={currentStatus}
-          {section}
-          {currencySymbol}
-          onEdit={openDiscountEdit} />
-      {:else if section === 'coupons'}
-        <CouponCodes
-          coupons={data.coupons}
-          couponCount={data.couponCount}
-          page={currentPage}
-          totalPage={data.totalPage}
-          search={currentSearch}
-          status={currentStatus}
-          {section}
-          {currencySymbol}
-          onEdit={openCouponEdit} />
-      {:else if section === 'creators'}
-        <CreatorCodes
-          creatorCodes={data.creatorCodes}
-          creatorCodeCount={data.creatorCodeCount}
-          page={currentPage}
-          totalPage={data.totalPage}
-          search={currentSearch}
-          status={currentStatus}
-          {section}
-          {currencySymbol}
-          onEdit={openCreatorEdit} />
-      {/if}
-    </div>
-  </div>
+  {#if loadError}
+    <LoadError error={loadError} />
+  {:else if section === 'general'}
+    <GeneralDiscounts
+      discounts={data.discounts}
+      discountCount={data.discountCount}
+      page={currentPage}
+      totalPage={data.totalPage}
+      search={currentSearch}
+      status={currentStatus}
+      {section}
+      {ctx}
+      onEdit={openDiscountEdit}
+      onDelete={(row) => remove('discount', row, data.discounts?.length ?? 0)} />
+  {:else if section === 'coupons'}
+    <CouponCodes
+      coupons={data.coupons}
+      couponCount={data.couponCount}
+      page={currentPage}
+      totalPage={data.totalPage}
+      search={currentSearch}
+      status={currentStatus}
+      {section}
+      {ctx}
+      onEdit={openCouponEdit}
+      onRedemptions={(row) => openRedemptions('coupons', row)}
+      onDelete={(row) => remove('coupon', row, data.coupons?.length ?? 0)} />
+  {:else if section === 'creators'}
+    <CreatorCodes
+      creatorCodes={data.creatorCodes}
+      creatorCodeCount={data.creatorCodeCount}
+      page={currentPage}
+      totalPage={data.totalPage}
+      search={currentSearch}
+      status={currentStatus}
+      {section}
+      {ctx}
+      onEdit={openCreatorEdit}
+      onRedemptions={(row) => openRedemptions('creator-codes', row)}
+      onDelete={(row) => remove('creator', row, data.creatorCodes?.length ?? 0)} />
+  {:else}
+    <CreatorPayouts
+      creators={data.creators}
+      currency={data.currency}
+      filters={data.filters}
+      {user}
+      onPayout={openPayout} />
+  {/if}
 </MarketLayout>
 
-<CreateDiscountModal isEdit={discountEdit} discount={selectedDiscount} {currencySymbol} onSaved={refresh} />
-<CreateCouponModal isEdit={couponEdit} coupon={selectedCoupon} {currencySymbol} onSaved={refresh} />
-<CreateCreatorCodeModal isEdit={creatorEdit} creatorCode={selectedCreator} {currencySymbol} onSaved={refresh} />
+<ConfirmModal bind:this={confirmModal} />
+<RedemptionsModal bind:this={redemptionsModal} {ctx} />
+<PayoutModal bind:this={payoutModal} {ctx} onSaved={refresh} />
+<CreateDiscountModal isEdit={discountEdit} discount={selectedDiscount} {ctx} onSaved={refresh} />
+<CreateCouponModal isEdit={couponEdit} coupon={selectedCoupon} {ctx} onSaved={refresh} />
+<CreateCreatorCodeModal
+  isEdit={creatorEdit}
+  creatorCode={selectedCreator}
+  {ctx}
+  onSaved={refresh} />

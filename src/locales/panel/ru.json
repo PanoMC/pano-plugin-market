@@ -18,7 +18,8 @@
     "creator-codes": "Поиск игрока или кода...",
     "payment-methods": "Поиск способов оплаты...",
     "orders": "Поиск заказов...",
-    "credit-accounts": "Поиск игрока..."
+    "credit-accounts": "Поиск игрока...",
+    "creator-report": "Поиск игрока или кода..."
   },
   "pages": {
     "orders": {
@@ -932,6 +933,30 @@
       "table": {
         "balance-after": "Баланс после"
       }
+    },
+    "creator-detail": {
+      "title": "Доходы автора",
+      "creator-id": "Автор #{id}",
+      "available": "Доступно: {amount}",
+      "earning-count": "Доходов: {count}",
+      "payout-count": "Выплат: {count}",
+      "table": {
+        "order": "Заказ",
+        "base-amount": "Базовая сумма",
+        "commission": "Комиссия",
+        "amount": "Сумма",
+        "state": "Статус",
+        "date": "Дата",
+        "method": "Способ",
+        "note": "Заметка",
+        "paid-by": "Выплатил",
+        "paid-at": "Дата выплаты"
+      },
+      "cancel": "Отменить",
+      "cancel-title": "Отменить выплату",
+      "cancel-description": "Ожидающая выплата {amount} будет отменена, сумма снова станет доступной.",
+      "cancel-confirm": "Отменить выплату",
+      "toast-cancelled": "Выплата отменена."
     }
   },
   "common": {
@@ -1135,63 +1160,33 @@
       "title-edit": "Редактировать скидку",
       "title-create": "Создать скидку",
       "name-label": "Название скидки",
-      "value-placeholder": "Значение",
       "value-label": "Размер скидки",
-      "unit-percent": "Процент (%)",
-      "unit-fixed": "Фиксированная ({symbol})",
-      "unit-label": "Единица",
       "min-payment": "Мин. сумма корзины",
       "scope-all": "Все товары",
       "scope-products": "Выбранные товары",
       "scope-categories": "Выбранные категории",
-      "category-search-placeholder": "Поиск категории...",
-      "no-results": "Ничего не найдено.",
-      "expiry-unlimited": "Бессрочно",
-      "start-date": "Дата начала",
-      "expiry-date": "Дата окончания",
-      "limit-unlimited": "Без лимита",
       "usage-limit": "Лимит использования",
-      "toast-name-required": "Название скидки обязательно.",
-      "toast-value-required": "Размер скидки обязателен.",
       "toast-updated": "Скидка обновлена.",
       "toast-created": "Скидка создана.",
-      "toast-save-error": "Произошла ошибка при сохранении скидки."
+      "show-badge": "Показывать значок скидки"
     },
     "coupon": {
-      "toast-code-required": "Код купона обязателен.",
-      "toast-discount-required": "Значение скидки обязательно.",
-      "toast-code-exists": "Этот код уже используется.",
-      "toast-save-error": "Произошла ошибка при сохранении купона.",
       "toast-updated": "Купон обновлён.",
       "toast-created": "Купон создан.",
       "edit-heading": "Редактировать код купона",
       "create-heading": "Создать код купона",
       "name": "Название купона",
       "code": "Код купона",
-      "code-placeholder": "Введите код купона",
       "generate-code": "Сгенерировать код",
       "all-products": "Все товары",
       "selected-products": "Выбранные товары",
       "discount-value": "Значение скидки",
-      "unit-percent": "Процент (%)",
-      "unit-fixed": "Фиксированная ({symbol})",
-      "unit": "Единица",
       "min-cart-amount": "Мин. сумма корзины",
-      "no-expiry": "Бессрочно",
-      "start-date": "Дата начала",
-      "end-date": "Дата окончания",
-      "no-limit": "Без лимита",
       "usage-limit": "Лимит использования",
       "per-customer-unlimited": "Без лимита на клиента",
       "per-customer-limit": "Лимит на клиента"
     },
     "creator-code": {
-      "toast-creator-required": "Реферальный игрок обязателен.",
-      "toast-code-required": "Код купона обязателен.",
-      "toast-discount-required": "Значение скидки обязательно.",
-      "toast-commission-range": "Ставка комиссии должна быть от 0 до 100.",
-      "toast-code-exists": "Этот код уже используется.",
-      "toast-save-error": "Произошла ошибка при сохранении реферального кода.",
       "toast-updated": "Реферальный код обновлён.",
       "toast-created": "Реферальный код создан.",
       "heading-edit": "Редактировать реферальный код",
@@ -1201,14 +1196,9 @@
       "code-label": "Код купона",
       "generate-title": "Сгенерировать код",
       "discount-label": "Значение скидки",
-      "unit-percent": "Процент (%)",
-      "unit-fixed": "Фиксированная ({symbol})",
-      "unit-label": "Единица",
-      "no-expiry": "Без срока",
-      "start-date": "Дата начала",
-      "end-date": "Дата окончания",
-      "no-limit": "Без лимита",
-      "usage-limit": "Лимит использования"
+      "usage-limit": "Лимит использования",
+      "account-found": "У игрока есть аккаунт Pano.",
+      "account-missing": "Аккаунта Pano нет: без дохода в профиле и выплат кредитами."
     },
     "order-filters": {
       "title": "Фильтр заказов",
@@ -1503,6 +1493,53 @@
         "note-TOO_SHORT": "Причина должна содержать не менее 3 символов.",
         "note-TOO_LONG": "Причина не может быть длиннее 255 символов."
       }
+    },
+    "discount-form": {
+      "start-date": "Дата начала",
+      "end-date": "Дата окончания",
+      "unit": "Единица",
+      "unit-percent": "Процент (%)",
+      "unit-fixed": "Фиксированная",
+      "unlimited-dates": "Без ограничения по дате",
+      "unlimited-usage": "Без ограничения использований",
+      "category-search": "Поиск категории...",
+      "no-results": "Ничего не найдено.",
+      "error": {
+        "REQUIRED": "Обязательное поле.",
+        "INVALID": "Введите корректное число.",
+        "TOO_LARGE": "Значение слишком велико (максимум 100%).",
+        "TOO_LONG": "Текст слишком длинный.",
+        "DATES_REVERSED": "Дата окончания не может быть раньше даты начала.",
+        "TAKEN": "Этот код уже используется."
+      }
+    },
+    "redemptions": {
+      "title": "Использования {code}",
+      "guest": "Гость",
+      "table": {
+        "order": "Заказ",
+        "player": "Игрок",
+        "amount": "Сумма",
+        "state": "Статус",
+        "date": "Дата"
+      }
+    },
+    "payout": {
+      "title": "Выплата автору",
+      "available": "Доступно: {amount}",
+      "amount": "Сумма",
+      "credits": "Будет выплачено: {credits}",
+      "credits-unknown": "Стоимость кредита неизвестна.",
+      "note": "Заметка (необязательно)",
+      "submit": "Выплатить",
+      "toast-paid": "Выплата записана.",
+      "error": {
+        "REQUIRED": "Укажите сумму.",
+        "INVALID": "Введите сумму больше 0 не более чем с 2 знаками после запятой.",
+        "EXCEEDS_AVAILABLE": "Сумма превышает доступный баланс.",
+        "NOTHING_AVAILABLE": "Нет суммы для выплаты.",
+        "TOO_MANY": "Слишком много действий."
+      }
     }
   },
   "settings": {
@@ -1706,7 +1743,8 @@
       "other-products": "Другие товары",
       "no-expiry": "Бессрочно",
       "start-label": "Нач.: {date}",
-      "end-label": "Оконч.: {date}"
+      "end-label": "Оконч.: {date}",
+      "delete-title": "Удалить скидку"
     },
     "coupons": {
       "toast-load-error": "Произошла ошибка при загрузке купонов.",
@@ -1722,7 +1760,9 @@
       },
       "validity-none": "Бессрочно",
       "validity-start": "Начало: {date}",
-      "validity-end": "Конец: {date}"
+      "validity-end": "Конец: {date}",
+      "delete-title": "Удалить код купона",
+      "redemptions": "Использования"
     },
     "creators": {
       "toast-load-error": "Произошла ошибка при загрузке реферальных кодов.",
@@ -1741,7 +1781,26 @@
       },
       "no-expiry": "Бессрочно",
       "start-date": "Нач.: {date}",
-      "end-date": "Кон.: {date}"
+      "end-date": "Кон.: {date}",
+      "delete-title": "Удалить код автора",
+      "redemptions": "Использования",
+      "view-earnings": "Показать доходы"
+    },
+    "payouts": {
+      "count": "Авторов: {count}",
+      "date-range": "Период",
+      "export-csv": "Экспорт CSV",
+      "view-earnings": "Показать доходы",
+      "pay-out": "Выплатить",
+      "table": {
+        "creator": "Автор",
+        "code": "Код",
+        "uses": "Использований",
+        "revenue": "Выручка",
+        "earned": "Заработано",
+        "paid-out": "Выплачено",
+        "available": "Доступно"
+      }
     }
   },
   "nav-overview": "Обзор",
@@ -2184,6 +2243,16 @@
       "CREATOR_PAYOUT": "Выплата автору",
       "EXTERNAL_IN": "Ввод с сервера",
       "EXTERNAL_OUT": "Вывод на сервер"
+    },
+    "redemption": {
+      "HELD": "Зарезервировано",
+      "APPLIED": "Применено",
+      "RELEASED": "Освобождено"
+    },
+    "payout-method": {
+      "CREDIT": "Кредиты",
+      "ACTION": "Действия",
+      "MANUAL": "Вручную"
     }
   },
   "alerts": {

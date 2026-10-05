@@ -1,8 +1,9 @@
 <script>
   import { CardHeader, CardFilters, CardFiltersItem, SearchInput, Pagination, NoContent } from '@panomc/sdk/components/panel';
   import { base, goto } from '@panomc/sdk/svelte';
-  import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
-  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
+  import { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { _ } from '../../../i18n';
+  import { currentLocale, fmt } from '../../utils/locale.js';
 
   // All view state (page/search/status) is URL-driven: the page load() reads the
   // query params and passes the resulting list + the current filter values down as
@@ -17,27 +18,23 @@
     search = '',
     status = 'all', // 'all' | 'ACTIVE' | 'INACTIVE'
     section = 'creators',
-    currencySymbol = '', // dynamic SALES-currency symbol from GET /settings
+    ctx = null, // GET /context (currency code)
+    onDelete = () => {},
+    onRedemptions = () => {},
     onEdit = () => {},
   } = $props();
 
   // Reflects the in-flight goto() so SearchInput keeps showing its spinner.
   let isSearching = $state(false);
 
-  // Epoch millis -> Turkish short date (e.g. "01 Haz 2026"); '-' when unset.
+  // Epoch millis -> localized short date (e.g. "01 Haz 2026"); '-' when unset.
   function formatDate(epoch) {
     if (!epoch) return '-';
-    return new Date(epoch).toLocaleDateString('tr-TR', {
+    return new Date(epoch).toLocaleDateString(currentLocale(), {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
     });
-  }
-
-  // Plain decimal money -> "725 {symbol}" using the dynamic SALES-currency symbol.
-  function formatMoney(value, symbol) {
-    const num = Number(value ?? 0);
-    return new Intl.NumberFormat('tr-TR').format(num) + ' ' + symbol;
   }
 
   // Navigate to the discounts list URL for the given page/search/status, keeping
@@ -66,29 +63,6 @@
     navigate({ status: value, page: 1 });
   }
 
-  async function deleteCreatorCode(item) {
-    if (!window.confirm($_('discounts.creators.confirm-delete', { values: { code: item.code } }))) {
-      return;
-    }
-
-    try {
-      const result = await ApiUtil.delete({
-        path: `/api/panel/market/creator-codes/${item.id}`,
-      });
-
-      if (result.error) throw result.error;
-
-      showSuccessToast($_('discounts.creators.toast-delete-success'));
-      // The deleted row may have been the last on this page; step back so the
-      // reload does not request a now-out-of-range page (backend -> PAGE_NOT_FOUND).
-      const targetPage = creatorCodes.length === 1 && page > 1 ? page - 1 : page;
-      await navigate({ page: targetPage });
-    } catch (e) {
-      console.error('[Market] Failed to delete creator code', e);
-      showErrorToast($_('discounts.creators.toast-delete-error'));
-    }
-  }
-
   function onPageClick(pageNum) {
     navigate({ page: pageNum });
   }
@@ -103,6 +77,7 @@
       <SearchInput
         initialValue={search}
         searching={isSearching}
+        autofocus
         placeholderKey="plugins.pano-plugin-market.search.creator-codes"
         onchange={onSearchChange} />
     </div>
@@ -114,7 +89,7 @@
   </CardHeader>
 
   {#if creatorCodes.length === 0}
-    <NoContent />
+    <NoContent icon="" />
   {:else}
     <div class="table-responsive">
       <table class="table table-hover align-middle text-nowrap">
@@ -145,11 +120,19 @@
                     <span class="fas fa-ellipsis-v"></span>
                   </button>
                   <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                    <a class="dropdown-item" href="{base}/market/discounts/creator/{item.id}">
+                      <i class="fas fa-chart-line me-2"></i>
+                      {$_('discounts.creators.view-earnings')}
+                    </a>
+                    <button type="button" class="dropdown-item" onclick={() => onRedemptions(item)}>
+                      <i class="fas fa-receipt me-2"></i>
+                      {$_('discounts.creators.redemptions')}
+                    </button>
                     <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createCreatorCodeModal" onclick={() => onEdit(item)}>
                       <i class="fas fa-pen me-2"></i>
                       {$_('common.edit')}
                     </button>
-                    <button type="button" class="dropdown-item text-danger" onclick={() => deleteCreatorCode(item)}>
+                    <button type="button" class="dropdown-item text-danger" onclick={() => onDelete(item)}>
                       <i class="fas fa-trash me-2"></i>
                       {$_('common.delete')}
                     </button>
@@ -157,21 +140,21 @@
                 </div>
               </th>
               <td>
-                <a href="#" class="text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCreatorCodeModal" onclick={(e) => { e.preventDefault(); onEdit(item); }}>
+                <button type="button" class="btn btn-link p-0 border-0 align-baseline text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCreatorCodeModal" onclick={() => onEdit(item)}>
                   {item.creator}
-                </a>
+                </button>
               </td>
               <td>
-                <a href="#" class="font-monospace text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCreatorCodeModal" onclick={(e) => { e.preventDefault(); onEdit(item); }}>
+                <button type="button" class="btn btn-link p-0 border-0 align-baseline font-monospace text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCreatorCodeModal" onclick={() => onEdit(item)}>
                   {item.code}
-                </a>
+                </button>
               </td>
               <td>
                 <span class="font-monospace">
                   {#if item.unit === 'PERCENT'}
                     %{item.discount}
                   {:else}
-                    {item.discount} {currencySymbol}
+                    {fmt.money(item.discount, ctx?.currency)}
                   {/if}
                 </span>
               </td>
@@ -188,7 +171,7 @@
                 </span>
               </td>
               <td>
-                <span class="font-monospace">{formatMoney(item.earnings, currencySymbol)}</span>
+                <span class="font-monospace">{fmt.money(item.earnings, ctx?.currency)}</span>
               </td>
               <td>
                 {#if item.status === 'ACTIVE'}
@@ -212,6 +195,7 @@
         </tbody>
       </table>
     </div>
+    {#if totalPage > 1}
     <div class="card-footer">
        <Pagination
           {page}
@@ -220,5 +204,6 @@
           on:lastPageClick={() => onPageClick(totalPage)}
           on:pageLinkClick={(event) => onPageClick(event.detail.page)} />
     </div>
+    {/if}
   {/if}
 </div>

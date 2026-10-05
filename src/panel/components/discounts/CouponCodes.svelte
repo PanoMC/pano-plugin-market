@@ -1,8 +1,9 @@
 <script>
   import { CardHeader, CardFilters, CardFiltersItem, SearchInput, Pagination, NoContent } from '@panomc/sdk/components/panel';
   import { base, goto } from '@panomc/sdk/svelte';
-  import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
-  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
+  import { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { _ } from '../../../i18n';
+  import { currentLocale, fmt } from '../../utils/locale.js';
 
   // All view state (page/search/status) is URL-driven: the page load() reads the
   // query params and passes the resulting list + the current filter values down as
@@ -17,17 +18,19 @@
     search = '',
     status = 'all', // 'all' | 'ACTIVE' | 'INACTIVE'
     section = 'coupons',
-    currencySymbol = '', // dynamic SALES-currency symbol from GET /settings
+    ctx = null, // GET /context (currency code)
+    onDelete = () => {},
+    onRedemptions = () => {},
     onEdit = () => {},
   } = $props();
 
   // Reflects the in-flight goto() so SearchInput keeps showing its spinner.
   let isSearching = $state(false);
 
-  // Epoch millis -> Turkish short date (e.g. "01 Haz 2026"); '-' when unset.
+  // Epoch millis -> localized short date (e.g. "01 Haz 2026"); '-' when unset.
   function formatDate(epoch) {
     if (!epoch) return '-';
-    return new Date(epoch).toLocaleDateString('tr-TR', {
+    return new Date(epoch).toLocaleDateString(currentLocale(), {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
@@ -60,29 +63,6 @@
     navigate({ status: value, page: 1 });
   }
 
-  async function deleteCoupon(coupon) {
-    if (!window.confirm($_('discounts.coupons.confirm-delete', { values: { code: coupon.code } }))) {
-      return;
-    }
-
-    try {
-      const result = await ApiUtil.delete({
-        path: `/api/panel/market/coupons/${coupon.id}`,
-      });
-
-      if (result.error) throw result.error;
-
-      showSuccessToast($_('discounts.coupons.toast-delete-success'));
-      // The deleted row may have been the last on this page; step back so the
-      // reload does not request a now-out-of-range page (backend -> PAGE_NOT_FOUND).
-      const targetPage = coupons.length === 1 && page > 1 ? page - 1 : page;
-      await navigate({ page: targetPage });
-    } catch (e) {
-      console.error('[Market] Failed to delete coupon', e);
-      showErrorToast($_('discounts.coupons.toast-delete-error'));
-    }
-  }
-
   function onPageClick(pageNum) {
     navigate({ page: pageNum });
   }
@@ -97,6 +77,7 @@
       <SearchInput
         initialValue={search}
         searching={isSearching}
+        autofocus
         placeholderKey="plugins.pano-plugin-market.search.coupons"
         onchange={onSearchChange} />
     </div>
@@ -108,7 +89,7 @@
   </CardHeader>
 
   {#if coupons.length === 0}
-    <NoContent />
+    <NoContent icon="" />
   {:else}
     <div class="table-responsive">
       <table class="table table-hover align-middle text-nowrap">
@@ -136,11 +117,15 @@
                     <span class="fas fa-ellipsis-v"></span>
                   </button>
                   <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                    <button type="button" class="dropdown-item" onclick={() => onRedemptions(coupon)}>
+                      <i class="fas fa-receipt me-2"></i>
+                      {$_('discounts.coupons.redemptions')}
+                    </button>
                     <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createCouponModal" onclick={() => onEdit(coupon)}>
                       <i class="fas fa-pen me-2"></i>
                       {$_('common.edit')}
                     </button>
-                    <button type="button" class="dropdown-item text-danger" onclick={() => deleteCoupon(coupon)}>
+                    <button type="button" class="dropdown-item text-danger" onclick={() => onDelete(coupon)}>
                       <i class="fas fa-trash me-2"></i>
                       {$_('common.delete')}
                     </button>
@@ -148,16 +133,16 @@
                 </div>
               </th>
               <td>
-                <a href="#" class="font-monospace text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCouponModal" onclick={(e) => { e.preventDefault(); onEdit(coupon); }}>
+                <button type="button" class="btn btn-link p-0 border-0 align-baseline font-monospace text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCouponModal" onclick={() => onEdit(coupon)}>
                   {coupon.code}
-                </a>
+                </button>
               </td>
               <td>
                 <span class="font-monospace">
                   {#if coupon.unit === 'PERCENT'}
                     %{coupon.discount}
                   {:else}
-                    {coupon.discount} {currencySymbol}
+                    {fmt.money(coupon.discount, ctx?.currency)}
                   {/if}
                 </span>
               </td>
@@ -192,6 +177,7 @@
         </tbody>
       </table>
     </div>
+    {#if totalPage > 1}
     <div class="card-footer">
        <Pagination
           {page}
@@ -200,5 +186,6 @@
           on:lastPageClick={() => onPageClick(totalPage)}
           on:pageLinkClick={(event) => onPageClick(event.detail.page)} />
     </div>
+    {/if}
   {/if}
 </div>
