@@ -848,6 +848,64 @@
       "cta": "İtiraz Aç",
       "toast": "İtiraz açıldı."
     },
+    "refund": {
+      "title": "Siparişi İade Et",
+      "mode": {
+        "FULL": "Kalan Tutarın Tamamı",
+        "AMOUNT": "Tutar",
+        "ITEMS": "Ürünler"
+      },
+      "amount": "Tutar",
+      "items": {
+        "quantity": "Adet",
+        "of": "/ {count}"
+      },
+      "invalid-amount": "İade edebileceğiniz en yüksek tutar {max}.",
+      "gateway": "Ödeme Yöntemi",
+      "credits": "Kredi",
+      "total": "Toplam",
+      "split-warning": {
+        "title": "Bu İade Bölünüyor",
+        "body": "Bu sipariş kısmen veya tamamen mağaza kredisiyle ödendi. Kredi kısmı alıcının kredi hesabına döner, yalnızca kalanı ödeme yöntemi üzerinden iade edilir.",
+        "ack": "Bu iadenin bölündüğünü anlıyorum"
+      },
+      "override": "Bölmeyi Değiştir",
+      "override-gateway": "Ödeme yöntemi (en fazla {max})",
+      "override-credits": "Kredi (en fazla {max})",
+      "revoke": "Teslim Edilen Ürünleri Geri Al",
+      "restock": "Stoğa Geri Ekle",
+      "manual": "Para Ödeme Yöntemi Dışında İade Edildi",
+      "revoke-first": "Önce ürünleri geri al, sonra iade et",
+      "cascade": {
+        "revoke": "Yükseltilen rütbeyi de geri al",
+        "keep": "Kalsın, ödenen değerini düşür"
+      },
+      "reason": "Neden",
+      "reason-required": "Neden (manuel iade için zorunlu)",
+      "cta": "{total} İade Et",
+      "cta-plain": "İade Et",
+      "toast-success": "İade tamamlandı.",
+      "toast-pending": "İade başlatıldı. Ödeme sağlayıcısı hâlâ işliyor.",
+      "error": {
+        "INVALID": "Geçerli bir tutar girin.",
+        "ABOVE_MAX": "İade edebileceğiniz en yüksek tutardan fazla ({max}).",
+        "ZERO_TOTAL": "İade tutarı sıfırdan büyük olmalı.",
+        "limit": "Hâlâ iade edilebilecek tutardan fazla.",
+        "items": "Kalan miktarı aşmayan en az bir adet girin.",
+        "reason-manual": "Manuel iade için 3 ile 255 karakter arasında bir neden gerekli.",
+        "reason-long": "Neden en fazla 255 karakter olabilir."
+      },
+      "warning": {
+        "CREDIT_ONLY_REFUND": "Bu iade yalnızca kredi döndürür. Ödeme yöntemi üzerinden para iade edilmez.",
+        "CASHBACK_REVERSAL": "{amount} tutarındaki nakit iadesi geri alınır. Bunun {shortfall} kadarı harcanmış ve geri alınamaz.",
+        "CREDIT_CLAWBACK": "Bu siparişin verdiği krediler geri alınır: {amount}. Bunun {shortfall} kadarı harcanmış ve geri alınamaz.",
+        "GATEWAY_PARTIAL_REFUND_NOT_SUPPORTED": "Ödeme yöntemi ödemenin bir kısmını iade edemez. Bunun yerine manuel iade edin.",
+        "CREDIT_ACCOUNT_CLOSED": "Alıcının hesabı anonimleştirildi, bu yüzden {credits} iade edilemez ve kaybolur.",
+        "UPGRADE_DEPENDENT": "Bir yükseltme siparişi ({order}) bu satın alıma bağlı. Fiyatı {deduction} düşürülmüştü. Ona ne olacağını seçin.",
+        "OLDER_SUBSCRIPTION_PERIOD": "Bu eski bir abonelik dönemi. Teslim edilen ürünler geri alınmaz.",
+        "UNKNOWN": "İadenin, bu panel sürümünün tanımadığı bir uyarısı var. Sayfayı yenileyin."
+      }
+    },
     "rerun": {
       "title": "Teslimatı Yeniden Çalıştır",
       "scope": {

@@ -848,6 +848,64 @@
       "cta": "Open Dispute",
       "toast": "Dispute opened."
     },
+    "refund": {
+      "title": "Refund Order",
+      "mode": {
+        "FULL": "Full Remaining Amount",
+        "AMOUNT": "Amount",
+        "ITEMS": "Items"
+      },
+      "amount": "Amount",
+      "items": {
+        "quantity": "Quantity",
+        "of": "of {count}"
+      },
+      "invalid-amount": "The most you can refund is {max}.",
+      "gateway": "Gateway",
+      "credits": "Credits",
+      "total": "Total",
+      "split-warning": {
+        "title": "This Refund Is Split",
+        "body": "This order was paid partly or fully with store credits. The credit part goes back to the buyer's credit account, only the rest goes back through the payment method.",
+        "ack": "I understand this refund is split"
+      },
+      "override": "Override Split",
+      "override-gateway": "Gateway (max {max})",
+      "override-credits": "Credits (max {max})",
+      "revoke": "Revoke Delivered Items",
+      "restock": "Restock",
+      "manual": "Money Was Returned Outside The Gateway",
+      "revoke-first": "Take the goods back first, then refund",
+      "cascade": {
+        "revoke": "Also revoke the upgraded rank",
+        "keep": "Keep it and reduce its paid value"
+      },
+      "reason": "Reason",
+      "reason-required": "Reason (required for a manual refund)",
+      "cta": "Refund {total}",
+      "cta-plain": "Refund",
+      "toast-success": "Refund completed.",
+      "toast-pending": "Refund started. The payment provider is still processing it.",
+      "error": {
+        "INVALID": "Enter a valid amount.",
+        "ABOVE_MAX": "Higher than the most you can refund ({max}).",
+        "ZERO_TOTAL": "The refund must be above zero.",
+        "limit": "Higher than what can still be refunded.",
+        "items": "Enter at least one quantity within what is left.",
+        "reason-manual": "A manual refund needs a reason of 3 to 255 characters.",
+        "reason-long": "The reason can be 255 characters at most."
+      },
+      "warning": {
+        "CREDIT_ONLY_REFUND": "This refund only returns credits. No money goes back through the payment method.",
+        "CASHBACK_REVERSAL": "The cashback of {amount} is taken back. {shortfall} of it is already spent and cannot be taken back.",
+        "CREDIT_CLAWBACK": "Credits granted by this order are taken back: {amount}. {shortfall} of it is already spent and cannot be taken back.",
+        "GATEWAY_PARTIAL_REFUND_NOT_SUPPORTED": "The payment method cannot refund part of a payment. Refund manually instead.",
+        "CREDIT_ACCOUNT_CLOSED": "The buyer's account was anonymised, so {credits} cannot be returned and are forfeited.",
+        "UPGRADE_DEPENDENT": "An upgrade order ({order}) depends on this purchase. Its price was reduced by {deduction}. Choose what happens to it.",
+        "OLDER_SUBSCRIPTION_PERIOD": "This is an older subscription period. Delivered items are not revoked.",
+        "UNKNOWN": "The refund has a warning this panel version does not know. Reload the page."
+      }
+    },
     "rerun": {
       "title": "Re-run Delivery",
       "scope": {
