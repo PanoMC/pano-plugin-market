@@ -243,6 +243,73 @@ class PricingEngineTest {
     }
 
     @Test
+    fun `one owned tier finances only one of two tier lines of its category`() {
+        // owns T1 (50.00, entitlement 501); the cart holds T2 (120.00) and T3 (200.00) of the same category
+        val r = price(line(T2), line(T3), buyer = PricingFixtures.buyer(listOf(owned(501, T1, 5000))))
+        assertEquals(5000L, r.upgradeDiscount)
+        assertEquals(27000L, r.itemsAmount) // 120.00 + 200.00 - 50.00, not 220.00
+        // the line of the highest rank claims the entitlement, the other one pays its full price and links nothing
+        assertEquals(5000L, r.key("L23").upgradeAmount)
+        assertEquals(501L, r.key("L23").upgradeFromEntitlementId)
+        assertEquals(15000L, r.key("L23").unitPrice)
+        assertEquals(0L, r.key("L22").upgradeAmount)
+        assertNull(r.key("L22").upgradeFromEntitlementId)
+        assertEquals(12000L, r.key("L22").unitPrice)
+        // the order of the lines does not matter
+        val reversed = price(line(T3), line(T2), buyer = PricingFixtures.buyer(listOf(owned(501, T1, 5000))))
+        assertEquals(27000L, reversed.itemsAmount)
+        assertEquals(501L, reversed.key("L23").upgradeFromEntitlementId)
+        assertNull(reversed.key("L22").upgradeFromEntitlementId)
+    }
+
+    @Test
+    fun `two lines of one tier product with different keys deduct the owned tier once, the first line claims it`() {
+        val buyer = PricingFixtures.buyer(listOf(owned(501, T1, 5000)))
+        val r = price(line(T2, key = "L22a"), line(T2, key = "L22b"), buyer = buyer)
+        assertEquals(5000L, r.upgradeDiscount)
+        assertEquals(19000L, r.itemsAmount) // 2 x 120.00 - 50.00
+        assertEquals(7000L, r.key("L22a").unitPrice)
+        assertEquals(501L, r.key("L22a").upgradeFromEntitlementId)
+        assertEquals(12000L, r.key("L22b").unitPrice)
+        assertNull(r.key("L22b").upgradeFromEntitlementId)
+
+        // mode FULL records the link on the claimant only, too: an entitlement has one successor (replacedById)
+        val full = PricingFixtures.tier(22, 12000, 2, UpgradeMode.FULL)
+        val f = price(line(full, key = "a"), line(full, key = "b"), line(full, key = "c"), buyer = buyer)
+        assertEquals(0L, f.upgradeDiscount)
+        assertEquals(listOf<Long?>(501L, null, null), f.lines.map { it.upgradeFromEntitlementId })
+    }
+
+    @Test
+    fun `every tiered category has its own claimant and each owned tier finances one line`() {
+        val other = PricingFixtures.Product(41, "Other tier", 8000, 0, listOf(11), tier = TierInfo(11, 2, UpgradeMode.DIFFERENCE))
+        val buyer = PricingFixtures.buyer(listOf(owned(501, T1, 5000), OwnedTier(502, 11, 1, 3000)))
+        val r = price(line(T2), line(other), line(T3), buyer = buyer)
+        assertEquals(8000L, r.upgradeDiscount) // 50.00 in category 10 (T3 claims), 30.00 in category 11
+        assertEquals(501L, r.key("L23").upgradeFromEntitlementId)
+        assertEquals(502L, r.key("L41").upgradeFromEntitlementId)
+        assertNull(r.key("L22").upgradeFromEntitlementId)
+        assertEquals(12000L + 5000L + 15000L, r.itemsAmount)
+        val links = r.lines.mapNotNull { it.upgradeFromEntitlementId }
+        assertEquals(links.size, links.toSet().size)
+    }
+
+    @Test
+    fun `a line that is excluded from the sums does not claim the owned tier`() {
+        val cfg = config(mode = CurrencyMode.MULTI, fallback = MultiCurrencyFallback.HIDE)
+        // T3 has no USD price and is hidden, T2 has one: T2 is the only priced tier line and claims the entitlement
+        val r = price(
+            line(T2, currencyPrices = mapOf("USD" to 300)), line(T3), config = cfg, currency = "USD",
+            buyer = PricingFixtures.buyer(listOf(owned(501, T1, 5000)))
+        )
+        assertTrue(r.key("L23").excluded)
+        assertNull(r.key("L23").upgradeFromEntitlementId)
+        assertEquals(125L, r.key("L22").upgradeAmount) // 50.00 TRY at 0.025 = 1.25 USD
+        assertEquals(501L, r.key("L22").upgradeFromEntitlementId)
+        assertEquals(175L, r.itemsAmount)
+    }
+
+    @Test
     fun `the upgrade is not deducted from a subscription line, under EXTERNAL pricing, or for profiles without upgrades`() {
         val sub = PricingFixtures.Product(31, "Sub tier", 3000, 0, listOf(10), subscription = true, tier = TierInfo(10, 2, UpgradeMode.DIFFERENCE))
         val buyer = PricingFixtures.buyer(listOf(owned(501, T1, 5000)))
@@ -387,6 +454,42 @@ class PricingEngineTest {
         val r = price(line(P2, 3), config = config(mode = CurrencyMode.MULTI), currency = "USD")
         assertEquals(25L, r.key("L2").listUnitPrice) // 0.24975 rounds up to 0.25
         assertEquals(75L, r.itemsAmount) // total 0.75
+    }
+
+    @Test
+    fun `MULTI fallback CONVERT never turns a priced product into a free one, a free product stays free`() {
+        val cfg = config(mode = CurrencyMode.MULTI)
+        // P8 costs 0.05 TRY: 0.00125 USD and 0.225 JPY round to 0, so one quantum is charged
+        val usd = price(line(P8), config = cfg, currency = "USD")
+        assertEquals(1L, usd.key("L8").listUnitPrice) // 0.01 USD
+        assertEquals(1L, usd.itemsAmount)
+        val jpy = price(line(P8), config = cfg, currency = "JPY")
+        assertEquals(100L, jpy.key("L8").listUnitPrice) // 1 JPY
+        assertEquals(100L, jpy.itemsAmount)
+        // the whole of a big quantity is no longer free either
+        val bulk = price(line(P8, qty = 100_000), config = cfg, currency = "USD")
+        assertEquals(100_000L, bulk.itemsAmount)
+        assertEquals(1L, bulk.subtotal / 100_000L)
+        // a base price of 0 is a free product: it stays 0 in every currency
+        for (c in listOf("USD", "JPY")) {
+            val free = price(line(P8, basePrice = 0), config = cfg, currency = c)
+            assertEquals(0L, free.key("L8").listUnitPrice, c)
+            assertEquals(0L, free.itemsAmount, c)
+        }
+        // an explicit price of 0 in the currency is the admin's decision and stays 0
+        assertEquals(0L, price(line(P8, currencyPrices = mapOf("USD" to 0)), config = cfg, currency = "USD").itemsAmount)
+        // at the rounding edge the plain half-up result is kept (rows 61 and 66 have their own tests): 0.20 TRY = 0.005 USD
+        assertEquals(1L, price(line(P8, basePrice = 20), config = cfg, currency = "USD").key("L8").listUnitPrice)
+        assertEquals(25L, price(line(P2), config = cfg, currency = "USD").key("L2").listUnitPrice)
+    }
+
+    @Test
+    fun `the CONVERT floor is one quantum of the order currency, whole units with removeCents`() {
+        val cfg = config(mode = CurrencyMode.MULTI, removeCents = true)
+        // 9.99 TRY = 0.24975 USD, removeCents rounds USD to whole units: 0 -> floored to 1.00 USD
+        assertEquals(100L, price(line(P2), config = cfg, currency = "USD").key("L2").listUnitPrice)
+        // 100.00 TRY = 2.50 USD rounds half up to 3.00 USD (not floored, well above one unit)
+        assertEquals(300L, price(line(P1, currencyPrices = emptyMap()), config = cfg, currency = "USD").key("L1").listUnitPrice)
     }
 
     @Test
@@ -741,6 +844,25 @@ class PricingEngineTest {
             val priced = result.lines.filter { it.kind != OrderItemKind.BUNDLE_CHILD }
             assertEquals(input.lines.size, priced.size, where)
 
+            // one owned entitlement finances at most one line and has one successor: no id is linked twice, and what
+            // is deducted for it never exceeds what it was worth
+            val links = priced.mapNotNull { it.upgradeFromEntitlementId }
+            assertEquals(links.size, links.toSet().size, "$where an entitlement is linked from two lines")
+            val deductedFor = HashMap<Long, BigInteger>()
+            for (l in priced) {
+                val id = l.upgradeFromEntitlementId ?: continue
+                deductedFor.merge(id, BigInteger.valueOf(l.upgradeAmount)) { a, b -> a + b }
+            }
+            for ((id, deducted) in deductedFor) {
+                val worth = input.buyer.recipientTiers.single { it.entitlementId == id }.pricePaid
+                assertTrue(deducted <= BigInteger.valueOf(result.conversions.toOrder(worth)), "$where entitlement $id deducted $deducted")
+            }
+            val tierLines = input.lines.indices.filter { input.lines[it].tier != null && !priced[it].excluded }
+            if (tierLines.groupBy { input.lines[it].tier!!.categoryId }.values.any { it.size > 1 }) {
+                hit("competing tier lines")
+                if (links.isNotEmpty()) hit("competing tier lines, one linked")
+            }
+
             val q = result.conversions.oq
             var sumSubtotal = BigInteger.ZERO
             var sumDiscount = BigInteger.ZERO
@@ -783,6 +905,13 @@ class PricingEngineTest {
                     hit(if (won.unit == DiscountUnit.PERCENT) "percent winner" else "fixed winner")
                     if (input.discounts.size > 1) hit("winner among several discounts")
                 }
+                // a priced product never converts to 0: at least one quantum
+                if (!line.excluded && input.lines[i].basePrice > 0 && result.currency != result.baseCurrency &&
+                    input.lines[i].currencyPrices[result.currency] == null
+                ) {
+                    assertTrue(line.listUnitPrice >= q, "$tag converted to ${line.listUnitPrice}")
+                    if (result.conversions.toOrder(input.lines[i].basePrice) == 0L) hit("cheap CONVERT line floored")
+                }
                 if (line.upgradeUnitAmount > 0) hit("upgrade deducted")
                 if (line.upgradeFromEntitlementId != null && line.upgradeUnitAmount == 0L) hit("upgrade linked, nothing deducted")
                 if (line.discountId == null && line.unitDiscount > 0) hit("gift line")
@@ -808,7 +937,8 @@ class PricingEngineTest {
         for (branch in listOf(
             "foreign order currency", "removeCents", "gift code", "external pricing", "excluded line", "bundle",
             "percent winner", "fixed winner", "winner among several discounts", "upgrade deducted",
-            "upgrade linked, nothing deducted", "gift line"
+            "upgrade linked, nothing deducted", "gift line", "competing tier lines", "competing tier lines, one linked",
+            "cheap CONVERT line floored"
         )) {
             assertTrue((seen[branch] ?: 0) >= 100, "the loop barely exercised '$branch': ${seen[branch]}")
         }
@@ -838,7 +968,7 @@ class PricingEngineTest {
                 kindRoll < 82 -> LineKind.BUNDLE
                 else -> LineKind.CREDIT_PACK
             }
-            val tiered = kind == LineKind.PRODUCT && rnd.nextInt(8) == 0
+            val tiered = kind == LineKind.PRODUCT && rnd.nextInt(5) == 0
             val quantity = if (tiered) 1 else if (rnd.nextInt(20) == 0) 1 + rnd.nextInt(100_000) else 1 + rnd.nextInt(20)
             val big = quantity <= 1000 && rnd.nextInt(10) == 0
             val basePrice = when (rnd.nextInt(3)) {

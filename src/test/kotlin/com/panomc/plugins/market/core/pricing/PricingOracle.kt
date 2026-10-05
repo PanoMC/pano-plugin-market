@@ -52,7 +52,9 @@ object PricingOracle {
             val explicit = l.currencyPrices[currency]
             when {
                 explicit != null -> roundQ(big(explicit), BigInteger.ONE, oq) to false
-                cfg.multiCurrencyFallback == MultiCurrencyFallback.CONVERT -> toOrder(l.basePrice) to false
+                // a priced product costs at least one quantum, a free one stays free
+                cfg.multiCurrencyFallback == MultiCurrencyFallback.CONVERT ->
+                    (if (l.basePrice > 0) maxOf(oq, toOrder(l.basePrice)) else 0L) to false
                 else -> 0L to true
             }
         }
@@ -65,6 +67,15 @@ object PricingOracle {
         val gift = input.profile == PricingProfile.GIFT_CODE
         val linkOn = input.profile in setOf(PricingProfile.STOREFRONT, PricingProfile.PANEL, PricingProfile.INGAME) && !override
         val deductOn = linkOn && !external
+
+        // one owned entitlement finances one line: per tiered category the non-excluded tier line of the highest rank,
+        // a tie to the lowest index (read by index here, the engine reads it by line key)
+        val claimantIndex = HashSet<Int>()
+        input.lines.mapIndexed { i, l -> i to l.tier }
+            .filter { (i, t) -> t != null && !listed[i].second }
+            .groupBy { it.second!!.categoryId }
+            .values
+            .forEach { group -> claimantIndex += group.sortedWith(compareBy({ -it.second!!.tierRank }, { it.first })).first().first }
 
         val lines = input.lines.mapIndexed { i, l ->
             val (list, excluded) = listed[i]
@@ -100,7 +111,7 @@ object PricingOracle {
             var upgrade = 0L
             var from: Long? = null
             val tier = l.tier
-            if (tier != null && linkOn) {
+            if (tier != null && linkOn && i in claimantIndex) {
                 val owned = input.buyer.recipientTiers
                     .filter { it.tierCategoryId == tier.categoryId && it.tierRank < tier.tierRank }
                     .sortedWith(compareBy({ it.tierRank }, { it.entitlementId }))

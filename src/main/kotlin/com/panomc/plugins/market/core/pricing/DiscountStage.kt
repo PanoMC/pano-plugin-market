@@ -40,8 +40,30 @@ internal object DiscountStage {
         val upgradeLink: Boolean,
         /** ... and its price is deducted (also not `EXTERNAL`). */
         val upgradeDeduction: Boolean,
-        val recipientTiers: List<OwnedTier>
+        val recipientTiers: List<OwnedTier>,
+        /**
+         * Line keys that may claim an owned entitlement (see [upgradeClaimants]): any other tier line of the cart
+         * records no upgrade link and gets no deduction, so one owned entitlement finances at most one line.
+         */
+        val upgradeClaimants: Set<String>
     )
+
+    /**
+     * One owned entitlement finances **one** line per run (05 section 5.2): per tiered category the claimant is the
+     * non-excluded tier line with the highest `tierRank`, a tie goes to the first of the cart. Without it a cart with
+     * several tier lines of one category (Silver and Gold, or the same tier twice with different field values) would
+     * deduct the same owned tier on every line and link it to every new entitlement.
+     */
+    fun upgradeClaimants(listed: List<ListedLine>): Set<String> {
+        val claimant = HashMap<Long, ListedLine>()
+        for (l in listed) {
+            if (l.excluded) continue
+            val tier = l.line.tier ?: continue
+            val current = claimant[tier.categoryId]
+            if (current == null || tier.tierRank > current.line.tier!!.tierRank) claimant[tier.categoryId] = l
+        }
+        return claimant.values.mapTo(HashSet()) { it.line.lineKey }
+    }
 
     fun apply(listed: ListedLine, s: Settings): DiscountOutcome {
         if (listed.excluded) return DiscountOutcome.NONE
@@ -103,11 +125,12 @@ internal object DiscountStage {
     /**
      * Upgrade deduction for a tiered line (05 section 5.2): the highest owned lower tier of the same category (then the
      * highest entitlement id). `FULL` mode, a subscription line and a pricing mode that is not `MARKET` deduct
-     * nothing but still record the entitlement that is replaced.
+     * nothing but still record the entitlement that is replaced. Only the claimant line of its category
+     * ([upgradeClaimants]) takes part; the other tier lines of the category get neither deduction nor link.
      */
     private fun upgrade(line: LineInput, discounted: Long, s: Settings): Pair<Long, Long?> {
         val tier = line.tier ?: return 0L to null
-        if (!s.upgradeLink) return 0L to null
+        if (!s.upgradeLink || line.lineKey !in s.upgradeClaimants) return 0L to null
         val owned = s.recipientTiers
             .filter { it.tierCategoryId == tier.categoryId && it.tierRank < tier.tierRank }
             .maxWithOrNull(compareBy<OwnedTier>({ it.tierRank }, { it.entitlementId }))

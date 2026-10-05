@@ -56,7 +56,8 @@ object PricingEngine {
             fullGift = input.profile == PricingProfile.GIFT_CODE,
             upgradeLink = input.profile.upgrade && !overridden,
             upgradeDeduction = input.profile.upgrade && !overridden && !external,
-            recipientTiers = input.buyer.recipientTiers
+            recipientTiers = input.buyer.recipientTiers,
+            upgradeClaimants = DiscountStage.upgradeClaimants(listed)
         )
 
         val lines = ArrayList<PricedLine>(listed.size)

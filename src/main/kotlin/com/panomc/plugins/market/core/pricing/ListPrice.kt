@@ -20,7 +20,7 @@ internal object ListPrice {
      * c == base                          -> roundQ(basePrice, oq)
      * MULTI, c != base:
      *   1./2. LineInput.currencyPrices[c] (resolved by the caller, see CurrencyPriceResolver) -> roundQ(price, oq)
-     *   3. fallback CONVERT              -> toOrder(basePrice)
+     *   3. fallback CONVERT              -> basePrice > 0 ? max(oq, toOrder(basePrice)) : 0
      *   4. fallback HIDE                 -> line error NOT_IN_CURRENCY, excluded from every sum
      * CREDIT_TOPUP                       -> max(oq, toOrder(halfUp(topUpCredits * cv / 100)))
      * ```
@@ -45,7 +45,9 @@ internal object ListPrice {
         return when {
             explicit != null -> ListedLine(line, Rounding.roundQ(explicit, oq), false, emptyList())
             config.multiCurrencyFallback == MultiCurrencyFallback.CONVERT ->
-                ListedLine(line, conversions.toOrder(line.basePrice), false, emptyList())
+                // a priced product never converts to 0: the buyer picks the currency, and 0.05 TRY would be free in
+                // USD (0.00125) and JPY (0.225); a free product (base price 0) stays free
+                ListedLine(line, if (line.basePrice > 0L) maxOf(oq, conversions.toOrder(line.basePrice)) else 0L, false, emptyList())
             else -> ListedLine(line, 0L, excluded = true, errors = listOf(PricingCode.NOT_IN_CURRENCY))
         }
     }
