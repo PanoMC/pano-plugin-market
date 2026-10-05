@@ -97,6 +97,7 @@ class MarketPlugin : PanoPlugin() {
 
         val configManager = PluginConfigManager(this, MarketConfig::class.java)
         pluginBeanContext.beanFactory.registerSingleton(PluginConfigManager::class.java.name, configManager)
+        com.panomc.plugins.market.routes.base.MarketGate.storeEnabled = { configManager.config.storeEnabled }
 
         val exchangeRateService = ExchangeRateService(this)
         pluginBeanContext.beanFactory.registerSingleton(ExchangeRateService::class.java.name, exchangeRateService)
