@@ -34,6 +34,7 @@ import com.panomc.plugins.market.spi.shipping.QuoteResult
 import com.panomc.plugins.market.spi.shipping.RateOption
 import com.panomc.plugins.market.spi.shipping.SenderKeys
 import com.panomc.plugins.market.spi.shipping.ShipmentErrorCode
+import com.panomc.plugins.market.spi.shipping.ShipmentPiece
 import com.panomc.plugins.market.spi.shipping.ShipmentTarget
 import com.panomc.plugins.market.spi.shipping.ShipmentView
 import com.panomc.plugins.market.spi.shipping.ShippingCapabilities
@@ -53,6 +54,13 @@ import com.panomc.plugins.market.util.Paging
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
+import io.vertx.kotlin.coroutines.coAwait
+import io.vertx.sqlclient.SqlConnection
+import io.vertx.sqlclient.Tuple
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
@@ -103,7 +111,7 @@ class ShippingServiceIT : MarketDaoITBase() {
         runBlocking { carrierRow() }
     }
 
-    private fun newService(createTimeoutMs: Long = 30_000, cancelTimeoutMs: Long = 30_000, ratesTimeoutMs: Long = 15_000) = ShippingService(
+    private fun newService(createTimeoutMs: Long = 30_000, cancelTimeoutMs: Long = 30_000, ratesTimeoutMs: Long = 15_000, labelsDir: Path = labels) = ShippingService(
         clock = w.clock, zones = w.shippingZones, methods = w.shippingMethods, rates = w.shippingRates, carriers = w.shippingCarriers,
         currencyRates = w.currencyRates, addresses = w.addresses, lookup = lookup, cipher = SecretCipher(ByteArray(32) { (it + 5).toByte() }),
         contexts = ShippingContexts { provider, settings, testMode -> TestContexts.shipping(provider.id, settings, vertx, testMode) },
@@ -111,7 +119,7 @@ class ShippingServiceIT : MarketDaoITBase() {
             db = w.db, locks = Locks(w.orders, w.orderItems, w.redemptions, w.creditAccounts), orders = w.orders, orderItems = w.orderItems, orderEvents = w.orderEvents,
             shipments = w.shipments, shipmentItems = w.shipmentItems, shipmentEvents = w.shipmentEvents,
             mail = MailOutboxService({ w.config }, w.clock, w.mailOutbox, w.orderEvents), webhooks = webhooks.service, ids = w.ids, config = { w.config },
-            labelsDir = labels, siteUrl = { "https://shop.example" }, createTimeoutMs = createTimeoutMs, cancelTimeoutMs = cancelTimeoutMs, ratesTimeoutMs = ratesTimeoutMs
+            labelsDir = labelsDir, siteUrl = { "https://shop.example" }, createTimeoutMs = createTimeoutMs, cancelTimeoutMs = cancelTimeoutMs, ratesTimeoutMs = ratesTimeoutMs
         )
     )
 
@@ -903,6 +911,239 @@ class ShippingServiceIT : MarketDaoITBase() {
         w.shipmentItems.add(com.panomc.plugins.market.db.model.MarketShipmentItem(shipmentId = id, orderItemId = item, quantity = 1, createdAt = now, updatedAt = now), pool)
 
         return id
+    }
+
+    // ================================================================================================ review fixes: cancel decision under the lock
+
+    private suspend fun failedCarrierRow(o: Ref, item: Long): Long {
+        carrier.onCreate = { CreateShipmentResult.Failed(ShipmentErrorCode.SERVICE_UNAVAILABLE, "down") }
+
+        expect("SHIPPING_PROVIDER_ERROR", 502) { carrierShip(o, item to 1) }
+
+        carrier.creates.clear()
+
+        return w.shipments.getByOrderId(o.id, pool).last().id
+    }
+
+    private suspend fun updateShipment(conn: SqlConnection, shipmentId: Long, set: String, vararg args: Any?) {
+        conn.preparedQuery("UPDATE `pano_market_shipment` SET $set WHERE `id` = ?").execute(Tuple.from(args.toList() + shipmentId)).coAwait()
+    }
+
+    /** Holds the order lock, lets a cancel of [shipmentId] read the row and queue for that lock, applies [change] to the row, then lets the cancel go on. */
+    private suspend fun cancelWhileRowMoves(o: Ref, shipmentId: Long, force: Boolean, change: suspend (SqlConnection) -> Unit): Result<JsonObject> = coroutineScope {
+        var cancel: Deferred<Result<JsonObject>>? = null
+
+        w.db.tx { conn ->
+            conn.preparedQuery("SELECT `id` FROM `pano_market_order` WHERE `id` = ? FOR UPDATE").execute(Tuple.of(o.id)).coAwait()
+
+            cancel = async(Dispatchers.IO) { runCatching { service.cancelShipment(shipmentId, force, 7, pool) } }
+
+            delay(800)
+            change(conn)
+        }
+
+        cancel!!.await()
+    }
+
+    private fun reasonOf(failure: Throwable?): String? = (failure as Error).let { assertEquals("SHIPMENT_NOT_CANCELLABLE", it.getErrorCode()); JsonObject(it.encode()).getString("reason") }
+
+    @Test
+    fun `cancel that read a failed row which a retry claims before the order lock is IN_PROGRESS and changes nothing`(): Unit = runBlocking {
+        carrier.caps = ScriptedCarrier.caps(cancel = true)
+
+        val o = order(Line("Shirt", 2))
+        val item = o.items.single()
+        val sid = failedCarrierRow(o, item)
+
+        val result = cancelWhileRowMoves(o, sid, false) { conn -> updateShipment(conn, sid, "`claimedUntil` = ?", w.clock.now() + 30_000) }
+
+        assertTrue(result.isFailure, "the cancel must not go through over a create in flight")
+        assertEquals("IN_PROGRESS", reasonOf(result.exceptionOrNull()))
+        assertEquals(ShipmentStatus.CREATED, shipmentNow(sid).status)
+        assertEquals(1, itemNow(item).shippedQuantity, "the units stay allocated")
+        assertEquals(0, carrier.cancels.size)
+    }
+
+    @Test
+    fun `cancel that read a row without carrier reference which gained one before the lock asks the carrier first`(): Unit = runBlocking {
+        carrier.caps = ScriptedCarrier.caps(cancel = true)
+
+        val o = order(Line("Shirt", 2))
+        val item = o.items.single()
+        val sid = failedCarrierRow(o, item)
+
+        val result = cancelWhileRowMoves(o, sid, false) { conn -> updateShipment(conn, sid, "`carrierReference` = ?, `lastErrorCode` = NULL", "CAR-LATE") }
+
+        assertTrue(result.isSuccess, "the cancel ends cancelled: ${result.exceptionOrNull()}")
+        assertEquals(1, carrier.cancels.size, "the paid shipment is voided at the carrier")
+        assertEquals("CAR-LATE", carrier.cancels.single().carrierReference)
+        assertEquals(ShipmentStatus.CANCELLED, shipmentNow(sid).status)
+        assertEquals(0, itemNow(item).shippedQuantity)
+
+        // the carrier refuses: without force nothing is cancelled locally
+        val o2 = order(Line("Shirt", 2))
+        val sid2 = failedCarrierRow(o2, o2.items.single())
+
+        carrier.onCancel = { CancelShipmentResult.refused("no") }
+
+        val refused = cancelWhileRowMoves(o2, sid2, false) { conn -> updateShipment(conn, sid2, "`carrierReference` = ?, `lastErrorCode` = NULL", "CAR-LATE2") }
+
+        assertTrue(refused.isFailure)
+        assertEquals("SHIPPING_PROVIDER_ERROR", (refused.exceptionOrNull() as Error).getErrorCode())
+        assertEquals(ShipmentStatus.CREATED, shipmentNow(sid2).status)
+    }
+
+    @Test
+    fun `cancel that read a row which reached a handed-over status before the lock is HANDED_OVER, force or not`(): Unit = runBlocking {
+        carrier.caps = ScriptedCarrier.caps(cancel = true)
+
+        val o = order(Line("Shirt", 3))
+        val item = o.items.single()
+        val sid = failedCarrierRow(o, item)
+
+        val result = cancelWhileRowMoves(o, sid, true) { conn -> updateShipment(conn, sid, "`carrierReference` = ?, `lastErrorCode` = NULL, `status` = 'IN_TRANSIT'", "CAR-LATE") }
+
+        assertTrue(result.isFailure)
+        assertEquals("HANDED_OVER", reasonOf(result.exceptionOrNull()))
+        assertEquals(ShipmentStatus.IN_TRANSIT, shipmentNow(sid).status)
+        assertEquals(0, carrier.cancels.size)
+        assertEquals(1, itemNow(item).shippedQuantity)
+    }
+
+    @Test
+    fun `cancel and retry in parallel on a failed row end cancelled without a create or in progress with the shipment intact`(): Unit = runBlocking {
+        carrier.caps = ScriptedCarrier.caps(cancel = true)
+
+        repeat(Race.rounds) { round ->
+            val o = order(Line("Shirt", 2))
+            val item = o.items.single()
+            val sid = failedCarrierRow(o, item)
+
+            carrier.cancels.clear()
+            carrier.onCreate = { r -> delay(120); CreateShipmentResult.Created("OK-${r.shipmentId}") }
+            carrier.onCancel = { CancelShipmentResult.cancelled() }
+
+            val results = Race.runWithSetup(2, { it }) { i -> if (i == 0) service.retryShipment(sid, 7, pool) else service.cancelShipment(sid, false, 7, pool) }
+            val retry = results[0]
+            val cancel = results[1]
+            val row = shipmentNow(sid)
+            val label = "round $round: retry=$retry cancel=$cancel creates=${carrier.creates.size} cancels=${carrier.cancels.size} status=${row.status}"
+
+            if (row.status == ShipmentStatus.CANCELLED) {
+                assertTrue(cancel.isSuccess, label)
+                assertTrue(carrier.creates.isEmpty() || carrier.cancels.size == 1, "a created carrier shipment is voided: $label")
+                assertEquals(0, itemNow(item).shippedQuantity, label)
+            } else {
+                assertTrue(retry.isSuccess, label)
+                assertTrue(cancel.isFailure, label)
+                assertEquals("OK-$sid", row.carrierReference, label)
+                assertEquals(1, carrier.creates.size, label)
+                assertEquals(1, itemNow(item).shippedQuantity, label)
+            }
+        }
+    }
+
+    // ================================================================================================ review fixes: the carrier result is never lost
+
+    @Test
+    fun `a carrier that returns more pieces than the request had parcels still has its reference and numbers stored`(): Unit = runBlocking {
+        carrier.onCreate = { r ->
+            CreateShipmentResult.Created("CAR-${r.shipmentId}").also {
+                it.trackingNumber = "MASTER"
+                it.pieces = listOf(ShipmentPiece("P-1"), ShipmentPiece("P-2"), ShipmentPiece("P-3"))
+            }
+        }
+
+        val o = order(Line("Shirt", 2))
+        val s = carrierShip(o, o.items.single() to 2)
+        val row = shipmentNow(id(s))
+        val packages = JsonArray(row.packages)
+
+        assertEquals("CAR-${row.id}", row.carrierReference)
+        assertEquals("MASTER", row.trackingNumber)
+        assertNull(row.lastErrorCode)
+        assertNull(row.claimedUntil)
+        assertEquals(1, packages.size(), "only the parcels of the request are numbered")
+        assertEquals("P-1", packages.getJsonObject(0).getString("trackingNumber"))
+    }
+
+    @Test
+    fun `a label that cannot be written does not lose the carrier reference`(): Unit = runBlocking {
+        val blocked = Files.createTempFile("market-labels-blocked", ".file")
+
+        service = newService(labelsDir = blocked.resolve("sub"))
+        carrier.onCreate = { r ->
+            CreateShipmentResult.Created("CAR-${r.shipmentId}").also {
+                it.trackingNumber = "CT-5"
+                it.labels = listOf(LabelDocument(LabelFormat.PDF, "%PDF-fake".toByteArray()))
+            }
+        }
+
+        val o = order(Line("Shirt", 1))
+        val s = carrierShip(o, o.items.single() to 1)
+        val row = shipmentNow(id(s))
+
+        assertEquals("CAR-${row.id}", row.carrierReference)
+        assertEquals("CT-5", row.trackingNumber)
+        assertNull(row.labelFile, "no label file was written")
+        assertNull(row.lastErrorCode)
+        assertNull(row.claimedUntil)
+        assertEquals(1, itemNow(o.items.single()).shippedQuantity)
+    }
+
+    @Test
+    fun `a failing tx2 after the carrier answered stores the reference, INTERNAL, and the retry and the cancel work on it`(): Unit = runBlocking {
+        carrier.caps = ScriptedCarrier.caps(cancel = true)
+        carrier.onCreate = { r ->
+            CreateShipmentResult.Created("CAR-${r.shipmentId}").also {
+                it.providerData = JsonObject().put("token", "handle-1")
+                it.status = com.panomc.plugins.market.spi.shipping.ShipmentStatus.LABEL_READY
+            }
+        }
+
+        val o = order(Line("Shirt", 2))
+        val o2 = order(Line("Shirt", 1))
+        val trigger = "pano_mk133_fail_label_ready"
+        var failed: Long = 0
+        var failed2: Long = 0
+
+        sql("DROP TRIGGER IF EXISTS `$trigger`")
+        sql("CREATE TRIGGER `$trigger` BEFORE UPDATE ON `pano_market_shipment` FOR EACH ROW IF NEW.`status` = 'LABEL_READY' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'boom'; END IF")
+
+        try {
+            expect("SHIPPING_PROVIDER_ERROR", 502) { carrierShip(o, o.items.single() to 2) }.let { assertEquals("INTERNAL", it.getString("code")) }
+            expect("SHIPPING_PROVIDER_ERROR", 502) { carrierShip(o2, o2.items.single() to 1) }
+
+            failed = w.shipments.getByOrderId(o.id, pool).single().id
+            failed2 = w.shipments.getByOrderId(o2.id, pool).single().id
+        } finally {
+            sql("DROP TRIGGER IF EXISTS `$trigger`")
+        }
+
+        val row = shipmentNow(failed)
+
+        assertEquals("CAR-$failed", row.carrierReference, "the paid shipment's reference is stored")
+        assertEquals("INTERNAL", row.lastErrorCode)
+        assertNull(row.claimedUntil)
+        assertEquals(ShipmentStatus.CREATED, row.status)
+        assertNotNull(row.providerData)
+        assertFalse(row.providerData!!.contains("handle-1"), "provider data is stored encrypted")
+        assertEquals(2, itemNow(o.items.single()).shippedQuantity, "the units stay allocated")
+
+        // the retry is idempotent at the carrier: it gets the stored reference back and finishes the row
+        val retried = service.retryShipment(failed, 7, pool)
+
+        assertEquals("CAR-$failed", carrier.creates.last().previousCarrierReference)
+        assertEquals("handle-1", carrier.creates.last().previousProviderData!!.getString("token"))
+        assertEquals("LABEL_READY", retried.getString("status"))
+        assertNull(retried.getString("lastErrorCode"))
+
+        // the other one is cancelled: a carrier reference exists, so the carrier is asked to void it
+        service.cancelShipment(failed2, false, 7, pool)
+
+        assertEquals(listOf("CAR-$failed2"), carrier.cancels.map { it.carrierReference })
+        assertEquals(ShipmentStatus.CANCELLED, shipmentNow(failed2).status)
+        assertEquals(0, itemNow(o2.items.single()).shippedQuantity)
     }
 
     // ================================================================================================ test 57 / 58: release, returned

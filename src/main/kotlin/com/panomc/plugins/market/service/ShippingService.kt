@@ -1401,9 +1401,28 @@ class ShippingService(
 
         when (outcome) {
             is CreateShipmentResult.Created -> {
-                val stored = storeDocuments(shipmentId, outcome)
+                // the label is paid: nothing below may lose the carrier reference
+                val stored = try {
+                    storeDocuments(shipmentId, outcome)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    log.warn("shipment $shipmentId: the label documents could not be stored, the carrier reference is kept", e)
 
-                finishCreate(row, outcome, stored, carrier.capabilities, actorUserId)
+                    StoredDocuments(null, null, JsonArray(), emptyMap())
+                }
+
+                try {
+                    finishCreate(row, outcome, stored, carrier.capabilities, actorUserId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    log.warn("shipment $shipmentId: storing the carrier result failed, the carrier reference is kept for the retry", e)
+
+                    recordCreatedButUnstored(row, outcome)
+
+                    throw ShippingProviderError(INTERNAL, shipmentId)
+                }
             }
 
             is CreateShipmentResult.Failed -> {
@@ -1434,6 +1453,31 @@ class ShippingService(
             if (providerData != null) sets["providerData"] = cipher.encrypt(providerData.encode())
 
             setShipment(conn, row.id, sets)
+        }
+    }
+
+    /** Fallback of a failed tx2: the carrier created the shipment, so at least the reference and the provider data are stored and the row becomes retriable (the retry is idempotent at the carrier) and cancellable at the carrier. */
+    private suspend fun recordCreatedButUnstored(row: MarketShipment, created: CreateShipmentResult.Created) {
+        try {
+            inOrder(row.orderId) { conn, _ ->
+                val current = fx().shipments.getById(row.id, conn) ?: return@inOrder
+
+                if (current.status != ShipmentStatus.CREATED) return@inOrder
+
+                val sets = LinkedHashMap<String, Any?>()
+
+                sets["carrierReference"] = created.carrierReference.take(MAX_CARRIER_REFERENCE)
+                created.providerData?.let { sets["providerData"] = cipher.encrypt(it.encode()) }
+                sets["claimedUntil"] = null
+                sets["lastErrorCode"] = INTERNAL.take(MAX_ERROR_CODE)
+                sets["lastError"] = null
+
+                setShipment(conn, row.id, sets)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.error("shipment ${row.id}: the carrier reference of a created shipment could not be stored", e)
         }
     }
 
@@ -1550,6 +1594,8 @@ class ShippingService(
                 val packages = JsonArray(current.packages ?: "[]")
 
                 created.pieces.forEachIndexed { i, piece ->
+                    if (i >= packages.size()) return@forEachIndexed
+
                     val p = packages.getJsonObject(i) ?: return@forEachIndexed
 
                     p.put("trackingNumber", piece.trackingNumber)
@@ -1618,6 +1664,21 @@ class ShippingService(
      * The caller writes the activity log with the `forced` flag.
      */
     suspend fun cancelShipment(shipmentId: Long, force: Boolean, actorUserId: Long?, sqlClient: SqlClient): JsonObject {
+        // the decision below is taken on an unlocked read; when the row moved before the order lock was taken the table is evaluated again
+        repeat(CANCEL_ATTEMPTS) {
+            try {
+                return cancelAttempt(shipmentId, force, actorUserId, sqlClient)
+            } catch (e: CancelDecisionStale) {
+                log.debug("shipment $shipmentId changed while it was being cancelled, the decision is taken again")
+            }
+        }
+
+        throw ShipmentNotCancellable("IN_PROGRESS")
+    }
+
+    private class CancelDecisionStale : RuntimeException(null, null, false, false)
+
+    private suspend fun cancelAttempt(shipmentId: Long, force: Boolean, actorUserId: Long?, sqlClient: SqlClient): JsonObject {
         val row = shipmentOrNotFound(shipmentId, sqlClient)
         val now = clock.now()
 
@@ -1679,6 +1740,18 @@ class ShippingService(
             if (current.status in ShipmentStateMachine.TERMINAL) throw ShipmentNotCancellable("TERMINAL")
 
             val t = clock.now()
+
+            // 10 section 9.5 again, on the row as it is under the lock
+            if (current.entryMode == ShipmentEntryMode.CARRIER) {
+                if (current.carrierReference == null) {
+                    if ((current.claimedUntil ?: 0) > t) throw ShipmentNotCancellable("IN_PROGRESS")
+                } else if (current.status in ShipmentStateMachine.HANDED) {
+                    throw ShipmentNotCancellable("HANDED_OVER")
+                } else if (!callCarrier) {
+                    // the row gained a carrier reference after it was read: the carrier has to be asked first
+                    throw CancelDecisionStale()
+                }
+            }
 
             if (!fx().shipments.transition(shipmentId, current.status, ShipmentStatus.CANCELLED, t, conn)) throw ShipmentNotCancellable("TERMINAL")
 
@@ -2205,6 +2278,7 @@ class ShippingService(
 
         private const val TIMEOUT = "TIMEOUT"
         private const val INTERNAL = "INTERNAL"
+        private const val CANCEL_ATTEMPTS = 3
         private const val CLAIM_MS = 60_000L
         private const val SERVICES_TTL_MS = 600_000L
         private const val MANUAL_MAX_PARCELS = 20
