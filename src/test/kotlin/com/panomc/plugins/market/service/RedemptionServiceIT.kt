@@ -242,7 +242,7 @@ class RedemptionServiceIT : MarketDaoITBase() {
         // a replayed O2 (the effect run again on the paid order) finds the transaction under its key and writes nothing
         val items = w.orderItems.getByOrderIds(listOf(order.id), pool)
 
-        ph.db.tx { conn -> c.credits.creditOrderItems(w.orders.getById(order.id, conn)!!, items, conn) }
+        ph.db.tx { conn -> c.credits.creditOrderItems(w.orders.getById(order.id, conn)!!, items, conn) { true } }
 
         assertGiftPosted(order, item.id, 5000, alex.id)
     }
@@ -276,7 +276,7 @@ class RedemptionServiceIT : MarketDaoITBase() {
         assertEquals(1, usedCount(gift.id))
         assertGiftPosted(order, item.id, 25000, alex.id)
 
-        ph.db.tx { conn -> c.credits.creditOrderItems(w.orders.getById(order.id, conn)!!, listOf(item), conn) }
+        ph.db.tx { conn -> c.credits.creditOrderItems(w.orders.getById(order.id, conn)!!, listOf(item), conn) { true } }
 
         assertGiftPosted(order, item.id, 25000, alex.id)
     }

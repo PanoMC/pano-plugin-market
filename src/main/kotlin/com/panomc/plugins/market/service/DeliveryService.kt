@@ -23,6 +23,18 @@ import com.panomc.plugins.market.core.delivery.PlannedDelivery
 import com.panomc.plugins.market.core.delivery.ProductAction
 import com.panomc.plugins.market.core.delivery.StoreInfo
 import com.panomc.plugins.market.core.delivery.TargetResolver
+import com.panomc.plugins.market.core.delivery.WebhookBodyInput
+import com.panomc.plugins.market.core.delivery.DefaultWebhookBody
+import com.panomc.plugins.market.core.delivery.WebhookFormat as PlanWebhookFormat
+import com.panomc.plugins.market.core.webhook.DiscordLabelSource
+import com.panomc.plugins.market.core.webhook.DiscordLabels
+import com.panomc.plugins.market.core.webhook.DiscordRenderer
+import com.panomc.plugins.market.core.webhook.WebhookEvents
+import com.panomc.plugins.market.db.dao.MarketWebhookDeliveryDao
+import com.panomc.plugins.market.db.model.MarketWebhookDelivery
+import com.panomc.plugins.market.db.model.WebhookDeliveryStatus
+import com.panomc.plugins.market.db.model.WebhookFormat
+import com.panomc.plugins.market.db.model.WebhookSigning
 import com.panomc.plugins.market.core.subscription.PeriodCalculator
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.core.time.Ids
@@ -85,7 +97,7 @@ class InlineFailure(val code: String, message: String?, val retryable: Boolean =
  * each in the lock order of 00 section 8.3: credit accounts, then the order row, then the delivery row (re-checked: `SENDING` and the claim token).
  * Two workers can select the same row; the conditional claim lets exactly one run it.
  *
- * Not here (other slices): the `WEBHOOK` executor (MK-106 adds its action type to [INLINE_TYPES]), the server rows (`MARKET_SYNC`: D7 - D11, D20, D14:
+ * The `WEBHOOK` executor (08 section 7.3) writes the outbox row of the action and runs only when an outbox is wired. Not here (other slices): the server rows (`MARKET_SYNC`: D7 - D11, D20, D14:
  * MK-103), the panel operations re-run / retry / cancel (MK-104), chargeback and payout rows (MK-112, MK-114).
  */
 class DeliveryService(
@@ -107,11 +119,19 @@ class DeliveryService(
     private val accounts: PlayerAccounts,
     private val credits: CreditService,
     private val permissions: PermissionGrantService,
-    private val random: Random = Random.Default
+    private val random: Random = Random.Default,
+    /** The outbox of store webhooks: with it the inline `WEBHOOK` executor exists (08 section 7.3, MK-106); without it `WEBHOOK` rows are never claimed. */
+    private val webhookDeliveries: MarketWebhookDeliveryDao? = null,
+    /** The localised texts of `format = DISCORD` action bodies (08 section 16.2); without it the stand-in body of the planner is used. */
+    private val discordLabels: DiscordLabelSource? = null
 ) {
     private fun table(name: String) = "`${deliveries.prefix()}$name`"
 
     private val deliveryTable get() = table("market_delivery")
+
+    /** The action types this instance executes inline: `WEBHOOK` only when the outbox is wired. */
+    private val inlineTypes: Set<DeliveryActionType> =
+        if (webhookDeliveries != null) INLINE_TYPES else INLINE_TYPES - DeliveryActionType.WEBHOOK
 
     private fun rules(): DeliveryRules = config().let { DeliveryRules(it.deliveryMaxAttempts, it.deliveryAckTimeoutSeconds) }
 
@@ -468,8 +488,43 @@ class DeliveryService(
 
         return Environment(
             planOrder, planItems, PlanServers(servers.lookup(), servers.names),
-            PlanSettings(onlineWaitDays = c.deliveryOnlineWaitDays, zone = PeriodCalculator.zoneOf(c.storeTimeZone), store = StoreInfo(c.storeName, ""))
+            PlanSettings(
+                onlineWaitDays = c.deliveryOnlineWaitDays, zone = PeriodCalculator.zoneOf(c.storeTimeZone), store = StoreInfo(c.storeName, ""),
+                webhookBody = webhookBodyRenderer(planItems.values)
+            )
         )
+    }
+
+    /**
+     * The body renderer of `WEBHOOK` actions at plan time: `JSON` keeps the planner's body, `DISCORD` goes through [DiscordRenderer] with the localised labels
+     * of the four `action.*` events (read before planning because the planner is not suspending). Without a label source the stand-in body is kept.
+     */
+    private suspend fun webhookBodyRenderer(items: Collection<PlanItem>): (WebhookBodyInput) -> String {
+        val source = discordLabels ?: return DefaultWebhookBody::render
+        val hasDiscord = items.any { item -> item.actions.actions.any { it.type == DeliveryActionType.WEBHOOK && it.webhook?.format == PlanWebhookFormat.DISCORD } }
+
+        if (!hasDiscord) return DefaultWebhookBody::render
+
+        val labels = HashMap<String, DiscordLabels>()
+
+        for (event in WebhookEvents.ACTION_EVENTS) labels[event] = source.labels(event)
+
+        return { input ->
+            if (input.spec.format != PlanWebhookFormat.DISCORD) {
+                DefaultWebhookBody.render(input)
+            } else {
+                val envelope = JsonObject(
+                    DefaultWebhookBody.render(
+                        WebhookBodyInput(
+                            input.event, input.phase, input.spec.copy(format = PlanWebhookFormat.JSON), input.key, input.actionId, input.unitIndex, input.quantity,
+                            input.order, input.item, input.player, input.serverId, input.context, input.now, input.store
+                        )
+                    )
+                )
+
+                DiscordRenderer.render(null, DiscordRenderer.vars(input.event, envelope, labels[input.event] ?: DiscordLabels.DEFAULT))
+            }
+        }
     }
 
     /** `market_order_item.fieldValues` (key -> scalar) typed by the product's field definitions; a value whose field is gone is dropped (its variable then renders empty). */
@@ -654,7 +709,7 @@ class DeliveryService(
      */
     suspend fun claimDue(limit: Int = INLINE_BATCH): List<MarketDelivery> {
         val now = clock.now()
-        val types = INLINE_TYPES.joinToString(",") { "'${it.name}'" }
+        val types = inlineTypes.joinToString(",") { "'${it.name}'" }
         val candidates = db.tx { conn ->
             conn.preparedQuery(
                 "SELECT d.`id`, (d.`phase` IN ('EXPIRE','REVOKE') AND d.`orderItemId` IS NOT NULL) AS isUndo FROM $deliveryTable d WHERE d.`status` = 'PENDING' " +
@@ -754,6 +809,7 @@ class DeliveryService(
             val result = when (claimed.actionType) {
                 DeliveryActionType.CREDIT -> db.txRestartingOnOrderChange { conn -> runCredit(conn, claimed, token) }
                 DeliveryActionType.PERMISSION -> permissions.serialized(claimed.playerUsername) { runPermission(claimed, token) }
+                DeliveryActionType.WEBHOOK -> db.txRestartingOnOrderChange { conn -> runWebhook(conn, claimed, token) }
                 else -> throw IllegalStateException("no inline executor for ${claimed.actionType}: the claim query must not select it")
             }
 
@@ -831,6 +887,49 @@ class DeliveryService(
 
             succeed(conn, row, token, result)
         }
+    }
+
+    // ----- WEBHOOK (08 section 7.3) -----------------------------------------------------------------------------------
+
+    /**
+     * One transaction: lock the order, insert the outbox row of the action (`endpointId = 0`, `deliveryId = <row id>`, `eventId = nameUUIDFromBytes("action:<id>")`,
+     * `INSERT IGNORE` on `uq_eventId`: a retried claim finds its row again), then the delivery becomes `SENT` with `result = {"webhookDeliveryId": n}` (D3).
+     * `WebhookJob` sends the row and reports `SUCCEEDED` (D12, `CONFIRMED`) or `DEAD` (D21) back through [reportWebhook]. `DISCORD` never signs (08 section 15.2).
+     */
+    private suspend fun runWebhook(conn: SqlConnection, claimed: MarketDelivery, token: String): DeliveryStatus? {
+        val outbox = webhookDeliveries ?: throw InlineFailure(DeliveryError.INVALID_PAYLOAD, "no webhook outbox is wired", retryable = false)
+        val hook = runCatching { JsonObject(claimed.payload).getJsonObject("webhook") }.getOrNull()
+            ?: throw InlineFailure(DeliveryError.INVALID_PAYLOAD, "a webhook delivery needs a webhook payload")
+        val url = hook.getString("url")?.takeIf { it.isNotBlank() } ?: throw InlineFailure(DeliveryError.INVALID_PAYLOAD, "the webhook has no url")
+        val format = runCatching { WebhookFormat.valueOf(hook.getString("format") ?: "JSON") }.getOrDefault(WebhookFormat.JSON)
+        val signing = if (format == WebhookFormat.DISCORD) WebhookSigning.NONE else runCatching { WebhookSigning.valueOf(hook.getString("signing") ?: "NONE") }.getOrDefault(WebhookSigning.NONE)
+
+        return withOrder(conn, claimed.orderId) {
+            val row = owned(conn, claimed, token) ?: return@withOrder null
+            val eventId = WebhookEvents.actionEventId(row.id)
+            val now = clock.now()
+            val event = hook.getString("event") ?: "action.${row.phase.name.lowercase()}"
+            val body = withEventId(hook.getString("body").orEmpty(), format, eventId)
+            val inserted = outbox.add(
+                MarketWebhookDelivery(
+                    endpointId = 0, deliveryId = row.id, eventId = eventId, event = event, orderId = row.orderId, url = url, format = format, signing = signing,
+                    secret = if (signing == WebhookSigning.HMAC_SHA256) hook.getString("secret") else null, body = body,
+                    status = WebhookDeliveryStatus.PENDING, attempts = 0, maxAttempts = WEBHOOK_ACTION_ATTEMPTS, nextAttemptAt = now, createdAt = now, updatedAt = now
+                ),
+                conn
+            ) ?: outbox.getByEventId(eventId, conn)?.id ?: throw IllegalStateException("the webhook row of delivery ${row.id} vanished")
+
+            succeed(conn, row, token, JsonObject().put("webhookDeliveryId", inserted))
+        }
+    }
+
+    /** The planner renders the body before the delivery has an id: a `JSON` body gets the event id as `id` now, a `DISCORD` body has none. */
+    private fun withEventId(body: String, format: WebhookFormat, eventId: String): String {
+        if (format != WebhookFormat.JSON) return body
+
+        val parsed = runCatching { JsonObject(body) }.getOrNull() ?: return body
+
+        return JsonObject().put("id", eventId).also { out -> parsed.forEach { (k, v) -> if (k != "id") out.put(k, v) } }.encode()
     }
 
     // ----- PERMISSION via=PANO (08 section 7.2) --------------------------------------------------------------------------
@@ -1037,8 +1136,11 @@ class DeliveryService(
     companion object {
         private val logger = LoggerFactory.getLogger(DeliveryService::class.java)
 
-        /** The action types that have an inline executor; `DeliveryJob` claims nothing else. MK-106 adds `WEBHOOK`. */
-        val INLINE_TYPES: Set<DeliveryActionType> = setOf(DeliveryActionType.CREDIT, DeliveryActionType.PERMISSION)
+        /** The action types that have an inline executor; `DeliveryJob` claims nothing else (`WEBHOOK` only on a service with an outbox). */
+        val INLINE_TYPES: Set<DeliveryActionType> = setOf(DeliveryActionType.CREDIT, DeliveryActionType.PERMISSION, DeliveryActionType.WEBHOOK)
+
+        /** An action webhook is retried like a store webhook: 8 attempts (08 section 7.3). */
+        const val WEBHOOK_ACTION_ATTEMPTS = 8
 
         const val INLINE_BATCH = 50
         const val PROMOTE_BATCH = 200
