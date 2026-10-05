@@ -732,6 +732,43 @@ class ShippingCheckoutIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a carrier failure for another buyer does not end the 30 minute honour window of a displayed price (test 31)`(): Unit = runBlocking {
+        val shirt = shirt()
+        val z = zone()
+
+        carrierWithSender()
+        carrier.caps = carrier.caps.also { it.quoteCacheSeconds = 600 }
+        carrier.onQuote = { QuoteResult(listOf(rate("exp", 900))) }
+
+        val live = method("Live", listOf(z), source = ShippingRateSource.CARRIER, providerId = carrier.id)
+
+        assertEquals(9.0, quote(shirt to 1, address = de).shippingOptions.single().getDouble("price"))
+        assertEquals(1, carrier.quotes.size)
+
+        val before = w.shippingCarriers.getByProviderId(carrier.id, pool)!!
+
+        // another buyer's quote fails: the carrier row gets lastError and a new updatedAt, but no cached price may be lost
+        w.clock.advance(2 * 60_000)
+        carrier.onQuote = { throw IllegalStateException("carrier down") }
+        quote(shirt to 1, address = de + ("city" to "Munich"))
+        assertEquals(2, carrier.quotes.size)
+
+        val after = w.shippingCarriers.getByProviderId(carrier.id, pool)!!
+
+        assertNotNull(after.lastError, "the failure is recorded on the carrier row")
+        assertTrue(after.updatedAt > before.updatedAt, "recordError moved updatedAt")
+
+        // the first buyer checks out 20 minutes after the quote while the carrier now charges more
+        w.clock.advance(18 * 60_000)
+        carrier.onQuote = { QuoteResult(listOf(rate("exp", 1500))) }
+
+        val order = h.checkout(body(shirt to 1, address = de, methodId = live.id))
+
+        assertEquals(2, carrier.quotes.size, "checkout inside the honour window makes no provider call")
+        assertEquals(900, order(order).shippingTotal)
+    }
+
+    @Test
     fun `saving a carrier clears its cache and a quoteCacheSeconds of 0 never reuses`(): Unit = runBlocking {
         val shirt = shirt()
         val z = zone()

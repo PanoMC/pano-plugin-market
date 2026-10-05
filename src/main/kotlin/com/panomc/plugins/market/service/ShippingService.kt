@@ -123,7 +123,7 @@ class ShippingService(
         val settings: ProviderSettings,
         val testMode: Boolean,
         val capabilities: ShippingCapabilities,
-        val updatedAt: Long
+        val version: Long
     ) {
         val sender: Address? get() = SenderAddress.from(settings)
     }
@@ -365,7 +365,18 @@ class ShippingService(
 
         val settings = codec.decrypt(stored)
 
-        return Carrier(provider, settings, row?.testMode ?: false, provider.capabilities(settings), row?.updatedAt ?: 0L)
+        return Carrier(provider, settings, row?.testMode ?: false, provider.capabilities(settings), settingsVersion(row?.settings))
+    }
+
+    /**
+     * The cache version of a carrier: a digest of its stored settings, never `updatedAt`. `lastError` / inbound stamps bump `updatedAt`
+     * on every carrier failure, which would silently end the 30-minute honour window of every cached quote of the provider (10 section 5.4);
+     * a settings save changes the stored text (and clears the cache through `ShippingAdminService`).
+     */
+    private fun settingsVersion(settings: String?): Long {
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest((settings ?: "").toByteArray(Charsets.UTF_8))
+
+        return java.nio.ByteBuffer.wrap(digest, 0, 8).long
     }
 
     private suspend fun manualSender(sqlClient: SqlClient, memo: MutableMap<String, Carrier?>): Address? =
@@ -438,7 +449,7 @@ class ShippingService(
             // the service filter: only when exactly one carrier-sourced candidate of the provider exists
             val serviceCode = ms.singleOrNull()?.serviceCode
             val value = Money(lines.fold(0L) { acc, l -> Math.addExact(acc, l.lineValue) }, request.currency)
-            val key = QuoteCacheKey.of(providerId, carrier.testMode, carrier.updatedAt, serviceCode, from, to, listOf(parcel), value.amount, request.currency)
+            val key = QuoteCacheKey.of(providerId, carrier.testMode, carrier.version, serviceCode, from, to, listOf(parcel), value.amount, request.currency)
             val seconds = carrier.capabilities.quoteCacheSeconds
             val cached = if (checkout) cache.honoured(key, seconds) else cache.fresh(key, seconds)
 
@@ -573,7 +584,7 @@ class ShippingService(
 
     private fun resolutionKey(providerId: String, carrier: Carrier, a: Address): String {
         val parts = listOf(
-            "resolve", providerId, carrier.testMode.toString(), carrier.updatedAt.toString(), a.country, a.state, a.city, a.district, a.neighborhood, a.line1,
+            "resolve", providerId, carrier.testMode.toString(), carrier.version.toString(), a.country, a.state, a.city, a.district, a.neighborhood, a.line1,
             a.line2, a.postalCode
         ).joinToString("|") { "${(it ?: "").length}:${it ?: ""}" }
 
