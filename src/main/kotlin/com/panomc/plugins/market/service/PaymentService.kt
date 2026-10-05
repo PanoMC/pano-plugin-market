@@ -328,6 +328,7 @@ class PaymentService(
     private val startTimeoutMs: Long = START_TIMEOUT_MS,
     private val cancelTimeoutMs: Long = CANCEL_TIMEOUT_MS,
     private val statusWaitMs: Long = STATUS_WAIT_MS,
+    private val queryTimeoutMs: Long = QUERY_TIMEOUT_MS,
     private val sanitizeHtml: (String) -> String = { HtmlSanitizer.sanitize(it) },
     /** Checks run after [RecipientLimitGuard] before an O2 (MK-151: blocked buyer, MK-121: late renewal). */
     extraPaidGuards: List<PaidGuard> = emptyList()
@@ -1372,6 +1373,74 @@ class PaymentService(
         }
     }
 
+    // ============================================================================== what the background jobs need (MK-078)
+
+    /** What `OrderExpiryJob` and `PaymentReconcileJob` need to know about a provider: `statusQuery` and `longPending` (02 section 8, 06 section 9.1). */
+    class ProviderTraits(val statusQuery: Boolean, val longPending: Boolean)
+
+    /** The traits of [providerId]; `null` when the provider is not registered (plugin stopped, license lapsed) or throws while it describes itself. */
+    suspend fun traitsOf(providerId: String, sqlClient: SqlClient): ProviderTraits? =
+        resolve(providerId, sqlClient)?.let { ProviderTraits(it.caps.statusQuery, it.caps.longPending) }
+
+    /** The result of one reconcile query (02 section 8). Nothing here ever fails an attempt: only an applied event moves it. */
+    sealed class ReconcileQuery {
+        /** The gateway answered with [events] events (all applied); [pollAgainAfterSeconds] is its own hint. */
+        class Applied(val events: Int, val pollAgainAfterSeconds: Long?) : ReconcileQuery()
+
+        /** `PaymentQueryResult.unknown()` or an empty answer: still pending. */
+        class Unknown(val pollAgainAfterSeconds: Long?) : ReconcileQuery()
+
+        /** The provider has no `statusQuery`, or answered `unsupported()`. */
+        data object Unsupported : ReconcileQuery()
+
+        /** No provider, a timeout or a throwing provider: the outcome is unknown, handled like [Unknown] by the caller. */
+        class Unavailable(val reason: String) : ReconcileQuery()
+    }
+
+    /**
+     * Asks the provider about [attempt] (`QueryReason.RECONCILE`, 30 s deadline) and applies what it reports through [applyEvent]. A provider
+     * failure, a missing provider and a timeout are [ReconcileQuery.Unavailable]: they change nothing. A failure while applying an event
+     * propagates (the transaction rolled back; the caller logs it and the next slot of the schedule retries).
+     */
+    suspend fun reconcileQuery(order: MarketOrder, attempt: MarketPayment, sqlClient: SqlClient): ReconcileQuery {
+        val resolved = resolve(attempt.providerId, sqlClient) ?: return ReconcileQuery.Unavailable("PROVIDER_UNAVAILABLE")
+
+        if (!resolved.caps.statusQuery) return ReconcileQuery.Unsupported
+
+        val result = try {
+            val ctx = contexts.create(resolved.provider, resolved.settings, attempt.testMode)
+
+            withTimeout(queryTimeoutMs) { resolved.provider.queryPayment(ctx, QueryPaymentRequest(attemptView(attempt, order.publicId ?: ""), QueryReason.RECONCILE)) }
+        } catch (e: TimeoutCancellationException) {
+            logger.warn("reconcile query of attempt {} timed out", attempt.id)
+
+            return ReconcileQuery.Unavailable("TIMEOUT")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            // a LinkageError of an older host included: the attempt is not touched, the next slot asks again
+            logger.warn("reconcile query of attempt {} failed: {}", attempt.id, e.javaClass.simpleName)
+
+            return ReconcileQuery.Unavailable(e.javaClass.simpleName)
+        }
+
+        if (result.unsupported) return ReconcileQuery.Unsupported
+
+        var applied = 0
+
+        for (event in result.events) {
+            val mapped = PaymentEventMapper.attemptEvent(event) ?: continue
+
+            applyEvent(order.id, attempt.id, mapped, AttemptFacts.of(event, cipher), OrderActor.GATEWAY, resolved.policy)
+            applied++
+        }
+
+        return if (applied == 0) ReconcileQuery.Unknown(result.pollAgainAfterSeconds) else ReconcileQuery.Applied(applied, result.pollAgainAfterSeconds)
+    }
+
+    /** Runs the follow-up work a transaction of a job collected ([TransitionResult.after]): gateway cancels (failures ignored) and panel alerts. */
+    suspend fun runAfterCommit(after: List<AfterCommit>, sqlClient: SqlClient) = runAfter(after, sqlClient)
+
     /** The `OrderView` of [order] for [role]: the owner view with the stored start and the retry data, cut to the role's allow-list (11 section 5.2). */
     suspend fun viewFor(order: MarketOrder, role: com.panomc.plugins.market.routes.api.OrderRole, caller: PayCaller, sqlClient: SqlClient): JsonObject {
         val attempts = payments.getByOrderId(order.id, sqlClient)
@@ -1444,6 +1513,7 @@ class PaymentService(
         const val START_TIMEOUT_MS = 30_000L
         const val CANCEL_TIMEOUT_MS = 10_000L
         const val STATUS_WAIT_MS = 8_000L
+        const val QUERY_TIMEOUT_MS = 30_000L
         const val STATUS_QUERY_FIRST_MS = 60_000L
         const val STATUS_QUERY_MIN_GAP_MS = 10_000L
 
