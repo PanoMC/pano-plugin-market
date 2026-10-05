@@ -28,6 +28,7 @@ import com.panomc.plugins.market.db.model.OrderSource
 import com.panomc.plugins.market.core.order.OrderEffect
 import com.panomc.plugins.market.db.tx.LockedOrder
 import com.panomc.plugins.market.error.InsufficientCredits
+import com.panomc.plugins.market.service.platform.UserDirectory
 import com.panomc.plugins.market.spi.payment.ReviewReason
 import com.panomc.plugins.market.util.MoneyUtil
 import io.vertx.core.json.JsonObject
@@ -479,16 +480,20 @@ class CreditService(
     /**
      * The credit-granting lines of a paid order (07 section 8.3): for every item with `creditAmount > 0` a `TOPUP` (a `GIFT` when
      * `order.source = GIFT_CODE`) of that amount to `recipientUserId ?: userId`, key `orderitem:<itemId>:topup` / `:gift`. Test-mode orders post too
-     * (only the cashback excludes them). With nobody to credit (the account was deleted meanwhile) nothing is posted and
-     * [CreditedLines.recipientMissing] is set; the caller notes it on the order timeline and the order is not diverted (the payment is valid).
+     * (only the cashback excludes them). With nobody to credit nothing is posted and [CreditedLines.recipientMissing] is set; the caller notes it on the
+     * order timeline and the order is not diverted (the payment is valid). Nobody means no id at all, or an id whose user no longer exists
+     * ([recipientExists] is asked inside the transaction before any account is locked or created: the anonymisation of a deleted user only clears
+     * `order.userId`, `recipientUserId` keeps pointing at the gone user).
      * Idempotent per item: the second call of the same order (a replayed O2) finds every transaction under its key and writes nothing.
      */
-    suspend fun creditOrderItems(order: MarketOrder, items: List<MarketOrderItem>, c: SqlConnection): CreditedLines {
+    suspend fun creditOrderItems(order: MarketOrder, items: List<MarketOrderItem>, c: SqlConnection, recipientExists: suspend (Long) -> Boolean): CreditedLines {
         val lines = items.filter { (it.creditAmount ?: 0L) > 0L }
 
         if (lines.isEmpty()) return CreditedLines(emptyList(), false)
 
         val recipient = order.recipientUserId ?: order.userId ?: return CreditedLines(emptyList(), true)
+
+        if (!recipientExists(recipient)) return CreditedLines(emptyList(), true)
 
         lockForIssuance(listOfNotNull(recipient, order.userId), c)
 
@@ -743,7 +748,7 @@ const val CREDIT_RECIPIENT_GONE_NOTE = "credit recipient no longer exists"
  * is read again, because the `LockedOrder` was read before `StampPaid` and a tender rewrite of an accepted review changed its money columns. The cashback
  * settings are the config values at payment time ([cashbackSettings]).
  *
- * Wiring (`OrderService(..., foreign = CreditEffects(credits, orders, events, clock, config, next))`) is the job of the composition root.
+ * Wiring (`OrderService(..., foreign = CreditEffects(credits, orders, events, clock, config, users, next))`) is the job of the composition root.
  */
 class CreditEffects(
     private val credits: CreditService,
@@ -751,6 +756,7 @@ class CreditEffects(
     private val events: MarketOrderEventDao,
     private val clock: com.panomc.plugins.market.core.time.Clock,
     private val config: () -> MarketConfig,
+    private val users: UserDirectory,
     private val next: ForeignEffects = ForeignEffects.PENDING_SLICES
 ) : ForeignEffects {
     override suspend fun apply(conn: SqlConnection, locked: LockedOrder, effect: OrderEffect) {
@@ -760,7 +766,7 @@ class CreditEffects(
             is OrderEffect.CreditGrantingLines -> {
                 val order = reload(conn, locked)
 
-                if (credits.creditOrderItems(order, locked.items, conn).recipientMissing) {
+                if (credits.creditOrderItems(order, locked.items, conn) { id -> users.usernameOf(id, conn) != null }.recipientMissing) {
                     val now = clock.now()
 
                     events.add(

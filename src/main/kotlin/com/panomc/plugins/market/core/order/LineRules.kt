@@ -137,7 +137,9 @@ class RuleContext(
     val existingServerIds: Set<Long> = emptySet(),
     val usage: Map<Long, ProductUsage> = emptyMap(),
     val owned: List<OwnedEntitlement> = emptyList(),
-    val subscribedProductIds: Set<Long> = emptySet()
+    val subscribedProductIds: Set<Long> = emptySet(),
+    /** `creditsEnabled && creditTopUpEnabled` (07 section 8, 14.1): a `CREDIT_PACK` line is unavailable while this is false. */
+    val creditPacksEnabled: Boolean = true
 )
 
 /** A failing code with the product it belongs to (a bundle line reports the code of a child with the child's id). */
@@ -238,6 +240,9 @@ object LineRules {
         val product = line.product
 
         if (product == null || !product.sellable(ctx.now)) return s.block(LineCode.PRODUCT_UNAVAILABLE)
+
+        // credit packs are sold only while the credit system and its top-up are on (07 section 8 and 14.1)
+        if (product.kind == ProductKind.CREDIT_PACK && !ctx.creditPacksEnabled) return s.block(LineCode.PRODUCT_UNAVAILABLE)
 
         // a bundle is as available as its weakest child (06 section 6.3, last paragraph)
         for (child in product.children) {

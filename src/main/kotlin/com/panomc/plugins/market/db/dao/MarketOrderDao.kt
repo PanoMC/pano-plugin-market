@@ -63,4 +63,16 @@ abstract class MarketOrderDao : MarketDao<MarketOrder>(MarketOrder::class.java) 
 
     /** COMPLETED order count grouped by paymentLabel, descending. */
     abstract suspend fun paymentMethodDistribution(sqlClient: SqlClient): Map<String, Long>
+
+    /**
+     * L4 (11 section 11, MK-152): `expiresAt` (epoch ms, `null` = none) of every `PENDING` order of the storefront (source `STOREFRONT`) whose `reservationState` is
+     * `HELD` and whose [column] equals [value] (`email` compares lower case). Ascending, so the first entry is the one that expires first.
+     */
+    abstract suspend fun openHeldExpiries(column: OpenOrderColumn, value: String, sqlClient: SqlClient): List<Long?>
+
+    /** L4 for an IPv6 bucket: `clientIp` and `expiresAt` of every open held order whose address is IPv6 (the caller keeps those in the same `/64`). */
+    abstract suspend fun openHeldIpv6(sqlClient: SqlClient): List<Pair<String, Long?>>
 }
+
+/** The columns of `market_order` that the open-order limit (L4) counts by. */
+enum class OpenOrderColumn(val column: String) { BUYER("buyerKey"), RECIPIENT("recipientKey"), EMAIL("email"), IP("clientIp") }

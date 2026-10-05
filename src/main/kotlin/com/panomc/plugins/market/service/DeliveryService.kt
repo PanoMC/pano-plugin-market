@@ -135,10 +135,13 @@ class DeliveryService(
         for ((phase, ofPhase) in listOf(DeliveryPhase.GRANT to items.filter { it.id !in renew }, DeliveryPhase.RENEW to items.filter { it.id in renew })) {
             if (ofPhase.isEmpty()) continue
 
-            // the planner walks every item it is given (a bundle child needs its parent); the others are switched off with an empty range
-            val skip = items.filter { it !in ofPhase }.associate { it.id to EMPTY_RANGE }
+            // The planner walks every item it is given (a bundle child needs its parent). Every item gets a range of its own: the whole line in its own
+            // phase, an empty one in the other. An item without an entry would follow its parent's range (a bundle child, 08 section 11.2), and a child
+            // of the other phase than its parent would then inherit the parent's switched-off range and be planned in neither phase.
+            val inPhase = ofPhase.mapTo(HashSet()) { it.id }
+            val units = items.associate { it.id to if (it.id in inPhase) (0 until it.quantity) else EMPTY_RANGE }
 
-            planned += DeliveryPlanner.plan(PlanRequest(env.order, env.items.values.toList(), phase, env.servers, env.settings, now, 0, skip))
+            planned += DeliveryPlanner.plan(PlanRequest(env.order, env.items.values.toList(), phase, env.servers, env.settings, now, 0, units))
         }
 
         return insertPlanned(conn, planned)
@@ -162,6 +165,10 @@ class DeliveryService(
      * `REVOKE` of the units [units] of items (refund, chargeback, manual revoke; 08 section 11.2). [revokedBefore] are the units that non-cancelled
      * `REVOKE` rows covered already (a permission is removed only when the last unit is revoked). [attemptGroup] is `0` unless this is a re-run.
      * The caller computes both maps (refunded quantity before this refund; the rows alone cannot tell the range of a row that is not `perUnit`).
+     *
+     * The ranges follow 08 section 11.2: a line without a range of its own (a bundle child) takes its bundle line's range scaled by its quantity per bundle.
+     * Unsent rows covering units of the range are cancelled (D16), rows in flight get a cancel request (D17). A whole-line row that D16 cancelled while the
+     * buyer keeps some of its units is planned again for those units (new attempt group, same schedule), so a partial refund never takes away what is left.
      */
     suspend fun planRevoke(
         conn: SqlConnection,
@@ -174,8 +181,11 @@ class DeliveryService(
         attemptGroup: Int = 0
     ): EndPlan = endFlow(conn, order, items, DeliveryPhase.REVOKE, reason, units, revokedBefore, coverage, attemptGroup)
 
-    /** What an end flow did: rows cancelled (D16), cancels requested (D17), rows planned. */
-    class EndPlan(val cancelled: Int, val cancelRequested: Int, val inserted: List<Long>)
+    /**
+     * What an end flow did: rows cancelled (D16), cancels requested (D17), the undo rows planned ([inserted]) and the rows planned again for the units
+     * of a partly revoked line that the buyer still owns ([replanned]).
+     */
+    class EndPlan(val cancelled: Int, val cancelRequested: Int, val inserted: List<Long>, val replanned: List<Long> = emptyList())
 
     private suspend fun endFlow(
         conn: SqlConnection,
@@ -194,24 +204,47 @@ class DeliveryService(
         val env = environment(conn, order, items, ents)
         var cancelled = 0
         var requested = 0
+        val replans = ArrayList<PlannedDelivery>()
 
-        // steps 1 and 2: unsent rows are cancelled, rows in flight get a cancel request
+        // steps 1 and 2: unsent rows covering units of U are cancelled, rows in flight get a cancel request
         for (item in items) {
             if (item.kind == OrderItemKind.CREDIT_TOPUP) continue
 
-            val covered = units[item.id] ?: (0 until item.quantity)
+            val covered = coveredUnits(items, item, units) ?: continue
             val actions = env.items[item.id]?.actions?.actions.orEmpty().associateBy { it.id }
+            val rows = deliveries.getByOrderItemId(item.id, conn)
+            val gone = revokedBefore[item.id].orEmpty()
+            val kept = ArrayList<Pair<MarketDelivery, List<IntRange>>>()
 
-            for (row in deliveries.getByOrderItemId(item.id, conn)) {
+            for (row in rows) {
                 if (row.phase != DeliveryPhase.GRANT && row.phase != DeliveryPhase.RENEW) continue
-                if (row.unitIndex >= item.quantity || !covers(row, actions[row.actionId], covered, item.quantity)) continue
+
+                val action = actions[row.actionId]
+
+                if (row.unitIndex >= item.quantity) continue
+
+                // the units a whole-line row stands for (a per unit row: its own); read from the rows as they were before this flow
+                val standsFor = if (perUnitRow(row, action)) listOf(row.unitIndex) else wholeLineUnits(row, rows, item.quantity, gone)
+
+                if (standsFor.none { it in covered }) continue
 
                 val applied = apply(conn, row.id, DeliveryEvent.Cancel(reason))
 
-                if (applied.moved) {
-                    if (applied.row?.status == DeliveryStatus.CANCELLED) cancelled++ else requested++
+                if (!applied.moved) continue
+
+                if (applied.row?.status == DeliveryStatus.CANCELLED) {
+                    cancelled++
+
+                    // a whole-line row stood for units the buyer keeps: they are planned again below
+                    val left = standsFor.filter { it !in covered }
+
+                    if (!perUnitRow(row, action) && left.isNotEmpty()) kept += row to contiguous(left)
+                } else {
+                    requested++
                 }
             }
+
+            if (kept.isNotEmpty()) replans += replanKept(env, item, kept, rows, clock.now())
         }
 
         // step 3: the undo rows, with what really happened to the grants (read after steps 1 and 2)
@@ -230,18 +263,113 @@ class DeliveryService(
         val now = clock.now()
         val request = PlanRequest(env.order, planItems, phase, env.servers, env.settings, now, attemptGroup, units, coverage)
         val inserted = insertPlanned(conn, DeliveryPlanner.plan(request))
+        val replanned = insertPlanned(conn, replans)
 
         refreshFulfillment(conn, order.id)
 
-        return EndPlan(cancelled, requested, inserted)
+        return EndPlan(cancelled, requested, inserted, replanned)
     }
 
     /**
-     * Does [row] cover units of [covered]? A `perUnit` action has one row per unit; any other row stands for the whole line, so it is cancelled only
-     * when the whole line is (a partial refund must not take away what the buyer still owns).
+     * The unit range an end flow covers for [item], exactly as `DeliveryPlanner.plan` reads it for step 3 (08 section 11.2): the range given for the
+     * line; for a `BUNDLE_CHILD` without a range of its own, the range of its bundle line scaled by the child's quantity per bundle
+     * (`U.first x n until (U.last + 1) x n`); else the whole line. Clipped to the line, `null` when nothing is left.
      */
-    private fun covers(row: MarketDelivery, action: ProductAction?, covered: IntRange, quantity: Int): Boolean =
-        if (action?.perUnit == true) row.unitIndex in covered else covered.first <= 0 && covered.last >= quantity - 1
+    private fun coveredUnits(items: List<MarketOrderItem>, item: MarketOrderItem, units: Map<Long, IntRange>): IntRange? {
+        if (item.quantity <= 0) return null
+
+        val parent = if (item.kind == OrderItemKind.BUNDLE_CHILD) item.parentItemId?.let { id -> items.firstOrNull { it.id == id } } else null
+        val given = units[item.id]
+        val parentUnits = parent?.let { units[it.id] }
+        val range = when {
+            given != null -> given
+            parent != null && parentUnits != null -> {
+                val n = if (parent.quantity > 0) item.quantity / parent.quantity else 1
+
+                (parentUnits.first * n)..((parentUnits.last + 1) * n - 1)
+            }
+            else -> 0 until item.quantity
+        }
+        val clipped = maxOf(range.first, 0)..minOf(range.last, item.quantity - 1)
+
+        return if (clipped.isEmpty()) null else clipped
+    }
+
+    /** One row per unit exists only for a `perUnit` action of type `COMMAND` / `WEBHOOK` (the planner's rule); every other row stands for the whole line. */
+    private fun perUnitRow(row: MarketDelivery, action: ProductAction?): Boolean =
+        action?.perUnit == true && (row.actionType == DeliveryActionType.COMMAND || row.actionType == DeliveryActionType.WEBHOOK)
+
+    /**
+     * The units a whole-line row (an action that is not `perUnit`) stands for: from its `unitIndex` up to the `unitIndex` of the next live row of the same
+     * item, action, server and phase, or the end of the line, without the units [revoked] by earlier `REVOKE` rows. A row planned for the whole line has
+     * `unitIndex` 0 and stands for every unit; a row planned again by [replanKept] stands for the kept range it was planned for. [rows] are the rows of the
+     * item as they were before the end flow touched them.
+     */
+    private fun wholeLineUnits(row: MarketDelivery, rows: List<MarketDelivery>, quantity: Int, revoked: Set<Int>): List<Int> {
+        val end = rows.filter {
+            it.id != row.id && it.phase == row.phase && it.actionId == row.actionId && it.serverId == row.serverId && it.status != DeliveryStatus.CANCELLED &&
+                it.unitIndex > row.unitIndex && it.unitIndex < quantity
+        }.minOfOrNull { it.unitIndex } ?: quantity
+
+        return (row.unitIndex until end).filter { it !in revoked }
+    }
+
+    private fun contiguous(units: List<Int>): List<IntRange> {
+        val out = ArrayList<IntRange>()
+
+        for (u in units.sorted()) {
+            val last = out.lastOrNull()
+
+            if (last != null && last.last + 1 == u) out[out.size - 1] = last.first..u else out += u..u
+        }
+
+        return out
+    }
+
+    /**
+     * The units of a partly revoked line that the buyer still owns, for the whole-line rows that an end flow cancelled (D16): the same action in the same
+     * phase on the same server for each kept range, as attempt group `max + 1` of the item (new keys), with the schedule of the row that was cancelled (an
+     * action `delay` is not started again). Rows that were only asked to cancel (D17) are not replaced: they may still take effect, and the undo of the
+     * revoked units takes the rest back.
+     */
+    private fun replanKept(
+        env: Environment,
+        item: MarketOrderItem,
+        cancelled: List<Pair<MarketDelivery, List<IntRange>>>,
+        rows: List<MarketDelivery>,
+        now: Long
+    ): List<PlannedDelivery> {
+        val base = env.items.getValue(item.id)
+        val parent = if (base.kind == OrderItemKind.BUNDLE_CHILD) base.parentItemId?.let { env.items[it] } else null
+        val request = listOfNotNull(parent, base)
+        val group = rows.maxOf { it.attemptGroup } + 1
+        val out = ArrayList<PlannedDelivery>()
+
+        for ((was, ranges) in cancelled) {
+            for (range in ranges) {
+                // the parent is only there to be read (targets, fields); it is switched off with an empty range
+                val limits = HashMap<Long, IntRange>()
+
+                parent?.let { limits[it.id] = EMPTY_RANGE }
+                limits[item.id] = range
+
+                for (p in DeliveryPlanner.plan(PlanRequest(env.order, request, was.phase, env.servers, env.settings, now, group, limits))) {
+                    if (p.actionId != was.actionId || (p.status != DeliveryStatus.FAILED && p.serverId != was.serverId)) continue
+
+                    // a row that is born FAILED (render error, no target server any more) stays as the planner made it: it is visible and retryable
+                    out += if (p.status == DeliveryStatus.FAILED) p else retimed(p, was, now)
+                }
+            }
+        }
+
+        return out
+    }
+
+    private fun retimed(p: PlannedDelivery, was: MarketDelivery, now: Long): PlannedDelivery =
+        p.copy(
+            runAfter = was.runAfter, status = if (was.runAfter > now) DeliveryStatus.SCHEDULED else DeliveryStatus.PENDING, nextAttemptAt = was.runAfter,
+            waitUntil = was.waitUntil
+        )
 
     /**
      * Inserts [planned] rows with `INSERT IGNORE` semantics (the unique key `uq_idem`), writes one `DELIVERY_FAILED` timeline row for every row that

@@ -10,7 +10,9 @@ import com.panomc.platform.model.Successful
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.cart.CartLineKey
 import com.panomc.plugins.market.core.cart.CartLineParser
+import com.panomc.plugins.market.core.abuse.AbuseLimits
 import com.panomc.plugins.market.core.time.SystemClock
+import com.panomc.plugins.market.routes.api.checkout.abuseWiring
 import com.panomc.plugins.market.db.dao.MarketCreditAccountDao
 import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.db.dao.MarketOrderItemDao
@@ -75,7 +77,9 @@ class RedeemGiftAPI(private val plugin: MarketPlugin) : MarketUserApi() {
 
         GiftRedeemService(
             checkout = checkoutService(plugin, withCheckout = true), redemptions = RedemptionService(SystemClock, locks, redemptionDao),
-            client = { databaseManager.getSqlClient() }, clock = SystemClock
+            client = { databaseManager.getSqlClient() }, clock = SystemClock,
+            guard = abuseWiring(plugin).codeGuard.forScope(AbuseLimits.SCOPE_GIFT).let { guard -> { guard } },
+            limit = { caller -> abuseWiring(plugin).rateLimits.checkout(caller.clientIp, "u:${caller.userId}") }
         )
     }
 

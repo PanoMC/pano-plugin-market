@@ -610,6 +610,7 @@ class QuoteIT : MarketDaoITBase() {
 
     @Test
     fun `LOGIN_REQUIRED for a guest and a credit pack or a subscription and for a store that refuses guests`(): Unit = runBlocking {
+        config = base(topUp = true) // a credit pack is a line error PRODUCT_UNAVAILABLE while the top-up is off (07 section 8)
         val pack = fx.product(price = 500).also { raw(it, "kind" to "CREDIT_PACK", "creditAmount" to 5000) }
         val sub = fx.product(price = 500).also { raw(it, "billingMode" to "SUBSCRIPTION", "periodUnit" to "MONTH", "periodCount" to 1) }
         val plain = fx.product()

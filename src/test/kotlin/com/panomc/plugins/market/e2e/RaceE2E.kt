@@ -139,9 +139,11 @@ class RaceE2E : E2eTestBase() {
     private fun reserved(productId: Long): Long = db.long("SELECT COALESCE(SUM(`stockReserved`), 0) FROM `pano_market_order_item` WHERE `productId` = ?", productId) ?: 0L
 
     /**
-     * 17 section 9.4 R-01 "one set of deliveries / mail / webhook": per order no business key appears twice. The expected row count is exact: the
-     * delivery, mail and webhook subsystems write nothing for a VIP purchase until their slices (MK-10x, MK-11x) land, and a table that starts
-     * filling must fail here so the slice that fills it states its expected set (and the cardinality check below then bites on it).
+     * 17 section 9.4 R-01 "one set of deliveries / mail / webhook": per order no business key appears twice. The expected row count is exact: a
+     * table that starts filling must fail here so the slice that fills it states its expected set (and the cardinality check below then bites on
+     * it). Delivery (MK-102): the standard VIP product has four GRANT-phase actions (`a1`, `a2`, `r1`, `r2` of `E2eCatalog.grantAndRevoke`: two
+     * permission and two credit actions), so the O2 transaction plans exactly four rows, however many copies of the webhook race for it. The mail and
+     * webhook subsystems still write nothing for a VIP purchase until their slices (MK-11x, MK-14x) land.
      */
     private fun assertSingleSetOfSideEffects(orderId: Long) {
         val sideEffects = mapOf(

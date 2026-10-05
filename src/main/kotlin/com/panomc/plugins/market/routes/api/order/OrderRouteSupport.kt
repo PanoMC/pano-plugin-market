@@ -228,6 +228,7 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
         // WIRE-1: StartShipping goes to the shipping service (derived shippingStatus); the rest still to PENDING_SLICES
         foreign = CreditEffects(
             credits, orderDao, context.getBean(MarketOrderEventDao::class.java), clock, { currentConfig(plugin) },
+            PlatformUserDirectory { context.getBean(DatabaseManager::class.java) },
             InvoiceEffects(
                 invoiceService(plugin), orderDao,
                 DeliveryEffects(

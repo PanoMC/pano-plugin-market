@@ -57,6 +57,10 @@ internal class CreditHarness(val w: TestWiring, val vertx: Vertx, lockWaitSecond
     @Volatile
     var deferStart = false
 
+    /** Thrown by the in-transaction O2 of a free order after it ran (MK-113), `null` = none. */
+    @Volatile
+    var zeroCompletionFault: Throwable? = null
+
     lateinit var orders: OrderService
         private set
 
@@ -95,7 +99,7 @@ internal class CreditHarness(val w: TestWiring, val vertx: Vertx, lockWaitSecond
             w.clock, w.ids, w.orders, w.orderItems, w.orderEvents, w.payments, redemptions, { _, _ -> false },
             credits = credits.checkoutHolds, settlement = credits,
             // MK-092: the production composition, the credit-granting lines and the cashback are posted inside the transition (the recorder still sees the rest)
-            reservations = reservations, foreign = CreditEffects(credits, w.orders, w.orderEvents, w.clock, { h.config.toConfig() }, ph.effects),
+            reservations = reservations, foreign = CreditEffects(credits, w.orders, w.orderEvents, w.clock, { h.config.toConfig() }, directory, ph.effects),
             webhooks = PaidWebhooks { conn, orderId -> ph.webhooks.service.emitOrderPaid(conn, orderId) },
             rates = { sqlClient -> w.currencyRates.getAll(sqlClient).filter { it.rate.signum() > 0 }.associate { it.currency to it.rate } },
             statsCurrency = { ph.statsCurrency },
@@ -119,6 +123,15 @@ internal class CreditHarness(val w: TestWiring, val vertx: Vertx, lockWaitSecond
                 if (deferStart) null else payments.start(order, attempt, sqlClient)
 
             override suspend fun served(attempt: MarketPayment, sqlClient: io.vertx.sqlclient.SqlClient): JsonObject? = payments.served(attempt, sqlClient)
+
+            // MK-113: O2 of a gift redemption inside the redeemer's transaction; `zeroCompletionFault` stands for a failure in it (an effect that throws)
+            override suspend fun completeZeroIn(conn: io.vertx.sqlclient.SqlConnection, order: MarketOrder, attempt: MarketPayment): (suspend (io.vertx.sqlclient.SqlClient) -> Unit)? {
+                val done = payments.completeZeroIn(conn, order, attempt)
+
+                zeroCompletionFault?.let { throw it }
+
+                return done
+            }
         }
 
         service = CheckoutService(
@@ -129,6 +142,7 @@ internal class CreditHarness(val w: TestWiring, val vertx: Vertx, lockWaitSecond
             paymentMethods = w.paymentMethods, lookup = StaticProviderLookup(listOf(ph.fake)), cipher = ph.cipher,
             contexts = PaymentContexts { provider, settings, testMode -> TestContexts.payment(provider.id, settings, vertx, testMode) },
             legal = LegalTextService(w.db, w.clock, w.legalTexts, { "en-US" }), users = directory, servers = com.panomc.plugins.market.service.platform.ServerDirectory { _, _ -> emptySet() },
+            blocks = BuyerBlocks { payer, recipient, email, ip, userId, _ -> h.blocked(payer, recipient, email, ip, userId) },
             checkout = CheckoutDeps(
                 db = ph.db, locks = ph.locks, reservations = reservations, redemptions = redemptions, orders = orders, payments = w.payments,
                 providerMeta = w.providerMeta, starter = deferred
