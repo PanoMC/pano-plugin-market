@@ -111,8 +111,12 @@ object MarketSchema {
             columns += Column(name, "VARCHAR($length)", nullable, default?.let { "'$it'" })
         }
 
-        fun text(name: String) {
-            columns += Column(name, "MEDIUMTEXT", nullable = true)
+        fun text(name: String, nullable: Boolean = true) {
+            columns += Column(name, "MEDIUMTEXT", nullable)
+        }
+
+        fun decimal(name: String, precision: Int, scale: Int, nullable: Boolean = false) {
+            columns += Column(name, "DECIMAL($precision,$scale)", nullable)
         }
 
         fun bigint(name: String, nullable: Boolean = false, default: Long? = null) {
@@ -148,14 +152,31 @@ object MarketSchema {
             alters += statement
         }
 
+        /**
+         * Columns and keys declared inside [block] were added to an existing table by a later scheme version: they
+         * are appended after the old columns (so a migrated table and a fresh one have the same column order) and
+         * their idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` statements are
+         * derived from the same declaration, one statement each (01 section 14.1 rule 2).
+         */
+        fun added(block: TableBuilder.() -> Unit) {
+            val firstColumn = columns.size
+            val firstKey = keys.size
+            block()
+            for (column in columns.drop(firstColumn)) alters += "ALTER TABLE {t} ADD COLUMN IF NOT EXISTS ${column.ddl()}"
+            for (key in keys.drop(firstKey)) {
+                val cols = key.columns.joinToString(", ") { "`$it`" }
+                alters += "CREATE ${if (key.unique) "UNIQUE " else ""}INDEX IF NOT EXISTS `${key.name}` ON {t} ($cols)"
+            }
+        }
+
         fun build() = Table(name, comment, columns.toList(), keys.toList(), alters.toList())
     }
 
     private fun table(name: String, comment: String, block: TableBuilder.() -> Unit): Table =
         TableBuilder(name, comment).apply(block).build()
 
-    // --- the ten tables of scheme version 2 ---------------------------------------------------------------------
-    // Frozen against src/test/resources/fixtures/schema-v2.sql by MarketSchemaIT (same columns, types, keys).
+    // --- the ten tables of scheme version 2 (category and product also carry the version 3 additions) ----------
+    // The version 2 part is frozen against src/test/resources/fixtures/schema-v2.sql by MigrationChainIT.
 
     val CATEGORY = table("market_category", "Market category table.") {
         id()
@@ -169,6 +190,11 @@ object MarketSchema {
         str("imageFileName", 255, nullable = true)
         timestamps()
         key("parentId", "parentId", "position")
+        // Scheme version 3 (01 section 2.1).
+        added {
+            flag("tiered", 0)
+            str("upgradeMode", 24, "DIFFERENCE")
+        }
     }
 
     val COMPARISON = table("market_comparison", "Market comparison table.") {
@@ -312,11 +338,136 @@ object MarketSchema {
         unique("unique_slug", "slug")
         key("categoryId", "categoryId")
         key("status", "status")
+        // Scheme version 3: the 29 columns of 01 section 2.2 and its three new indexes.
+        added {
+            str("kind", 24, "STANDARD")
+            str("shortDescription", 512, nullable = true)
+            bigint("compareAtPrice", nullable = true)
+            bigint("vatPercent", nullable = true)
+            flag("physical", 0)
+            str("sku", 64, nullable = true)
+            int("weightGrams", nullable = true)
+            int("lengthMm", nullable = true)
+            int("widthMm", nullable = true)
+            int("heightMm", nullable = true)
+            str("hsCode", 16, nullable = true)
+            str("originCountry", 2, nullable = true)
+            str("billingMode", 24, "ONE_TIME")
+            str("periodUnit", 24, nullable = true)
+            int("periodCount", nullable = true)
+            int("subscriptionMaxCycles", nullable = true)
+            int("limitPerPlayer", nullable = true)
+            int("maxQuantityPerOrder", nullable = true)
+            bigint("cooldownSeconds", nullable = true)
+            int("tierRank", nullable = true)
+            bigint("creditAmount", nullable = true)
+            flag("allowGift", 1)
+            text("serverChoices")
+            flag("hasVariants", 0)
+            text("variantOptions")
+            str("metaTitle", 255, nullable = true)
+            str("metaDescription", 512, nullable = true)
+            int("soldCount", default = 0)
+            bigint("deletedAt", nullable = true)
+            key("idx_imageFileName", "imageFileName")
+            key("idx_kind", "kind")
+            key("idx_category_tier", "categoryId", "tierRank")
+        }
+    }
+
+    // --- scheme version 3: catalogue tables (01 sections 2.3 - 2.7, 2.9) ----------------------------------------
+
+    val PRODUCT_VARIANT = table("market_product_variant", "Market product variant table.") {
+        id()
+        bigint("productId")
+        str("name", 255)
+        str("sku", 64, nullable = true)
+        text("optionValues")
+        text("attributes")
+        bigint("price", nullable = true)
+        bigint("creditPrice", nullable = true)
+        bigint("compareAtPrice", nullable = true)
+        int("stock", nullable = true)
+        int("weightGrams", nullable = true)
+        int("periodCount", nullable = true)
+        str("imageFileName", 255, nullable = true)
+        int("position", default = 0)
+        str("status", 16, "ACTIVE")
+        bigint("deletedAt", nullable = true)
+        timestamps()
+        key("idx_product", "productId", "position")
+    }
+
+    val PRODUCT_PRICE = table("market_product_price", "Market per-currency product price table.") {
+        id()
+        bigint("productId")
+        bigint("variantId", default = 0)
+        str("currency", 8)
+        bigint("price")
+        bigint("compareAtPrice", nullable = true)
+        timestamps()
+        unique("uq_product_variant_currency", "productId", "variantId", "currency")
+    }
+
+    val PRODUCT_FIELD = table("market_product_field", "Market product custom field table.") {
+        id()
+        bigint("productId")
+        str("fieldKey", 32)
+        str("label", 255)
+        str("helpText", 512, nullable = true)
+        str("type", 24, "TEXT")
+        flag("required", 0)
+        text("options")
+        str("pattern", 255, nullable = true)
+        int("minLength", nullable = true)
+        int("maxLength", nullable = true)
+        bigint("minValue", nullable = true)
+        bigint("maxValue", nullable = true)
+        str("placeholder", 255, nullable = true)
+        str("defaultValue", 255, nullable = true)
+        flag("usableInCommands", 1)
+        int("position", default = 0)
+        timestamps()
+        unique("uq_product_key", "productId", "fieldKey")
+    }
+
+    val BUNDLE_ITEM = table("market_bundle_item", "Market bundle item table.") {
+        id()
+        bigint("bundleProductId")
+        bigint("productId")
+        bigint("variantId", default = 0)
+        int("quantity", default = 1)
+        int("position", default = 0)
+        timestamps()
+        unique("uq_bundle_child", "bundleProductId", "productId", "variantId")
+        key("idx_product", "productId")
+    }
+
+    val PRODUCT_PROVIDER_META = table("market_product_provider_meta", "Market product data owned by a payment provider.") {
+        id()
+        bigint("productId")
+        bigint("variantId", default = 0)
+        str("providerId", 64)
+        text("meta", nullable = false)
+        timestamps()
+        unique("uq_product_variant_provider", "productId", "variantId", "providerId")
+        key("idx_provider", "providerId")
+    }
+
+    val CURRENCY_RATE = table("market_currency_rate", "Market additional currency rate table.") {
+        id()
+        str("currency", 8)
+        decimal("rate", 20, 10)
+        str("mode", 24, "AUTO")
+        bigint("fetchedAt", nullable = true)
+        timestamps()
+        unique("uq_currency", "currency")
     }
 
     /** Every table the plugin owns, in creation order. Later migration slices append their tables here. */
     val tables: List<Table> = listOf(
-        CATEGORY, COMPARISON, COUPON, CREATOR_CODE, DISCOUNT, GIFT, ORDER, ORDER_ITEM, PAYMENT_METHOD, PRODUCT
+        CATEGORY, COMPARISON, COUPON, CREATOR_CODE, DISCOUNT, GIFT, ORDER, ORDER_ITEM, PAYMENT_METHOD, PRODUCT,
+        PRODUCT_VARIANT, PRODUCT_PRICE, PRODUCT_FIELD, BUNDLE_ITEM, PRODUCT_PROVIDER_META, CURRENCY_RATE
     )
 
     /** The table declared under [name] (without prefix), or an error naming it. */

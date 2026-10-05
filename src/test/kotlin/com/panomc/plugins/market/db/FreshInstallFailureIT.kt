@@ -1,15 +1,21 @@
 package com.panomc.plugins.market.db
 
+import com.panomc.plugins.market.db.impl.MarketBundleItemDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCategoryDaoImpl
 import com.panomc.plugins.market.db.impl.MarketComparisonDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCouponDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCreatorCodeDaoImpl
+import com.panomc.plugins.market.db.impl.MarketCurrencyRateDaoImpl
 import com.panomc.plugins.market.db.impl.MarketDiscountDaoImpl
 import com.panomc.plugins.market.db.impl.MarketGiftDaoImpl
 import com.panomc.plugins.market.db.impl.MarketOrderDaoImpl
 import com.panomc.plugins.market.db.impl.MarketOrderItemDaoImpl
 import com.panomc.plugins.market.db.impl.MarketPaymentMethodDaoImpl
 import com.panomc.plugins.market.db.impl.MarketProductDaoImpl
+import com.panomc.plugins.market.db.impl.MarketProductFieldDaoImpl
+import com.panomc.plugins.market.db.impl.MarketProductPriceDaoImpl
+import com.panomc.plugins.market.db.impl.MarketProductProviderMetaDaoImpl
+import com.panomc.plugins.market.db.impl.MarketProductVariantDaoImpl
 import com.panomc.plugins.market.runtime.MarketBootstrap
 import com.panomc.plugins.market.runtime.MarketRuntime
 import com.panomc.plugins.market.support.MarketDbTestBase
@@ -57,6 +63,12 @@ class FreshInstallFailureIT : MarketDbTestBase() {
         MarketOrderItemDaoImpl().init(client)
         MarketPaymentMethodDaoImpl().init(client)
         MarketProductDaoImpl().init(client)
+        MarketProductVariantDaoImpl().init(client)
+        MarketProductPriceDaoImpl().init(client)
+        MarketProductFieldDaoImpl().init(client)
+        MarketBundleItemDaoImpl().init(client)
+        MarketProductProviderMetaDaoImpl().init(client)
+        MarketCurrencyRateDaoImpl().init(client)
     }
 
     private suspend fun obstacle() {
@@ -95,11 +107,11 @@ class FreshInstallFailureIT : MarketDbTestBase() {
         assertEquals(MarketRuntime.State.DEGRADED, first.finalState)
         assertFalse(MarketRuntime.isReady)
 
-        // steps 6 to 8 still ran and the other nine tables exist
+        // steps 6 to 8 still ran and the other fifteen tables exist
         assertEquals(1, calls.secrets.get())
         assertEquals(1, calls.seeds.get())
         assertEquals(1, calls.scheduler.get())
-        assertEquals(9, MarketTestDb.marketTables(pool).size)
+        assertEquals(15, MarketTestDb.marketTables(pool).size)
 
         val health = MarketRuntime.health()
         assertEquals(MarketRuntime.State.DEGRADED, health.state)
@@ -113,7 +125,7 @@ class FreshInstallFailureIT : MarketDbTestBase() {
         assertEquals(MarketRuntime.State.READY, MarketRuntime.state)
         assertTrue(MarketRuntime.isReady)
         assertTrue(MarketRuntime.health().problems.isEmpty())
-        assertEquals(10, MarketTestDb.marketTables(pool).size)
+        assertEquals(16, MarketTestDb.marketTables(pool).size)
         assertTrue(SchemaVerifier.verify(pool, prefix).ok)
     }
 
@@ -166,7 +178,7 @@ class FreshInstallFailureIT : MarketDbTestBase() {
         )
         // ensure() creates the schema although initialize() failed: the plugin is usable
         assertEquals(MarketRuntime.State.READY, runner.run())
-        assertEquals(10, MarketTestDb.marketTables(pool).size)
+        assertEquals(16, MarketTestDb.marketTables(pool).size)
         assertEquals(1, calls.seeds.get())
         assertEquals(1, calls.scheduler.get())
         val errors = MarketRuntime.health().bootstrapErrors

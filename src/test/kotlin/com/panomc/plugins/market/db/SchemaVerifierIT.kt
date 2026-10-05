@@ -22,7 +22,13 @@ class SchemaVerifierIT : MarketDbTestBase() {
         "pano_market_creator_code" to ("unique_code" to listOf("code")),
         "pano_market_gift" to ("unique_code" to listOf("code")),
         "pano_market_payment_method" to ("unique_method_id" to listOf("methodId")),
-        "pano_market_product" to ("unique_slug" to listOf("slug"))
+        "pano_market_product" to ("unique_slug" to listOf("slug")),
+        // scheme version 3 (01 section 2)
+        "pano_market_product_price" to ("uq_product_variant_currency" to listOf("productId", "variantId", "currency")),
+        "pano_market_product_field" to ("uq_product_key" to listOf("productId", "fieldKey")),
+        "pano_market_bundle_item" to ("uq_bundle_child" to listOf("bundleProductId", "productId", "variantId")),
+        "pano_market_product_provider_meta" to ("uq_product_variant_provider" to listOf("productId", "variantId", "providerId")),
+        "pano_market_currency_rate" to ("uq_currency" to listOf("currency"))
     )
 
     private suspend fun rebuild() {
@@ -70,7 +76,7 @@ class SchemaVerifierIT : MarketDbTestBase() {
     }
 
     @Test
-    fun `the unique indexes of the existing tables are declared and present`(): Unit = runBlocking {
+    fun `the unique indexes of the existing and the catalogue tables are declared and present`(): Unit = runBlocking {
         for ((physical, key) in uniqueIndexes) {
             val declared = MarketSchema.tables.single { it.physicalName(prefix) == physical }.keys.single { it.name == key.first }
             assertTrue(declared.unique)
@@ -79,8 +85,8 @@ class SchemaVerifierIT : MarketDbTestBase() {
                 "SELECT NON_UNIQUE FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?",
                 physical, key.first
             )
-            assertEquals(1, rows.size)
-            assertEquals(0, (rows.single().getValue("NON_UNIQUE") as Number).toInt())
+            assertEquals(key.second.size, rows.size, "one STATISTICS row per key column")
+            assertTrue(rows.all { (it.getValue("NON_UNIQUE") as Number).toInt() == 0 })
         }
     }
 
@@ -205,6 +211,44 @@ class SchemaVerifierIT : MarketDbTestBase() {
             assertTrue(SchemaVerifier.verify(pool, prefix, MarketSchema.tables, listOf(fixup)).ok)
         } finally {
             runCatching { sql("DROP TABLE IF EXISTS `$probe`") }
+        }
+    }
+
+    @Test
+    fun `the version 3 additions of category and product are verified by name`(): Unit = runBlocking {
+        try {
+            sql("ALTER TABLE `pano_market_product` DROP COLUMN `soldCount`, DROP INDEX `idx_category_tier`")
+            sql("ALTER TABLE `pano_market_category` DROP COLUMN `upgradeMode`")
+            val targets = verify().findings.associate { it.target to it.kind }
+            assertEquals(
+                mapOf(
+                    "pano_market_product.soldCount" to Kind.MISSING_COLUMN,
+                    "pano_market_product#idx_category_tier" to Kind.MISSING_INDEX,
+                    "pano_market_category.upgradeMode" to Kind.MISSING_COLUMN
+                ),
+                targets
+            )
+        } finally {
+            rebuild()
+        }
+        assertTrue(verify().ok)
+    }
+
+    @Test
+    fun `a catalogue table lost its unique index and the decimal rate lost its type`(): Unit = runBlocking {
+        try {
+            sql("ALTER TABLE `pano_market_product_field` DROP INDEX `uq_product_key`")
+            sql("ALTER TABLE `pano_market_currency_rate` MODIFY `rate` DOUBLE NOT NULL")
+            val targets = verify().findings.associate { it.target to it.kind }
+            assertEquals(
+                mapOf(
+                    "pano_market_product_field#uq_product_key" to Kind.MISSING_INDEX,
+                    "pano_market_currency_rate.rate" to Kind.COLUMN_MISMATCH
+                ),
+                targets
+            )
+        } finally {
+            rebuild()
         }
     }
 

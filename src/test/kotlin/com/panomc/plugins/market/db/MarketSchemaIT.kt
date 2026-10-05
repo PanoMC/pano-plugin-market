@@ -1,15 +1,21 @@
 package com.panomc.plugins.market.db
 
+import com.panomc.plugins.market.db.impl.MarketBundleItemDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCategoryDaoImpl
 import com.panomc.plugins.market.db.impl.MarketComparisonDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCouponDaoImpl
 import com.panomc.plugins.market.db.impl.MarketCreatorCodeDaoImpl
+import com.panomc.plugins.market.db.impl.MarketCurrencyRateDaoImpl
 import com.panomc.plugins.market.db.impl.MarketDiscountDaoImpl
 import com.panomc.plugins.market.db.impl.MarketGiftDaoImpl
 import com.panomc.plugins.market.db.impl.MarketOrderDaoImpl
 import com.panomc.plugins.market.db.impl.MarketOrderItemDaoImpl
 import com.panomc.plugins.market.db.impl.MarketPaymentMethodDaoImpl
 import com.panomc.plugins.market.db.impl.MarketProductDaoImpl
+import com.panomc.plugins.market.db.impl.MarketProductFieldDaoImpl
+import com.panomc.plugins.market.db.impl.MarketProductPriceDaoImpl
+import com.panomc.plugins.market.db.impl.MarketProductProviderMetaDaoImpl
+import com.panomc.plugins.market.db.impl.MarketProductVariantDaoImpl
 import com.panomc.plugins.market.db.model.MarketCoupon
 import com.panomc.plugins.market.db.model.MarketCreatorCode
 import com.panomc.plugins.market.db.model.MarketDiscount
@@ -28,16 +34,19 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * `MarketSchema.ensure` on a real MariaDB (17 section 11.3 `MarketSchemaIT`, 01 section 14.1): the ten tables of the
- * existing plugin, idempotency, equality with the frozen scheme-version-2 install, the `Dao.init` contract, the
- * fixup framework and the "generic update no longer writes the counters" rule of 00 section 8.3. MK-031 changes the
- * table assertion to 53 tables and scheme version 10 once the other tables exist.
+ * `MarketSchema.ensure` on a real MariaDB (17 section 11.3 `MarketSchemaIT`, 01 section 14.1): the tables declared so
+ * far (the ten of the existing plugin plus the six of the catalogue step, MK-023), idempotency, the repair of the
+ * frozen scheme-version-2 install, the `Dao.init` contract, the fixup framework and the "generic update no longer
+ * writes the counters" rule of 00 section 8.3. MK-031 changes the table assertion to 53 tables and scheme version 10
+ * once the other tables exist.
  */
 class MarketSchemaIT : MarketDbTestBase() {
     private val expectedTables = listOf(
         "category", "comparison", "coupon", "creator_code", "discount", "gift", "order", "order_item",
-        "payment_method", "product"
-    ).map { "pano_market_$it" }
+        "payment_method", "product",
+        // scheme version 3 (MK-023)
+        "product_variant", "product_price", "product_field", "bundle_item", "product_provider_meta", "currency_rate"
+    ).map { "pano_market_$it" }.sorted()
 
     /** Drops every table and runs `ensure` again: the way a test that damaged the schema puts it back. */
     private suspend fun rebuild() {
@@ -48,7 +57,7 @@ class MarketSchemaIT : MarketDbTestBase() {
     // --- ensure ------------------------------------------------------------------------------------------------
 
     @Test
-    fun `ensure on an empty database creates the ten tables`(): Unit = runBlocking {
+    fun `ensure on an empty database creates the sixteen tables`(): Unit = runBlocking {
         MarketTestDb.dropAllTables(pool)
         val report = MarketSchema.ensure(pool, prefix)
         assertTrue(report.clean, report.ddlErrors.toString())
@@ -66,11 +75,11 @@ class MarketSchemaIT : MarketDbTestBase() {
         val after = SchemaSnapshot.take(pool)
         assertTrue(first.clean && second.clean)
         assertEquals(before, after)
-        assertTrue(before.columns.isNotEmpty() && before.keys.isNotEmpty() && before.tables.size == 10)
+        assertTrue(before.columns.isNotEmpty() && before.keys.isNotEmpty() && before.tables.size == 16)
     }
 
     @Test
-    fun `ensure produces the schema of the frozen version 2 install`(): Unit = runBlocking {
+    fun `ensure brings the frozen version 2 install to the schema of a fresh install`(): Unit = runBlocking {
         val admin = MarketTestDb.adminPool()
         val reference = MarketTestDb.newDatabaseName()
         var referencePool: Pool? = null
@@ -80,13 +89,17 @@ class MarketSchemaIT : MarketDbTestBase() {
             val script = MarketSchemaIT::class.java.getResourceAsStream("/fixtures/schema-v2.sql")!!
                 .use { it.readBytes().toString(Charsets.UTF_8) }
             MarketTestDb.runScript(referencePool, script)
+            assertEquals(10, SchemaSnapshot.take(referencePool).tables.size)
+
+            // the repair path of every plugin start: the idempotent ALTERs and CREATEs bring version 2 up to date
+            assertTrue(MarketSchema.ensure(referencePool, prefix).clean)
 
             MarketTestDb.dropAllTables(pool)
             MarketSchema.ensure(pool, prefix)
 
-            val expected = SchemaSnapshot.take(referencePool)
-            val actual = SchemaSnapshot.take(pool)
-            assertEquals(10, expected.tables.size)
+            val expected = SchemaSnapshot.take(pool)
+            val actual = SchemaSnapshot.take(referencePool)
+            assertEquals(16, expected.tables.size)
             assertEquals(expected.tables, actual.tables)
             assertEquals(expected.columns, actual.columns)
             assertEquals(expected.keys, actual.keys)
@@ -141,11 +154,14 @@ class MarketSchemaIT : MarketDbTestBase() {
         { c -> MarketCouponDaoImpl().init(c) }, { c -> MarketCreatorCodeDaoImpl().init(c) },
         { c -> MarketDiscountDaoImpl().init(c) }, { c -> MarketGiftDaoImpl().init(c) },
         { c -> MarketOrderDaoImpl().init(c) }, { c -> MarketOrderItemDaoImpl().init(c) },
-        { c -> MarketPaymentMethodDaoImpl().init(c) }, { c -> MarketProductDaoImpl().init(c) }
+        { c -> MarketPaymentMethodDaoImpl().init(c) }, { c -> MarketProductDaoImpl().init(c) },
+        { c -> MarketProductVariantDaoImpl().init(c) }, { c -> MarketProductPriceDaoImpl().init(c) },
+        { c -> MarketProductFieldDaoImpl().init(c) }, { c -> MarketBundleItemDaoImpl().init(c) },
+        { c -> MarketProductProviderMetaDaoImpl().init(c) }, { c -> MarketCurrencyRateDaoImpl().init(c) }
     )
 
     @Test
-    fun `the ten Dao init calls create the same schema as ensure`(): Unit = runBlocking {
+    fun `the sixteen Dao init calls create the same schema as ensure`(): Unit = runBlocking {
         MarketTestDb.dropAllTables(pool)
         allDaoInits().forEach { it(pool) }
         allDaoInits().forEach { it(pool) } // twice: idempotent
@@ -377,7 +393,7 @@ class MarketSchemaIT : MarketDbTestBase() {
     }
 
     @Test
-    fun `the fixup list is empty for the ten tables and a predicate-less fixup must be one-shot`() {
+    fun `the fixup list is empty for the catalogue tables and a predicate-less fixup must be one-shot`() {
         assertTrue(MarketSchema.fixups().isEmpty())
         val failure = runCatching { MarketSchema.Fixup("x", pendingSql = null, oneShot = false) { _, _ -> } }
         assertTrue(failure.exceptionOrNull() is IllegalArgumentException)
