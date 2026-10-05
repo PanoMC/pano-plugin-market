@@ -7,6 +7,7 @@ import io.vertx.mysqlclient.MySQLException
 import io.vertx.sqlclient.Pool
 import io.vertx.sqlclient.SqlConnection
 import io.vertx.sqlclient.Transaction
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -61,8 +62,23 @@ class MarketDb(
         throw MarketBusyException(MAX_ATTEMPTS, last)
     }
 
+    /**
+     * Borrows a connection. `Future.coAwait` has no cancellation hook and the pool keeps a cancelled waiter queued
+     * (until its connection timeout), so a connection can be delivered after the coroutine is gone, or in the very
+     * moment it is cancelled: that connection is handed straight back instead of being lost from the shared pool.
+     */
+    private suspend fun acquire(): SqlConnection {
+        val future = pool().connection
+        try {
+            return future.coAwait()
+        } catch (e: CancellationException) {
+            future.onSuccess { late -> late.close() }
+            throw e
+        }
+    }
+
     private suspend fun <T> runOnce(block: suspend (SqlConnection) -> T): T {
-        val conn = pool().connection.coAwait()
+        val conn = acquire()
         var previousTimeout: Long? = null
         var isolationPending = false
         var transaction: Transaction? = null

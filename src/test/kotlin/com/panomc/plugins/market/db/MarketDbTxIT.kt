@@ -16,11 +16,15 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -343,5 +347,43 @@ class MarketDbTxIT : MarketDbTestBase() {
         }
         assertEquals(1, attempts.get())
         assertEquals(5, pool.n(1))
+    }
+
+    @Test
+    fun `a transaction cancelled while it waits for a connection does not leak the connection`(): Unit = runBlocking {
+        // Pool of one: transaction A holds the only connection, transaction B queues behind it in the pool and is
+        // cancelled there. The pool keeps B's waiter queued and later hands it the connection A gives back; if
+        // nobody closes that connection the pool is empty for good.
+        val solo = MarketTestDb.pool(databaseName, maxSize = 1, connectionTimeoutMs = 3_000)
+        try {
+            val soloDb = MarketDb({ solo }, SystemClock, 1)
+            val holding = CompletableDeferred<Unit>()
+            val gate = CompletableDeferred<Unit>()
+            val holder = async(Dispatchers.IO) {
+                soloDb.tx { conn ->
+                    conn.insert(1)
+                    holding.complete(Unit)
+                    gate.await()
+                }
+            }
+            holding.await()
+
+            val waiterRan = AtomicBoolean(false)
+            val waiter = launch(Dispatchers.IO) { soloDb.tx { waiterRan.set(true) } }
+            delay(300) // B is parked in the pool queue: the only connection is busy
+            waiter.cancelAndJoin()
+            assertFalse(waiterRan.get(), "the cancelled transaction never got a connection to run its block")
+
+            gate.complete(Unit)
+            holder.await()
+            assertEquals(1L, rows(), "the holding transaction committed")
+
+            // The connection is back in the pool: a new transaction gets it well inside the 3 s timeout.
+            val one = soloDb.tx { conn -> conn.query("SELECT 1 AS one").execute().coAwait().first().getInteger("one") }
+            assertEquals(1, one)
+        } finally {
+            // A leaked connection would make close() wait for ever and hide the assertion above.
+            withTimeoutOrNull(5_000) { solo.close().coAwait() }
+        }
     }
 }
