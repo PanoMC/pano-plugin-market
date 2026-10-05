@@ -19,7 +19,9 @@
     "payment-methods": "Search methods...",
     "orders": "Search orders...",
     "credit-accounts": "Search player...",
-    "creator-report": "Search player or code..."
+    "creator-report": "Search player or code...",
+    "blocks": "Search blocks...",
+    "subscriptions": "Search subscriptions..."
   },
   "pages": {
     "orders": {
@@ -957,6 +959,118 @@
       "cancel-description": "The pending payout of {amount} will be cancelled and the amount becomes available again.",
       "cancel-confirm": "Cancel Payout",
       "toast-cancelled": "Payout cancelled."
+    },
+    "blocks": {
+      "title": "Block List",
+      "add": "Add Block",
+      "count": "{count} Blocks",
+      "source": "Source",
+      "source-all": "All Sources",
+      "tab": {
+        "all": "All",
+        "players": "Players",
+        "emails": "E-mails",
+        "ips": "IPs",
+        "users": "Users"
+      },
+      "table": {
+        "type": "Type",
+        "value": "Value",
+        "reason": "Reason",
+        "source": "Source",
+        "hits": "Hits",
+        "last-hit": "Last Hit",
+        "expires": "Expires",
+        "created": "Created"
+      },
+      "actions": {
+        "view-order": "View Order",
+        "remove": "Remove"
+      },
+      "expired": "Expired",
+      "toast-removed": "The block was removed."
+    },
+    "subscriptions": {
+      "title": "Subscriptions",
+      "count": "{count} Subscriptions",
+      "tab": {
+        "all": "All",
+        "active": "Active",
+        "past-due": "Past Due",
+        "cancelled": "Cancelled"
+      },
+      "table": {
+        "id": "Id",
+        "player": "Player",
+        "product": "Product",
+        "price": "Price",
+        "method": "Method",
+        "period-end": "Period End",
+        "mode": "Mode"
+      },
+      "actions": {
+        "view": "View",
+        "retry": "Retry Charge",
+        "cancel": "Cancel"
+      },
+      "cancels-at-period-end": "Cancels At Period End",
+      "retry-title": "Retry the charge now?",
+      "retry-description": "The renewal is charged again with the stored payment method.",
+      "toast-retry": "The charge was retried."
+    },
+    "subscription-detail": {
+      "title": "Subscription",
+      "heading": "Subscription #{id}",
+      "summary": "Summary",
+      "player": "Player",
+      "price": "Price",
+      "cycles": "Cycles",
+      "period-start": "Period Start",
+      "next-charge": "Next Charge",
+      "grace-ends": "Grace Ends",
+      "fail-count": "Failed Charges",
+      "end-reason": "End Reason",
+      "gateway-id": "Gateway Subscription Id",
+      "copy-gateway-id": "Copy the gateway subscription id",
+      "renewal-count": "{count} Renewals",
+      "order-count": "{count} Orders",
+      "table": {
+        "index": "Period",
+        "period": "Dates",
+        "amount": "Amount",
+        "attempts": "Attempts",
+        "last-error": "Last Error",
+        "order": "Order"
+      }
+    },
+    "payment-events": {
+      "title": "Payment Events",
+      "count": "{count} Events",
+      "tab": {
+        "all": "All",
+        "deferred": "Deferred",
+        "failed": "Failed",
+        "rejected": "Rejected"
+      },
+      "table": {
+        "provider": "Provider",
+        "direction": "Direction",
+        "channel": "Channel",
+        "event-types": "Event Types",
+        "http": "HTTP",
+        "error": "Error",
+        "ip": "IP",
+        "date": "Date"
+      },
+      "actions": {
+        "view": "View",
+        "replay": "Replay"
+      },
+      "unverified": "Unverified",
+      "replay-title": "Replay this event?",
+      "replay-description": "The stored request is processed again. Nothing is sent to the gateway.",
+      "toast-replayed": "The event was replayed: {status}.",
+      "toast-replayed-generic": "The event was replayed."
     }
   },
   "common": {
@@ -1540,6 +1654,66 @@
         "NOTHING_AVAILABLE": "Nothing is available to pay out.",
         "TOO_MANY": "Too many actions."
       }
+    },
+    "block": {
+      "title": "Add Block",
+      "type": "Type",
+      "value": "Value",
+      "value-placeholder": {
+        "PLAYER": "Player name",
+        "EMAIL": "E-mail address",
+        "IP": "IP address or range (1.2.3.0/24)"
+      },
+      "reason": "Reason (optional)",
+      "expires": "Expires",
+      "expires-at": "Expiry date and time",
+      "submit": "Add Block",
+      "toast-added": "The block was added.",
+      "error": {
+        "value-REQUIRED": "Enter a value.",
+        "value-TOO_LONG": "The value is too long.",
+        "value-INVALID": "The value is not valid for this type.",
+        "value-BLOCK_ALREADY_EXISTS": "This value is already blocked.",
+        "value-INVALID_BLOCK": "The server rejected this value.",
+        "reason-TOO_LONG": "The reason can be at most 255 characters.",
+        "expires-REQUIRED": "Pick an expiry date.",
+        "expires-PAST": "The expiry must be in the future."
+      }
+    },
+    "confirm-delete": {
+      "block": {
+        "title": "Remove this block?",
+        "description": "The value can buy from the store again."
+      }
+    },
+    "cancel-subscription": {
+      "title": "Cancel Subscription",
+      "period-end": "At Period End",
+      "now": "Immediately",
+      "hint-period-end": "The player keeps access until the paid period ends.",
+      "hint-now": "The subscription ends now and its actions are revoked as configured.",
+      "reason": "Reason (optional)",
+      "submit": "Cancel Subscription",
+      "toast-cancelled": "The subscription was cancelled.",
+      "error": {
+        "reason-TOO_LONG": "The reason can be at most 255 characters."
+      }
+    },
+    "payment-event": {
+      "title": "Payment Event",
+      "rows": {
+        "provider": "Provider",
+        "direction": "Direction",
+        "channel": "Channel",
+        "event-key": "Event Key",
+        "event-types": "Event Types",
+        "http": "HTTP",
+        "error": "Error",
+        "ip": "IP"
+      },
+      "date": "Date",
+      "headers": "Headers",
+      "body": "Body"
     }
   },
   "settings": {
@@ -2253,6 +2427,37 @@
       "CREDIT": "Credits",
       "ACTION": "Actions",
       "MANUAL": "Manual"
+    },
+    "block-type": {
+      "PLAYER": "Player",
+      "EMAIL": "E-mail",
+      "IP": "IP",
+      "USER": "User"
+    },
+    "block-source": {
+      "MANUAL": "Manual",
+      "CHARGEBACK": "Chargeback"
+    },
+    "subscription-mode": {
+      "GATEWAY": "Gateway",
+      "MERCHANT": "Merchant",
+      "MANUAL": "Manual"
+    },
+    "renewal": {
+      "PENDING": "Pending",
+      "PAID": "Paid",
+      "FAILED": "Failed",
+      "SKIPPED": "Skipped"
+    },
+    "subscription-end-reason": {
+      "BUYER_CANCEL": "Cancelled by the buyer",
+      "ADMIN_CANCEL": "Cancelled by an admin",
+      "PAYMENT_FAILED": "Payment failed",
+      "GATEWAY_ENDED": "Ended by the gateway",
+      "COMPLETED": "Completed",
+      "REFUND": "Refunded",
+      "CHARGEBACK": "Chargeback",
+      "PROVIDER_UNAVAILABLE": "Provider unavailable"
     }
   },
   "alerts": {

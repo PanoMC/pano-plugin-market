@@ -19,7 +19,9 @@
     "payment-methods": "Поиск способов оплаты...",
     "orders": "Поиск заказов...",
     "credit-accounts": "Поиск игрока...",
-    "creator-report": "Поиск игрока или кода..."
+    "creator-report": "Поиск игрока или кода...",
+    "blocks": "Поиск блокировок...",
+    "subscriptions": "Поиск подписок..."
   },
   "pages": {
     "orders": {
@@ -957,6 +959,118 @@
       "cancel-description": "Ожидающая выплата {amount} будет отменена, сумма снова станет доступной.",
       "cancel-confirm": "Отменить выплату",
       "toast-cancelled": "Выплата отменена."
+    },
+    "blocks": {
+      "title": "Список блокировок",
+      "add": "Добавить блокировку",
+      "count": "Блокировок: {count}",
+      "source": "Источник",
+      "source-all": "Все источники",
+      "tab": {
+        "all": "Все",
+        "players": "Игроки",
+        "emails": "E-mail",
+        "ips": "IP-адреса",
+        "users": "Пользователи"
+      },
+      "table": {
+        "type": "Тип",
+        "value": "Значение",
+        "reason": "Причина",
+        "source": "Источник",
+        "hits": "Срабатывания",
+        "last-hit": "Последнее срабатывание",
+        "expires": "Истекает",
+        "created": "Создано"
+      },
+      "actions": {
+        "view-order": "Открыть заказ",
+        "remove": "Удалить"
+      },
+      "expired": "Истекла",
+      "toast-removed": "Блокировка удалена."
+    },
+    "subscriptions": {
+      "title": "Подписки",
+      "count": "Подписок: {count}",
+      "tab": {
+        "all": "Все",
+        "active": "Активные",
+        "past-due": "Просроченные",
+        "cancelled": "Отменённые"
+      },
+      "table": {
+        "id": "Id",
+        "player": "Игрок",
+        "product": "Товар",
+        "price": "Цена",
+        "method": "Способ",
+        "period-end": "Конец периода",
+        "mode": "Режим"
+      },
+      "actions": {
+        "view": "Открыть",
+        "retry": "Повторить списание",
+        "cancel": "Отменить"
+      },
+      "cancels-at-period-end": "Отмена в конце периода",
+      "retry-title": "Повторить списание сейчас?",
+      "retry-description": "Продление будет оплачено ещё раз сохранённым способом оплаты.",
+      "toast-retry": "Списание повторено."
+    },
+    "subscription-detail": {
+      "title": "Подписка",
+      "heading": "Подписка #{id}",
+      "summary": "Сводка",
+      "player": "Игрок",
+      "price": "Цена",
+      "cycles": "Циклы",
+      "period-start": "Начало периода",
+      "next-charge": "Следующее списание",
+      "grace-ends": "Конец льготного периода",
+      "fail-count": "Неудачных списаний",
+      "end-reason": "Причина окончания",
+      "gateway-id": "Id подписки в шлюзе",
+      "copy-gateway-id": "Копировать id подписки в шлюзе",
+      "renewal-count": "Продлений: {count}",
+      "order-count": "Заказов: {count}",
+      "table": {
+        "index": "Период №",
+        "period": "Даты",
+        "amount": "Сумма",
+        "attempts": "Попытки",
+        "last-error": "Последняя ошибка",
+        "order": "Заказ"
+      }
+    },
+    "payment-events": {
+      "title": "События платежей",
+      "count": "Событий: {count}",
+      "tab": {
+        "all": "Все",
+        "deferred": "Отложенные",
+        "failed": "Ошибки",
+        "rejected": "Отклонённые"
+      },
+      "table": {
+        "provider": "Провайдер",
+        "direction": "Направление",
+        "channel": "Канал",
+        "event-types": "Типы событий",
+        "http": "HTTP",
+        "error": "Ошибка",
+        "ip": "IP",
+        "date": "Дата"
+      },
+      "actions": {
+        "view": "Открыть",
+        "replay": "Повторить"
+      },
+      "unverified": "Не проверено",
+      "replay-title": "Повторить это событие?",
+      "replay-description": "Сохранённый запрос будет обработан заново. В шлюз ничего не отправляется.",
+      "toast-replayed": "Событие повторено: {status}.",
+      "toast-replayed-generic": "Событие повторено."
     }
   },
   "common": {
@@ -1540,6 +1654,66 @@
         "NOTHING_AVAILABLE": "Нет суммы для выплаты.",
         "TOO_MANY": "Слишком много действий."
       }
+    },
+    "block": {
+      "title": "Добавить блокировку",
+      "type": "Тип",
+      "value": "Значение",
+      "value-placeholder": {
+        "PLAYER": "Имя игрока",
+        "EMAIL": "Адрес e-mail",
+        "IP": "IP-адрес или диапазон (1.2.3.0/24)"
+      },
+      "reason": "Причина (необязательно)",
+      "expires": "Ограничить по времени",
+      "expires-at": "Дата и время окончания",
+      "submit": "Добавить блокировку",
+      "toast-added": "Блокировка добавлена.",
+      "error": {
+        "value-REQUIRED": "Введите значение.",
+        "value-TOO_LONG": "Значение слишком длинное.",
+        "value-INVALID": "Значение не подходит для этого типа.",
+        "value-BLOCK_ALREADY_EXISTS": "Это значение уже заблокировано.",
+        "value-INVALID_BLOCK": "Сервер отклонил это значение.",
+        "reason-TOO_LONG": "Причина не длиннее 255 символов.",
+        "expires-REQUIRED": "Выберите дату окончания.",
+        "expires-PAST": "Срок окончания должен быть в будущем."
+      }
+    },
+    "confirm-delete": {
+      "block": {
+        "title": "Удалить эту блокировку?",
+        "description": "Это значение снова сможет покупать в магазине."
+      }
+    },
+    "cancel-subscription": {
+      "title": "Отмена подписки",
+      "period-end": "В конце периода",
+      "now": "Немедленно",
+      "hint-period-end": "Игрок сохраняет доступ до конца оплаченного периода.",
+      "hint-now": "Подписка завершается сейчас, действия отзываются согласно настройкам.",
+      "reason": "Причина (необязательно)",
+      "submit": "Отменить подписку",
+      "toast-cancelled": "Подписка отменена.",
+      "error": {
+        "reason-TOO_LONG": "Причина не длиннее 255 символов."
+      }
+    },
+    "payment-event": {
+      "title": "Событие платежа",
+      "rows": {
+        "provider": "Провайдер",
+        "direction": "Направление",
+        "channel": "Канал",
+        "event-key": "Ключ события",
+        "event-types": "Типы событий",
+        "http": "HTTP",
+        "error": "Ошибка",
+        "ip": "IP"
+      },
+      "date": "Дата",
+      "headers": "Заголовки",
+      "body": "Тело"
     }
   },
   "settings": {
@@ -2253,6 +2427,37 @@
       "CREDIT": "Кредиты",
       "ACTION": "Действия",
       "MANUAL": "Вручную"
+    },
+    "block-type": {
+      "PLAYER": "Игрок",
+      "EMAIL": "E-mail",
+      "IP": "IP",
+      "USER": "Пользователь"
+    },
+    "block-source": {
+      "MANUAL": "Вручную",
+      "CHARGEBACK": "Чарджбэк"
+    },
+    "subscription-mode": {
+      "GATEWAY": "Шлюз",
+      "MERCHANT": "Магазин",
+      "MANUAL": "Вручную"
+    },
+    "renewal": {
+      "PENDING": "Ожидает",
+      "PAID": "Оплачено",
+      "FAILED": "Ошибка",
+      "SKIPPED": "Пропущено"
+    },
+    "subscription-end-reason": {
+      "BUYER_CANCEL": "Отменено покупателем",
+      "ADMIN_CANCEL": "Отменено администратором",
+      "PAYMENT_FAILED": "Платёж не прошёл",
+      "GATEWAY_ENDED": "Завершено шлюзом",
+      "COMPLETED": "Завершено",
+      "REFUND": "Возврат",
+      "CHARGEBACK": "Чарджбэк",
+      "PROVIDER_UNAVAILABLE": "Провайдер недоступен"
     }
   },
   "alerts": {

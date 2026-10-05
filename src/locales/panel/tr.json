@@ -19,7 +19,9 @@
     "payment-methods": "Yöntem ara...",
     "orders": "Sipariş ara...",
     "credit-accounts": "Oyuncu ara...",
-    "creator-report": "Oyuncu veya kod ara..."
+    "creator-report": "Oyuncu veya kod ara...",
+    "blocks": "Engellerde ara...",
+    "subscriptions": "Abonelik ara..."
   },
   "pages": {
     "orders": {
@@ -957,6 +959,118 @@
       "cancel-description": "Bekleyen {amount} tutarındaki ödeme iptal edilecek ve tutar tekrar kullanılabilir olacak.",
       "cancel-confirm": "Ödemeyi İptal Et",
       "toast-cancelled": "Ödeme iptal edildi."
+    },
+    "blocks": {
+      "title": "Engel Listesi",
+      "add": "Engel Ekle",
+      "count": "{count} Engel",
+      "source": "Kaynak",
+      "source-all": "Tüm Kaynaklar",
+      "tab": {
+        "all": "Tümü",
+        "players": "Oyuncular",
+        "emails": "E-postalar",
+        "ips": "IP'ler",
+        "users": "Kullanıcılar"
+      },
+      "table": {
+        "type": "Tür",
+        "value": "Değer",
+        "reason": "Neden",
+        "source": "Kaynak",
+        "hits": "İsabet",
+        "last-hit": "Son İsabet",
+        "expires": "Bitiş",
+        "created": "Oluşturulma"
+      },
+      "actions": {
+        "view-order": "Siparişi Görüntüle",
+        "remove": "Kaldır"
+      },
+      "expired": "Süresi Doldu",
+      "toast-removed": "Engel kaldırıldı."
+    },
+    "subscriptions": {
+      "title": "Abonelikler",
+      "count": "{count} Abonelik",
+      "tab": {
+        "all": "Tümü",
+        "active": "Aktif",
+        "past-due": "Gecikmiş",
+        "cancelled": "İptal Edilmiş"
+      },
+      "table": {
+        "id": "Id",
+        "player": "Oyuncu",
+        "product": "Ürün",
+        "price": "Fiyat",
+        "method": "Yöntem",
+        "period-end": "Dönem Sonu",
+        "mode": "Mod"
+      },
+      "actions": {
+        "view": "Görüntüle",
+        "retry": "Tahsilatı Tekrar Dene",
+        "cancel": "İptal Et"
+      },
+      "cancels-at-period-end": "Dönem Sonunda İptal Olur",
+      "retry-title": "Tahsilat şimdi tekrar denensin mi?",
+      "retry-description": "Yenileme, kayıtlı ödeme yöntemiyle tekrar tahsil edilir.",
+      "toast-retry": "Tahsilat tekrar denendi."
+    },
+    "subscription-detail": {
+      "title": "Abonelik",
+      "heading": "Abonelik #{id}",
+      "summary": "Özet",
+      "player": "Oyuncu",
+      "price": "Fiyat",
+      "cycles": "Döngüler",
+      "period-start": "Dönem Başlangıcı",
+      "next-charge": "Sonraki Tahsilat",
+      "grace-ends": "Ek Süre Bitişi",
+      "fail-count": "Başarısız Tahsilat",
+      "end-reason": "Bitiş Nedeni",
+      "gateway-id": "Ağ Geçidi Abonelik Kimliği",
+      "copy-gateway-id": "Ağ geçidi abonelik kimliğini kopyala",
+      "renewal-count": "{count} Yenileme",
+      "order-count": "{count} Sipariş",
+      "table": {
+        "index": "Dönem No",
+        "period": "Tarihler",
+        "amount": "Tutar",
+        "attempts": "Deneme",
+        "last-error": "Son Hata",
+        "order": "Sipariş"
+      }
+    },
+    "payment-events": {
+      "title": "Ödeme Olayları",
+      "count": "{count} Olay",
+      "tab": {
+        "all": "Tümü",
+        "deferred": "Ertelenen",
+        "failed": "Başarısız",
+        "rejected": "Reddedilen"
+      },
+      "table": {
+        "provider": "Sağlayıcı",
+        "direction": "Yön",
+        "channel": "Kanal",
+        "event-types": "Olay Türleri",
+        "http": "HTTP",
+        "error": "Hata",
+        "ip": "IP",
+        "date": "Tarih"
+      },
+      "actions": {
+        "view": "Görüntüle",
+        "replay": "Yeniden Oynat"
+      },
+      "unverified": "Doğrulanmadı",
+      "replay-title": "Bu olay yeniden oynatılsın mı?",
+      "replay-description": "Saklanan istek yeniden işlenir. Ağ geçidine hiçbir şey gönderilmez.",
+      "toast-replayed": "Olay yeniden oynatıldı: {status}.",
+      "toast-replayed-generic": "Olay yeniden oynatıldı."
     }
   },
   "common": {
@@ -1540,6 +1654,66 @@
         "NOTHING_AVAILABLE": "Ödenebilecek tutar yok.",
         "TOO_MANY": "Çok fazla aksiyon var."
       }
+    },
+    "block": {
+      "title": "Engel Ekle",
+      "type": "Tür",
+      "value": "Değer",
+      "value-placeholder": {
+        "PLAYER": "Oyuncu adı",
+        "EMAIL": "E-posta adresi",
+        "IP": "IP adresi veya aralığı (1.2.3.0/24)"
+      },
+      "reason": "Neden (isteğe bağlı)",
+      "expires": "Süreli",
+      "expires-at": "Bitiş tarihi ve saati",
+      "submit": "Engel Ekle",
+      "toast-added": "Engel eklendi.",
+      "error": {
+        "value-REQUIRED": "Bir değer girin.",
+        "value-TOO_LONG": "Değer çok uzun.",
+        "value-INVALID": "Değer bu tür için geçerli değil.",
+        "value-BLOCK_ALREADY_EXISTS": "Bu değer zaten engelli.",
+        "value-INVALID_BLOCK": "Sunucu bu değeri reddetti.",
+        "reason-TOO_LONG": "Neden en fazla 255 karakter olabilir.",
+        "expires-REQUIRED": "Bir bitiş tarihi seçin.",
+        "expires-PAST": "Bitiş zamanı gelecekte olmalı."
+      }
+    },
+    "confirm-delete": {
+      "block": {
+        "title": "Bu engel kaldırılsın mı?",
+        "description": "Bu değer mağazadan tekrar alışveriş yapabilir."
+      }
+    },
+    "cancel-subscription": {
+      "title": "Aboneliği İptal Et",
+      "period-end": "Dönem Sonunda",
+      "now": "Hemen",
+      "hint-period-end": "Oyuncu ödenen dönem bitene kadar erişimini korur.",
+      "hint-now": "Abonelik hemen biter ve aksiyonlar ayarlara göre geri alınır.",
+      "reason": "Neden (isteğe bağlı)",
+      "submit": "Aboneliği İptal Et",
+      "toast-cancelled": "Abonelik iptal edildi.",
+      "error": {
+        "reason-TOO_LONG": "Neden en fazla 255 karakter olabilir."
+      }
+    },
+    "payment-event": {
+      "title": "Ödeme Olayı",
+      "rows": {
+        "provider": "Sağlayıcı",
+        "direction": "Yön",
+        "channel": "Kanal",
+        "event-key": "Olay Anahtarı",
+        "event-types": "Olay Türleri",
+        "http": "HTTP",
+        "error": "Hata",
+        "ip": "IP"
+      },
+      "date": "Tarih",
+      "headers": "Başlıklar",
+      "body": "Gövde"
     }
   },
   "settings": {
@@ -2253,6 +2427,37 @@
       "CREDIT": "Kredi",
       "ACTION": "Aksiyon",
       "MANUAL": "Manuel"
+    },
+    "block-type": {
+      "PLAYER": "Oyuncu",
+      "EMAIL": "E-posta",
+      "IP": "IP",
+      "USER": "Kullanıcı"
+    },
+    "block-source": {
+      "MANUAL": "Manuel",
+      "CHARGEBACK": "Geri ödeme itirazı"
+    },
+    "subscription-mode": {
+      "GATEWAY": "Ağ geçidi",
+      "MERCHANT": "Mağaza",
+      "MANUAL": "Manuel"
+    },
+    "renewal": {
+      "PENDING": "Beklemede",
+      "PAID": "Ödendi",
+      "FAILED": "Başarısız",
+      "SKIPPED": "Atlandı"
+    },
+    "subscription-end-reason": {
+      "BUYER_CANCEL": "Alıcı iptal etti",
+      "ADMIN_CANCEL": "Yönetici iptal etti",
+      "PAYMENT_FAILED": "Ödeme başarısız",
+      "GATEWAY_ENDED": "Ağ geçidi sonlandırdı",
+      "COMPLETED": "Tamamlandı",
+      "REFUND": "İade edildi",
+      "CHARGEBACK": "Geri ödeme itirazı",
+      "PROVIDER_UNAVAILABLE": "Sağlayıcı kullanılamıyor"
     }
   },
   "alerts": {
