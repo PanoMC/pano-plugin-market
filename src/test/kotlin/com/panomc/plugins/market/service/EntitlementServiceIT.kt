@@ -520,6 +520,63 @@ class EntitlementServiceIT : MarketDaoITBase() {
         assertEquals(0L, w.fixtures.creditBalance(u))
     }
 
+    @Test
+    fun `a link that expired with the chain continuing keeps the permission when it is revoked later (coverage, MK-107 review)`(): Unit = runBlocking {
+        val u = steve()
+        val actions = listOf(permission("a1", "group.vip"), credit("a2", 100))
+        val first = timed(u, actions)
+        val t0 = w.clock.now()
+
+        d.pay(first)
+        d.runInline()
+        w.clock.advance(20 * day)
+
+        val second = timed(u, actions, first.product)
+
+        d.pay(second)
+        d.runInline()
+
+        // day 31: the first link ran out and the chain continues (no EXPIRE rows), then the first order is charged back
+        w.clock.advance(11 * day)
+        assertEquals(EntitlementService.ExpiryOutcome.CHAIN_CONTINUES, expire(first).outcome)
+        assertEquals(EntitlementStatus.EXPIRED, entitlementOf(first).status)
+
+        val done = revoke(first, endReason = "CHARGEBACK")
+
+        assertTrue(done.ended.isEmpty(), "an EXPIRED entitlement stays EXPIRED")
+        assertEquals(t0 + 60 * day, done.coverage.getValue(first.items[0].id).chainEnd, "the second link still covers now")
+        assertEquals(EntitlementStatus.EXPIRED, entitlementOf(first).status)
+        assertTrue(rowsOf(first, DeliveryPhase.REVOKE).none { it.actionType == DeliveryActionType.PERMISSION && payload(it).getString("op") != "EXTEND" }, "no permission removal while the owner is covered")
+        assertEquals(1, rowsOf(first, DeliveryPhase.REVOKE).count { it.actionType == DeliveryActionType.CREDIT }, "the credit inverse is still planned")
+
+        d.runInline()
+        assertEquals(t0 + 60 * day, d.permissionStore.of(u.id).single().expiresAt, "the node stays with the expiry of the second link")
+        assertEquals(100L, w.fixtures.creditBalance(u))
+    }
+
+    @Test
+    fun `a bundle revoke does not plan a child again that an earlier revoke took back (MK-107 review)`(): Unit = runBlocking {
+        val u = steve()
+        val placed = d.placeBundle(u, listOf(credit("p1", 100)), listOf(DeliveryWorld.ChildLine(listOf(credit("c1", 40)))))
+        val child = placed.items[1].id
+
+        d.pay(placed)
+        d.runInline()
+
+        revoke(placed, mapOf(child to null))
+        d.runInline()
+        assertEquals(100L, w.fixtures.creditBalance(u))
+
+        // the caller names only the bundle line, as the manual revoke of an order does
+        val done = revoke(placed, mapOf(placed.items[0].id to null))
+
+        assertEquals(setOf(placed.items[0].id), done.units.keys, "the child has nothing left to revoke")
+        assertEquals(1, rowsOf(placed, DeliveryPhase.REVOKE).count { it.orderItemId == child })
+
+        d.runInline()
+        assertEquals(0L, w.fixtures.creditBalance(u))
+    }
+
     // ===== tier upgrade (05 section 5.2, 21 section 5.4) ===========================================================================
 
     private class Ladder(val low: MarketProduct, val high: MarketProduct)

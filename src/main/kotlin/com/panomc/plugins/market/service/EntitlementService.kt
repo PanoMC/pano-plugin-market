@@ -237,9 +237,12 @@ class EntitlementService(
                 for (child in items.filter { it.parentItemId == id }) {
                     val n = if (item.quantity > 0) child.quantity / item.quantity else 1
                     val childRange = clip(child, (range.first * n)..((range.last + 1) * n - 1)) ?: continue
+                    // units of the child that an earlier revoke (the child alone) already took back are never planned again (they would debit credits twice)
+                    val goneChild = revokedBefore[child.id] ?: revokedUnitsOf(conn, child)
+                    val first = childRange.firstOrNull { it !in goneChild } ?: continue
 
-                    gone[child.id] = revokedBefore[child.id] ?: revokedUnitsOf(conn, child)
-                    units[child.id] = childRange
+                    gone[child.id] = goneChild
+                    units[child.id] = first..childRange.last
                 }
             }
         }
@@ -271,12 +274,14 @@ class EntitlementService(
                     "UPDATE ${table()} SET `status` = 'REVOKED', `endReason` = ?, `endedAt` = ?, `updatedAt` = ? WHERE `id` = ? AND `status` IN ('ACTIVE', 'UPGRADED')"
                 ).execute(Tuple.of(endReason, now, now, e.id)).coAwait().rowCount() > 0
 
-                if (!moved) continue
+                if (moved) {
+                    ended += e.id
 
-                ended += e.id
+                    if (e.status == EntitlementStatus.ACTIVE && e.subscriptionId == null && e.expiresAt != null) pullForward(conn, e, now)
+                }
 
-                if (e.status == EntitlementStatus.ACTIVE && e.subscriptionId == null && e.expiresAt != null) pullForward(conn, e, now)
-
+                // the coverage rule (08 section 11.1 step 5) depends on the owner still holding a covering ACTIVE link, not on the status of the ended
+                // one: a link that expired with CHAIN_CONTINUES (no EXPIRE rows ran) and is revoked later must not lose the permission either
                 if (billingOf(item) == "TIMED" || billingOf(item) == "SUBSCRIPTION") coveringChain(conn, e, now)?.let { coverage[id] = Coverage(e.id, it.chainEnd) }
             }
         }

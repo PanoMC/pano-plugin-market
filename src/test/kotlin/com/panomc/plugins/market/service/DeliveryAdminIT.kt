@@ -854,6 +854,33 @@ class DeliveryAdminIT : MarketDaoITBase() {
         assertEquals(t0 + 40 * 86_400_000L, d.permissionStore.of(u.id).single().expiresAt)
     }
 
+    @Test
+    fun `a child revoked alone and then the whole bundle order does not revoke the child twice and debits the credits once (MK-107 review)`(): Unit = runBlocking {
+        val u = steve()
+        val placed = d.placeBundle(u, listOf(credit("p1", 100)), listOf(DeliveryWorld.ChildLine(listOf(credit("c1", 40)))))
+        val child = placed.items[1].id
+
+        d.pay(placed)
+        d.runInline()
+        assertEquals(140L, w.fixtures.creditBalance(u))
+
+        assertEquals(1, admin.revoke(placed.order.id, listOf(child), 1))
+        d.runInline()
+        assertEquals(100L, w.fixtures.creditBalance(u))
+
+        val childRevokes = d.rows(placed.order.id).filter { it.phase == DeliveryPhase.REVOKE && it.orderItemId == child }.map { it.idempotencyKey }
+
+        assertEquals(1, childRevokes.size)
+
+        // the whole order: only the bundle line is left to revoke, the child keeps its single REVOKE row
+        assertEquals(1, admin.revoke(placed.order.id, null, 1))
+        d.runInline()
+
+        assertEquals(childRevokes, d.rows(placed.order.id).filter { it.phase == DeliveryPhase.REVOKE && it.orderItemId == child }.map { it.idempotencyKey })
+        assertEquals(1, d.rows(placed.order.id).count { it.phase == DeliveryPhase.REVOKE && it.orderItemId == placed.items[0].id })
+        assertEquals(0L, w.fixtures.creditBalance(u), "100 + 40 granted, each taken back exactly once")
+    }
+
     // ===== list (14.5) ===================================================================================================
 
     @Test
