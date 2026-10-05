@@ -1040,6 +1040,8 @@ class CheckoutServiceIT : MarketDaoITBase() {
 
         val pack = fx.product(slug = "pack", price = 500, columns = mapOf("kind" to "CREDIT_PACK", "creditAmount" to 50000))
 
+        h.config = h.config.copy(creditTopUpEnabled = true) // a pack is sold only while the top-up is on (07 section 8)
+
         assertTrue(fails { h.checkout(json("items" to listOf(line(pack)), "paymentMethodId" to "fake")) } is NotLoggedIn)
         nothingWritten()
     }

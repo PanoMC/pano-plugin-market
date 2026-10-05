@@ -514,7 +514,8 @@ class CheckoutService(
             existingServerIds = existingServers,
             usage = facts.usage,
             owned = facts.owned,
-            subscribedProductIds = facts.subscribed
+            subscribedProductIds = facts.subscribed,
+            creditPacksEnabled = c.creditsEnabled && c.creditTopUpEnabled
         )
         val rules = LineRules.evaluate(ruleLines, ruleContext).let { if (manual != null) manualRules(it, manual.request.force) else it }
 

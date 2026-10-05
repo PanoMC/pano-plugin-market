@@ -150,5 +150,10 @@ class TestUsers {
 
     fun nameOf(id: Long): String? = byId[id]
 
+    /** The account is deleted (the platform's user row is gone); the name stays reserved so a test cannot reuse it by accident. */
+    fun remove(id: Long) {
+        byId.remove(id)
+    }
+
     val all: Map<Long, String> get() = byId.toMap()
 }
