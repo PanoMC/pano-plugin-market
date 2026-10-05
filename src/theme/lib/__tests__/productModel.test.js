@@ -72,6 +72,17 @@ describe('resolveProductLoad', () => {
     expect(r.data).toMatchObject({ settings: {}, titleOptions: true, variantParam: '4' });
   });
 
+  test('settings fetch failed: placeholder {} for rendering, settingsLoaded false so it is never stored', () => {
+    const failed = resolveProductLoad({ res: ok, settings: null, slug: 'vip', origin: ORIGIN });
+    const missing = resolveProductLoad({ res: ok, slug: 'vip', origin: ORIGIN });
+    const loaded = resolveProductLoad({ res: ok, settings: {}, slug: 'vip', origin: ORIGIN });
+
+    expect(failed.data.settingsLoaded).toBe(false);
+    expect(failed.data.settings).toEqual({});
+    expect(missing.data.settingsLoaded).toBe(false);
+    expect(loaded.data.settingsLoaded).toBe(true);
+  });
+
   test('NOT_FOUND asks for a 404', () => {
     expect(
       resolveProductLoad({ res: { ok: false, code: 'NOT_FOUND' }, slug: 'x', origin: ORIGIN }),

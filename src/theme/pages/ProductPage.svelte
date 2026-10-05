@@ -189,7 +189,8 @@
 
     if (result.notFound) throw error(404);
 
-    if (result.data.state === 'READY') setSettings(result.data.settings);
+    if (result.data.state === 'READY' && result.data.settingsLoaded)
+      setSettings(result.data.settings);
 
     return result;
   }
@@ -359,7 +360,7 @@
   onMount(() => {
     if (data.state !== 'READY') return undefined;
 
-    setSettings(settings);
+    if (data.settingsLoaded) setSettings(settings);
     initCurrency();
 
     const fromUrl = parseCurrency(new URLSearchParams(window.location.search));

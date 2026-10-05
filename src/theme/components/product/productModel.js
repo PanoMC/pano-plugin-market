@@ -94,6 +94,8 @@ export function resolveProductLoad({
       state: 'READY',
       product,
       settings: settings || {},
+      // false when the settings fetch failed: the {} above is a render placeholder, never to be stored
+      settingsLoaded: settings != null,
       slug,
       // the page renders its own h1 only when the host hides the title (14 §9.2)
       titleOptions: features.titleOptions === true,
