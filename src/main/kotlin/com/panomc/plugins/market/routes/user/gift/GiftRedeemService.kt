@@ -66,9 +66,9 @@ class GiftRedeemService(
         return checkout.redeemGift(CheckoutService.GiftRedeemRequest(gift.id, targetServerId, fieldValues, locale), caller, client())
     }
 
-    /** 11 section 12.2: `ip:<ip>` when the address is trusted, `b:<buyerKey>` for the account; a caller with neither is `anon`. */
+    /** 11 section 12.2: `ip:<bucketKey>` when the address is trusted, `b:<buyerKey>` for the account; a caller with neither is `anon`. */
     private fun subjectsOf(caller: QuoteCaller): List<String> = buildList {
-        caller.clientIp?.let { add("ip:$it") }
+        com.panomc.plugins.market.core.abuse.IpRange.bucketKey(caller.clientIp)?.let { add("ip:$it") }
         caller.userId?.let { add("b:u:$it") }
 
         if (isEmpty()) add("anon")
