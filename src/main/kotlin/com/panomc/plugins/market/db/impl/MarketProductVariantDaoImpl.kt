@@ -89,6 +89,31 @@ class MarketProductVariantDaoImpl : MarketProductVariantDao() {
             .coAwait()
     }
 
+    override suspend fun adjustStock(id: Long, delta: Int, sqlClient: SqlClient): Boolean {
+        val rows = sqlClient
+            .preparedQuery(
+                "UPDATE `${prefix() + tableName}` SET `stock` = `stock` + ?, `updatedAt` = ? WHERE `id` = ? AND `stock` IS NOT NULL AND `stock` + ? >= 0 AND `stock` + ? <= ?"
+            )
+            .execute(
+                Tuple.tuple()
+                    .addLong(delta.toLong())
+                    .addLong(System.currentTimeMillis())
+                    .addLong(id)
+                    .addLong(delta.toLong())
+                    .addLong(delta.toLong())
+                    .addLong(com.panomc.plugins.market.db.dao.MarketProductDao.MAX_STOCK.toLong())
+            )
+            .coAwait()
+        return rows.rowCount() > 0
+    }
+
+    override suspend fun deleteById(id: Long, sqlClient: SqlClient) {
+        sqlClient
+            .preparedQuery("DELETE FROM `${prefix() + tableName}` WHERE `id` = ?")
+            .execute(Tuple.of(id))
+            .coAwait()
+    }
+
     override suspend fun reserveStock(id: Long, quantity: Int, sqlClient: SqlClient): Boolean {
         require(quantity > 0) { "quantity must be positive" }
         val rows = sqlClient

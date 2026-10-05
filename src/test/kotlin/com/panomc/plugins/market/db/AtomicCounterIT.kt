@@ -46,7 +46,6 @@ import org.junit.jupiter.api.Test
 class AtomicCounterIT : MarketDaoITBase() {
     /** Statement shapes of 00 section 8.3 for counters whose DAO method does not exist yet (see the class comment). */
     private object Statements {
-        const val PRODUCT_STOCK_TAKE = "UPDATE `pano_market_product` SET `stock` = `stock` - ? WHERE `id` = ? AND `stock` IS NOT NULL AND `stock` >= ?"
         const val COUPON_USE = "UPDATE `pano_market_coupon` SET `usedCount` = `usedCount` + 1 WHERE `id` = ? AND (`redeemLimit` IS NULL OR `usedCount` < `redeemLimit`)"
         const val GIFT_USE = "UPDATE `pano_market_gift` SET `usedCount` = `usedCount` + 1 WHERE `id` = ? AND (`redeemLimit` IS NULL OR `usedCount` < `redeemLimit`)"
         const val GIFT_RELEASE = "UPDATE `pano_market_gift` SET `usedCount` = `usedCount` - 1 WHERE `id` = ? AND `usedCount` > 0"
@@ -114,23 +113,44 @@ class AtomicCounterIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `product stock guarded decrement of 00 section 8-3 reports 0 rows when the guard fails`(): Unit = runBlocking {
+    fun `product stock guarded decrement of 00 section 8-3 reports no change when the guard fails`(): Unit = runBlocking {
+        // MK-050: the real DAO method (`adjustStock`, `stock IS NOT NULL AND 0 <= stock + delta <= MAX_STOCK`).
+        suspend fun take(id: Long, quantity: Int): Int = if (products.adjustStock(id, -quantity, pool)) 1 else 0
+
         val id = product(stock = 3)
-        val take = Statements.PRODUCT_STOCK_TAKE
-        assertEquals(0, rows(take, 4, id, 4))
+        assertEquals(0, take(id, 4))
         assertEquals(3, stockOf("market_product", id))
-        assertEquals(1, rows(take, 3, id, 3))
-        assertEquals(0, rows(take, 1, id, 1))
+        assertEquals(1, take(id, 3))
+        assertEquals(0, take(id, 1))
         assertEquals(0, stockOf("market_product", id))
         val unlimited = product(stock = null)
-        assertEquals(0, rows(take, 1, unlimited, 1))
+        assertEquals(0, take(unlimited, 1))
         assertEquals(null, stockOf("market_product", unlimited))
+        assertEquals(0, take(9999, 1))
         repeat(Race.rounds) {
             val raced = product(stock = 5)
-            val won = Race.run(20) { rows(take, 1, raced, 1) }.count { r -> r.getOrThrow() == 1 }
+            val won = Race.run(20) { take(raced, 1) }.count { r -> r.getOrThrow() == 1 }
             assertEquals(5, won)
             assertEquals(0, stockOf("market_product", raced))
         }
+    }
+
+    @Test
+    fun `variant stock adjust shares the guard and a product stock cannot pass the cap`(): Unit = runBlocking {
+        val v = variants.add(MarketProductVariant(productId = product(), name = "A", stock = 2), pool)
+        assertFalse(variants.adjustStock(v, -3, pool))
+        assertEquals(2, stockOf("market_product_variant", v))
+        assertTrue(variants.adjustStock(v, -2, pool))
+        assertTrue(variants.adjustStock(v, 7, pool))
+        assertEquals(7, stockOf("market_product_variant", v))
+        assertFalse(variants.adjustStock(9999, 1, pool))
+
+        val unlimited = variants.add(MarketProductVariant(productId = product(), name = "U", stock = null), pool)
+        assertFalse(variants.adjustStock(unlimited, 1, pool))
+
+        val full = product(stock = MarketProductDao.MAX_STOCK)
+        assertFalse(products.adjustStock(full, 1, pool))
+        assertTrue(products.adjustStock(full, -1, pool))
     }
 
     @Test
@@ -350,7 +370,10 @@ class AtomicCounterIT : MarketDaoITBase() {
     private val knownMethods: Map<Class<*>, Set<String>> = mapOf(
         MarketProductDao::class.java to setOf(
             "add", "update", "setStock", "deleteById", "getById", "getBySlug", "getVisibleProducts", "getByImageFileName",
-            "getAllPaged", "count", "getAllSimple", "getByIds", "clearCategory"
+            "getAllPaged", "count", "getAllSimple", "getByIds", "clearCategory",
+            // MK-050
+            "adjustStock", "markDeleted", "isReferenced", "isVariantReferenced", "removeFromCarts", "removeVariantFromCarts",
+            "isCategoryTiered", "hasSellableShippingMethod"
         ),
         MarketCouponDao::class.java to setOf("add", "update", "deleteById", "getById", "getByCode", "getAll", "count"),
         MarketGiftDao::class.java to setOf("add", "update", "deleteById", "getById", "getByCode", "getAll", "count"),
