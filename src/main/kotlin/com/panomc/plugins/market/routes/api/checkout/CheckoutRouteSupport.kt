@@ -42,6 +42,12 @@ import com.panomc.plugins.market.routes.panel.shipping.shippingService
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.routes.user.cart.cartService
+import com.panomc.plugins.market.config.MarketConfig
+import com.panomc.plugins.market.db.dao.MarketThrottleDao
+import com.panomc.plugins.market.service.CodeGuard
+import com.panomc.plugins.market.service.MarketRateLimits
+import com.panomc.plugins.market.service.OpenOrderLimit
+import com.panomc.plugins.market.service.ThrottleService
 import com.panomc.plugins.market.service.CheckoutDeps
 import com.panomc.plugins.market.service.CheckoutService
 import com.panomc.plugins.market.service.OrderService
@@ -82,6 +88,39 @@ internal class PlatformServerDirectory(private val databaseManager: () -> Databa
 }
 
 /**
+ * The abuse limits of one plugin instance (11 sections 11 and 12, MK-152): the in-memory limiters, the durable throttle, the code lock and the
+ * open-order limit. One instance per plugin, so every route shares the same buckets and the same counters.
+ */
+internal class MarketAbuseWiring(val rateLimits: MarketRateLimits, val throttle: ThrottleService, val codeGuard: CodeGuard, val openOrders: OpenOrderLimit)
+
+private object AbuseWiringHolder
+
+private var cachedAbuse: Pair<MarketPlugin, MarketAbuseWiring>? = null
+
+internal fun abuseWiring(plugin: MarketPlugin): MarketAbuseWiring {
+    cachedAbuse?.takeIf { it.first === plugin }?.let { return it.second }
+
+    return synchronized(AbuseWiringHolder) {
+        cachedAbuse?.takeIf { it.first === plugin }?.second ?: run {
+            val context = plugin.beans
+            val config: () -> MarketConfig = { currentConfig(plugin) }
+            val throttle = ThrottleService(
+                context.getBean(MarketThrottleDao::class.java),
+                { context.getBean(DatabaseManager::class.java).getSqlClient() },
+                SystemClock
+            )
+
+            MarketAbuseWiring(
+                rateLimits = MarketRateLimits(config),
+                throttle = throttle,
+                codeGuard = CodeGuard(throttle, config, SystemClock),
+                openOrders = OpenOrderLimit(context.getBean(MarketOrderDao::class.java), SystemClock)
+            ).also { cachedAbuse = plugin to it }
+        }
+    }
+}
+
+/**
  * The checkout service on the plugin's beans (stateless apart from the rate limiter: a route keeps one). [withCheckout] adds the
  * wiring of `checkout` (the transaction helper, the locks, the reservation, the order inserts); the quote needs none of it.
  */
@@ -90,6 +129,7 @@ internal fun checkoutService(plugin: MarketPlugin, withCheckout: Boolean = false
     val databaseManager = { context.getBean(DatabaseManager::class.java) }
     val wiring = paymentWiring(plugin)
     val deps = if (withCheckout) checkoutDeps(plugin, databaseManager) else null
+    val abuse = abuseWiring(plugin)
 
     return CheckoutService(
         config = { currentConfig(plugin) },
@@ -120,7 +160,11 @@ internal fun checkoutService(plugin: MarketPlugin, withCheckout: Boolean = false
         servers = PlatformServerDirectory(databaseManager),
         shipping = shippingService(plugin),
         addresses = context.getBean(MarketAddressDao::class.java),
-        checkout = deps
+        checkout = deps,
+        codeGuard = abuse.codeGuard,
+        rateLimits = abuse.rateLimits,
+        openOrders = abuse.openOrders,
+        throttle = abuse.throttle
     )
 }
 

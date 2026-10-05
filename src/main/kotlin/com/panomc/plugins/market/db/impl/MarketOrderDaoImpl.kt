@@ -3,6 +3,7 @@ package com.panomc.plugins.market.db.impl
 import com.panomc.platform.annotation.Dao
 import com.panomc.plugins.market.db.MarketSchema
 import com.panomc.plugins.market.db.dao.MarketOrderDao
+import com.panomc.plugins.market.db.dao.OpenOrderColumn
 import com.panomc.plugins.market.db.dao.ProductOrderUsage
 import com.panomc.plugins.market.db.dao.isDuplicateKey
 import com.panomc.plugins.market.db.model.MarketOrder
@@ -268,6 +269,25 @@ class MarketOrderDaoImpl : MarketOrderDao() {
             productId to ProductOrderUsage(productId, it.getLong("used"), it.getLong("lastAt"))
         }
     }
+
+    override suspend fun openHeldExpiries(column: OpenOrderColumn, value: String, sqlClient: SqlClient): List<Long?> {
+        val field = if (column == OpenOrderColumn.EMAIL) "LOWER(`email`)" else "`${column.column}`"
+        val query =
+            "SELECT `expiresAt` FROM `${prefix() + tableName}` WHERE $field = ? AND `status` = 'PENDING' AND `reservationState` = 'HELD' AND `source` = 'STOREFRONT'" +
+                " ORDER BY `expiresAt` IS NULL, `expiresAt` ASC"
+        val bound = if (column == OpenOrderColumn.EMAIL) value.lowercase() else value
+
+        return sqlClient.preparedQuery(query).execute(Tuple.of(bound)).coAwait().map { it.getLong("expiresAt") }
+    }
+
+    override suspend fun openHeldIpv6(sqlClient: SqlClient): List<Pair<String, Long?>> =
+        sqlClient
+            .preparedQuery(
+                "SELECT `clientIp`, `expiresAt` FROM `${prefix() + tableName}` WHERE `clientIp` LIKE '%:%' AND `status` = 'PENDING' AND `reservationState` = 'HELD' AND `source` = 'STOREFRONT'"
+            )
+            .execute()
+            .coAwait()
+            .map { it.getString("clientIp") to it.getLong("expiresAt") }
 
     // Per-order conversion factor: frozen rate if set, otherwise the currency-based fallback
     // (statsCurrency -> 1.0, salesCurrency -> the current view rate, otherwise 1.0). Bind order:
