@@ -40,6 +40,7 @@ import com.panomc.plugins.market.core.pricing.CurrencyPriceResolver
 import com.panomc.plugins.market.core.pricing.DiscountInput
 import com.panomc.plugins.market.core.pricing.ItemsResult
 import com.panomc.plugins.market.core.pricing.LineInput
+import com.panomc.plugins.market.core.credit.CreditEligibility
 import com.panomc.plugins.market.core.pricing.LineKind
 import com.panomc.plugins.market.core.pricing.MethodEvaluation
 import com.panomc.plugins.market.core.pricing.MethodInput
@@ -65,6 +66,7 @@ import com.panomc.plugins.market.core.subscription.ModeResolver
 import com.panomc.plugins.market.core.subscription.RecurringPlan
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.db.dao.MarketBundleItemDao
+import com.panomc.plugins.market.db.dao.MarketAddressDao
 import com.panomc.plugins.market.db.dao.MarketCartDao
 import com.panomc.plugins.market.db.dao.MarketCartItemDao
 import com.panomc.plugins.market.db.dao.MarketCategoryDao
@@ -107,6 +109,11 @@ import com.panomc.plugins.market.db.model.ShippingStatus
 import com.panomc.plugins.market.db.model.SubscriptionStatus
 import com.panomc.plugins.market.db.tx.Locks
 import com.panomc.plugins.market.db.tx.MarketDb
+import com.panomc.plugins.market.core.order.OrderActor
+import com.panomc.plugins.market.core.order.OrderEvent
+import com.panomc.plugins.market.db.model.OrderActorType
+import com.panomc.plugins.market.db.tx.OrderLockScope
+import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.error.BuyerBlocked
 import com.panomc.plugins.market.error.BuyerInfoRequired
 import com.panomc.plugins.market.error.CooldownActive
@@ -298,6 +305,57 @@ class CheckoutDeps(
     val replayPollMs: Long = 500
 )
 
+/**
+ * `POST /api/panel/market/orders` and `POST /orders/quote` after parsing (04 section 7, 06 section 14.3). [priceOverride] is a gross total x 100
+ * in the order currency; [shippingPrice] a gross amount x 100 that replaces the price of the chosen shipping method.
+ */
+class ManualOrderRequest(
+    val playerUsername: String,
+    val recipientUsername: String? = null,
+    val email: String? = null,
+    val items: List<CartLine>,
+    val priceOverride: Long? = null,
+    val markPaid: Boolean = false,
+    val paymentLabel: String? = null,
+    val runDeliveries: Boolean = true,
+    val sendMail: Boolean = true,
+    val note: String? = null,
+    val force: Boolean = false,
+    val shippingAddress: JsonObject? = null,
+    val shippingMethodId: Long? = null,
+    val shippingPrice: Long? = null,
+    /** The `Idempotency-Key` header, already checked; `""` for a quote (never stored). */
+    val idempotencyKey: String = "",
+    /** `RequestFingerprint.hash` of the whole body. */
+    val bodyHash: String = "",
+    /** The locale of the order: the payer's stored locale, else the site default, resolved by the route; `null` = [CheckoutService.DEFAULT_LOCALE]. */
+    val orderLocale: String? = null,
+    /** The currency of the order (`null` = the store's base currency). */
+    val currency: String? = null
+)
+
+/** The answer of a manual order: its ids and the warnings of the quote (a blocked buyer, a reduced quantity), never an error. */
+class ManualOrderResult(val id: Long, val publicId: String, val warnings: List<QuoteMessage>, val replay: Boolean = false) {
+    fun toMap(): Map<String, Any?> = mapOf("id" to id, "publicId" to publicId, "warnings" to warnings.map { it.toJson() })
+}
+
+/**
+ * What a manual order stores in the `data` of its `CREATED` timeline row (06 section 14.3): `runDeliveries` and `sendMail` are honoured at O2, so
+ * they travel with the order. A row written without them (every non-manual order) means "yes".
+ */
+class ManualFlags(val runDeliveries: Boolean, val sendMail: Boolean) {
+    companion object {
+        val DEFAULT = ManualFlags(runDeliveries = true, sendMail = true)
+
+        /** The flags of a `CREATED` event `data` JSON text; anything unreadable is [DEFAULT]. */
+        fun of(createdData: String?): ManualFlags {
+            val data = createdData?.let { runCatching { JsonObject(it) }.getOrNull() } ?: return DEFAULT
+
+            return ManualFlags(data.getBoolean("runDeliveries", true) != false, data.getBoolean("sendMail", true) != false)
+        }
+    }
+}
+
 /** The priced cart changed between phase A and the order transaction (06 section 5.3 B5): phase A and B run again once. Internal. */
 class QuoteChanged(why: String) : RuntimeException(why)
 
@@ -341,6 +399,8 @@ class CheckoutService(
     private val servers: ServerDirectory,
     private val blocks: BuyerBlocks = BuyerBlocks.NONE,
     private val shipping: ShippingQuoter = ShippingQuoter.NONE,
+    /** The saved addresses of a payer: a manual order of a physical product falls back to the payer's default one (06 section 14.3); `null` = none. */
+    private val addresses: MarketAddressDao? = null,
     /** The wiring of [checkout]; `null` for a service that only quotes. */
     private val checkout: CheckoutDeps? = null
 ) {
@@ -364,6 +424,7 @@ class CheckoutService(
         strict: Boolean,
         frozen: Frozen?,
         orderLocale: String? = null,
+        manual: ManualContext? = null,
         profile: PricingProfile = PricingProfile.STOREFRONT
     ): Assessment {
         val c = config()
@@ -392,21 +453,22 @@ class CheckoutService(
         val giftMessage = input.giftMessage ?: cart?.giftMessage
 
         // ---- the rows the cart points at
-        val catalog = loadCatalog(lines, c, now, sqlClient)
+        val catalog = loadCatalog(lines, c, now, sqlClient, lenient = manual?.request?.force == true)
 
         // ---- payer, recipient
-        val payerName = if (caller.userId != null) users.usernameOf(caller.userId, sqlClient) else guestOf(input)?.username
-        val accountEmail = if (caller.userId != null) users.emailOf(caller.userId, sqlClient) else null
-        val orderEmail = if (caller.userId != null) BuyerValidator.orderEmailOfAccount(accountEmail, input.billingInfo?.getString("email")) else guestOf(input)?.email
-        val payerKey = when {
+        val payerName = manual?.payer?.name ?: if (caller.userId != null) users.usernameOf(caller.userId, sqlClient) else guestOf(input)?.username
+        val accountEmail = if (caller.userId != null && manual == null) users.emailOf(caller.userId, sqlClient) else null
+        val orderEmail = if (manual != null) manual.payer.email
+        else if (caller.userId != null) BuyerValidator.orderEmailOfAccount(accountEmail, input.billingInfo?.getString("email")) else guestOf(input)?.email
+        val payerKey = manual?.payer?.key ?: when {
             caller.userId != null -> "u:${caller.userId}"
             !payerName.isNullOrBlank() -> "g:${payerName.lowercase(Locale.ROOT)}"
             else -> ""
         }
         val hasCreditPack = lines.any { catalog.products[it.productId]?.kind == ProductKind.CREDIT_PACK }
-        val recipient = resolveRecipient(caller, payerName, recipientAsked, giftMessage, c, hasCreditPack || topUp != null, messages, sqlClient)
+        val recipient = resolveRecipient(caller, payerName, recipientAsked, giftMessage, c, hasCreditPack || topUp != null, messages, sqlClient, anyGift = manual != null)
 
-        if (!loggedIn && !c.allowGuestCheckout) messages += QuoteMessage(LineCode.LOGIN_REQUIRED, LineRules.ERROR)
+        if (!loggedIn && !c.allowGuestCheckout && manual == null) messages += QuoteMessage(LineCode.LOGIN_REQUIRED, LineRules.ERROR)
 
         if (topUp != null && !loggedIn) messages += QuoteMessage(LineCode.LOGIN_REQUIRED, LineRules.ERROR)
 
@@ -431,7 +493,7 @@ class CheckoutService(
             owned = facts.owned,
             subscribedProductIds = facts.subscribed
         )
-        val rules = LineRules.evaluate(ruleLines, ruleContext)
+        val rules = LineRules.evaluate(ruleLines, ruleContext).let { if (manual != null) manualRules(it, manual.request.force) else it }
 
         for (m in rules.messages) messages += QuoteMessage(m.code, m.level, m.lineKey)
 
@@ -476,7 +538,7 @@ class CheckoutService(
         )
 
         // ---- payment methods and the selected one
-        val candidates = if (frozen != null) listOfNotNull(frozen.selected) else loadCandidates(c, sqlClient)
+        val candidates = if (manual != null) emptyList() else if (frozen != null) listOfNotNull(frozen.selected) else loadCandidates(c, sqlClient)
         val selectedId = input.paymentMethodId?.trim()?.takeIf { it.isNotEmpty() }
         val payWithCredits = topUp == null && (input.payWithCredits || selectedId == MethodInput.CREDITS)
         val selected = if (payWithCredits || selectedId == null) null else candidates.firstOrNull { it.id == selectedId }
@@ -504,7 +566,7 @@ class CheckoutService(
                 PricingInput(
                     config = pricingConfig,
                     now = now,
-                    profile = profile,
+                    profile = if (manual != null) PricingProfile.PANEL else profile,
                     requestedCurrency = currencyAsked,
                     lines = priceable,
                     buyer = buyer,
@@ -513,11 +575,14 @@ class CheckoutService(
                     creatorCode = creator,
                     pricingMode = pricingMode,
                     payWithCredits = payWithCredits,
-                    priceOverride = null
+                    priceOverride = manual?.request?.priceOverride
                 )
             )
         } catch (e: PricingException) {
             if (e.error == PricingError.AMOUNT_OVERFLOW) throw InvalidCart(mapOf("cart" to listOf(AMOUNT_OVERFLOW)))
+
+            // 05 section 12: a `priceOverride` above the gross list total is the caller's mistake (400 BAD_REQUEST)
+            if (e.error == PricingError.PRICE_OVERRIDE_OUT_OF_RANGE) throw BadRequest()
 
             throw e
         }
@@ -528,7 +593,7 @@ class CheckoutService(
         if (items.requiresShipping) {
             val physical = items.lines.filter { l -> l.physicalLine(catalog) }
 
-            shippingQuote = frozen?.shipping ?: shipping.quote(
+            shippingQuote = frozen?.shipping ?: if (manual != null) manualShipping(manual, input, items, catalog, orderEmail, sqlClient) else shipping.quote(
                 ShippingRequest(
                     items.currency, items.itemsBasisBase, items.physicalBasisBase, physical, input.shippingAddress,
                     input.shippingAddressId ?: cart?.shippingAddressId, input.shippingMethodId ?: cart?.shippingMethodId, caller.userId,
@@ -591,11 +656,11 @@ class CheckoutService(
         for (m in breakdown.messages) messages += QuoteMessage(m.code.name, m.level.name.lowercase(Locale.ROOT), m.lineKey)
 
         // ---- the legal text
-        val legalView = if (frozen == null) legal.activeFor(locale, sqlClient) else null
+        val legalView = if (frozen == null && manual == null) legal.activeFor(locale, sqlClient) else null
         val legalText = legalView?.let { QuoteLegal(c.legalTextRequired, it.id, it.version, it.title) }
 
         // ---- the lines of the answer
-        val quoteLines = quoteLines(rules.lines, lines, breakdown, catalog)
+        val quoteLines = quoteLines(rules.lines, lines, breakdown, catalog, separateCreditOrders(c, breakdown))
         val distinct = messages.distinct()
         val requiredFields = RequiredBuyerFields.of(
             c.billingInfoMode, selected?.caps?.requiredBuyerFields.orEmpty(),
@@ -1456,6 +1521,332 @@ class CheckoutService(
         return CheckoutResult(deps.orders.ownerView(order, sqlClient, start), token, start)
     }
 
+    // ----------------------------------------------------------------------------------------------- manual orders (06 section 14.3)
+
+    private class ManualPayer(val key: String, val name: String, val email: String?, val userId: Long?)
+
+    private class ManualContext(val request: ManualOrderRequest, val payer: ManualPayer)
+
+    /**
+     * `POST /api/panel/market/orders/quote` (04 section 7): the price of a manual order for the named player, nothing created. Limits and cooldown
+     * are evaluated for the player (and the recipient), `force` skips what it skips at creation, `priceOverride` and the shipping fields are honoured.
+     * Never fails for a business reason except what creation refuses for every request alike (an unreadable player name, a `priceOverride` out of range).
+     */
+    suspend fun quoteManual(request: ManualOrderRequest, sqlClient: SqlClient): Quote {
+        val payer = resolveManualPayer(request, sqlClient)
+
+        return assess(manualInput(request), QuoteCaller(payer.userId), sqlClient, strict = false, frozen = null, orderLocale = request.orderLocale, manual = ManualContext(request, payer)).quote
+    }
+
+    /**
+     * `POST /api/panel/market/orders` (06 section 14.3): phase A and B of checkout with the manual differences (no codes, no credits, no payment method,
+     * no legal text, no minimum amount, no guest or block-list refusal, `force`). One transaction writes the order (`source = PANEL`, `createdBy`, method
+     * `manual`), its items and the reservation; `markPaid` also applies O2 with actor `ADMIN` inside it (no attempt row, `paidAmount = gatewayAmount`).
+     * Same `Idempotency-Key` for the same payer: the first order again (another body: `IDEMPOTENCY_CONFLICT`).
+     */
+    suspend fun createManualOrder(request: ManualOrderRequest, adminUserId: Long, sqlClient: SqlClient): ManualOrderResult {
+        val deps = checkout ?: throw IllegalStateException("this CheckoutService was built without the checkout wiring")
+        val payer = resolveManualPayer(request, sqlClient)
+        val caller = QuoteCaller(payer.userId)
+        val manual = ManualContext(request, payer)
+        val input = manualInput(request)
+        val locale = request.orderLocale ?: DEFAULT_LOCALE
+
+        orders.getByBuyerAndIdempotencyKey(payer.key, request.idempotencyKey, sqlClient)?.let { return manualReplay(it, request) }
+
+        var attempts = 0
+        var placed: CreatedManualOrder? = null
+        var duplicate: MarketOrder? = null
+        var warnings: List<QuoteMessage> = emptyList()
+
+        while (placed == null && duplicate == null) {
+            attempts++
+
+            try {
+                val plan = assess(input, caller, sqlClient, strict = true, frozen = null, orderLocale = locale, manual = manual)
+
+                if (plan.lines.isEmpty()) throw EmptyCart()
+
+                failOnManual(plan)
+
+                try {
+                    placed = phaseBManual(request, adminUserId, caller, manual, plan, deps)
+                    warnings = plan.messages.filter { it.level == LineRules.WARNING }
+                } catch (e: IdempotentReplay) {
+                    duplicate = e.order
+                } catch (e: QuoteChanged) {
+                    if (attempts >= 2) throw PriceChanged(assess(input, caller, sqlClient, strict = false, frozen = null, orderLocale = locale, manual = manual).quote.toJson())
+                }
+            } catch (e: PanoError) {
+                // the first request of the same key may have committed meanwhile and emptied what this one needs: that is a replay, not a failure
+                duplicate = orders.getByBuyerAndIdempotencyKey(payer.key, request.idempotencyKey, sqlClient) ?: throw e
+            }
+        }
+
+        duplicate?.let { return manualReplay(it, request) }
+
+        val order = checkNotNull(placed).order
+
+        return ManualOrderResult(order.id, checkNotNull(order.publicId), warnings)
+    }
+
+    private fun manualReplay(existing: MarketOrder, request: ManualOrderRequest): ManualOrderResult {
+        if (existing.idempotencyHash != request.bodyHash) throw IdempotencyConflict()
+
+        return ManualOrderResult(existing.id, checkNotNull(existing.publicId), emptyList(), replay = true)
+    }
+
+    private fun manualInput(request: ManualOrderRequest) = QuoteInput(
+        items = request.items, currency = request.currency, recipientUsername = request.recipientUsername?.trim()?.takeIf { it.isNotEmpty() },
+        shippingAddress = request.shippingAddress, shippingMethodId = request.shippingMethodId, locale = request.orderLocale
+    )
+
+    /** 06 section 14.3 `payer`: the name must look like a Minecraft name (Bedrock `.` prefix and `*` allowed); a Pano user when one exists, else guest style. */
+    private suspend fun resolveManualPayer(request: ManualOrderRequest, sqlClient: SqlClient): ManualPayer {
+        val name = request.playerUsername.trim()
+
+        if (!MANUAL_PLAYER.matches(name)) throw RequestValueException("playerUsername", "INVALID")
+
+        val email = request.email?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() }
+
+        if (email != null && !BuyerValidator.isValidEmail(email)) throw BuyerInfoRequired(listOf(BuyerValidator.FIELD_ORDER_EMAIL))
+
+        val known = users.byUsername(name, sqlClient)
+
+        return if (known != null) {
+            ManualPayer("u:${known.id}", known.username, email ?: users.emailOf(known.id, sqlClient)?.takeIf { it.isNotBlank() }, known.id)
+        } else {
+            ManualPayer("g:${name.lowercase(Locale.ROOT)}", name, email, null)
+        }
+    }
+
+    /**
+     * 06 section 14.3 `line rules`: `PERMISSION_REQUIRED`, `LOGIN_REQUIRED` and `GIFT_NOT_ALLOWED` never apply to an admin; `force` also lets a limit, a
+     * cooldown, a requirement, an owned tier or a quantity / stock shortage through (the forced stock statement of 06 section 7.1 clamps at 0).
+     */
+    private fun manualRules(rules: RuleResult, force: Boolean): RuleResult {
+        val ignored = if (force) MANUAL_IGNORED + MANUAL_FORCED else MANUAL_IGNORED
+
+        return RuleResult(
+            rules.lines.map { v ->
+                if (v.errors.none { it in ignored }) v
+                else LineVerdict(
+                    v.lineKey, v.errors.filter { it !in ignored }, v.details.filter { it.code !in ignored }, v.priceable, v.quantity, v.maxQuantity, v.fieldValues, v.targetServerId
+                )
+            },
+            rules.messages
+        )
+    }
+
+    /** The saved default address of the payer as the JSON of a shipping address, `null` when the payer has none (or is no account). */
+    private suspend fun defaultAddressOf(userId: Long?, sqlClient: SqlClient): JsonObject? {
+        if (userId == null) return null
+
+        val row = addresses?.getByUserId(userId, sqlClient)?.firstOrNull { it.isDefault } ?: return null
+        val out = JsonObject()
+
+        fun put(key: String, value: String?) {
+            if (!value.isNullOrBlank()) out.put(key, value)
+        }
+
+        put("firstName", row.firstName)
+        put("lastName", row.lastName)
+        put("company", row.company)
+        put("phone", row.phone)
+        put("email", row.email)
+        put("country", row.country)
+        put("state", row.state)
+        put("city", row.city)
+        put("district", row.district)
+        put("neighborhood", row.neighborhood)
+        put("line1", row.line1)
+        put("line2", row.line2)
+        put("postalCode", row.postalCode)
+        put("identityNumber", row.identityNumber)
+
+        return out
+    }
+
+    /**
+     * Shipping of a manual order (06 section 14.3 `physical lines`): the address is the body's, else the payer's default one (neither: `SHIPPING_ADDRESS_REQUIRED`);
+     * without `shippingMethodId` the shipping total is 0 and the address is kept as typed; with one the rate engine prices that method and `shippingPrice` (when
+     * given) replaces its price.
+     */
+    private suspend fun manualShipping(
+        manual: ManualContext, input: QuoteInput, items: ItemsResult, catalog: Catalog, orderEmail: String?, sqlClient: SqlClient
+    ): ShippingQuote {
+        val request = manual.request
+        val address = input.shippingAddress ?: defaultAddressOf(manual.payer.userId, sqlClient)
+            ?: return ShippingQuote(null, messages = listOf(QuoteMessage(SHIPPING_ADDRESS_REQUIRED, LineRules.ERROR)), fields = listOf("shippingAddress"))
+
+        if (request.shippingMethodId == null) return ShippingQuote(ShippingCharge(0L, null), address = address)
+
+        val quoted = shipping.quote(
+            ShippingRequest(
+                items.currency, items.itemsBasisBase, items.physicalBasisBase, items.lines.filter { l -> l.physicalLine(catalog) }, address, null, request.shippingMethodId,
+                manual.payer.userId, physicalBasis = items.physicalBasis, conversions = items.conversions, pricesIncludeVat = items.pricesIncludeVat,
+                configVatBp = items.terms.vatBp, orderEmail = orderEmail, checkout = true, shippable = shippableLines(items.lines, catalog)
+            ),
+            sqlClient
+        )
+        val charge = quoted.charge
+        val price = request.shippingPrice
+
+        if (price == null || charge == null) return quoted
+
+        return ShippingQuote(
+            ShippingCharge(price, charge.vatBp), quoted.options, quoted.methodId, quoted.messages, quoted.address, quoted.methodName, quoted.snapshot, quoted.weightGrams,
+            quoted.fields, quoted.reason
+        )
+    }
+
+    /** What creation of a manual order refuses (the A-table of 06 section 5.2 reduced to what 06 section 14.3 keeps), the first failure wins. */
+    private fun failOnManual(a: Assessment) {
+        val messages = a.messages
+
+        if (messages.any { it.code == INVALID_RECIPIENT }) throw InvalidRecipient()
+
+        // a subscription cannot be created manually at all
+        if (a.lines.any { a.catalog.products[it.productId]?.billingMode == BillingMode.SUBSCRIPTION }) throw SubscriptionMustBeAlone()
+
+        val lineErrors = a.quote.lines.filter { l -> badRequestCodes(a, l).isNotEmpty() }.associate { it.lineKey to it.errors }
+
+        if (lineErrors.isNotEmpty()) throw InvalidCart(lineErrors)
+
+        val shipping = messages.firstOrNull { it.code in SHIPPING_CODES }
+
+        if (a.items.requiresShipping && (shipping != null || a.shipping.charge == null)) {
+            when (shipping?.code) {
+                SHIPPING_UNAVAILABLE -> throw ShippingUnavailable(a.shipping.reason ?: "NO_METHOD")
+                SHIPPING_METHOD_REQUIRED -> throw ShippingUnavailable("METHOD_REQUIRED")
+                else -> throw ShippingAddressRequired(a.shipping.fields.ifEmpty { listOf("shippingAddress") })
+            }
+        }
+
+        for (verdict in a.rules.lines) {
+            for (detail in verdict.details) {
+                when (detail.code) {
+                    LineCode.REQUIREMENT_NOT_MET -> throw ProductRequirementNotMet(detail.productId)
+                    LineCode.PURCHASE_LIMIT_REACHED -> throw PurchaseLimitReached(detail.productId, detail.limit ?: 0)
+                    LineCode.COOLDOWN_ACTIVE -> throw CooldownActive(detail.productId, detail.retryAfterSeconds ?: 0)
+                }
+            }
+        }
+
+        val outOfStock = a.rules.lines.filter { LineCode.OUT_OF_STOCK in it.errors || stockShort(a, it) }.map { it.lineKey }
+
+        if (outOfStock.isNotEmpty()) throw OutOfStock(outOfStock)
+    }
+
+    private suspend fun phaseBManual(
+        request: ManualOrderRequest, adminUserId: Long, caller: QuoteCaller, manual: ManualContext, plan: Assessment, deps: CheckoutDeps
+    ): CreatedManualOrder {
+        val frozen = Frozen(null, plan.shipping)
+        val planUses = usesOf(plan)
+        val products = productIdsOf(plan)
+        val variants = variantIdsOf(plan)
+        val input = manualInput(request)
+        val locale = request.orderLocale ?: DEFAULT_LOCALE
+
+        return deps.db.tx { conn ->
+            deps.redemptions.lockFor(conn, planUses)
+            deps.locks.products(conn, products)
+            deps.locks.variants(conn, variants)
+
+            orders.getByBuyerAndIdempotencyKey(manual.payer.key, request.idempotencyKey, conn)?.let { throw IdempotentReplay(it) }
+
+            val a = assess(input, caller, conn, strict = true, frozen = frozen, orderLocale = locale, manual = manual)
+
+            if (a.lines.isEmpty()) throw QuoteChanged("the cart is empty")
+
+            failOnManual(a)
+            ensureUnchanged(plan, a)
+
+            val uses = usesOf(a)
+            val built = itemsOf(a, deps, conn)
+            val customer = CustomerKeys(manual.payer.userId, manual.payer.key, a.orderEmail, a.recipient?.key.orEmpty(), recipientKeysOf(a.recipient))
+            val reservation = try {
+                deps.reservations.reserve(conn, built.demands, uses, customer, force = request.force)
+            } catch (e: DiscountUnavailable) {
+                throw QuoteChanged("discount ${e.discountId} is exhausted")
+            }
+            val created = deps.orders.createManual(conn, draftOfManual(a, request, adminUserId, manual.payer, built.items, reservation, uses, customer))
+
+            // markPaid: O2 in the same transaction (no attempt, `paidAmount = gatewayAmount`); the order locks of a COMMIT are taken in the global order, the
+            // product rows are this transaction's already and nobody else can see the new order row
+            if (request.markPaid) {
+                deps.locks.forOrder(conn, created.order.id, OrderLockScope.COMMIT, cashback = a.c.cashbackPercent > 0) { locked ->
+                    val result = deps.orders.transition(conn, locked, OrderEvent.Paid(null, OrderActor.ADMIN), actorUserId = adminUserId)
+
+                    check(result.moved) { "the manual order ${created.order.id} did not move to paid: ${result.decision}" }
+                }
+
+                CreatedManualOrder(orders.getById(created.order.id, conn)!!, created.items)
+            } else {
+                created
+            }
+        }
+    }
+
+    private fun draftOfManual(
+        a: Assessment,
+        request: ManualOrderRequest,
+        adminUserId: Long,
+        payer: ManualPayer,
+        items: List<DraftItem>,
+        reservation: Reservation,
+        uses: List<CodeUse>,
+        customer: CustomerKeys
+    ): OrderDraft {
+        val b = a.breakdown
+        val recipient = checkNotNull(a.recipient) { "an order without a recipient" }
+        val now = clock.now()
+        val timings = TimingConfig(a.c.orderExpiryMinutes, a.c.bankTransferExpiryHours)
+        val label = request.paymentLabel?.trim()?.takeIf { it.isNotEmpty() }?.take(PAYMENT_LABEL_MAX) ?: manualLabel(a.locale)
+
+        check(b.gatewayAmount + b.creditValue == b.total) { "gateway ${b.gatewayAmount} + credit value ${b.creditValue} != total ${b.total}" }
+        check(b.creditAmount == 0L) { "a manual order has no credit part" }
+
+        val build = { publicId: String, accessToken: String ->
+            MarketOrder(
+                userId = payer.userId, playerUsername = payer.name, totalPrice = b.total, currency = a.items.currency, paymentMethodId = MANUAL_METHOD,
+                paymentLabel = label, status = OrderStatus.PENDING, createdAt = now, updatedAt = now, publicId = publicId, accessToken = accessToken,
+                source = OrderSource.PANEL, buyerKey = payer.key, idempotencyKey = request.idempotencyKey, idempotencyHash = request.bodyHash,
+                email = a.orderEmail?.lowercase(Locale.ROOT), locale = a.locale, clientIp = null, userAgent = null,
+                recipientUsername = recipient.username, recipientUserId = recipient.userId, recipientKey = recipient.key, isGift = recipient.isGift,
+                giftMessage = null, hideFromBroadcast = false, reservationState = ReservationState.HELD, fulfillmentBy = FulfillmentBy.MARKET,
+                expiresAt = OrderTimings.orderExpiresAtOnCreate(now, MANUAL_METHOD, null, timings, manualPending = true),
+                baseCurrency = a.items.baseCurrency, fxRate = a.items.fxRate, displayCurrency = a.items.display?.currency, displayRate = a.items.display?.rate,
+                pricingMode = DbPricingMode.valueOf(a.items.pricingMode.name), pricesIncludeVat = a.items.pricesIncludeVat, subtotal = b.subtotal,
+                discountTotal = b.discountTotal, couponDiscount = 0, creatorDiscount = 0, upgradeDiscount = b.upgradeDiscount,
+                shippingTotal = b.shippingTotal, shippingVatPercent = b.shippingVatPercent, shippingVatAmount = b.shippingVat, paymentFee = 0,
+                paymentFeeVatPercent = b.tender.paymentFeeVatPercent, paymentFeeVatAmount = b.tender.paymentFeeVatAmount, vatTotal = b.vatTotal,
+                creditAmount = 0, creditValue = 0, gatewayAmount = b.gatewayAmount, testMode = false, requiresShipping = a.items.requiresShipping,
+                shippingStatus = if (a.items.requiresShipping) ShippingStatus.PENDING else ShippingStatus.NOT_REQUIRED,
+                shippingAddress = if (a.items.requiresShipping) (a.shipping.address ?: request.shippingAddress)?.encode() else null,
+                shippingMethodId = if (a.items.requiresShipping) a.shipping.methodId else null,
+                shippingMethodName = if (a.items.requiresShipping) a.shipping.methodName else null,
+                shippingQuote = if (a.items.requiresShipping) a.shipping.snapshot?.encode() else null,
+                shippingWeightGrams = if (a.items.requiresShipping) a.shipping.weightGrams else null,
+                note = request.note?.trim()?.takeIf { it.isNotEmpty() }, createdBy = adminUserId
+            )
+        }
+        val flags = JsonObject().put("runDeliveries", request.runDeliveries).put("sendMail", request.sendMail).put("markPaid", request.markPaid)
+
+        return OrderDraft(
+            order = build, items = items, reservation = reservation, uses = uses, customer = customer, attempt = null, clearCartOfUser = null, actorUserId = adminUserId,
+            created = CreatedEvent(OrderActorType.ADMIN, OrderSource.PANEL, flags)
+        )
+    }
+
+    /** `paymentLabel` default: "Manual payment" in the order locale. */
+    private fun manualLabel(locale: String): String = when (locale.lowercase(Locale.ROOT).substringBefore('-')) {
+        "tr" -> "Manuel ödeme"
+        "ru" -> "Ручная оплата"
+        else -> "Manual payment"
+    }
+
+
     // ----- rate limit L1 (11 section 11): IP before the replay lookup, buyer after it
 
     private class Limiters(val perMinute: Int, val ip: RateLimiter, val buyer: RateLimiter)
@@ -1510,13 +1901,14 @@ class CheckoutService(
         c: MarketConfig,
         hasCreditPack: Boolean,
         messages: MutableList<QuoteMessage>,
-        sqlClient: SqlClient
+        sqlClient: SqlClient,
+        anyGift: Boolean = false
     ): RecipientResolver.Recipient? {
         // a guest who has not said who they are, buying for nobody in particular: per-player rules cannot be judged yet
         if (caller.userId == null && payerName.isNullOrBlank() && recipientAsked.isNullOrBlank()) return null
 
         val result = RecipientResolver.resolve(
-            RecipientResolver.Payer(caller.userId, payerName.orEmpty()), recipientAsked, giftMessage, c.allowGiftPurchase, hasCreditPack
+            RecipientResolver.Payer(caller.userId, payerName.orEmpty()), recipientAsked, giftMessage, c.allowGiftPurchase || anyGift, hasCreditPack
         ) { name -> users.byUsername(name, sqlClient)?.let { RecipientResolver.KnownPlayer(it.id, it.username) } }
 
         return when (result) {
@@ -1554,7 +1946,9 @@ class CheckoutService(
         val live: Set<Long>,
         val prices: Map<Long, List<CurrencyPriceResolver.PriceRow>>,
         val now: Long,
-        val c: MarketConfig
+        val c: MarketConfig,
+        /** A forced manual order sells inactive (not deleted) products and products of an inactive category (06 section 14.3). */
+        val lenient: Boolean = false
     ) {
         class ChildRow(val productId: Long, val variantId: Long, val quantity: Int)
 
@@ -1605,9 +1999,9 @@ class CheckoutService(
                 id = p.id,
                 kind = p.kind,
                 billingMode = p.billingMode,
-                status = p.status,
+                status = if (lenient && p.deletedAt == null) MarketStatus.ACTIVE else p.status,
                 deleted = p.deletedAt != null,
-                categoryActive = categoryActive(p),
+                categoryActive = lenient || categoryActive(p),
                 durationType = p.durationType,
                 durationStart = p.durationStart,
                 durationExpiry = p.durationExpiry,
@@ -1637,7 +2031,7 @@ class CheckoutService(
             p.kind == ProductKind.BUNDLE && children[p.id].orEmpty().any { row -> products[row.productId]?.actions?.let { buyerChoice(it) } == true }
     }
 
-    private suspend fun loadCatalog(lines: List<CartLine>, c: MarketConfig, now: Long, sqlClient: SqlClient): Catalog {
+    private suspend fun loadCatalog(lines: List<CartLine>, c: MarketConfig, now: Long, sqlClient: SqlClient, lenient: Boolean = false): Catalog {
         val lineProducts = products.getByIds(lines.map { it.productId }.distinct().filter { it > 0 }, sqlClient)
         val byId = HashMap<Long, MarketProduct>()
 
@@ -1668,7 +2062,7 @@ class CheckoutService(
         val priceRows = prices.getAll(sqlClient).groupBy({ it.productId }) { CurrencyPriceResolver.PriceRow(it.variantId, it.currency, it.price) }
         val live = byId.values.filter { it.deletedAt == null }.map { it.id }.toSet()
 
-        return Catalog(byId, variantRows, children, fieldRows, categories.getAll(null, sqlClient).associateBy { it.id }, live, priceRows, now, c)
+        return Catalog(byId, variantRows, children, fieldRows, categories.getAll(null, sqlClient).associateBy { it.id }, live, priceRows, now, c, lenient)
     }
 
     private class RecipientFacts(
@@ -1852,7 +2246,16 @@ class CheckoutService(
 
     // ------------------------------------------------------------------------------------------ answer lines
 
-    private fun quoteLines(verdicts: List<LineVerdict>, lines: List<CartLine>, breakdown: PriceBreakdown, catalog: Catalog): List<QuoteLine> {
+    /**
+     * 07 section 13: in an `onlyAcceptCredits` store a cart that mixes credit purchases (packs, the free amount) with products is the combined cart; its
+     * credit-purchase lines carry the line error `CREDIT_PACK_SEPARATE_ORDER` (the product lines already carry the engine's `CREDITS_ONLY`), so the quote cannot
+     * be checked out and checkout answers 400 `INVALID_CART`.
+     */
+    private fun separateCreditOrders(c: MarketConfig, breakdown: PriceBreakdown): Boolean =
+        c.creditsEnabled && c.onlyAcceptCredits &&
+            CreditEligibility.classify(breakdown.lines.filter { it.parentLineKey == null }.map { it.lineKind }) == CreditEligibility.CartClass.COMBINED
+
+    private fun quoteLines(verdicts: List<LineVerdict>, lines: List<CartLine>, breakdown: PriceBreakdown, catalog: Catalog, separateOrders: Boolean): List<QuoteLine> {
         val priced = breakdown.lines.associateBy { it.lineKey }
         val childrenOf = breakdown.lines.filter { it.parentLineKey != null }.groupBy { it.parentLineKey!! }
         val byKey = lines.associateBy { it.lineKey }
@@ -1866,6 +2269,8 @@ class CheckoutService(
             val errors = LinkedHashSet<String>(verdict.errors)
 
             pricedLine?.errors?.forEach { errors += it.name }
+
+            if (separateOrders && pricedLine?.lineKind == LineKind.CREDIT_PACK) errors += CREDIT_PACK_SEPARATE_ORDER
 
             out += QuoteLine(
                 lineKey = verdict.lineKey,
@@ -2189,6 +2594,7 @@ class CheckoutService(
         const val AMOUNT_OVERFLOW = "AMOUNT_OVERFLOW"
         const val INVALID_RECIPIENT = "INVALID_RECIPIENT"
         const val INVALID_CREDIT_AMOUNT = "INVALID_CREDIT_AMOUNT"
+        const val CREDIT_PACK_SEPARATE_ORDER = "CREDIT_PACK_SEPARATE_ORDER"
         const val PAYMENT_METHOD_UNAVAILABLE = "PAYMENT_METHOD_UNAVAILABLE"
         const val GUESTS_NOT_SUPPORTED = "GUESTS_NOT_SUPPORTED"
         const val TEST_MODE = "TEST_MODE"
@@ -2199,6 +2605,13 @@ class CheckoutService(
         const val SHIPPING_METHOD_REQUIRED = "SHIPPING_METHOD_REQUIRED"
         const val METHOD_REQUIRED = "METHOD_REQUIRED"
         const val METHOD_NOT_OFFERED = "METHOD_NOT_OFFERED"
+        const val MANUAL_METHOD = "manual"
+        private const val PAYMENT_LABEL_MAX = 255
+        private val MANUAL_PLAYER = Regex("^[A-Za-z0-9_.*]{1,32}$")
+        private val MANUAL_IGNORED = setOf(LineCode.PERMISSION_REQUIRED, LineCode.LOGIN_REQUIRED, LineCode.GIFT_NOT_ALLOWED)
+        private val MANUAL_FORCED = setOf(
+            LineCode.MAX_QUANTITY, LineCode.ALREADY_OWNED, LineCode.PURCHASE_LIMIT_REACHED, LineCode.COOLDOWN_ACTIVE, LineCode.REQUIREMENT_NOT_MET, LineCode.OUT_OF_STOCK
+        )
 
         private val logger = LoggerFactory.getLogger(CheckoutService::class.java)
 

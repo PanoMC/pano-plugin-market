@@ -48,7 +48,7 @@ class PaymentEventApplier(private val attempts: InboundAttempts, private val sin
 
             val stated = event.testMode
 
-            if (attempt != null && stated != null && stated != attempt.testMode && event !is PaymentEvent.Succeeded) {
+            if (attempt != null && skippedForEnvironment(event, attempt.testMode)) {
                 logger.warn("provider {} sent a {} of another environment (test mode {}) for attempt {}, skipped", access.provider.id, event.javaClass.simpleName, stated, attempt.id)
                 skipped++
 
@@ -80,6 +80,17 @@ class PaymentEventApplier(private val attempts: InboundAttempts, private val sin
 
     companion object {
         const val ENVIRONMENT_MISMATCH = "environment mismatch"
+
+        /**
+         * An event that states another environment than its attempt's is not about this attempt's money: it is skipped, except a `Succeeded`, which is
+         * recorded as a review (a sandbox notification must never complete a live order, and real money that arrived is recorded). The one rule of every
+         * channel: the inbound pipeline, the status query and the reconcile query ([com.panomc.plugins.market.service.PaymentService]).
+         */
+        fun skippedForEnvironment(event: PaymentEvent, attemptTestMode: Boolean): Boolean {
+            val stated = event.testMode
+
+            return stated != null && stated != attemptTestMode && event !is PaymentEvent.Succeeded
+        }
 
         /** `market_payment_event.eventTypes` is `VARCHAR(255)`. */
         const val EVENT_TYPES_MAX = 255

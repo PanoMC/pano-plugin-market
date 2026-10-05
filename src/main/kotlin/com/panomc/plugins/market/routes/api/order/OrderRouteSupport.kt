@@ -39,11 +39,15 @@ import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.routes.user.cart.cartService
+import com.panomc.plugins.market.service.CreditEffects
 import com.panomc.plugins.market.service.CreditHoldGuard
 import com.panomc.plugins.market.service.CreditService
 import com.panomc.plugins.market.service.DuplicateRefundPolicy
 import com.panomc.plugins.market.service.ForeignEffects
 import com.panomc.plugins.market.service.InvoiceEffects
+import com.panomc.plugins.market.service.ShippingEffects
+import com.panomc.plugins.market.routes.panel.shipping.shippingService
+import com.panomc.plugins.market.routes.api.payment.attemptLocks
 import com.panomc.plugins.market.service.OrderService
 import com.panomc.plugins.market.service.OutboundHttp
 import com.panomc.plugins.market.service.PayCaller
@@ -157,7 +161,12 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
         webhooks = PaidWebhooks { conn, orderId -> webhooks.emitOrderPaid(conn, orderId) },
         // O2 / O4 issue the invoice inside the transition (12 section 6.1, MK-144 wires what MK-143 built); the effects of the slices that
         // have not landed still go to PENDING_SLICES
-        foreign = InvoiceEffects(invoiceService(plugin), orderDao, ForeignEffects.PENDING_SLICES),
+        // MK-092: the credit-granting lines (TOPUP / GIFT) and the cashback are posted inside the transition too
+        // WIRE-1: StartShipping goes to the shipping service (derived shippingStatus); the rest still to PENDING_SLICES
+        foreign = CreditEffects(
+            credits, orderDao, context.getBean(MarketOrderEventDao::class.java), clock, { currentConfig(plugin) },
+            InvoiceEffects(invoiceService(plugin), orderDao, ShippingEffects({ shippingService(plugin) }, ForeignEffects.PENDING_SLICES))
+        ),
         rates = { sqlClient -> rates.getAll(sqlClient).filter { it.rate.signum() > 0 }.associate { it.currency to it.rate } },
         statsCurrency = { currentConfig(plugin).statsCurrency.name },
         // MK-079: the re-reserve of an accepted late payment checks `limitPerPlayer`; a rejected review and a duplicate payment request their refund
@@ -193,7 +202,9 @@ private fun buildPaymentService(plugin: MarketPlugin): PaymentService {
         orderService = orderService(plugin), site = wiring.site, readClient = { databaseManager().getSqlClient() },
         products = context.getBean(MarketProductDao::class.java), entitlements = context.getBean(MarketEntitlementDao::class.java),
         // MK-091 (07 section 5 C3): an order whose credit part is not backed by its hold in the ledger is never completed by a payment
-        extraPaidGuards = listOf(CreditHoldGuard(creditService(plugin)))
+        extraPaidGuards = listOf(CreditHoldGuard(creditService(plugin))),
+        // WIRE-1 (MK-077 seam): the query paths and `continue` run under the attempt locks the inbound pipeline holds
+        attemptLocks = attemptLocks(plugin)
     )
 }
 

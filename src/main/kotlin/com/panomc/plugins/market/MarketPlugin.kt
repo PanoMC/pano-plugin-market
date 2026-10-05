@@ -98,6 +98,19 @@ class MarketPlugin : PanoPlugin() {
         running.start(vertx)
     }
 
+    /**
+     * First start of the shipping settings (10 section 4.2, WIRE-1): the `manual` carrier and the zone "Everywhere" exist before the first physical cart is
+     * quoted. Idempotent and race safe (a carrier row that exists, or one the admin changed, is never touched); a failure is logged and the lazy seed
+     * of the admin calls still applies, it never stops the plugin from starting.
+     */
+    private suspend fun seedShipping() {
+        try {
+            com.panomc.plugins.market.routes.panel.shipping.shippingAdminService(this).seed()
+        } catch (e: Exception) {
+            logger.warn("The shipping settings could not be seeded at start, they are seeded when the panel first opens them", e)
+        }
+    }
+
     private fun stopJobScheduler() {
         jobScheduler?.stop(vertx)
     }
@@ -128,6 +141,7 @@ class MarketPlugin : PanoPlugin() {
             pool = { databaseManager.getSqlClient() as Pool },
             initDatabase = { pluginDatabaseManager.initialize(this) },
             armScheduler = {
+                seedShipping()
                 startExchangeRateScheduler(configManager, exchangeRateService)
                 startJobScheduler()
             }

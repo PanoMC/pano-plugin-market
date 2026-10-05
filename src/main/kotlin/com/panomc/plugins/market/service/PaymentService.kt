@@ -3,6 +3,9 @@ package com.panomc.plugins.market.service
 import com.panomc.platform.error.BadRequest
 import com.panomc.plugins.market.core.order.BillingSnapshot
 import com.panomc.plugins.market.core.order.OrderActor
+import com.panomc.plugins.market.routes.api.payment.AttemptLocks
+import com.panomc.plugins.market.routes.api.payment.PaymentEventApplier
+import com.panomc.plugins.market.routes.api.payment.withReceived
 import com.panomc.plugins.market.core.order.OrderEvent
 import com.panomc.plugins.market.core.order.OrderTimings
 import com.panomc.plugins.market.core.order.RequiredBuyerFields
@@ -79,6 +82,7 @@ import com.panomc.plugins.market.spi.payment.OrderLine
 import com.panomc.plugins.market.spi.payment.PaymentAttemptView
 import com.panomc.plugins.market.spi.payment.PaymentCapabilities
 import com.panomc.plugins.market.spi.payment.PaymentEvent
+import com.panomc.plugins.market.spi.payment.PaymentTarget
 import com.panomc.plugins.market.spi.payment.PaymentProvider
 import com.panomc.plugins.market.spi.payment.QueryPaymentRequest
 import com.panomc.plugins.market.spi.payment.QueryReason
@@ -332,7 +336,13 @@ class PaymentService(
     private val queryTimeoutMs: Long = QUERY_TIMEOUT_MS,
     private val sanitizeHtml: (String) -> String = { HtmlSanitizer.sanitize(it) },
     /** Checks run after [RecipientLimitGuard] before an O2 (MK-151: blocked buyer, MK-121: late renewal). */
-    extraPaidGuards: List<PaidGuard> = emptyList()
+    extraPaidGuards: List<PaidGuard> = emptyList(),
+    /**
+     * The attempt locks of the plugin instance (MK-077): the provider calls of the status query, the reconcile query and `continue` run under the lock
+     * of the attempt they are about, the same lock the inbound pipeline and `ctx.payments.withAttemptLock` take, so a `queryPayment` and a
+     * `handleInbound` of one attempt never run side by side. Production passes the registry the pipeline uses; the default is a private one.
+     */
+    private val attemptLocks: AttemptLocks = AttemptLocks()
 ) : PaymentStarter {
 
     private val paidGuards: List<PaidGuard> = listOf(RecipientLimitGuard(orders, products, entitlements, clock)) + extraPaidGuards
@@ -916,7 +926,13 @@ class PaymentService(
                 }
 
                 is PaymentEffect.NotifyOrder -> {
-                    var orderEvent = effect.event
+                    // an admin's decision on the attempt (the bank transfer approval, 06 section 14.1) is the admin's decision on the order too: O2 / O3 / O8 carry the actor
+                    var orderEvent = if (actor != OrderActor.ADMIN) effect.event else when (val e = effect.event) {
+                        is OrderEvent.Paid -> e.copy(actor = actor)
+                        is OrderEvent.NeedsReview -> e.copy(actor = actor)
+                        is OrderEvent.Fail -> e.copy(actor = actor)
+                        else -> e
+                    }
                     var note: String? = null
                     val paidEvent = orderEvent as? OrderEvent.Paid
 
@@ -1239,10 +1255,10 @@ class PaymentService(
         var users = 0
     }
 
-    private val attemptLocks = HashMap<Long, AttemptLock>()
+    private val continueLocks = HashMap<Long, AttemptLock>()
 
     /** How many attempt locks a running call holds or awaits right now; `0` when no `continue` is in flight (a hook for the tests). */
-    internal fun attemptLocksInUse(): Int = synchronized(attemptLocks) { attemptLocks.size }
+    internal fun attemptLocksInUse(): Int = synchronized(continueLocks) { continueLocks.size }
 
     /**
      * Runs [block] holding the lock of the open attempt of [orderId]. An order has at most one open attempt (I10) and `continue` only ever
@@ -1250,12 +1266,12 @@ class PaymentService(
      * last call that holds or waits for it leaves, so the map holds only the calls that are running right now.
      */
     private suspend fun <T> underAttemptLock(orderId: Long, block: suspend () -> T): T {
-        val entry = synchronized(attemptLocks) { attemptLocks.getOrPut(orderId) { AttemptLock() }.also { it.users++ } }
+        val entry = synchronized(continueLocks) { continueLocks.getOrPut(orderId) { AttemptLock() }.also { it.users++ } }
 
         try {
             return entry.mutex.withLock { block() }
         } finally {
-            synchronized(attemptLocks) { if (--entry.users == 0) attemptLocks.remove(orderId) }
+            synchronized(continueLocks) { if (--entry.users == 0) continueLocks.remove(orderId) }
         }
     }
 
@@ -1267,8 +1283,18 @@ class PaymentService(
      * as it is, so the buyer can enter the step again.
      */
     suspend fun continuePayment(order: MarketOrder, values: JsonObject, caller: PayCaller, sqlClient: SqlClient): JsonObject? = underAttemptLock(order.id) {
+        // the attempt lock of the inbound pipeline (lock order: this order's continue lock, then the attempt lock; the pipeline never takes the first)
+        val addressed = payments.getByOrderId(order.id, sqlClient).lastOrNull() ?: throw OrderNotPayable()
+
+        attemptLocks.with(addressed.id) { continueLocked(order, addressed.id, values, sqlClient) }
+    }
+
+    private suspend fun continueLocked(order: MarketOrder, addressedAttemptId: Long, values: JsonObject, sqlClient: SqlClient): JsonObject? {
         val current = orders.getById(order.id, sqlClient) ?: throw OrderNotPayable()
         val attempt = payments.getByOrderId(order.id, sqlClient).lastOrNull()
+
+        // a newer attempt appeared while this call waited for the lock: it is not the one the buyer's form belongs to
+        if (attempt != null && attempt.id != addressedAttemptId) throw OrderNotPayable()
 
         if (current.status != OrderStatus.PENDING || attempt == null || attempt.status != PaymentStatus.PENDING || attempt.startKind != "EMBEDDED") throw OrderNotPayable()
 
@@ -1291,7 +1317,7 @@ class PaymentService(
             throw PaymentProviderError(ProviderErrorCode.INTERNAL.name, orderService.ownerView(current, sqlClient), current.accessToken)
         }
 
-        storeResult(current, attempt, resolved, result, continued = true)
+        return storeResult(current, attempt, resolved, result, continued = true)
     }
 
     // ================================================================================================= cancel (O7)
@@ -1361,24 +1387,61 @@ class PaymentService(
 
         if (claimed != 1) return
 
-        val ctx = contexts.create(resolved.provider, resolved.settings, attempt.testMode)
-        val events = try {
-            withTimeoutOrNull(statusWaitMs) {
-                resolved.provider.queryPayment(ctx, QueryPaymentRequest(attemptView(attempt, order.publicId ?: ""), QueryReason.RETURN_PAGE)).events
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            logger.warn("status query of attempt {} failed: {}", attempt.id, e.javaClass.simpleName)
+        // the provider query and what it reports are one unit under the attempt lock of the inbound pipeline (a `handleInbound` of this attempt waits)
+        attemptLocks.with(attempt.id) {
+            val ctx = contexts.create(resolved.provider, resolved.settings, attempt.testMode)
+            val events = try {
+                withTimeoutOrNull(statusWaitMs) {
+                    resolved.provider.queryPayment(ctx, QueryPaymentRequest(attemptView(attempt, order.publicId ?: ""), QueryReason.RETURN_PAGE)).events
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                logger.warn("status query of attempt {} failed: {}", attempt.id, e.javaClass.simpleName)
 
-            null
-        } ?: return
+                null
+            }
+
+            if (events != null) applyQueried(order, attempt, events, resolved.policy)
+        }
+    }
+
+    /**
+     * The events a provider reported on a query ([QueryReason.RETURN_PAGE] / [QueryReason.RECONCILE]), judged like the inbound pipeline judges them
+     * (`PaymentEventApplier`, 02 section 7.3 step 6): an event that names another attempt is skipped, an event of another environment than the attempt's is
+     * skipped unless it is a `Succeeded` (which the attempt machine turns into a review, with the note "environment mismatch" and the money it names);
+     * everything else is applied through [applyEvent]. Returns how many events were applied.
+     */
+    private suspend fun applyQueried(order: MarketOrder, attempt: MarketPayment, events: List<PaymentEvent>, policy: ProviderMoneyPolicy): Int {
+        var applied = 0
 
         for (event in events) {
-            val mapped = PaymentEventMapper.attemptEvent(event) ?: continue
+            val target = event.target
 
-            applyEvent(order.id, attempt.id, mapped, AttemptFacts.of(event, cipher), OrderActor.GATEWAY, resolved.policy)
+            if (target is PaymentTarget.Attempt && target.attemptId != attempt.id) {
+                logger.warn("a query of attempt {} answered a {} for attempt {}, skipped", attempt.id, event.javaClass.simpleName, target.attemptId)
+
+                continue
+            }
+
+            if (PaymentEventApplier.skippedForEnvironment(event, attempt.testMode)) {
+                logger.warn("a query of attempt {} answered a {} of another environment (test mode {}), skipped", attempt.id, event.javaClass.simpleName, event.testMode)
+
+                continue
+            }
+
+            val mapped = PaymentEventMapper.attemptEvent(event) ?: continue
+            var facts = AttemptFacts.of(event, cipher)
+
+            if (event is PaymentEvent.Succeeded && event.testMode != null && event.testMode != attempt.testMode) {
+                facts = facts.withReceived(event.paid.amount, event.paid.currency, PaymentEventApplier.ENVIRONMENT_MISMATCH)
+            }
+
+            applyEvent(order.id, attempt.id, mapped, facts, OrderActor.GATEWAY, policy)
+            applied++
         }
+
+        return applied
     }
 
     // ============================================================================== what the background jobs need (MK-078)
@@ -1415,6 +1478,10 @@ class PaymentService(
 
         if (!resolved.caps.statusQuery) return ReconcileQuery.Unsupported
 
+        return attemptLocks.with(attempt.id) { reconcileLocked(order, attempt, resolved) }
+    }
+
+    private suspend fun reconcileLocked(order: MarketOrder, attempt: MarketPayment, resolved: Resolved): ReconcileQuery {
         val result = try {
             val ctx = contexts.create(resolved.provider, resolved.settings, attempt.testMode)
 
@@ -1434,14 +1501,7 @@ class PaymentService(
 
         if (result.unsupported) return ReconcileQuery.Unsupported
 
-        var applied = 0
-
-        for (event in result.events) {
-            val mapped = PaymentEventMapper.attemptEvent(event) ?: continue
-
-            applyEvent(order.id, attempt.id, mapped, AttemptFacts.of(event, cipher), OrderActor.GATEWAY, resolved.policy)
-            applied++
-        }
+        val applied = applyQueried(order, attempt, result.events, resolved.policy)
 
         return if (applied == 0) ReconcileQuery.Unknown(result.pollAgainAfterSeconds) else ReconcileQuery.Applied(applied, result.pollAgainAfterSeconds)
     }

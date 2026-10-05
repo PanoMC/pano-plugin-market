@@ -373,12 +373,12 @@ class AtomicCounterIT : MarketDaoITBase() {
             "getAllPaged", "count", "getAllSimple", "getByIds", "clearCategory",
             // MK-050
             "adjustStock", "markDeleted", "isReferenced", "isVariantReferenced", "removeFromCarts", "removeVariantFromCarts",
-            "isCategoryTiered", "hasSellableShippingMethod"
+            "isCategoryTiered", "hasSellableShippingMethod", "getByIdForUpdate"
         ),
         MarketCouponDao::class.java to setOf("add", "update", "deleteById", "getById", "getByCode", "getAll", "count"),
         MarketGiftDao::class.java to setOf("add", "update", "deleteById", "getById", "getByCode", "getAll", "count"),
         MarketCreatorCodeDao::class.java to setOf("add", "update", "deleteById", "getById", "getByCode", "getAll", "count"),
-        MarketDiscountDao::class.java to setOf("add", "update", "deleteById", "getById", "getAll", "count")
+        MarketDiscountDao::class.java to setOf("add", "update", "deleteById", "getById", "getAll", "count", "getAutomatic")
     )
 
     @Test

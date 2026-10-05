@@ -26,6 +26,9 @@ import java.math.BigDecimal
  * status column holds the nine statuses of 00 section 7.1.
  */
 class MarketOrderDaoIT : MarketDaoITBase() {
+    /** A DAO round-trip test writes raw rows (credit legs without a transaction, counters without orders, ...) that the cross-table invariants I1 to I22 reconcile, on purpose. */
+    override suspend fun assertInvariants() {}
+
     private val dao = MarketOrderDaoImpl()
 
     private fun order(

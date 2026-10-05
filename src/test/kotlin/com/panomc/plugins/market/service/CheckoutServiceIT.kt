@@ -2173,6 +2173,7 @@ internal class CheckoutHarness(val w: TestWiring, private val vertx: Vertx) {
         val creditTopUpFreeAmount: Boolean = false,
         val creditTopUpMin: Double = 1.0,
         val creditTopUpMax: Double = 10000.0,
+        val cashbackPercent: Double = 0.0,
         val creditName: String = "",
         val checkoutRateLimitPerMinute: Int = 0,
         val currencyMode: CurrencyMode = CurrencyMode.SINGLE,
@@ -2184,7 +2185,7 @@ internal class CheckoutHarness(val w: TestWiring, private val vertx: Vertx) {
             allowGiftPurchase = allowGiftPurchase, minimumOrderAmount = minimumOrderAmount, creditsEnabled = creditsEnabled, allowMixedCreditPayment = allowMixedCreditPayment,
             onlyAcceptCredits = onlyAcceptCredits, testMode = testMode, billingInfoMode = billingInfoMode, legalTextRequired = legalTextRequired,
             creditTopUpEnabled = creditTopUpEnabled, creditTopUpFreeAmount = creditTopUpFreeAmount, creditTopUpMin = creditTopUpMin, creditTopUpMax = creditTopUpMax,
-            creditName = creditName, checkoutRateLimitPerMinute = checkoutRateLimitPerMinute, currencyMode = currencyMode, additionalCurrencies = additionalCurrencies
+            cashbackPercent = cashbackPercent, creditName = creditName, checkoutRateLimitPerMinute = checkoutRateLimitPerMinute, currencyMode = currencyMode, additionalCurrencies = additionalCurrencies
         )
     }
 
