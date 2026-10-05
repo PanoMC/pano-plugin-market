@@ -11,7 +11,10 @@ enum class PricingError {
     AMOUNT_OVERFLOW,
 
     /** The caller broke the input contract of 05 section 2 / 3 (a bug of the caller, not a business case). */
-    INVALID_INPUT
+    INVALID_INPUT,
+
+    /** A panel `priceOverride` above the gross list total of the lines (05 section 12; the endpoint answers 400 `BAD_REQUEST`). */
+    PRICE_OVERRIDE_OUT_OF_RANGE
 }
 
 class PricingException(val error: PricingError, message: String, cause: Throwable? = null) :
@@ -40,7 +43,13 @@ enum class PricingCode(val level: MessageLevel) {
     MINIMUM_ORDER_AMOUNT_NOT_REACHED(MessageLevel.ERROR),
     INSUFFICIENT_CREDITS(MessageLevel.ERROR),
     LOGIN_REQUIRED(MessageLevel.ERROR),
-    CREDITS_REDUCED(MessageLevel.WARNING)
+    CREDITS_REDUCED(MessageLevel.WARNING),
+
+    /** Pay-with-credits was asked while credits are switched off (07 section 6.1 rule F1; checkout: `PAYMENT_METHOD_UNAVAILABLE`). */
+    CREDITS_DISABLED(MessageLevel.ERROR),
+
+    /** `onlyAcceptCredits`: a product cart is paid with credits and the buyer chose a gateway (07 section 13; checkout: `PAYMENT_METHOD_UNAVAILABLE`). */
+    CREDITS_REQUIRED(MessageLevel.ERROR)
 }
 
 /** [level] defaults to the code's own level; a few codes are `INFO` in a specific place (05 section 14). */
@@ -84,6 +93,8 @@ data class PricedLine(
     val variantId: Long,
     val parentLineKey: String?,
     val quantity: Int,
+    /** What the line was in the cart; [kind] folds `CREDIT_PACK` into `PRODUCT`, this keeps them apart (earning and cashback skip packs). */
+    val lineKind: LineKind,
     /** Catalogue unit price in the order currency, quantised. */
     val listUnitPrice: Long,
     /** The winning automatic discount (null when none, or under the `GIFT_CODE` profile). */
@@ -116,7 +127,10 @@ data class PricedLine(
     val vatAmount: Long,
     /** What the buyer pays for the line (05 section 7). */
     val lineTotal: Long,
-    /** `creditPrice` as is (no currency, no conversion). */
+    /**
+     * The credit run's unit price after the automatic discount and the upgrade deduction (05 section 8.1); `creditPrice`
+     * as is when no credit run was made (credits off, a profile without credits). No currency, no conversion.
+     */
     val creditUnitPrice: Long,
     /** `CREDIT_TOPUP`: the credits x 100 bought; 0 for every other line at this stage. */
     val creditAmount: Long,
@@ -128,8 +142,8 @@ data class PricedLine(
 
 /**
  * Result of `PricingEngine.priceItems` (stage A, 05 sections 4 to 7): currency and list price, automatic discount and
- * upgrade, coupon and creator code, VAT and line totals. The later stages of 05 (shipping, tender, totals) extend this
- * result; nothing here is ever recomputed by them.
+ * upgrade, coupon and creator code, VAT and line totals, plus the credit run of section 8.1. The later stages of 05
+ * (shipping, tender, totals: `PricingEngine.finalize`) extend this result; nothing here is ever recomputed by them.
  *
  * Identities (asserted by the engine before it returns; a violation is an `IllegalStateException`, a bug):
  * `sum(lineBasis) = subtotal - discountTotal - upgradeDiscount - couponDiscount - creatorDiscount`, and in `MARKET`
@@ -172,7 +186,19 @@ data class ItemsResult(
     /** Outcome of the creator code the caller passed, null when none was passed. */
     val creatorCode: CodeOutcome?,
     val discountRedemptions: List<DiscountRedemption>,
-    val messages: List<PricingMessage>
+    val messages: List<PricingMessage>,
+    /** The profile the cart was priced under (05 section 12). */
+    val profile: PricingProfile,
+    /** The whole order is paid in credits (05 section 8.1): asked for, or forced by `onlyAcceptCredits`. */
+    val payWithCredits: Boolean,
+    /** [payWithCredits] was not asked for: `onlyAcceptCredits` put a product cart on credits (07 section 13). */
+    val creditsForced: Boolean,
+    /** A panel `priceOverride` set the totals (05 section 12): such an order has no shipping and no fee. */
+    val priceOverridden: Boolean,
+    /** The credit run (05 section 8.1); null when credits are off or the profile / pricing mode has none. */
+    val credit: CreditRun?,
+    /** What stages B and C need from the config and the buyer. */
+    val terms: TenderTerms
 ) {
     val currency: String get() = conversions.orderCurrency
     val baseCurrency: String get() = conversions.baseCurrency

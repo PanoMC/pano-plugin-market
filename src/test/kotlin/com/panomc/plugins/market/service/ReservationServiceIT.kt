@@ -1,6 +1,7 @@
 package com.panomc.plugins.market.service
 
 import com.panomc.plugins.market.db.MarketDaoITBase
+import com.panomc.plugins.market.db.model.CreditSystemKey
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.db.model.MarketOrderItem
 import com.panomc.plugins.market.db.model.MarketProduct
@@ -21,6 +22,7 @@ import com.panomc.plugins.market.error.InvalidGiftCode
 import com.panomc.plugins.market.error.MarketBusyException
 import com.panomc.plugins.market.error.OutOfStock
 import com.panomc.plugins.market.support.Fixtures
+import com.panomc.plugins.market.support.TestUser
 import com.panomc.plugins.market.support.TestWiring
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.json.JsonObject
@@ -854,6 +856,159 @@ class ReservationServiceIT : MarketDaoITBase() {
             }
         }
         assertTrue(h.expire(placed.orderId))
+    }
+
+    // ----- credit account lock sets of COMMIT and RELEASE (06 section 13.2, 07 section 3.3) ----------------------------------
+
+    /** The payer, the recipient, a bystander and the system accounts of a probe order, by name. */
+    private class CreditLockWorld(val payer: TestUser, val recipient: TestUser, val accounts: Map<String, Long>)
+
+    private suspend fun creditLockWorld(): CreditLockWorld {
+        val payer = w.fixtures.user()
+        val recipient = w.fixtures.user()
+        val bystander = w.fixtures.user()
+        val accounts = linkedMapOf("payer" to payer.accountId, "recipient" to recipient.accountId, "bystander" to bystander.accountId)
+
+        for (key in listOf(CreditSystemKey.HOLD, CreditSystemKey.SPENT, CreditSystemKey.ISSUANCE, CreditSystemKey.REVOKED)) {
+            accounts[key.name] = w.creditAccounts.getBySystemKey(key, pool)!!.id
+        }
+
+        return CreditLockWorld(payer, recipient, accounts)
+    }
+
+    /** An order row (and a `CREDIT_TOPUP` item when [granted] is set) that only the lock tests look at; remove it with [dropProbeOrder]. */
+    private suspend fun probeOrder(world: CreditLockWorld, withRecipient: Boolean = false, held: Long = 0, granted: Long? = null): Long {
+        val now = w.clock.now()
+        val orderId = w.orders.add(
+            MarketOrder(
+                userId = world.payer.id, playerUsername = world.payer.username, buyerKey = "u:${world.payer.id}",
+                source = if (held > 0) OrderSource.RENEWAL else OrderSource.STOREFRONT, creditAmount = held,
+                recipientUserId = if (withRecipient) world.recipient.id else null, createdAt = now, updatedAt = now, paymentMethodId = "manual"
+            ),
+            pool
+        )
+
+        if (granted != null) {
+            w.orderItems.add(MarketOrderItem(orderId = orderId, productName = "pack", kind = OrderItemKind.CREDIT_TOPUP, creditAmount = granted, createdAt = now, updatedAt = now), pool)
+        }
+
+        return orderId
+    }
+
+    private suspend fun dropProbeOrder(orderId: Long) {
+        sql("DELETE FROM `pano_market_order_item` WHERE `orderId` = ?", orderId)
+        sql("DELETE FROM `pano_market_order` WHERE `id` = ?", orderId)
+    }
+
+    /** The names of the accounts of [world] that another connection cannot lock while `forOrder(scope, cashback)` runs its block. */
+    private suspend fun lockedAccounts(world: CreditLockWorld, orderId: Long, scope: OrderLockScope, cashback: Boolean = false): Set<String> {
+        var locked: Set<String> = emptySet()
+
+        w.db.tx { conn ->
+            h.locks.forOrder(conn, orderId, scope, cashback) {
+                locked = world.accounts.filter { lockedByOthers("market_credit_account", it.value) }.keys.toSet()
+            }
+        }
+
+        return locked
+    }
+
+    @Test
+    fun `RELEASE locks payer, ISSUANCE and REVOKED when the cashback flag is set on an order without credits`(): Unit = runBlocking {
+        val world = creditLockWorld()
+        val orderId = probeOrder(world)
+
+        try {
+            assertEquals(setOf("payer", "ISSUANCE", "REVOKED"), lockedAccounts(world, orderId, OrderLockScope.RELEASE, cashback = true))
+            assertEquals(setOf("payer", "ISSUANCE"), lockedAccounts(world, orderId, OrderLockScope.COMMIT, cashback = true), "COMMIT never posts to REVOKED")
+            assertEquals(emptySet<String>(), lockedAccounts(world, orderId, OrderLockScope.RELEASE), "no flag, no credits, no grants: nothing")
+        } finally {
+            dropProbeOrder(orderId)
+        }
+    }
+
+    @Test
+    fun `an order that grants credits locks ISSUANCE, payer and recipient under COMMIT and under RELEASE`(): Unit = runBlocking {
+        val world = creditLockWorld()
+        val gift = probeOrder(world, withRecipient = true, granted = 1_000)
+        val own = probeOrder(world, granted = 1_000)
+        val recipientOnly = probeOrder(world, withRecipient = true)
+
+        try {
+            for (cashback in listOf(false, true)) {
+                assertEquals(setOf("payer", "recipient", "ISSUANCE"), lockedAccounts(world, gift, OrderLockScope.COMMIT, cashback), "COMMIT, gift pack, cashback=$cashback")
+                assertEquals(
+                    setOf("payer", "recipient", "ISSUANCE", "REVOKED"), lockedAccounts(world, gift, OrderLockScope.RELEASE, cashback),
+                    "RELEASE, gift pack, cashback=$cashback"
+                )
+                assertEquals(setOf("payer", "ISSUANCE"), lockedAccounts(world, own, OrderLockScope.COMMIT, cashback), "COMMIT, own pack, cashback=$cashback")
+                assertEquals(setOf("payer", "ISSUANCE", "REVOKED"), lockedAccounts(world, own, OrderLockScope.RELEASE, cashback), "RELEASE, own pack, cashback=$cashback")
+            }
+
+            for (scope in listOf(OrderLockScope.COMMIT, OrderLockScope.RELEASE)) {
+                assertEquals(emptySet<String>(), lockedAccounts(world, recipientOnly, scope), "a recipient alone locks nothing: $scope")
+            }
+        } finally {
+            dropProbeOrder(gift)
+            dropProbeOrder(own)
+            dropProbeOrder(recipientOnly)
+        }
+    }
+
+    @Test
+    fun `RELEASE locks every credit account COMMIT locks for each mix of hold, grant, recipient and cashback`(): Unit = runBlocking {
+        val world = creditLockWorld()
+        val orders = LinkedHashMap<String, Long>()
+
+        try {
+            for (held in listOf(0L, 500L)) {
+                for (granted in listOf<Long?>(null, 1_000L)) {
+                    for (withRecipient in listOf(false, true)) {
+                        orders["held=$held granted=$granted recipient=$withRecipient"] = probeOrder(world, withRecipient, held, granted)
+                    }
+                }
+            }
+
+            for ((mix, orderId) in orders) {
+                val holds = mix.contains("held=500")
+                val grants = mix.contains("granted=1000")
+                val recipient = mix.contains("recipient=true")
+
+                for (cashback in listOf(false, true)) {
+                    val commit = lockedAccounts(world, orderId, OrderLockScope.COMMIT, cashback)
+                    val release = lockedAccounts(world, orderId, OrderLockScope.RELEASE, cashback)
+                    val expected = buildSet {
+                        if (holds || grants || cashback) add("payer")
+                        if (holds) addAll(listOf("HOLD", "SPENT"))
+                        if (grants || cashback) add("ISSUANCE")
+                        if (grants && recipient) add("recipient")
+                    }
+
+                    assertEquals(expected, commit, "COMMIT: $mix cashback=$cashback")
+                    assertEquals(if (grants || cashback) expected + "REVOKED" else expected, release, "RELEASE: $mix cashback=$cashback")
+                    assertTrue(release.containsAll(commit), "RELEASE is a superset of COMMIT: $mix cashback=$cashback")
+                    assertFalse("bystander" in release, "an account the order does not touch is never locked")
+                }
+            }
+        } finally {
+            orders.values.forEach { dropProbeOrder(it) }
+        }
+    }
+
+    @Test
+    fun `without credits, grants or cashback no scope but CREDIT locks a credit account`(): Unit = runBlocking {
+        val world = creditLockWorld()
+        val orderId = probeOrder(world, withRecipient = true)
+
+        try {
+            for (scope in listOf(OrderLockScope.PAYMENT, OrderLockScope.COMMIT, OrderLockScope.RELEASE)) {
+                assertEquals(emptySet<String>(), lockedAccounts(world, orderId, scope), "$scope")
+            }
+
+            assertEquals(setOf("payer", "HOLD"), lockedAccounts(world, orderId, OrderLockScope.CREDIT), "CREDIT always locks the payer and HOLD (POST .../pay)")
+        } finally {
+            dropProbeOrder(orderId)
+        }
     }
 
     @Test

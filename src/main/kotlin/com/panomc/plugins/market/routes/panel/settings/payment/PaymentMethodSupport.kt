@@ -98,7 +98,11 @@ internal fun providerLookup(plugin: MarketPlugin): ProviderLookup {
 
     return synchronized(PaymentMethodServiceHolder) {
         cachedLookup?.takeIf { it.first === plugin }?.second
-            ?: ProviderRegistry.forPlatform(plugin.wrapper.pluginManager, builtInPayment = { BUILT_IN_PAYMENT_PROVIDERS })
+            ?: ProviderRegistry.forPlatform(
+                plugin.wrapper.pluginManager,
+                builtInPayment = { BUILT_IN_PAYMENT_PROVIDERS },
+                builtInShipping = { com.panomc.plugins.market.routes.panel.shipping.BUILT_IN_SHIPPING_PROVIDERS }
+            )
                 .also { cachedLookup = plugin to it }
     }
 }
