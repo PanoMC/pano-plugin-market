@@ -1,4 +1,4 @@
-package com.panomc.plugins.market.routes.panel.gift
+package com.panomc.plugins.market.routes.panel.creatorcode
 
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.model.Path
@@ -11,12 +11,12 @@ import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
 import io.vertx.json.schema.SchemaRepository
 
-/** `DELETE /api/panel/market/gifts/:id` (`P:DISC`): soft delete when redemptions exist, else removed; a missing row is 404 `NOT_FOUND`. */
+/** `GET /api/panel/market/creator-codes/:id/redemptions` (`P:DISC`): `redemptions[{orderId, playerUsername, amount, currency, state, createdAt}]`, `redemptionCount`, `totalPage`. */
 @Endpoint
-class PanelDeleteGiftAPI(plugin: MarketPlugin) : PromotionAdminRoute(plugin, Promotion.GIFT) {
-    override val paths = listOf(Path("/api/panel/market/gifts/:id", RouteType.DELETE))
+class PanelGetCreatorCodeRedemptionsAPI(plugin: MarketPlugin) : PromotionAdminRoute(plugin, Promotion.CREATOR_CODE) {
+    override val paths = listOf(Path("/api/panel/market/creator-codes/:id/redemptions", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = pagingValidation(schemaRepository)
 
-    override suspend fun handleAuthorized(context: RoutingContext): Result = deleteAnswer(context)
+    override suspend fun handleAuthorized(context: RoutingContext): Result = redemptionsAnswer(context)
 }

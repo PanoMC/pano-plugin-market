@@ -126,6 +126,7 @@ import com.panomc.plugins.market.error.InvalidCart
 import com.panomc.plugins.market.error.InvalidCoupon
 import com.panomc.plugins.market.error.InvalidCreatorCode
 import com.panomc.plugins.market.error.InvalidCreditAmount
+import com.panomc.plugins.market.error.InvalidGiftCode
 import com.panomc.plugins.market.error.InvalidRecipient
 import com.panomc.plugins.market.error.LegalAcceptanceRequired
 import com.panomc.plugins.market.error.MinimumOrderAmountNotReached
@@ -160,11 +161,13 @@ import com.panomc.plugins.market.spi.payment.PaymentProvider
 import com.panomc.plugins.market.spi.payment.SubscriptionPlan
 import com.panomc.plugins.market.util.CouponScope
 import com.panomc.plugins.market.util.DiscountUnit
+import com.panomc.plugins.market.util.GiftType
 import com.panomc.plugins.market.util.MarketStatus
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.json.JsonArray
 import com.panomc.platform.util.RateLimiter
 import io.vertx.core.json.JsonObject
+import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.sqlclient.SqlClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -417,7 +420,14 @@ class CheckoutService(
      * list call is made while the locks are held (06 section 13.1 rule 1).
      */
     private suspend fun assess(
-        input: QuoteInput, caller: QuoteCaller, sqlClient: SqlClient, strict: Boolean, frozen: Frozen?, orderLocale: String? = null, manual: ManualContext? = null
+        input: QuoteInput,
+        caller: QuoteCaller,
+        sqlClient: SqlClient,
+        strict: Boolean,
+        frozen: Frozen?,
+        orderLocale: String? = null,
+        manual: ManualContext? = null,
+        profile: PricingProfile = PricingProfile.STOREFRONT
     ): Assessment {
         val c = config()
         val now = clock.now()
@@ -558,7 +568,7 @@ class CheckoutService(
                 PricingInput(
                     config = pricingConfig,
                     now = now,
-                    profile = if (manual != null) PricingProfile.PANEL else PricingProfile.STOREFRONT,
+                    profile = if (manual != null) PricingProfile.PANEL else profile,
                     requestedCurrency = currencyAsked,
                     lines = priceable,
                     buyer = buyer,
@@ -1042,6 +1052,215 @@ class CheckoutService(
         }
     }
 
+    // ----- gift-code redemption (21 section 6, MK-113)
+
+    /** The inputs of [redeemGift] that are not the code row: where a delivery goes and what the buyer filled in (04 section 4). */
+    class GiftRedeemRequest(
+        val giftId: Long,
+        val targetServerId: Long? = null,
+        val fieldValues: Map<String, Any?> = emptyMap(),
+        /** The locale of the order (06 section 5.4), resolved by the route. */
+        val orderLocale: String? = null
+    )
+
+    private class GiftPick(val productId: Long?, val line: CartLine?)
+
+    /**
+     * `POST /api/market/me/gifts/redeem` after the code guard and the lookup of the code (21 section 6): the one transaction (gift row, then product
+     * rows, then the order), then the free payment attempt after the commit, which completes the order (O2: entitlements, deliveries, credit grant).
+     *
+     * Every refusal is `400 INVALID_GIFT_CODE {reason}` with a reason of 04 section 4: `CODE_NOT_FOUND`, `CODE_NOT_STARTED`, `CODE_EXPIRED`,
+     * `CODE_LIMIT_REACHED`, `SERVER_REQUIRED`, `FIELD_REQUIRED`, `PRODUCT_UNAVAILABLE`, `PHYSICAL_NOT_SUPPORTED`, and `CREDITS_DISABLED` for a credit gift
+     * while credits are off (07 section 10). A refusal rolls the counter back with the transaction, so a failed redemption never uses the code.
+     *
+     * The order of a product gift is priced by the engine under the `GIFT_CODE` profile (every line discounted to 0, method `free`); a credit gift has
+     * no product: one `CREDIT_TOPUP` item with `creditAmount = gift.creditAmount` (07 section 10). Both orders have `source = GIFT_CODE`, `giftId`,
+     * total 0 and no credit part, so there is no hold and no gateway money.
+     */
+    suspend fun redeemGift(request: GiftRedeemRequest, caller: QuoteCaller, sqlClient: SqlClient): CheckoutResult {
+        val deps = checkout ?: throw IllegalStateException("this CheckoutService was built without the checkout wiring")
+        val userId = caller.userId ?: throw NotLoggedIn()
+        val c = config()
+        val payerName = users.usernameOf(userId, sqlClient) ?: throw NotLoggedIn()
+        val email = BuyerValidator.orderEmailOfAccount(users.emailOf(userId, sqlClient), null)
+        val payer = Payer("u:$userId", payerName, email, userId)
+        val locale = request.orderLocale ?: DEFAULT_LOCALE
+
+        if (blocks.blocked(payerName, payerName, email, caller.clientIp, userId, sqlClient)) throw BuyerBlocked()
+
+        // the plan: the pick, the rules and the product rows to lock, without a lock (the transaction judges everything again)
+        val planGift = deps.redemptions.gift(sqlClient, request.giftId) ?: throw InvalidGiftCode(RedemptionService.CODE_NOT_FOUND)
+
+        planGift.checkOpen(clock.now())
+
+        val pick = pickGift(planGift, request, c)
+        val plan = pick.line?.let { assessGift(it, caller, locale, sqlClient) }
+
+        val placed = deps.db.tx { conn ->
+            // 1 to 3: the gift row, then the product rows (the global order); the per-customer limit and the guarded counter follow in `reserve`
+            val gift = deps.redemptions.lockGift(conn, request.giftId) ?: throw InvalidGiftCode(RedemptionService.CODE_NOT_FOUND)
+
+            gift.checkOpen(clock.now())
+
+            // an edit of the gift between the plan and the lock: the drawn product may be gone from it, so it is not handed out
+            if (gift.type != planGift.type || gift.candidates != planGift.candidates || gift.creditAmount != planGift.creditAmount) throw InvalidGiftCode(PRODUCT_UNAVAILABLE)
+
+            if (plan != null) {
+                deps.locks.products(conn, productIdsOf(plan))
+                deps.locks.variants(conn, variantIdsOf(plan))
+            }
+
+            createGiftOrder(conn, gift, pick, caller, payer, locale, deps)
+        }
+
+        return finish(placed, deps, sqlClient)
+    }
+
+    /** What the gift hands out: the product line (one unit, the buyer's server and fields), or nothing for a credit gift. `PRODUCT` / `RANDOM` draw with `SecureRandom`. */
+    private fun pickGift(gift: GiftRow, request: GiftRedeemRequest, c: MarketConfig): GiftPick {
+        if (gift.type == GiftType.CREDIT) {
+            if (!c.creditsEnabled) throw InvalidGiftCode(CREDITS_DISABLED)
+
+            if ((gift.creditAmount ?: 0L) <= 0L) throw InvalidGiftCode(PRODUCT_UNAVAILABLE)
+
+            return GiftPick(null, null)
+        }
+
+        val candidates = gift.candidates
+
+        if (candidates.isEmpty()) throw InvalidGiftCode(PRODUCT_UNAVAILABLE)
+
+        val productId = if (candidates.size == 1) candidates.single() else candidates[giftRandom.nextInt(candidates.size)]
+
+        return GiftPick(productId, CartLine(productId, 0, 1, CartLineKey.normalize(request.fieldValues), request.targetServerId))
+    }
+
+    /** The assessment of a gift line under the `GIFT_CODE` profile: `frozen` keeps every provider, carrier and block-list call out of it. */
+    private suspend fun assessGift(line: CartLine, caller: QuoteCaller, locale: String, sqlClient: SqlClient): Assessment {
+        val a = assess(
+            QuoteInput(items = listOf(line)), caller, sqlClient, strict = true, frozen = Frozen(null, ShippingQuote(null)), orderLocale = locale,
+            profile = PricingProfile.GIFT_CODE
+        )
+        val product = a.catalog.products[line.productId] ?: throw InvalidGiftCode(PRODUCT_UNAVAILABLE)
+        val handedOut = listOf(product) + a.catalog.children[product.id].orEmpty().mapNotNull { a.catalog.products[it.productId] }
+
+        ShippingService.giftCodeRefusal(handedOut)?.let { throw it }
+
+        if (product.billingMode == BillingMode.SUBSCRIPTION) throw InvalidGiftCode(PRODUCT_UNAVAILABLE)
+
+        giftLineReason(a)?.let { throw InvalidGiftCode(it) }
+
+        return a
+    }
+
+    /** The reason of 04 section 4 for a line the rules refuse: the server and the fields have their own, everything else is the product being unavailable to this redeemer. */
+    private fun giftLineReason(a: Assessment): String? {
+        val errors = a.quote.lines.flatMap { it.errors } + a.messages.filter { it.level == LineRules.ERROR }.map { it.code }
+
+        return when {
+            errors.isEmpty() && a.lines.isNotEmpty() && a.quote.lines.isNotEmpty() -> null
+            errors.any { it == LineCode.SERVER_REQUIRED || it == LineCode.SERVER_UNAVAILABLE } -> LineCode.SERVER_REQUIRED
+            errors.any { it == LineCode.FIELD_REQUIRED || it == LineCode.FIELD_INVALID } -> LineCode.FIELD_REQUIRED
+            else -> PRODUCT_UNAVAILABLE
+        }
+    }
+
+    private suspend fun createGiftOrder(
+        conn: io.vertx.sqlclient.SqlConnection,
+        gift: GiftRow,
+        pick: GiftPick,
+        caller: QuoteCaller,
+        payer: Payer,
+        locale: String,
+        deps: CheckoutDeps
+    ): CreatedOrder {
+        val c = config()
+        val customer = CustomerKeys(caller.userId, payer.key, payer.email, payer.key, listOf(payer.key, "g:${payer.name.lowercase(Locale.ROOT)}").distinct())
+
+        if (pick.line == null) {
+            // a credit gift (07 section 10): re-judged under the row lock, like the settings of a product gift
+            if (!c.creditsEnabled) throw InvalidGiftCode(CREDITS_DISABLED)
+
+            val uses = listOf(CodeUse(RedemptionKind.GIFT, gift.id, gift.code, 0, c.currency.name))
+            val reservation = reserveGift(conn, deps, emptyList(), uses, customer)
+
+            return markGiftSource(conn, deps.orders.create(conn, creditGiftDraft(gift, caller, payer, locale, c, reservation, uses, customer)))
+        }
+
+        // a product gift: the same rules and the same price as the plan, on rows nobody can change now
+        val a = assessGift(pick.line, caller, locale, conn)
+
+        if (a.items.lines.any { l -> l.lineTotal != 0L }) throw IllegalStateException("a gift order is priced at 0, got ${a.items.lines.map { it.lineTotal }}")
+
+        val uses = listOf(CodeUse(RedemptionKind.GIFT, gift.id, gift.code, a.breakdown.subtotal, a.items.currency))
+        val built = itemsOf(a, deps, conn)
+        val reservation = reserveGift(conn, deps, built.demands, uses, customer)
+
+        return markGiftSource(conn, deps.orders.create(conn, draftOf(a, null, caller, payer, null, built.items, reservation, uses, customer, OrderSource.GIFT_CODE, gift.id)))
+    }
+
+    /** `OrderService.create` writes `source = STOREFRONT` into the `CREATED` event of every order; a redemption's timeline names its real source. */
+    private suspend fun markGiftSource(conn: io.vertx.sqlclient.SqlConnection, created: CreatedOrder): CreatedOrder {
+        conn.preparedQuery("UPDATE `${orders.prefix()}market_order_event` SET `data` = ? WHERE `orderId` = ? AND `type` = 'CREATED'")
+            .execute(io.vertx.sqlclient.Tuple.of(JsonObject().put("source", OrderSource.GIFT_CODE.name).encode(), created.order.id)).coAwait()
+
+        return created
+    }
+
+    /** B8 and B9 for a gift: stock (a gift never oversells, `PRODUCT_UNAVAILABLE`), then the per-customer limit and the guarded counter (`CODE_LIMIT_REACHED`). */
+    private suspend fun reserveGift(conn: io.vertx.sqlclient.SqlConnection, deps: CheckoutDeps, demands: List<StockDemand>, uses: List<CodeUse>, customer: CustomerKeys): Reservation =
+        try {
+            deps.reservations.reserve(conn, demands, uses, customer)
+        } catch (e: OutOfStock) {
+            throw InvalidGiftCode(PRODUCT_UNAVAILABLE)
+        }
+
+    private fun creditGiftDraft(
+        gift: GiftRow,
+        caller: QuoteCaller,
+        payer: Payer,
+        locale: String,
+        c: MarketConfig,
+        reservation: Reservation,
+        uses: List<CodeUse>,
+        customer: CustomerKeys
+    ): OrderDraft {
+        val now = clock.now()
+        val credits = checkNotNull(gift.creditAmount)
+        val currency = c.currency.name
+        val timings = TimingConfig(c.orderExpiryMinutes, c.bankTransferExpiryHours)
+        val label = lookup.payment(MethodInput.FREE)?.provider?.descriptor?.displayName?.resolve(locale) ?: MethodInput.FREE
+        val name = gift.name.ifBlank { "${topUpAmount(credits)} ${c.creditName.ifBlank { "credits" }}" }
+        val window = OrderTimings.providerWindowMs(MethodInput.FREE, null, timings)
+        val item = DraftItem("gift", null, false) { orderId, _, stockReserved ->
+            MarketOrderItem(
+                orderId = orderId, productId = null, productName = name, quantity = 1, unitPrice = 0, kind = OrderItemKind.CREDIT_TOPUP, parentItemId = null,
+                listUnitPrice = 0, discountAmount = 0, upgradeAmount = 0, couponAmount = 0, vatPercent = 0, vatAmount = 0, lineTotal = 0, creditUnitPrice = null,
+                creditAmount = credits, snapshot = ItemSnapshot.topUp().encode(), physical = false, stockReserved = stockReserved, createdAt = now, updatedAt = now
+            )
+        }
+        val build = { publicId: String, accessToken: String ->
+            MarketOrder(
+                userId = caller.userId, playerUsername = payer.name, totalPrice = 0, currency = currency, paymentMethodId = MethodInput.FREE, paymentLabel = label,
+                status = OrderStatus.PENDING, createdAt = now, updatedAt = now, publicId = publicId, accessToken = accessToken, source = OrderSource.GIFT_CODE,
+                giftId = gift.id, buyerKey = payer.key, email = payer.email?.lowercase(Locale.ROOT), locale = locale, clientIp = caller.clientIp,
+                userAgent = caller.userAgent?.take(255), recipientUsername = payer.name, recipientUserId = caller.userId, recipientKey = payer.key,
+                reservationState = ReservationState.HELD, fulfillmentBy = FulfillmentBy.MARKET,
+                expiresAt = OrderTimings.orderExpiresAtOnCreate(now, MethodInput.FREE, null, timings), baseCurrency = currency, fxRate = BigDecimal.ONE,
+                pricingMode = DbPricingMode.MARKET, pricesIncludeVat = c.showVatInPrice, testMode = c.testMode
+            )
+        }
+
+        return OrderDraft(
+            order = build, items = listOf(item), reservation = reservation, uses = uses, customer = customer,
+            attempt = AttemptDraft(
+                providerId = MethodInput.FREE, methodLabel = label, expiresAt = OrderTimings.attemptExpiresAt(now, window, OrderTimings.hardCap(now, window)),
+                testMode = c.testMode, clientIp = caller.clientIp, userAgent = caller.userAgent?.take(255)
+            ),
+            clearCartOfUser = null, actorUserId = caller.userId
+        )
+    }
+
     /**
      * B5: the price under the locks must be the price of phase A, line for line; anything else is a changed quote. A total that
      * equals the plan's also equals the `expectedTotal` the plan was verified against (PT-12), so the consent needs no check of its own here.
@@ -1168,14 +1387,16 @@ class CheckoutService(
 
     private fun draftOf(
         a: Assessment,
-        request: CheckoutRequest,
+        request: CheckoutRequest?,
         caller: QuoteCaller,
         payer: Payer,
-        verified: Verified,
+        verified: Verified?,
         items: List<DraftItem>,
         reservation: Reservation,
         uses: List<CodeUse>,
-        customer: CustomerKeys
+        customer: CustomerKeys,
+        source: OrderSource = OrderSource.STOREFRONT,
+        giftId: Long? = null
     ): OrderDraft {
         val b = a.breakdown
         val methodId = checkNotNull(b.paymentMethodId) { "an order without a payment method" }
@@ -1198,10 +1419,10 @@ class CheckoutService(
             MarketOrder(
                 userId = caller.userId, playerUsername = payer.name, totalPrice = b.total, currency = a.items.currency, paymentMethodId = methodId,
                 paymentLabel = label, status = OrderStatus.PENDING, createdAt = now, updatedAt = now, publicId = publicId, accessToken = accessToken,
-                source = OrderSource.STOREFRONT, buyerKey = payer.key, idempotencyKey = request.idempotencyKey, idempotencyHash = request.bodyHash,
+                source = source, giftId = giftId, buyerKey = payer.key, idempotencyKey = request?.idempotencyKey, idempotencyHash = request?.bodyHash,
                 email = a.orderEmail?.lowercase(Locale.ROOT), locale = a.locale, clientIp = caller.clientIp, userAgent = caller.userAgent?.take(255),
                 recipientUsername = recipient.username, recipientUserId = recipient.userId, recipientKey = recipient.key, isGift = recipient.isGift,
-                giftMessage = if (recipient.isGift) recipient.giftMessage else null, hideFromBroadcast = request.hideFromBroadcast,
+                giftMessage = if (recipient.isGift) recipient.giftMessage else null, hideFromBroadcast = request?.hideFromBroadcast ?: false,
                 reservationState = ReservationState.HELD, fulfillmentBy = fulfillmentBy,
                 expiresAt = OrderTimings.orderExpiresAtOnCreate(now, methodId, windowMinutes, timings),
                 baseCurrency = a.items.baseCurrency, fxRate = a.items.fxRate, displayCurrency = a.items.display?.currency, displayRate = a.items.display?.rate,
@@ -1212,12 +1433,12 @@ class CheckoutService(
                 creditAmount = b.creditAmount, creditValue = b.creditValue, gatewayAmount = b.gatewayAmount, couponId = coupon?.id, creatorCodeId = creator?.id,
                 couponCode = coupon?.code, creatorCode = creator?.code, testMode = testMode, requiresShipping = a.items.requiresShipping,
                 shippingStatus = if (a.items.requiresShipping) ShippingStatus.PENDING else ShippingStatus.NOT_REQUIRED,
-                shippingAddress = if (a.items.requiresShipping) (a.shipping.address ?: request.input.shippingAddress)?.encode() else null,
+                shippingAddress = if (a.items.requiresShipping) (a.shipping.address ?: request?.input?.shippingAddress)?.encode() else null,
                 shippingMethodId = if (a.items.requiresShipping) a.shipping.methodId else null,
                 shippingMethodName = if (a.items.requiresShipping) a.shipping.methodName else null,
                 shippingQuote = if (a.items.requiresShipping) a.shipping.snapshot?.encode() else null,
                 shippingWeightGrams = if (a.items.requiresShipping) a.shipping.weightGrams else null,
-                billingInfo = verified.billing?.encode(), legalTextId = verified.legal?.id, legalAcceptedAt = verified.legal?.let { now }
+                billingInfo = verified?.billing?.encode(), legalTextId = verified?.legal?.id, legalAcceptedAt = verified?.legal?.let { now }
             )
         }
 
@@ -2397,6 +2618,10 @@ class CheckoutService(
 
     companion object {
         const val DEFAULT_LOCALE = "en-US"
+
+        private const val PRODUCT_UNAVAILABLE = LineCode.PRODUCT_UNAVAILABLE
+        private const val CREDITS_DISABLED = "CREDITS_DISABLED"
+        private val giftRandom = java.security.SecureRandom()
         const val TOP_UP_LINE_KEY = "topup"
         const val CART_FULL = "CART_FULL"
         const val AMOUNT_OVERFLOW = "AMOUNT_OVERFLOW"
