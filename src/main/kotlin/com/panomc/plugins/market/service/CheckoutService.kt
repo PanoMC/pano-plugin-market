@@ -737,8 +737,13 @@ class CheckoutService(
     private fun failOn(a: Assessment, request: CheckoutRequest, caller: QuoteCaller, frozen: Boolean) {
         val messages = a.messages
 
-        // PT-5 (11 section 4.1): a currency the store does not offer is refused here; the quote only warns and prices in the base currency
-        if (a.items.messages.any { it.code == PricingCode.CURRENCY_NOT_SUPPORTED }) {
+        // PT-5 (11 section 4.1): a currency the request itself names and the store does not offer is refused here; the quote only warns and
+        // prices in the base currency. A fallback that comes from the stored server cart currency (gone stale after the admin changed the
+        // currency settings) is not the request's currency: the order is priced in the base currency like the quote says, and expectedTotal
+        // still guards the buyer's consent
+        val currencyNamed = request.input.currency?.trim()?.takeIf { it.isNotEmpty() }
+
+        if (currencyNamed != null && a.items.messages.any { it.code == PricingCode.CURRENCY_NOT_SUPPORTED }) {
             throw InvalidCart(mapOf("cart" to listOf(PricingCode.CURRENCY_NOT_SUPPORTED.name)))
         }
 

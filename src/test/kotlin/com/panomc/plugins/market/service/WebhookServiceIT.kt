@@ -65,8 +65,9 @@ class WebhookServiceIT : MarketDaoITBase() {
         reporter: WebhookDeliveryReporter? = null,
         resolver: StubResolver = StubResolver(),
         allowPrivate: Boolean = true,
-        timeoutMs: Long = 5_000L
-    ) = WebhookHarness(w, vertx, resolver, allowPrivate, timeoutMs, renderer, reporter)
+        timeoutMs: Long = 5_000L,
+        uuidOf: suspend (Long?, String) -> String? = { _, _ -> null }
+    ) = WebhookHarness(w, vertx, resolver, allowPrivate, timeoutMs, renderer, reporter, uuidOf = uuidOf)
 
     private suspend fun order(testMode: Boolean = false): Long {
         val now = w.clock.now()
@@ -192,6 +193,36 @@ class WebhookServiceIT : MarketDaoITBase() {
         assertEquals("steve@example.com", data.getJsonObject("buyer").getString("email"))
         assertEquals("VIP", data.getJsonArray("items").getJsonObject(0).getString("productName"))
         assertFalse(JsonObject(row.body).getBoolean("testMode"))
+    }
+
+    @Test
+    fun `a gift to a name without an account asks for the uuid of the recipient name, not of the payer`(): Unit = runBlocking {
+        val asked = java.util.concurrent.CopyOnWriteArrayList<Pair<Long?, String>>()
+        val h = harness(uuidOf = { id, name -> asked += id to name; "uuid-of-${id ?: name}" })
+        h.endpoint("https://a.example.com/hook", events = "[\"order.paid\"]")
+        val now = w.clock.now()
+        val orderId = w.orders.add(
+            MarketOrder(
+                userId = 5, playerUsername = "Steve", recipientUsername = "Alex", recipientUserId = null, isGift = true,
+                publicId = w.ids.publicId(), status = OrderStatus.COMPLETED, currency = "EUR", subtotal = 1000, totalPrice = 1000,
+                gatewayAmount = 1000, paidAmount = 1000, paidAt = now, createdAt = now, updatedAt = now, buyerKey = "u:5", recipientKey = "g:alex",
+                baseCurrency = "EUR", paymentMethodId = "manual", reservationState = com.panomc.plugins.market.db.model.ReservationState.COMMITTED
+            ),
+            pool
+        )
+        w.orderItems.add(
+            MarketOrderItem(orderId = orderId, productName = "VIP", quantity = 1, unitPrice = 1000, lineTotal = 1000, kind = OrderItemKind.PRODUCT, createdAt = now, updatedAt = now),
+            pool
+        )
+
+        w.db.tx { conn -> h.service.emitOrderPaid(conn, orderId) }
+
+        assertEquals(listOf<Pair<Long?, String>>(5L to "Steve", null to "Alex"), asked.toList())
+        val data = JsonObject(h.rows().single().body).getJsonObject("data")
+        assertEquals("Alex", data.getJsonObject("recipient").getString("username"))
+        assertNull(data.getJsonObject("recipient").getValue("userId"))
+        assertEquals("uuid-of-Alex", data.getJsonObject("recipient").getString("uuid"))
+        assertEquals("uuid-of-5", data.getJsonObject("buyer").getString("uuid"))
     }
 
     @Test

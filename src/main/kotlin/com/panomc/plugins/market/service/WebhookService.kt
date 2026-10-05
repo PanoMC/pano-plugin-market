@@ -163,7 +163,7 @@ class WebhookService(
         val data = EventPayloads.orderPaid(
             order, items, store(),
             buyerUuid = uuidOf(order.userId, order.playerUsername),
-            recipientUuid = uuidOf(order.recipientUserId ?: order.userId, order.recipientUsername.ifEmpty { order.playerUsername })
+            recipientUuid = uuidOf(EventPayloads.recipientUserId(order), EventPayloads.recipientName(order))
         )
 
         return insertRows(conn, targets, WebhookEvents.ORDER_PAID, orderId.toString(), orderId, data, order.testMode)

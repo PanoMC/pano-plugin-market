@@ -4,6 +4,7 @@ import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NotLoggedIn
 import com.panomc.platform.model.Error
 import com.panomc.plugins.market.config.BillingInfoMode
+import com.panomc.plugins.market.config.CurrencyMode
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.cart.CartLine
 import com.panomc.plugins.market.core.order.RequestFingerprint
@@ -12,8 +13,10 @@ import com.panomc.plugins.market.core.time.Ids
 import com.panomc.plugins.market.db.MarketDaoITBase
 import com.panomc.plugins.market.db.model.CreditSystemKey
 import com.panomc.plugins.market.db.model.CreditTxType
+import com.panomc.plugins.market.db.model.CurrencyRateMode
 import com.panomc.plugins.market.db.model.MarketCreditEntry
 import com.panomc.plugins.market.db.model.MarketCreditTx
+import com.panomc.plugins.market.db.model.MarketCurrencyRate
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.db.model.MarketPayment
 import com.panomc.plugins.market.db.model.MarketProduct
@@ -1806,6 +1809,126 @@ class CheckoutServiceIT : MarketDaoITBase() {
         assertEquals(2, rows("market_order"))
     }
 
+    /** The USD rate row of the currency tests: 1 EUR = 1.1 USD, so a 1000 EUR line costs 1100 USD. */
+    private suspend fun usdRate() {
+        w.currencyRates.upsert(MarketCurrencyRate(currency = "USD", rate = java.math.BigDecimal("1.1"), mode = CurrencyRateMode.MANUAL, fetchedAt = w.clock.now()), pool)
+    }
+
+    @Test
+    fun `PT-5 a stale server cart currency is no request currency, the order is priced in the base currency like the quote says`(): Unit = runBlocking {
+        val p = fx.product(price = 1000, stock = 9)
+
+        fx.paymentMethod("fake")
+        usdRate()
+        h.config = h.config.copy(currencyMode = CurrencyMode.MULTI, additionalCurrencies = listOf("USD"))
+
+        val (alice, caller) = user("Alice")
+
+        h.cart.addItem(alice.id, CartLine(p.id, 0, 1, emptyMap(), null))
+        h.cart.replace(alice.id, CartService.Replacement(currency = CartService.Field("USD")))
+        assertEquals("USD", w.carts.getByUserId(alice.id, pool)!!.currency, "the buyer picked USD while it was offered")
+
+        // the admin switches to a single currency: the stored cart currency is stale now
+        h.config = h.config.copy(currencyMode = CurrencyMode.SINGLE)
+
+        val quote = h.service.quote(QuoteInput(), caller, pool)
+
+        assertEquals("EUR", quote.currency)
+        assertTrue(quote.canCheckout, "the quote only warns")
+        assertEquals("warning", quote.messages.single { it.code == "CURRENCY_NOT_SUPPORTED" }.level)
+
+        // the request itself names a currency the store does not sell: refused, nothing written, the cart stays
+        val lineErrors = expect("INVALID_CART", 400) { h.checkout(json("paymentMethodId" to "fake", "currency" to "USD"), caller = caller) }.getJsonObject("lineErrors")
+
+        assertEquals(listOf("CURRENCY_NOT_SUPPORTED"), lineErrors.getJsonArray("cart").list)
+        nothingWritten()
+        assertEquals(9, stockOf(p))
+        assertEquals(1, w.cartItems.getByCartId(w.carts.getByUserId(alice.id, pool)!!.id, pool).size)
+
+        // a blank currency names nothing: the stored one is not asked either
+        val blank = order(h.checkout(json("paymentMethodId" to "fake", "currency" to "  ", "expectedTotal" to quote.total / 100.0), caller = caller).order.getString("publicId"))
+
+        assertEquals("EUR", blank.currency)
+        assertEquals(1000, blank.totalPrice)
+
+        // the same stale cart without a currency in the body: the order is made in the base currency, the buyer's expectedTotal is the quote's
+        h.cart.addItem(alice.id, CartLine(p.id, 0, 1, emptyMap(), null))
+        assertEquals("USD", w.carts.getByUserId(alice.id, pool)!!.currency, "the stored currency is still the stale one")
+
+        val result = h.checkout(json("paymentMethodId" to "fake", "expectedTotal" to quote.total / 100.0), caller = caller)
+        val created = order(result.order.getString("publicId"))
+
+        assertEquals("EUR", created.currency)
+        assertEquals("EUR", created.baseCurrency)
+        assertEquals(java.math.BigDecimal.ONE.compareTo(created.fxRate), 0)
+        assertEquals(quote.total, created.totalPrice)
+        assertEquals(2, rows("market_order"))
+        assertEquals(7, stockOf(p))
+    }
+
+    @Test
+    fun `PT-5 a stored cart currency whose rate is gone or that left additionalCurrencies still checks out in the base currency`(): Unit = runBlocking {
+        val p = fx.product(price = 1000, stock = 9)
+
+        fx.paymentMethod("fake")
+        usdRate()
+        h.config = h.config.copy(currencyMode = CurrencyMode.MULTI, additionalCurrencies = listOf("USD", "GBP"))
+
+        val (alice, caller) = user("Alice")
+
+        h.cart.addItem(alice.id, CartLine(p.id, 0, 1, emptyMap(), null))
+        h.cart.replace(alice.id, CartService.Replacement(currency = CartService.Field("USD")))
+
+        // the rate row is deleted
+        w.currencyRates.deleteByCurrency("USD", pool)
+
+        assertEquals("EUR", order(h.checkout(json("paymentMethodId" to "fake"), caller = caller).order.getString("publicId")).currency, "no rate: not offered, base currency")
+
+        // the rate is back but the currency left additionalCurrencies
+        usdRate()
+        h.cart.addItem(alice.id, CartLine(p.id, 0, 1, emptyMap(), null))
+        h.config = h.config.copy(additionalCurrencies = listOf("GBP"))
+
+        assertEquals("EUR", order(h.checkout(json("paymentMethodId" to "fake"), caller = caller).order.getString("publicId")).currency, "not listed any more: base currency")
+
+        // an explicit request for it is still refused
+        h.cart.addItem(alice.id, CartLine(p.id, 0, 1, emptyMap(), null))
+        expect("INVALID_CART", 400) { h.checkout(json("paymentMethodId" to "fake", "currency" to "USD"), caller = caller) }
+        assertEquals(2, rows("market_order"))
+    }
+
+    @Test
+    fun `PT-5 MULTI mode creates the order in an additional currency with a rate, from request lines and from the server cart`(): Unit = runBlocking {
+        val p = fx.product(price = 1000, stock = 9)
+
+        fx.paymentMethod("fake")
+        usdRate()
+        h.config = h.config.copy(currencyMode = CurrencyMode.MULTI, additionalCurrencies = listOf("USD"))
+
+        val (alice, caller) = user("Alice")
+
+        // request lines and a currency in the body
+        val usd = order(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "currency" to "usd", "expectedTotal" to 11.0), caller = caller).order.getString("publicId"))
+
+        assertEquals("USD", usd.currency)
+        assertEquals("EUR", usd.baseCurrency)
+        assertEquals(0, java.math.BigDecimal("1.1").compareTo(usd.fxRate))
+        assertEquals(1100, usd.totalPrice)
+
+        // the server cart carries the currency the buyer picked, the body names none
+        h.cart.addItem(alice.id, CartLine(p.id, 0, 1, emptyMap(), null))
+        h.cart.replace(alice.id, CartService.Replacement(currency = CartService.Field("USD")))
+
+        val fromCart = order(h.checkout(json("paymentMethodId" to "fake", "expectedTotal" to 11.0), caller = caller).order.getString("publicId"))
+
+        assertEquals("USD", fromCart.currency)
+        assertEquals(1100, fromCart.totalPrice)
+
+        // the base currency stays the base currency
+        assertEquals("EUR", order(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "currency" to "EUR"), caller = caller).order.getString("publicId")).currency)
+        assertEquals(3, rows("market_order"))
+    }
+
     @Test
     fun `a billing type with padding is the type that is stored, so the fields it requires are checked`(): Unit = runBlocking {
         val p = fx.product(price = 700)
@@ -2047,14 +2170,16 @@ internal class CheckoutHarness(val w: TestWiring, private val vertx: Vertx) {
         val creditTopUpMin: Double = 1.0,
         val creditTopUpMax: Double = 10000.0,
         val creditName: String = "",
-        val checkoutRateLimitPerMinute: Int = 0
+        val checkoutRateLimitPerMinute: Int = 0,
+        val currencyMode: CurrencyMode = CurrencyMode.SINGLE,
+        val additionalCurrencies: List<String> = emptyList()
     ) {
         fun toConfig() = MarketConfig(
             currency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", allowGuestCheckout = allowGuestCheckout,
             allowGiftPurchase = allowGiftPurchase, minimumOrderAmount = minimumOrderAmount, creditsEnabled = creditsEnabled, allowMixedCreditPayment = allowMixedCreditPayment,
             onlyAcceptCredits = onlyAcceptCredits, testMode = testMode, billingInfoMode = billingInfoMode, legalTextRequired = legalTextRequired,
             creditTopUpEnabled = creditTopUpEnabled, creditTopUpFreeAmount = creditTopUpFreeAmount, creditTopUpMin = creditTopUpMin, creditTopUpMax = creditTopUpMax,
-            creditName = creditName, checkoutRateLimitPerMinute = checkoutRateLimitPerMinute
+            creditName = creditName, checkoutRateLimitPerMinute = checkoutRateLimitPerMinute, currencyMode = currencyMode, additionalCurrencies = additionalCurrencies
         )
     }
 
