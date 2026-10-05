@@ -35,6 +35,25 @@
         "checkout-soon": "Ödeme sistemi yakında eklenecek.",
         "clear": "Sepeti Temizle"
       }
+    },
+    "errors": {
+      "NETWORK": "İstek tamamlanamadı. Lütfen tekrar deneyin.",
+      "GENERIC": "Bir şeyler ters gitti. Lütfen tekrar deneyin."
+    },
+    "common": {
+      "retry": "Tekrar dene",
+      "loading": "Yükleniyor...",
+      "copy": "Kopyala",
+      "copied": "Kopyalandı",
+      "cancel": "Vazgeç",
+      "confirm": "Onayla",
+      "close": "Kapat"
+    },
+    "period": {
+      "DAY": "{count} gün",
+      "WEEK": "{count} hafta",
+      "MONTH": "{count} ay",
+      "YEAR": "{count} yıl"
     }
   }
 }

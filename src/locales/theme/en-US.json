@@ -35,6 +35,25 @@
         "checkout-soon": "Payment is coming soon.",
         "clear": "Clear Cart"
       }
+    },
+    "errors": {
+      "NETWORK": "The request could not be completed. Please try again.",
+      "GENERIC": "Something went wrong. Please try again."
+    },
+    "common": {
+      "retry": "Retry",
+      "loading": "Loading...",
+      "copy": "Copy",
+      "copied": "Copied",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "close": "Close"
+    },
+    "period": {
+      "DAY": "{count, plural, one {# day} other {# days}}",
+      "WEEK": "{count, plural, one {# week} other {# weeks}}",
+      "MONTH": "{count, plural, one {# month} other {# months}}",
+      "YEAR": "{count, plural, one {# year} other {# years}}"
     }
   }
 }
