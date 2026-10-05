@@ -87,4 +87,5 @@ class InvalidMailKind : Error(400)
 
 class MailRecipientRequired : Error(400)
 
-class InvalidInvoiceSequence : Error(400)
+/** [minimum]: the smallest `nextNumber` that is accepted for the series (12 section 9.3); absent when the series itself is invalid. */
+class InvalidInvoiceSequence(minimum: Number? = null) : Error(400, extras = extrasOf("minimum" to minimum))

@@ -2,12 +2,14 @@ package com.panomc.plugins.market.routes.panel.settings
 
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.api.config.PluginConfigManager
+import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.runtime.MarketRuntime
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
+import com.panomc.plugins.market.routes.panel.invoice.invoiceWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentMethodService
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
@@ -47,6 +49,7 @@ class PanelGetSettingsAPI(
             .put("currencySymbol", config.currency.symbol)
             .put("statsCurrencySymbol", config.statsCurrency.symbol)
             .put("mailEnabled", MarketRuntime.capabilities.mail)
+            .put("invoiceSequences", invoiceWiring(plugin).endpoints.sequences(plugin.applicationContext.getBean(DatabaseManager::class.java).getSqlClient()))
 
         return Successful(response.map)
     }
