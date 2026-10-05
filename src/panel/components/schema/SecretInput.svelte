@@ -105,7 +105,7 @@
   // Secret input of the schema form (13 §16.3). `value` is the mask (stored secret), a typed text,
   // '' (nothing stored) or null (the admin removed the stored secret). `revealPath` is the
   // password-gated reveal endpoint ('' = no reveal); `onrevealed(settings)` lets the form fill the
-  // other secrets that still show the mask.
+  // other secrets that still show the mask. `stored` = the server holds a value for this secret.
   let {
     value = $bindable(''),
     multiline = false,
@@ -114,28 +114,22 @@
     disabled = false,
     invalid = false,
     removable = false,
+    stored = false,
     id = 'secret',
     label = '',
     placeholder = '',
     onrevealed = null,
   } = $props();
 
-  let hadMask = $state(false);
-  let removed = $state(false);
   let visible = $state(false);
   let promptOpen = $state(false);
   let password = $state('');
   let passwordInvalid = $state(false);
   let loading = $state(false);
 
-  // A secret that arrives masked (or is masked again after a save) remembers it had a stored value.
-  $effect(() => {
-    if (value === SECRET_MASK) {
-      hadMask = true;
-      removed = false;
-    }
-  });
-
+  // No sticky local state: a removed secret is `null` itself and "a value is stored" comes from the
+  // parent (the loaded baseline), so a remount or a re-seeded form can never lose either fact.
+  const removed = $derived(value === null);
   const masked = $derived(value === SECRET_MASK);
   const text = $derived(value === null || value === undefined ? '' : value);
   const shownPlaceholder = $derived(removed ? $_('schema.secret-will-be-removed') : placeholder || label);
@@ -149,13 +143,12 @@
   }
 
   function onBlur() {
-    value = secretOnBlur(value, { hadMask, removed });
+    value = secretOnBlur(value, { hadMask: stored, removed });
     if (value === SECRET_MASK) visible = false;
   }
 
   function onInput(event) {
     const typed = secretOnInput(event.currentTarget.value);
-    if (typed !== '') removed = false;
     value = typed;
     if (event.currentTarget.value !== typed) event.currentTarget.value = typed;
   }
@@ -177,7 +170,6 @@
 
   function removeSecret() {
     value = null;
-    removed = true;
     visible = false;
     closePrompt();
   }

@@ -8,6 +8,7 @@ import {
   initialValues,
   isConfigured,
   isDirty,
+  isStoredSecret,
   isVisible,
   readonlyValue,
   resolveText,
@@ -273,6 +274,30 @@ describe('secret protocol', () => {
     expect(secretOnBlur('', { hadMask: false })).toBe('');
     expect(secretOnBlur('', { hadMask: true, removed: true })).toBeNull();
     expect(secretOnBlur('abc', { hadMask: true })).toBe('abc');
+  });
+  // SecretInput derives both facts instead of keeping them: removed = (value === null), hadMask =
+  // the loaded baseline held the mask. These tests drive that exact focus / blur sequence.
+  const blurOf = (value, baseline, key = 'apiKey') =>
+    secretOnBlur(secretOnFocus(value), { hadMask: isStoredSecret(baseline, key), removed: value === null });
+  test('a provider without a stored secret never gets a mask from focus + blur', () => {
+    const providerA = { apiKey: SECRET_MASK };
+    const providerB = { apiKey: '' };
+    expect(blurOf(SECRET_MASK, providerA)).toBe(SECRET_MASK);
+    expect(blurOf('', providerB)).toBe('');
+    expect(blurOf(undefined, providerB)).toBe('');
+  });
+  test('a removed secret stays null across focus + blur after a remount and is sent as null', () => {
+    const baseline = { apiKey: SECRET_MASK };
+    const value = blurOf(null, baseline);
+    expect(value).toBeNull();
+    const schema = { fields: [field('apiKey', 'PASSWORD', { secret: true })] };
+    expect(buildSettingsPayload(schema, { apiKey: value }).apiKey).toBeNull();
+  });
+  test('a stored secret cleared after typing gets the mask back; isStoredSecret reads the baseline', () => {
+    expect(blurOf('', { apiKey: SECRET_MASK })).toBe(SECRET_MASK);
+    expect(isStoredSecret({ apiKey: SECRET_MASK }, 'apiKey')).toBe(true);
+    expect(isStoredSecret({ apiKey: '' }, 'apiKey')).toBe(false);
+    expect(isStoredSecret(undefined, 'apiKey')).toBe(false);
   });
   test('typing over the mask drops the mask prefix', () => {
     expect(secretOnInput('********abc')).toBe('abc');

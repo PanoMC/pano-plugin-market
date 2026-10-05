@@ -58,6 +58,7 @@
             disabled={readOnly}
             {invalid}
             removable={!field.required}
+            stored={isStoredSecret(baseline, field.key)}
             onrevealed={revealAll}
             bind:value={values[field.key]} />
         {:else if field.type === 'TEXTAREA'}
@@ -126,15 +127,18 @@
     applyReveal,
     errorText,
     groupFields,
+    isStoredSecret,
     readonlyValue,
     resolveText,
   } from '../../utils/schema-form.js';
 
   // Schema-driven form of a provider (13 §16.3). `values` holds one entry per storable field
-  // (initialValues); `errors` maps a field key to a client code or the server's LocalizedText.
+  // (initialValues); `baseline` = the loaded values (a masked secret there is stored on the server);
+  // `errors` maps a field key to a client code or the server's LocalizedText.
   let {
     schema,
     values = $bindable({}),
+    baseline = {},
     errors = {},
     readOnly = false,
     webhookUrls = {},

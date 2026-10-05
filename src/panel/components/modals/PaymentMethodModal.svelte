@@ -57,14 +57,17 @@
                 </dl>
               {/if}
 
-              <SchemaForm
-                schema={provider.schema}
-                bind:values={working}
-                errors={schemaErrors}
-                {readOnly}
-                webhookUrls={provider.webhookUrls ?? {}}
-                idPrefix="pm-field"
-                revealPath="/payment-methods/{provider.id}/reveal" />
+              {#key seedCount}
+                <SchemaForm
+                  schema={provider.schema}
+                  bind:values={working}
+                  {baseline}
+                  errors={schemaErrors}
+                  {readOnly}
+                  webhookUrls={provider.webhookUrls ?? {}}
+                  idPrefix="pm-field"
+                  revealPath="/payment-methods/{provider.id}/reveal" />
+              {/key}
 
               <PluginHook
                 name="market:panel:payment-method:settings:{provider.id}"
@@ -442,6 +445,8 @@
   let provider = $state.raw(null);
   let working = $state({});
   let baseline = $state.raw({});
+  // bumped on every seed: the form remounts so reveal / prompt state never leaks between providers
+  let seedCount = $state(0);
   let form = $state(configToForm());
   let schemaErrors = $state({});
   let configErrors = $state({});
@@ -477,6 +482,7 @@
     const values = initialValues(next.schema, next.settings ?? {});
     working = { ...values };
     baseline = values;
+    seedCount++;
     form = configToForm(next.config ?? {});
     schemaErrors = {};
     configErrors = {};

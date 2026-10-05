@@ -200,6 +200,9 @@ export function readonlyValue(field, webhookUrls = {}) {
 
 // -- secret input protocol (13 §16.3) ---------------------------------------------------------
 
+/** The server holds a value for this secret: it was loaded masked (`baseline` = initialValues). */
+export const isStoredSecret = (baseline, key) => baseline?.[key] === SECRET_MASK;
+
 /** Focus on a masked value empties the input so typing replaces it. */
 export const secretOnFocus = (value) => (value === SECRET_MASK ? '' : value);
 
