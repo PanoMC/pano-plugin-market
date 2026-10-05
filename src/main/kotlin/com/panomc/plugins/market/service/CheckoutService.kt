@@ -281,6 +281,13 @@ interface PaymentStarter {
     /** The stored start result of [attempt] as `PaymentStart` JSON (a replay of the request), `null` when it has none. */
     suspend fun served(attempt: MarketPayment, sqlClient: SqlClient): JsonObject?
 
+    /**
+     * O2 of an order whose first attempt needs no gateway (`free`), applied on the caller's transaction [conn] (gift redemption, 21 section 6 step 4):
+     * a failure throws and rolls the caller's rows back. Returns what to run after the commit, `null` when this starter cannot do it (the attempt is then
+     * started after the commit like any other).
+     */
+    suspend fun completeZeroIn(conn: io.vertx.sqlclient.SqlConnection, order: MarketOrder, attempt: MarketPayment): (suspend (SqlClient) -> Unit)? = null
+
     companion object {
         val NONE: PaymentStarter = object : PaymentStarter {
             override suspend fun start(order: MarketOrder, attempt: MarketPayment, sqlClient: SqlClient): JsonObject? = null
@@ -1067,7 +1074,8 @@ class CheckoutService(
 
     /**
      * `POST /api/market/me/gifts/redeem` after the code guard and the lookup of the code (21 section 6): the one transaction (gift row, then product
-     * rows, then the order), then the free payment attempt after the commit, which completes the order (O2: entitlements, deliveries, credit grant).
+     * rows, then the order and O2 of the free attempt: entitlements, deliveries, credit grant), so a failure never leaves the code consumed. A starter that
+     * cannot complete in the transaction (`completeZeroIn` is `null`) starts the attempt after the commit instead.
      *
      * Every refusal is `400 INVALID_GIFT_CODE {reason}` with a reason of 04 section 4: `CODE_NOT_FOUND`, `CODE_NOT_STARTED`, `CODE_EXPIRED`,
      * `CODE_LIMIT_REACHED`, `SERVER_REQUIRED`, `FIELD_REQUIRED`, `PRODUCT_UNAVAILABLE`, `PHYSICAL_NOT_SUPPORTED`, and `CREDITS_DISABLED` for a credit gift
@@ -1096,6 +1104,8 @@ class CheckoutService(
         val pick = pickGift(planGift, request, c)
         val plan = pick.line?.let { assessGift(it, caller, locale, sqlClient) }
 
+        var afterCommit: (suspend (SqlClient) -> Unit)? = null
+
         val placed = deps.db.tx { conn ->
             // 1 to 3: the gift row, then the product rows (the global order); the per-customer limit and the guarded counter follow in `reserve`
             val gift = deps.redemptions.lockGift(conn, request.giftId) ?: throw InvalidGiftCode(RedemptionService.CODE_NOT_FOUND)
@@ -1110,10 +1120,22 @@ class CheckoutService(
                 deps.locks.variants(conn, variantIdsOf(plan))
             }
 
-            createGiftOrder(conn, gift, pick, caller, payer, locale, deps)
+            val created = createGiftOrder(conn, gift, pick, caller, payer, locale, deps)
+
+            // 4: O2 (redemption APPLIED, entitlements, deliveries, credit grant) in the same transaction as the gift lock, the counter and the order, so a
+            // failure anywhere rolls all of them back together and the code is never left consumed by a pending order
+            afterCommit = deps.starter.completeZeroIn(conn, created.order, created.attempt)
+
+            if (afterCommit != null) CreatedOrder(orders.getById(created.order.id, conn) ?: created.order, created.items, created.attempt) else created
         }
 
-        return finish(placed, deps, sqlClient)
+        val completion = afterCommit ?: return finish(placed, deps, sqlClient)
+
+        completion(sqlClient)
+
+        val order = orders.getById(placed.order.id, sqlClient) ?: placed.order
+
+        return CheckoutResult(deps.orders.ownerView(order, sqlClient, null), checkNotNull(order.accessToken), completedStart(order))
     }
 
     /** What the gift hands out: the product line (one unit, the buyer's server and fields), or nothing for a credit gift. `PRODUCT` / `RANDOM` draw with `SecureRandom`. */
