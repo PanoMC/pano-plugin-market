@@ -20,5 +20,11 @@ abstract class MarketShippingZoneDao : MarketDao<MarketShippingZone>(MarketShipp
     /** Zones with status `ACTIVE`, in matching order. */
     abstract suspend fun getActive(sqlClient: SqlClient): List<MarketShippingZone>
 
+    /**
+     * `ACTIVE` zones with at least one rate row of an `ACTIVE`, not deleted method (the zones a buyer can ship to),
+     * in matching order. The state of the method's provider is not judged here.
+     */
+    abstract suspend fun getSellable(sqlClient: SqlClient): List<MarketShippingZone>
+
     abstract suspend fun delete(id: Long, sqlClient: SqlClient): Boolean
 }
