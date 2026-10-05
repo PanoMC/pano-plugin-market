@@ -50,7 +50,7 @@ sealed interface ReplayResult {
  *
  * Steps 3 to 7 can be run again on the stored raw request ([retry], [replay]): the retry job and the panel recover rows this way.
  * The provider's reply is sent verbatim, except for a `RETURN`: its answer is always the 303 to the order page (a browser must never be sent
- * anywhere a provider names; the one exception is the `STEP` hop of a gateway that needs an intermediate redirect, 02 section 5).
+ * anywhere a provider names; the one exception is the `STEP` hop of a gateway that needs an intermediate redirect, 02 section 3 `AttemptUrls.step`).
  */
 class InboundDispatcher(
     private val store: InboundEventStore,
@@ -463,7 +463,7 @@ class InboundDispatcher(
         else -> sanitized(provider)
     }
 
-    /** The intermediate hop of a gateway (02 section 5): the provider's own redirect to an absolute http(s) address, anything else goes to the order page. */
+    /** The intermediate hop of a gateway (02 section 3 `AttemptUrls.step`): the provider's own redirect to an absolute http(s) address, anything else goes to the order page. */
     private suspend fun stepReply(provider: HttpReply, attempt: MarketPayment?): HttpReply {
         val location = provider.headers.entries.firstOrNull { it.key.equals("location", ignoreCase = true) }?.value
 

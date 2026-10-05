@@ -61,8 +61,15 @@ internal object InboundRouteSupport {
 
     fun outcomeOf(name: String?): ReturnOutcome? = OUTCOMES[name]
 
-    /** The call of [context], or `null` when a path parameter is not of the documented shape (404 without touching anything). */
-    fun callOf(context: RoutingContext, kind: InboundKind, outcome: ReturnOutcome? = null): InboundCall? {
+    /**
+     * The call of [context], or `null` when a path parameter is not of the documented shape (404 without touching anything). [remoteIp] is the
+     * trusted-proxy-resolved address (11 section 2, never the raw `X-Forwarded-For`); a test passes its own.
+     */
+    fun callOf(
+        context: RoutingContext, kind: InboundKind, outcome: ReturnOutcome? = null, remoteIp: (RoutingContext) -> String = { ClientIpResolver.resolve(it).ip.orEmpty() }
+    ): InboundCall? {
+        if ((kind == InboundKind.RETURN) != (outcome != null)) return null
+
         val providerId = context.pathParam("providerId")?.takeIf { PROVIDER_ID.matches(it) } ?: return null
         val token = if (kind == InboundKind.WEBHOOK) null else context.pathParam("attemptToken")?.takeIf { TOKEN.matches(it) } ?: return null
         val channel = if (kind == InboundKind.RETURN) "default" else context.pathParam("channel")?.let { if (CHANNEL.matches(it)) it else return null } ?: "default"
@@ -82,7 +89,7 @@ internal object InboundRouteSupport {
 
         return InboundCall(
             kind, providerId, channel, token, outcome, step, request.method().name(), request.path(), request.query(), query, headers, contentType,
-            context.body().buffer()?.bytes ?: ByteArray(0), form, ClientIpResolver.resolve(context).ip.orEmpty(), SystemClock.now()
+            context.body().buffer()?.bytes ?: ByteArray(0), form, remoteIp(context), SystemClock.now()
         )
     }
 
