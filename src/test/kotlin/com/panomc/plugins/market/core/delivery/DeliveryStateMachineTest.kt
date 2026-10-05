@@ -109,8 +109,30 @@ class DeliveryStateMachineTest {
         ),
         Case("UNKNOWN answer without a cancel request is ignored", DeliveryEvent.ServerResult(ResultStatus.UNKNOWN), moves = emptyMap()),
         Case(
-            "D16 / D17 cancel", DeliveryEvent.Cancel(DeliveryError.ORDER_REVOKED), otherwise = rejectCancel,
+            "D16 / D17 cancel by an end flow", DeliveryEvent.Cancel(DeliveryError.ORDER_REVOKED), otherwise = rejectCancel,
+            moves = moves(every, unsent, CANCELLED, "D16") + moves(every, listOf(SENT), SENT, "D17") + moves(every, listOf(QUEUED), QUEUED, "D17") +
+                moves(inline, listOf(SENDING), SENDING, "D17")
+        ),
+        Case(
+            "D16 / D17 admin cancel (a claimed row is not cancellable, 14.3)", DeliveryEvent.Cancel(DeliveryError.CANCELLED_BY_ADMIN), otherwise = rejectCancel,
             moves = moves(every, unsent, CANCELLED, "D16") + moves(every, listOf(SENT), SENT, "D17") + moves(every, listOf(QUEUED), QUEUED, "D17")
+        ),
+        Case(
+            "D4 retryable error after an end-flow cancel request", DeliveryEvent.InlineFailed(DeliveryError.DB_ERROR, "x", retryable = true),
+            prep = { it.copy(cancelRequestedAt = now - 5, lastErrorCode = DeliveryError.ORDER_REVOKED) }, moves = moves(inline, listOf(SENDING), CANCELLED, "D4")
+        ),
+        Case(
+            "D5 error after an end-flow cancel request", DeliveryEvent.InlineFailed(DeliveryError.INVALID_PLAYER, "x"),
+            prep = { it.copy(cancelRequestedAt = now - 5, lastErrorCode = DeliveryError.ORDER_REVOKED) }, moves = moves(inline, listOf(SENDING), FAILED, "D5")
+        ),
+        Case(
+            "D3 success after an end-flow cancel request", DeliveryEvent.InlineSucceeded(),
+            prep = { it.copy(cancelRequestedAt = now - 5, lastErrorCode = DeliveryError.ORDER_REVOKED) },
+            moves = moves(listOf(Kind.CREDIT), listOf(SENDING), CONFIRMED, "D3") + moves(listOf(Kind.WEBHOOK), listOf(SENDING), SENT, "D3")
+        ),
+        Case(
+            "D6 stale claim after an end-flow cancel request", DeliveryEvent.ClaimExpired,
+            prep = { it.copy(cancelRequestedAt = now - 5, lastErrorCode = DeliveryError.ORDER_REVOKED) }, moves = moves(every, listOf(SENDING), CANCELLED, "D6")
         ),
         Case(
             "D18 / D19 retry", DeliveryEvent.Retry, otherwise = rejectRetry,
@@ -125,7 +147,9 @@ class DeliveryStateMachineTest {
         Case("D21 webhook dead", DeliveryEvent.WebhookDead, moves = moves(listOf(Kind.WEBHOOK), listOf(SENT), FAILED, "D21")),
         Case(
             "D22 gate open, nothing delivered", DeliveryEvent.GateOpened(nothingDelivered = true),
-            prep = { it.copy(phase = DeliveryPhase.REVOKE) }, moves = moves(every, listOf(PENDING), CANCELLED, "D22")
+            prep = { it.copy(phase = DeliveryPhase.REVOKE) },
+            // A held server undo is WAITING_SERVER once D7 labelled it, so the gate must reach that state too.
+            moves = moves(every, listOf(PENDING), CANCELLED, "D22") + moves(server, listOf(WAITING_SERVER), CANCELLED, "D22")
         )
     )
 
@@ -646,7 +670,144 @@ class DeliveryStateMachineTest {
 
         for (phase in listOf(DeliveryPhase.GRANT, DeliveryPhase.RENEW)) {
             assertEquals(NoOp, DeliveryStateMachine.decide(row(PENDING, Kind.COMMAND, phase), DeliveryEvent.GateOpened(true), now, rules), phase.name)
+            assertEquals(NoOp, DeliveryStateMachine.decide(row(WAITING_SERVER, Kind.COMMAND, phase), DeliveryEvent.GateOpened(true), now, rules), "WAITING_SERVER ${phase.name}")
         }
+    }
+
+    @Test
+    fun `D22 reaches a held undo that D7 already labelled WAITING_SERVER, so it is never offered to the game server`() {
+        for (phase in listOf(DeliveryPhase.EXPIRE, DeliveryPhase.REVOKE)) {
+            // The revoke command waits for the predecessor gate while its server is offline: PENDING -> D7 -> WAITING_SERVER.
+            var r = row(PENDING, Kind.COMMAND, phase).copy(runAfter = now - 20_000, attempts = 0, sentAt = null)
+
+            r = apply(r, move(r, DeliveryEvent.ServerNotReady(DeliveryError.SERVER_OFFLINE)), now)
+            assertEquals(WAITING_SERVER, r.status)
+            assertEquals(DeliveryError.SERVER_OFFLINE, r.lastErrorCode)
+
+            // Gate still closed (a predecessor is in flight) or the predecessor was delivered: the row is left alone.
+            assertEquals(NoOp, DeliveryStateMachine.decide(r, DeliveryEvent.GateOpened(false), now, rules), phase.name)
+
+            // The predecessor never executed: nothing to undo, no command may run.
+            val gate = move(r, DeliveryEvent.GateOpened(true))
+
+            assertEquals(
+                Move(CANCELLED, listOf(SetError(DeliveryError.NOTHING_TO_REVOKE), SetNextAttemptAt(null), RecomputeFulfillment), "D22"),
+                gate, phase.name
+            )
+
+            r = apply(r, gate, now)
+
+            assertEquals(CANCELLED, r.status)
+            assertEquals(DeliveryError.NOTHING_TO_REVOKE, r.lastErrorCode)
+            assertEquals(NoOp, DeliveryStateMachine.decide(r, DeliveryEvent.Offer, now + 3_600_000, rules), "a cancelled undo is never offered")
+        }
+
+        // An inline row is never WAITING_SERVER; the state is only taken for server rows.
+        assertEquals(NoOp, DeliveryStateMachine.decide(row(WAITING_SERVER, Kind.CREDIT, DeliveryPhase.REVOKE), DeliveryEvent.GateOpened(true), now, rules))
+    }
+
+    // ---- an end flow reaches a claimed inline row (review fix, 08 section 11.1) -----------------------------------------
+
+    private val endReasons = listOf(DeliveryError.ORDER_REVOKED, DeliveryError.ENTITLEMENT_ENDED)
+
+    @Test
+    fun `D17 asks for the cancel of a SENDING inline row when an end flow runs, the admin cancel and a server row stay rejected`() {
+        for (reason in endReasons) {
+            for (kind in inline) {
+                val claimed = row(SENDING, kind).copy(claimedUntil = now + 30_000)
+
+                assertEquals(Move(SENDING, listOf(RequestCancel(now), SetError(reason)), "D17"), move(claimed, DeliveryEvent.Cancel(reason)), "$kind $reason")
+                assertFalse(move(claimed, DeliveryEvent.Cancel(reason)).touchesOrder)
+
+                // Idempotent: a second end flow changes nothing.
+                assertEquals(NoOp, DeliveryStateMachine.decide(claimed.copy(cancelRequestedAt = now - 1), DeliveryEvent.Cancel(reason), now, rules), "$kind $reason again")
+            }
+        }
+
+        val claimed = row(SENDING, Kind.CREDIT)
+
+        assertEquals(Rejected(DeliveryError.DELIVERY_NOT_CANCELLABLE), DeliveryStateMachine.decide(claimed, DeliveryEvent.Cancel(DeliveryError.CANCELLED_BY_ADMIN), now, rules))
+        assertEquals(Rejected(DeliveryError.DELIVERY_NOT_CANCELLABLE), DeliveryStateMachine.decide(claimed, DeliveryEvent.Cancel("whatever"), now, rules), "an unknown reason is an admin cancel")
+        assertEquals(Rejected(DeliveryError.DELIVERY_NOT_CANCELLABLE), DeliveryStateMachine.decide(row(SENDING, Kind.COMMAND), DeliveryEvent.Cancel(DeliveryError.ORDER_REVOKED), now, rules), "a server row is never SENDING")
+    }
+
+    /** A claimed inline grant, still within its claim, that an end flow has asked to cancel (D17). */
+    private fun cancelRequestedWhileSending(kind: Kind = Kind.CREDIT, reason: String = DeliveryError.ORDER_REVOKED): DeliveryRow {
+        val claimed = row(SENDING, kind).copy(attempts = 1, claimedUntil = now + 30_000, nextAttemptAt = null)
+
+        return apply(claimed, move(claimed, DeliveryEvent.Cancel(reason)), now)
+    }
+
+    @Test
+    fun `after an end-flow cancel a SENDING grant that executes is CONFIRMED and its inverse then undoes it (D3)`() {
+        val r = cancelRequestedWhileSending()
+
+        assertEquals(SENDING, r.status)
+        assertEquals(now, r.cancelRequestedAt)
+        assertEquals(DeliveryError.ORDER_REVOKED, r.lastErrorCode)
+
+        val done = move(r, DeliveryEvent.InlineSucceeded("""{"creditTxId":5}"""))
+
+        assertEquals(CONFIRMED, done.to)
+        assertEquals("D3", done.rule)
+        assertEquals(null, apply(r, done, now).lastErrorCode, "the stored cancel reason is cleared by the success")
+    }
+
+    @Test
+    fun `after an end-flow cancel a retryable failure (D4) or a stale claim (D6) ends CANCELLED with the reason and never runs again`() {
+        for (reason in endReasons) {
+            for (kind in inline) {
+                val r = cancelRequestedWhileSending(kind, reason)
+
+                val failed = move(r, DeliveryEvent.InlineFailed(DeliveryError.DB_ERROR, "db down", retryable = true))
+                val stale = move(r.copy(claimedUntil = now - 1), DeliveryEvent.ClaimExpired)
+
+                for ((label, result) in listOf("D4" to failed, "D6" to stale)) {
+                    assertEquals(
+                        Move(CANCELLED, listOf(SetNextAttemptAt(null), ClearClaim, RecomputeFulfillment), label), result,
+                        "$label $kind $reason: the recorded reason stays, no SetError overwrites it"
+                    )
+                    assertTrue(result.touchesOrder, label)
+
+                    val after = apply(r, result, now)
+
+                    assertEquals(CANCELLED, after.status)
+                    assertEquals(reason, after.lastErrorCode)
+                    assertEquals(null, after.claimedUntil)
+                    assertEquals(null, after.nextAttemptAt)
+
+                    // Terminal: not claimed, not promoted, not retried, not cancelled again.
+                    assertEquals(NoOp, DeliveryStateMachine.decide(after, DeliveryEvent.Claim, now + 1, rules), label)
+                    assertEquals(NoOp, DeliveryStateMachine.decide(after, DeliveryEvent.ClaimExpired, now + 1, rules), label)
+                    assertEquals(Rejected(DeliveryError.DELIVERY_NOT_RETRYABLE), DeliveryStateMachine.decide(after, DeliveryEvent.Retry, now + 1, rules), label)
+                }
+            }
+        }
+
+        // A cancel request without a stored reason becomes an admin cancel.
+        val noReason = cancelRequestedWhileSending().copy(lastErrorCode = null)
+
+        assertTrue(SetError(DeliveryError.CANCELLED_BY_ADMIN) in move(noReason, DeliveryEvent.InlineFailed(DeliveryError.DB_ERROR, retryable = true)).effects)
+        assertTrue(SetError(DeliveryError.CANCELLED_BY_ADMIN) in move(noReason.copy(claimedUntil = now - 1), DeliveryEvent.ClaimExpired).effects)
+    }
+
+    @Test
+    fun `after an end-flow cancel a final failure (D5) stays FAILED, and a stale claim without a cancel request still returns to PENDING`() {
+        val r = cancelRequestedWhileSending()
+
+        val final = move(r, DeliveryEvent.InlineFailed(DeliveryError.INVALID_PLAYER, "bad name"))
+
+        assertEquals("D5", final.rule)
+        assertEquals(FAILED, final.to)
+
+        // Attempts used up: the retryable failure is final as well (D5), not a cancel.
+        assertEquals(FAILED, move(r.copy(attempts = 5), DeliveryEvent.InlineFailed(DeliveryError.DB_ERROR, "db", retryable = true)).to)
+
+        // Nobody asked to cancel: D4 and D6 are unchanged.
+        val plain = row(SENDING, Kind.CREDIT).copy(attempts = 1)
+
+        assertEquals(PENDING, move(plain, DeliveryEvent.InlineFailed(DeliveryError.DB_ERROR, "x", retryable = true)).to)
+        assertEquals(PENDING, move(plain, DeliveryEvent.ClaimExpired).to)
     }
 
     @Test

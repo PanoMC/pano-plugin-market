@@ -51,8 +51,9 @@ class Coverage(val endedEntitlementId: Long, val chainEnd: Long?)
  * line are used (08 section 5.2); [serverChoices] stay the child product's own.
  *
  * [priorRows] are the item's existing delivery rows, read after the end flow cancelled the unsent ones: an automatic
- * inverse (`REMOVE` of a permission, credit reversal) is planned only for an action that has a `CONFIRMED`, `SENT`,
- * `QUEUED` or `FAILED (UNKNOWN_OUTCOME)` `GRANT` / `RENEW` row (08 section 11.3). [revokedUnits] are the units already
+ * inverse (`REMOVE` of a permission, credit reversal) is planned only for an action that has a `SENDING`, `CONFIRMED`,
+ * `SENT`, `QUEUED` or `FAILED (UNKNOWN_OUTCOME)` `GRANT` / `RENEW` row (08 section 11.3; `SENDING` is added to the
+ * spec's list: an inline row claimed but not yet executed is in flight and may still take effect). [revokedUnits] are the units already
  * covered by non-cancelled `REVOKE` rows; a permission is removed only when the last unit is revoked (08 section 11.2).
  */
 class PlanItem(
@@ -444,7 +445,13 @@ object DeliveryPlanner {
         class Failed(val code: String) : Targets()
     }
 
-    private val EXECUTED = setOf(DeliveryStatus.CONFIRMED, DeliveryStatus.SENT, DeliveryStatus.QUEUED)
+    /**
+     * 08 section 11.3 lists `CONFIRMED`, `SENT`, `QUEUED`; `SENDING` is added (review fix): an inline grant that was claimed
+     * (D2) but has not run yet is the only in-flight state of an inline row and may still post its credits or add its
+     * rank, so the end flow must plan the inverse for it. The inverse is held by the predecessor gate (11.4, which lists
+     * `SENDING`) until the grant resolves, and D22 cancels it when the grant never executed.
+     */
+    private val EXECUTED = setOf(DeliveryStatus.CONFIRMED, DeliveryStatus.SENDING, DeliveryStatus.SENT, DeliveryStatus.QUEUED)
 
     /** Planning of one item (or, with a null item, of a standalone action list) in one phase. */
     private class ItemPlan(
@@ -707,7 +714,9 @@ object DeliveryPlanner {
             val delayMs = if (step.inverse || forced != null) 0L else action.delaySeconds * 1000L
             val runAfter = c.now + delayMs
             val status = forced ?: if (runAfter > c.now) DeliveryStatus.SCHEDULED else DeliveryStatus.PENDING
-            val requiresOnline = action.type == DeliveryActionType.COMMAND && action.requiresOnline && status != DeliveryStatus.FAILED
+            // 11 section 10 item 2: "requires online" is ignored for chargeback actions, a ban must not wait for the player.
+            val requiresOnline = action.type == DeliveryActionType.COMMAND && action.requiresOnline && status != DeliveryStatus.FAILED &&
+                src.type != DeliverySourceType.CHARGEBACK_ACTION
             val live = status == DeliveryStatus.SCHEDULED || status == DeliveryStatus.PENDING
 
             return PlannedDelivery(

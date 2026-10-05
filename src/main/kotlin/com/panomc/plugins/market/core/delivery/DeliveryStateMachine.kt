@@ -334,6 +334,9 @@ object DeliveryStateMachine {
         if (row.status != DeliveryStatus.SENDING || !row.isInlineRow) return DeliveryTransition.NoOp
 
         if (event.retryable && row.attempts < rules.maxAttempts) {
+            // An end flow asked for the cancel while the row was claimed (D17 on SENDING): it must not run again later.
+            if (row.cancelRequestedAt != null) return cancelledWhileSending(row, "D4")
+
             return move(
                 DeliveryStatus.PENDING, "D4",
                 DeliveryEffect.SetNextAttemptAt(now + retryDelayMs(row.attempts, random)),
@@ -358,7 +361,26 @@ object DeliveryStateMachine {
 
         if (row.status != DeliveryStatus.SENDING || until == null || until >= now) return DeliveryTransition.NoOp
 
+        // A cancel was requested while the claim ran (D17 on SENDING): the grant never took effect and must not run again.
+        if (row.cancelRequestedAt != null) return cancelledWhileSending(row, "D6")
+
         return move(DeliveryStatus.PENDING, "D6", DeliveryEffect.SetNextAttemptAt(now), DeliveryEffect.ClearClaim)
+    }
+
+    /**
+     * D4 / D6 of a `SENDING` row whose cancel was requested by an end flow (D17): the attempt did not take effect, so the
+     * row ends `CANCELLED` with the recorded reason instead of going back to `PENDING` (where it would run later, after
+     * D22 already cancelled the inverse that was waiting for it).
+     */
+    private fun cancelledWhileSending(row: DeliveryRow, rule: String): DeliveryTransition {
+        val effects = ArrayList<DeliveryEffect>()
+
+        effects += DeliveryEffect.SetNextAttemptAt(null)
+        effects += DeliveryEffect.ClearClaim
+        if (row.lastErrorCode !in CANCEL_REASONS) effects += DeliveryEffect.SetError(DeliveryError.CANCELLED_BY_ADMIN)
+        effects += DeliveryEffect.RecomputeFulfillment
+
+        return DeliveryTransition.Move(DeliveryStatus.CANCELLED, effects, rule)
     }
 
     /** D7: after [NOT_READY_MS] of waiting; also refreshes the reason label of a row that is already `WAITING_SERVER`. */
@@ -555,7 +577,9 @@ object DeliveryStateMachine {
     /**
      * D16 (not yet sent: cancelled at once), D17 (in flight: only a request, the row turns `CANCELLED` or `CONFIRMED`
      * when the server answers). The reason is stored as `lastErrorCode` on the in-flight row so that D15 can keep it;
-     * a `DONE` answer clears it again. `SENDING` and terminal rows are `DELIVERY_NOT_CANCELLABLE` (08 section 14.3).
+     * a `DONE` answer clears it again. Terminal rows are `DELIVERY_NOT_CANCELLABLE` (08 section 14.3), and so is a
+     * `SENDING` row for the admin reason; an end flow (`ORDER_REVOKED` / `ENTITLEMENT_ENDED`, 08 section 11.1) gets D17
+     * on a claimed inline row (review fix: the claim-to-execute window would otherwise let a refunded grant still run).
      */
     private fun cancel(row: DeliveryRow, event: DeliveryEvent.Cancel, now: Long): DeliveryTransition {
         val reason = if (event.reason in CANCEL_REASONS) event.reason else DeliveryError.CANCELLED_BY_ADMIN
@@ -569,7 +593,9 @@ object DeliveryStateMachine {
                     DeliveryEffect.RecomputeFulfillment
                 )
 
-            row.status in IN_FLIGHT ->
+            // An end flow (08 section 11.1) reaches a claimed inline row too: only a request, which the executor, D4, D5 or D6
+            // resolves. The admin cancel of 14.3 keeps rejecting SENDING.
+            row.status in IN_FLIGHT || (row.status == DeliveryStatus.SENDING && row.isInlineRow && reason != DeliveryError.CANCELLED_BY_ADMIN) ->
                 if (row.cancelRequestedAt != null) {
                     DeliveryTransition.NoOp
                 } else {
@@ -655,11 +681,18 @@ object DeliveryStateMachine {
         )
     }
 
-    /** D22: a held undo whose predecessor never took effect has nothing to undo. */
+    /**
+     * D22: a held undo whose predecessor never took effect has nothing to undo. Applies to `PENDING` and, for server rows,
+     * `WAITING_SERVER` (the table of 08 section 6 says `PENDING` only; the held row of an offline server is `WAITING_SERVER` after D7 and
+     * would otherwise be offered at the next sync and run its revoke command for a grant that never executed).
+     */
     private fun gateOpened(row: DeliveryRow, event: DeliveryEvent.GateOpened): DeliveryTransition {
         val undo = row.phase == DeliveryPhase.EXPIRE || row.phase == DeliveryPhase.REVOKE
 
-        if (row.status != DeliveryStatus.PENDING || !undo || !event.nothingDelivered) return DeliveryTransition.NoOp
+        // A held server undo turns WAITING_SERVER by D7 when its server is not ready, so that state counts for server rows.
+        val waiting = row.status == DeliveryStatus.PENDING || (row.status == DeliveryStatus.WAITING_SERVER && row.isServerRow)
+
+        if (!waiting || !undo || !event.nothingDelivered) return DeliveryTransition.NoOp
 
         return move(
             DeliveryStatus.CANCELLED, "D22",

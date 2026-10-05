@@ -581,18 +581,20 @@ class DeliveryPlannerTest {
     // ---- inverses refer to what took effect (08 section 11.3) --------------------------------------------------------
 
     @Test
-    fun `an inverse is planned only for an action with a CONFIRMED, SENT, QUEUED or UNKNOWN_OUTCOME row`() {
+    fun `an inverse is planned only for an action with a CONFIRMED, SENDING, SENT, QUEUED or UNKNOWN_OUTCOME row`() {
         val actions = arrayOf(permission("p1", "group.vip"), credit("c1", 100))
 
         fun inverses(vararg prior: DeliveryRow) = plan(item(9, *actions, prior = prior.toList()), phase = DeliveryPhase.REVOKE).map { it.actionId }
 
         assertEquals(listOf("p1", "c1"), inverses(executed(9, "p1"), executed(9, "c1")))
         assertEquals(listOf("p1"), inverses(executed(9, "p1", status = DeliveryStatus.SENT)))
+        // A claimed inline row may still execute: a refund between the claim and the executor must get its undo (review fix).
+        assertEquals(listOf("p1", "c1"), inverses(executed(9, "p1", status = DeliveryStatus.SENDING), executed(9, "c1", status = DeliveryStatus.SENDING)))
         assertEquals(listOf("c1"), inverses(executed(9, "c1", status = DeliveryStatus.QUEUED)))
         assertEquals(listOf("p1"), inverses(executed(9, "p1", status = DeliveryStatus.FAILED, code = DeliveryError.UNKNOWN_OUTCOME)))
         assertEquals(listOf("p1", "c1"), inverses(executed(9, "p1", phase = DeliveryPhase.RENEW), executed(9, "c1", phase = DeliveryPhase.RENEW)))
 
-        for (status in listOf(DeliveryStatus.PENDING, DeliveryStatus.SCHEDULED, DeliveryStatus.WAITING_SERVER, DeliveryStatus.CANCELLED, DeliveryStatus.SENDING)) {
+        for (status in listOf(DeliveryStatus.PENDING, DeliveryStatus.SCHEDULED, DeliveryStatus.WAITING_SERVER, DeliveryStatus.WAITING_PLAYER, DeliveryStatus.CANCELLED)) {
             assertEquals(emptyList<String>(), inverses(executed(9, "p1", status = status), executed(9, "c1", status = status)), "$status")
         }
 
@@ -602,6 +604,28 @@ class DeliveryPlannerTest {
 
         // Rows of another item or another action do not count, nor does an undo row.
         assertEquals(emptyList<String>(), inverses(executed(10, "p1"), executed(9, "zz"), executed(9, "p1", phase = DeliveryPhase.REVOKE)))
+    }
+
+    @Test
+    fun `a grant that is SENDING gets its credit reversal and permission removal, EXPIRE and coverage included`() {
+        val actions = arrayOf(permission("p1", "group.vip"), credit("c1", 100))
+        val sending = listOf(executed(9, "p1", status = DeliveryStatus.SENDING), executed(9, "c1", status = DeliveryStatus.SENDING))
+
+        val revoke = plan(item(9, *actions, prior = sending), phase = DeliveryPhase.REVOKE)
+
+        assertEquals(listOf("9:p1:0:0:REVOKE:0", "9:c1:0:0:REVOKE:0"), revoke.map { it.idempotencyKey })
+        assertTrue(revoke.all { it.status == DeliveryStatus.PENDING && it.nextAttemptAt == now }, "held by the predecessor gate, not delayed")
+        assertEquals("REMOVE", json(revoke[0]).getString("op"))
+
+        // EXPIRE takes the permission back (credits never), the same as for a confirmed grant.
+        val expire = plan(item(9, *actions, prior = sending, entitlement = PlanEntitlement(3, now - 1)), phase = DeliveryPhase.EXPIRE)
+
+        assertEquals(listOf("9:p1:0:0:EXPIRE:0"), expire.map { it.idempotencyKey })
+
+        // A grant on a server is never SENDING; a RENEW row that is SENDING counts like a GRANT row.
+        val renew = plan(item(9, *actions, prior = listOf(executed(9, "c1", phase = DeliveryPhase.RENEW, status = DeliveryStatus.SENDING))), phase = DeliveryPhase.REVOKE)
+
+        assertEquals(listOf("9:c1:0:0:REVOKE:0"), renew.map { it.idempotencyKey })
     }
 
     @Test
@@ -856,6 +880,36 @@ class DeliveryPlannerTest {
 
         assertEquals(DeliveryStatus.FAILED, row.status)
         assertEquals(DeliveryError.RENDER_ERROR, row.lastErrorCode)
+    }
+
+    @Test
+    fun `requires online is ignored for a chargeback action, a ban must not wait for the player (11 section 10)`() {
+        val online = command("c1", "ban {username} Chargeback", targets = listOf(4L), online = true)
+        val settings = PlanSettings(onlineWaitDays = 7)
+
+        fun planned(parties: TargetResolver.Parties) =
+            DeliveryPlanner.planChargebackActions(ChargebackRequest(order(parties), 12, ActionParser.Stored(listOf(online), emptyList()), servers, settings, now)).single()
+
+        val pending = planned(TargetResolver.Parties("Steve", payerUsername = "Steve", payerUserId = 3))
+
+        assertEquals(DeliveryStatus.PENDING, pending.status)
+        assertFalse(pending.requiresOnline)
+        assertNull(pending.waitUntil)
+        assertEquals(now, pending.nextAttemptAt)
+
+        // The row parked for the panel's confirmation carries no online wait either, so its re-run does not inherit one.
+        val parked = planned(TargetResolver.Parties("Attacker", payerUsername = "Victim", payerUserId = null))
+
+        assertEquals(DeliveryStatus.CANCELLED, parked.status)
+        assertEquals(DeliveryError.NEEDS_CONFIRMATION, parked.lastErrorCode)
+        assertFalse(parked.requiresOnline)
+        assertNull(parked.waitUntil)
+
+        // The same action on a product still waits for the player (the flag is only ignored for chargeback rows).
+        val product = plan(item(1, online), settings = settings).single()
+
+        assertTrue(product.requiresOnline)
+        assertEquals(now + 7 * day, product.waitUntil)
     }
 
     @Test
