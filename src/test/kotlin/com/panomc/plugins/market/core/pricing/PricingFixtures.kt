@@ -115,11 +115,13 @@ object PricingFixtures {
 
     fun coupon(
         id: Long, code: String, value: Long, unit: DiscountUnit = DiscountUnit.PERCENT, scope: CouponScope = CouponScope.ALL,
-        productIds: Set<Long> = emptySet(), min: Long? = null
+        productIds: Set<Long> = emptySet(), min: Long? = null, categoryIds: Set<Long> = emptySet(),
+        found: Boolean = true, active: Boolean = true, start: Long? = null, expiry: Long? = null,
+        redeemLimit: Int? = null, customerRedeemLimit: Int? = null, used: Int = 0, buyerUses: Int = 0
     ) = CouponInput(
-        found = true, id = id, code = code, active = true, discount = value, unit = unit, scope = scope,
-        productIds = productIds, categoryIds = emptySet(), minPaymentAmount = min, startDate = null, expiryDate = null,
-        redeemLimit = null, customerRedeemLimit = null, usedCount = 0, buyerUses = 0
+        found = found, id = id, code = code, active = active, discount = value, unit = unit, scope = scope,
+        productIds = productIds, categoryIds = categoryIds, minPaymentAmount = min, startDate = start, expiryDate = expiry,
+        redeemLimit = redeemLimit, customerRedeemLimit = customerRedeemLimit, usedCount = used, buyerUses = buyerUses
     )
 
     val K25 = coupon(1, "K25", 2500)
@@ -131,6 +133,16 @@ object PricingFixtures {
     val CR5 = CreatorCodeInput(
         found = true, id = 1, code = "CR5", active = true, discount = 500, unit = DiscountUnit.PERCENT, commissionBp = 1000,
         creatorUserId = 900, startDate = null, expiryDate = null, redeemLimit = null, usedCount = 0
+    )
+
+    fun creatorCode(
+        value: Long = 500, unit: DiscountUnit = DiscountUnit.PERCENT, found: Boolean = true, active: Boolean = true,
+        creatorUserId: Long? = 900, creatorEmail: String? = null, start: Long? = null, expiry: Long? = null,
+        redeemLimit: Int? = null, used: Int = 0, commissionBp: Long = 1000
+    ) = CreatorCodeInput(
+        found = found, id = 1, code = "CR", active = active, discount = value, unit = unit, commissionBp = commissionBp,
+        creatorUserId = creatorUserId, startDate = start, expiryDate = expiry, redeemLimit = redeemLimit, usedCount = used,
+        creatorEmail = creatorEmail
     )
 
     /** Fee method F: 2.9 % + 0.30 paid by the buyer. */
@@ -177,6 +189,8 @@ object PricingFixtures {
         vararg lines: LineInput,
         config: PricingConfig = config(),
         discounts: List<DiscountInput> = emptyList(),
+        coupon: CouponInput? = null,
+        creatorCode: CreatorCodeInput? = null,
         profile: PricingProfile = PricingProfile.STOREFRONT,
         currency: String? = null,
         buyer: BuyerContext = buyer(),
@@ -184,8 +198,8 @@ object PricingFixtures {
         override: Long? = null,
         now: Long = NOW
     ): ItemsResult = PricingEngine.priceItems(
-        input(*lines, config = config, discounts = discounts, profile = profile, currency = currency, buyer = buyer,
-            mode = mode, override = override, now = now)
+        input(*lines, config = config, discounts = discounts, coupon = coupon, creatorCode = creatorCode, profile = profile,
+            currency = currency, buyer = buyer, mode = mode, override = override, now = now)
     )
 
     fun owned(entitlementId: Long, tierProduct: Product, pricePaid: Long) =

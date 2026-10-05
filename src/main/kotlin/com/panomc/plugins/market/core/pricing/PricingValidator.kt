@@ -58,6 +58,11 @@ internal object PricingValidator {
             bad(owned.pricePaid < 0) { "owned tier ${owned.entitlementId}: negative price paid" }
         }
 
+        // 05 section 12: only the storefront takes codes; another profile that receives one is a caller bug, not a quote
+        bad((input.coupon != null || input.creatorCode != null) && !input.profile.codes) {
+            "the ${input.profile} profile takes no coupon or creator code"
+        }
+
         val override = input.priceOverride
         if (override != null) {
             bad(input.profile != PricingProfile.PANEL) { "priceOverride is for the PANEL profile only" }

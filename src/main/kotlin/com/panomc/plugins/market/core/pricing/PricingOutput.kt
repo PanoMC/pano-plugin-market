@@ -53,10 +53,29 @@ data class DisplayInfo(val currency: String, val rate: BigDecimal)
 data class DiscountRedemption(val discountId: Long, val amount: Long)
 
 /**
- * One priced line after stages A1 and A2 (05 sections 4, 5), all amounts in the order currency, price basis.
- * Bundle children are lines of their own ([OrderItemKind.BUNDLE_CHILD], [parentLineKey] set, every amount 0).
+ * What stage A3 decided about a coupon or a creator code (05 section 6.3): `Quote.coupon` / `Quote.creatorCode`.
  *
- * `unitPrice * quantity` is exact: automatic discount and upgrade deduction are per unit.
+ * [valid] is false when the code is refused ([reason] says why) and for a coupon that the combine rule of 05 section
+ * 6.4 gave up (`CODE_NOT_COMBINABLE`). A creator code stays valid when only checks 8 or 10 zero its discount: [reason]
+ * then carries that info code and [discount] is 0 (attribution and commission are kept). [discount] is what the code
+ * took off the order, order currency, price basis (`couponDiscount` / `creatorDiscount`).
+ */
+data class CodeOutcome(
+    /** Row id of the code, null when it was not found. */
+    val id: Long?,
+    val code: String,
+    val valid: Boolean,
+    val reason: PricingCode?,
+    val discount: Long
+)
+
+/**
+ * One priced line after stages A1 to A4 (05 sections 4 to 7), all amounts in the order currency, price basis unless
+ * the field says otherwise. Bundle children are lines of their own ([OrderItemKind.BUNDLE_CHILD], [parentLineKey]
+ * set, every amount 0).
+ *
+ * `unitPrice * quantity` is exact: automatic discount and upgrade deduction are per unit. Coupon and creator-code
+ * shares, VAT and line totals are per line (00 section 6.6).
  */
 data class PricedLine(
     val lineKey: String,
@@ -83,6 +102,20 @@ data class PricedLine(
     val unitPrice: Long,
     /** `unitPrice * quantity`, price basis, before coupons and creator codes. */
     val lineAmount: Long,
+    /** The coupon's share of this line (05 section 6.2), 0 when there is none. */
+    val couponShare: Long,
+    /** The creator code's share of this line, taken from what the coupon left. */
+    val creatorShare: Long,
+    /** `couponShare + creatorShare` (`market_order_item.couponAmount`). */
+    val couponAmount: Long,
+    /** `lineAmount - couponAmount`: the final amount of the line in the price basis (VAT-inclusive or net). */
+    val lineBasis: Long,
+    /** Stored `market_order_item.vatPercent` in basis points: the rate used, 0 when the gateway adds the tax or sets the price. */
+    val vatPercent: Long,
+    /** VAT contained in [lineTotal] (0 when the gateway adds the tax or sets the price). */
+    val vatAmount: Long,
+    /** What the buyer pays for the line (05 section 7). */
+    val lineTotal: Long,
     /** `creditPrice` as is (no currency, no conversion). */
     val creditUnitPrice: Long,
     /** `CREDIT_TOPUP`: the credits x 100 bought; 0 for every other line at this stage. */
@@ -94,8 +127,13 @@ data class PricedLine(
 )
 
 /**
- * Result of `PricingEngine.priceItems` up to stage A2 (automatic discount and upgrade). The later stages of 05
- * (codes, VAT and line totals, shipping, tender) extend this result; nothing here is ever recomputed by them.
+ * Result of `PricingEngine.priceItems` (stage A, 05 sections 4 to 7): currency and list price, automatic discount and
+ * upgrade, coupon and creator code, VAT and line totals. The later stages of 05 (shipping, tender, totals) extend this
+ * result; nothing here is ever recomputed by them.
+ *
+ * Identities (asserted by the engine before it returns; a violation is an `IllegalStateException`, a bug):
+ * `sum(lineBasis) = subtotal - discountTotal - upgradeDiscount - couponDiscount - creatorDiscount`, and in `MARKET`
+ * pricing mode `itemsTotal = sum(lineBasis) + (pricesIncludeVat ? 0 : itemsVat)`.
  */
 data class ItemsResult(
     val conversions: Conversions,
@@ -111,6 +149,28 @@ data class ItemsResult(
     val upgradeDiscount: Long,
     /** `sum(lineAmount)`: the merchandise after automatic discount and upgrade, before codes. */
     val itemsAmount: Long,
+    /** `sum(couponShare)`. */
+    val couponDiscount: Long,
+    /** `sum(creatorShare)`. */
+    val creatorDiscount: Long,
+    /** `sum(lineBasis)`: the merchandise after every discount, price basis, before shipping, fee and VAT on top. */
+    val itemsBasis: Long,
+    /** `fromOrder(itemsBasis)`: what the rate engine's free-shipping threshold and `AMOUNT` rows look at (03 section 2.4). */
+    val itemsBasisBase: Long,
+    /** `sum(lineBasis)` of the physical lines. */
+    val physicalBasis: Long,
+    /** `fromOrder(physicalBasis)`. */
+    val physicalBasisBase: Long,
+    /** `sum(lineTotal)`. */
+    val itemsTotal: Long,
+    /** `sum(vatAmount)`. */
+    val itemsVat: Long,
+    /** Any priced line is physical. */
+    val requiresShipping: Boolean,
+    /** Outcome of the coupon the caller passed, null when none was passed. */
+    val coupon: CodeOutcome?,
+    /** Outcome of the creator code the caller passed, null when none was passed. */
+    val creatorCode: CodeOutcome?,
     val discountRedemptions: List<DiscountRedemption>,
     val messages: List<PricingMessage>
 ) {
@@ -122,6 +182,13 @@ data class ItemsResult(
     val display: DisplayInfo?
         get() = conversions.displayCurrency?.let { DisplayInfo(it, conversions.displayRate!!) }
 
-    /** No line carries an error (the cart validation of the caller may still say no). */
-    val canCheckout: Boolean get() = lines.none { it.errors.isNotEmpty() }
+    /**
+     * The pricing part of `canCheckout` (05 section 10): no line error, no error-level message, and every code that
+     * was passed is valid (the cart validation of the caller may still say no).
+     */
+    val canCheckout: Boolean
+        get() = lines.none { it.errors.isNotEmpty() } &&
+            messages.none { it.level == MessageLevel.ERROR } &&
+            coupon?.valid != false &&
+            creatorCode?.valid != false
 }
