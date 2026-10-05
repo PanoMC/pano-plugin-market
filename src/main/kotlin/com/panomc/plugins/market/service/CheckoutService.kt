@@ -57,6 +57,8 @@ import com.panomc.plugins.market.core.pricing.PricingMode
 import com.panomc.plugins.market.core.pricing.PricingProfile
 import com.panomc.plugins.market.core.pricing.ShippingCharge
 import com.panomc.plugins.market.core.money.Conversions
+import com.panomc.plugins.market.core.money.Rounding
+import com.panomc.plugins.market.core.pricing.DiscountStage
 import com.panomc.plugins.market.core.shipping.ShippableLine
 import com.panomc.plugins.market.core.shipping.ShippableLines
 import com.panomc.plugins.market.core.pricing.TenderInput
@@ -1473,10 +1475,41 @@ class CheckoutService(
 
         if (price == null || charge == null) return quoted
 
+        // 06 section 14.3: shippingPrice is the GROSS amount the admin typed; the charge is a price-basis figure (Tender.shipping adds the VAT on top of it in a
+        // VAT-exclusive store), so convert the gross to the basis it grosses up from
+        val basis = if (items.pricesIncludeVat) price else shippingBasisOfGross(price, charge.vatBp ?: items.terms.vatBp, items.conversions.oq)
+
         return ShippingQuote(
-            ShippingCharge(price, charge.vatBp), quoted.options, quoted.methodId, quoted.messages, quoted.address, quoted.methodName, quoted.snapshot, quoted.weightGrams,
+            ShippingCharge(basis, charge.vatBp), quoted.options, quoted.methodId, quoted.messages, quoted.address, quoted.methodName, quoted.snapshot, quoted.weightGrams,
             quoted.fields, quoted.reason
         )
+    }
+
+    /**
+     * The net basis whose gross (`basis + vatOnTop(basis)`, what `Tender.shipping` charges in a VAT-exclusive store) equals [gross]: `gross - vatInside(gross)`,
+     * corrected by the rounding remainder (the nearest candidate wins, the smaller basis on a tie).
+     */
+    private fun shippingBasisOfGross(gross: Long, vatBp: Long, oq: Long): Long {
+        val bp = DiscountStage.clampBp(vatBp)
+        val rounded = Rounding.roundQ(gross, oq)
+        val first = rounded - Rounding.vatInside(rounded, bp, oq)
+        var best = first
+        var bestGap = Long.MAX_VALUE
+
+        for (step in -2L..2L) {
+            val candidate = first + step * oq
+
+            if (candidate < 0) continue
+
+            val gap = Math.abs(candidate + Rounding.vatOnTop(candidate, bp, oq) - rounded)
+
+            if (gap < bestGap || (gap == bestGap && candidate < best)) {
+                best = candidate
+                bestGap = gap
+            }
+        }
+
+        return best
     }
 
     /** What creation of a manual order refuses (the A-table of 06 section 5.2 reduced to what 06 section 14.3 keeps), the first failure wins. */
