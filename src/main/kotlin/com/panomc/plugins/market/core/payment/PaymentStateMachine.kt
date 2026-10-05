@@ -25,7 +25,12 @@ data class OrderTender(
     val gatewayAmount: Long,
     val creditAmount: Long,
     /** `now >= order.expiresAt`: only relevant for the final failure rule (O8). */
-    val windowOver: Boolean = false
+    val windowOver: Boolean = false,
+    /**
+     * `order.paymentId`: the attempt whose money the order already carries (O3 / O9 / O2), `null` when none. Lets the
+     * machine tell the order's own attempt (a late or corrected success after a review) from a SECOND paid attempt.
+     */
+    val paymentAttemptId: Long? = null
 )
 
 /** What the provider's capabilities say about money (00 section 6.9). */
@@ -83,6 +88,14 @@ sealed interface PaymentEffect {
 
     /** The reason is kept on the attempt (provider data) and in the timeline. */
     data class RecordReviewReason(val reason: ReviewReason) : PaymentEffect
+
+    /**
+     * The order is already in `REVIEW` and money arrived on [attemptId]: the service records it on the order
+     * (`paymentId` / `paidAmount` from this attempt when the order carries none or the order's own attempt was
+     * corrected; otherwise it adds to the received total) so that a later review rejection refunds what was really
+     * received (06 section 9.4, `OrderState.paidAmount`). Always emitted together with [PanelAlert].
+     */
+    data class RecordPaymentOnOrder(val attemptId: Long) : PaymentEffect
 
     /** Panel alert without an order move (money arrived and the order cannot use it). */
     data object PanelAlert : PaymentEffect
@@ -221,14 +234,19 @@ object PaymentStateMachine {
                 )
             }
 
-            // The order is already waiting for a human: only the payment is recorded on it.
-            OrderStatus.REVIEW -> Unit
+            // The order is already waiting for a human: the payment is recorded on the order and the panel told.
+            OrderStatus.REVIEW -> {
+                effects += PaymentEffect.RecordPaymentOnOrder(attempt.attemptId)
+                effects += PaymentEffect.PanelAlert
+            }
 
             in RELEASED_ORDER -> effects += PaymentEffect.NotifyOrder(
                 OrderEvent.LatePayment(attempt.attemptId, if (tenderOk) ReviewReason.LATE else ReviewReason.AMOUNT_MISMATCH)
             )
 
-            in PAID_ORDER -> effects += PaymentEffect.FlagDuplicate
+            // A SECOND paid attempt is a duplicate; the order's own attempt (accepted out of REVIEW, then settled by
+            // the gateway) just becomes SUCCEEDED.
+            in PAID_ORDER -> if (order.paymentAttemptId != attempt.attemptId) effects += PaymentEffect.FlagDuplicate
 
             else -> Unit
         }
@@ -247,10 +265,16 @@ object PaymentStateMachine {
                 effects += PaymentEffect.NotifyOrder(OrderEvent.NeedsReview(reason, attempt.attemptId))
             }
 
-            OrderStatus.REVIEW -> Unit
+            // Already waiting for a human: money that arrived is recorded on the order and the panel told.
+            OrderStatus.REVIEW -> if (recordPaid) {
+                effects += PaymentEffect.RecordPaymentOnOrder(attempt.attemptId)
+                effects += PaymentEffect.PanelAlert
+            }
+
             in RELEASED_ORDER -> effects += PaymentEffect.NotifyOrder(OrderEvent.LatePayment(attempt.attemptId, reason))
-            // Paid order: nothing to move; money (or a suspicious notice) arrived and a human must look at it.
-            else -> effects += PaymentEffect.PanelAlert
+            // Paid order: nothing to move; money (or a suspicious notice) arrived and a human must look at it,
+            // unless it is the order's own attempt (already accepted by that human).
+            else -> if (order.paymentAttemptId != attempt.attemptId) effects += PaymentEffect.PanelAlert
         }
         return PaymentTransition.Move(PaymentStatus.REVIEW, effects)
     }
