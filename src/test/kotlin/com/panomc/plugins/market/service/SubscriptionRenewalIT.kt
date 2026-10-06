@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.delivery.ProductAction
 import com.panomc.plugins.market.core.order.OrderEvent
 import com.panomc.plugins.market.db.MarketDaoITBase
@@ -10,9 +11,13 @@ import com.panomc.plugins.market.db.model.MarketPayment
 import com.panomc.plugins.market.db.model.MarketProduct
 import com.panomc.plugins.market.db.model.MarketSubscription
 import com.panomc.plugins.market.db.model.MarketSubscriptionRenewal
+import com.panomc.plugins.market.db.model.OrderActorType
 import com.panomc.plugins.market.db.model.OrderEventType
 import com.panomc.plugins.market.db.model.OrderSource
+import com.panomc.plugins.market.db.model.PaymentFeeMode
 import com.panomc.plugins.market.db.model.PaymentStatus
+import com.panomc.plugins.market.db.model.RefundOrigin
+import com.panomc.plugins.market.db.model.RefundStatus
 import com.panomc.plugins.market.db.model.RemoteCancelState
 import com.panomc.plugins.market.db.model.RenewalStatus
 import com.panomc.plugins.market.db.model.ReservationState
@@ -29,10 +34,12 @@ import com.panomc.plugins.market.spi.payment.PaymentTarget
 import com.panomc.plugins.market.spi.payment.RecurringChargeRequest
 import com.panomc.plugins.market.spi.payment.RecurringChargeResult
 import com.panomc.plugins.market.spi.payment.RecurringSupport
+import com.panomc.plugins.market.spi.payment.RefundSupport
 import com.panomc.plugins.market.spi.payment.StoredPaymentMethod
 import com.panomc.plugins.market.support.FakePaymentProvider
 import com.panomc.plugins.market.support.TestUser
 import com.panomc.plugins.market.support.TestWiring
+import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
@@ -71,13 +78,46 @@ internal class RenewalWorld(val sw: SubscriptionWorld, val w: TestWiring, val ve
     lateinit var job: SubscriptionJob
         private set
 
+    /** The bank transfer flow of the buyer's notice and the admin's approval, on the payment service of this world (09 section 16 test 49). */
+    lateinit var bank: BankTransferService
+        private set
+
+    /** Who counts as blocked for the charge of a merchant subscription (09 section 8.3); read when the world is built, so a test sets it and calls [build]. */
+    @Volatile
+    var blocks: BuyerBlocks = BuyerBlocks.NONE
+
+    /** The settings the checkout harness's `Cfg` does not carry; every service of this world reads them at call time. */
+    @Volatile
+    var autoRefundDuplicatePayments = true
+
+    @Volatile
+    var subscriptionReminderDays = 3
+
+    /** The store switches test mode on (the checkout harness stays live, so what was bought before stays a live purchase). */
+    @Volatile
+    var storeTestMode = false
+
+    private fun settings(): MarketConfig {
+        val c = sw.h.config
+
+        return MarketConfig(
+            currency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = c.showVatInPrice, creditValue = 1.0, storeTimeZone = "UTC", allowGuestCheckout = c.allowGuestCheckout,
+            allowGiftPurchase = c.allowGiftPurchase, minimumOrderAmount = c.minimumOrderAmount, creditsEnabled = c.creditsEnabled, allowMixedCreditPayment = c.allowMixedCreditPayment,
+            onlyAcceptCredits = c.onlyAcceptCredits, testMode = c.testMode || storeTestMode, billingInfoMode = c.billingInfoMode, legalTextRequired = c.legalTextRequired,
+            creditTopUpEnabled = c.creditTopUpEnabled, creditTopUpFreeAmount = c.creditTopUpFreeAmount, creditTopUpMin = c.creditTopUpMin, creditTopUpMax = c.creditTopUpMax,
+            cashbackPercent = c.cashbackPercent, creditName = c.creditName, checkoutRateLimitPerMinute = c.checkoutRateLimitPerMinute, currencyMode = c.currencyMode,
+            additionalCurrencies = c.additionalCurrencies, subscriptionManualFallback = c.subscriptionManualFallback, subscriptionGraceDays = c.subscriptionGraceDays,
+            subscriptionReminderDays = subscriptionReminderDays, autoRefundDuplicatePayments = autoRefundDuplicatePayments
+        )
+    }
+
     init {
         build()
     }
 
     fun build() {
         val h = sw.h
-        val config = { h.config.toConfig() }
+        val config = { settings() }
 
         subs = SubscriptionService(
             clock = w.clock, config = config, locks = sw.locks, subscriptions = w.subscriptions, renewals = w.subscriptionRenewals, orders = w.orders,
@@ -89,7 +129,7 @@ internal class RenewalWorld(val sw: SubscriptionWorld, val w: TestWiring, val ve
 
                 sw.webhookRows.service.emit(conn, event, key, orderId, data, testMode)
             },
-            ids = w.ids, orderService = { orderService }
+            ids = w.ids, blocks = blocks, orderService = { orderService }
         )
 
         val redemptions = RedemptionService(w.clock, sw.locks, w.redemptions)
@@ -113,6 +153,7 @@ internal class RenewalWorld(val sw: SubscriptionWorld, val w: TestWiring, val ve
         h.useStarter(payments)
         h.pendingSubscriptions = subs
 
+        bank = BankTransferService(sw.db, sw.locks, w.clock, w.orders, w.payments, w.orderEvents, payments, { false }, { false }, { w.pool })
         sink = SubscriptionEventSink(sw.db, { subs }).withPayments { payments }
         job = SubscriptionJob(w.clock, sw.db, subs, w.subscriptions, payments, config, { w.pool }, sink)
     }
@@ -512,7 +553,7 @@ internal class SubscriptionRenewalIT : RenewalITBase() {
     // ==================================================================================== 8.5: a payment for a closed subscription
 
     @Test
-    fun `a payment for the renewal order of an ended subscription waits in review as LATE and the admin cannot accept it`(): Unit = runBlocking {
+    fun `a payment for the renewal order of an ended subscription waits in review as LATE when the provider cannot refund, and the admin cannot accept it`(): Unit = runBlocking {
         val a = activeMerchant()
 
         // the renewal order of the next period exists and is open when the buyer cancels (the subscription ends)
@@ -533,6 +574,7 @@ internal class SubscriptionRenewalIT : RenewalITBase() {
 
         assertEquals(OrderStatus.REVIEW, reviewed.status)
         assertEquals("LATE", reviewed.reviewReason)
+        assertEquals(0, w.refunds.getByOrderId(renewalOrder.id, pool).size, "the provider cannot refund: nothing is requested, the admin decides")
         assertEquals(SubscriptionStatus.CANCELLED, subscription(a.sub.id).status, "the period is never extended")
         assertEquals(1, subscription(a.sub.id).cycleCount)
         assertEquals(RenewalStatus.PENDING, renewals(a.sub.id).single().status)
@@ -582,6 +624,113 @@ internal class SubscriptionRenewalIT : RenewalITBase() {
         assertEquals(1, subscription(id).cycleCount)
     }
 
+    // ==================================================================================== 8.5 with the automatic refund (test 32)
+
+    /** An ended merchant subscription whose charge was in flight and succeeds anyway: the renewal order (open at the end), its attempt and the money. */
+    private suspend fun lateMerchantPayment(a: Active): MarketOrder {
+        w.clock.set(a.sub.nextChargeAt!!)
+        sw.db.txRestartingOnOrderChange { conn -> rw.subs.prepareCharge(conn, a.sub.id, SubscriptionService.ProviderFacts(true, false)) }
+
+        val renewalOrder = renewalOrderOf(a.sub.id)
+
+        sql("UPDATE `pano_market_subscription` SET `status` = 'CANCELLED', `endedAt` = ?, `endReason` = 'BUYER_CANCEL', `nextChargeAt` = NULL WHERE `id` = ?", w.clock.now(), a.sub.id)
+
+        val charged = attempts(renewalOrder.id).single()
+        val event = PaymentEvent.Succeeded(PaymentTarget.Attempt(charged.id), Money(charged.amount, charged.currency))
+
+        rw.payments.applyEvent(renewalOrder.id, charged.id, PaymentEventMapper.attemptEvent(event)!!, AttemptFacts.of(event, sw.cipher))
+
+        return renewalOrder
+    }
+
+    @Test
+    fun `32 a late payment for the renewal of an ended subscription is refunded at once when the switch is on and the provider can refund`(): Unit = runBlocking {
+        val a = activeMerchant()
+
+        sw.caps(RecurringSupport.MERCHANT_INITIATED) { refund = RefundSupport.FULL_ONLY }
+
+        val renewalOrder = lateMerchantPayment(a)
+        val done = order(renewalOrder.id)
+        val charged = attempts(renewalOrder.id).single()
+
+        assertEquals(OrderStatus.CANCELLED, done.status, "O3 then O5 in the same transaction")
+
+        val refund = w.refunds.getByOrderId(renewalOrder.id, pool).single()
+
+        assertEquals(RefundOrigin.SYSTEM, refund.origin)
+        assertEquals(RefundStatus.REQUESTED, refund.status, "the gateway call is the refund service's")
+        assertEquals(charged.amount, refund.amount, "exactly the money that arrived")
+        assertEquals(charged.id, refund.paymentId)
+        assertEquals("fake", refund.providerId)
+
+        val moves = events(renewalOrder.id, OrderEventType.STATUS_CHANGED)
+
+        assertEquals(listOf(OrderStatus.REVIEW.name, OrderStatus.CANCELLED.name), moves.map { it.toStatus })
+        assertEquals(OrderActorType.SYSTEM, moves.last().actorType, "the system rejected it, not an admin")
+        assertEquals(PaymentService.LATE_REFUND_NOTE, moves.last().message)
+        assertEquals(1, events(renewalOrder.id, OrderEventType.REFUND_REQUESTED).size)
+
+        // the subscription stays ended, the period is never extended, nothing was delivered for the renewal
+        val row = subscription(a.sub.id)
+
+        assertEquals(SubscriptionStatus.CANCELLED, row.status)
+        assertEquals(1, row.cycleCount)
+        assertEquals(RenewalStatus.PENDING, renewals(a.sub.id).single().status)
+        assertTrue(sw.dw.rows(renewalOrder.id).isEmpty(), "no RENEW row for money that is being sent back")
+        assertEquals(0, hooks("subscription.renewed").size)
+    }
+
+    @Test
+    fun `32 the late renewal of an ended gateway subscription is refunded at once and the gateway is told to stop billing`(): Unit = runBlocking {
+        val product = subProduct()
+
+        fx.paymentMethod("fake")
+        sw.caps(RecurringSupport.GATEWAY_MANAGED) { refund = RefundSupport.FULL_ONLY }
+
+        val (_, caller) = user("Alex")
+        val first = buy(product, caller)
+        val end = w.clock.now() + 30 * day
+
+        succeed(first, subscription = gatewayState("sub_gw", periodStart = w.clock.now(), periodEnd = end))
+
+        val id = first.subscriptionId!!
+
+        sql("UPDATE `pano_market_subscription` SET `status` = 'EXPIRED', `endedAt` = ?, `endReason` = 'PAYMENT_FAILED', `remoteCancelState` = 'DONE', `nextQueryAt` = NULL WHERE `id` = ?", w.clock.now(), id)
+        w.clock.set(end + 1000)
+
+        val event = PaymentEvent.SubscriptionRenewed("sub_gw", Money(600, "EUR")).also {
+            it.gatewayTransactionId = "txn_late"
+            it.periodStart = end
+        }
+
+        rw.sink.apply(event, null, com.panomc.plugins.market.routes.api.payment.InboundEventContext(1, "fake", null, null, w.clock.now()))
+
+        val renewalOrder = order(renewals(id).single().orderId!!)
+        val refund = w.refunds.getByOrderId(renewalOrder.id, pool).single()
+
+        assertEquals(OrderStatus.CANCELLED, renewalOrder.status)
+        assertEquals(RefundOrigin.SYSTEM, refund.origin)
+        assertEquals(600, refund.amount)
+        assertEquals(RemoteCancelState.PENDING, subscription(id).remoteCancelState, "the gateway is still billing a closed subscription: stop it")
+        assertEquals(1, subscription(id).cycleCount)
+    }
+
+    @Test
+    fun `32 with the switch off the late payment of an ended subscription waits in review even when the provider can refund`(): Unit = runBlocking {
+        val a = activeMerchant()
+
+        sw.caps(RecurringSupport.MERCHANT_INITIATED) { refund = RefundSupport.FULL_ONLY }
+        rw.autoRefundDuplicatePayments = false
+
+        val renewalOrder = lateMerchantPayment(a)
+        val reviewed = order(renewalOrder.id)
+
+        assertEquals(OrderStatus.REVIEW, reviewed.status)
+        assertEquals("LATE", reviewed.reviewReason)
+        assertEquals(0, w.refunds.getByOrderId(renewalOrder.id, pool).size)
+        assertEquals(1, subscription(a.sub.id).cycleCount)
+    }
+
     // ==================================================================================== 9.1: a gateway failure
 
     @Test
@@ -622,6 +771,144 @@ internal class SubscriptionRenewalIT : RenewalITBase() {
         assertEquals(2, subscription(row.id).failCount, "a new attempt count is a new failure")
         assertEquals(2, renewals(row.id).single().attempts)
         assertEquals(1, mails("SUBSCRIPTION_PAYMENT_FAILED"), "the mail is queued on the first failure only")
+    }
+
+    @Test
+    fun `33 a gateway renewal while the subscription is past due makes it active again and clears the failures`(): Unit = runBlocking {
+        val product = subProduct()
+
+        fx.paymentMethod("fake")
+        sw.caps(RecurringSupport.GATEWAY_MANAGED)
+
+        val (_, caller) = user("Alex")
+        val first = buy(product, caller)
+        val end = w.clock.now() + 30 * day
+
+        succeed(first, subscription = gatewayState("sub_gw", periodStart = w.clock.now(), periodEnd = end))
+        w.clock.set(end + 1000)
+
+        val context = com.panomc.plugins.market.routes.api.payment.InboundEventContext(1, "fake", null, null, w.clock.now())
+
+        rw.sink.apply(PaymentEvent.SubscriptionPaymentFailed("sub_gw").also { it.attemptCount = 1 }, null, context)
+
+        val past = subscription(first.subscriptionId!!)
+
+        assertEquals(SubscriptionStatus.PAST_DUE, past.status)
+        assertEquals(1, past.failCount)
+        assertNotNull(past.graceEndsAt)
+
+        // the gateway collects after all, still inside the grace
+        w.clock.advance(day)
+
+        val renewed = PaymentEvent.SubscriptionRenewed("sub_gw", Money(past.price, past.currency)).also {
+            it.gatewayTransactionId = "txn_ok"
+            it.periodStart = end
+            it.periodEnd = end + 30 * day
+        }
+
+        rw.sink.apply(renewed, null, context)
+
+        val row = subscription(past.id)
+        val renewal = renewals(past.id).single()
+
+        assertEquals(SubscriptionStatus.ACTIVE, row.status, "S5")
+        assertEquals(0, row.failCount)
+        assertNull(row.graceEndsAt)
+        assertNull(row.reminderSentAt)
+        assertEquals(2, row.cycleCount)
+        assertEquals(end, row.currentPeriodStart)
+        assertEquals(end + 30 * day, row.currentPeriodEnd)
+        assertEquals(RenewalStatus.PAID, renewal.status, "the row the failure created is the one that was paid")
+        assertEquals(OrderStatus.COMPLETED, order(renewal.orderId!!).status)
+        assertEquals(1, hooks("subscription.renewed").size)
+    }
+
+    // ==================================================================================== the frozen price and the fee of the first order (05 section 12)
+
+    /** A subscription whose first period was paid through a method with a buyer fee of 10 %, and whose product can also be paid with credits. */
+    private suspend fun feeSubscription(recurring: RecurringSupport, stored: StoredPaymentMethod? = null): Triple<TestUser, MarketOrder, MarketSubscription> {
+        val product = fx.product(
+            slug = "fee-monthly", price = 600, creditPrice = 600, actions = actions(),
+            columns = mapOf("billingMode" to "SUBSCRIPTION", "periodUnit" to "MONTH", "periodCount" to 1)
+        )
+
+        fx.paymentMethod("fake", feeMode = PaymentFeeMode.BUYER, feePercent = 1000)
+        sw.caps(recurring)
+
+        val (alex, caller) = user("Alex")
+
+        fx.credit(alex, 10_000_000)
+
+        val first = buy(product, caller)
+
+        succeed(first, stored = stored)
+
+        val paid = order(first.id)
+
+        assertTrue(paid.paymentFee > 0, "the first order carries the buyer fee")
+        assertEquals(OrderStatus.COMPLETED, paid.status)
+
+        return Triple(alex, paid, subscription(first.subscriptionId!!))
+    }
+
+    @Test
+    fun `a merchant renewal order keeps the fee of the first order and splits the frozen total, and a gateway-paid renewal never changes the price`(): Unit = runBlocking {
+        val (_, first, sub) = feeSubscription(RecurringSupport.MERCHANT_INITIATED, StoredPaymentMethod("tok_1").also { it.expiresAt = w.clock.now() + 400 * day })
+
+        assertEquals(first.totalPrice, sub.price)
+
+        chargeSucceeds()
+        w.clock.set(sub.nextChargeAt!!)
+        rw.job.runOnce()
+
+        val renewalOrder = renewalOrderOf(sub.id)
+        val item = w.orderItems.getByOrderIds(listOf(renewalOrder.id), pool).single()
+
+        assertEquals(sub.price, renewalOrder.totalPrice, "the total is frozen")
+        assertEquals(first.paymentFee, renewalOrder.paymentFee, "the fee of the first order, never recomputed")
+        assertEquals(first.paymentFeeVatAmount, renewalOrder.paymentFeeVatAmount)
+        assertEquals(sub.price - first.paymentFee, item.lineTotal, "the item is the frozen total without the fee")
+        assertEquals(item.lineTotal, renewalOrder.subtotal)
+        assertEquals(renewalOrder.totalPrice, renewalOrder.gatewayAmount)
+        assertEquals(renewalOrder.totalPrice, charges().single().amount.amount, "the gateway is asked for the frozen total, fee included")
+        assertEquals(OrderStatus.COMPLETED, renewalOrder.status)
+        assertEquals(sub.price, subscription(sub.id).price, "a gateway-paid renewal totals the frozen price")
+    }
+
+    @Test
+    fun `renewals paid with credits keep the frozen price and the fee split of the first order, period after period`(): Unit = runBlocking {
+        val (_, first, sub) = feeSubscription(RecurringSupport.NONE)
+
+        assertEquals(SubscriptionMode.MANUAL, sub.mode)
+        assertEquals(first.totalPrice, sub.price)
+
+        var current = sub
+
+        repeat(3) { n ->
+            w.clock.set(current.currentPeriodEnd!! - 3 * day + 1)
+            rw.job.runOnce()
+
+            val renewalOrder = renewalOrderOf(sub.id, n + 1)
+            val item = w.orderItems.getByOrderIds(listOf(renewalOrder.id), pool).single()
+
+            assertEquals(first.totalPrice, renewalOrder.totalPrice, "renewal order ${n + 1}: the frozen total")
+            assertEquals(first.paymentFee, renewalOrder.paymentFee, "renewal order ${n + 1}: the fee of the first order")
+            assertEquals(first.totalPrice - first.paymentFee, item.lineTotal, "renewal order ${n + 1}: the line without the fee")
+
+            // the buyer pays it with credits: a full-credit tender has no fee, so the paid order totals less than the frozen price
+            rw.payments.pay(renewalOrder, PayRequest("credits", null, null), PayCaller(), pool)
+
+            val paid = order(renewalOrder.id)
+
+            assertEquals(OrderStatus.COMPLETED, paid.status)
+            assertEquals(0, paid.gatewayAmount)
+            assertEquals(0, paid.paymentFee, "credits carry no fee")
+            assertEquals(first.totalPrice, subscription(sub.id).price, "after renewal ${n + 1} paid with credits the subscription still costs what it cost")
+
+            current = subscription(sub.id)
+
+            assertEquals(n + 2, current.cycleCount)
+        }
     }
 
     // ==================================================================================== 8.6: MANUAL
@@ -712,7 +999,7 @@ internal class SubscriptionRenewalIT : RenewalITBase() {
     }
 
     @Test
-    fun `the buyer cannot cancel a renewal order, a renewal order is paid with any method`(): Unit = runBlocking {
+    fun `51 the buyer cannot cancel a renewal order, the subscription is what is cancelled`(): Unit = runBlocking {
         val a = activeManual()
 
         w.clock.set(a.sub.currentPeriodEnd!! - 3 * day + 1)
@@ -722,6 +1009,27 @@ internal class SubscriptionRenewalIT : RenewalITBase() {
         val refusal = runCatching { rw.payments.cancel(renewalOrder, pool) }.exceptionOrNull()
 
         assertEquals("ORDER_NOT_CANCELLABLE", (refusal as com.panomc.platform.model.Error).getErrorCode())
+        assertEquals(OrderStatus.PENDING, order(renewalOrder.id).status)
+    }
+
+    @Test
+    fun `a renewal order is payable with any method the store offers, not only the one of the subscription`(): Unit = runBlocking {
+        val a = activeManual()
+
+        w.clock.set(a.sub.currentPeriodEnd!! - 3 * day + 1)
+        rw.job.runOnce()
+
+        val renewalOrder = renewalOrderOf(a.sub.id)
+
+        fx.paymentMethod("second")
+        sw.capsOfSecond(RecurringSupport.NONE)
+        rw.payments.pay(renewalOrder, PayRequest("second", null, null), PayCaller(), pool)
+
+        val attempt = attempts(renewalOrder.id).last()
+
+        assertEquals("second", attempt.providerId, "the order was not locked to the method of the subscription (it was paid through `fake`)")
+        assertEquals("fake", subscription(a.sub.id).providerId)
+        assertEquals(renewalOrder.gatewayAmount, attempt.amount)
         assertEquals(OrderStatus.PENDING, order(renewalOrder.id).status)
     }
 

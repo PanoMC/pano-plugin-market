@@ -1197,6 +1197,35 @@ class SubscriptionService(
         ).execute(Tuple.of(now, subscriptionId, now, now + CHARGE_LEASE_MS)).coAwait()
     }
 
+    /**
+     * The status query of an attempt of unknown outcome got no answer (the provider threw or timed out, 09 sections 8.3 and 11): the attempt stays open, never closed
+     * as a failure on a question that was not answered, and never answered by a second charge. [prepareCharge] cleared `nextChargeAt` for the open attempt, so it is
+     * armed again one lease ahead: the next due tick finds the attempt in flight and asks again. Only for a `CREATED` attempt of a `MERCHANT` row that is still
+     * waiting (an attempt the gateway holds is settled by its notification and the reconcile job, a row that moved on is not touched). Judged under the row lock.
+     * Answers whether the question was re-armed.
+     */
+    suspend fun askAgainLater(conn: SqlConnection, subscriptionId: Long, attemptId: Long): Boolean {
+        val known = subscriptions.getById(subscriptionId, conn) ?: return false
+
+        return locks.orderWithSubscription(conn, known.initialOrderId) {
+            val row = subscriptions.getById(subscriptionId, conn) ?: return@orderWithSubscription false
+            val attempt = payments.getById(attemptId, conn)
+            val open = row.status == SubscriptionStatus.ACTIVE || row.status == SubscriptionStatus.PAST_DUE
+
+            if (row.mode != SubscriptionMode.MERCHANT || !open || row.nextChargeAt != null || attempt == null || attempt.status != PaymentStatus.CREATED) {
+                return@orderWithSubscription false
+            }
+
+            val now = clock.now()
+
+            update(conn, row.id, linkedMapOf("nextChargeAt" to now + CHARGE_LEASE_MS))
+            conn.preparedQuery("UPDATE ${table("market_subscription_renewal")} SET `nextAttemptAt` = ?, `updatedAt` = ? WHERE `subscriptionId` = ? AND `status` = 'PENDING' AND `nextAttemptAt` IS NULL")
+                .execute(Tuple.of(now + CHARGE_LEASE_MS, now, row.id)).coAwait()
+
+            true
+        }
+    }
+
     /** `max(now, periodStart) + (subscriptionGraceDays + 8) days`: the window of the renewal order of a merchant charge (09 section 8.3). */
     private fun merchantExpiry(renewal: MarketSubscriptionRenewal, now: Long): Long =
         maxOf(now, renewal.periodStart) + (config().subscriptionGraceDays + MERCHANT_ORDER_EXTRA_DAYS) * SubscriptionTimings.DAY_MS
@@ -1359,9 +1388,13 @@ class SubscriptionService(
             .execute(Tuple.of(order.id, payment?.id, now, renewal.id)).coAwait()
 
         // 3. the period moves; the new price is what the buyer paid (09 section 8.4, last paragraph)
+        // a renewal that credits paid in full carries no payment fee (a full-credit tender has none), so its total is the frozen price minus the fee of the first order:
+        // it must not become the new price, or every credit-paid period would take that fee off the subscription for good. A gateway-paid renewal has the frozen fee
+        // (RENEWAL pricing profile, 05 section 12) and so always totals the frozen price.
+        val paidInCredits = order.gatewayAmount == 0L && order.creditAmount > 0
         val sets = linkedMapOf<String, Any?>(
             "cycleCount" to row.cycleCount + 1, "currentPeriodStart" to renewal.periodStart, "currentPeriodEnd" to renewal.periodEnd, "graceEndsAt" to null, "failCount" to 0,
-            "reminderSentAt" to null, "price" to order.totalPrice, "mode" to effect.mode.name
+            "reminderSentAt" to null, "price" to if (paidInCredits) row.price else order.totalPrice, "mode" to effect.mode.name
         )
 
         // 4. the method: the paying provider, a replaced card, or the fall back to a manual renewal
@@ -1550,6 +1583,15 @@ class SubscriptionService(
                     conn
                 )
                 renewal = renewals.getByPeriod(row.id, index, conn) ?: error("renewal $index of subscription ${row.id} was not written")
+            } else if (renewal.status == RenewalStatus.PENDING && renewal.orderId == null) {
+                // a row that a failed payment of the gateway created (09 section 9.1) knows nothing of the gateway's period: the event's own is what the renewal covers
+                // (09 section 5), so the row takes it now, before its order exists
+                val period = calculatorOf(row).gatewayRenewalPeriod(anchorOf(conn, row, now), row.currentPeriodEnd ?: now, now, event.periodStart, event.periodEnd)
+
+                if (period.start != renewal.periodStart || period.end != renewal.periodEnd) {
+                    conn.preparedQuery("UPDATE ${table("market_subscription_renewal")} SET `periodStart` = ?, `periodEnd` = ?, `amount` = ?, `currency` = ?, `updatedAt` = ? WHERE `id` = ? AND `status` = 'PENDING' AND `orderId` IS NULL")
+                        .execute(Tuple.of(period.start, period.end, event.paid.amount, event.paid.currency, now, renewal.id)).coAwait()
+                }
             }
 
             val bundle = ensureRenewal(conn, row, now) { now + config().orderExpiryMinutes * SubscriptionTimings.MINUTE_MS }
@@ -1947,7 +1989,8 @@ class SubscriptionClosedGuard(private val service: () -> SubscriptionService) : 
 
         order.subscriptionId?.let { subscription.requeueRemoteCancel(conn, it) }
 
-        return PaidDiversion(reason, NOTE)
+        // 09 section 8.5: the money of a closed subscription's renewal goes back at once when the store's switch is on and the provider can refund
+        return PaidDiversion(reason, NOTE, refundAtOnce = true)
     }
 
     companion object {

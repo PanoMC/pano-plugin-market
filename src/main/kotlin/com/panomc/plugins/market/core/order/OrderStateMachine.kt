@@ -44,8 +44,8 @@ sealed class OrderEvent {
     /** O4. */
     data class ReviewAccepted(val force: Boolean = false) : OrderEvent()
 
-    /** O5. [refund]: create a refund for the money received. */
-    data class ReviewRejected(val refund: Boolean = false) : OrderEvent()
+    /** O5. [refund]: create a refund for the money received. [system]: the system rejected it (09 section 8.5, a late renewal payment), not an admin: the timeline says so. */
+    data class ReviewRejected(val refund: Boolean = false, val system: Boolean = false) : OrderEvent()
 
     /** O6, from the expiry job. */
     data class Expire(val now: Long) : OrderEvent()

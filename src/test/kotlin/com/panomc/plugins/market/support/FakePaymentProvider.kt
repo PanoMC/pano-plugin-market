@@ -19,12 +19,14 @@ import com.panomc.plugins.market.spi.payment.PaymentProvider
 import com.panomc.plugins.market.spi.payment.PaymentQueryResult
 import com.panomc.plugins.market.spi.payment.QueryPaymentRequest
 import com.panomc.plugins.market.spi.payment.QueryRefundRequest
+import com.panomc.plugins.market.spi.payment.QuerySubscriptionRequest
 import com.panomc.plugins.market.spi.payment.RecurringChargeRequest
 import com.panomc.plugins.market.spi.payment.RecurringChargeResult
 import com.panomc.plugins.market.spi.payment.RefundRequest
 import com.panomc.plugins.market.spi.payment.RefundResult
 import com.panomc.plugins.market.spi.payment.StartPaymentRequest
 import com.panomc.plugins.market.spi.payment.StartPaymentResult
+import com.panomc.plugins.market.spi.payment.SubscriptionQueryResult
 import kotlinx.coroutines.CompletableDeferred
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
@@ -36,7 +38,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * the optional timeout passes), to let a second actor act meanwhile.
  */
 class FakePaymentProvider(override val id: String = "fake") : PaymentProvider {
-    enum class Op { START, INBOUND, QUERY, CANCEL, REFUND, QUERY_REFUND, CHARGE_RECURRING, CANCEL_SUBSCRIPTION }
+    enum class Op { START, INBOUND, QUERY, CANCEL, REFUND, QUERY_REFUND, CHARGE_RECURRING, CANCEL_SUBSCRIPTION, QUERY_SUBSCRIPTION }
 
     /** One recorded call: the operation and its request object (a [PaymentInboundRequest], [RefundRequest], ...). */
     class Call(val op: Op, val request: Any)
@@ -51,12 +53,16 @@ class FakePaymentProvider(override val id: String = "fake") : PaymentProvider {
     @Volatile var onCancel: (CancelPaymentRequest) -> CancelPaymentResult = { CancelPaymentResult.cancelled() }
     @Volatile var onChargeRecurring: (RecurringChargeRequest) -> RecurringChargeResult = { RecurringChargeResult(emptyList()) }
     @Volatile var onCancelSubscription: (CancelSubscriptionRequest) -> CancelSubscriptionResult = { CancelSubscriptionResult.localOnly() }
+    @Volatile var onQuerySubscription: (QuerySubscriptionRequest) -> SubscriptionQueryResult = { SubscriptionQueryResult.unsupported() }
 
     private val recorded = CopyOnWriteArrayList<Call>()
     private val failures = ConcurrentHashMap<Op, java.util.concurrent.ConcurrentLinkedQueue<ProviderException>>()
     private val gates = ConcurrentHashMap<Op, java.util.concurrent.ConcurrentLinkedQueue<CompletableDeferred<Unit>>>()
 
     val calls: List<Call> get() = recorded.toList()
+
+    /** The `testMode` of the context of every `chargeRecurring` call, in call order: the environment the charge was asked to run in. */
+    val chargeTestModes = CopyOnWriteArrayList<Boolean>()
 
     fun calls(op: Op): List<Call> = recorded.filter { it.op == op }
 
@@ -104,8 +110,14 @@ class FakePaymentProvider(override val id: String = "fake") : PaymentProvider {
 
     override suspend fun queryRefund(ctx: PaymentContext, request: QueryRefundRequest): RefundResult = enter(Op.QUERY_REFUND, request) { RefundResult.unknown() }
 
-    override suspend fun chargeRecurring(ctx: PaymentContext, request: RecurringChargeRequest): RecurringChargeResult =
-        enter(Op.CHARGE_RECURRING, request) { onChargeRecurring(request) }
+    override suspend fun chargeRecurring(ctx: PaymentContext, request: RecurringChargeRequest): RecurringChargeResult {
+        chargeTestModes.add(ctx.testMode)
+
+        return enter(Op.CHARGE_RECURRING, request) { onChargeRecurring(request) }
+    }
+
+    override suspend fun querySubscription(ctx: PaymentContext, request: QuerySubscriptionRequest): SubscriptionQueryResult =
+        enter(Op.QUERY_SUBSCRIPTION, request) { onQuerySubscription(request) }
 
     override suspend fun cancelSubscription(ctx: PaymentContext, request: CancelSubscriptionRequest): CancelSubscriptionResult =
         enter(Op.CANCEL_SUBSCRIPTION, request) { onCancelSubscription(request) }
