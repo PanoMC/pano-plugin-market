@@ -10,6 +10,7 @@ import com.panomc.plugins.market.core.delivery.DeliveryPlanner
 import com.panomc.plugins.market.core.delivery.DeliveryTransition
 import com.panomc.plugins.market.core.delivery.FulfillmentCalculator
 import com.panomc.plugins.market.core.delivery.PlannedDelivery
+import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.db.dao.MarketDeliveryDao
 import com.panomc.plugins.market.db.dao.MarketEntitlementDao
@@ -21,7 +22,6 @@ import com.panomc.plugins.market.db.model.DeliveryStatus
 import com.panomc.plugins.market.db.model.DeliveryTransport
 import com.panomc.plugins.market.db.model.EntitlementStatus
 import com.panomc.plugins.market.db.model.MarketDelivery
-import com.panomc.plugins.market.db.model.MarketEntitlement
 import com.panomc.plugins.market.db.model.MarketOrderEvent
 import com.panomc.plugins.market.db.model.MarketOrderItem
 import com.panomc.plugins.market.db.model.OrderActorType
@@ -34,8 +34,8 @@ import com.panomc.plugins.market.db.tx.txRestartingOnOrderChange
 import com.panomc.plugins.market.error.DeliveryNotCancellable
 import com.panomc.plugins.market.error.DeliveryNotRetryable
 import com.panomc.plugins.market.error.InvalidOrderTransition
-import com.panomc.plugins.market.error.InvalidState
 import com.panomc.plugins.market.service.DeliveryService
+import com.panomc.plugins.market.service.EntitlementService
 import com.panomc.plugins.market.service.platform.ServerRoster
 import com.panomc.plugins.market.util.OrderStatus
 import com.panomc.plugins.market.util.Paging
@@ -63,7 +63,9 @@ class DeliveryAdminService(
     private val orderEvents: MarketOrderEventDao,
     private val deliveries: MarketDeliveryDao,
     private val entitlements: MarketEntitlementDao,
-    private val roster: ServerRoster
+    private val roster: ServerRoster,
+    /** The end flow of the entitlements (MK-107); the default is built from [entitlements] because a revoke never reads the settings. */
+    private val entitlementService: EntitlementService = EntitlementService(clock, { MarketConfig() }, entitlements)
 ) {
     private fun table(name: String) = "`${deliveries.prefix()}$name`"
 
@@ -91,7 +93,6 @@ class DeliveryAdminService(
 
                 // what to run again: copies of chosen rows, or what the planner makes from the snapshots
                 val candidates: List<PlannedDelivery>
-                val grantItems = LinkedHashSet<Long>()
 
                 when (selector) {
                     is Selector.Deliveries -> {
@@ -101,7 +102,6 @@ class DeliveryAdminService(
                         if (chosen.any { it.phase.isGrantLike }) requireRerunnableOrder(order.status)
 
                         candidates = chosen.map { copyOf(it, nextGroup(all, it), now) }
-                        chosen.filter { it.phase == DeliveryPhase.GRANT }.mapNotNullTo(grantItems) { it.orderItemId }
                     }
 
                     else -> {
@@ -119,26 +119,44 @@ class DeliveryAdminService(
                         val group = (all.filter { it.orderItemId in wanted }.maxOfOrNull { it.attemptGroup } ?: -1) + 1
 
                         candidates = deliveryService.planAgain(conn, order, lines, phase, group).filter { it.orderItemId in wanted }
-
-                        if (phase == DeliveryPhase.GRANT) grantItems += wanted
                     }
                 }
 
-                // a logical delivery whose effective row is still open is skipped; one that took effect needs PAY
+                // a logical delivery whose effective row is still open is skipped; one that moves value again, or for the first time, needs PAY
                 var skipped = 0
                 var repeats = false
+                var needsPay = false
                 var credits = 0L
                 val runnable = ArrayList<PlannedDelivery>()
+                val itemById = locked.items.associateBy { it.id }
 
                 for (c in candidates) {
                     val current = effective[logicalKey(c.sourceType.name, c.orderItemId, c.sourceId, c.actionId, c.serverId, c.unitIndex, c.phase)]
+                    val grantLike = c.phase.isGrantLike
+                    val refunded = if (grantLike) refundState(c.orderItemId?.let { itemById[it] }, itemById) else Refunded.NONE
 
                     when {
                         current != null && FulfillmentCalculator.isOpen(current.status) -> skipped++
 
+                        // a line that was refunded in full is never delivered again, not even by an actor with PAY
+                        refunded == Refunded.FULL -> skipped++
+
                         else -> {
-                            if (current != null && tookEffect(current)) {
-                                repeats = true
+                            // a line that was refunded in part would be granted over its whole quantity: that moves value, so it needs PAY
+                            var valueMoves = refunded == Refunded.PARTIAL
+
+                            if (current != null) {
+                                if (tookEffect(current)) {
+                                    repeats = true
+                                    valueMoves = true
+                                }
+                            } else if (grantLike && movesValueWithoutPriorRow(all, c)) {
+                                // no row of this logical key exists: its first execution, or the same action on a server or unit that is new since the first plan
+                                valueMoves = true
+                            }
+
+                            if (valueMoves) {
+                                needsPay = true
 
                                 if (c.actionType == DeliveryActionType.CREDIT) credits += creditsOf(c.payload)
                             }
@@ -148,9 +166,10 @@ class DeliveryAdminService(
                     }
                 }
 
-                if (repeats && !mayRepeatTakenEffect) throw NoPermission()
+                if (needsPay && !mayRepeatTakenEffect) throw NoPermission()
 
-                // an item whose entitlement was revoked comes back for a GRANT re-run, unless it ran out meanwhile (then the item is skipped)
+                // an item whose entitlement was revoked comes back for a GRANT re-run that actually delivers it, unless it ran out meanwhile (then the item is skipped)
+                val grantItems = runnable.filter { it.phase == DeliveryPhase.GRANT }.mapNotNullTo(LinkedHashSet()) { it.orderItemId }
                 val revived = HashSet<Long>()
                 val dropped = HashSet<Long>()
 
@@ -158,7 +177,14 @@ class DeliveryAdminService(
                     val ents = entitlements.getByOrderItemId(itemId, conn).filter { it.status == EntitlementStatus.REVOKED }
 
                     for (e in ents) {
-                        if (e.expiresAt == null || e.expiresAt > now) revived += e.id else dropped += itemId
+                        when {
+                            // an end by money (refund, chargeback) is only undone by an actor who may repeat what took effect
+                            (e.endReason == "REFUND" || e.endReason == "CHARGEBACK") && !mayRepeatTakenEffect -> dropped += itemId
+
+                            e.expiresAt == null || e.expiresAt > now -> revived += e.id
+
+                            else -> dropped += itemId
+                        }
                     }
                 }
 
@@ -187,6 +213,31 @@ class DeliveryAdminService(
                 RerunResult(inserted, skipped, repeats, credits)
             }
         }
+
+    private enum class Refunded { NONE, PARTIAL, FULL }
+
+    /** How much of the line (or of its bundle parent) was refunded: a refunded unit must never be delivered again by a re-run or a retry. */
+    private fun refundState(item: MarketOrderItem?, items: Map<Long, MarketOrderItem>): Refunded {
+        if (item == null) return Refunded.NONE
+
+        val lines = listOfNotNull(item, item.parentItemId?.let { items[it] })
+
+        return when {
+            lines.any { it.refundedQuantity >= it.quantity } -> Refunded.FULL
+            lines.any { it.refundedQuantity > 0 } -> Refunded.PARTIAL
+            else -> Refunded.NONE
+        }
+    }
+
+    /**
+     * [c] has no row of its own logical key. It moves value for the first time unless the same action (same line, source, action id and phase) has
+     * rows that all did not take effect: a target that could not be resolved the first time (`NO_TARGET_SERVER`) and resolves now is a plain re-run.
+     */
+    private fun movesValueWithoutPriorRow(all: List<MarketDelivery>, c: PlannedDelivery): Boolean {
+        val same = all.filter { it.sourceType == c.sourceType && it.orderItemId == c.orderItemId && it.sourceId == c.sourceId && it.actionId == c.actionId && it.phase == c.phase }
+
+        return same.isEmpty() || same.any { tookEffect(it) }
+    }
 
     private fun requireRerunnableOrder(status: OrderStatus) {
         if (status != OrderStatus.COMPLETED && status != OrderStatus.PARTIALLY_REFUNDED) throw InvalidOrderTransition(reason = "ORDER_STATUS")
@@ -239,6 +290,13 @@ class DeliveryAdminService(
 
     private fun creditsOf(payload: String): Long = runCatching { JsonObject(payload).getLong("credits") }.getOrNull() ?: 0L
 
+    /** The line, or its bundle parent, was refunded in full (read under the order lock of the caller). */
+    private suspend fun fullyRefunded(conn: SqlConnection, itemId: Long): Boolean =
+        conn.preparedQuery(
+            "SELECT 1 FROM ${table("market_order_item")} i LEFT JOIN ${table("market_order_item")} p ON p.`id` = i.`parentItemId` " +
+                "WHERE i.`id` = ? AND (i.`refundedQuantity` >= i.`quantity` OR (p.`id` IS NOT NULL AND p.`refundedQuantity` >= p.`quantity`))"
+        ).execute(Tuple.of(itemId)).coAwait().iterator().hasNext()
+
     private suspend fun reactivate(conn: SqlConnection, entitlementId: Long, now: Long) {
         conn.preparedQuery("UPDATE ${table("market_entitlement")} SET `status` = 'ACTIVE', `endReason` = NULL, `endedAt` = NULL, `updatedAt` = ? WHERE `id` = ? AND `status` = 'REVOKED'")
             .execute(Tuple.of(now, entitlementId)).coAwait()
@@ -265,6 +323,15 @@ class DeliveryAdminService(
                     val status = orders.getById(current.orderId, conn)?.status
 
                     if (status != OrderStatus.COMPLETED && status != OrderStatus.PARTIALLY_REFUNDED) throw refusal()
+
+                    // nor after its line was refunded in full or its entitlement was revoked: only a re-run (which asks for PAY) brings that back
+                    val itemId = current.orderItemId
+
+                    if (itemId != null) {
+                        if (fullyRefunded(conn, itemId)) throw refusal()
+
+                        if (entitlements.getByOrderItemId(itemId, conn).any { it.status == EntitlementStatus.REVOKED }) throw refusal()
+                    }
                 }
 
                 val applied = deliveryService.apply(conn, deliveryId, event)
@@ -283,8 +350,9 @@ class DeliveryAdminService(
 
     /**
      * `POST /orders/:id/revoke`: the end flow of 08 section 11.1 for [itemIds] (default every line) and every not-yet-revoked unit; no money moves.
-     * Answers the number of `REVOKE` rows planned. An item whose entitlement is `UPGRADED`, or a timed item whose owner has another live entitlement
-     * of the same product (the chain pull-forward and coverage rules, MK-107), is refused with 409 `INVALID_STATE` instead of being revoked halfway.
+     * Answers the number of `REVOKE` rows planned. The entitlements and the rows go through [EntitlementService.revoke] (MK-107): the entitlement of a line whose
+     * units are all revoked becomes `REVOKED` (`ADMIN`; an `UPGRADED` one too), the later links of a timed chain are pulled forward and an owner who is still
+     * covered by another link keeps the permission with a corrected expiry instead of losing it (08 section 11.1).
      */
     suspend fun revoke(orderId: Long, itemIds: List<Long>?, actorUserId: Long): Int =
         db.txRestartingOnOrderChange { conn ->
@@ -324,16 +392,11 @@ class DeliveryAdminService(
 
                 if (targets.isEmpty()) return@forOrder 0
 
-                guardEntitlements(conn, targets)
-
                 val now = clock.now()
-                val plan = deliveryService.planRevoke(conn, locked.order, lines, units, before, DeliveryError.ORDER_REVOKED, emptyMap(), group)
-
-                for (item in targets) {
-                    for (e in entitlements.getByOrderItemId(item.id, conn)) {
-                        if (e.status == EntitlementStatus.ACTIVE) entitlements.end(e.id, EntitlementStatus.REVOKED, "ADMIN", now, conn)
-                    }
-                }
+                val ids = targets.map { it.id }.toSet()
+                // the children of a bundle line follow it: the end flow scales the range of the bundle line to them
+                val named = targets.filter { it.parentItemId == null || it.parentItemId !in ids }.associate { it.id to units.getValue(it.id) as IntRange? }
+                val plan = entitlementService.revoke(conn, deliveryService, locked.order, locked.items, named, "ADMIN", DeliveryError.ORDER_REVOKED, before, group).plan
 
                 deliveryService.refreshFulfillment(conn, orderId)
 
@@ -356,8 +419,11 @@ class DeliveryAdminService(
         val actions = ActionParser.parseStored(runCatching { JsonObject(item.snapshot ?: "{}").getJsonArray("actions")?.encode() }.getOrNull()).actions.associateBy { it.id }
         val out = HashSet<Int>()
 
+        // a GRANT / RENEW re-run (attempt group above zero) after a revoke brings the item back: only REVOKE rows planned after it count
+        val lastGrantId = rows.filter { (it.phase == DeliveryPhase.GRANT || it.phase == DeliveryPhase.RENEW) && it.attemptGroup > 0 }.maxOfOrNull { it.id } ?: 0L
+
         for (row in rows) {
-            if (row.phase != DeliveryPhase.REVOKE || row.status == DeliveryStatus.CANCELLED || row.unitIndex >= item.quantity) continue
+            if (row.phase != DeliveryPhase.REVOKE || row.status == DeliveryStatus.CANCELLED || row.unitIndex >= item.quantity || row.id < lastGrantId) continue
 
             val perUnit = actions[row.actionId]?.perUnit == true && (row.actionType == DeliveryActionType.COMMAND || row.actionType == DeliveryActionType.WEBHOOK)
 
@@ -366,21 +432,6 @@ class DeliveryAdminService(
 
         return out
     }
-
-    private suspend fun guardEntitlements(conn: SqlClient, targets: List<MarketOrderItem>) {
-        for (item in targets) {
-            val timed = runCatching { JsonObject(item.snapshot ?: "{}").getString("billingMode") }.getOrNull().let { it == "TIMED" || it == "SUBSCRIPTION" }
-
-            for (e in entitlements.getByOrderItemId(item.id, conn)) {
-                if (e.status == EntitlementStatus.UPGRADED) throw InvalidState("UPGRADED")
-
-                if (timed && e.status == EntitlementStatus.ACTIVE && othersLive(conn, e)) throw InvalidState("ENTITLEMENT_CHAIN")
-            }
-        }
-    }
-
-    private suspend fun othersLive(conn: SqlClient, e: MarketEntitlement): Boolean =
-        entitlements.getByOwnerAndProduct(e.ownerKey, e.productId, conn).any { it.id != e.id && it.variantId == e.variantId && it.status == EntitlementStatus.ACTIVE }
 
     // ===== list (08 section 14.5, 04 section 7) ==========================================================================
 

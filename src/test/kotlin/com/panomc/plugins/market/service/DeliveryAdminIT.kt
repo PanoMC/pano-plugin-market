@@ -14,7 +14,6 @@ import com.panomc.plugins.market.db.model.OrderEventType
 import com.panomc.plugins.market.error.DeliveryNotCancellable
 import com.panomc.plugins.market.error.DeliveryNotRetryable
 import com.panomc.plugins.market.error.InvalidOrderTransition
-import com.panomc.plugins.market.error.InvalidState
 import com.panomc.plugins.market.routes.panel.delivery.DeliveryAdminService
 import com.panomc.plugins.market.routes.panel.delivery.DeliveryAdminService.Selector
 import com.panomc.plugins.market.support.MarketTestDb
@@ -48,7 +47,7 @@ class DeliveryAdminIT : MarketDaoITBase() {
     fun wire() {
         w = TestWiring(pool)
         d = DeliveryWorld(w)
-        admin = DeliveryAdminService(w.db, d.locks, w.clock, d.service, w.orders, w.orderEvents, w.deliveries, w.entitlements, d.roster)
+        admin = DeliveryAdminService(w.db, d.locks, w.clock, d.service, w.orders, w.orderEvents, w.deliveries, w.entitlements, d.roster, d.entitlementService)
     }
 
     private fun credit(id: String, credits: Long, phase: DeliveryPhase = DeliveryPhase.GRANT) = ProductAction(id = id, type = DeliveryActionType.CREDIT, phase = phase, credit = credits)
@@ -344,6 +343,178 @@ class DeliveryAdminIT : MarketDaoITBase() {
         assertEquals(1, result.skipped)
     }
 
+    @Test
+    fun `a re-run of a phase that never ran needs PAY, nothing is written without it`(): Unit = runBlocking {
+        val u = steve()
+        val placed = d.place(user = u, actions = listOf(credit("a1", 500), credit("r1", 300, DeliveryPhase.RENEW)))
+
+        d.pay(placed)
+        d.runInline()
+
+        assertEquals(500L, w.fixtures.creditBalance(u))
+        assertEquals(1, d.rows(placed.order.id).size)
+
+        // the product has a RENEW credit, the order never had a RENEW row: running it first time is free value
+        assertThrows(NoPermission::class.java) { runBlocking { rerun(placed.order.id, Selector.All, DeliveryPhase.RENEW) } }
+        assertThrows(NoPermission::class.java) { runBlocking { rerun(placed.order.id, Selector.Items(listOf(placed.items[0].id)), DeliveryPhase.RENEW) } }
+        assertEquals(1, d.rows(placed.order.id).size)
+        assertEquals(0, w.orderEvents.getByOrderId(placed.order.id, pool).count { it.type == OrderEventType.DELIVERY_RERUN })
+
+        val result = rerun(placed.order.id, Selector.All, DeliveryPhase.RENEW, pay = true)
+
+        assertEquals(1, result.created)
+        assertEquals(300L, result.creditAmount)
+
+        d.runInline()
+
+        assertEquals(800L, w.fixtures.creditBalance(u))
+    }
+
+    @Test
+    fun `a re-plan after a server was added needs PAY because the confirmed grant would run on the new server`(): Unit = runBlocking {
+        val u = steve()
+
+        d.roster.granted = listOf(7L)
+
+        val placed = d.place(user = u, actions = listOf(command("c1")))
+
+        d.pay(placed)
+
+        val first = d.rows(placed.order.id).single()
+
+        setStatus(first.id, DeliveryStatus.CONFIRMED)
+
+        d.roster.granted = listOf(7L, 8L)
+
+        assertThrows(NoPermission::class.java) { runBlocking { rerun(placed.order.id, Selector.All) } }
+        assertEquals(1, d.rows(placed.order.id).size)
+
+        val result = rerun(placed.order.id, Selector.All, pay = true)
+
+        // the plan covers every connected server again: the first one a second time, the new one for the first time
+        assertEquals(2, result.created)
+        assertEquals(setOf(7L, 8L), d.rows(placed.order.id).filter { it.id != first.id }.map { it.serverId }.toSet())
+    }
+
+    @Test
+    fun `a grant that found no target before is a plain re-run for OM once a server exists`(): Unit = runBlocking {
+        val u = steve()
+        val placed = d.place(user = u, actions = listOf(command("c1")))
+
+        d.pay(placed)
+
+        val first = d.rows(placed.order.id).single()
+
+        assertEquals(DeliveryStatus.FAILED, first.status)
+        assertEquals(DeliveryError.NO_TARGET_SERVER, first.lastErrorCode)
+
+        d.roster.granted = listOf(7L)
+
+        val result = rerun(placed.order.id, Selector.All)
+
+        assertEquals(1, result.created)
+        assertFalse(result.duplicateGrant)
+        assertEquals(7L, d.rows(placed.order.id).single { it.id != first.id }.serverId)
+    }
+
+    // ===== refunded lines (14.1) ==========================================================================================
+
+    /** An order whose only line was refunded in full while its grant never ran: the grant row is CANCELLED, the entitlement REVOKED by the refund. */
+    private suspend fun refundedLine(user: TestUser, quantity: Int = 1, refunded: Int = quantity): Placed {
+        val placed = d.place(user = user, actions = listOf(credit("a1", 500)), quantity = quantity)
+
+        d.pay(placed)
+
+        val item = placed.items[0].id
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order_item` SET `refundedQuantity` = ? WHERE `id` = ?", refunded, item)
+        setOrderStatus(placed.order.id, OrderStatus.PARTIALLY_REFUNDED)
+        // I17: the product counts the units that were sold and not refunded
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_product` SET `soldCount` = ? WHERE `id` = ?", quantity - refunded, placed.product.id)
+        setStatus(d.rows(placed.order.id).single().id, DeliveryStatus.CANCELLED, DeliveryError.ORDER_REVOKED)
+
+        val e = w.entitlements.getByOrderItemId(item, pool).single()
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_entitlement` SET `status` = 'REVOKED', `endReason` = 'REFUND', `endedAt` = ? WHERE `id` = ?", w.clock.now(), e.id)
+
+        return placed
+    }
+
+    @Test
+    fun `a re-run never delivers a line that was refunded in full, with or without PAY`(): Unit = runBlocking {
+        val u = steve()
+        val placed = refundedLine(u)
+        val item = placed.items[0].id
+        val row = d.rows(placed.order.id).single()
+
+        for (pay in listOf(false, true)) {
+            for (selector in listOf(Selector.All, Selector.Items(listOf(item)), Selector.Deliveries(listOf(row.id)))) {
+                val result = rerun(placed.order.id, selector, pay = pay)
+
+                assertEquals(0, result.created, "$selector pay=$pay")
+                assertTrue(result.skipped >= 1, "$selector pay=$pay")
+            }
+        }
+
+        d.runInline()
+
+        assertEquals(1, d.rows(placed.order.id).size)
+        assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(item, pool).single().status)
+        assertEquals("REFUND", w.entitlements.getByOrderItemId(item, pool).single().endReason)
+        assertEquals(0L, w.fixtures.creditBalance(u))
+    }
+
+    @Test
+    fun `a line refunded in part is re-run by PAY only, and an entitlement ended by a refund is not revived by OM`(): Unit = runBlocking {
+        val u = steve()
+        val placed = refundedLine(u, quantity = 3, refunded = 1)
+        val item = placed.items[0].id
+
+        assertThrows(NoPermission::class.java) { runBlocking { rerun(placed.order.id, Selector.All) } }
+        assertEquals(1, d.rows(placed.order.id).size)
+        assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(item, pool).single().status)
+
+        val result = rerun(placed.order.id, Selector.All, pay = true)
+
+        assertEquals(1, result.created)
+        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(item, pool).single().status)
+    }
+
+    @Test
+    fun `a retry of a grant whose line was refunded in full or whose entitlement was revoked is refused`(): Unit = runBlocking {
+        val u = steve()
+        val placed = d.place(user = u, actions = listOf(credit("a1", 500)))
+
+        d.pay(placed)
+
+        val row = d.rows(placed.order.id).single()
+        val item = placed.items[0].id
+
+        setOrderStatus(placed.order.id, OrderStatus.PARTIALLY_REFUNDED)
+
+        // control: a failed grant of a line nobody refunded retries
+        setStatus(row.id, DeliveryStatus.FAILED, DeliveryError.COMMAND_ERROR)
+        assertEquals(DeliveryStatus.PENDING, admin.retry(row.id).status)
+
+        setStatus(row.id, DeliveryStatus.FAILED, DeliveryError.COMMAND_ERROR)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order_item` SET `refundedQuantity` = `quantity` WHERE `id` = ?", item)
+
+        assertThrows(DeliveryNotRetryable::class.java) { runBlocking { admin.retry(row.id) } }
+        assertEquals(DeliveryStatus.FAILED, d.row(row.id).status)
+
+        // a revoked entitlement refuses it as well
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order_item` SET `refundedQuantity` = 0 WHERE `id` = ?", item)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_entitlement` SET `status` = 'REVOKED', `endReason` = 'ADMIN', `endedAt` = ? WHERE `orderItemId` = ?", w.clock.now(), item)
+
+        assertThrows(DeliveryNotRetryable::class.java) { runBlocking { admin.retry(row.id) } }
+
+        d.runInline()
+
+        assertEquals(DeliveryStatus.FAILED, d.row(row.id).status)
+        assertEquals(1, d.rows(placed.order.id).size)
+        assertEquals(0L, w.fixtures.creditBalance(u))
+    }
+
     // ===== retry (14.2) ==================================================================================================
 
     @Test
@@ -576,6 +747,39 @@ class DeliveryAdminIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `revoke, re-run the grant with PAY, revoke again undoes the second grant too`(): Unit = runBlocking {
+        val u = steve()
+        val placed = confirmedCredit(u)
+        val item = placed.items[0].id
+
+        assertEquals(1, admin.revoke(placed.order.id, null, 1))
+        d.runInline()
+        assertEquals(0L, w.fixtures.creditBalance(u))
+
+        assertEquals(1, rerun(placed.order.id, Selector.Items(listOf(item)), pay = true).created)
+        d.runInline()
+
+        assertEquals(500L, w.fixtures.creditBalance(u))
+        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(item, pool).single().status)
+
+        // the first revoke no longer stands for the units: the item can be revoked again
+        assertEquals(1, admin.revoke(placed.order.id, null, 1))
+
+        val undos = d.rows(placed.order.id).filter { it.phase == DeliveryPhase.REVOKE }
+
+        assertEquals(2, undos.size)
+        assertEquals(2, undos.map { it.idempotencyKey }.toSet().size)
+
+        d.runInline()
+
+        assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(item, pool).single().status)
+        assertEquals(0L, w.fixtures.creditBalance(u))
+
+        // and now nothing is left again
+        assertEquals(0, admin.revoke(placed.order.id, null, 1))
+    }
+
+    @Test
     fun `a revoke of a grant nothing delivered cancels it and plans no undo`(): Unit = runBlocking {
         val u = steve()
         val placed = d.place(user = u, actions = listOf(credit("a1", 500)))
@@ -596,37 +800,85 @@ class DeliveryAdminIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `a revoke of an unknown line is 404 and of an upgraded entitlement is 409, and neither writes anything`(): Unit = runBlocking {
+    fun `a revoke of an unknown line is 404 and writes nothing, an upgraded entitlement is ended as REVOKED (MK-107)`(): Unit = runBlocking {
         val u = steve()
         val placed = confirmedCredit(u)
         val item = placed.items[0].id
 
         assertThrows(NotFound::class.java) { runBlocking { admin.revoke(placed.order.id, listOf(999999), 1) } }
+        assertEquals(1, d.rows(placed.order.id).size)
 
         val e = w.entitlements.getByOrderItemId(item, pool).single()
 
-        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_entitlement` SET `status` = 'UPGRADED' WHERE `id` = ?", e.id)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_entitlement` SET `status` = 'UPGRADED', `replacedById` = 4242 WHERE `id` = ?", e.id)
 
-        assertThrows(InvalidState::class.java) { runBlocking { admin.revoke(placed.order.id, null, 1) } }
-        assertEquals(1, d.rows(placed.order.id).size)
+        assertEquals(1, admin.revoke(placed.order.id, null, 1))
 
-        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_entitlement` SET `status` = 'ACTIVE' WHERE `id` = ?", e.id)
+        val ended = w.entitlements.getByOrderItemId(item, pool).single()
+
+        assertEquals(EntitlementStatus.REVOKED, ended.status)
+        assertEquals("ADMIN", ended.endReason)
+        assertEquals(4242L, ended.replacedById, "the link to the successor stays")
     }
 
     @Test
-    fun `a timed item whose owner holds another live entitlement of the product is refused until the chain rules of MK-107 exist`(): Unit = runBlocking {
+    fun `a revoke of a timed link whose owner is still covered by another one corrects the node instead of removing it (MK-107)`(): Unit = runBlocking {
         val u = steve()
         val actions = listOf(permission("p1", "group.vip"))
         val first = d.place(user = u, actions = actions, billing = "TIMED", periodUnit = "DAY", periodCount = 30)
-        val second = d.place(user = u, actions = actions, billing = "TIMED", periodUnit = "DAY", periodCount = 30, product = first.product)
+        val t0 = w.clock.now()
 
         d.pay(first)
+        d.runInline()
+        w.clock.advance(10 * 86_400_000L)
+
+        val second = d.place(user = u, actions = actions, billing = "TIMED", periodUnit = "DAY", periodCount = 30, product = first.product)
+
         d.pay(second)
+        d.runInline()
 
         assertEquals(2, MarketTestDb.count(pool, "market_entitlement", "`status` = 'ACTIVE'"))
-        assertThrows(InvalidState::class.java) { runBlocking { admin.revoke(first.order.id, null, 1) } }
+        assertEquals(t0 + 60 * 86_400_000L, d.permissionStore.of(u.id).single().expiresAt)
+
+        // the running first link is revoked: no REVOKE row for the rank, the second link moves forward by the 20 days that were left
+        assertEquals(1, admin.revoke(first.order.id, null, 1), "one row planned: the EXTEND that corrects the node expiry, no REVOKE of the rank")
+        assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(first.items[0].id, pool).single().status)
+
+        val e2 = w.entitlements.getByOrderItemId(second.items[0].id, pool).single()
+
+        assertEquals(t0 + 10 * 86_400_000L, e2.startsAt)
+        assertEquals(t0 + 40 * 86_400_000L, e2.expiresAt)
         assertEquals(0, d.rows(first.order.id).count { it.phase == DeliveryPhase.REVOKE })
-        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(first.items[0].id, pool).single().status)
+
+        d.runInline()
+        assertEquals(t0 + 40 * 86_400_000L, d.permissionStore.of(u.id).single().expiresAt)
+    }
+
+    @Test
+    fun `a child revoked alone and then the whole bundle order does not revoke the child twice and debits the credits once (MK-107 review)`(): Unit = runBlocking {
+        val u = steve()
+        val placed = d.placeBundle(u, listOf(credit("p1", 100)), listOf(DeliveryWorld.ChildLine(listOf(credit("c1", 40)))))
+        val child = placed.items[1].id
+
+        d.pay(placed)
+        d.runInline()
+        assertEquals(140L, w.fixtures.creditBalance(u))
+
+        assertEquals(1, admin.revoke(placed.order.id, listOf(child), 1))
+        d.runInline()
+        assertEquals(100L, w.fixtures.creditBalance(u))
+
+        val childRevokes = d.rows(placed.order.id).filter { it.phase == DeliveryPhase.REVOKE && it.orderItemId == child }.map { it.idempotencyKey }
+
+        assertEquals(1, childRevokes.size)
+
+        // the whole order: only the bundle line is left to revoke, the child keeps its single REVOKE row
+        assertEquals(1, admin.revoke(placed.order.id, null, 1))
+        d.runInline()
+
+        assertEquals(childRevokes, d.rows(placed.order.id).filter { it.phase == DeliveryPhase.REVOKE && it.orderItemId == child }.map { it.idempotencyKey })
+        assertEquals(1, d.rows(placed.order.id).count { it.phase == DeliveryPhase.REVOKE && it.orderItemId == placed.items[0].id })
+        assertEquals(0L, w.fixtures.creditBalance(u), "100 + 40 granted, each taken back exactly once")
     }
 
     // ===== list (14.5) ===================================================================================================

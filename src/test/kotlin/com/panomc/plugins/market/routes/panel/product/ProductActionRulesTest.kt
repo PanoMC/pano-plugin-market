@@ -237,4 +237,47 @@ class ProductActionRulesTest {
     fun `a webhook action changes nothing the guard asks about`() {
         assertTrue(save(request(webhook("""{"url":"https://example.com/h"}"""), caller = Caller())).json.isNotEmpty())
     }
+
+    private fun unchanged(
+        stored: String,
+        storedChoices: String? = null,
+        choices: String? = null,
+        billing: BillingMode = BillingMode.ONE_TIME,
+        maxQuantity: Int? = null,
+        caller: ActionGuard.Caller? = Caller(admin = true)
+    ) = ProductActionCheck.Unchanged(stored, storedChoices, billing, maxQuantity, choices, emptyMap(), caller)
+
+    private fun check(r: ProductActionCheck.Unchanged) = runBlocking { rules().onUnchanged(conn, r) }
+
+    @Test
+    fun `stored actions are re-checked when a save without actions moves what they depend on`() {
+        val choice = save(request("""[{"id":"a1","type":"COMMAND","value":["x"],"serverMode":"BUYER_CHOICE"}]""", choices = "[1]")).json
+
+        // widening the choices needs the console of the new server, narrowing or keeping needs nothing
+        assertThrows(NoPermission::class.java) { check(unchanged(choice, storedChoices = "[1]", choices = "[1,2]", caller = Caller(consoles = setOf(1)))) }
+        check(unchanged(choice, storedChoices = "[1]", choices = "[1,2]", caller = Caller(consoles = setOf(2))))
+        check(unchanged(choice, storedChoices = "[1,2]", choices = "[1]", caller = Caller()))
+        check(unchanged(choice, storedChoices = "[1]", choices = "[1]", caller = Caller()))
+        assertThrows(NoPermission::class.java) { check(unchanged(choice, storedChoices = "[1]", choices = "[1,2]", caller = null)) }
+
+        // the strict rules apply to the stored list with the new product: no choices left, EXPIRE on a product that is no longer timed, per unit without a limit
+        assertEquals("SERVER_CHOICES_REQUIRED", unchangedErrors(unchanged(choice, storedChoices = "[1]", choices = null))["actions.0.serverMode"])
+
+        val timed = save(request("""[{"id":"a1","type":"COMMAND","value":["x"],"phase":"EXPIRE","targetServers":[1]}]""", billing = BillingMode.TIMED)).json
+
+        assertEquals("INVALID_PHASE", unchangedErrors(unchanged(timed, billing = BillingMode.ONE_TIME))["actions.0.phase"])
+        check(unchanged(timed, billing = BillingMode.TIMED))
+
+        val perUnit = save(request(command(""","perUnit":true"""), maxQuantity = 5)).json
+
+        assertEquals("PER_UNIT_NEEDS_MAX_QUANTITY", unchangedErrors(unchanged(perUnit, maxQuantity = null))["actions.0.perUnit"])
+    }
+
+    private fun unchangedErrors(r: ProductActionCheck.Unchanged): Map<String, String> {
+        val e = runCatching { check(r) }.exceptionOrNull()
+
+        assertTrue(e is InvalidProduct, "expected INVALID_PRODUCT, got $e")
+
+        return JsonObject((e as InvalidProduct).encode(emptyMap())).getJsonObject("fieldErrors").map.mapValues { it.value as String }
+    }
 }

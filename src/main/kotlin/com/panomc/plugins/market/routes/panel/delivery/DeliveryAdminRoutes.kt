@@ -29,6 +29,7 @@ import com.panomc.plugins.market.log.RetriedMarketDeliveryLog
 import com.panomc.plugins.market.log.RevokedMarketOrderLog
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.api.order.deliveryService
+import com.panomc.plugins.market.routes.api.order.entitlementService
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseEnum
 import com.panomc.plugins.market.routes.base.parseId
@@ -79,7 +80,8 @@ private fun buildDeliveryAdminService(plugin: MarketPlugin): DeliveryAdminServic
         db = MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock), locks = locks, clock = SystemClock, deliveryService = deliveryService(plugin),
         orders = orderDao, orderEvents = context.getBean(MarketOrderEventDao::class.java), deliveries = context.getBean(MarketDeliveryDao::class.java),
         entitlements = context.getBean(MarketEntitlementDao::class.java),
-        roster = PlatformServerRoster(databaseManager) { context.getBean(com.panomc.platform.server.ServerManager::class.java) }
+        roster = PlatformServerRoster(databaseManager) { context.getBean(com.panomc.platform.server.ServerManager::class.java) },
+        entitlementService = entitlementService(plugin)
     )
 }
 

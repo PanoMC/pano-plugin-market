@@ -38,7 +38,8 @@ class E2eCatalog(private val admin: E2eClient, private val db: E2eDb) {
         product("FREE", "free-kit", "Free kit", price = "0.00", actions = JsonArray().add(action("a1", "CREDIT", "GRANT", 1)).encode())
         product(
             "TIMED", "rank-30-day", "30 day rank", price = "8.00",
-            actions = JsonArray().add(action("a1", "PERMISSION", "GRANT", JsonArray().add("group.timed"))).add(action("a2", "PERMISSION", "EXPIRE", JsonArray().add("group.timed"))).encode(),
+            // CP-1 / MK-107: a PERMISSION action is state-only (GRANT / RENEW); what happens at the end is the automatic inverse, no authored EXPIRE row
+            actions = JsonArray().add(action("a1", "PERMISSION", "GRANT", JsonArray().add("group.timed"))).encode(),
             extra = mapOf("billingMode" to "TIMED", "periodUnit" to "DAY", "periodCount" to "30")
         )
         product("SUB", "monthly", "Monthly", price = "6.00", extra = mapOf("billingMode" to "SUBSCRIPTION", "periodUnit" to "MONTH", "periodCount" to "1"))
@@ -59,13 +60,20 @@ class E2eCatalog(private val admin: E2eClient, private val db: E2eDb) {
         product("TIER2", "tier-2", "Tier 2", price = "25.00", extra = mapOf("categoryId" to tierCategoryId.toString(), "tierRank" to "2"))
         product("PACK", "credits-500", "500 credits", price = "5.00", extra = mapOf("kind" to "CREDIT_PACK", "creditAmount" to "500.00"))
         product("SHIRT", "t-shirt", "T-shirt", price = "20.00", stock = 10, extra = mapOf("physical" to "true", "weightGrams" to "250"))
-        product(
-            "CMD", "diamonds", "Diamonds", price = "2.00",
-            actions = JsonArray().add(
-                action("a1", "COMMAND", "GRANT", JsonArray().add("give {username} diamond {quantity}"))
-                    .put("serverMode", "FIXED").put("targetServers", JsonArray().add(1)).put("requiredOnline", true).put("requiresOnline", true)
-            ).encode()
-        )
+        // A COMMAND action needs a connected server (ActionParser: NO_SERVERS). An instance without one cannot hold CMD; the seed records that and goes on,
+        // because no scenario of the checkout classes uses it. The delivery scenarios that need it register a server (FakeMcServer) first and add the product.
+        try {
+            product(
+                "CMD", "diamonds", "Diamonds", price = "2.00",
+                actions = JsonArray().add(
+                    action("a1", "COMMAND", "GRANT", JsonArray().add("give {username} diamond {quantity}"))
+                        .put("serverMode", "FIXED").put("targetServers", JsonArray().add(1)).put("requiredOnline", true).put("requiresOnline", true)
+                ).encode()
+            )
+        } catch (e: AssertionError) {
+            if (e.message?.contains("NO_SERVERS") != true) throw e
+            problems += "CMD skipped: the instance has no connected server"
+        }
 
         coupon("TEN", JsonObject().put("name", "Ten").put("discount", 10).put("unit", "PERCENT"))
         coupon("FIVEOFF", JsonObject().put("name", "Five off").put("discount", 5).put("unit", "FIXED").put("minPaymentAmount", 20))
