@@ -300,8 +300,13 @@ class LifecycleE2E {
 
         lc.awaitOrder(paid, "COMPLETED")
         val paidOrderId = lc.orderId(paid)
-        val firstTry = Await.untilValue(60_000, 250, "the first webhook attempt reached the sink") {
-            lc.db.sql("SELECT * FROM `pano_market_webhook_delivery` WHERE `orderId` = ? AND `event` = 'order.paid' AND `attempts` >= 1", paidOrderId).firstOrNull()
+        // attempts is counted when the row is claimed (status SENDING); the outcome (the 503 and the backoff slot) is written afterwards, so wait for the
+        // row to rest again with its retry in the future
+        val firstTry = Await.untilValue(60_000, 100, "the first webhook attempt was refused and the retry is scheduled") {
+            lc.db.sql(
+                "SELECT * FROM `pano_market_webhook_delivery` WHERE `orderId` = ? AND `event` = 'order.paid' AND `attempts` >= 1 AND `status` <> 'SENDING' AND `nextAttemptAt` > ?",
+                paidOrderId, System.currentTimeMillis() + 15_000
+            ).firstOrNull()
         }
         val webhookId = firstTry.getLong("id")
         val eventId = firstTry.getString("eventId")
@@ -682,7 +687,11 @@ class LifecycleE2E {
             // The plugin's data folder (config.conf, secret.key, uploads) lives outside `plugins/<id>`: the host UI sync removes and re-creates `plugins/<id>`
             // (the market jar carries a plugin-ui.zip of a local build), which would take the config and the encryption key with it on every start. The
             // platform reads `pano.pluginDataDir` for exactly this (PanoPlugin.pluginDataFolder, PluginConfigManager); see the evidence file.
-            builder.environment().putIfAbsent("MARKET_E2E_JAVA_OPTS", "-XX:MaxRAMPercentage=40 -Dpano.pluginDataDir=${File(dir, "plugin-data").path}")
+            // MARKET_E2E_LIFECYCLE_DEFAULT_DATA_DIR=1 leaves the default layout in place: that is the way to reproduce the finding (L-02 then fails with
+            // both fake providers NOT_CONFIGURED after the first restart).
+            if (System.getenv("MARKET_E2E_LIFECYCLE_DEFAULT_DATA_DIR").isNullOrBlank()) {
+                builder.environment().putIfAbsent("MARKET_E2E_JAVA_OPTS", "-XX:MaxRAMPercentage=40 -Dpano.pluginDataDir=${File(dir, "plugin-data").path}")
+            }
 
             if (degraded) builder.environment()["MARKET_E2E_ALLOW_DEGRADED"] = "1"
 
