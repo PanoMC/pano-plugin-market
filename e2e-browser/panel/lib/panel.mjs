@@ -1,7 +1,7 @@
 // Helpers of the panel scenarios 56 to 65 (13 section 25.4). They only use the HTTP API (as a person with a session would) and the browser; no SQL.
 import { grantUserNode } from '../../lib/bootstrap.mjs';
 import { newContext } from '../../lib/browser.mjs';
-import { panelOpen } from '../../lib/ui.mjs';
+import { hydrated, panelOpen } from '../../lib/ui.mjs';
 
 export const NODE_PREFIX = 'pano.plugin.pano-plugin-market.';
 export const node = (suffix) => `${NODE_PREFIX}${suffix}`;
@@ -31,6 +31,17 @@ export async function signedIn(browser, api, options = {}) {
 /** Opens a market panel route and waits for the layout to show `ready`; the default waits for the market section navigation. */
 export async function openMarket(page, env, route, ready) {
   await panelOpen(page, env, route, ready);
+}
+
+/** Like openMarket, but returns the HTTP status of the navigation (the document the platform answered for the route). */
+export async function openMarketStatus(page, env, route, ready) {
+  const response = await page.goto(`${env.url}/panel${route}`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 240000,
+  });
+  await hydrated(page);
+  if (ready) await ready(page);
+  return response?.status() ?? 0;
 }
 
 /** Polls `fn` until it returns a truthy value (or throws at the deadline with `what`). */

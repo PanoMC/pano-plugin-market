@@ -7,6 +7,53 @@ import { signedIn, openMarket, waitFor, bodyText, modalsClosed } from './lib/pan
 import { grantedServer, removeServer } from './lib/servers.mjs';
 
 const MASK = '********';
+const VARIANT_NAME_LABEL = 'Name';
+const COMMAND_TEXT = 'give {username} diamond 1';
+const WEBHOOK_URL = 'https://example.com/hook';
+const VARIANT_NAMES = ['Small / Red', 'Small / Blue', 'Large / Red', 'Large / Blue'];
+const inputValues = (els) => els.map((e) => e.value);
+
+/** The content the form of PANEL-62 puts in, as the API returns it: axes, the four combinations, the field, both actions and the server. */
+function assertStored(product, server) {
+  assertEqual(
+    JSON.stringify(
+      (product.variantOptions ?? []).map((o) => [o.label, o.values.map((v) => v.label)]),
+    ),
+    JSON.stringify([
+      ['Size', ['Small', 'Large']],
+      ['Color', ['Red', 'Blue']],
+    ]),
+    'PANEL-62: the axes and their values are stored',
+  );
+  assertEqual(
+    JSON.stringify((product.variants ?? []).map((v) => v.name)),
+    JSON.stringify(VARIANT_NAMES.map((name) => name)),
+    'PANEL-62: the four variant combinations are stored in order',
+  );
+  assertEqual((product.fields ?? []).length, 1, 'PANEL-62: one custom field is stored');
+  assertEqual(product.fields[0].fieldKey, 'engraving', 'PANEL-62: the custom field key');
+  assertEqual(product.fields[0].label, 'Engraving', 'PANEL-62: the custom field label');
+  assertEqual((product.actions ?? []).length, 2, 'PANEL-62: two actions are stored');
+  const command = product.actions.find((a) => a.type === 'COMMAND');
+  const webhook = product.actions.find((a) => a.type === 'WEBHOOK');
+  assertEqual(
+    JSON.stringify(command?.value),
+    JSON.stringify([COMMAND_TEXT]),
+    'PANEL-62: the command text is stored',
+  );
+  assertEqual(
+    command?.serverMode,
+    'BUYER_CHOICE',
+    "PANEL-62: the command targets the buyer's choice",
+  );
+  assertEqual(
+    JSON.stringify(product.serverChoices),
+    JSON.stringify([server.id]),
+    'PANEL-62: the selected server is stored',
+  );
+  assertEqual(webhook?.value?.url, WEBHOOK_URL, 'PANEL-62: the webhook URL is stored');
+  assertEqual(webhook?.value?.signing, 'HMAC_SHA256', 'PANEL-62: the signing mode is stored');
+}
 
 async function productByName(admin, name) {
   const found = must(
@@ -115,14 +162,11 @@ export const scenarios = [
         await openTab(page, 'Actions');
         await page.getByLabel(server.name, { exact: false }).first().check();
         await addAction(page, 'Command');
-        await page
-          .getByPlaceholder('Command without the leading slash')
-          .first()
-          .fill('give {username} diamond 1');
+        await page.getByPlaceholder('Command without the leading slash').first().fill(COMMAND_TEXT);
         // the radio is a visually hidden btn-check: its label is what a person clicks
         await page.locator('label[for$="-mode-BUYER_CHOICE"]').first().click();
         await addAction(page, 'Webhook');
-        await page.getByPlaceholder('https://example.com/hook').fill('https://example.com/hook');
+        await page.getByPlaceholder('https://example.com/hook').fill(WEBHOOK_URL);
         await page.getByLabel('Signing').selectOption('HMAC_SHA256');
         await page.getByRole('button', { name: 'Generate' }).click();
         const clearSecret = await page.getByPlaceholder('Leave empty to generate one').inputValue();
@@ -133,19 +177,11 @@ export const scenarios = [
           timeout: 30000,
         });
 
-        // reload: everything round-trips
+        // what was stored, value by value (a save that drops or swaps a value must fail here, not only a count)
         const saved = await detailOf(admin, created.id);
-        assertEqual((saved.variants ?? []).length, 4, 'PANEL-62: four variants saved');
-        assertEqual((saved.variantOptions ?? []).length, 2, 'PANEL-62: two axes saved');
-        assertEqual((saved.fields ?? []).length, 1, 'PANEL-62: one custom field saved');
-        assertEqual((saved.actions ?? []).length, 2, 'PANEL-62: two actions saved');
+        assertStored(saved, server);
         const command = saved.actions.find((a) => a.type === 'COMMAND');
         const webhook = saved.actions.find((a) => a.type === 'WEBHOOK');
-        assertEqual(
-          command?.serverMode,
-          'BUYER_CHOICE',
-          "PANEL-62: the command targets the buyer's choice",
-        );
         assertEqual(
           webhook?.value?.secret,
           MASK,
@@ -155,6 +191,7 @@ export const scenarios = [
           !JSON.stringify(saved).includes(clearSecret),
           'PANEL-62: the API never returns the webhook secret in clear',
         );
+        assert(command && webhook, 'PANEL-62: both actions are stored');
 
         await page.reload({ waitUntil: 'domcontentloaded' });
 
@@ -164,12 +201,66 @@ export const scenarios = [
           name,
           'PANEL-62: the name after the reload',
         );
+        await openTab(page, 'Pricing');
+        assertEqual(
+          Number(await page.locator('#product-price').inputValue()),
+          12.5,
+          'PANEL-62: the price after the reload',
+        );
         await openTab(page, 'Variants');
         await page.getByText('4 Variants').waitFor({ timeout: 15000 });
+        assertEqual(
+          JSON.stringify(await page.getByLabel('Option name, e.g. Size').evaluateAll(inputValues)),
+          JSON.stringify(['Size', 'Color']),
+          'PANEL-62: the axis names after the reload',
+        );
+        assertEqual(
+          JSON.stringify(await page.getByLabel('Value, e.g. Large').evaluateAll(inputValues)),
+          JSON.stringify(['Small', 'Large', 'Red', 'Blue']),
+          'PANEL-62: the axis values after the reload',
+        );
+        // the variant names are inputs of the variant rows
+        assertEqual(
+          JSON.stringify(
+            await page.getByLabel(VARIANT_NAME_LABEL, { exact: true }).evaluateAll(inputValues),
+          ),
+          JSON.stringify(VARIANT_NAMES),
+          'PANEL-62: the four variant combinations after the reload',
+        );
         await openTab(page, 'Custom Fields');
         await page.getByText('1 Custom Fields').waitFor({ timeout: 15000 });
+        const fieldsText = await bodyText(page);
+        assert(
+          fieldsText.includes('Engraving') && fieldsText.includes('engraving'),
+          'PANEL-62: the custom field label and key after the reload',
+        );
         await openTab(page, 'Actions');
         await page.getByText('2 Actions').waitFor({ timeout: 15000 });
+        assertEqual(
+          await page.getByPlaceholder('Command without the leading slash').first().inputValue(),
+          COMMAND_TEXT,
+          'PANEL-62: the command text after the reload',
+        );
+        assertEqual(
+          await page.locator('input[id$="-mode-BUYER_CHOICE"]').first().isChecked(),
+          true,
+          'PANEL-62: BUYER_CHOICE is selected again after the reload',
+        );
+        assertEqual(
+          await page.getByLabel(server.name, { exact: false }).first().isChecked(),
+          true,
+          'PANEL-62: the selected server is checked after the reload',
+        );
+        assertEqual(
+          await page.getByPlaceholder('https://example.com/hook').inputValue(),
+          WEBHOOK_URL,
+          'PANEL-62: the webhook URL after the reload',
+        );
+        assertEqual(
+          await page.getByLabel('Signing').inputValue(),
+          'HMAC_SHA256',
+          'PANEL-62: the signing mode after the reload',
+        );
         const shown = await page.getByPlaceholder('Leave empty to generate one').inputValue();
         assertEqual(shown, MASK, 'PANEL-62: the editor shows the stored secret masked');
         await page.screenshot({ path: 'build/e2e-browser/PANEL-62-actions.png' }).catch(() => {});
@@ -187,10 +278,11 @@ export const scenarios = [
         );
         const again = await detailOf(admin, created.id);
         assertEqual(
-          JSON.stringify(again.actions.map((a) => a.id)),
-          JSON.stringify(saved.actions.map((a) => a.id)),
-          'PANEL-62: the action ids are unchanged after a second save',
+          JSON.stringify(again.actions),
+          JSON.stringify(saved.actions),
+          'PANEL-62: the actions (ids, type, value, server mode, signing, masked secret) are unchanged after a second save',
         );
+        assertStored(again, server);
 
         pc.expectNoErrors('PANEL-62');
       } finally {

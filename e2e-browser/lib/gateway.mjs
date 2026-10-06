@@ -10,8 +10,10 @@ export async function startGateway(port) {
   const payments = new Map(); // reference -> { id, amount, currency, status, notifyUrl, returnSuccess, returnCancel }
   // gateway transaction ids are unique per provider in the market database (uq_provider_txn) and the instance database outlives a run
   const runTag = Date.now().toString(36);
+  const paymentsById = new Map(); // gateway payment id -> payment (a refund names the payment by it)
   const refunds = new Map(); // idempotency key -> refund
   const refundsById = new Map();
+  const cents = (value) => Math.round(Number(value) * 100);
   let sequence = 0;
 
   async function sendWebhook(payment, type) {
@@ -62,6 +64,7 @@ export async function startGateway(port) {
         const body = JSON.parse(raw);
         const payment = { id: `pay_${runTag}${++sequence}`, status: 'pending', ...body };
         payments.set(body.reference, payment);
+        paymentsById.set(payment.id, payment);
         return json(res, 201, {
           id: payment.id,
           payUrl: `http://127.0.0.1:${port}/pay/${encodeURIComponent(body.reference)}`,
@@ -81,12 +84,24 @@ export async function startGateway(port) {
         });
       }
 
-      // refunds (E2E-14): always succeeds; one refund per Idempotency-Key, like the Kotlin FakePayGateway
+      // refunds (E2E-14): validated like a real gateway (known payment, same currency, never more than what was paid and not yet refunded);
+      // one refund per Idempotency-Key, like the Kotlin FakePayGateway
       if (req.method === 'POST' && url.pathname === '/v1/refunds') {
         const key = req.headers['idempotency-key'] || `auto-${sequence}`;
         let refund = refunds.get(key);
         if (!refund) {
           const body = JSON.parse(raw);
+          const payment = paymentsById.get(body.paymentId);
+          if (!payment || payment.status !== 'paid')
+            return json(res, 404, { message: 'unknown payment' });
+          if (body.currency !== payment.currency)
+            return json(res, 422, { message: 'currency differs from the payment' });
+          const amount = cents(body.amount);
+          if (!(amount > 0)) return json(res, 422, { message: 'amount must be positive' });
+          const refunded = payment.refunded ?? 0;
+          if (refunded + amount > cents(payment.amount))
+            return json(res, 422, { message: 'refund exceeds the paid amount' });
+          payment.refunded = refunded + amount;
           refund = { id: `rf_${runTag}${++sequence}`, status: 'succeeded', ...body };
           refunds.set(key, refund);
           refundsById.set(refund.id, refund);
@@ -150,6 +165,10 @@ export async function startGateway(port) {
     baseUrl: `http://127.0.0.1:${port}`,
     secret: GATEWAY_SECRET,
     payments,
+    /** Every refund the gateway accepted, in order: { id, paymentId, amount, currency, status }. */
+    get refunds() {
+      return [...refundsById.values()];
+    },
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
 }

@@ -267,9 +267,10 @@ export const scenarios = [
     title:
       'refund: a partial refund of a mixed order warns about the split, the previewed split equals the created refund, a double click creates one refund, REFUND_NOT_SUPPORTED turns the manual switch on',
     async run(ctx) {
-      const { env, admin, catalogue } = ctx;
+      const { env, admin, catalogue, gateway } = ctx;
       const cat = await catalogue();
       const order = await mixedOrder(ctx, cat, { label: 'r60' });
+      const refundsBefore = gateway.refunds.length;
       const { pc, page } = await signedIn(ctx.browser, admin);
 
       await openMarket(page, env, `/market/orders/detail/${order.number}`, (p) =>
@@ -323,6 +324,34 @@ export const scenarios = [
         'PANEL-60: the previewed credit part equals the refund row',
       );
 
+      // the gateway received exactly one refund, of the previewed gateway part, against the payment of this order (the credit part never
+      // leaves the platform)
+      const sent = gateway.refunds.slice(refundsBefore);
+      assertEqual(sent.length, 1, 'PANEL-60: the gateway received exactly one refund');
+      assertEqual(
+        Math.round(Number(sent[0].amount) * 100),
+        Math.round(previewed.gateway * 100),
+        'PANEL-60: the gateway refund equals the previewed gateway part',
+      );
+      assertEqual(sent[0].currency, 'EUR', 'PANEL-60: the gateway refund currency');
+      const paid = [...gateway.payments.values()].find((p) => p.id === sent[0].paymentId);
+      assert(paid, 'PANEL-60: the refund names a payment the gateway knows');
+      assertEqual(
+        Math.round(Number(paid.amount) * 100),
+        Math.round((10 - 3) * 100),
+        'PANEL-60: the refunded payment is the gateway part (10.00 minus 3 credits) of this order',
+      );
+      assertEqual(
+        paid.refunded,
+        Math.round(previewed.gateway * 100),
+        'PANEL-60: the gateway keeps the refunded sum of the payment',
+      );
+      assertEqual(
+        (await admin.get(`/api/panel/market/orders/${order.number}`)).json.refunds.length,
+        1,
+        'PANEL-60: the platform lists the same single refund',
+      );
+
       // REFUND_NOT_SUPPORTED: the provider stops supporting refunds after the dialog previewed one; the server refuses and the
       // dialog turns the manual switch on (a manual refund records money returned outside the gateway)
       const second = await gatewayOrder(ctx, cat, { label: 'r60b' });
@@ -359,6 +388,11 @@ export const scenarios = [
         await page.locator('.modal.show').waitFor({ state: 'detached', timeout: 30000 });
         const refunds = (await admin.get(`/api/panel/market/orders/${second.number}`)).json.refunds;
         assertEqual(refunds.length, 1, 'PANEL-60: the manual refund exists');
+        assertEqual(
+          gateway.refunds.length - refundsBefore,
+          1,
+          'PANEL-60: the manual refund never reached the gateway (still only the first order refund)',
+        );
       } finally {
         await setFakeRefundSupport(ctx, 'PARTIAL');
       }
