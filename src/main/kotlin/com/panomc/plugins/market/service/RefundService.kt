@@ -1021,11 +1021,12 @@ class RefundService(
         // 9. subscription
         effects.subscription(conn, after, effective)
 
-        // 10. credit note, mail, webhook (goal progress has no writer yet)
+        // 10. credit note, mail, webhook, goal progress
         if (effective.amount > 0L) effects.creditNote(conn, after, orderItems.getByOrderIds(listOf(order.id), conn), refund.id)
 
         effects.mail(conn, after, effective)
         effects.webhook(conn, after, effective, itemRows, fully, revoked)
+        effects.goalProgress(conn, order, after, effective, lineDeltas.quantities)
     }
 
     private fun actorOf(refund: MarketRefund) = when (refund.origin) {

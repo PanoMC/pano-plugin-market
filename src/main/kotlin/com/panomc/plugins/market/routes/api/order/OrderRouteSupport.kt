@@ -45,6 +45,7 @@ import com.panomc.plugins.market.routes.api.checkout.PlatformUserDirectory
 import com.panomc.plugins.market.routes.api.checkout.quoteCaller
 import com.panomc.plugins.market.routes.api.payment.attemptContexts
 import com.panomc.plugins.market.routes.panel.invoice.invoiceService
+import com.panomc.plugins.market.routes.api.store.goalProgress
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
@@ -55,6 +56,7 @@ import com.panomc.plugins.market.service.CreditEffects
 import com.panomc.plugins.market.service.CreditHoldGuard
 import com.panomc.plugins.market.service.CreditService
 import com.panomc.plugins.market.service.DeliveryEffects
+import com.panomc.plugins.market.service.GoalEffects
 import com.panomc.plugins.market.service.DeliveryService
 import com.panomc.plugins.market.service.DeliveryWebhookReporter
 import com.panomc.plugins.market.service.EntitlementService
@@ -323,7 +325,8 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
                 SubscriptionEffects({ subscriptionService(plugin) }, DeliveryEffects(
                     entitlementService(plugin), deliveryService(plugin), orderDao,
                     // MK-142: QueueMail (ORDER_CONFIRMATION, GIFT_RECEIVED) goes to the order mails; the rest still to PENDING_SLICES
-                    ShippingEffects({ shippingService(plugin) }, MailEffects(orderMails(plugin), orderDao, ForeignEffects.PENDING_SLICES))
+                    // MK-171: AdvanceGoalProgress goes to the goal progress writer; the rest still to PENDING_SLICES
+                    ShippingEffects({ shippingService(plugin) }, MailEffects(orderMails(plugin), orderDao, GoalEffects({ goalProgress(plugin) }, ForeignEffects.PENDING_SLICES)))
                 ))
             )
         )),
