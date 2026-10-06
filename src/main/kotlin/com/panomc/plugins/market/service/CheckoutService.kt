@@ -528,7 +528,8 @@ class CheckoutService(
             usage = facts.usage,
             owned = facts.owned,
             subscribedProductIds = facts.subscribed,
-            creditPacksEnabled = c.creditsEnabled && c.creditTopUpEnabled
+            // a redeemed pack is not a purchase: `creditTopUpEnabled` is irrelevant for it, only the credit system has to be on (07 sections 8.1 and 10)
+            creditPacksEnabled = c.creditsEnabled && (profile == PricingProfile.GIFT_CODE || c.creditTopUpEnabled)
         )
         val rules = LineRules.evaluate(ruleLines, ruleContext).let { if (manual != null) manualRules(it, manual.request.force) else it }
 

@@ -282,6 +282,25 @@ class RedemptionServiceIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a credit pack gift needs the credit system on but not the top-up switch, and the refusal does not consume the code (WIRE-2)`(): Unit = runBlocking {
+        val pack = fx.product("pack-gift-switches", price = 500, columns = mapOf("kind" to "CREDIT_PACK", "creditAmount" to 25000))
+        val gift = fx.gift("PACK-SWITCHES", GiftType.PRODUCT, productId = pack.id, redeemLimit = 1)
+        val (_, caller) = user("Alex")
+
+        // the sale of packs is switched off (MK-092) and credits are off too: nothing is credited, nothing is consumed
+        h.config = h.config.copy(creditsEnabled = false, creditTopUpEnabled = false)
+
+        invalid("PRODUCT_UNAVAILABLE") { redeem("PACK-SWITCHES", caller) }
+        nothingWritten(gift.id)
+
+        // credits on, top-up (the purchase of packs) still off: a redemption is no purchase
+        h.config = h.config.copy(creditsEnabled = true, creditTopUpEnabled = false)
+
+        assertEquals(OrderStatus.COMPLETED, orderOf(redeem("PACK-SWITCHES", caller)).status)
+        assertEquals(1, usedCount(gift.id))
+    }
+
+    @Test
     fun `a failure in O2 rolls the order, the redemption and the counter back, and the code can be redeemed right away`(): Unit = runBlocking {
         val gift = fx.gift("FAILS-ONCE", GiftType.CREDIT, creditAmount = 5000, redeemLimit = 1)
         val vip = fx.product("vip-fail", price = 1000, stock = 3)
