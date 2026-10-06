@@ -28,6 +28,8 @@
 #   MARKET_E2E_FAKE_JAR       fake provider jar (default $M/build/fake/pano-plugin-market-fake-local-build.jar)
 #   MARKET_E2E_JAVA_OPTS      extra JVM options (default -XX:MaxRAMPercentage=40)
 #   MARKET_E2E_READY_TIMEOUT  seconds to wait for each readiness phase (default 300)
+#   MARKET_E2E_ALLOW_DEGRADED set to 1: start / restart accept a market that runs DEGRADED (503 STORE_UNAVAILABLE, ERROR in the log); only the log
+#                             marker and GET /api/health are awaited (LifecycleE2E L-04)
 #   MARKET_E2E_THEME_DIR / MARKET_E2E_PANEL_DIR   host UI checkouts for --ui external
 #
 # Exit codes (printed as `e2e-instance: FAIL <code> <text>`; 17 section 14, plus the two this script needs):
@@ -420,6 +422,12 @@ post_install_restart() {
 
 wait_market() {
   wait_until "marker" market_marker_ok || abort_boot 16 "log marker '$MARKER' missing within ${READY_TIMEOUT}s"
+  # MARKET_E2E_ALLOW_DEGRADED=1 (17 L-04): the instance is meant to run with a broken schema, so the market answers 503 STORE_UNAVAILABLE and logs
+  # an ERROR; ready then means "the marker is there and the platform answers", nothing more.
+  if [ -n "${MARKET_E2E_ALLOW_DEGRADED:-}" ]; then
+    wait_until "health" health_ok || abort_boot 14 "no GET /api/health 200 within ${READY_TIMEOUT}s"
+    return 0
+  fi
   wait_until "store" store_ok || abort_boot 14 "no GET /api/market/store 200 within ${READY_TIMEOUT}s"
   local errs; errs=$(market_errors)
   [ -z "$errs" ] || abort_boot 16 "ERROR line(s) mention the market: $(echo "$errs" | head -n 2 | cut -c1-200)"
@@ -545,7 +553,41 @@ cmd_install_legacy() {
   print_exports
 }
 
+cmd_start_presetup() {
+  default_ports
+  preflight_ports fresh
+  resolve_jars
+  check_pano_jar
+  check_plugin_jars
+  mkdir -p "$BASE"
+  case "$INSTANCE" in "$BASE"/instance|"$BASE"/instance-*) rm -rf -- "$INSTANCE" ;; *) die 2 "refusing to delete $INSTANCE" ;; esac
+  mkdir -p "$INSTANCE"
+  db_recreate
+  copy_plugin_jars with
+  record_ports
+  launch_pano || abort_boot 14 "the JVM did not start"
+  wait_until "health" health_ok || abort_boot 14 "no GET /api/health 200 within ${READY_TIMEOUT}s"
+  say "ok: instance '$NAME' up before setup (PID $(recorded_pid), http $HTTP_PORT, database $DB_NAME)"
+  print_exports
+}
+
+cmd_finish_setup() {
+  load_ports
+  local pid; pid=$(recorded_pid)
+  is_instance_java "$pid" || die 17 "instance '$NAME' is not running (start-presetup first)"
+  [ ! -f "$INSTANCE/installed" ] || die 2 "instance '$NAME' is already installed"
+  install_pano || abort_boot 15 "the install (smoke-install.sh) failed"
+  : > "$INSTANCE/installed"
+  # No restart: the market of this JVM has to initialise by itself when the setup finishes (01 section 14.4).
+  [ "$(recorded_pid)" = "$pid" ] || die 17 "the instance PID changed during the setup"
+  wait_market
+  say "ok: setup finished without a restart (PID $pid, http $HTTP_PORT)"
+  print_exports
+}
+
 case "$CMD" in
+  start-presetup) cmd_start_presetup ;;
+  finish-setup) cmd_finish_setup ;;
   start) if [ "$KEEP" = 1 ]; then cmd_start keep; else cmd_start fresh; fi ;;
   stop) cmd_stop ;;
   kill) cmd_kill ;;
