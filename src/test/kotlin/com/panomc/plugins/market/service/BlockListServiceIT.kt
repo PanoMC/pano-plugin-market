@@ -28,11 +28,13 @@ import com.panomc.plugins.market.support.TestWiring
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
+import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.sqlclient.SqlClient
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -194,9 +196,72 @@ class BlockListServiceIT : MarketDaoITBase() {
         assertNotNull(quote(p, caller).messages.firstOrNull { it.code == "BUYER_BLOCKED" })
         expectBlocked { checkout(p, caller, guest = null) }
 
-        // the same name as a guest is a different buyer for a USER block
-        checkout(p, guest = mapOf("username" to "Alex", "email" to "alex@example.com"))
+        // logging out does not help: a guest typing the registered name lands on that account (RecipientResolver.self), so the USER block holds at quote and checkout
+        val asGuest = GuestInput("Alex", "alex@example.com")
+
+        assertNotNull(quote(p, guest = asGuest).messages.firstOrNull { it.code == "BUYER_BLOCKED" })
+        expectBlocked { checkout(p, guest = mapOf("username" to "Alex", "email" to "alex@example.com")) }
+        expectBlocked { checkout(p, guest = mapOf("username" to "aLeX", "email" to "other@example.com")) }
+        assertEquals(0, orderCount())
+
+        // a guest name that is not a registered account is somebody else
+        assertNull(quote(p, guest = GuestInput("Nobody", "nobody@example.com")).messages.firstOrNull { it.code == "BUYER_BLOCKED" })
+        checkout(p, guest = mapOf("username" to "Nobody", "email" to "nobody@example.com"))
         assertEquals(1, orderCount())
+    }
+
+    @Test
+    fun `a guest order on a blocked account's name is refused at pay and the payment guard agrees (no money taken for an order that would be diverted)`(): Unit = runBlocking {
+        val p = fx.product(price = 1000, stock = 5)
+
+        fx.paymentMethod("fake")
+
+        val (alex, _) = user("Alex")
+        val order = orderOf(checkout(p, guest = mapOf("username" to "Alex", "email" to "alex@example.com")))
+
+        assertEquals("u:${alex.id}", order.recipientKey)
+        assertNotEquals(order.buyerKey, order.recipientKey, "a guest payer, the account as the recipient")
+
+        blocks.requireOrderBuyerAllowed(order, null, pool)
+
+        block("USER", alex.id.toString())
+        expectBlocked { blocks.requireOrderBuyerAllowed(order, null, pool) }
+
+        // the guard the payment runs agrees
+        assertTrue(blocks.orderBlocked(order, pool))
+    }
+
+    @Test
+    fun `a hit is never counted on a transaction connection, and the lookup does not wait for a lock on the block row`(): Unit = runBlocking {
+        val id = block("PLAYER", "steve").id
+
+        // another transaction holds the row (O11 inserts and cancels under it)
+        val holder = pool.getConnection().coAwait()
+        val tx = holder.begin().coAwait()
+
+        try {
+            holder.query("SELECT id FROM `${MarketTestDb.TABLE_PREFIX}market_block` WHERE id = $id FOR UPDATE").execute().coAwait()
+
+            val verdict = w.db.tx { conn ->
+                val first = blocks.blocked("Steve", null, null, null, null, conn)
+                val viaSeam = blocks.asBuyerBlocks().blocked("Steve", null, null, null, null, conn)
+
+                first && viaSeam
+            }
+
+            assertTrue(verdict)
+        } finally {
+            tx.rollback().coAwait()
+            holder.close().coAwait()
+        }
+
+        assertEquals(0, row(id)!!.hitCount, "no counter write on a caller's connection")
+
+        // the same lookup on the pool counts, and the seam without a counter does not
+        assertTrue(blocks.asBuyerBlocks(recordHit = false).blocked("Steve", null, null, null, null, pool))
+        assertEquals(0, row(id)!!.hitCount)
+        assertTrue(blocks.blocked("Steve", null, null, null, null, pool))
+        assertEquals(1, row(id)!!.hitCount)
     }
 
     @Test

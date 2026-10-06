@@ -117,6 +117,10 @@ class BlockListService(
     fun reloadIps() = ipCache.set(null)
 
     private suspend fun recordHit(id: Long, sqlClient: SqlClient) {
+        // never on a transaction's connection: the counter would take an X lock on the block row under the caller's order / subscription locks and could be the
+        // deadlock victim of a block write (O11), rolling that transaction back while its owner carries on (11 section 9.2 step 4)
+        if (sqlClient is SqlConnection) return
+
         val now = clock.now()
         var claimed = false
 
@@ -140,26 +144,32 @@ class BlockListService(
     // ------------------------------------------------------------------------------------------------------ enforcement seams
 
     /** The seam of [CheckoutService] and [SubscriptionService]: `true` when the payer or the recipient is blocked (the payer's own IP counts, the recipient has none). */
-    fun asBuyerBlocks(): BuyerBlocks = BuyerBlocks { payer, recipient, email, clientIp, userId, sqlClient -> blocked(payer, recipient, email, clientIp, userId, sqlClient) }
+    fun asBuyerBlocks(recordHit: Boolean = true): BuyerBlocks =
+        BuyerBlocks { payer, recipient, email, clientIp, userId, sqlClient -> blocked(payer, recipient, email, clientIp, userId, sqlClient, recordHit) }
 
-    suspend fun blocked(payerUsername: String?, recipientUsername: String?, email: String?, clientIp: String?, userId: Long?, sqlClient: SqlClient): Boolean {
+    /**
+     * [recordHit] false: the caller runs under row locks and must not touch the block row (the subscription job). A call on a transaction connection never counts
+     * a hit either way.
+     */
+    suspend fun blocked(payerUsername: String?, recipientUsername: String?, email: String?, clientIp: String?, userId: Long?, sqlClient: SqlClient, recordHit: Boolean = true): Boolean {
         val payer = BlockSubjects(
             usernames = setOfNotNull(payerUsername?.takeIf { it.isNotBlank() }), userIds = setOfNotNull(userId), emails = setOfNotNull(email?.takeIf { it.isNotBlank() }), ip = clientIp
         )
-        val recipient = recipientUsername?.takeIf { it.isNotBlank() && !it.equals(payerUsername, ignoreCase = true) }?.let { name ->
-            // the recipient's account (a USER block follows the account, 11 section 9.1), when the name is a registered player
-            BlockSubjects(usernames = setOf(name), userIds = setOfNotNull(users.byUsername(name, sqlClient)?.id))
-        }
+        // the goods-receiving name: the typed recipient, else the payer. A logged-in buyer's own account is the payer's userId already; every other name (a gift, or a guest
+        // typing a registered name, which RecipientResolver.self() puts on that account) is looked up so a USER block follows the account (11 section 9.1)
+        val name = recipientUsername?.takeIf { it.isNotBlank() } ?: payerUsername?.takeIf { it.isNotBlank() }
+        val ownAccount = userId != null && name != null && name.equals(payerUsername, ignoreCase = true)
+        val recipient = if (name == null || ownAccount) null else BlockSubjects(usernames = setOf(name), userIds = setOfNotNull(users.byUsername(name, sqlClient)?.id))
 
-        return check(payer, recipient, sqlClient) != null
+        return check(payer, recipient, sqlClient, recordHit) != null
     }
 
     /**
-     * `/pay`, `/payment/continue`, `/bank-transfer/notify` (11 section 9.3): the payer of [order] and the caller's current IP. 403 `BUYER_BLOCKED` without any
-     * detail. Never judges an order that is not the buyer's to pay (the route resolved the owner already).
+     * `/pay`, `/payment/continue`, `/bank-transfer/notify` (11 section 9.3): the payer and the recipient of [order] (the judgement of the payment's guard, so a
+     * blocked account is not charged first and diverted after) and the caller's current IP. 403 `BUYER_BLOCKED` without any detail. Never judges an order that is not the buyer's to pay (the route resolved the owner already).
      */
     suspend fun requireOrderBuyerAllowed(order: MarketOrder, clientIp: String?, sqlClient: SqlClient) {
-        if (check(payerOf(order, clientIp), null, sqlClient) != null) throw BuyerBlocked()
+        if (check(payerOf(order, clientIp), recipientOf(order), sqlClient) != null) throw BuyerBlocked()
     }
 
     /** O2 -> O3 (11 section 9.3, PP-5): the payer and the recipient of the order, without an IP, under the payment's `COMMIT` locks (no counter update there). */

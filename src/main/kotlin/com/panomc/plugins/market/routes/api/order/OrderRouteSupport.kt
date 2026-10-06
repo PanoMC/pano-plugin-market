@@ -244,8 +244,8 @@ private fun buildSubscriptionService(plugin: MarketPlugin): SubscriptionService 
         webhooks = SubscriptionWebhooks { conn, event, subjectKey, orderId, data, testMode -> webhookService(plugin).emit(conn, event, subjectKey, orderId, data, testMode) },
         // MK-122: the renewal orders and attempts (random ids) and the cancel of the unpaid renewal order of an ended subscription (the order service is looked up late)
         ids = SecureIds(), orderService = { orderService(plugin) },
-        // MK-151: a blocked owner is not charged again (09 section 8.3, 11 section 9.3)
-        blocks = blockListService(plugin).asBuyerBlocks()
+        // MK-151: a blocked owner is not charged again (09 section 8.3, 11 section 9.3); no hit counter under the renewal's row locks
+        blocks = blockListService(plugin).asBuyerBlocks(recordHit = false)
     )
 }
 
