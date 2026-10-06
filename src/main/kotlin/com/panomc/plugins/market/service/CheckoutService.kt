@@ -272,7 +272,12 @@ data class CheckoutRequest(
      * user's stored locale, else the first installed match of `Accept-Language`, else the site default. `null` (a caller that resolved
      * nothing) = [CheckoutService.DEFAULT_LOCALE]; the body's own `locale` is never stored.
      */
-    val orderLocale: String? = null
+    val orderLocale: String? = null,
+    /**
+     * `STOREFRONT` for the web checkout; [OrderSource.INGAME] for a chest-GUI purchase (19 section 7.3, MC-04): the order is priced under the `INGAME`
+     * profile (05 section 12), stored with `source = INGAME` and its `CREATED` event says so. No other value is accepted here.
+     */
+    val source: OrderSource = OrderSource.STOREFRONT
 )
 
 /** The answer of a checkout: the order (owner view), its access token (returned only here) and the payment start. */
@@ -900,7 +905,7 @@ class CheckoutService(
     // ----- phase A
 
     private suspend fun phaseA(request: CheckoutRequest, caller: QuoteCaller, sqlClient: SqlClient): Assessment {
-        val a = assess(request.input, caller, sqlClient, strict = true, frozen = null, orderLocale = request.orderLocale ?: DEFAULT_LOCALE)
+        val a = assess(request.input, caller, sqlClient, strict = true, frozen = null, orderLocale = request.orderLocale ?: DEFAULT_LOCALE, profile = profileOf(request.source))
 
         if (a.topUp == null && a.lines.isEmpty()) throw EmptyCart()
 
@@ -1140,7 +1145,7 @@ class CheckoutService(
             orders.getByBuyerAndIdempotencyKey(payer.key, request.idempotencyKey, conn)?.let { throw IdempotentReplay(it) }
 
             // B5 to B7: the whole price and every rule again, on rows nobody can change now
-            val a = assess(request.input, caller, conn, strict = true, frozen = frozen, orderLocale = request.orderLocale ?: DEFAULT_LOCALE)
+            val a = assess(request.input, caller, conn, strict = true, frozen = frozen, orderLocale = request.orderLocale ?: DEFAULT_LOCALE, profile = profileOf(request.source))
 
             if (a.topUp == null && a.lines.isEmpty()) throw QuoteChanged("the cart is empty")
 
@@ -1158,8 +1163,15 @@ class CheckoutService(
             }
 
             // B10, B11
-            deps.orders.create(conn, draftOf(a, request, caller, payer, verified, built.items, reservation, uses, customer))
+            deps.orders.create(conn, draftOf(a, request, caller, payer, verified, built.items, reservation, uses, customer, request.source))
         }
+    }
+
+    /** The pricing profile of a checkout (05 section 12): an in-game purchase is `INGAME`, everything else `STOREFRONT`. */
+    private fun profileOf(source: OrderSource): PricingProfile = when (source) {
+        OrderSource.STOREFRONT -> PricingProfile.STOREFRONT
+        OrderSource.INGAME -> PricingProfile.INGAME
+        else -> throw IllegalArgumentException("a checkout request cannot carry the source $source")
     }
 
     // ----- gift-code redemption (21 section 6, MK-113)
@@ -1575,6 +1587,7 @@ class CheckoutService(
             ),
             clearCartOfUser = if (a.usedServerCart) caller.userId else null,
             actorUserId = caller.userId,
+            created = if (source == OrderSource.INGAME) CreatedEvent(OrderActorType.BUYER, OrderSource.INGAME) else CreatedEvent.STOREFRONT,
             // 09 section 4.3: the offer's verdict for the chosen method (offer table, then `checkEligibility`) becomes the provisional mode of the pending subscription row
             recurring = a.recurring
         )
@@ -1673,7 +1686,7 @@ class CheckoutService(
      * `manual`), its items and the reservation; `markPaid` also applies O2 with actor `ADMIN` inside it (no attempt row, `paidAmount = gatewayAmount`).
      * Same `Idempotency-Key` for the same payer: the first order again (another body: `IDEMPOTENCY_CONFLICT`).
      */
-    suspend fun createManualOrder(request: ManualOrderRequest, adminUserId: Long, sqlClient: SqlClient): ManualOrderResult {
+    suspend fun createManualOrder(request: ManualOrderRequest, adminUserId: Long?, sqlClient: SqlClient): ManualOrderResult {
         val deps = checkout ?: throw IllegalStateException("this CheckoutService was built without the checkout wiring")
         val payer = resolveManualPayer(request, sqlClient)
         val caller = QuoteCaller(payer.userId)
@@ -1899,7 +1912,7 @@ class CheckoutService(
     }
 
     private suspend fun phaseBManual(
-        request: ManualOrderRequest, adminUserId: Long, caller: QuoteCaller, manual: ManualContext, plan: Assessment, deps: CheckoutDeps
+        request: ManualOrderRequest, adminUserId: Long?, caller: QuoteCaller, manual: ManualContext, plan: Assessment, deps: CheckoutDeps
     ): CreatedManualOrder {
         val frozen = Frozen(null, plan.shipping)
         val planUses = usesOf(plan)
@@ -1951,7 +1964,7 @@ class CheckoutService(
     private fun draftOfManual(
         a: Assessment,
         request: ManualOrderRequest,
-        adminUserId: Long,
+        adminUserId: Long?,
         payer: ManualPayer,
         items: List<DraftItem>,
         reservation: Reservation,

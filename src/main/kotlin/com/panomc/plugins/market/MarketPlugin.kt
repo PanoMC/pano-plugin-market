@@ -4,6 +4,7 @@ import com.panomc.platform.api.PanoPlugin
 import com.panomc.platform.api.PluginDatabaseManager
 import com.panomc.platform.api.config.PluginConfigManager
 import com.panomc.platform.db.DatabaseManager
+import com.panomc.platform.server.ServerEvent
 import com.panomc.platform.server.ServerManager
 import com.panomc.platform.setup.SetupManager
 import com.panomc.plugins.market.config.MarketConfig
@@ -11,10 +12,9 @@ import com.panomc.plugins.market.db.MarketTables
 import com.panomc.plugins.market.core.time.SystemClock
 import com.panomc.plugins.market.event.UninstallExport
 import com.panomc.plugins.market.event.exportThenDrop
-import com.panomc.plugins.market.event.server.MarketSyncEvent
 import com.panomc.plugins.market.job.MarketJobs
 import com.panomc.plugins.market.job.MarketScheduler
-import com.panomc.plugins.market.routes.panel.server.mcSyncService
+import com.panomc.plugins.market.routes.panel.server.marketServerEvents
 import com.panomc.plugins.market.runtime.MarketBootstrap
 import com.panomc.plugins.market.runtime.MarketRuntime
 import com.panomc.plugins.market.service.ExchangeRateService
@@ -72,9 +72,9 @@ class MarketPlugin : PanoPlugin() {
     @Volatile
     private var jobScheduler: MarketScheduler? = null
 
-    // The server event MARKET_SYNC (08 section 8.1): registered at start, removed at stop / disable.
+    // The six server events of the Minecraft component (MARKET_SYNC of 08 section 8.1 and the five game events of 19 section 7): registered at start, removed at stop / disable.
     @Volatile
-    private var syncEvent: MarketSyncEvent? = null
+    private var serverEvents: List<ServerEvent<*, *>>? = null
 
     override suspend fun onStart() {
         logger.info("Starting...")
@@ -111,22 +111,26 @@ class MarketPlugin : PanoPlugin() {
     private fun registerServerEvents() {
         try {
             val manager = applicationContext.getBean(ServerManager::class.java)
-            val event = syncEvent ?: MarketSyncEvent({ mcSyncService(this) }).also { syncEvent = it }
+            val events = serverEvents ?: marketServerEvents(this).also { serverEvents = it }
 
-            manager.unregisterEvent(event)
-            manager.registerEvent(event)
+            for (event in events) {
+                manager.unregisterEvent(event)
+                manager.registerEvent(event)
+            }
         } catch (e: Exception) {
-            logger.warn("The MARKET_SYNC server event could not be registered, Minecraft deliveries wait until the plugin is restarted", e)
+            logger.warn("The market server events (MARKET_SYNC, MARKET_CONFIG, MARKET_QUERY, MARKET_PURCHASE, MARKET_ADMIN, MARKET_ECONOMY) could not be registered, the Minecraft component waits until the plugin is restarted", e)
         }
     }
 
     private fun unregisterServerEvents() {
-        val event = syncEvent ?: return
+        val events = serverEvents ?: return
 
         try {
-            applicationContext.getBean(ServerManager::class.java).unregisterEvent(event)
+            val manager = applicationContext.getBean(ServerManager::class.java)
+
+            for (event in events) manager.unregisterEvent(event)
         } catch (e: Exception) {
-            logger.warn("The MARKET_SYNC server event could not be unregistered", e)
+            logger.warn("The market server events could not be unregistered", e)
         }
     }
 
