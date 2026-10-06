@@ -401,6 +401,7 @@ boot_and_wait() { # $1 = install | keep ; assumes the JVM is not running
     : > "$INSTANCE/installed"
     trust_loopback_proxy
     post_install_restart
+    trust_loopback_proxy
   fi
 }
 
@@ -409,7 +410,10 @@ boot_and_wait() { # $1 = install | keep ; assumes the JVM is not running
 # JVM is stopped and the JVM is booted again with it. MARKET_E2E_NO_TRUSTED_PROXY=1 switches this off (and makes F-18 skip).
 trust_loopback_proxy() {
   [ -z "${MARKET_E2E_NO_TRUSTED_PROXY:-}" ] || return 0
+  [ -z "${MARKET_E2E_NO_TRUSTED_LOOPBACK:-}" ] || return 0 # the stream-F name of the same switch
+  case "$INSTANCE" in *-lifecycle) return 0 ;; esac # the lifecycle instance keeps its own flow
   [ -f "$INSTANCE/plugins/$(basename "$PLUGIN_JAR")" ] || return 0 # install-legacy installs without the market
+  grep -qE '^[[:space:]]*trusted-proxies[[:space:]]*=[[:space:]]*\[[[:space:]]*\]' "$INSTANCE/config.conf" 2>/dev/null || return 0 # already trusted (the function runs twice around the restart)
   stop_recorded || abort_boot 19 "the install JVM did not exit for the trusted-proxies edit"
   [ -f "$INSTANCE/config.conf" ] || abort_boot 14 "no config.conf in the instance after the install"
   sed -i -E 's/^([[:space:]]*trusted-proxies[[:space:]]*=[[:space:]]*)\[[^]]*\]/\1["127.0.0.1", "::1"]/' "$INSTANCE/config.conf"
