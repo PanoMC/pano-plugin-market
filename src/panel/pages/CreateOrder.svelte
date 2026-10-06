@@ -388,7 +388,7 @@
 <script>
   import { CardHeader, NoContent } from '@panomc/sdk/components/panel';
   import { base, goto, page } from '@panomc/sdk/svelte';
-  import { onDestroy, untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { _, showErrorToast, showSuccessToast } from '../../i18n';
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import LoadError from '../components/LoadError.svelte';
@@ -472,7 +472,8 @@
     onPending: (value) => (pending = value),
     onResult: (result) => (quote = result),
   });
-  onDestroy(() => runner.cancel());
+  // cleanup through onMount's return value: onDestroy cannot run in the plugin's server bundle (SSR 500)
+  onMount(() => () => runner.cancel());
 
   // The quote is requested again on every change of the request body (debounced, last wins).
   $effect(() => {

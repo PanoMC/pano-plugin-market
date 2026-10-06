@@ -62,7 +62,7 @@
     </div>
 
     <div class="w-100 flex-grow-1 d-flex flex-column">
-      <Editor id="product-description" bind:content={product.description} />
+      <ClientEditor id="product-description" bind:content={product.description} />
     </div>
 
     <div class="form-check form-switch">
@@ -112,7 +112,7 @@
 </div>
 
 <script>
-  import { Editor } from '@panomc/sdk/components/panel';
+  import ClientEditor from '../ClientEditor.svelte';
   import { _ } from '../../../i18n';
   import { fieldErrorKey, slugify } from './model.js';
 

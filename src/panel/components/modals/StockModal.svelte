@@ -90,6 +90,7 @@
   import ApiUtil from '@panomc/sdk/utils/api';
   import { _, showErrorToast, showSuccessToast } from '../../../i18n';
   import { call, errorKey, marketPath } from '../../utils/api.js';
+  import { stockFieldErrorKey } from '../../utils/stock.js';
 
   let { onUpdated = () => {} } = $props();
 
@@ -149,9 +150,9 @@
     saving = false;
 
     if (!result.ok) {
-      // A negative result of ADJUST is the only BAD_REQUEST of this endpoint: mark the value.
-      if (result.error === 'BAD_REQUEST')
-        return fail('pages.create-product.field-errors.OUT_OF_RANGE');
+      // A refused quantity (a negative result of ADJUST ...) marks the value; see stockFieldErrorKey for the codes.
+      const key = stockFieldErrorKey(result);
+      if (key !== null) return fail(key);
       showErrorToast($_(errorKey(result.error)));
       return;
     }

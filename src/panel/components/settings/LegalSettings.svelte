@@ -63,7 +63,7 @@
         <div class="mb-0">
           <div class="mb-2">{$_('settings.legal.content')}</div>
           {#key editorKey}
-            <Editor bind:content={editor.content} />
+            <ClientEditor bind:content={editor.content} />
           {/key}
           {#if editorShown.content}
             <div class="invalid-feedback d-block">{editorMessage('content')}</div>
@@ -164,11 +164,11 @@
   import {
     CardHeader,
     Date as DateComponent,
-    Editor,
     NoContent,
   } from '@panomc/sdk/components/panel';
   import { Languages, currentLanguage } from '@panomc/sdk/utils/language';
   import { _, showSuccessToast } from '../../../i18n';
+  import ClientEditor from '../ClientEditor.svelte';
   import ConfirmModal from '../ConfirmModal.svelte';
   import LoadError from '../LoadError.svelte';
   import LegalVersionModal from '../modals/LegalVersionModal.svelte';

@@ -9,7 +9,10 @@
         </div>
         <CardFilters slot="right">
           {#each STATUS_TABS as tab (tab.key)}
-            <CardFiltersItem button active={currentTab === tab.key} onclick={() => go({ status: tab.value })}>
+            <CardFiltersItem
+              button
+              active={currentTab === tab.key}
+              onclick={() => go({ status: tab.value })}>
               {$_(`pages.payment-events.tab.${tab.key}`)}
             </CardFiltersItem>
           {/each}
@@ -24,15 +27,23 @@
             <thead>
               <tr>
                 <th class="align-middle text-nowrap" scope="col"></th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.payment-events.table.provider')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.payment-events.table.direction')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.payment-events.table.channel')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.payment-events.table.provider')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.payment-events.table.direction')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.payment-events.table.channel')}</th>
                 <th class="align-middle text-nowrap" scope="col">{$_('common.status')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.payment-events.table.event-types')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.payment-events.table.http')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.payment-events.table.error')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.payment-events.table.ip')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.payment-events.table.date')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.payment-events.table.event-types')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.payment-events.table.http')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.payment-events.table.error')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.payment-events.table.ip')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.payment-events.table.date')}</th>
               </tr>
             </thead>
             <tbody>
@@ -48,13 +59,20 @@
                         aria-label={$_('common.actions')}>
                         <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
                       </button>
-                      <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
-                        <button type="button" class="dropdown-item" onclick={() => detailModal?.open(event)}>
+                      <div
+                        class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                        <button
+                          type="button"
+                          class="dropdown-item"
+                          onclick={() => detailModal?.open(event)}>
                           <i class="fa-solid fa-eye me-2" aria-hidden="true"></i>
                           {$_('pages.payment-events.actions.view')}
                         </button>
                         {#if canReplay(event, user)}
-                          <button type="button" class="dropdown-item" onclick={() => askReplay(event)}>
+                          <button
+                            type="button"
+                            class="dropdown-item"
+                            onclick={() => askReplay(event)}>
                             <i class="fa-solid fa-rotate-right me-2" aria-hidden="true"></i>
                             {$_('pages.payment-events.actions.replay')}
                           </button>
@@ -68,7 +86,8 @@
                   <td class="text-nowrap">
                     <StatusBadge kind="event" value={event.status} />
                     {#if isUnverified(event)}
-                      <span class="badge text-bg-danger ms-1">{$_('pages.payment-events.unverified')}</span>
+                      <span class="badge text-bg-danger ms-1"
+                        >{$_('pages.payment-events.unverified')}</span>
                     {/if}
                   </td>
                   <td>{eventTypesText(event) || '—'}</td>
@@ -143,6 +162,7 @@
     activeTab,
     canReplay,
     eventTypesText,
+    isUnverified,
     listParams,
     normalizeFilters,
   } from '../utils/payment-events.js';
@@ -162,7 +182,8 @@
   const currentPage = $derived(data.page ?? 1);
   const currentTab = $derived(activeTab(filters.status));
 
-  const dateText = (epoch) => (epoch ? new Date(Number(epoch)).toLocaleString(currentLocale()) : '—');
+  const dateText = (epoch) =>
+    epoch ? new Date(Number(epoch)).toLocaleString(currentLocale()) : '—';
 
   // The URL is the source of truth; a filter change always drops `page`.
   function go(overrides) {
