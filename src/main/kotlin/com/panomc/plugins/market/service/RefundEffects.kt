@@ -88,26 +88,8 @@ class StandardRefundEffects(
      * reversedAmount` (not positive: skipped); `reversedAmount += delta`, the code's cached `earnings -= delta`; a fully reversed row is `REVERSED` unless it is
      * `PAID` (then the reversal shows up as a negative available balance).
      */
-    override suspend fun creatorReversal(conn: SqlConnection, order: MarketOrder, refundedTotalAfter: Long, fully: Boolean) {
-        for (earning in earnings.getByOrderId(order.id, conn).sortedBy { it.id }) {
-            val target = if (fully || order.totalPrice <= 0L || refundedTotalAfter >= order.totalPrice) earning.amount
-            else java.math.BigInteger.valueOf(earning.amount).multiply(java.math.BigInteger.valueOf(refundedTotalAfter)).divide(java.math.BigInteger.valueOf(order.totalPrice)).toLong()
-            val delta = target - earning.reversedAmount
-
-            if (delta <= 0L) continue
-
-            if (!earnings.addReversed(earning.id, delta, conn)) continue
-
-            conn.preparedQuery("UPDATE ${table("market_creator_code")} SET `earnings` = `earnings` - ? WHERE `id` = ?").execute(Tuple.of(delta, earning.creatorCodeId)).coAwait()
-
-            if (earning.reversedAmount + delta >= earning.amount) {
-                // a PAID row stays PAID; PENDING and AVAILABLE rows end REVERSED
-                if (!earnings.transition(earning.id, CreatorEarningState.PENDING, CreatorEarningState.REVERSED, conn)) {
-                    earnings.transition(earning.id, CreatorEarningState.AVAILABLE, CreatorEarningState.REVERSED, conn)
-                }
-            }
-        }
-    }
+    override suspend fun creatorReversal(conn: SqlConnection, order: MarketOrder, refundedTotalAfter: Long, fully: Boolean) =
+        CreatorReversal.reverse(earnings, tablePrefix(), conn, order, refundedTotalAfter, fully)
 
     override suspend fun creditNote(conn: SqlConnection, order: MarketOrder, items: List<MarketOrderItem>, refundId: Long) {
         invoices?.issueCreditNote(conn, order, items, refundId)

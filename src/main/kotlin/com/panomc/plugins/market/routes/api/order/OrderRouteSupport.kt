@@ -60,7 +60,10 @@ import com.panomc.plugins.market.service.DeliveryWebhookReporter
 import com.panomc.plugins.market.service.EntitlementService
 import com.panomc.plugins.market.service.PermissionGrantService
 import com.panomc.plugins.market.service.DuplicateRefundPolicy
+import com.panomc.plugins.market.service.CreatorEffects
 import com.panomc.plugins.market.service.ForeignEffects
+import com.panomc.plugins.market.service.PayoutSettlement
+import com.panomc.plugins.market.routes.panel.creatorcode.creatorService
 import com.panomc.plugins.market.service.InvoiceEffects
 import com.panomc.plugins.market.service.ShippingEffects
 import com.panomc.plugins.market.service.MailEffects
@@ -195,7 +198,13 @@ private fun buildDeliveryService(plugin: MarketPlugin): DeliveryService {
         // MK-106: the WEBHOOK executor writes its outbox row here; the DISCORD bodies of action webhooks use the store's default locale
         webhookDeliveries = context.getBean(MarketWebhookDeliveryDao::class.java), discordLabels = discordLabelSource(plugin),
         // MK-142: ORDER_DELIVERED when the fulfillment becomes FULFILLED
-        fulfilledMails = orderMails(plugin)
+        fulfilledMails = orderMails(plugin),
+        // MK-114: an ACTION creator payout follows its rows (the creator service is looked up when the first row changes, it needs this service itself)
+        payouts = object : PayoutSettlement {
+            override suspend fun lock(conn: io.vertx.sqlclient.SqlClient, payoutId: Long) = creatorService(plugin).lock(conn, payoutId)
+
+            override suspend fun settle(conn: io.vertx.sqlclient.SqlClient, payoutId: Long) = creatorService(plugin).settle(conn, payoutId)
+        }
     )
 }
 
@@ -303,7 +312,8 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
         // O2 / O4 issue the invoice inside the transition (12 section 6.1, MK-144), then the entitlements and the GRANT / RENEW delivery rows are written (MK-102);
         // MK-092: the credit-granting lines (TOPUP / GIFT) and the cashback are posted inside the transition too
         // WIRE-1: StartShipping goes to the shipping service (derived shippingStatus); the rest still to PENDING_SLICES
-        foreign = CreditEffects(
+        // MK-114: AccrueCreatorEarning goes to the creator service (the earning of the order's creator code, 21 section 7.1)
+        foreign = CreatorEffects({ creatorService(plugin) }, orderDao, CreditEffects(
             credits, orderDao, context.getBean(MarketOrderEventDao::class.java), clock, { currentConfig(plugin) },
             PlatformUserDirectory { context.getBean(DatabaseManager::class.java) },
             InvoiceEffects(
@@ -316,7 +326,7 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
                     ShippingEffects({ shippingService(plugin) }, MailEffects(orderMails(plugin), orderDao, ForeignEffects.PENDING_SLICES))
                 ))
             )
-        ),
+        )),
         rates = { sqlClient -> rates.getAll(sqlClient).filter { it.rate.signum() > 0 }.associate { it.currency to it.rate } },
         statsCurrency = { currentConfig(plugin).statsCurrency.name },
         // MK-079: the re-reserve of an accepted late payment checks `limitPerPlayer`; a rejected review and a duplicate payment request their refund

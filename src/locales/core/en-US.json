@@ -58,6 +58,8 @@
     "CREATED_MARKET_CREATOR_CODE": "<b>{username}</b> created the \"{name}\" creator code.",
     "UPDATED_MARKET_CREATOR_CODE": "<b>{username}</b> updated the \"{name}\" creator code.",
     "DELETED_MARKET_CREATOR_CODE": "<b>{username}</b> deleted the \"{name}\" creator code.",
+    "CREATED_MARKET_CREATOR_PAYOUT": "<b>{username}</b> paid {amount} to the \"{name}\" creator code ({method}).",
+    "CANCELLED_MARKET_CREATOR_PAYOUT": "<b>{username}</b> cancelled a {amount} payout of the \"{name}\" creator code.",
     "SORTED_MARKET_CATEGORIES": "<b>{username}</b> changed the position of the \"{name}\" market category.",
     "UPDATED_MARKET_SETTINGS": "<b>{username}</b> updated the market settings.",
     "UPDATED_MARKET_PAYMENT_METHOD": "<b>{username}</b> updated the \"{name}\" payment method.",
