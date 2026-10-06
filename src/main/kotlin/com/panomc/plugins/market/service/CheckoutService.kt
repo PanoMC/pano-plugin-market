@@ -243,6 +243,18 @@ fun interface BuyerBlocks {
     }
 }
 
+/**
+ * [BuyerBlocks] that also says where the matching block came from (WIRE-2, 11 section 9.3: a merchant renewal blocked by a `source = CHARGEBACK` row ends the
+ * subscription with `endReason = CHARGEBACK`, any other block with `ADMIN_CANCEL`). A plain [BuyerBlocks] lambda has no source and counts as `MANUAL`.
+ */
+interface SourcedBuyerBlocks : BuyerBlocks {
+    /** The source of the block that matched (the same first hit as [blocked]), `null` when nobody matched. */
+    suspend fun blockedBy(payerUsername: String?, recipientUsername: String?, email: String?, clientIp: String?, userId: Long?, sqlClient: SqlClient): com.panomc.plugins.market.db.model.BlockSource?
+
+    override suspend fun blocked(payerUsername: String?, recipientUsername: String?, email: String?, clientIp: String?, userId: Long?, sqlClient: SqlClient): Boolean =
+        blockedBy(payerUsername, recipientUsername, email, clientIp, userId, sqlClient) != null
+}
+
 /** `POST /api/market/checkout` after parsing (04 section 3): the `CartInput`, the consent total and the legal acceptance. */
 data class CheckoutRequest(
     val input: QuoteInput,

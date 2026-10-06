@@ -108,8 +108,11 @@ sealed class SubEvent {
     /** `PlayerEventListener.onDelete` (01 section 13). */
     data object UserDeleted : SubEvent()
 
-    /** The buyer matches `market_block` (09 sections 8.3, 10.4). */
-    data object BuyerBlocked : SubEvent()
+    /**
+     * The buyer matches `market_block` (09 sections 8.3, 10.4). [chargeback]: the matching row has `source = CHARGEBACK`, so the subscription ends with
+     * `endReason = CHARGEBACK` instead of `ADMIN_CANCEL` (11 section 9.3).
+     */
+    data class BuyerBlocked(val chargeback: Boolean = false) : SubEvent()
 
     /** O5 on the initial order. */
     data object InitialOrderRejected : SubEvent()
@@ -246,7 +249,7 @@ object SubscriptionStateMachine {
         SubEvent.Refunded -> onEndedByMoney(sub, SubscriptionEndReason.REFUND, undoHandledByCaller = true)
         is SubEvent.Chargeback -> onEndedByMoney(sub, SubscriptionEndReason.CHARGEBACK, event.revokeOnChargeback)
         SubEvent.UserDeleted -> onUserDeleted(sub)
-        SubEvent.BuyerBlocked -> onBuyerBlocked(sub, now)
+        is SubEvent.BuyerBlocked -> onBuyerBlocked(sub, now, if (event.chargeback) SubscriptionEndReason.CHARGEBACK else SubscriptionEndReason.ADMIN_CANCEL)
         SubEvent.InitialOrderRejected -> onPendingClosed(sub, SubscriptionEndReason.ADMIN_CANCEL)
         SubEvent.PendingTimeout -> onPendingClosed(sub, SubscriptionEndReason.PAYMENT_FAILED)
     }
@@ -635,20 +638,20 @@ object SubscriptionStateMachine {
     }
 
     /**
-     * A blocked buyer: `ACTIVE` ends at the period end (S8, `ADMIN_CANCEL`; for `GATEWAY` the gateway is told to stop
-     * billing), `PAST_DUE` / `PAUSED` have no paid time left and end now (S7). 09 sections 8.3 and 10.4.
+     * A blocked buyer: `ACTIVE` ends at the period end (S8; for `GATEWAY` the gateway is told to stop billing), `PAST_DUE` / `PAUSED` have no paid time left and
+     * end now (S7). The end reason is [reason]: `ADMIN_CANCEL`, or `CHARGEBACK` when the block is a chargeback's. 09 sections 8.3 and 10.4, 11 section 9.3.
      */
-    private fun onBuyerBlocked(sub: SubState, now: Long): SubTransition = when (sub.status) {
+    private fun onBuyerBlocked(sub: SubState, now: Long, reason: SubscriptionEndReason): SubTransition = when (sub.status) {
         SubscriptionStatus.ACTIVE ->
             if (sub.cancelAtPeriodEnd) ignored(ALREADY_CANCEL_SCHEDULED)
             else single(
                 SubRule.S8, SubscriptionStatus.ACTIVE, SubscriptionStatus.ACTIVE,
-                scheduleCancelEffects(sub, SubscriptionEndReason.ADMIN_CANCEL, now, queueRemote = true)
+                scheduleCancelEffects(sub, reason, now, queueRemote = true)
             )
 
         SubscriptionStatus.PAST_DUE, SubscriptionStatus.PAUSED -> single(
             SubRule.S7, sub.status, SubscriptionStatus.CANCELLED,
-            endEffects(sub, SubscriptionStatus.CANCELLED, SubscriptionEndReason.ADMIN_CANCEL, RenewalDisposition.SKIPPED, queueRemote = true, cancelledWebhook = true)
+            endEffects(sub, SubscriptionStatus.CANCELLED, reason, RenewalDisposition.SKIPPED, queueRemote = true, cancelledWebhook = true)
         )
 
         SubscriptionStatus.PENDING -> ignored(NOT_ACTIVATED)

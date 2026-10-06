@@ -6,6 +6,7 @@ import com.panomc.plugins.market.core.order.OrderEffect
 import com.panomc.plugins.market.core.subscription.CancelActor
 import com.panomc.plugins.market.core.subscription.RenewalDedupe
 import com.panomc.plugins.market.core.time.Backoff
+import com.panomc.plugins.market.db.model.BlockSource
 import com.panomc.plugins.market.db.model.RemoteCancelState
 import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.db.tx.OrderLockScope
@@ -1127,8 +1128,10 @@ class SubscriptionService(
             return ChargePreparation.Skipped(SKIP_TEST_MODE, ended = true)
         }
 
-        if (blocks.blocked(row.playerUsername, row.playerUsername, row.email, null, row.userId, conn)) {
-            applyDecision(conn, row, decide(row, SubEvent.BuyerBlocked), Context(initial, OrderActorType.SYSTEM))
+        val blockedBy = blockSourceOf(row, conn)
+
+        if (blockedBy != null) {
+            applyDecision(conn, row, decide(row, SubEvent.BuyerBlocked(chargeback = blockedBy == BlockSource.CHARGEBACK)), Context(initial, OrderActorType.SYSTEM))
 
             return ChargePreparation.Skipped(SKIP_BLOCKED, ended = subscriptions.getById(row.id, conn)?.status?.isTerminal == true)
         }
@@ -1399,9 +1402,21 @@ class SubscriptionService(
         val row = subscriptions.getById(subscriptionId, conn) ?: return
 
         if (row.mode != SubscriptionMode.GATEWAY || row.status != SubscriptionStatus.ACTIVE || row.cancelAtPeriodEnd) return
-        if (!blocks.blocked(row.playerUsername, row.playerUsername, row.email, null, row.userId, conn)) return
+        val blockedBy = blockSourceOf(row, conn) ?: return
 
-        applyDecision(conn, row, decide(row, SubEvent.BuyerBlocked), Context(initial, OrderActorType.SYSTEM))
+        applyDecision(conn, row, decide(row, SubEvent.BuyerBlocked(chargeback = blockedBy == BlockSource.CHARGEBACK)), Context(initial, OrderActorType.SYSTEM))
+    }
+
+    /**
+     * The source of the block that stops this owner (`null`: not blocked). A [SourcedBuyerBlocks] seam names it, so a chargeback's block ends the subscription with
+     * `CHARGEBACK` (11 section 9.3); a plain [BuyerBlocks] lambda only knows yes or no, which counts as `MANUAL` (`ADMIN_CANCEL`).
+     */
+    private suspend fun blockSourceOf(row: MarketSubscription, conn: SqlConnection): BlockSource? {
+        val seam = blocks
+
+        if (seam is SourcedBuyerBlocks) return seam.blockedBy(row.playerUsername, row.playerUsername, row.email, null, row.userId, conn)
+
+        return if (seam.blocked(row.playerUsername, row.playerUsername, row.email, null, row.userId, conn)) BlockSource.MANUAL else null
     }
 
     /** `ApplyRenewal` (09 section 8.4 steps 2 to 5). */
@@ -1948,7 +1963,10 @@ class SubscriptionService(
                     if (remote) {
                         update(
                             conn, row.id,
-                            linkedMapOf("cancelRequestedAt" to (row.cancelRequestedAt ?: now), "endReason" to if (actor == CancelActor.BUYER) SubscriptionEndReason.BUYER_CANCEL.name else SubscriptionEndReason.ADMIN_CANCEL.name)
+                            // the provisional reason only for a row that is not scheduled yet: an immediate cancel on top of a scheduled one must leave the scheduled
+                            // cancel's reason alone when the gateway call fails (09 section 10.1: nothing else changes; /resume checks it, 09 section 10.2)
+                            linkedMapOf<String, Any?>("cancelRequestedAt" to (row.cancelRequestedAt ?: now)) +
+                                if (!row.cancelAtPeriodEnd) mapOf("endReason" to if (actor == CancelActor.BUYER) SubscriptionEndReason.BUYER_CANCEL.name else SubscriptionEndReason.ADMIN_CANCEL.name) else emptyMap()
                         )
                     }
 
@@ -2119,6 +2137,43 @@ class SubscriptionService(
 
         endByMoney(conn, row, SubEvent.Chargeback(config().revokeOnChargeback), order, OrderActorType.SYSTEM)
     }
+
+    /**
+     * O11 step 4 of 11 section 10 (WIRE-2), after the dispute's transaction has committed: every other `ACTIVE`, `PAST_DUE` or `PAUSED` subscription of the same `ownerKey`
+     * ends at once (S7, `CHARGEBACK`). Their goods come from other, paid orders, so the ending expires the entitlement (`EXPIRE` rows) instead of revoking it. One
+     * transaction per subscription under its own initial order's lock (never two order locks in one transaction, 00 section 8.3); the remote cancel of a `GATEWAY` row
+     * is queued by the ending. Returns the number of subscriptions that ended. The subscription of [order] itself is `onOrderChargeback`'s.
+     */
+    suspend fun onChargebackOwner(db: MarketDb, afterCommit: suspend (List<AfterCommit>) -> Unit, order: MarketOrder): Int {
+        val ownerKey = order.buyerKey.takeIf { it.isNotBlank() } ?: return 0
+        val ids = db.tx { client ->
+            subscriptions.getByOwnerKey(ownerKey, client).filter { it.id != order.subscriptionId && it.status.isOpenForChargeback() }.map { it.id }
+        }
+        var ended = 0
+
+        for (id in ids) {
+            db.txRestartingOnOrderChange { conn ->
+                val known = subscriptions.getById(id, conn) ?: return@txRestartingOnOrderChange
+
+                locks.orderWithSubscription(conn, known.initialOrderId) { locked ->
+                    val row = subscriptions.getById(id, conn) ?: return@orderWithSubscription
+
+                    if (row.ownerKey != ownerKey) return@orderWithSubscription
+
+                    val decision = decide(row, SubEvent.Chargeback(revokeOnChargeback = false)) as? SubTransition.Apply ?: return@orderWithSubscription
+
+                    apply(conn, row, decision, Context(locked.order, OrderActorType.SYSTEM))
+                    ended++
+                }
+            }
+        }
+
+        if (ids.isNotEmpty()) cancelClosedRenewalOrders(db, afterCommit)
+
+        return ended
+    }
+
+    private fun SubscriptionStatus.isOpenForChargeback() = this == SubscriptionStatus.ACTIVE || this == SubscriptionStatus.PAST_DUE || this == SubscriptionStatus.PAUSED
 
     private suspend fun endByMoney(conn: SqlConnection, row: MarketSubscription, event: SubEvent, order: MarketOrder, actor: OrderActorType) {
         val initial = orders.getById(row.initialOrderId, conn) ?: return

@@ -144,14 +144,31 @@ class BlockListService(
     // ------------------------------------------------------------------------------------------------------ enforcement seams
 
     /** The seam of [CheckoutService] and [SubscriptionService]: `true` when the payer or the recipient is blocked (the payer's own IP counts, the recipient has none). */
-    fun asBuyerBlocks(recordHit: Boolean = true): BuyerBlocks =
-        BuyerBlocks { payer, recipient, email, clientIp, userId, sqlClient -> blocked(payer, recipient, email, clientIp, userId, sqlClient, recordHit) }
+    fun asBuyerBlocks(recordHit: Boolean = true): BuyerBlocks = object : SourcedBuyerBlocks {
+        override suspend fun blockedBy(payerUsername: String?, recipientUsername: String?, email: String?, clientIp: String?, userId: Long?, sqlClient: SqlClient): BlockSource? =
+            sourceOfHit(payerUsername, recipientUsername, email, clientIp, userId, sqlClient, recordHit)
+    }
 
     /**
      * [recordHit] false: the caller runs under row locks and must not touch the block row (the subscription job). A call on a transaction connection never counts
      * a hit either way.
      */
-    suspend fun blocked(payerUsername: String?, recipientUsername: String?, email: String?, clientIp: String?, userId: Long?, sqlClient: SqlClient, recordHit: Boolean = true): Boolean {
+    suspend fun blocked(payerUsername: String?, recipientUsername: String?, email: String?, clientIp: String?, userId: Long?, sqlClient: SqlClient, recordHit: Boolean = true): Boolean =
+        hitOf(payerUsername, recipientUsername, email, clientIp, userId, sqlClient, recordHit) != null
+
+    /** The source (`MANUAL` / `CHARGEBACK`) of the block [blocked] matches, `null` when there is none (WIRE-2: the end reason of a blocked subscription). */
+    private suspend fun sourceOfHit(
+        payerUsername: String?, recipientUsername: String?, email: String?, clientIp: String?, userId: Long?, sqlClient: SqlClient, recordHit: Boolean
+    ): BlockSource? {
+        val hit = hitOf(payerUsername, recipientUsername, email, clientIp, userId, sqlClient, recordHit) ?: return null
+
+        // a row deleted between the lookup and this read still blocked the buyer a moment ago: it counts as a manual block
+        return blocks.getById(hit.blockId, sqlClient)?.source ?: BlockSource.MANUAL
+    }
+
+    private suspend fun hitOf(
+        payerUsername: String?, recipientUsername: String?, email: String?, clientIp: String?, userId: Long?, sqlClient: SqlClient, recordHit: Boolean
+    ): BlockHit? {
         val payer = BlockSubjects(
             usernames = setOfNotNull(payerUsername?.takeIf { it.isNotBlank() }), userIds = setOfNotNull(userId), emails = setOfNotNull(email?.takeIf { it.isNotBlank() }), ip = clientIp
         )
@@ -161,7 +178,7 @@ class BlockListService(
         val ownAccount = userId != null && name != null && name.equals(payerUsername, ignoreCase = true)
         val recipient = if (name == null || ownAccount) null else BlockSubjects(usernames = setOf(name), userIds = setOfNotNull(users.byUsername(name, sqlClient)?.id))
 
-        return check(payer, recipient, sqlClient, recordHit) != null
+        return check(payer, recipient, sqlClient, recordHit)
     }
 
     /**

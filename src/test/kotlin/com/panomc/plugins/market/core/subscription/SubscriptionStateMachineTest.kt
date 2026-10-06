@@ -638,23 +638,45 @@ class SubscriptionStateMachineTest {
 
     @Test
     fun `a blocked buyer ends at the period end when ACTIVE and at once when PAST_DUE or PAUSED`() {
-        val active = decide(st(ACTIVE, merchant), SubEvent.BuyerBlocked).moved()
+        val active = decide(st(ACTIVE, merchant), SubEvent.BuyerBlocked()).moved()
         assertEquals(listOf(SubRule.S8), active.rules)
         assertEquals(ACTIVE, active.to)
         assertEquals(SubscriptionEndReason.ADMIN_CANCEL, active.one<SetEndReason>().reason)
         assertEquals(SetCancelRequestedAt(now), active.one<SetCancelRequestedAt>())
         assertFalse(active.has(QueueRemoteCancel))
-        assertTrue(decide(st(ACTIVE, gateway), SubEvent.BuyerBlocked).moved().has(QueueRemoteCancel), "the gateway must stop billing a blocked buyer")
-        assertEquals("ALREADY_CANCEL_SCHEDULED", decide(st(ACTIVE, merchant, cancelAtPeriodEnd = true), SubEvent.BuyerBlocked).ignoredReason())
+        assertTrue(decide(st(ACTIVE, gateway), SubEvent.BuyerBlocked()).moved().has(QueueRemoteCancel), "the gateway must stop billing a blocked buyer")
+        assertEquals("ALREADY_CANCEL_SCHEDULED", decide(st(ACTIVE, merchant, cancelAtPeriodEnd = true), SubEvent.BuyerBlocked()).ignoredReason())
 
         for (s in listOf(PAST_DUE, PAUSED)) {
-            val t = decide(st(s, gateway), SubEvent.BuyerBlocked).moved()
+            val t = decide(st(s, gateway), SubEvent.BuyerBlocked()).moved()
             assertEquals(listOf(SubRule.S7), t.rules, "$s")
             assertEquals(SubscriptionEndReason.ADMIN_CANCEL, t.one<EndSubscription>().reason)
             assertTrue(t.has(QueueRemoteCancel))
         }
-        assertEquals("NOT_ACTIVATED", decide(st(PENDING), SubEvent.BuyerBlocked).ignoredReason())
-        for (s in listOf(CANCELLED, EXPIRED, COMPLETED)) assertEquals("SUBSCRIPTION_CLOSED", decide(st(s), SubEvent.BuyerBlocked).ignoredReason())
+        assertEquals("NOT_ACTIVATED", decide(st(PENDING), SubEvent.BuyerBlocked()).ignoredReason())
+        for (s in listOf(CANCELLED, EXPIRED, COMPLETED)) assertEquals("SUBSCRIPTION_CLOSED", decide(st(s), SubEvent.BuyerBlocked()).ignoredReason())
+    }
+
+    @Test
+    fun `a buyer blocked by a chargeback ends with CHARGEBACK, every other shape stays the same as for a manual block (WIRE-2)`() {
+        val blocked = SubEvent.BuyerBlocked(chargeback = true)
+        val active = decide(st(ACTIVE, merchant), blocked).moved()
+
+        assertEquals(listOf(SubRule.S8), active.rules)
+        assertEquals(SubscriptionEndReason.CHARGEBACK, active.one<SetEndReason>().reason)
+        assertTrue(decide(st(ACTIVE, gateway), blocked).moved().has(QueueRemoteCancel))
+
+        for (s in listOf(PAST_DUE, PAUSED)) {
+            val t = decide(st(s, gateway), blocked).moved()
+
+            assertEquals(listOf(SubRule.S7), t.rules, "$s")
+            assertEquals(SubscriptionEndReason.CHARGEBACK, t.one<EndSubscription>().reason)
+            assertTrue(t.has(QueueRemoteCancel))
+        }
+
+        assertEquals("NOT_ACTIVATED", decide(st(PENDING), blocked).ignoredReason())
+        for (s in listOf(CANCELLED, EXPIRED, COMPLETED)) assertEquals("SUBSCRIPTION_CLOSED", decide(st(s), blocked).ignoredReason())
+        assertEquals(SubscriptionEndReason.ADMIN_CANCEL, decide(st(ACTIVE, merchant), SubEvent.BuyerBlocked()).moved().one<SetEndReason>().reason)
     }
 
     // ================================================================ S8: cancel at period end
@@ -1056,7 +1078,7 @@ class SubscriptionStateMachineTest {
 
     @Test
     fun `a blocked GATEWAY buyer keeps the scheduled cancel when the gateway then reports ACTIVE`() {
-        val blocked = decide(gwActive, SubEvent.BuyerBlocked).moved()
+        val blocked = decide(gwActive, SubEvent.BuyerBlocked()).moved()
         assertEquals(SubRule.S8, blocked.step().rule)
         assertTrue(blocked.has(SetCancelAtPeriodEnd(true)))
         assertTrue(blocked.has(QueueRemoteCancel))
@@ -1233,7 +1255,7 @@ class SubscriptionStateMachineTest {
         add(SubEvent.Chargeback(true))
         add(SubEvent.Chargeback(false))
         add(SubEvent.UserDeleted)
-        add(SubEvent.BuyerBlocked)
+        add(SubEvent.BuyerBlocked())
         add(SubEvent.InitialOrderRejected)
         add(SubEvent.PendingTimeout)
     }
