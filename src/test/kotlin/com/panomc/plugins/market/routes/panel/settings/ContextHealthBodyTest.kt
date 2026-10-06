@@ -1,5 +1,8 @@
 package com.panomc.plugins.market.routes.panel.settings
 
+import com.panomc.plugins.market.config.BillingInfoMode
+import com.panomc.plugins.market.config.CurrencyMode
+import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.runtime.MarketRuntime
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -30,6 +33,37 @@ class ContextHealthBodyTest {
         assertEquals("READY", body["runtimeState"])
         assertEquals("SINGLE", body["currencyMode"], "the documented default")
         assertEquals(false, body["shippingEnabled"])
+    }
+
+    @Test
+    fun `the context reports the configured currency mode, credit rules and billing settings, not the defaults`() {
+        val config = MarketConfig(
+            currencyMode = CurrencyMode.MULTI, additionalCurrencies = listOf("USD", "GBP"), creditValue = 2.5, allowMixedCreditPayment = true,
+            storeTimeZone = "Europe/Istanbul", revokeOnRefund = false, revokeOnChargeback = false, billingInfoMode = BillingInfoMode.REQUIRED,
+            invoiceEnabled = false
+        )
+
+        val body = marketContextBody(marketContextInput(config, storeUrl = "https://x.test/store", mailEnabled = true, runtimeState = "READY"), includeProductMeta = false)
+
+        assertEquals("MULTI", body["currencyMode"])
+        assertEquals(listOf("USD", "GBP"), body["additionalCurrencies"])
+        assertEquals(2.5, body["creditValue"])
+        assertEquals(true, body["allowMixedCreditPayment"])
+        assertEquals("Europe/Istanbul", body["storeTimeZone"])
+        assertEquals(false, body["revokeOnRefund"])
+        assertEquals(false, body["revokeOnChargeback"])
+        assertEquals("REQUIRED", body["billingInfoMode"])
+        assertEquals(false, body["invoiceEnabled"])
+        assertEquals("TRY", body["currency"], "the base currency of the default configuration")
+    }
+
+    @Test
+    fun `a default configuration gives the documented defaults`() {
+        val body = marketContextBody(marketContextInput(MarketConfig(), storeUrl = "", mailEnabled = false, runtimeState = "READY"), includeProductMeta = false)
+
+        assertEquals("SINGLE", body["currencyMode"])
+        assertEquals(emptyList<String>(), body["additionalCurrencies"])
+        assertEquals("OPTIONAL", body["billingInfoMode"])
     }
 
     @Test

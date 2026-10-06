@@ -109,24 +109,42 @@ class PanelGetContextAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
         val websiteUrl = runCatching { plugin.applicationContext.getBean(ConfigManager::class.java).config.websiteUrl }
             .getOrDefault("")
 
-        val input = MarketContextInput(
-            currency = config.currency.name,
-            currencySymbol = config.currency.symbol,
-            statsCurrency = config.statsCurrency.name,
-            statsCurrencySymbol = config.statsCurrency.symbol,
-            creditsEnabled = config.creditsEnabled,
-            creditName = config.creditName,
-            vatPercent = config.vatPercent,
-            showVatInPrice = config.showVatInPrice,
-            testMode = config.testMode,
-            mailEnabled = MarketRuntime.capabilities.mail,
-            storeUrl = marketStoreUrl(websiteUrl),
-            runtimeState = MarketRuntime.state.name
+        val input = marketContextInput(
+            config, storeUrl = marketStoreUrl(websiteUrl), mailEnabled = MarketRuntime.capabilities.mail, runtimeState = MarketRuntime.state.name
         )
 
         return Successful(marketContextBody(input, includeProductMeta = has(context, MarketNode.CATALOG)))
     }
 }
+
+/**
+ * The context of [config]. Every key the body documents comes from the configuration: the handler used to fill only the currency, credit-name, VAT and test-mode
+ * keys and left the rest at the data class defaults, so the context said `currencyMode = SINGLE` with no additional currency whatever the settings were, and the
+ * product form never offered the per-currency price grid (found by the panel browser scenario 71).
+ */
+internal fun marketContextInput(config: MarketConfig, storeUrl: String, mailEnabled: Boolean, runtimeState: String) = MarketContextInput(
+    currency = config.currency.name,
+    currencySymbol = config.currency.symbol,
+    statsCurrency = config.statsCurrency.name,
+    statsCurrencySymbol = config.statsCurrency.symbol,
+    currencyMode = config.currencyMode.name,
+    additionalCurrencies = config.additionalCurrencies,
+    creditsEnabled = config.creditsEnabled,
+    creditName = config.creditName,
+    creditValue = config.creditValue,
+    allowMixedCreditPayment = config.allowMixedCreditPayment,
+    vatPercent = config.vatPercent,
+    showVatInPrice = config.showVatInPrice,
+    testMode = config.testMode,
+    storeTimeZone = config.storeTimeZone,
+    revokeOnRefund = config.revokeOnRefund,
+    revokeOnChargeback = config.revokeOnChargeback,
+    billingInfoMode = config.billingInfoMode.name,
+    invoiceEnabled = config.invoiceEnabled,
+    mailEnabled = mailEnabled,
+    storeUrl = storeUrl,
+    runtimeState = runtimeState
+)
 
 /** The market configuration when its manager exists; the defaults before the plugin initialised (setup pending). */
 internal fun currentConfig(plugin: MarketPlugin): MarketConfig = try {
