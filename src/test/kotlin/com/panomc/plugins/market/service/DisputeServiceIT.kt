@@ -36,6 +36,7 @@ import com.panomc.plugins.market.spi.common.Money
 import com.panomc.plugins.market.spi.payment.DisputeState
 import com.panomc.plugins.market.spi.payment.PaymentEvent
 import com.panomc.plugins.market.spi.payment.PaymentTarget
+import com.panomc.plugins.market.spi.payment.RefundResult
 import com.panomc.plugins.market.spi.payment.RefundState
 import com.panomc.plugins.market.support.MarketTestDb
 import com.panomc.plugins.market.support.Race
@@ -347,6 +348,121 @@ class DisputeServiceIT : MarketDaoITBase() {
 
         assertEquals(OrderStatus.REFUNDED, r.order(full.order.id).status)
         assertEquals(0, sold(full.products[0].id))
+    }
+
+    // ===== a refund in flight while the dispute opens (R-27, E2E-06 review) =========================================================
+
+    /** A full panel refund the gateway has not settled, so that it is still in flight when the dispute opens (`PENDING` rows are the gateway's, O11 step 4 leaves them). */
+    private suspend fun pendingRefund(paid: PaidOrder, input: RefundInput, gatewayRefundId: String): Long {
+        r.fake.onRefund = { RefundResult.Pending().also { p -> p.gatewayRefundId = gatewayRefundId } }
+
+        val refund = r.service.request(paid.order.id, input, r.key(), null).refund
+
+        assertEquals(RefundStatus.PENDING, refund.status)
+
+        return refund.id
+    }
+
+    @Test
+    fun `a full refund settling on the charged-back order moves statusBeforeDispute to REFUNDED, gives the codes back and WON then restores REFUNDED (R-27)`(): Unit = runBlocking {
+        val coupon = w.fixtures.coupon(code = "SAVE10", redeemLimit = 5)
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_coupon` SET `usedCount` = `usedCount` + 1 WHERE `id` = ?", coupon.id)
+        w.redemptions.add(
+            com.panomc.plugins.market.db.model.MarketRedemption(
+                kind = com.panomc.plugins.market.db.model.RedemptionKind.COUPON, refId = coupon.id, orderId = paid.order.id, code = "SAVE10",
+                state = com.panomc.plugins.market.db.model.RedemptionState.APPLIED, buyerKey = paid.order.buyerKey
+            ),
+            pool
+        )
+
+        val refundId = pendingRefund(paid, RefundInput(), "gw-r27")
+
+        dispute(paid, DisputeState.OPENED, "dp_r27")
+
+        assertEquals(OrderStatus.CHARGEBACK, r.order(paid.order.id).status)
+        assertEquals(OrderStatus.COMPLETED, r.order(paid.order.id).statusBeforeDispute)
+        assertEquals(0, sold(paid.products[0].id), "O11 took the unit out of the sold count")
+
+        val revokedByDispute = revokeRows(paid.order.id).map { it.id }
+
+        assertEquals(1, revokedByDispute.size)
+
+        // the gateway settles the refund the panel started before the dispute
+        r.inbound(paid, RefundState.SUCCEEDED, amount = 1000, gatewayRefundId = "gw-r27")
+
+        val settled = r.order(paid.order.id)
+
+        assertEquals(RefundStatus.SUCCEEDED, r.refund(refundId).status)
+        assertEquals(OrderStatus.CHARGEBACK, settled.status, "a refund never moves a charged-back order")
+        assertEquals(OrderStatus.REFUNDED, settled.statusBeforeDispute, "what O12 restores follows the money that went back")
+        assertEquals(1000, settled.refundedTotal)
+        assertEquals(1, w.orderItems.getByOrderIds(listOf(paid.order.id), pool).single().refundedQuantity, "the line counts as refunded")
+        assertEquals(com.panomc.plugins.market.db.model.RedemptionState.RELEASED, w.redemptions.getByOrderId(paid.order.id, pool).single().state, "a fully refunded order gives its code use back")
+        assertEquals(0, w.coupons.getById(coupon.id, pool)!!.usedCount)
+        assertEquals(revokedByDispute, revokeRows(paid.order.id).map { it.id }, "the chargeback had taken everything back: the refund plans no second REVOKE")
+        assertEquals(0, sold(paid.products[0].id), "the unit left the sold count once, at O11")
+
+        dispute(paid, DisputeState.WON, "dp_r27")
+
+        val won = r.order(paid.order.id)
+
+        assertEquals(OrderStatus.REFUNDED, won.status, "a won dispute on a refunded order is REFUNDED, not COMPLETED")
+        assertEquals(1000, won.refundedTotal)
+        assertEquals(0, sold(paid.products[0].id), "a refunded unit stays out of the sold count")
+        assertEquals(com.panomc.plugins.market.db.model.RedemptionState.RELEASED, w.redemptions.getByOrderId(paid.order.id, pool).single().state)
+    }
+
+    @Test
+    fun `a partial refund settling on the charged-back order moves statusBeforeDispute to PARTIALLY_REFUNDED and WON restores it (R-27)`(): Unit = runBlocking {
+        val coupon = w.fixtures.coupon(code = "SAVE10", redeemLimit = 5)
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_coupon` SET `usedCount` = `usedCount` + 1 WHERE `id` = ?", coupon.id)
+        w.redemptions.add(
+            com.panomc.plugins.market.db.model.MarketRedemption(
+                kind = com.panomc.plugins.market.db.model.RedemptionKind.COUPON, refId = coupon.id, orderId = paid.order.id, code = "SAVE10",
+                state = com.panomc.plugins.market.db.model.RedemptionState.APPLIED, buyerKey = paid.order.buyerKey
+            ),
+            pool
+        )
+
+        pendingRefund(paid, RefundInput(amount = 400), "gw-r27p")
+        dispute(paid, DisputeState.OPENED, "dp_r27p")
+
+        assertEquals(OrderStatus.COMPLETED, r.order(paid.order.id).statusBeforeDispute)
+
+        r.inbound(paid, RefundState.SUCCEEDED, amount = 400, gatewayRefundId = "gw-r27p")
+
+        val settled = r.order(paid.order.id)
+
+        assertEquals(OrderStatus.CHARGEBACK, settled.status)
+        assertEquals(OrderStatus.PARTIALLY_REFUNDED, settled.statusBeforeDispute)
+        assertEquals(400, settled.refundedTotal)
+        assertEquals(com.panomc.plugins.market.db.model.RedemptionState.APPLIED, w.redemptions.getByOrderId(paid.order.id, pool).single().state, "a partial refund keeps the code use")
+        assertEquals(0, sold(paid.products[0].id))
+
+        dispute(paid, DisputeState.WON, "dp_r27p")
+
+        assertEquals(OrderStatus.PARTIALLY_REFUNDED, r.order(paid.order.id).status)
+        assertEquals(1, sold(paid.products[0].id), "an amount-only partial refund counts no unit as refunded (the rule of the refund service)")
+    }
+
+    @Test
+    fun `a refund that settles on a charged-back order whose dispute is lost leaves it charged back, refunded and with its codes released (R-27)`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+
+        pendingRefund(paid, RefundInput(), "gw-r27l")
+        dispute(paid, DisputeState.OPENED, "dp_r27l")
+        r.inbound(paid, RefundState.SUCCEEDED, amount = 1000, gatewayRefundId = "gw-r27l")
+        dispute(paid, DisputeState.LOST, "dp_r27l")
+
+        val order = r.order(paid.order.id)
+
+        assertEquals(OrderStatus.CHARGEBACK, order.status)
+        assertEquals(OrderStatus.REFUNDED, order.statusBeforeDispute)
+        assertEquals(0, sold(paid.products[0].id))
     }
 
     // ===== V-07, RD-D9, RD-D10 ======================================================================================================
