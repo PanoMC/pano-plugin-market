@@ -158,5 +158,83 @@
     "decimal-separator": ".",
     "group-separator": ",",
     "money": "{symbol}{amount}"
+  },
+  "mail": {
+    "common": {
+      "order-number": "Order number",
+      "order-date": "Order date",
+      "payment-method": "Payment method",
+      "recipient": "Gift for",
+      "subtotal": "Subtotal",
+      "discount": "Discount",
+      "shipping": "Shipping",
+      "payment-fee": "Payment fee",
+      "vat": "VAT",
+      "vat-included": "VAT (included)",
+      "total": "Total",
+      "paid-with-credits": "Paid with credits",
+      "test-banner": "TEST ORDER - no real payment was made",
+      "footer": "You are receiving this e-mail because of an order at {storeName}.",
+      "view-order": "View order",
+      "visit-store": "Visit store",
+      "invoice-attached": "Your invoice is attached to this e-mail as a PDF.",
+      "gift-from": "From",
+      "pay-before": "Pay before",
+      "refund-amount": "Refund amount",
+      "refund-to-method": "Returned to your payment method",
+      "refund-to-credits": "Returned as credits",
+      "refund-reason": "Reason",
+      "hello": "Hi {username},"
+    },
+    "order-received": {
+      "subject": "We received your order {orderNumber}",
+      "preheader": "Your payment is being confirmed.",
+      "heading": "We received your order",
+      "body": "Thank you for your order {orderNumber} at {storeName}. We are confirming your payment and will e-mail you again as soon as it is complete.",
+      "body-2": "If your payment needs a manual check by our team, this can take a little longer.",
+      "button": "View order"
+    },
+    "bank-transfer-instructions": {
+      "subject": "Payment instructions for order {orderNumber}",
+      "preheader": "Transfer the amount to complete your order.",
+      "heading": "Complete your payment",
+      "body": "Thank you for your order {orderNumber} at {storeName}. Please transfer the total using the details below so we can complete your order.",
+      "body-2": "Your order is reserved until {expiresAt}. After that it is cancelled automatically.",
+      "button": "View order"
+    },
+    "order-confirmation": {
+      "subject": "Your order {orderNumber} is confirmed",
+      "preheader": "Thank you for your purchase at {storeName}.",
+      "heading": "Order confirmed",
+      "body": "Thank you for your purchase! Your order {orderNumber} at {storeName} is confirmed.",
+      "body-2": "Digital items are delivered to the Minecraft account automatically.",
+      "shipping-address": "We will ship your order to: {address}",
+      "button": "View order"
+    },
+    "gift-received": {
+      "subject": "{username} sent you a gift on {websiteName}",
+      "preheader": "A gift is waiting for you.",
+      "heading": "You received a gift!",
+      "body": "{username} sent you a gift at {storeName}. It is delivered to your Minecraft account automatically.",
+      "body-2": "If something is missing, join the server and check again in a few minutes.",
+      "button": "Visit store"
+    },
+    "order-delivered": {
+      "subject": "Your order {orderNumber} has been delivered",
+      "preheader": "Everything from your order has been delivered.",
+      "heading": "Order delivered",
+      "body": "All items of your order {orderNumber} at {storeName} have been delivered. Enjoy!",
+      "button": "View order"
+    },
+    "order-refunded": {
+      "subject": "Refund for order {orderNumber}",
+      "preheader": "A refund for your order was processed.",
+      "heading": "Refund processed",
+      "body": "We refunded {amount} for your order {orderNumber} at {storeName}.",
+      "body-2": "Depending on your bank, it can take a few days until the money shows up.",
+      "credit-note-attached": "The credit note is attached to this e-mail as a PDF.",
+      "button": "View order",
+      "button-claim": "Claim refund"
+    }
   }
 }

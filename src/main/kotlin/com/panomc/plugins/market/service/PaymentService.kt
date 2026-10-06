@@ -363,7 +363,9 @@ class PaymentService(
      */
     private val attemptLocks: AttemptLocks = AttemptLocks(),
     /** The subscription side of a payment (MK-121, 09 section 2): the plan a start carries, the gateway data of a success, the offer a method change makes. */
-    private val subscriptionHooks: PaymentSubscriptions = PaymentSubscriptions.NONE
+    private val subscriptionHooks: PaymentSubscriptions = PaymentSubscriptions.NONE,
+    /** The mails of an attempt's transitions (MK-142, 12 section 4.1): bank transfer instructions and "order received", queued in the transition's transaction. */
+    private val mails: PaymentMails = PaymentMails.NONE
 ) : PaymentStarter {
 
     private val paidGuards: List<PaidGuard> = listOf(RecipientLimitGuard(orders, products, entitlements, clock)) + extraPaidGuards
@@ -600,6 +602,11 @@ class PaymentService(
                     rewriteStart(conn, current, facts)
                 } else {
                     applyIn(conn, locked, attempt.id, PaymentAttemptEvent.Started, facts, resolved.policy, OrderActor.GATEWAY, after)
+                }
+
+                // 12 section 4.1: an attempt that starts with INSTRUCTIONS mails them to the payer, in this transaction (the stored payload is cleared when the attempt closes)
+                if (json.getString("kind") == "INSTRUCTIONS") {
+                    orders.getById(order.id, conn)?.let { fresh -> if (fresh.status == OrderStatus.PENDING) mails.instructions(conn, fresh, attempt, json) }
                 }
 
                 // order `expiresAt` after a new attempt: max(order.expiresAt, attempt.expiresAt)
@@ -1018,6 +1025,9 @@ class PaymentService(
         if (!updateAttempt(conn, attemptId, sets, whereStatus = attempt.status)) throw com.panomc.plugins.market.db.tx.OrderChangedException(orderId, "attempt $attemptId moved under the lock")
 
         timeline(conn, orderId, attempt, decision.to, event, actor, paid, decision.effects.any { it is PaymentEffect.NotifyOrder }, duplicate)
+
+        // 12 section 4.1 `ORDER_RECEIVED`: the attempt reached PROCESSING (the gateway has the money in flight) while the order still waits
+        if (decision.to == PaymentStatus.PROCESSING && attempt.status != PaymentStatus.PROCESSING && order.status == OrderStatus.PENDING) mails.processing(conn, order, attempt)
 
         // 09 section 4.4: what a success says about the subscription (gateway subscription, stored method) goes onto the pending row now, so the activation
         // of O2 / O4 (also an admin's accept long after) reads it from there; the subscription row is locked by every scope that can reach a Succeeded

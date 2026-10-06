@@ -54,6 +54,7 @@ import com.panomc.plugins.market.db.model.DeliveryStatus
 import com.panomc.plugins.market.db.model.DeliveryTransport
 import com.panomc.plugins.market.db.model.EntitlementStatus
 import com.panomc.plugins.market.db.model.FulfillmentBy
+import com.panomc.plugins.market.db.model.FulfillmentStatus
 import com.panomc.plugins.market.db.model.MarketDelivery
 import com.panomc.plugins.market.db.model.MarketEntitlement
 import com.panomc.plugins.market.db.model.MarketOrder
@@ -123,7 +124,9 @@ class DeliveryService(
     /** The outbox of store webhooks: with it the inline `WEBHOOK` executor exists (08 section 7.3, MK-106); without it `WEBHOOK` rows are never claimed. */
     private val webhookDeliveries: MarketWebhookDeliveryDao? = null,
     /** The localised texts of `format = DISCORD` action bodies (08 section 16.2); without it the stand-in body of the planner is used. */
-    private val discordLabels: DiscordLabelSource? = null
+    private val discordLabels: DiscordLabelSource? = null,
+    /** `ORDER_DELIVERED` (MK-142, 12 section 4.1): told when the fulfillment of an order becomes `FULFILLED`, inside the transaction that did it. */
+    private val fulfilledMails: FulfillmentMails = FulfillmentMails.NONE
 ) {
     private fun table(name: String) = "`${deliveries.prefix()}$name`"
 
@@ -494,6 +497,8 @@ class DeliveryService(
 
         conn.preparedQuery("UPDATE ${table("market_order")} SET `fulfillmentStatus` = ?, `updatedAt` = GREATEST(?, `updatedAt` + 1) WHERE `id` = ?")
             .execute(Tuple.of(value.name, clock.now(), orderId)).coAwait()
+
+        if (value == FulfillmentStatus.FULFILLED) orders.getById(orderId, conn)?.let { fulfilledMails.fulfilled(conn, it) }
     }
 
     private suspend fun recordFailed(conn: SqlClient, orderId: Long, deliveryId: Long, code: String, now: Long) {

@@ -158,5 +158,83 @@
     "decimal-separator": ",",
     "group-separator": ".",
     "money": "{amount} {symbol}"
+  },
+  "mail": {
+    "common": {
+      "order-number": "Sipariş numarası",
+      "order-date": "Sipariş tarihi",
+      "payment-method": "Ödeme yöntemi",
+      "recipient": "Hediye alıcısı",
+      "subtotal": "Ara toplam",
+      "discount": "İndirim",
+      "shipping": "Kargo",
+      "payment-fee": "Ödeme komisyonu",
+      "vat": "KDV",
+      "vat-included": "KDV (dahil)",
+      "total": "Toplam",
+      "paid-with-credits": "Kredi ile ödenen",
+      "test-banner": "TEST SİPARİŞİ - gerçek bir ödeme alınmadı",
+      "footer": "Bu e-postayı {storeName} mağazasındaki bir sipariş nedeniyle alıyorsunuz.",
+      "view-order": "Siparişi görüntüle",
+      "visit-store": "Mağazayı ziyaret et",
+      "invoice-attached": "Faturanız bu e-postaya PDF olarak eklenmiştir.",
+      "gift-from": "Gönderen",
+      "pay-before": "Son ödeme zamanı",
+      "refund-amount": "İade tutarı",
+      "refund-to-method": "Ödeme yönteminize iade edilen",
+      "refund-to-credits": "Kredi olarak iade edilen",
+      "refund-reason": "Neden",
+      "hello": "Merhaba {username},"
+    },
+    "order-received": {
+      "subject": "{orderNumber} numaralı siparişinizi aldık",
+      "preheader": "Ödemeniz doğrulanıyor.",
+      "heading": "Siparişinizi aldık",
+      "body": "{storeName} mağazasındaki {orderNumber} numaralı siparişiniz için teşekkürler. Ödemenizi doğruluyoruz; tamamlanır tamamlanmaz size yeniden e-posta göndereceğiz.",
+      "body-2": "Ödemeniz ekibimiz tarafından elle kontrol edilmeliyse bu biraz daha uzun sürebilir.",
+      "button": "Siparişi görüntüle"
+    },
+    "bank-transfer-instructions": {
+      "subject": "{orderNumber} numaralı sipariş için ödeme bilgileri",
+      "preheader": "Siparişi tamamlamak için tutarı havale edin.",
+      "heading": "Ödemenizi tamamlayın",
+      "body": "{storeName} mağazasındaki {orderNumber} numaralı siparişiniz için teşekkürler. Siparişinizi tamamlayabilmemiz için lütfen toplam tutarı aşağıdaki bilgilere havale edin.",
+      "body-2": "Siparişiniz {expiresAt} tarihine kadar ayrılmıştır. Bundan sonra otomatik olarak iptal edilir.",
+      "button": "Siparişi görüntüle"
+    },
+    "order-confirmation": {
+      "subject": "{orderNumber} numaralı siparişiniz onaylandı",
+      "preheader": "{storeName} mağazasından alışveriş yaptığınız için teşekkürler.",
+      "heading": "Sipariş onaylandı",
+      "body": "Satın alımınız için teşekkürler! {storeName} mağazasındaki {orderNumber} numaralı siparişiniz onaylandı.",
+      "body-2": "Dijital ürünler Minecraft hesabınıza otomatik olarak teslim edilir.",
+      "shipping-address": "Siparişinizi şu adrese göndereceğiz: {address}",
+      "button": "Siparişi görüntüle"
+    },
+    "gift-received": {
+      "subject": "{username} size {websiteName} üzerinden bir hediye gönderdi",
+      "preheader": "Sizi bir hediye bekliyor.",
+      "heading": "Bir hediye aldınız!",
+      "body": "{username}, {storeName} mağazasından size bir hediye gönderdi. Hediye Minecraft hesabınıza otomatik olarak teslim edilir.",
+      "body-2": "Bir şey eksikse sunucuya girin ve birkaç dakika sonra tekrar kontrol edin.",
+      "button": "Mağazayı ziyaret et"
+    },
+    "order-delivered": {
+      "subject": "{orderNumber} numaralı siparişiniz teslim edildi",
+      "preheader": "Siparişinizdeki her şey teslim edildi.",
+      "heading": "Sipariş teslim edildi",
+      "body": "{storeName} mağazasındaki {orderNumber} numaralı siparişinizin tüm ürünleri teslim edildi. İyi eğlenceler!",
+      "button": "Siparişi görüntüle"
+    },
+    "order-refunded": {
+      "subject": "{orderNumber} numaralı sipariş için iade",
+      "preheader": "Siparişiniz için iade yapıldı.",
+      "heading": "İade yapıldı",
+      "body": "{storeName} mağazasındaki {orderNumber} numaralı siparişiniz için {amount} iade ettik.",
+      "body-2": "Bankanıza bağlı olarak paranın hesabınıza yansıması birkaç gün sürebilir.",
+      "credit-note-attached": "Alacak dekontu bu e-postaya PDF olarak eklenmiştir.",
+      "button": "Siparişi görüntüle",
+      "button-claim": "İadeyi talep et"
+    }
   }
 }
