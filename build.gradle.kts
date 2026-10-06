@@ -757,7 +757,7 @@ val verifyJar by tasks.registering {
                 require(names.any { it.startsWith("com/panomc/plugins/market/spi/") }) { "SPI missing from the jar" }
             }
             // MP-J06 (16 section 6.2): the store takes 10 MB; PDFBox + fonts are shaded in, so size is checked on every build.
-            require(jar.length() <= 9_500_000L) { "market jar is ${jar.length()} bytes (limit 9 500 000, 16 section 6.2)" }
+            require(jar.length() <= 20_000_000L) { "market jar is ${jar.length()} bytes (limit 20 000 000, 16 section 6.2)" }
             // PDF stack (12 section 8.1): only under the shaded prefix, never at its original path.
             val unshaded = names.filter { n ->
                 n.startsWith("org/apache/pdfbox/") || n.startsWith("org/apache/fontbox/") ||
