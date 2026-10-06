@@ -36,14 +36,21 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 
-/** One line of an order built by [RefundWorld.place]: its gross total, units, the actions its snapshot carries and the stock it reserved. */
+/** One child of a bundle line: the actions its snapshot carries and its units per bundle (08 section 5.2). */
+internal class RefundChild(val actions: List<ProductAction>, val perBundle: Int = 1)
+
+/**
+ * One line of an order built by [RefundWorld.place]: its gross total, units, the actions its snapshot carries and the stock it reserved. With [children] the line
+ * is a `BUNDLE` and each child is a `BUNDLE_CHILD` line of its own (price 0, `quantity x perBundle` units), appended after all the lines of the order.
+ */
 internal class RefundLine(
     val total: Long,
     val quantity: Int = 1,
     val actions: List<ProductAction> = emptyList(),
     val reservedStock: Int = 0,
     val product: MarketProduct? = null,
-    val billing: String = "ONE_TIME"
+    val billing: String = "ONE_TIME",
+    val children: List<RefundChild> = emptyList()
 )
 
 /** A paid order of [RefundWorld.place]: its rows as inserted (re-read them for the current state) and the payment attempt that took the gateway part. */
@@ -124,7 +131,9 @@ internal class RefundWorld(val w: TestWiring, val vertx: Vertx, invoices: Invoic
         grant: Boolean = true,
         shipping: Long = 0,
         testMode: Boolean = false,
-        email: String? = null
+        email: String? = null,
+        currency: String = "EUR",
+        fxRate: java.math.BigDecimal = java.math.BigDecimal.ONE
     ): PaidOrder {
         val total = lines.sumOf { it.total } + shipping
         val gateway = total - creditValue
@@ -138,7 +147,7 @@ internal class RefundWorld(val w: TestWiring, val vertx: Vertx, invoices: Invoic
         val orderId = w.orders.add(
             MarketOrder(
                 userId = user?.id, playerUsername = name, recipientUsername = name, recipientUserId = user?.id, recipientKey = key, buyerKey = key, publicId = w.ids.publicId(),
-                status = OrderStatus.COMPLETED, currency = "EUR", baseCurrency = "EUR", subtotal = lines.sumOf { it.total }, shippingTotal = shipping, totalPrice = total,
+                status = OrderStatus.COMPLETED, currency = currency, baseCurrency = "EUR", fxRate = fxRate, subtotal = lines.sumOf { it.total }, shippingTotal = shipping, totalPrice = total,
                 gatewayAmount = gateway, creditValue = creditValue, creditAmount = credits, paidAmount = gateway, paidAt = now, createdAt = now, updatedAt = now,
                 paymentMethodId = provider, reservationState = ReservationState.COMMITTED, email = email, testMode = testMode
             ),
@@ -148,11 +157,32 @@ internal class RefundWorld(val w: TestWiring, val vertx: Vertx, invoices: Invoic
             w.orderItems.add(
                 MarketOrderItem(
                     orderId = orderId, productId = products[i].id, productName = "Line ${i + 1}", quantity = line.quantity, unitPrice = line.total / line.quantity,
-                    lineTotal = line.total, listUnitPrice = line.total / line.quantity, kind = OrderItemKind.PRODUCT, snapshot = snapshot(products[i], line),
-                    stockReserved = line.reservedStock, createdAt = now, updatedAt = now
+                    lineTotal = line.total, listUnitPrice = line.total / line.quantity, kind = if (line.children.isEmpty()) OrderItemKind.PRODUCT else OrderItemKind.BUNDLE,
+                    snapshot = snapshot(products[i], line), stockReserved = line.reservedStock, createdAt = now, updatedAt = now
                 ),
                 w.pool
             )
+        }
+
+        // the children of a bundle line, after every line (the tests address the lines by their index)
+        lines.forEachIndexed { i, line ->
+            for (child in line.children) {
+                val childProduct = w.fixtures.product(actions = JsonArray(child.actions.map { a -> a.toJson() }).encode())
+                val quantity = line.quantity * child.perBundle
+
+                w.orderItems.add(
+                    MarketOrderItem(
+                        orderId = orderId, productId = childProduct.id, productName = "Child of line ${i + 1}", quantity = quantity, unitPrice = 0, lineTotal = 0, listUnitPrice = 0,
+                        kind = OrderItemKind.BUNDLE_CHILD, parentItemId = itemIds[i],
+                        snapshot = JsonObject().put("slug", childProduct.slug).put("billingMode", "ONE_TIME").put("actions", JsonArray(child.actions.map { a -> a.toJson() })).encode(),
+                        createdAt = now, updatedAt = now
+                    ),
+                    w.pool
+                )
+
+                // I17: the units of a paid order are in the products' soldCount
+                if (!testMode) MarketTestDb.sql(w.pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_product` SET `soldCount` = `soldCount` + ? WHERE `id` = ?", quantity, childProduct.id)
+            }
         }
 
         // I17: the units of a paid order are in the products' soldCount
@@ -166,8 +196,8 @@ internal class RefundWorld(val w: TestWiring, val vertx: Vertx, invoices: Invoic
         val attemptId = w.payments.add(
             MarketPayment(
                 orderId = orderId, providerId = provider, methodLabel = "Fake", status = PaymentStatus.SUCCEEDED, reference = "REF%017d".format(unique), token = "%040x".format(unique),
-                amount = gateway, currency = "EUR", creditAmount = credits, creditValue = creditValue, orderTotal = total, gatewayTransactionId = "txn-$unique", paidAmount = gateway,
-                paidCurrency = "EUR", paidAt = now, createdAt = now, updatedAt = now
+                amount = gateway, currency = currency, creditAmount = credits, creditValue = creditValue, orderTotal = total, gatewayTransactionId = "txn-$unique", paidAmount = gateway,
+                paidCurrency = currency, paidAt = now, createdAt = now, updatedAt = now
             ),
             w.pool
         )!!

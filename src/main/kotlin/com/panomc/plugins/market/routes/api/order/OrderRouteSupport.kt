@@ -5,6 +5,7 @@ import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.auth.PermissionManager
 import com.panomc.platform.server.ServerManager
+import com.panomc.platform.config.ConfigManager
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.hosted.HostedEnvConfig
 import com.panomc.platform.util.RateLimiter
@@ -60,7 +61,9 @@ import com.panomc.plugins.market.service.DuplicateRefundPolicy
 import com.panomc.plugins.market.service.ForeignEffects
 import com.panomc.plugins.market.service.InvoiceEffects
 import com.panomc.plugins.market.service.ShippingEffects
+import com.panomc.plugins.market.service.MailEffects
 import com.panomc.plugins.market.service.MailOutboxService
+import com.panomc.plugins.market.service.OrderMails
 import com.panomc.plugins.market.service.SubscriptionClosedGuard
 import com.panomc.plugins.market.service.SubscriptionEffects
 import com.panomc.plugins.market.service.SubscriptionService
@@ -188,7 +191,23 @@ private fun buildDeliveryService(plugin: MarketPlugin): DeliveryService {
             PlatformPermissionWriter(databaseManager, { context.getBean(PermissionManager::class.java) }, { context.getBean(ServerManager::class.java) }), SystemClock
         ),
         // MK-106: the WEBHOOK executor writes its outbox row here; the DISCORD bodies of action webhooks use the store's default locale
-        webhookDeliveries = context.getBean(MarketWebhookDeliveryDao::class.java), discordLabels = discordLabelSource(plugin)
+        webhookDeliveries = context.getBean(MarketWebhookDeliveryDao::class.java), discordLabels = discordLabelSource(plugin),
+        // MK-142: ORDER_DELIVERED when the fulfillment becomes FULFILLED
+        fulfilledMails = orderMails(plugin)
+    )
+}
+
+/** The enqueue side of the order mails (MK-142): the payer's address from the order or the platform user, the order's locale, one outbox row per mail. */
+internal fun orderMails(plugin: MarketPlugin): OrderMails {
+    val context = plugin.beans
+    val databaseManager = { context.getBean(DatabaseManager::class.java) }
+    val outboxDao = context.getBean(MarketMailOutboxDao::class.java)
+
+    return OrderMails(
+        config = { currentConfig(plugin) }, clock = SystemClock,
+        outbox = MailOutboxService({ currentConfig(plugin) }, SystemClock, outboxDao, context.getBean(MarketOrderEventDao::class.java)),
+        mailOutbox = outboxDao, orderItems = context.getBean(MarketOrderItemDao::class.java), orderEvents = context.getBean(MarketOrderEventDao::class.java), users = PlatformUserDirectory(databaseManager),
+        defaultLocale = { runCatching { context.getBean(ConfigManager::class.java).config.locale }.getOrNull()?.takeIf { it.isNotBlank() } ?: MailOutboxService.DEFAULT_LOCALE }
     )
 }
 
@@ -289,7 +308,8 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
                 // renewal order must not reach GrantEntitlements (the subscription's own entitlement runs on); the rest still to PENDING_SLICES
                 SubscriptionEffects({ subscriptionService(plugin) }, DeliveryEffects(
                     entitlementService(plugin), deliveryService(plugin), orderDao,
-                    ShippingEffects({ shippingService(plugin) }, ForeignEffects.PENDING_SLICES)
+                    // MK-142: QueueMail (ORDER_CONFIRMATION, GIFT_RECEIVED) goes to the order mails; the rest still to PENDING_SLICES
+                    ShippingEffects({ shippingService(plugin) }, MailEffects(orderMails(plugin), orderDao, ForeignEffects.PENDING_SLICES))
                 ))
             )
         ),
@@ -299,7 +319,9 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
         limits = ProductPurchaseLimits(orderDao, context.getBean(MarketProductDao::class.java), context.getBean(MarketEntitlementDao::class.java), clock),
         refunds = context.getBean(MarketRefundDao::class.java),
         // the duplicates an accepted review finds are judged by the same two questions as a duplicate that arrives on a paid order
-        duplicates = DuplicateRefundPolicy { conn, providerId -> payments.duplicateRefundRule(conn, providerId) }
+        duplicates = DuplicateRefundPolicy { conn, providerId -> payments.duplicateRefundRule(conn, providerId) },
+        // MK-142: the "order received" mail of O3
+        receivedMails = orderMails(plugin)
     )
 }
 
@@ -333,7 +355,9 @@ private fun buildPaymentService(plugin: MarketPlugin): PaymentService {
         // WIRE-1 (MK-077 seam): the query paths and `continue` run under the attempt locks the inbound pipeline holds
         attemptLocks = attemptLocks(plugin),
         // MK-121: the plan of a start, the gateway data of a success (09 sections 4.2 and 4.4)
-        subscriptionHooks = subscriptionService(plugin)
+        subscriptionHooks = subscriptionService(plugin),
+        // MK-142: the bank transfer instructions and "order received" mails of an attempt's transitions
+        mails = orderMails(plugin)
     )
 }
 

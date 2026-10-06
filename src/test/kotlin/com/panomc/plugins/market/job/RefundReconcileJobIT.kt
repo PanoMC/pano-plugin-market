@@ -7,6 +7,8 @@ import com.panomc.plugins.market.db.model.RefundStatus
 import com.panomc.plugins.market.service.RefundInput
 import com.panomc.plugins.market.service.RefundLine
 import com.panomc.plugins.market.service.RefundWorld
+import com.panomc.plugins.market.spi.common.ProviderErrorCode
+import com.panomc.plugins.market.spi.common.ProviderException
 import com.panomc.plugins.market.spi.payment.RefundResult
 import com.panomc.plugins.market.support.FakePaymentProvider.Op
 import com.panomc.plugins.market.support.TestWiring
@@ -141,6 +143,111 @@ class RefundReconcileJobIT : MarketDaoITBase() {
         assertEquals(RefundStatus.PENDING, r.refund(pending.id).status)
         assertEquals(OrderStatus.COMPLETED, r.order(paid.order.id).status)
         assertEquals(4, r.queries.size)
+    }
+
+    // ===== a question that errors is no answer (21 section 3.3 "Unknown changes nothing", section 9.2) ==================================
+
+    @Test
+    fun `a status query that errors leaves a pending refund PENDING with its next query and its reservation`(): Unit = runBlocking {
+        val paid = r.place(w.fixtures.user("Down"), listOf(RefundLine(1000)))
+
+        r.fake.onRefund = { RefundResult.Pending().also { p -> p.gatewayRefundId = "gw-down" } }
+
+        val pending = r.service.request(paid.order.id, RefundInput(), r.key("down"), null).refund
+        val start = pending.createdAt
+
+        // the gateway is down when the job asks: a retryable provider error, then an unexpected one
+        r.onQueryRefund = { throw ProviderException(ProviderErrorCode.GATEWAY_UNREACHABLE, "the gateway is down", retryable = true) }
+        w.clock.advance(5 * 60_000)
+
+        assertEquals(1, r.job.run().polled)
+
+        var row = r.refund(pending.id)
+
+        assertEquals(RefundStatus.PENDING, row.status, "an error is not an answer")
+        assertNull(row.failureCode)
+        assertEquals(start + 30 * 60_000, row.nextQueryAt, "asked again on the schedule")
+        assertEquals(0, r.order(paid.order.id).refundedTotal)
+
+        // the money may be on its way: it keeps bounding the remainder, a second full refund is refused and never reaches the gateway
+        val body = r.expect("INVALID_REFUND_AMOUNT", 400) { r.service.request(paid.order.id, RefundInput(), r.key("second"), null) }
+
+        assertEquals(0.0, body.getDouble("max"), 0.0)
+        assertEquals(1, r.fake.calls(Op.REFUND).size)
+
+        r.onQueryRefund = { throw ProviderException(ProviderErrorCode.INTERNAL, "boom") }
+        w.clock.advance(25 * 60_000)
+
+        assertEquals(1, r.job.run().polled)
+        assertEquals(RefundStatus.PENDING, r.refund(pending.id).status)
+        assertEquals(w.clock.now() + 6 * 3_600_000, r.refund(pending.id).nextQueryAt)
+
+        // the gateway is back and says the money left: that answer is applied
+        r.onQueryRefund = { RefundResult.Succeeded() }
+        w.clock.advance(6 * 3_600_000)
+
+        assertEquals(1, r.job.run().polled)
+
+        row = r.refund(pending.id)
+
+        assertEquals(RefundStatus.SUCCEEDED, row.status)
+        assertEquals(1000, r.order(paid.order.id).refundedTotal)
+        assertEquals(OrderStatus.REFUNDED, r.order(paid.order.id).status)
+        assertEquals(1, r.fake.calls(Op.REFUND).size, "asking never sends")
+    }
+
+    @Test
+    fun `a status query that errors leaves a refund of unknown outcome REQUESTED and retryable`(): Unit = runBlocking {
+        val paid = r.place(w.fixtures.user("Crashed"), listOf(RefundLine(1000)))
+        val row = crashed(paid.order.id, paid.attempt.id, 1000, "crashed-key-000000000000001")
+
+        r.onQueryRefund = { throw ProviderException(ProviderErrorCode.GATEWAY_UNREACHABLE, "the gateway is down", retryable = true) }
+
+        assertEquals(1, r.job.run().polled)
+
+        val asked = r.refund(row.id)
+
+        assertEquals(RefundStatus.REQUESTED, asked.status, "the call may have executed: the row is not failed by a question that errors")
+        assertNull(asked.failureCode)
+        assertNotNull(asked.nextQueryAt)
+        assertEquals(0, r.order(paid.order.id).refundedTotal)
+
+        // still bounded while nobody knows
+        r.expect("INVALID_REFUND_AMOUNT", 400) { r.service.request(paid.order.id, RefundInput(), r.key("second"), null) }
+
+        // retry sends the same key, so a gateway that already executed it refunds once
+        val retried = r.service.retry(row.id)
+
+        assertEquals(RefundStatus.SUCCEEDED, retried.refund.status)
+        assertEquals("crashed-key-000000000000001", (r.fake.calls(Op.REFUND).single().request as com.panomc.plugins.market.spi.payment.RefundRequest).idempotencyKey)
+        assertEquals(1000, r.order(paid.order.id).refundedTotal)
+    }
+
+    @Test
+    fun `a provider that is gone when the job asks changes nothing`(): Unit = runBlocking {
+        val paid = r.place(w.fixtures.user("Gone"), listOf(RefundLine(1000)))
+
+        r.fake.onRefund = { RefundResult.Pending().also { p -> p.gatewayRefundId = "gw-gone" } }
+
+        val pending = r.service.request(paid.order.id, RefundInput(), r.key("gone"), null).refund
+
+        // the provider plugin is unloaded (or being updated) when the query is due
+        r.lookup.remove("fake")
+        w.clock.advance(6 * 60_000)
+
+        assertEquals(1, r.job.run().polled)
+        assertEquals(0, r.queries.size, "nothing could be asked")
+
+        val row = r.refund(pending.id)
+
+        assertEquals(RefundStatus.PENDING, row.status)
+        assertNull(row.failureCode)
+        assertNotNull(row.nextQueryAt)
+        assertEquals(0, r.order(paid.order.id).refundedTotal)
+        assertEquals(OrderStatus.COMPLETED, r.order(paid.order.id).status)
+
+        r.expect("INVALID_REFUND_AMOUNT", 400) { r.service.request(paid.order.id, RefundInput(), r.key("second"), null) }
+        assertEquals(1, r.refunds(paid.order.id).size)
     }
 
     @Test
