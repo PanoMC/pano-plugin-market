@@ -98,6 +98,17 @@ object MarketSchema {
 
         /** Idempotent `ALTER` statements with the table name filled in. */
         fun alterSql(prefix: String): List<String> = alters.map { it.replace("{t}", "`${physicalName(prefix)}`") }
+
+        /**
+         * One idempotent `CREATE [UNIQUE] INDEX IF NOT EXISTS` per declared non-primary key: an index dropped by hand (or lost) comes back at the next
+         * start, also when it belongs to the table's first `CREATE` and not to an `added { }` block (CP-2, E2E L-04b). A unique index that cannot be
+         * built (duplicate rows) fails here, is reported by [ensure] and leaves the store degraded through the verifier.
+         */
+        fun indexSql(prefix: String): List<String> = keys.filterNot { it.primary }.map {
+            val cols = it.columns.joinToString(", ") { c -> "`$c`" }
+
+            "CREATE ${if (it.unique) "UNIQUE " else ""}INDEX IF NOT EXISTS `${it.name}` ON `${physicalName(prefix)}` ($cols)"
+        }
     }
 
     private class TableBuilder(private val name: String, private val comment: String) {
@@ -1632,7 +1643,7 @@ object MarketSchema {
     // --- statements ---------------------------------------------------------------------------------------------
 
     /** Idempotent DDL of one table: the `CREATE` followed by its idempotent `ALTER`s. */
-    fun ddl(table: Table, prefix: String): List<String> = listOf(table.createSql(prefix)) + table.alterSql(prefix)
+    fun ddl(table: Table, prefix: String): List<String> = listOf(table.createSql(prefix)) + table.alterSql(prefix) + table.indexSql(prefix)
 
     /**
      * Runs the DDL of one table through [client], swallowing and logging an error (the `Dao.init` contract: it never

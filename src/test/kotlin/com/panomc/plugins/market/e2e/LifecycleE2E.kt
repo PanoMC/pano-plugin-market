@@ -6,6 +6,7 @@ import com.panomc.plugins.market.e2e.support.E2eDb
 import com.panomc.plugins.market.e2e.support.E2eEnv
 import com.panomc.plugins.market.e2e.support.E2eResponse
 import com.panomc.plugins.market.support.Await
+import com.panomc.plugins.market.support.AwaitTimeout
 import com.panomc.plugins.market.support.FakePayGateway
 import com.panomc.plugins.market.support.InvariantChecker
 import io.vertx.core.json.JsonArray
@@ -202,11 +203,15 @@ class LifecycleE2E {
         lc.login()
         assertHealthy()
 
-        val stored = JsonObject(lc.db.string("SELECT `settings` FROM `pano_market_payment_method` WHERE `methodId` = 'fake'") ?: throw AssertionError("the legacy `fake` row is missing"))
-        val secret = stored.getString("secret")
+        // the provider lives in another plugin: the second secrets pass of the market runs a few seconds after the start (MarketPlugin.encryptLegacySecrets)
+        fun storedSecret(): String? = lc.db.string("SELECT `settings` FROM `pano_market_payment_method` WHERE `methodId` = 'fake'")?.let { JsonObject(it).getString("secret") }
+
+        runCatching { Await.until(60_000, 500, "legacy secret encrypted") { storedSecret()?.startsWith("v1:") == true } }
+
+        val secret = storedSecret()
 
         assertNotNull(secret, "the secret was not lost")
-        assertTrue(secret.startsWith("v1:"), "the legacy plaintext secret is encrypted at rest after the upgrade (is plaintext: ${secret == LEGACY_FAKE_SECRET})")
+        assertTrue(secret!!.startsWith("v1:"), "the legacy plaintext secret is encrypted at rest after the upgrade (is plaintext: ${secret == LEGACY_FAKE_SECRET})")
         assertNotEquals(LEGACY_FAKE_SECRET, secret)
 
         val revealed = lc.admin.post("/api/panel/market/payment-methods/fake/reveal", JsonObject().put("password", lc.adminPassword())).ok().obj()
@@ -662,6 +667,14 @@ class LifecycleE2E {
         assertEquals(wanted, indexColumns(), "the index is back")
         assertHealthy()
         assertEquals(200, visitor.get("/api/market/store").status)
+
+        // the event the degraded store deferred waits for a replay (the gateway would redeliver it, or the admin replays it): it now completes the pending order once
+        val deferredId = lc.db.long("SELECT `id` FROM `pano_market_payment_event` WHERE `status` = 'DEFERRED' ORDER BY `id` DESC LIMIT 1") ?: throw AssertionError("no deferred event")
+
+        lc.admin.post("/api/panel/market/payment-events/$deferredId/replay", JsonObject()).ok()
+        lc.awaitOrder(pending, "COMPLETED")
+        assertEquals(0L, lc.db.count("market_payment_event", "`status` = 'DEFERRED'"), "no deferred event is left")
+
         val again = lc.publicIdOf(lc.checkout(lc.admin, product).ok())
 
         lc.pay(again)
@@ -995,10 +1008,19 @@ class LifecycleE2E {
         fun holdBalance(): Long = db.long("SELECT `balance` FROM `pano_market_credit_account` WHERE `systemKey` = 'HOLD'") ?: 0L
 
         fun assertInvariants() {
-            Await.until(30_000, 250, "queues drained") {
-                val queues = admin.get("/api/panel/market/health", log = false).obj().getJsonObject("queues")
+            var lastQueues: Any? = null
 
-                listOf("deliveriesPending", "webhooksPending", "mailsPending", "deferredEvents").all { (queues?.getInteger(it) ?: 0) == 0 }
+            try {
+                Await.until(30_000, 250, "queues drained") {
+                    val queues = admin.get("/api/panel/market/health", log = false).obj().getJsonObject("queues")
+
+                    lastQueues = queues
+
+                    // mailsPending is not drained here: the E2E instance has no mail relay, so the outbox rows of the orders stay PENDING by design (CP-2)
+                    listOf("deliveriesPending", "webhooksPending", "deferredEvents").all { (queues?.getInteger(it) ?: 0) == 0 }
+                }
+            } catch (e: AwaitTimeout) {
+                throw AssertionError("queues not drained, last health queues: $lastQueues", e)
             }
             runBlocking { InvariantChecker.assertAll(db.pool) }
             val run = InvariantChecker.lastRun
