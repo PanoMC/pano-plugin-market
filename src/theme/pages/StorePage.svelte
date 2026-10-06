@@ -387,6 +387,10 @@
   onMount(() => {
     if (data.state !== 'READY') return undefined;
 
+    // 14 §7.3: the cart initialises at once on a market page. The session hook only runs at the first bind and on a login, so a visitor who
+    // signs in on another page and then goes to the store would otherwise keep a stale badge and an unmerged browser cart (TH-13).
+    cart.autoInit();
+
     setSettings(settings);
     initCurrency();
 

@@ -68,6 +68,8 @@ const initialState = () => ({
   count: 0,
   error: null,
   codes: null,
+  // lineKeys of guest lines the theme itself lowered to the available stock after a quote; shown as a notice until the buyer changes the cart
+  reduced: [],
 });
 
 const userKeyOf = (u) => (u ? `u:${u.id ?? u.username ?? ''}` : '');
@@ -165,6 +167,7 @@ export function createCartStore(overrides = {}) {
       lines,
       quote,
       quoteStale: false,
+      reduced: [],
       codes: {
         couponCode: cartBody.couponCode ?? null,
         creatorCode: cartBody.creatorCode ?? null,
@@ -265,6 +268,7 @@ export function createCartStore(overrides = {}) {
       quoteStale: lines.length > 0,
       error: null,
       codes: null,
+      reduced: [],
     });
     serverExtras = {};
   }
@@ -343,7 +347,7 @@ export function createCartStore(overrides = {}) {
   function mutateGuest(lines) {
     quoteSeq++; // an answer to the previous lines is stale now
     writeGuest(lines);
-    commit({ lines, quoteStale: true, status: 'IDLE', error: null });
+    commit({ lines, quoteStale: true, status: 'IDLE', error: null, reduced: [] });
     if (watchers > 0) requestQuote();
   }
 
@@ -560,7 +564,7 @@ export function createCartStore(overrides = {}) {
 
     quoteSeq++;
     writeGuest([]);
-    commit({ lines: [], quote: null, quoteStale: false, status: 'IDLE', error: null });
+    commit({ lines: [], quote: null, quoteStale: false, status: 'IDLE', error: null, reduced: [] });
   }
 
   // ---- quotes --------------------------------------------------------------------------------------------
@@ -571,12 +575,18 @@ export function createCartStore(overrides = {}) {
 
     if (result.changed) writeGuest(result.lines);
 
+    // a lowered quantity is announced (the quote that carried the reason is already stale for the new quantity)
+    const lowered = result.changed
+      ? result.lines.filter((line, i) => line.quantity !== s.lines[i].quantity).map(lineKey)
+      : [];
+
     commit({
       lines: result.changed ? result.lines : s.lines,
       quote,
       quoteStale: result.stale,
       status: 'IDLE',
       error: null,
+      reduced: lowered.length ? [...new Set([...(s.reduced || []), ...lowered])] : s.reduced || [],
     });
 
     if (result.stale && watchers > 0) requestQuote();
