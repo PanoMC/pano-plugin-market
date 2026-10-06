@@ -302,6 +302,7 @@ class OrderQueryService(
 
         val orderJson = orderJson(order, legalVersion, viewer.pii)
         val itemJson = items.map { itemJson(it, names) }
+        val productNames = items.associate { it.id to it.productName }
 
         val itemExpiry = HashMap<Long, Long?>()
 
@@ -315,7 +316,7 @@ class OrderQueryService(
             .put("payments", JsonArray(paymentRows.map { paymentJson(it) }))
             .put("refunds", JsonArray(refundRows.map { refundJson(it, username(it.initiatedBy)) }))
             .put("disputes", JsonArray(disputeRows.map { disputeJson(it) }))
-            .put("deliveries", JsonArray(deliveryRows.map { deliveryJson(it, names) }))
+            .put("deliveries", JsonArray(deliveryRows.map { deliveryJson(it, names, productNames) }))
             .put("shipments", JsonArray(shipmentRows.map { shipmentJson(it, viewer.pii) }))
             .put("events", JsonArray(eventRows.map { eventJson(it, username(it.actorUserId)) }))
             .put("invoices", JsonArray(invoiceRows.map { JsonObject().put("id", it.id).put("type", it.type.name).put("refundId", it.refundId).put("number", it.number).put("issuedAt", it.issuedAt) }))
@@ -402,12 +403,12 @@ class OrderQueryService(
         .put("id", d.id).put("status", d.status.name).put("origin", d.origin.name).put("amount", money(d.amount)).put("currency", d.currency).put("reason", d.reason)
         .put("openedAt", d.openedAt).put("resolvedAt", d.resolvedAt)
 
-    /** The row of `GET /deliveries` plus `orderItemId` (04 section 7); the payload never carries a webhook secret. */
-    private fun deliveryJson(d: MarketDelivery, names: Map<Long, String>): JsonObject {
+    /** The row of `GET /deliveries` (with its `productName`, null for a row without an item such as a chargeback action) plus `orderItemId` (04 section 7); the payload never carries a webhook secret. */
+    private fun deliveryJson(d: MarketDelivery, names: Map<Long, String>, productNames: Map<Long, String>): JsonObject {
         val item = d.orderItemId
 
         return JsonObject()
-            .put("id", d.id).put("orderId", d.orderId).put("orderItemId", item).put("playerUsername", d.playerUsername).put("phase", d.phase.name)
+            .put("id", d.id).put("orderId", d.orderId).put("orderItemId", item).put("productName", item?.let { productNames[it] }).put("playerUsername", d.playerUsername).put("phase", d.phase.name)
             .put("actionId", d.actionId).put("actionType", d.actionType.name).put("transport", d.transport?.name).put("idempotencyKey", d.idempotencyKey)
             .put("serverId", d.serverId).put("serverName", names[d.serverId]).put("status", d.status.name).put("attempts", d.attempts)
             .put("requiresOnline", d.requiresOnline).put("waitUntil", d.waitUntil).put("cancelRequested", d.cancelRequestedAt != null).put("lastErrorCode", d.lastErrorCode)
