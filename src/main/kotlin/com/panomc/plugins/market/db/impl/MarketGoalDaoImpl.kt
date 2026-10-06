@@ -96,6 +96,12 @@ class MarketGoalDaoImpl : MarketGoalDao() {
     override suspend fun resetPeriod(id: Long, periodStart: Long, now: Long, sqlClient: SqlClient): Boolean =
         change("`progress` = 0, `periodStart` = ?, `completedAt` = NULL, `updatedAt` = ?", "`id` = ?", Tuple.of(periodStart, now, id), sqlClient) > 0
 
+    override suspend fun rollPeriod(id: Long, periodStart: Long, now: Long, sqlClient: SqlClient): Boolean =
+        change(
+            "`progress` = 0, `periodStart` = ?, `completedAt` = NULL, `updatedAt` = ?", "`id` = ? AND (`periodStart` IS NULL OR `periodStart` < ?)",
+            Tuple.of(periodStart, now, id, periodStart), sqlClient
+        ) > 0
+
     override suspend fun markCompleted(id: Long, now: Long, sqlClient: SqlClient): Boolean =
         change("`completedAt` = ?, `updatedAt` = ?", "`id` = ? AND `completedAt` IS NULL", Tuple.of(now, now, id), sqlClient) > 0
 

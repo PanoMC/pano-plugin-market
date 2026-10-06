@@ -491,9 +491,15 @@ class OrderQueryIT : MarketDaoITBase() {
         assertEquals("https://hook.example", grant.getJsonObject("payload").getJsonObject("webhook").getString("url"))
         assertFalse(d.encode().contains("s3cret-value"), "a webhook secret never leaves")
         assertEquals(true, grant.getJsonObject("result").getBoolean("ok"))
-        for (key in listOf("id", "orderId", "playerUsername", "actionId", "actionType", "transport", "idempotencyKey", "serverId", "status", "attempts", "requiresOnline", "waitUntil", "cancelRequested", "lastErrorCode", "lastError", "runAfter", "sentAt", "confirmedAt", "payload", "result")) {
-            assertTrue(grant.containsKey(key), key)
-        }
+        assertEquals("VIP", grant.getString("productName"), "the Product column of the order page: the row of GET /deliveries carries it")
+        assertEquals(
+            setOf(
+                "id", "orderId", "orderItemId", "productName", "playerUsername", "phase", "actionId", "actionType", "transport", "idempotencyKey", "serverId", "serverName", "status", "attempts",
+                "requiresOnline", "waitUntil", "cancelRequested", "lastErrorCode", "lastError", "runAfter", "sentAt", "confirmedAt", "payload", "result"
+            ),
+            grant.fieldNames(),
+            "the pinned row of GET /deliveries plus orderItemId"
+        )
         assertEquals(1, d.getInteger("revokePending"), "the REVOKE row that nobody confirmed yet")
         assertEquals(1, d.getInteger("revokeFailed"), "the EXPIRE row that failed")
 
@@ -632,8 +638,10 @@ class OrderQueryIT : MarketDaoITBase() {
             pool
         )
 
-        val allowed = service.detail(paid.id, both, pool)!!.getJsonObject("allowed")
+        val paidDetail = service.detail(paid.id, both, pool)!!
+        val allowed = paidDetail.getJsonObject("allowed")
 
+        assertEquals(listOf("Box", "Box", null), paidDetail.getJsonArray("deliveries").map { (it as JsonObject).getString("productName") }, "null for the chargeback action without an item")
         assertEquals(
             setOf("refund", "dispute", "rerunDelivery", "revoke", "createShipment", "editShippingAddress", "resendMail", "anonymize", "runChargebackActions"), allowed.flags()
         )

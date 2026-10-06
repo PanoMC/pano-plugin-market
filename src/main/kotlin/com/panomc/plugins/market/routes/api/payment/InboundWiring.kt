@@ -177,17 +177,45 @@ private fun inboundAttempts(plugin: MarketPlugin): PaymentInboundAttempts {
     ) { databaseManager().getSqlClient() }
 }
 
+/** The provider registry view of the inbound pipeline: stateless, every `resolve` reads the settings and the provider state afresh. */
+private fun registryProviders(plugin: MarketPlugin): RegistryInboundProviders {
+    val context = plugin.beans
+    val databaseManager = { context.getBean(DatabaseManager::class.java) }
+    val wiring = paymentWiring(plugin)
+    val db = MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock)
+    val stateDao = context.getBean(MarketProviderStateDao::class.java)
+
+    return RegistryInboundProviders(
+        providerLookup(plugin), context.getBean(MarketPaymentMethodDao::class.java), wiring.cipher, attemptContexts(plugin), { currentConfig(plugin) },
+        { databaseManager().getSqlClient() }
+    ) { providerId -> ProviderStateStoreImpl(ProviderStateKind.PAYMENT, providerId, stateDao, db, wiring.cipher, SystemClock).values() }
+}
+
+/**
+ * The redactor of one provider for the panel read path (11 section 8.4): built from its decrypted secret settings and its `market_provider_state` values,
+ * exactly as the dispatcher builds it. A provider that is not registered (so its secret keys are unknown) gets the plain [Redactor].
+ */
+internal fun providerRedactorFor(plugin: MarketPlugin): suspend (providerId: String) -> Redactor {
+    val providers = registryProviders(plugin)
+
+    return { providerId ->
+        try {
+            (providers.resolve(providerId, true) as? ProviderAccess.Ready)?.redactor ?: Redactor()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Redactor()
+        }
+    }
+}
+
 private fun buildDispatcher(plugin: MarketPlugin): InboundDispatcher {
     val context = plugin.beans
     val databaseManager = { context.getBean(DatabaseManager::class.java) }
     val wiring = paymentWiring(plugin)
     val attempts = inboundAttempts(plugin)
     val db = MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock)
-    val stateDao = context.getBean(MarketProviderStateDao::class.java)
-    val providers = RegistryInboundProviders(
-        providerLookup(plugin), context.getBean(MarketPaymentMethodDao::class.java), wiring.cipher, attemptContexts(plugin), { currentConfig(plugin) },
-        { databaseManager().getSqlClient() }
-    ) { providerId -> ProviderStateStoreImpl(ProviderStateKind.PAYMENT, providerId, stateDao, db, wiring.cipher, SystemClock).values() }
+    val providers = registryProviders(plugin)
 
     return InboundDispatcher(
         inboundEventStore(plugin), attempts, providers,

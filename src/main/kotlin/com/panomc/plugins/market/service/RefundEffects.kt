@@ -39,6 +39,12 @@ interface RefundEffects {
     suspend fun subscription(conn: SqlConnection, order: MarketOrder, refund: MarketRefund)
 
     /**
+     * Goal progress decrement (21 section 3.4 step 10, MK-171): [before] is the order as it was when the refund began, [after] as the refund left it,
+     * [quantities] the refunded quantity per order item. Best effort (`GoalProgress` never throws).
+     */
+    suspend fun goalProgress(conn: SqlConnection, before: MarketOrder, after: MarketOrder, refund: MarketRefund, quantities: Map<Long, Int>) = Unit
+
+    /**
      * Whether [order] belongs to an older period of a subscription than the one being paid for (`SubscriptionService.isOlderPeriod`, 09 section 10.4, 21 section 3.2
      * step 4): a refund of it never takes the goods back (`revoke` is forced to `false`, the subscription keeps its entitlement) and the preview warns
      * `OLDER_SUBSCRIPTION_PERIOD`.
@@ -79,7 +85,8 @@ class StandardRefundEffects(
     private val webhooks: WebhookService? = null,
     private val defaultLocale: () -> String = { "en-US" },
     private val subscriptionEnding: suspend (SqlConnection, MarketOrder, MarketRefund) -> Unit = { _, _, _ -> },
-    private val olderPeriod: suspend (io.vertx.sqlclient.SqlClient, MarketOrder) -> Boolean = { _, _ -> false }
+    private val olderPeriod: suspend (io.vertx.sqlclient.SqlClient, MarketOrder) -> Boolean = { _, _ -> false },
+    private val goals: GoalProgress? = null
 ) : RefundEffects {
     private fun table(name: String) = "`${tablePrefix()}$name`"
 
@@ -123,6 +130,10 @@ class StandardRefundEffects(
     }
 
     override suspend fun subscription(conn: SqlConnection, order: MarketOrder, refund: MarketRefund) = subscriptionEnding(conn, order, refund)
+
+    override suspend fun goalProgress(conn: SqlConnection, before: MarketOrder, after: MarketOrder, refund: MarketRefund, quantities: Map<Long, Int>) {
+        goals?.onRefundSucceeded(conn, before, after, refund, quantities)
+    }
 
     override suspend fun olderSubscriptionPeriod(conn: io.vertx.sqlclient.SqlClient, order: MarketOrder): Boolean = olderPeriod(conn, order)
 }
