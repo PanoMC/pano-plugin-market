@@ -538,6 +538,9 @@ class McGameService(
      * `purchasable` is the verdict of the line rules for that player (limits, cooldown, prerequisites, stock), evaluated by one quote over the page.
      */
     private suspend fun catalog(request: MarketQueryEventRequest, server: Server): MarketQueryEventResponse {
+        // the store switch (04 section 1): a closed store lists nothing the menu could offer for purchase
+        if (!config().storeEnabled) return MarketQueryEventResponse(accepted = false, reason = REASON_STORE_DISABLED)
+
         val client = read()
         val user = request.player?.username?.takeIf { it.isNotBlank() }?.let { userOf(it, client) }
         val categoryId = request.args?.categoryId
@@ -651,9 +654,15 @@ class McGameService(
         }
 
         val c = read()
-        val user = users.byUsername(username, c) ?: return purchaseFailed("LOGIN_REQUIRED")
+        val user = users.byUsername(username, c)
         val key = "mc:${server.id}:${request.operationId}"
-        val replay = orders.getByBuyerAndIdempotencyKey("u:${user.id}", key, c) != null
+        val replay = user != null && orders.getByBuyerAndIdempotencyKey("u:${user.id}", key, c) != null
+
+        // 06 section 4 step 1: the store switch comes before everything else a purchase is judged on, as on the web; a replay of an order that was placed while the
+        // store was on still answers its first result (the checkout's own replay), only a new order is refused
+        if (!replay && !config().storeEnabled) return purchaseFailed(REASON_STORE_DISABLED)
+
+        if (user == null) return purchaseFailed("LOGIN_REQUIRED")
 
         // the pre-checks of what the chest GUI never sells; a replay skips them (the first result stands even when the product changed since)
         val product = products.getById(request.productId, c)
@@ -685,6 +694,15 @@ class McGameService(
         }
 
         val order = orders.getByPublicId(result.order.getString("publicId"), c) ?: throw IllegalStateException("order ${result.order.getString("publicId")} was just placed")
+
+        // `ok` is told only for an order that is paid. A replay returns normally for an order that is still being completed (the first request is slow or died
+        // with the hold still on) and for one that ended without payment: the first must stay "outcome unknown" (no answer, the component keeps the operationId and
+        // asks again), the second is a definite refusal, never "bought".
+        when (order.status) {
+            OrderStatus.PENDING, OrderStatus.REVIEW -> throw IllegalStateException("order ${order.id} is ${order.status}, not paid yet")
+            OrderStatus.FAILED, OrderStatus.CANCELLED, OrderStatus.EXPIRED -> return purchaseFailed(REASON_ORDER_NOT_PAYABLE)
+            OrderStatus.COMPLETED, OrderStatus.PARTIALLY_REFUNDED, OrderStatus.REFUNDED, OrderStatus.CHARGEBACK -> Unit
+        }
 
         if (!replay && order.status == OrderStatus.COMPLETED) {
             try {
@@ -869,11 +887,26 @@ class McGameService(
 
         if (op !in ECONOMY_OPS || !ECONOMY_OPERATION_ID.matches(request.operationId)) return economyFailed(REASON_BAD_REQUEST)
 
-        // a bridge that is switched off for this server is an explicit refusal (not one of the transient reasons the component retries)
-        if ((effectiveSettings(server.id)[McSettingKeys.VAULT_MODE] as String) == "OFF") return MarketEconomyEventResponse(accepted = false, reason = REASON_VAULT_DISABLED)
-        if (!config().creditsEnabled) return economyFailed(REASON_CREDITS_DISABLED)
-
         val c = read()
+        val vaultOff = (effectiveSettings(server.id)[McSettingKeys.VAULT_MODE] as String) == "OFF"
+        var compensation = false
+
+        if ((vaultOff || !config().creditsEnabled) && op != ECONOMY_BALANCE) {
+            // What the ledger already holds still gets its answer while a switch is off: the component settles an unknown outcome by re-sending the id and reads a
+            // refusal as "not applied", which would refund (or leave without an undo) a movement the ledger did apply (value duplicated, or the two sides differing).
+            when (val settled = settledWhileOff(request, op, server, c)) {
+                is Settled.Answer -> return settled.response
+                Settled.Compensation -> compensation = true
+                null -> Unit
+            }
+        }
+
+        if (!compensation) {
+            // a bridge that is switched off for this server is an explicit refusal (not one of the transient reasons the component retries)
+            if (vaultOff) return MarketEconomyEventResponse(accepted = false, reason = REASON_VAULT_DISABLED)
+            if (!config().creditsEnabled) return economyFailed(REASON_CREDITS_DISABLED)
+        }
+
         val user = userOf(request.player.username, c) ?: return economyFailed("NO_ACCOUNT")
 
         if (op == ECONOMY_BALANCE) return MarketEconomyEventResponse(accepted = true, ok = true, balance = MoneyUtil.toDecimal(credits.balance(user.id, c)))
@@ -913,6 +946,48 @@ class McGameService(
     }
 
     private fun economyFailed(code: String) = MarketEconomyEventResponse(accepted = true, ok = false, code = code)
+
+    /** What [settledWhileOff] found: the answer to a replay, or a compensation that may pass the switches. */
+    private sealed class Settled {
+        class Answer(val response: MarketEconomyEventResponse) : Settled()
+
+        object Compensation : Settled()
+    }
+
+    /**
+     * Only called while the bridge or the credits are switched off, for a `DEPOSIT` / `WITHDRAW`. `null` = a new operation: the switch refuses it.
+     * - the ledger holds a transaction under the key: the same type, user and amount is a replay and answers `ok` with the current balance; anything else under
+     *   that key is `IDEMPOTENCY_CONFLICT` (07 section 3.1), never a refusal that reads as "not applied";
+     * - an `<id>:undo` that is the exact opposite (type, user, amount) of the applied `mc:<serverId>:<id>` passes the switches: a compensation only reverses what the
+     *   ledger already holds, and refusing it would leave the ledger and the server economy apart for good (19 section 10).
+     */
+    private suspend fun settledWhileOff(request: MarketEconomyEventRequest, op: String, server: Server, c: SqlClient): Settled? {
+        val user = userOf(request.player.username, c) ?: return null
+        val minor = try {
+            parseCreditAmount(request.amount)
+        } catch (e: InvalidCreditAmount) {
+            return null
+        }
+        val type = if (op == ECONOMY_DEPOSIT) CreditTxType.EXTERNAL_IN else CreditTxType.EXTERNAL_OUT
+        val key = "mc:${server.id}:${request.operationId}"
+
+        creditTxs.getByIdempotencyKey(key, c)?.let { existing ->
+            return Settled.Answer(
+                if (existing.type == type && existing.userId == user.id && existing.amount == minor) {
+                    MarketEconomyEventResponse(accepted = true, ok = true, balance = MoneyUtil.toDecimal(credits.balance(user.id, c)))
+                } else {
+                    economyFailed("IDEMPOTENCY_CONFLICT")
+                }
+            )
+        }
+
+        if (!request.operationId.endsWith(UNDO_SUFFIX)) return null
+
+        val original = creditTxs.getByIdempotencyKey("mc:${server.id}:${request.operationId.removeSuffix(UNDO_SUFFIX)}", c) ?: return null
+        val opposite = if (type == CreditTxType.EXTERNAL_IN) CreditTxType.EXTERNAL_OUT else CreditTxType.EXTERNAL_IN
+
+        return if (original.type == opposite && original.userId == user.id && original.amount == minor) Settled.Compensation else null
+    }
 
     // ===== shared =========================================================================================================
 
@@ -980,6 +1055,12 @@ class McGameService(
         const val REASON_UNSUPPORTED_TYPE = "UNSUPPORTED_TYPE"
         const val REASON_CREDITS_DISABLED = "CREDITS_DISABLED"
 
+        /** `storeEnabled = false` (04 section 1): a purchase answers it as a code, the catalogue as a refusal reason. */
+        const val REASON_STORE_DISABLED = "STORE_DISABLED"
+
+        /** A replay of a purchase whose order ended without being paid (`FAILED`, `CANCELLED`, `EXPIRED`). */
+        const val REASON_ORDER_NOT_PAYABLE = "ORDER_NOT_PAYABLE"
+
         /** `MARKET_ECONOMY` while the effective `mcVaultMode` is `OFF`: not one of the four reasons a component treats as transient. */
         const val REASON_VAULT_DISABLED = "VAULT_DISABLED"
 
@@ -1007,6 +1088,9 @@ class McGameService(
         const val ECONOMY_BALANCE = "BALANCE"
 
         val ECONOMY_OPS: Set<String> = setOf(ECONOMY_DEPOSIT, ECONOMY_WITHDRAW, ECONOMY_BALANCE)
+
+        /** The suffix of the compensation of an economy operation (`<id>:undo`, 19 section 10). */
+        const val UNDO_SUFFIX = ":undo"
 
         /** 20 queries a second per server (19 section 7.2); 30 admin operations a minute (19 section 7.4). */
         const val QUERY_PER_SECOND = 20

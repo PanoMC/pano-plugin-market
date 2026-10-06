@@ -99,7 +99,8 @@ class McGameServiceIT : MarketDaoITBase() {
         val vaultRate: Double = 1.0,
         val vaultDirection: VaultDirection = VaultDirection.BOTH,
         val creditName: String = "Gems",
-        val joinNotifications: Boolean = true
+        val joinNotifications: Boolean = true,
+        val storeEnabled: Boolean = true
     )
 
     @Volatile
@@ -168,7 +169,7 @@ class McGameServiceIT : MarketDaoITBase() {
 
         return MarketConfig(
             currency = com.panomc.plugins.market.util.CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = base.showVatInPrice, creditValue = 1.0, storeTimeZone = "UTC",
-            allowGuestCheckout = base.allowGuestCheckout, creditsEnabled = base.creditsEnabled, creditTopUpEnabled = base.creditTopUpEnabled, creditName = m.creditName, storeName = "Shop",
+            storeEnabled = m.storeEnabled, allowGuestCheckout = base.allowGuestCheckout, creditsEnabled = base.creditsEnabled, creditTopUpEnabled = base.creditTopUpEnabled, creditName = m.creditName, storeName = "Shop",
             mcAdminCommands = m.adminCommands, mcBroadcast = m.broadcast, mcBroadcastTemplate = m.template, mcDisabledAdminCommands = m.disabledAdmin,
             mcVaultMode = m.vaultMode, mcVaultRate = m.vaultRate, mcVaultDirection = m.vaultDirection, mcJoinNotifications = m.joinNotifications
         )
@@ -551,6 +552,152 @@ class McGameServiceIT : MarketDaoITBase() {
 
         assertEquals(true, r.ok)
         assertEquals(OrderStatus.COMPLETED, orderRow(r.orderPublicId!!).status)
+    }
+
+    @Test
+    fun `a closed store refuses a new purchase and the catalogue, a replay of an order placed while it was open still answers its first result`(): Unit = runBlocking {
+        val alex = user("Alex", credit = 10_000)
+        val p = product(stock = 3)
+        val placed = op()
+        val first = purchaseOf("Alex", p.id, operationId = placed)
+
+        assertEquals(true, first.ok)
+        assertEquals(7_500, balance(alex))
+        assertEquals(listOf(first.orderPublicId), announced.toList())
+
+        mc = mc.copy(storeEnabled = false)
+
+        // a new purchase: refused before anything is placed (04 section 1: 503 STORE_DISABLED on the web), nothing moves
+        assertFailed("STORE_DISABLED", purchaseOf("Alex", p.id))
+        assertFailed("STORE_DISABLED", purchaseOf("Alex", p.id, quantity = 2))
+
+        assertEquals(1, orderCount())
+        assertEquals(7_500, balance(alex), "no credits were held or taken")
+        assertEquals(2, w.products.getById(p.id, pool)!!.stock, "no stock was reserved")
+        assertEquals(1, announced.size)
+        assertEquals(
+            listOf("order:${orderRow(first.orderPublicId!!).id}:hold", "order:${orderRow(first.orderPublicId!!).id}:capture"),
+            sql("SELECT `idempotencyKey` FROM `pano_market_credit_tx` WHERE `idempotencyKey` LIKE 'order:%' ORDER BY `id`").map { it.getString("idempotencyKey") },
+            "the ledger holds the hold and the capture of the first order only"
+        )
+
+        // the switch comes before the account check, as on the web: a stranger is told the store is closed, not to register
+        assertFailed("STORE_DISABLED", purchaseOf("Stranger", p.id))
+
+        // a replay of the order placed while the store was open: the first result, no second order
+        val replay = purchaseOf("Alex", p.id, operationId = placed)
+
+        assertEquals(true, replay.ok)
+        assertEquals(first.orderPublicId, replay.orderPublicId)
+        assertEquals(75.0, replay.balance)
+        assertEquals(1, orderCount())
+
+        // a malformed request is still BAD_REQUEST (schema validation is part of the same step)
+        assertFailed("BAD_REQUEST", purchaseOf("Alex", p.id, operationId = "x"))
+
+        // the catalogue lists nothing a closed store could sell
+        val catalog = queryOf("CATALOG", "Alex")
+
+        assertFalse(catalog.accepted)
+        assertEquals("STORE_DISABLED", catalog.reason)
+        assertNull(catalog.data)
+
+        // what is no store endpoint keeps answering: the player's own balance is read-only
+        assertEquals(75.0, queryOf("BALANCE", "Alex").data!!.balance)
+
+        // the store is opened again: the same request now buys, and the catalogue lists
+        mc = mc.copy(storeEnabled = true)
+
+        assertTrue(queryOf("CATALOG", "Alex").accepted)
+        assertEquals(true, purchaseOf("Alex", p.id).ok)
+        assertEquals(5_000, balance(alex))
+        assertEquals(2, orderCount())
+    }
+
+    /** The first request of a purchase committed its order and hold, then the completion never finished (a crash between O1 and O2 of 07 section 5): the order stays PENDING. */
+    private suspend fun leavePending(player: String, productId: Long, operationId: String): MarketOrder {
+        c.deferStart = true
+
+        try {
+            val thrown = runCatching { purchaseOf(player, productId, operationId = operationId) }.exceptionOrNull()
+
+            assertTrue(thrown is IllegalStateException, "the unfinished purchase is no answer at all: $thrown")
+        } finally {
+            c.deferStart = false
+        }
+
+        return w.orders.getByBuyerAndIdempotencyKey("u:${w.users.idOf(player)!!}", "mc:7:$operationId", pool)!!
+    }
+
+    @Test
+    fun `a purchase whose order is not paid yet is no answer, a replay stays unanswered while the order is PENDING and answers ok once it is completed`(): Unit = runBlocking {
+        val alex = user("Alex", credit = 10_000)
+        val p = product(stock = 3)
+        val id = op()
+        val pending = leavePending("Alex", p.id, id)
+
+        assertEquals(OrderStatus.PENDING, pending.status)
+        assertEquals(OrderSource.INGAME, pending.source)
+        assertEquals(7_500, balance(alex), "the credits are on hold")
+        assertEquals(emptyList<String>(), announced.toList(), "nothing is announced for an order that is not paid")
+
+        // the component timed out and asks again with the same operationId: the order is still PENDING with a CREATED attempt, so still no `ok`
+        val again = runCatching { purchaseOf("Alex", p.id, operationId = id) }.exceptionOrNull()
+
+        assertTrue(again is IllegalStateException, "a replay of an unfinished order must not be answered: $again")
+        assertEquals(1, orderCount())
+        assertEquals(7_500, balance(alex))
+
+        // the re-drive of the reconcile job completes the order: the same replay now answers the first result
+        val attempt = c.attempts(pending.id).single()
+
+        c.payments.startAttempt(pending.id, attempt.id, emptyList(), pool)
+
+        assertEquals(OrderStatus.COMPLETED, orderRow(pending.publicId!!).status)
+
+        val done = purchaseOf("Alex", p.id, operationId = id)
+
+        assertEquals(true, done.ok)
+        assertEquals(pending.publicId, done.orderPublicId)
+        assertEquals(25.0, done.creditTotal)
+        assertEquals(75.0, done.balance)
+        assertEquals(1, orderCount())
+        assertEquals(7_500, balance(alex), "completing the order took no second amount")
+    }
+
+    @Test
+    fun `a replay of an order that was cancelled or expired is a definite refusal, never ok`(): Unit = runBlocking {
+        val alex = user("Alex", credit = 10_000)
+        val p = product(stock = 5)
+        val expiredId = op()
+        val cancelledId = op()
+        val expired = leavePending("Alex", p.id, expiredId)
+        val cancelled = leavePending("Alex", p.id, cancelledId)
+
+        assertEquals(5_000, balance(alex), "two holds")
+
+        // the buyer cancels one, the expiry job takes the other
+        assertEquals(OrderStatus.CANCELLED, c.payments.cancel(cancelled, pool))
+
+        w.clock.advance(61 * 60_000L)
+
+        assertTrue(c.expiry.runOnce() >= 1)
+        assertEquals(OrderStatus.EXPIRED, orderRow(expired.publicId!!).status)
+        assertEquals(10_000, balance(alex), "both holds are released")
+
+        val a = assertFailed("ORDER_NOT_PAYABLE", purchaseOf("Alex", p.id, operationId = expiredId))
+        val b = assertFailed("ORDER_NOT_PAYABLE", purchaseOf("Alex", p.id, operationId = cancelledId))
+
+        assertNull(a.orderPublicId)
+        assertNull(b.orderPublicId)
+        assertNull(a.balance)
+        assertEquals(2, orderCount())
+        assertEquals(10_000, balance(alex))
+        assertEquals(emptyList<String>(), announced.toList())
+
+        // the player may buy again with a fresh operationId
+        assertEquals(true, purchaseOf("Alex", p.id).ok)
+        assertEquals(7_500, balance(alex))
     }
 
     // ===================================================================================== MARKET_ADMIN (MC-E5)
@@ -976,6 +1123,174 @@ class McGameServiceIT : MarketDaoITBase() {
         assertEquals(40.0, balance.balance)
         assertEquals(2, txKeys().size, "BALANCE writes nothing")
         assertEquals(0, system(CreditSystemKey.EXTERNAL))
+    }
+
+    @Test
+    fun `an operation the ledger applied is answered ok again after the bridge or the credits were switched off, a new operation stays refused`(): Unit = runBlocking {
+        mc = mc.copy(vaultMode = VaultMode.CONVERT)
+
+        val steve = user("Steve", credit = 5_000)
+        val deposit = op()
+        val withdraw = op()
+
+        assertEquals(true, economyOf("DEPOSIT", "Steve", operationId = deposit, amount = 5.0).ok)
+        assertEquals(true, economyOf("WITHDRAW", "Steve", operationId = withdraw, amount = 20.0).ok)
+        assertEquals(3_500, balance(steve))
+        assertEquals(2, txKeys().size)
+
+        // the admin switches the bridge off while the component still settles an unknown outcome with the same id: that must read "applied", never "refused"
+        mc = mc.copy(vaultMode = VaultMode.OFF)
+
+        val d = economyOf("DEPOSIT", "Steve", operationId = deposit, amount = 5.0)
+        val wd = economyOf("WITHDRAW", "Steve", operationId = withdraw, amount = 20.0)
+
+        assertTrue(d.accepted, "$d")
+        assertEquals(true, d.ok, "$d")
+        assertEquals(35.0, d.balance, "the balance now")
+        assertEquals(true, wd.ok, "$wd")
+        assertEquals(35.0, wd.balance)
+        assertEquals(3_500, balance(steve), "a replay moves nothing")
+        assertEquals(2, txKeys().size, "one transaction per operation")
+
+        // another request for the same id is a conflict, and a new operation is refused by the switch as before
+        assertFailed("IDEMPOTENCY_CONFLICT", economyOf("DEPOSIT", "Steve", operationId = deposit, amount = 6.0))
+        assertFailed("IDEMPOTENCY_CONFLICT", economyOf("WITHDRAW", "Steve", operationId = deposit, amount = 5.0))
+        assertFailed("IDEMPOTENCY_CONFLICT", economyOf("DEPOSIT", "Steve", operationId = withdraw, amount = 20.0))
+
+        for (op in listOf("DEPOSIT", "WITHDRAW", "BALANCE")) {
+            val fresh = economyOf(op, "Steve", amount = 1.0)
+
+            assertFalse(fresh.accepted, op)
+            assertEquals("VAULT_DISABLED", fresh.reason, op)
+        }
+
+        assertEquals("VAULT_DISABLED", economyOf("DEPOSIT", "Steve", operationId = deposit, amount = 5.0, server = server8).reason, "the id was applied on server 7, not on this one")
+        assertEquals(3_500, balance(steve))
+        assertEquals(2, txKeys().size)
+
+        // the per-server override switches it off just the same, and credits switched off is the same story
+        mc = mc.copy(vaultMode = VaultMode.CONVERT)
+        game.updateServerSettings(7, JsonObject().put("mcVaultMode", "OFF"))
+
+        assertEquals(true, economyOf("DEPOSIT", "Steve", operationId = deposit, amount = 5.0).ok)
+        assertEquals("VAULT_DISABLED", economyOf("DEPOSIT", "Steve", amount = 1.0).reason)
+
+        game.updateServerSettings(7, null)
+        h.config = h.config.copy(creditsEnabled = false)
+
+        assertEquals(true, economyOf("DEPOSIT", "Steve", operationId = deposit, amount = 5.0).ok)
+        assertEquals(true, economyOf("WITHDRAW", "Steve", operationId = withdraw, amount = 20.0).ok)
+        assertFailed("CREDITS_DISABLED", economyOf("DEPOSIT", "Steve", amount = 1.0))
+        assertFailed("CREDITS_DISABLED", economyOf("BALANCE", "Steve"))
+        assertFailed("IDEMPOTENCY_CONFLICT", economyOf("DEPOSIT", "Steve", operationId = deposit, amount = 6.0))
+        assertEquals(3_500, balance(steve))
+        assertEquals(2, txKeys().size)
+
+        // both switches back on: the ordinary replay and a new operation work again
+        h.config = h.config.copy(creditsEnabled = true)
+
+        assertEquals(true, economyOf("DEPOSIT", "Steve", operationId = deposit, amount = 5.0).ok)
+        assertEquals(true, economyOf("DEPOSIT", "Steve", amount = 1.0).ok)
+        assertEquals(3_600, balance(steve))
+    }
+
+    @Test
+    fun `the undo of an applied operation passes a switched-off bridge or credits, any other operation id does not`(): Unit = runBlocking {
+        mc = mc.copy(vaultMode = VaultMode.CONVERT)
+
+        val steve = user("Steve", credit = 4_000)
+        val alex = user("Alex", credit = 4_000)
+        val withdraw = op()
+        val deposit = op()
+
+        assertEquals(true, economyOf("WITHDRAW", "Steve", operationId = withdraw, amount = 10.0).ok)
+        assertEquals(true, economyOf("DEPOSIT", "Steve", operationId = deposit, amount = 6.0).ok)
+        assertEquals(3_600, balance(steve), "10 out, 6 in")
+
+        mc = mc.copy(vaultMode = VaultMode.OFF)
+
+        // an undo that is not the exact opposite of what the ledger holds under the original id is an ordinary new operation: refused
+        for ((label, r) in listOf(
+            "wrong amount" to economyOf("DEPOSIT", "Steve", operationId = "$withdraw:undo", amount = 9.0),
+            "same direction as the original" to economyOf("WITHDRAW", "Steve", operationId = "$withdraw:undo", amount = 10.0),
+            "another player" to economyOf("DEPOSIT", "Alex", operationId = "$withdraw:undo", amount = 10.0),
+            "no original under that id" to economyOf("DEPOSIT", "Steve", operationId = "${op()}:undo", amount = 10.0),
+            "a new id without the undo suffix" to economyOf("DEPOSIT", "Steve", operationId = op(), amount = 10.0)
+        )) {
+            assertFalse(r.accepted, "$label: $r")
+            assertEquals("VAULT_DISABLED", r.reason, label)
+        }
+
+        assertEquals(3_600, balance(steve))
+        assertEquals(4_000, balance(alex))
+        assertEquals(2, txKeys().size, "nothing was posted by the refused ones")
+
+        // the undo of the applied withdrawal: accepted although the bridge is off, one ledger transaction under its own key
+        val undo = economyOf("DEPOSIT", "Steve", operationId = "$withdraw:undo", amount = 10.0)
+
+        assertTrue(undo.accepted, "$undo")
+        assertEquals(true, undo.ok, "$undo")
+        assertEquals(46.0, undo.balance)
+        assertEquals(4_600, balance(steve))
+        assertEquals(CreditTxType.EXTERNAL_IN, w.creditTxs.getByIdempotencyKey("mc:7:$withdraw:undo", pool)!!.type)
+        assertEquals(listOf("mc:7:$withdraw", "mc:7:$deposit", "mc:7:$withdraw:undo"), txKeys())
+
+        // its own replay while the bridge is still off: the same answer, no second reversal
+        assertEquals(true, economyOf("DEPOSIT", "Steve", operationId = "$withdraw:undo", amount = 10.0).ok)
+        assertEquals(4_600, balance(steve))
+        assertEquals(3, txKeys().size)
+
+        // the undo of the applied deposit is a withdrawal
+        val reversed = economyOf("WITHDRAW", "Steve", operationId = "$deposit:undo", amount = 6.0)
+
+        assertEquals(true, reversed.ok, "$reversed")
+        assertEquals(40.0, reversed.balance)
+        assertEquals(4_000, balance(steve))
+        assertEquals(CreditTxType.EXTERNAL_OUT, w.creditTxs.getByIdempotencyKey("mc:7:$deposit:undo", pool)!!.type)
+
+        // credits switched off lets the undo through the same way, and still refuses a new operation
+        mc = mc.copy(vaultMode = VaultMode.CONVERT)
+
+        val third = op()
+
+        assertEquals(true, economyOf("WITHDRAW", "Steve", operationId = third, amount = 4.0).ok)
+        assertEquals(3_600, balance(steve))
+
+        h.config = h.config.copy(creditsEnabled = false)
+
+        assertFailed("CREDITS_DISABLED", economyOf("WITHDRAW", "Steve", operationId = op(), amount = 4.0))
+        assertFailed("CREDITS_DISABLED", economyOf("DEPOSIT", "Steve", operationId = "${op()}:undo", amount = 4.0))
+        assertEquals(3_600, balance(steve))
+
+        val creditsOff = economyOf("DEPOSIT", "Steve", operationId = "$third:undo", amount = 4.0)
+
+        assertEquals(true, creditsOff.ok, "$creditsOff")
+        assertEquals(40.0, creditsOff.balance)
+        assertEquals(true, economyOf("DEPOSIT", "Steve", operationId = "$third:undo", amount = 4.0).ok)
+        assertEquals(4_000, balance(steve))
+        assertEquals(6, txKeys().size)
+    }
+
+    @Test
+    fun `an undo that the balance cannot cover is still INSUFFICIENT_CREDITS while the bridge is off`(): Unit = runBlocking {
+        mc = mc.copy(vaultMode = VaultMode.CONVERT)
+
+        val steve = user("Steve", credit = 0)
+        val deposit = op()
+
+        assertEquals(true, economyOf("DEPOSIT", "Steve", operationId = deposit, amount = 8.0).ok)
+
+        // the player spent the credits meanwhile
+        assertEquals(true, economyOf("WITHDRAW", "Steve", amount = 8.0).ok)
+        assertEquals(0, balance(steve))
+
+        mc = mc.copy(vaultMode = VaultMode.OFF)
+
+        val undo = assertFailed("INSUFFICIENT_CREDITS", economyOf("WITHDRAW", "Steve", operationId = "$deposit:undo", amount = 8.0))
+
+        assertEquals(0.0, undo.balance)
+        assertEquals(0, balance(steve))
+        assertEquals(2, txKeys().size)
     }
 
     @Test
