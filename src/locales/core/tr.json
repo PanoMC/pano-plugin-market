@@ -108,7 +108,10 @@
     "UPDATED_MARKET_CURRENCY_RATES": "<b>{username}</b> ek para birimlerinin döviz kurlarını kaydetti ({currencies}).",
     "REFRESHED_MARKET_CURRENCY_RATES": "<b>{username}</b> ek para birimlerinin döviz kurlarını yeniledi ({currencies}).",
     "REGENERATED_MARKET_INVOICE": "<b>{username}</b>, <b>#{orderId}</b> numaralı siparişin belgelerini yeniden oluşturdu ({numbers}).",
-    "UPDATED_MARKET_INVOICE_SEQUENCE": "<b>{username}</b>, <b>{series}</b> fatura serisinin sıradaki numarasını <b>{nextNumber}</b> yaptı."
+    "UPDATED_MARKET_INVOICE_SEQUENCE": "<b>{username}</b>, <b>{series}</b> fatura serisinin sıradaki numarasını <b>{nextNumber}</b> yaptı.",
+    "RESENT_MARKET_ORDER_MAIL": "<b>{username}</b> #{orderId} numaralı market siparişinin \"{kind}\" e-postasını yeniden gönderdi.",
+    "RETRIED_MARKET_MAIL": "<b>{username}</b> #{mailId} numaralı market e-postasını ({kind}) yeniden denedi.",
+    "SENT_MARKET_TEST_MAIL": "<b>{username}</b> bir market test e-postası gönderdi."
   },
   "invoice": {
     "title": "Fatura",
@@ -190,7 +193,19 @@
       "refund-to-method": "Ödeme yönteminize iade edilen",
       "refund-to-credits": "Kredi olarak iade edilen",
       "refund-reason": "Neden",
-      "hello": "Merhaba {username},"
+      "hello": "Merhaba {username},",
+      "product": "Ürün",
+      "valid-until": "Geçerlilik sonu",
+      "renews-on": "Yenilenme tarihi",
+      "amount": "Tutar",
+      "carrier": "Kargo firması",
+      "tracking-number": "Takip numarası",
+      "estimated-delivery": "Tahmini teslimat",
+      "delivered-on": "Teslim tarihi",
+      "shipment-items": "Bu paketteki ürünler",
+      "manage-subscription": "Aboneliği yönet",
+      "payment-method-stored": "Ödeme yöntemi",
+      "ship-to": "Teslimat adresi"
     },
     "order-received": {
       "subject": "{orderNumber} numaralı siparişinizi aldık",
@@ -241,6 +256,80 @@
       "credit-note-attached": "Alacak dekontu bu e-postaya PDF olarak eklenmiştir.",
       "button": "Siparişi görüntüle",
       "button-claim": "İadeyi talep et"
+    },
+    "expiry-reminder": {
+      "subject": "{productName} {date} tarihinde sona eriyor",
+      "preheader": "Erişiminizi korumak için yenileyin.",
+      "heading": "Satın aldığınız ürünün süresi dolmak üzere",
+      "body": "{storeName} mağazasından aldığınız {productName} {date} tarihine kadar geçerli. Ardından erişiminizi kaybedersiniz.",
+      "body-2": "Kesinti yaşamamak için süresi dolmadan yenileyin.",
+      "button": "Yenile"
+    },
+    "subscription-reminder": {
+      "subject": "{productName} {date} tarihinde yenileniyor",
+      "preheader": "Aboneliğiniz yakında yenilenecek.",
+      "heading": "Aboneliğiniz yakında yenilenecek",
+      "body": "{storeName} mağazasındaki {productName} aboneliğiniz {date} tarihinde yenilenecek. O gün {amount} tahsil edeceğiz.",
+      "body-method": "Tahsilat şu yönteme yapılacak: {method}.",
+      "body-manual": "{storeName} mağazasındaki {productName} aboneliğiniz {date} tarihinde sona erecek. Sürdürmek için o tarihten önce {amount} ödeyin.",
+      "button": "Şimdi öde"
+    },
+    "subscription-payment-failed": {
+      "subject": "{productName} için ödeme başarısız",
+      "preheader": "Ödeme yönteminizden tahsilat yapılamadı.",
+      "heading": "Ödeme başarısız",
+      "body": "{storeName} mağazasındaki {productName} aboneliğiniz için {amount} tahsil edilemedi. Erişiminiz {graceEndsAt} tarihine kadar devam ediyor.",
+      "body-no-grace": "{storeName} mağazasındaki {productName} aboneliğiniz için {amount} tahsil edilemedi.",
+      "body-2": "Aboneliği sürdürmek için lütfen ödeme bilginizi güncelleyin.",
+      "button": "Ödemeyi güncelle"
+    },
+    "subscription-cancelled": {
+      "subject": "{productName} yenilenmeyecek",
+      "preheader": "Aboneliğiniz iptal edildi.",
+      "heading": "Abonelik iptal edildi",
+      "body": "{storeName} mağazasındaki {productName} aboneliğiniz yenilenmeyecek. Erişiminiz {accessUntil} tarihine kadar sürer.",
+      "body-no-date": "{storeName} mağazasındaki {productName} aboneliğiniz yenilenmeyecek. Erişiminiz mevcut dönemin sonuna kadar sürer."
+    },
+    "subscription-ended": {
+      "subject": "{productName} sona erdi",
+      "preheader": "Aboneliğiniz sona erdi.",
+      "heading": "Abonelik sona erdi",
+      "body": "{storeName} mağazasındaki {productName} aboneliğiniz sona erdi.",
+      "button": "Mağazayı ziyaret et",
+      "reason": {
+        "BUYER_CANCEL": "Aboneliği siz iptal ettiğiniz için sona erdi.",
+        "ADMIN_CANCEL": "Mağaza ekibi tarafından iptal edildi.",
+        "PAYMENT_FAILED": "Ödeme tahsil edilemediği için sona erdi.",
+        "GATEWAY_ENDED": "Ödeme sağlayıcısı tarafından sonlandırıldı.",
+        "COMPLETED": "Son faturalandırma dönemine ulaştı.",
+        "REFUND": "Sipariş iade edildiği için sona erdi.",
+        "CHARGEBACK": "Ödemeye itiraz edildiği için sona erdi.",
+        "PROVIDER_UNAVAILABLE": "Ödeme yöntemi artık kullanılamadığı için sona erdi.",
+        "OTHER": "Bunu beklemiyorsanız mağazayla iletişime geçin."
+      }
+    },
+    "shipment-shipped": {
+      "subject": "{orderNumber} numaralı siparişiniz yola çıktı",
+      "preheader": "Paketiniz kargo firmasına teslim edildi.",
+      "heading": "Siparişiniz yola çıktı",
+      "body": "Güzel haber! {storeName} mağazasındaki {orderNumber} numaralı siparişiniz kargoya verildi.",
+      "partial-note": "Bu paket siparişinizin bir bölümünü içeriyor. Kalanı başka bir gönderiyle gelecek.",
+      "button": "Siparişi görüntüle",
+      "button-track": "Gönderiyi takip et"
+    },
+    "shipment-delivered": {
+      "subject": "{orderNumber} numaralı siparişiniz teslim edildi",
+      "preheader": "Paketiniz ulaştı.",
+      "heading": "Paketiniz teslim edildi",
+      "body": "{storeName} mağazasındaki {orderNumber} numaralı siparişinizin paketi teslim edildi.",
+      "button": "Siparişi görüntüle"
+    },
+    "test": {
+      "subject": "{storeName} test e-postası",
+      "preheader": "Mağazanız e-posta gönderebiliyor.",
+      "heading": "Çalışıyor",
+      "body": "Bu, {websiteName} sitesindeki {storeName} mağazasından gönderilen bir test e-postasıdır. Bunu okuyabiliyorsanız web sitenizin e-posta ayarları çalışıyor demektir.",
+      "footer": "Bu e-postayı, {websiteName} yöneticilerinden biri test gönderdiği için alıyorsunuz."
     }
   }
 }

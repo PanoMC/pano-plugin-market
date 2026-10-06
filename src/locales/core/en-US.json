@@ -108,7 +108,10 @@
     "UPDATED_MARKET_CURRENCY_RATES": "<b>{username}</b> saved the exchange rates of the additional currencies ({currencies}).",
     "REFRESHED_MARKET_CURRENCY_RATES": "<b>{username}</b> refreshed the exchange rates of the additional currencies ({currencies}).",
     "REGENERATED_MARKET_INVOICE": "<b>{username}</b> regenerated the documents of order <b>#{orderId}</b> ({numbers}).",
-    "UPDATED_MARKET_INVOICE_SEQUENCE": "<b>{username}</b> set the next number of the invoice series <b>{series}</b> to <b>{nextNumber}</b>."
+    "UPDATED_MARKET_INVOICE_SEQUENCE": "<b>{username}</b> set the next number of the invoice series <b>{series}</b> to <b>{nextNumber}</b>.",
+    "RESENT_MARKET_ORDER_MAIL": "<b>{username}</b> resent a \"{kind}\" e-mail of market order #{orderId}.",
+    "RETRIED_MARKET_MAIL": "<b>{username}</b> retried market e-mail #{mailId} ({kind}).",
+    "SENT_MARKET_TEST_MAIL": "<b>{username}</b> sent a market test e-mail."
   },
   "invoice": {
     "title": "Invoice",
@@ -190,7 +193,19 @@
       "refund-to-method": "Returned to your payment method",
       "refund-to-credits": "Returned as credits",
       "refund-reason": "Reason",
-      "hello": "Hi {username},"
+      "hello": "Hi {username},",
+      "product": "Product",
+      "valid-until": "Valid until",
+      "renews-on": "Renews on",
+      "amount": "Amount",
+      "carrier": "Carrier",
+      "tracking-number": "Tracking number",
+      "estimated-delivery": "Estimated delivery",
+      "delivered-on": "Delivered on",
+      "shipment-items": "Items in this parcel",
+      "manage-subscription": "Manage subscription",
+      "payment-method-stored": "Payment method",
+      "ship-to": "Shipping to"
     },
     "order-received": {
       "subject": "We received your order {orderNumber}",
@@ -241,6 +256,80 @@
       "credit-note-attached": "The credit note is attached to this e-mail as a PDF.",
       "button": "View order",
       "button-claim": "Claim refund"
+    },
+    "expiry-reminder": {
+      "subject": "{productName} expires on {date}",
+      "preheader": "Renew to keep your access.",
+      "heading": "Your purchase is about to expire",
+      "body": "Your {productName} from {storeName} is valid until {date}. After that you lose access to it.",
+      "body-2": "Renew before it expires so nothing is interrupted.",
+      "button": "Renew"
+    },
+    "subscription-reminder": {
+      "subject": "{productName} renews on {date}",
+      "preheader": "Your subscription renews soon.",
+      "heading": "Your subscription renews soon",
+      "body": "Your subscription to {productName} at {storeName} renews on {date}. We will charge {amount} then.",
+      "body-method": "It will be charged to: {method}.",
+      "body-manual": "Your subscription to {productName} at {storeName} ends on {date}. Please pay {amount} before then to keep it.",
+      "button": "Pay now"
+    },
+    "subscription-payment-failed": {
+      "subject": "Payment failed for {productName}",
+      "preheader": "We could not charge your payment method.",
+      "heading": "Payment failed",
+      "body": "We could not charge {amount} for your subscription to {productName} at {storeName}. Your access continues until {graceEndsAt}.",
+      "body-no-grace": "We could not charge {amount} for your subscription to {productName} at {storeName}.",
+      "body-2": "Please update your payment to keep the subscription.",
+      "button": "Update payment"
+    },
+    "subscription-cancelled": {
+      "subject": "{productName} will not renew",
+      "preheader": "Your subscription was cancelled.",
+      "heading": "Subscription cancelled",
+      "body": "Your subscription to {productName} at {storeName} will not renew. You keep your access until {accessUntil}.",
+      "body-no-date": "Your subscription to {productName} at {storeName} will not renew. You keep your access until the end of the current period."
+    },
+    "subscription-ended": {
+      "subject": "{productName} has ended",
+      "preheader": "Your subscription has ended.",
+      "heading": "Subscription ended",
+      "body": "Your subscription to {productName} at {storeName} has ended.",
+      "button": "Visit store",
+      "reason": {
+        "BUYER_CANCEL": "It ended because you cancelled it.",
+        "ADMIN_CANCEL": "It was cancelled by the store team.",
+        "PAYMENT_FAILED": "It ended because the payment could not be collected.",
+        "GATEWAY_ENDED": "It was ended by the payment provider.",
+        "COMPLETED": "It reached its last billing period.",
+        "REFUND": "It ended because the order was refunded.",
+        "CHARGEBACK": "It ended because the payment was disputed.",
+        "PROVIDER_UNAVAILABLE": "It ended because the payment method is no longer available.",
+        "OTHER": "If you did not expect this, contact the store."
+      }
+    },
+    "shipment-shipped": {
+      "subject": "Your order {orderNumber} is on its way",
+      "preheader": "Your parcel has been handed to the carrier.",
+      "heading": "Your order is on its way",
+      "body": "Good news! Your order {orderNumber} at {storeName} has been shipped.",
+      "partial-note": "This parcel holds part of your order. The rest follows in another shipment.",
+      "button": "View order",
+      "button-track": "Track shipment"
+    },
+    "shipment-delivered": {
+      "subject": "Your order {orderNumber} was delivered",
+      "preheader": "Your parcel arrived.",
+      "heading": "Your parcel was delivered",
+      "body": "The parcel of your order {orderNumber} at {storeName} was delivered.",
+      "button": "View order"
+    },
+    "test": {
+      "subject": "Test e-mail from {storeName}",
+      "preheader": "Your store can send e-mail.",
+      "heading": "It works",
+      "body": "This is a test e-mail from {storeName} on {websiteName}. If you can read it, the e-mail settings of your website are working.",
+      "footer": "You are receiving this e-mail because an administrator of {websiteName} sent a test."
     }
   }
 }

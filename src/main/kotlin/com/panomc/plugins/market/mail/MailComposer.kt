@@ -1,25 +1,38 @@
 package com.panomc.plugins.market.mail
 
 import com.panomc.plugins.market.config.MarketConfig
+import com.panomc.plugins.market.db.dao.MarketEntitlementDao
 import com.panomc.plugins.market.db.dao.MarketInvoiceDao
 import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.dao.MarketRefundDao
+import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.dao.MarketRefundItemDao
+import com.panomc.plugins.market.db.dao.MarketShipmentDao
+import com.panomc.plugins.market.db.dao.MarketShipmentItemDao
+import com.panomc.plugins.market.db.dao.MarketSubscriptionDao
 import com.panomc.plugins.market.db.model.InvoiceType
 import com.panomc.plugins.market.db.model.MailKind
 import com.panomc.plugins.market.db.model.MailRefType
 import com.panomc.plugins.market.db.model.MarketMailOutbox
+import com.panomc.plugins.market.db.model.EntitlementStatus
+import com.panomc.plugins.market.db.model.MarketEntitlement
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.db.model.MarketOrderItem
 import com.panomc.plugins.market.db.model.MarketRefund
 import com.panomc.plugins.market.db.model.MarketRefundItem
+import com.panomc.plugins.market.db.model.MarketShipment
+import com.panomc.plugins.market.db.model.MarketShipmentItem
+import com.panomc.plugins.market.db.model.MarketSubscription
 import com.panomc.plugins.market.db.model.OrderItemKind
 import com.panomc.plugins.market.db.model.PricingMode
+import com.panomc.plugins.market.db.model.SubscriptionMode
+import com.panomc.plugins.market.db.model.SubscriptionStatus
 import com.panomc.plugins.market.i18n.MarketFormat
 import com.panomc.plugins.market.i18n.MarketI18n
 import com.panomc.plugins.market.pdf.InvoiceMailAttachments
 import com.panomc.plugins.market.util.HtmlSanitizer
+import com.panomc.plugins.market.util.MarketStatus
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -41,15 +54,22 @@ class MailInput(
     val params: JsonObject = JsonObject(),
     val refund: MarketRefund? = null,
     val refundItems: List<MarketRefundItem> = emptyList(),
-    val invoiceAttached: Boolean = false
+    val invoiceAttached: Boolean = false,
+    /** The subscription of a `SUBSCRIPTION_*` mail (MK-146). */
+    val subscription: MarketSubscription? = null,
+    /** The entitlement of an `EXPIRY_REMINDER`. */
+    val entitlement: MarketEntitlement? = null,
+    /** The slug of the product page the renew buttons point to; `null` when the product is gone or archived (the button is then left out). */
+    val productSlug: String? = null,
+    /** The parcel of a `SHIPMENT_*` mail and its lines. */
+    val shipment: MarketShipment? = null,
+    val shipmentItems: List<MarketShipmentItem> = emptyList()
 )
 
 /**
  * Builds the [MailContent] block model of the order mails (12 section 5) from loaded rows, with no database and no host class: the
- * kinds `ORDER_RECEIVED`, `BANK_TRANSFER_INSTRUCTIONS`, `ORDER_CONFIRMATION`, `GIFT_RECEIVED`, `ORDER_DELIVERED` and `ORDER_REFUNDED`.
+ * kinds of 12 section 4.1: the order kinds (MK-142) and the subscription, expiry-reminder and shipment kinds (MK-146).
  * Locale keys are `mail.<kind-key>.*` and `mail.common.*`; every string is final (translated, formatted, cut to 255 characters).
- *
- * The subscription, expiry and shipment kinds are MK-146: [supports] is false for them and [build] refuses them.
  */
 class MailContentBuilder(
     private val i18n: MarketI18n,
@@ -72,8 +92,24 @@ class MailContentBuilder(
             MailKind.GIFT_RECEIVED -> gift(input, vars)
             MailKind.ORDER_DELIVERED -> delivered(input, vars)
             MailKind.ORDER_REFUNDED -> refunded(input, vars)
-            else -> throw IllegalStateException("unreachable: ${input.kind}")
+            MailKind.EXPIRY_REMINDER -> expiryReminder(input, vars)
+            MailKind.SUBSCRIPTION_REMINDER -> subscriptionReminder(input, vars)
+            MailKind.SUBSCRIPTION_PAYMENT_FAILED -> subscriptionPaymentFailed(input, vars)
+            MailKind.SUBSCRIPTION_CANCELLED -> subscriptionCancelled(input, vars)
+            MailKind.SUBSCRIPTION_ENDED -> subscriptionEnded(input, vars)
+            MailKind.SHIPMENT_SHIPPED -> shipmentShipped(input, vars)
+            MailKind.SHIPMENT_DELIVERED -> shipmentDelivered(input, vars)
         }
+    }
+
+    /** The plain test mail of the panel ("send test" without a kind): proves the e-mail settings, mentions no order. */
+    suspend fun test(locale: String): MailContent {
+        val vars = mapOf("websiteName" to cut(site().websiteName), "storeName" to cut(config().storeName.ifBlank { site().websiteName }))
+
+        return MailContent(
+            subject = i18n.t(locale, "mail.test.subject", vars), preheader = i18n.t(locale, "mail.test.preheader", vars), heading = i18n.t(locale, "mail.test.heading", vars),
+            paragraphs = listOf(i18n.t(locale, "mail.test.body", vars)), footerNote = i18n.t(locale, "mail.test.footer", vars)
+        )
     }
 
     // ----- the kinds ---------------------------------------------------------------------------------------------------
@@ -177,6 +213,211 @@ class MailContentBuilder(
             footerExtra = if (i.invoiceAttached) t(i, "mail.order-refunded.credit-note-attached", withAmount) else null
         )
     }
+
+
+    // ----- subscription, expiry and shipment kinds (MK-146) --------------------------------------------------------------
+
+    /** 12 section 5 `EXPIRY_REMINDER`: product, valid until, a "Renew" button to the product page (left out when the product is gone). */
+    private suspend fun expiryReminder(i: MailInput, vars: Map<String, Any?>): MailContent {
+        val expiresAt = long(i.params, "expiresAt") ?: i.entitlement?.expiresAt ?: error("EXPIRY_REMINDER has no expiry date")
+        val name = cut(entitlementProductName(i))
+        val v = vars + ("productName" to name) + ("date" to format.date(expiresAt, i.locale))
+        val details = listOf(
+            MailContent.Row(t(i, "mail.common.product", v), name),
+            MailContent.Row(t(i, "mail.common.valid-until", v), format.dateTime(expiresAt, i.locale), strong = true)
+        )
+
+        return shell(
+            i, v, "expiry-reminder", paragraphs = listOf(t(i, "mail.expiry-reminder.body", v), t(i, "mail.expiry-reminder.body-2", v)), details = details,
+            button = productUrl(i)?.let { t(i, "mail.expiry-reminder.button", v) to it }
+        )
+    }
+
+    /**
+     * `SUBSCRIPTION_REMINDER`: `MANUAL` = "pay to keep it" with the pay link (the renewal order) or else the product page; `GATEWAY` / `MERCHANT` = the
+     * upcoming-charge notice with the stored method. The amount is the subscription's price (the row), the date the period end the reminder was queued for.
+     */
+    private suspend fun subscriptionReminder(i: MailInput, vars: Map<String, Any?>): MailContent {
+        val sub = checkNotNull(i.subscription) { "SUBSCRIPTION_REMINDER needs its subscription row" }
+        val periodEnd = long(i.params, "periodEnd") ?: sub.currentPeriodEnd ?: error("SUBSCRIPTION_REMINDER has no period end")
+        val v = subscriptionVars(i, sub, vars, periodEnd)
+        val manual = sub.mode == SubscriptionMode.MANUAL
+        val paragraphs = ArrayList<String>()
+
+        paragraphs += t(i, if (manual) "mail.subscription-reminder.body-manual" else "mail.subscription-reminder.body", v)
+
+        val method = sub.storedMethodLabel?.trim()?.takeIf { it.isNotEmpty() }
+
+        if (!manual && method != null) paragraphs += t(i, "mail.subscription-reminder.body-method", v + ("method" to cut(method)))
+
+        val details = listOf(
+            MailContent.Row(t(i, "mail.common.product", v), v.getValue("productName").toString()),
+            MailContent.Row(t(i, "mail.common.renews-on", v), format.date(periodEnd, i.locale)),
+            MailContent.Row(t(i, "mail.common.amount", v), v.getValue("amount").toString(), strong = true)
+        )
+        val pay = if (manual) (siteUrl(i.params.getString("payUrl")) ?: productUrl(i))?.let { t(i, "mail.subscription-reminder.button", v) to it } else null
+
+        return shell(i, v, "subscription-reminder", paragraphs = paragraphs, details = details, button = pay, secondary = manage(i, v))
+    }
+
+    /** `SUBSCRIPTION_PAYMENT_FAILED`: the grace date, the amount, a button to the failed renewal order (else the profile). */
+    private suspend fun subscriptionPaymentFailed(i: MailInput, vars: Map<String, Any?>): MailContent {
+        val sub = checkNotNull(i.subscription) { "SUBSCRIPTION_PAYMENT_FAILED needs its subscription row" }
+        val grace = long(i.params, "graceEndsAt") ?: sub.graceEndsAt
+        val v = subscriptionVars(i, sub, vars, null) + (if (grace != null) mapOf("graceEndsAt" to format.date(grace, i.locale)) else emptyMap())
+        val details = listOf(
+            MailContent.Row(t(i, "mail.common.product", v), v.getValue("productName").toString()),
+            MailContent.Row(t(i, "mail.common.amount", v), v.getValue("amount").toString(), strong = true)
+        )
+        val base = site().websiteUrl
+        val target = siteUrl(i.params.getString("payUrl")) ?: if (base.isEmpty()) null else "$base/profile"
+
+        return shell(
+            i, v, "subscription-payment-failed",
+            paragraphs = listOf(t(i, if (grace != null) "mail.subscription-payment-failed.body" else "mail.subscription-payment-failed.body-no-grace", v), t(i, "mail.subscription-payment-failed.body-2", v)),
+            details = details, button = target?.let { t(i, "mail.subscription-payment-failed.button", v) to it }
+        )
+    }
+
+    /** `SUBSCRIPTION_CANCELLED`: access continues until `accessUntil`; a "Manage subscription" link. */
+    private suspend fun subscriptionCancelled(i: MailInput, vars: Map<String, Any?>): MailContent {
+        val sub = checkNotNull(i.subscription) { "SUBSCRIPTION_CANCELLED needs its subscription row" }
+        val until = long(i.params, "accessUntil") ?: long(i.params, "endsAt") ?: sub.currentPeriodEnd
+        val v = subscriptionVars(i, sub, vars, until)
+
+        return shell(
+            i, v, "subscription-cancelled", paragraphs = listOf(t(i, if (until != null) "mail.subscription-cancelled.body" else "mail.subscription-cancelled.body-no-date", v + ("accessUntil" to (until?.let { format.date(it, i.locale) } ?: "")))),
+            secondary = manage(i, v)
+        )
+    }
+
+    /** `SUBSCRIPTION_ENDED`: the sentence of `mail.subscription-ended.reason.<END_REASON>`, `OTHER` for a reason without a text. */
+    private suspend fun subscriptionEnded(i: MailInput, vars: Map<String, Any?>): MailContent {
+        val sub = checkNotNull(i.subscription) { "SUBSCRIPTION_ENDED needs its subscription row" }
+        val v = subscriptionVars(i, sub, vars, null)
+        val reason = (i.params.getString("endReason") ?: sub.endReason)?.trim().orEmpty()
+        val key = "mail.subscription-ended.reason.$reason".takeIf { reason.matches(REASON) && i18n.has(i.locale, it) } ?: "mail.subscription-ended.reason.OTHER"
+        val base = site().websiteUrl
+
+        return shell(
+            i, v, "subscription-ended", paragraphs = listOf(t(i, "mail.subscription-ended.body", v), t(i, key, v)),
+            button = if (base.isEmpty()) null else t(i, "mail.subscription-ended.button", v) to "$base/store"
+        )
+    }
+
+    /** 10 section 11.1 `SHIPMENT_SHIPPED`: carrier, tracking number, estimate, parcel lines, a track button (http / https only) and the order link. */
+    private suspend fun shipmentShipped(i: MailInput, vars: Map<String, Any?>): MailContent {
+        val shipment = i.shipment
+        val carrier = (i.params.getString("carrierName") ?: shipment?.carrierName)?.trim()?.takeIf { it.isNotEmpty() }
+        val tracking = (i.params.getString("trackingNumber") ?: shipment?.trackingNumber)?.trim()?.takeIf { it.isNotEmpty() }
+        val trackUrl = (i.params.getString("trackingUrl") ?: shipment?.trackingUrl)?.trim()?.takeIf { isWebUrl(it) }
+        val estimate = shipment?.estimatedDeliveryAt?.let { format.date(it, i.locale) } ?: i.params.getString("estimatedDelivery")?.trim()?.takeIf { it.isNotEmpty() }
+        val details = ArrayList<MailContent.Row>()
+
+        details += MailContent.Row(t(i, "mail.common.order-number", vars), vars.getValue("orderNumber").toString())
+        if (carrier != null) details += MailContent.Row(t(i, "mail.common.carrier", vars), cut(carrier))
+        if (tracking != null) details += MailContent.Row(t(i, "mail.common.tracking-number", vars), cut(tracking), strong = true)
+        if (estimate != null) details += MailContent.Row(t(i, "mail.common.estimated-delivery", vars), cut(estimate))
+
+        val address = addressLines(i)
+
+        if (address.isNotEmpty()) details += MailContent.Row(t(i, "mail.common.ship-to", vars), cut(address.joinToString(", ")))
+
+        val paragraphs = arrayListOf(t(i, "mail.shipment-shipped.body", vars))
+
+        if (i.params.getBoolean("isPartial", false) == true) paragraphs += t(i, "mail.shipment-shipped.partial-note", vars)
+
+        val view = viewOrder(i, "mail.shipment-shipped.button")
+
+        return shell(
+            i, vars, "shipment-shipped", paragraphs = paragraphs, items = shipmentLines(i), details = details,
+            button = if (trackUrl != null) t(i, "mail.shipment-shipped.button-track", vars) to trackUrl else view,
+            secondary = if (trackUrl != null) viewOrder(i, "mail.common.view-order") else null
+        )
+    }
+
+    /** `SHIPMENT_DELIVERED`: carrier, delivered date, parcel lines, the order link. */
+    private suspend fun shipmentDelivered(i: MailInput, vars: Map<String, Any?>): MailContent {
+        val shipment = i.shipment
+        val carrier = (i.params.getString("carrierName") ?: shipment?.carrierName)?.trim()?.takeIf { it.isNotEmpty() }
+        val delivered = shipment?.deliveredAt?.let { format.date(it, i.locale) } ?: i.params.getString("deliveredAt")?.trim()?.takeIf { it.isNotEmpty() }
+        val details = ArrayList<MailContent.Row>()
+
+        details += MailContent.Row(t(i, "mail.common.order-number", vars), vars.getValue("orderNumber").toString())
+        if (carrier != null) details += MailContent.Row(t(i, "mail.common.carrier", vars), cut(carrier))
+        if (delivered != null) details += MailContent.Row(t(i, "mail.common.delivered-on", vars), cut(delivered))
+
+        return shell(
+            i, vars, "shipment-delivered", paragraphs = listOf(t(i, "mail.shipment-delivered.body", vars)), items = shipmentLines(i), details = details,
+            button = viewOrder(i, "mail.shipment-delivered.button")
+        )
+    }
+
+    // ----- pieces of the new kinds -------------------------------------------------------------------------------------
+
+    /** `{productName}`, `{amount}` (the subscription price in its currency) and `{date}` (when [date] is given) on top of the common variables. */
+    private suspend fun subscriptionVars(i: MailInput, sub: MarketSubscription, vars: Map<String, Any?>, date: Long?): Map<String, Any?> {
+        val currency = sub.currency.ifBlank { i.order.currency }
+        val base = vars + ("productName" to cut(sub.productName)) + ("amount" to format.money(sub.price, currency, i.locale))
+
+        return if (date != null) base + ("date" to format.date(date, i.locale)) else base
+    }
+
+    /** The "Manage subscription" link to the buyer's profile; none without a site URL. */
+    private suspend fun manage(i: MailInput, vars: Map<String, Any?>): Pair<String, String>? {
+        val base = site().websiteUrl
+
+        return if (base.isEmpty()) null else t(i, "mail.common.manage-subscription", vars) to "$base/profile"
+    }
+
+    /** The name of the product an entitlement reminder is about: the snapshot of its order line (never the live product). */
+    private fun entitlementProductName(i: MailInput): String {
+        val line = i.entitlement?.let { e -> i.items.firstOrNull { it.id == e.orderItemId } }
+            ?: i.items.firstOrNull { it.kind != OrderItemKind.BUNDLE_CHILD }
+
+        return line?.productName.orEmpty()
+    }
+
+    private fun productUrl(i: MailInput): String? {
+        val base = site().websiteUrl
+        val slug = i.productSlug?.takeIf { it.isNotBlank() } ?: return null
+
+        return if (base.isEmpty() || !SLUG.matches(slug)) null else "$base/store/$slug"
+    }
+
+    /** A site-relative link stored in `params` (`/store/order/<publicId>`) made absolute; an absolute http(s) link is kept; anything else is no link. */
+    private fun siteUrl(raw: String?): String? {
+        val value = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val base = site().websiteUrl
+
+        return when {
+            value.startsWith("/") && !value.startsWith("//") -> if (base.isEmpty()) null else base + value
+            isWebUrl(value) -> value
+            else -> null
+        }
+    }
+
+    /** The lines of a parcel: the `market_shipment_item` rows against the order lines, else the pre-formatted `params.items`. No prices. */
+    private fun shipmentLines(i: MailInput): List<MailContent.Item> {
+        if (i.shipmentItems.isNotEmpty()) {
+            val byId = i.items.associateBy { it.id }
+
+            return i.shipmentItems.sortedBy { it.id }.mapNotNull { s ->
+                val line = byId[s.orderItemId] ?: return@mapNotNull null
+
+                MailContent.Item(cut(line.productName), line.variantName?.takeIf { it.isNotBlank() }?.let { cut(it) }, s.quantity.toString(), "", false)
+            }
+        }
+
+        return (i.params.getJsonArray("items") ?: JsonArray()).filterIsInstance<JsonObject>().map { o ->
+            MailContent.Item(cut(o.getString("name").orEmpty()), o.getString("variantName")?.takeIf { it.isNotBlank() }?.let { cut(it) }, (o.getValue("quantity") ?: 1).toString(), "", false)
+        }
+    }
+
+    private fun addressLines(i: MailInput): List<String> =
+        (i.params.getJsonArray("addressLines") ?: JsonArray()).filterIsInstance<String>().map { it.trim() }.filter { it.isNotEmpty() }
+
+    private fun long(params: JsonObject, key: String): Long? = (params.getValue(key) as? Number)?.toLong()
 
     // ----- shared pieces -----------------------------------------------------------------------------------------------
 
@@ -338,20 +579,22 @@ class MailContentBuilder(
     companion object {
         const val MAX_TEXT = 255
 
-        val KINDS: Set<MailKind> = setOf(
-            MailKind.ORDER_RECEIVED, MailKind.BANK_TRANSFER_INSTRUCTIONS, MailKind.ORDER_CONFIRMATION, MailKind.GIFT_RECEIVED,
-            MailKind.ORDER_DELIVERED, MailKind.ORDER_REFUNDED
-        )
+        private val REASON = Regex("^[A-Z_]{1,40}$")
+        private val SLUG = Regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+
+        /** Every kind has a composer (MK-142: the order kinds, MK-146: subscription, expiry and shipment kinds). */
+        val KINDS: Set<MailKind> = MailKind.entries.toSet()
     }
 }
 
 /**
- * The content side of the mail outbox for the order mails (12 sections 4.3.5, 4.3.6, 4.4, 5), the production [MailComposition]: reads the rows
- * the outbox row points at and hands them to [MailContentBuilder]. A kind without a composer yet ends `FAILED (RENDER_ERROR)` like the
- * unwired composition did (the subscription, expiry and shipment kinds are MK-146).
+ * The content side of the mail outbox (12 sections 4.3.5, 4.3.6, 4.4, 5), the production [MailComposition]: reads the rows
+ * the outbox row points at and hands them to [MailContentBuilder].
  *
  * Relevance (12 section 4.3.5): a missing referenced row is obsolete for every kind; `BANK_TRANSFER_INSTRUCTIONS` and `ORDER_RECEIVED` are obsolete
- * once the order left `PENDING` / `REVIEW`.
+ * once the order left `PENDING` / `REVIEW`; `EXPIRY_REMINDER` once the entitlement is not `ACTIVE`, its `expiresAt` is no longer the `refKey` or has
+ * passed; `SUBSCRIPTION_REMINDER` once the subscription is not `ACTIVE`, is set to end, or went past the reminded period; `SUBSCRIPTION_PAYMENT_FAILED`
+ * once the subscription is not `PAST_DUE`.
  */
 class MailComposer(
     private val builder: MailContentBuilder,
@@ -361,17 +604,38 @@ class MailComposer(
     private val refundItems: MarketRefundItemDao,
     private val invoices: MarketInvoiceDao? = null,
     private val attachments: InvoiceMailAttachments? = null,
-    private val config: () -> MarketConfig = { MarketConfig() }
+    private val config: () -> MarketConfig = { MarketConfig() },
+    private val subscriptions: MarketSubscriptionDao? = null,
+    private val entitlements: MarketEntitlementDao? = null,
+    private val shipments: MarketShipmentDao? = null,
+    private val shipmentItems: MarketShipmentItemDao? = null,
+    private val products: MarketProductDao? = null,
+    private val now: () -> Long = { System.currentTimeMillis() }
 ) : MailComposition {
     override suspend fun isObsolete(row: MarketMailOutbox, sqlClient: SqlClient): Boolean {
         if (!builder.supports(row.kind)) return false
 
         val order = orderOf(row, sqlClient) ?: return true
 
-        if (row.kind == MailKind.ORDER_REFUNDED) return refundOf(row, order, sqlClient) == null
-
         return when (row.kind) {
+            MailKind.ORDER_REFUNDED -> refundOf(row, order, sqlClient) == null
             MailKind.BANK_TRANSFER_INSTRUCTIONS, MailKind.ORDER_RECEIVED -> order.status != OrderStatus.PENDING && order.status != OrderStatus.REVIEW
+            MailKind.EXPIRY_REMINDER -> {
+                val entitlement = entitlementOf(row, sqlClient) ?: return true
+                val expiresAt = entitlement.expiresAt
+
+                entitlement.status != EntitlementStatus.ACTIVE || expiresAt == null || expiresAt.toString() != row.refKey || expiresAt <= now()
+            }
+            MailKind.SUBSCRIPTION_REMINDER -> {
+                val sub = subscriptionOf(row, sqlClient) ?: return true
+                val reminded = row.refKey.toIntOrNull()
+
+                // `periodIndex` is the cycle the reminder was queued in: a paid renewal moves `cycleCount` past it
+                sub.status != SubscriptionStatus.ACTIVE || sub.cancelAtPeriodEnd || (reminded != null && sub.cycleCount > reminded)
+            }
+            MailKind.SUBSCRIPTION_PAYMENT_FAILED -> (subscriptionOf(row, sqlClient) ?: return true).status != SubscriptionStatus.PAST_DUE
+            MailKind.SUBSCRIPTION_CANCELLED, MailKind.SUBSCRIPTION_ENDED -> subscriptionOf(row, sqlClient) == null
+            MailKind.SHIPMENT_SHIPPED, MailKind.SHIPMENT_DELIVERED -> shipmentOf(row, order, sqlClient) == null
             else -> false
         }
     }
@@ -385,8 +649,29 @@ class MailComposer(
 
         val refundLines = refund?.let { refundItems.getByRefundId(it.id, sqlClient) }.orEmpty()
         val params = runCatching { JsonObject(row.params.ifBlank { "{}" }) }.getOrDefault(JsonObject())
+        val attached = invoiceWillBeAttached(row, order, refund, sqlClient)
+        val base = MailInput(row.kind, row.locale, order, items, params, refund, refundLines, attached)
 
-        return builder.build(MailInput(row.kind, row.locale, order, items, params, refund, refundLines, invoiceWillBeAttached(row, order, refund, sqlClient)))
+        return builder.build(
+            when (row.kind) {
+                MailKind.EXPIRY_REMINDER -> {
+                    val entitlement = checkNotNull(entitlementOf(row, sqlClient)) { "entitlement ${row.refId} of mail ${row.id} is gone" }
+
+                    base.withEntitlement(entitlement, slugOf(entitlement.productId, sqlClient))
+                }
+                MailKind.SUBSCRIPTION_REMINDER, MailKind.SUBSCRIPTION_PAYMENT_FAILED, MailKind.SUBSCRIPTION_CANCELLED, MailKind.SUBSCRIPTION_ENDED -> {
+                    val sub = checkNotNull(subscriptionOf(row, sqlClient)) { "subscription ${row.refId} of mail ${row.id} is gone" }
+
+                    base.withSubscription(sub, slugOf(sub.productId, sqlClient))
+                }
+                MailKind.SHIPMENT_SHIPPED, MailKind.SHIPMENT_DELIVERED -> {
+                    val shipment = checkNotNull(shipmentOf(row, order, sqlClient)) { "shipment ${row.refId} of mail ${row.id} is gone" }
+
+                    base.withShipment(shipment, shipmentItems?.getByShipmentId(shipment.id, sqlClient).orEmpty())
+                }
+                else -> base
+            }
+        )
     }
 
     override suspend fun attachments(row: MarketMailOutbox, sqlClient: SqlClient): MailAttachments = attachments?.attachmentsFor(row, sqlClient) ?: MailAttachments.NONE
@@ -410,4 +695,32 @@ class MailComposer(
 
     private suspend fun refundOf(row: MarketMailOutbox, order: MarketOrder, sqlClient: SqlClient): MarketRefund? =
         if (row.refType == MailRefType.REFUND) refunds.getById(row.refId, sqlClient)?.takeIf { it.orderId == order.id } else null
+
+    private suspend fun entitlementOf(row: MarketMailOutbox, sqlClient: SqlClient): MarketEntitlement? =
+        if (row.refType == MailRefType.ENTITLEMENT) entitlements?.getById(row.refId, sqlClient) else null
+
+    private suspend fun subscriptionOf(row: MarketMailOutbox, sqlClient: SqlClient): MarketSubscription? =
+        if (row.refType == MailRefType.SUBSCRIPTION) subscriptions?.getById(row.refId, sqlClient) else null
+
+    private suspend fun shipmentOf(row: MarketMailOutbox, order: MarketOrder, sqlClient: SqlClient): MarketShipment? =
+        if (row.refType == MailRefType.SHIPMENT) shipments?.getById(row.refId, sqlClient)?.takeIf { it.orderId == order.id } else null
+
+    /** The product page slug for a renew button: `null` when the product is deleted, archived (inactive) or unknown (12 section 5). */
+    private suspend fun slugOf(productId: Long, sqlClient: SqlClient): String? {
+        val product = products?.getById(productId, sqlClient) ?: return null
+
+        return product.slug.takeIf { product.deletedAt == null && product.status != MarketStatus.INACTIVE }
+    }
+
+    private fun MailInput.withEntitlement(entitlement: MarketEntitlement, slug: String?) = MailInput(
+        kind, locale, order, items, params, refund, refundItems, invoiceAttached, entitlement = entitlement, productSlug = slug
+    )
+
+    private fun MailInput.withSubscription(sub: MarketSubscription, slug: String?) = MailInput(
+        kind, locale, order, items, params, refund, refundItems, invoiceAttached, subscription = sub, productSlug = slug
+    )
+
+    private fun MailInput.withShipment(shipment: MarketShipment, lines: List<MarketShipmentItem>) = MailInput(
+        kind, locale, order, items, params, refund, refundItems, invoiceAttached, shipment = shipment, shipmentItems = lines
+    )
 }
