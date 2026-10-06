@@ -656,8 +656,12 @@ export function buildQuoteBody({
   }
 
   if (currency) body.currency = currency;
+  // A signed-in buyer's quote falls back to the codes stored on the server cart when the body names none, and the cart is written after the
+  // quote (14 §10.6): an empty string says "no code", so a code the buyer just removed is gone from the very quote that follows the removal.
   if (text(draft?.couponCode)) body.couponCode = text(draft.couponCode);
+  else if (loggedIn) body.couponCode = '';
   if (text(draft?.creatorCode)) body.creatorCode = text(draft.creatorCode);
+  else if (loggedIn) body.creatorCode = '';
 
   if (recipientUsername) {
     body.recipientUsername = recipientUsername;

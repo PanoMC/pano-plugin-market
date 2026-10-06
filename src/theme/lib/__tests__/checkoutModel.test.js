@@ -697,7 +697,24 @@ describe('buildQuoteBody', () => {
     });
     expect('items' in logged).toBe(false);
     expect('guest' in logged).toBe(false);
-    expect(logged).toEqual({ locale: 'tr' });
+    // a signed-in buyer says "no code" explicitly: the server would otherwise fall back to the codes stored on the cart
+    expect(logged).toEqual({ locale: 'tr', couponCode: '', creatorCode: '' });
+  });
+
+  test('a signed-in buyer who removed a code sends an empty code, a guest sends none', () => {
+    const removed = draftWith({ couponCode: '', creatorCode: 'YT' });
+
+    expect(buildQuoteBody({ loggedIn: true, draft: removed })).toEqual({
+      couponCode: '',
+      creatorCode: 'YT',
+    });
+    expect(buildQuoteBody({ loggedIn: false, items: [], draft: removed })).toEqual({
+      items: [],
+      creatorCode: 'YT',
+    });
+    expect(buildQuoteBody({ topup: 5, loggedIn: true, draft: removed })).toEqual({
+      creditTopUp: 5,
+    });
   });
 
   test('a saved address id wins over the typed address; gift message needs a recipient', () => {

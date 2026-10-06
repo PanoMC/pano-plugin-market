@@ -201,11 +201,18 @@ export const scenarios = [
       const api = new Api(env.url, account.username);
       must(await api.login(account.username, BUYER_PASSWORD), 'second device login');
       const server = must(await api.get('/api/market/me/cart'), 'server cart').json;
-      const ids = (server.cart?.items ?? server.items ?? []).map((i) => i.productId).sort();
+      const pairs = (server.cart?.items ?? server.items ?? [])
+        .map((i) => [i.productId, i.quantity])
+        .sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0));
       assertEqual(
-        JSON.stringify(ids),
-        JSON.stringify([vip.id, free.id].sort()),
-        'the server cart holds both products',
+        JSON.stringify(pairs),
+        JSON.stringify(
+          [
+            [vip.id, 1],
+            [free.id, 1],
+          ].sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0)),
+        ),
+        'the server cart holds both products once each (a doubled merge fails here)',
       );
 
       // second device: a clean browser signed in as the same account
@@ -224,21 +231,30 @@ export const scenarios = [
         'the second device lists both lines',
       );
 
-      // The cart answers of the backend still carry the unpriced advice quote (MK-070 / MK-072 seam: the full Quote is not wired into
-      // `routes/user/cart`), so the rows of a signed-in buyer have no name and no price yet. Named rows are asserted as soon as the
-      // backend sends them; until then the gap is reported, not hidden.
-      const lean = !(
-        must(await api.get('/api/market/me/cart'), 'server cart').json.quote?.lines ?? []
-      ).every((l) => typeof l.name === 'string' && l.name);
-
-      if (lean)
-        console.log(
-          '  TH-13: backend cart answers carry the advice quote (no name, no price): named rows not asserted (open seam MK-072)',
-        );
-      else {
-        await offcanvas.getByText(vip.name).first().waitFor({ timeout: 30000 });
-        await offcanvas.getByText(free.name).first().waitFor({ timeout: 30000 });
-      }
+      // The rows of a signed-in buyer carry the full quote (06 section 3: embedded in the cart answers): named rows, their price and the
+      // subtotal are asserted unconditionally, so a backend that still answers the unpriced advice quote fails this scenario.
+      const rowOf = (item) => offcanvas.locator('.list-group-item').filter({ hasText: item.name });
+      await rowOf(vip).first().waitFor({ timeout: 30000 });
+      await rowOf(free).first().waitFor({ timeout: 30000 });
+      assertEqual(await rowOf(vip).count(), 1, 'the second device lists the paid product once');
+      assertEqual(await rowOf(free).count(), 1, 'the second device lists the free product once');
+      assert(
+        (await rowOf(vip).first().innerText()).includes(`€${vip.price}`),
+        `the paid row shows its price €${vip.price}`,
+      );
+      assert(
+        (await rowOf(free).first().innerText()).includes(`€${free.price}`),
+        `the free row shows its price €${free.price}`,
+      );
+      const subtotal = (Number(vip.price) + Number(free.price)).toFixed(2);
+      const footer = offcanvas
+        .locator('.fw-bold.fs-5')
+        .filter({ hasText: text('theme.cart.subtotal') });
+      await footer.waitFor({ timeout: 30000 });
+      assert(
+        (await footer.innerText()).includes(`€${subtotal}`),
+        `the subtotal shows €${subtotal}: ${await footer.innerText()}`,
+      );
 
       assertEqual(
         (await cartRaw(other)) === null || (await storedCart(other)).items.length === 0,
