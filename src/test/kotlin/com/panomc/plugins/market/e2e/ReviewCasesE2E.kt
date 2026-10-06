@@ -21,6 +21,7 @@ import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.sqlclient.Row
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -363,7 +364,7 @@ class ReviewCasesE2E : E2eTestBase() {
         )
 
         // 07 F5 / 09 section 4.1 sell a subscription with a credit price in full with credits, 04 section 5 (and the real ProductRules) refuse a creditPrice on a
-        // SUBSCRIPTION product (MUST_BE_ZERO): the product API cannot build the state V-02 is about, so the price is written to the row (recorded in the evidence)
+        // SUBSCRIPTION product (MUST_BE_ZERO): the product API cannot build the state V-02 is about, so the price is written to the row (open seam in evidence/E2E-12.md: the spec contradiction, ProductRules is not this slice's)
         db.sql("UPDATE `pano_market_product` SET `creditPrice` = 600 WHERE `id` = ?", productId)
 
         grant(buyer.userId, initialCredits)
@@ -1050,39 +1051,107 @@ class ReviewCasesE2E : E2eTestBase() {
 
     // --- V-12 ----------------------------------------------------------------------------------------------------------
 
+    private class OpenGuestOrder(val client: E2eClient, val publicId: String, val token: String?)
+
+    /**
+     * One L4 block (17 section 9.11 V-12, 11 section 21 S-HOARD) for the dimension that [request] holds constant: three open bank-transfer orders of
+     * `request(1..3)` pass, the fourth is 429 TOO_MANY_REQUESTS with `retryAfter >= 1`, a control order that differs only in that dimension (`request(0)`)
+     * still passes (so it is that dimension and not a global limit), and after one of the three is cancelled the next order of the full subject passes.
+     * Every opened order is cancelled at the end. [expectedIp] is the stored `clientIp` of the opened orders (`null` = the IP dimension is switched off).
+     *
+     * The 429 `Retry-After` header that 11 section 11 requires is NOT asserted: the real code sets only the body's `retryAfter` (open seam in evidence/E2E-12.md).
+     */
+    private fun l4Block(label: String, goods: Long, request: (Int) -> Pair<JsonObject, Map<String, String>>, expectedIp: String?) {
+        val opened = ArrayList<OpenGuestOrder>()
+
+        fun open(n: Int, name: String): E2eResponse {
+            val (body, headers) = request(n)
+
+            return checkout(visitor("v12-$label-$name"), body, method = "bank-transfer", headers = headers)
+        }
+
+        fun keep(answer: E2eResponse, checkIp: Boolean = true) {
+            val publicId = publicIdOf(answer)
+
+            opened += OpenGuestOrder(visitor("v12-cancel"), publicId, answer.obj().getString("orderToken"))
+            // the control order differs in the counted dimension (for the IP block: its own address), so only the held-constant orders are checked
+            if (checkIp) assertEquals(expectedIp, orderRow(publicId).getString("clientIp"), "$label: the stored address of the order")
+        }
+
+        try {
+            for (n in 1..3) keep(open(n, "$n").ok())
+
+            val fourth = open(4, "4")
+
+            assertEquals(429, fourth.status, "L4 by $label: ${fourth.error}")
+            assertEquals("TOO_MANY_REQUESTS", fourth.error)
+            assertTrue(fourth.obj().getInteger("retryAfter") >= 1)
+
+            // a subject that differs only in the counted dimension is not affected
+            keep(open(0, "control").ok(), checkIp = false)
+
+            // one is cancelled: the full subject may order again
+            val first = opened.first()
+
+            cancelOrder(first.client, first.publicId, first.token)
+            keep(open(5, "5").ok())
+        } finally {
+            opened.forEach { cancelOrder(it.client, it.publicId, it.token) }
+        }
+    }
+
+    /** True when the instance's config lists a loopback address under `server.trusted-proxies` (the file holds what the JVM booted with). */
+    private fun loopbackIsTrustedProxy(): Boolean {
+        val file = session.env.dir?.let { java.io.File(it, "config.conf") }?.takeIf { it.isFile } ?: return false
+        val list = Regex("""(?m)^\s*trusted-proxies\s*=\s*\[([^\]]*)]""").find(file.readText())?.groupValues?.get(1) ?: return false
+
+        return list.contains("\"127.0.0.1\"") || list.contains("\"::1\"")
+    }
+
+    @Test
+    fun `V-12 a guest hoarding unpaid orders from one address is stopped by L4 on the IP dimension alone`() {
+        // the address reaches market only through X-Forwarded-For of a trusted proxy (11 section 2): without server.trusted-proxies holding 127.0.0.1 the
+        // IP dimension is off and cannot be proven over HTTP (the harness gap of evidence/E2E-04.md), so the test is skipped, never passed
+        Assumptions.assumeTrue(loopbackIsTrustedProxy(), "the instance does not list 127.0.0.1 in server.trusted-proxies")
+
+        bankTransferOn()
+        try {
+            val goods = product("5.00", stock = 100)
+            val ip = "203.0.113.${(1..254).random()}"
+            val otherIp = "198.51.100.${(1..254).random()}"
+
+            // every other dimension differs per order: own payer name, own e-mail, no gift
+            l4Block("ip", goods, { n -> guestBody(goods, guestName()) to mapOf("X-Forwarded-For" to if (n == 0) otherIp else ip) }, expectedIp = ip)
+        } finally {
+            bankTransferOff()
+        }
+    }
+
     @Test
     fun `V-12 a guest hoarding unpaid orders for one recipient is stopped by L4 and a bank-transfer notice does not extend the expiry`() {
         bankTransferOn()
         try {
-            val recipient = buyer(canPay = false)
             val goods = product("5.00", stock = 100)
-            val opened = ArrayList<Triple<E2eClient, String, String?>>()
 
-            // four payer names, one recipient: the fourth open order is refused
-            for (n in 1..3) {
-                val guest = visitor("v12-guest$n")
-                val answer = checkout(guest, guestBody(goods, guestName()).put("recipientUsername", recipient.username), method = "bank-transfer").ok()
+            // L4 by recipient: three payer names and three e-mails (every guest has its own), one recipient. The loopback peer carries no trusted address (the
+            // IP dimension is skipped, the stored clientIp is NULL), so only the recipient dimension can refuse the fourth order
+            val recipient = buyer(canPay = false)
+            val otherRecipient = buyer(canPay = false)
 
-                opened += Triple(guest, publicIdOf(answer), answer.obj().getString("orderToken"))
-            }
+            l4Block("recipient", goods, { n ->
+                guestBody(goods, guestName()).put("recipientUsername", if (n == 0) otherRecipient.username else recipient.username) to emptyMap()
+            }, expectedIp = null)
 
-            val fourthGuest = visitor("v12-guest4")
-            val fourth = checkout(fourthGuest, guestBody(goods, guestName()).put("recipientUsername", recipient.username), method = "bank-transfer")
+            // L4 by e-mail: three payer names, one guest e-mail, no gift (nothing is counted on a recipient), IP skipped as above
+            val sharedEmail = "v12-shared-${UUID.randomUUID().toString().take(8)}@example.com"
 
-            assertEquals(429, fourth.status, "L4 by recipient key: ${fourth.error}")
-            assertEquals("TOO_MANY_REQUESTS", fourth.error)
-            assertTrue(fourth.obj().getInteger("retryAfter") >= 1)
-            // 11 section 11 also names a Retry-After header; the L4 answer of the real code carries retryAfter in the body only (recorded in the evidence)
+            l4Block("e-mail", goods, { n ->
+                val name = guestName()
+                val body = guestBody(goods, name)
 
-            // one expires or is cancelled: the recipient may be the target again
-            val (client, publicId, token) = opened.first()
-
-            cancelOrder(client, publicId, token)
-            checkout(fourthGuest, guestBody(goods, guestName()).put("recipientUsername", recipient.username), method = "bank-transfer").ok().also {
-                opened += Triple(fourthGuest, publicIdOf(it), it.obj().getString("orderToken"))
-            }
-
-            opened.drop(1).forEach { (c, id, t) -> cancelOrder(c, id, t) }
+                if (n != 0) body.getJsonObject("guest").put("email", sharedEmail)
+                body to emptyMap()
+            }, expectedIp = null)
 
             // a bank-transfer order with 50 units of a stock-limited product: line error MAX_QUANTITY
             val bulk = checkout(visitor("v12-bulk"), guestBody(goods, guestName(), quantity = 50), method = "bank-transfer")
