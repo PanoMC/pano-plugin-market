@@ -69,8 +69,8 @@ export async function gatewayOrder({ admin, buyer }, cat, { label = 'gw', produc
   return { api, publicId: placed.publicId, number: order.number };
 }
 
-/** A PENDING order on the bank transfer method (the buyer has not paid; nothing is delivered). */
-export async function bankTransferOrder({ admin, buyer }, productRef, { label = 'bank' } = {}) {
+/** Configures and enables the bank transfer method (a live-capable method: the fake provider is a test-mode method only). */
+export async function enableBankTransfer(admin) {
   must(
     await admin.post('/api/panel/market/payment-methods/bank-transfer', {
       settings: {
@@ -91,6 +91,11 @@ export async function bankTransferOrder({ admin, buyer }, productRef, { label = 
     await admin.post('/api/panel/market/payment-methods/bank-transfer/toggle', { enabled: true }),
     'enable bank transfer',
   );
+}
+
+/** A PENDING order on the bank transfer method (the buyer has not paid; nothing is delivered). */
+export async function bankTransferOrder({ admin, buyer }, productRef, { label = 'bank' } = {}) {
+  await enableBankTransfer(admin);
   const api = await buyer(label);
   const placed = await checkout(api, {
     items: [{ productId: productRef.id, quantity: 1 }],

@@ -13,6 +13,8 @@ export async function startGateway(port) {
   const paymentsById = new Map(); // gateway payment id -> payment (a refund names the payment by it)
   const refunds = new Map(); // idempotency key -> refund
   const refundsById = new Map();
+  const chargeLog = []; // merchant-initiated recurring charges (E2E-15): { id, reference, amount, currency, storedMethod, status }
+  let declineCharges = 0;
   const cents = (value) => Math.round(Number(value) * 100);
   let sequence = 0;
 
@@ -39,11 +41,18 @@ export async function startGateway(port) {
     const t = Math.floor(Date.now() / 1000);
     const v1 = crypto.createHmac('sha256', GATEWAY_SECRET).update(`${t}.${body}`).digest('hex');
 
-    return fetch(payment.notifyUrl, {
+    // The signed event goes to the provider's webhook route, `/api/market/payments/<provider>/webhook` (the `notifyUrl` of a payment is the
+    // provider's NOTIFY route, which takes a form body). Before E2E-15 this posted the JSON to the notify route, which refused it with 400 and left
+    // every order to the status query of the return page; a subscription needs the webhook, because the stored method only travels in it.
+    const hook = payment.notifyUrl.replace(/\/notify\/[^/?#]+$/, '/webhook');
+    const answer = await fetch(hook, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Fake-Signature': `t=${t},v1=${v1}` },
       body,
     });
+    if (!answer.ok)
+      throw new Error(`the webhook ${type} of ${payment.reference} was answered ${answer.status}`);
+    return answer;
   }
 
   const json = (res, status, value) => {
@@ -109,6 +118,34 @@ export async function startGateway(port) {
         return json(res, 200, { id: refund.id, status: refund.status });
       }
 
+      // merchant-initiated recurring charge of a stored method (E2E-15): paid, or declined while `declineNextCharge` armed it
+      if (req.method === 'POST' && url.pathname === '/v1/charges') {
+        const body = JSON.parse(raw);
+        const declined = declineCharges > 0;
+        if (declined) declineCharges--;
+        const charge = {
+          id: `ch_${runTag}${++sequence}`,
+          reference: body.reference,
+          amount: body.amount,
+          currency: body.currency,
+          storedMethod: body.storedMethod,
+          status: declined ? 'failed' : 'paid',
+        };
+        chargeLog.push(charge);
+        return json(
+          res,
+          200,
+          declined
+            ? {
+                id: charge.id,
+                status: 'failed',
+                code: 'card_declined',
+                message: 'The card was declined',
+              }
+            : { id: charge.id, status: 'paid' },
+        );
+      }
+
       const refundQuery = url.pathname.match(/^\/v1\/refunds\/([^/]+)$/);
 
       if (req.method === 'GET' && refundQuery) {
@@ -166,6 +203,14 @@ export async function startGateway(port) {
     secret: GATEWAY_SECRET,
     payments,
     /** Every refund the gateway accepted, in order: { id, paymentId, amount, currency, status }. */
+    /** The next `count` recurring charges are declined (a failed renewal); later ones are paid. */
+    declineNextCharge(count = 1) {
+      declineCharges = count;
+    },
+    /** Every recurring charge the gateway received, in order. */
+    get charges() {
+      return [...chargeLog];
+    },
     get refunds() {
       return [...refundsById.values()];
     },
@@ -185,4 +230,15 @@ export async function completePayment(payUrl) {
   const target = /http-equiv="refresh" content="0;url=([^"]+)"/.exec(html)?.[1];
 
   if (target) await fetch(target.replace(/&amp;/g, '&'), { redirect: 'manual' });
+}
+
+/**
+ * Like completePayment, but the buyer's browser never returns to the store: only the signed `payment.succeeded` webhook arrives. A subscription
+ * needs this: the stored method the store charges at every renewal travels in the webhook, the status query that the return page triggers
+ * carries none (E2E-15).
+ */
+export async function payByWebhookOnly(payUrl) {
+  const page = await fetch(payUrl);
+  if (!page.ok) throw new Error(`the fake gateway page answered ${page.status}`);
+  await page.text();
 }

@@ -1,4 +1,5 @@
 // Helpers of the panel scenarios 56 to 65 (13 section 25.4). They only use the HTTP API (as a person with a session would) and the browser; no SQL.
+import { must } from '../../lib/api.mjs';
 import { grantUserNode } from '../../lib/bootstrap.mjs';
 import { newContext } from '../../lib/browser.mjs';
 import { hydrated, panelOpen } from '../../lib/ui.mjs';
@@ -68,4 +69,63 @@ export async function modalsClosed(page, timeout = 15000) {
     null,
     { timeout },
   );
+}
+
+/**
+ * Sets store settings (a partial POST) and returns the function that puts the previous values back: settings are global state of the one
+ * instance, so a scenario that changes them restores them in a `finally`.
+ */
+export async function settingsPatch(admin, changes) {
+  const res = must(await admin.get('/api/panel/market/settings'), 'read the market settings');
+  const before = res.json.settings ?? res.json;
+  const restore = {};
+  for (const key of Object.keys(changes)) if (key in before) restore[key] = before[key];
+  must(await admin.post('/api/panel/market/settings', changes), 'change the market settings');
+
+  return async () => {
+    await admin.post('/api/panel/market/settings', restore);
+  };
+}
+
+/** The console errors since `mark` that match `pattern` were provoked on purpose: exactly `count` must exist, and they leave the run's errors. */
+export function provoked(pc, mark, pattern, label, count = 1) {
+  const hits = pc.errors.slice(mark).filter((e) => pattern.test(e));
+  if (hits.length !== count)
+    throw new Error(
+      `${label}: expected ${count} provoked console error(s) matching ${pattern}, got ${hits.length}: ${hits.join(' | ')}`,
+    );
+  for (const hit of hits) pc.errors.splice(pc.errors.indexOf(hit), 1);
+}
+
+/**
+ * The panel of the local panel-ui checkout (`e2e-instance.sh start --ui external:<theme>,<panel>`), or null. The panel the platform serves is the one
+ * bundled in the jar (an older release); the checkout is the host the design guidelines and the X-9 menu API are written against.
+ */
+export const devPanelBase = (env) => (env.panelUrl ? `${env.panelUrl}/panel` : null);
+
+/**
+ * A vite dev port opened directly bounces the browser into the Pano dev server (the SDK's dev-only checkDomainRedirection assumes that server proxies
+ * vite; the isolated instance serves the bundled panel instead). The bounce is a document navigation to the instance: answer it with 204 (no
+ * navigation), the dev page stays and talks to the instance through vite's own API proxy.
+ */
+export async function blockDevBounce(pc, env) {
+  await pc.context.route(`${env.url}/panel/**`, (route) =>
+    route.request().isNavigationRequest() ? route.fulfill({ status: 204 }) : route.continue(),
+  );
+}
+
+/** Opens `route` below `base` ("<url>/panel" or devPanelBase) and waits until the host booted and `ready(page)` holds. */
+export async function openAt(page, base, route, ready) {
+  await page.goto(`${base}${route}`, { waitUntil: 'domcontentloaded', timeout: 240000 });
+  await hydrated(page);
+  if (ready) await ready(page);
+}
+
+/**
+ * Waits until the page refresh that follows a modal-driven save has finished. A modal now hides first and the page refreshes when it is gone
+ * (hide-then.js), so a scenario that navigates away right after `modalsClosed` would abort that refresh and the browser would log "Failed to fetch".
+ */
+export async function refreshSettled(page) {
+  await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+  await sleep(500);
 }

@@ -2,7 +2,14 @@
 import fs from 'node:fs';
 import { must } from '../lib/api.mjs';
 import { assert, assertEqual } from '../lib/ui.mjs';
-import { signedIn, openMarket, waitFor, modalsClosed, bodyText } from './lib/panel.mjs';
+import {
+  signedIn,
+  openMarket,
+  waitFor,
+  modalsClosed,
+  bodyText,
+  refreshSettled,
+} from './lib/panel.mjs';
 
 const enUS = JSON.parse(
   fs.readFileSync(new URL('../../src/locales/panel/en-US.json', import.meta.url), 'utf8'),
@@ -40,6 +47,7 @@ export const scenarios = [
       await modal.getByRole('button', { name: 'Grant Credits' }).click();
       await page.getByText('Credits granted.').waitFor({ timeout: 15000 });
       await modalsClosed(page);
+      await refreshSettled(page);
 
       // the ledger of the account: one GRANT entry, the admin is the actor
       await openMarket(

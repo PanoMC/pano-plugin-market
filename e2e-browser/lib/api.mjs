@@ -73,6 +73,10 @@ export class Api {
     return this.request('PUT', path, body, headers);
   }
 
+  delete(path, headers) {
+    return this.request('DELETE', path, undefined, headers);
+  }
+
   /** A multipart form of text fields (the product and category forms of the panel). */
   multipart(method, path, fields) {
     const form = new FormData();
