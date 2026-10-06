@@ -6,6 +6,7 @@ import com.panomc.plugins.market.core.abuse.BlockMatcher
 import com.panomc.plugins.market.core.abuse.BlockSubjects
 import com.panomc.plugins.market.core.abuse.BlockType as CoreBlockType
 import com.panomc.plugins.market.core.delivery.ProductAction
+import com.panomc.plugins.market.core.refund.RefundMath
 import com.panomc.plugins.market.db.MarketDaoITBase
 import com.panomc.plugins.market.db.model.BlockSource
 import com.panomc.plugins.market.db.model.BlockType
@@ -463,6 +464,49 @@ class DisputeServiceIT : MarketDaoITBase() {
         assertEquals(OrderStatus.CHARGEBACK, order.status)
         assertEquals(OrderStatus.REFUNDED, order.statusBeforeDispute)
         assertEquals(0, sold(paid.products[0].id))
+    }
+
+    @Test
+    fun `a refund by line settling on the charged-back order counts its units once, plans no second REVOKE and WON gives back only the units that were not refunded (R-27)`(): Unit = runBlocking {
+        val paid = r.place(
+            steve(),
+            listOf(
+                RefundLine(600, quantity = 2, actions = listOf(permission("a1", "group.vip"), ProductAction(id = "a2", type = DeliveryActionType.CREDIT, credit = 100))),
+                RefundLine(400, actions = listOf(permission("b1", "group.vip2")))
+            )
+        )
+        val line1 = paid.items[0]
+
+        pendingRefund(paid, RefundInput(items = listOf(RefundMath.ItemRequest(line1.id, 1))), "gw-r27i")
+        dispute(paid, DisputeState.OPENED, "dp_r27i")
+
+        assertEquals(0, sold(paid.products[0].id), "O11 took both units of line 1 out of the sold count")
+        assertEquals(0, sold(paid.products[1].id))
+
+        val revokedByDispute = revokeRows(paid.order.id).map { it.id }.toSet()
+
+        r.inbound(paid, RefundState.SUCCEEDED, amount = 300, gatewayRefundId = "gw-r27i")
+
+        val settled = r.order(paid.order.id)
+        val items = r.items(paid.order.id).associateBy { it.id }
+
+        assertEquals(OrderStatus.CHARGEBACK, settled.status)
+        assertEquals(OrderStatus.PARTIALLY_REFUNDED, settled.statusBeforeDispute)
+        assertEquals(300, settled.refundedTotal)
+        assertEquals(1, items.getValue(line1.id).refundedQuantity, "one unit of line 1 counts as refunded")
+        assertEquals(0, sold(paid.products[0].id), "and it does not leave the sold count a second time")
+        assertEquals(0, sold(paid.products[1].id))
+
+        val rows = revokeRows(paid.order.id)
+
+        assertEquals(revokedByDispute, rows.map { it.id }.toSet(), "the chargeback had taken every unit back: the refund plans nothing more")
+        assertEquals(rows.size, rows.map { Triple(it.orderItemId, it.actionId, it.unitIndex) }.toSet().size, "no REVOKE row twice for an item, action and unit")
+
+        dispute(paid, DisputeState.WON, "dp_r27i")
+
+        assertEquals(OrderStatus.PARTIALLY_REFUNDED, r.order(paid.order.id).status)
+        assertEquals(1, sold(paid.products[0].id), "one of the two units of line 1 was refunded, so one comes back")
+        assertEquals(1, sold(paid.products[1].id), "the untouched line comes back whole")
     }
 
     // ===== V-07, RD-D9, RD-D10 ======================================================================================================
