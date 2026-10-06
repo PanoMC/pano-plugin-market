@@ -12,6 +12,7 @@ import {
   submitCheckout,
   successPlan,
 } from '../checkoutSubmit.js';
+import { normalize } from '../api-result.js';
 
 const UUID4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -570,5 +571,27 @@ describe('failurePlan', () => {
     );
 
     expect(result.success.clearCart).toBe(false);
+  });
+});
+
+describe('a provider error at start, as the real answer arrives', () => {
+  // the 502 body of PAYMENT_PROVIDER_ERROR carries the provider's own `code` next to the order (E2E-18 found the checkout staying on the form)
+  test('goes to the order page with the order the checkout created', () => {
+    const res = normalize({
+      result: 'error',
+      error: 'PAYMENT_PROVIDER_ERROR',
+      code: 'GATEWAY_UNREACHABLE',
+      order: { publicId: 'ORD123' },
+      orderToken: 'tok-abc',
+    });
+    const plan = failurePlan({
+      res,
+      draft: {},
+      context: { origin: 'https://shop.test', base: '' },
+    });
+
+    expect(plan.action.kind).toBe('ORDER_CREATED');
+    expect(plan.success.navigation).toEqual({ type: 'GOTO', path: '/store/order/ORD123' });
+    expect(plan.success.token).toEqual({ publicId: 'ORD123', value: 'tok-abc' });
   });
 });

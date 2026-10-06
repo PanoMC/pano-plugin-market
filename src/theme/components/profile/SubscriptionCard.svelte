@@ -170,6 +170,7 @@
 
   // cancellation is at period end only: the buyer cannot ask for an immediate one
   const cancel = () => run('cancel', { body: { ...CANCEL_BODY } });
-  const resume = () => run('resume');
+  // an empty JSON object: a POST without a body is refused by the route's body validation (400), which is what "Keep subscription" used to answer
+  const resume = () => run('resume', { body: {} });
   const portal = (purpose) => run('portal', { body: { purpose } });
 </script>

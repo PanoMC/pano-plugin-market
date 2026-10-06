@@ -24,6 +24,28 @@ describe('normalize', () => {
     });
   });
 
+  test('a code of the answer itself never replaces the error code of the envelope', () => {
+    // PAYMENT_PROVIDER_ERROR carries the provider's own `code` next to the order the checkout created
+    expect(
+      normalize({
+        result: 'error',
+        error: 'PAYMENT_PROVIDER_ERROR',
+        code: 'GATEWAY_UNREACHABLE',
+        order: { publicId: 'P' },
+      }),
+    ).toEqual({
+      ok: false,
+      code: 'PAYMENT_PROVIDER_ERROR',
+      providerCode: 'GATEWAY_UNREACHABLE',
+      order: { publicId: 'P' },
+    });
+    expect(normalize({ result: 'error', code: 'ONLY_A_CODE' })).toEqual({
+      ok: false,
+      code: 'GENERIC',
+      providerCode: 'ONLY_A_CODE',
+    });
+  });
+
   test('error result without a code is GENERIC', () => {
     expect(normalize({ result: 'error' })).toEqual({ ok: false, code: 'GENERIC' });
   });

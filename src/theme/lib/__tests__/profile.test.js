@@ -1063,6 +1063,14 @@ describe('source rules of the profile files (14 §2)', () => {
     expect(block).toContain('theme.profile.block.title');
     expect(block).not.toContain('<button');
   });
+
+  test('the profile block asks for the summary itself in the browser when the host gives the slot no load result', () => {
+    const block = read('src/theme/components/profile/MarketProfileBlock.svelte');
+    expect(block).toContain("import { onMount } from 'svelte'");
+    expect(block).toContain('if (data?.summary) return;');
+    expect(block).toContain("call('GET', '/api/market/me/summary')");
+    expect(block).toContain('data?.summary ?? fetched');
+  });
 });
 
 describe('locale keys of the profile files', () => {

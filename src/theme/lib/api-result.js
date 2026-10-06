@@ -27,7 +27,10 @@ export function buildQuery(query) {
 /**
  * Turns the raw API answer into an ApiResult.
  *  undefined / non-object / no `result` -> { ok: false, code: 'NETWORK' }
- *  result === 'error'                    -> { ok: false, code: raw.error, ...raw }
+ *  result === 'error'                    -> { ok: false, ...raw, code: raw.error }
+ * The envelope's own `error` is the code. Some answers carry a `code` of their own (PAYMENT_PROVIDER_ERROR: the provider's
+ * `GATEWAY_UNREACHABLE`): it is kept as `providerCode` and never replaces the envelope's code, or the page would not
+ * recognise the answer (the checkout would show "something went wrong" instead of going to the order page).
  *  otherwise                             -> { ok: true, ...raw }
  */
 export function normalize(raw) {
@@ -35,8 +38,14 @@ export function normalize(raw) {
     return { ok: false, code: 'NETWORK' };
 
   if (raw.result === 'error') {
-    const { result, error, ...rest } = raw;
-    return { ok: false, code: typeof error === 'string' && error ? error : 'GENERIC', ...rest };
+    const { result, error, code: providerCode, ...rest } = raw;
+
+    return {
+      ok: false,
+      ...rest,
+      ...(providerCode === undefined ? {} : { providerCode }),
+      code: typeof error === 'string' && error ? error : 'GENERIC',
+    };
   }
 
   const { result, ...rest } = raw;

@@ -475,7 +475,7 @@ describe('source rules of the subscription and creator files (14 §2)', () => {
     const card = read(FILES[2]);
     expect(card).toContain('<ConfirmModal');
     expect(card).toContain("run('cancel', { body: { ...CANCEL_BODY } })");
-    expect(card).toContain("run('resume')");
+    expect(card).toContain("run('resume', { body: {} })");
     expect(card).toContain("run('portal'");
     expect(card).toContain('actionOutcome(res)');
     expect(card).toContain('window.location.assign(outcome.url)');
