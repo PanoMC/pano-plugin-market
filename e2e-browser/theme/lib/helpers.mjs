@@ -36,6 +36,8 @@ export async function setSettings(admin, patch) {
 /** Runs `fn` with `patch` applied and puts `restore` back afterwards, whatever happens. */
 export async function withSettings(admin, patch, restore, fn) {
   await setSettings(admin, patch);
+  // the store reads its settings through a small cache: a first request right after the PUT can still see the old values (TH-01 flaked on it)
+  await new Promise((resolve) => setTimeout(resolve, 1500));
 
   try {
     return await fn();
