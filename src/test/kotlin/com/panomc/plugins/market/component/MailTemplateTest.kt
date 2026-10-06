@@ -7,7 +7,14 @@ import com.panomc.plugins.market.db.model.MailKind
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.db.model.MarketOrderItem
 import com.panomc.plugins.market.db.model.MarketRefund
+import com.panomc.plugins.market.db.model.MarketEntitlement
 import com.panomc.plugins.market.db.model.MarketRefundItem
+import com.panomc.plugins.market.db.model.MarketShipment
+import com.panomc.plugins.market.db.model.MarketShipmentItem
+import com.panomc.plugins.market.db.model.MarketSubscription
+import com.panomc.plugins.market.db.model.ShipmentStatus
+import com.panomc.plugins.market.db.model.SubscriptionMode
+import com.panomc.plugins.market.db.model.SubscriptionStatus
 import com.panomc.plugins.market.db.model.OrderItemKind
 import com.panomc.plugins.market.db.model.PricingMode
 import com.panomc.plugins.market.i18n.MarketFormat
@@ -109,7 +116,39 @@ class MailTemplateTest {
         fun input(kind: MailKind, o: MarketOrder = digital, params: JsonObject = JsonObject(), r: MarketRefund? = null, rl: List<MarketRefundItem> = emptyList(), attached: Boolean = false) =
             MailInput(kind, locale, o, items, params, r, rl, attached)
 
+        val day = 86_400_000L
+        val sub = MarketSubscription(
+            id = 5, productName = "Gold Rank", initialOrderId = 1042, mode = SubscriptionMode.GATEWAY, status = SubscriptionStatus.ACTIVE, price = 15_000, currency = "TRY",
+            cycleCount = 2, currentPeriodEnd = paidAt + 30 * day, graceEndsAt = paidAt + 33 * day, storedMethodLabel = "Visa **** 4242", endReason = "BUYER_CANCEL"
+        )
+        val manual = MarketSubscription(
+            id = 6, productName = "Gold Rank", initialOrderId = 1042, mode = SubscriptionMode.MANUAL, status = SubscriptionStatus.ACTIVE, price = 15_000, currency = "TRY",
+            cycleCount = 2, currentPeriodEnd = paidAt + 30 * day
+        )
+        val entitlement = MarketEntitlement(id = 3, orderId = 1042, orderItemId = 1, expiresAt = paidAt + 30 * day)
+        val shippedOrder = MarketOrder(
+            id = 1042, userId = null, playerUsername = "Steve", totalPrice = 37_500, currency = "TRY", status = OrderStatus.COMPLETED, createdAt = createdAt, publicId = "K7M2Q9X4B8D6T3W5Z1RV",
+            accessToken = "0f1e2d3c4b5a69788796a5b4c3d2e1f001122334", email = "steve@example.com", locale = "en-US", paidAt = paidAt, requiresShipping = true
+        )
+        val parcel = MarketShipment(
+            id = 8, orderId = 1042, status = ShipmentStatus.IN_TRANSIT, carrierName = "Aras Kargo", trackingNumber = "AR123456789", trackingUrl = "https://track.example/AR123456789?a=1&b=2",
+            estimatedDeliveryAt = paidAt + 3 * day, deliveredAt = paidAt + 2 * day
+        )
+        val parcelLines = listOf(MarketShipmentItem(id = 1, shipmentId = 8, orderItemId = 1, quantity = 1), MarketShipmentItem(id = 2, shipmentId = 8, orderItemId = 2, quantity = 2))
+        val shipParams = JsonObject().put("isPartial", true).put("addressLines", JsonArray().add("Steve Miner").add("12 Cube Street").add("34000 Istanbul").add("Turkey"))
+
         return listOf(
+            Scenario("expiry-reminder", MailInput(MailKind.EXPIRY_REMINDER, locale, digital, items, JsonObject().put("expiresAt", paidAt + 30 * day), entitlement = entitlement, productSlug = "gold-rank")),
+            Scenario("subscription-reminder-gateway", MailInput(MailKind.SUBSCRIPTION_REMINDER, locale, digital, items, JsonObject().put("periodEnd", paidAt + 30 * day), subscription = sub, productSlug = "gold-rank")),
+            Scenario(
+                "subscription-reminder-manual",
+                MailInput(MailKind.SUBSCRIPTION_REMINDER, locale, digital, items, JsonObject().put("periodEnd", paidAt + 30 * day).put("payUrl", "/store/order/PAYLINK0000000000000"), subscription = manual, productSlug = "gold-rank")
+            ),
+            Scenario("subscription-payment-failed", MailInput(MailKind.SUBSCRIPTION_PAYMENT_FAILED, locale, digital, items, JsonObject().put("graceEndsAt", paidAt + 33 * day), subscription = sub)),
+            Scenario("subscription-cancelled", MailInput(MailKind.SUBSCRIPTION_CANCELLED, locale, digital, items, JsonObject().put("accessUntil", paidAt + 30 * day), subscription = sub)),
+            Scenario("subscription-ended", MailInput(MailKind.SUBSCRIPTION_ENDED, locale, digital, items, JsonObject().put("endReason", "PAYMENT_FAILED"), subscription = sub)),
+            Scenario("shipment-shipped", MailInput(MailKind.SHIPMENT_SHIPPED, locale, shippedOrder, items, shipParams, shipment = parcel, shipmentItems = parcelLines)),
+            Scenario("shipment-delivered", MailInput(MailKind.SHIPMENT_DELIVERED, locale, shippedOrder, items, JsonObject(), shipment = parcel, shipmentItems = parcelLines)),
             Scenario("order-received", input(MailKind.ORDER_RECEIVED, order(status = OrderStatus.PENDING))),
             Scenario("bank-transfer-instructions", input(MailKind.BANK_TRANSFER_INSTRUCTIONS, order(status = OrderStatus.PENDING), bank)),
             Scenario("order-confirmation", input(MailKind.ORDER_CONFIRMATION, attached = true)),
@@ -158,7 +197,7 @@ class MailTemplateTest {
 
                 for ((what, value) in listOf("subject" to content.subject, "preheader" to content.preheader, "heading" to content.heading, "text" to text, "html" to rendered)) {
                     assertFalse(unresolved.containsMatchIn(value), "${s.name} / $locale: unresolved placeholder in $what: ${unresolved.find(value)?.value}")
-                    assertFalse(value.contains("mail.common.") || value.contains("mail.order-") || value.contains("mail.gift-") || value.contains("mail.bank-"), "${s.name} / $locale: a missing key leaked into $what")
+                    assertFalse(listOf("mail.common.", "mail.order-", "mail.gift-", "mail.bank-", "mail.expiry-", "mail.subscription-", "mail.shipment-", "mail.test.").any { value.contains(it) }, "${s.name} / $locale: a missing key leaked into $what")
                 }
 
                 val file = File(goldenDir, "${s.name}.$locale.golden")
@@ -349,19 +388,189 @@ class MailTemplateTest {
     }
 
     @Test
-    fun `the kinds of the other mail slice have no composer yet and say so`(): Unit = runBlocking {
-        val open = MailKind.entries - MailContentBuilder.KINDS
-        val expected = setOf(
-            MailKind.SUBSCRIPTION_REMINDER, MailKind.SUBSCRIPTION_PAYMENT_FAILED, MailKind.SUBSCRIPTION_CANCELLED, MailKind.SUBSCRIPTION_ENDED, MailKind.EXPIRY_REMINDER,
-            MailKind.SHIPMENT_SHIPPED, MailKind.SHIPMENT_DELIVERED
-        )
+    fun `every kind of 12 section 4_1 has a composer and a golden scenario`(): Unit = runBlocking {
+        assertEquals(MailKind.entries.toSet(), MailContentBuilder.KINDS, "no kind is left without a composer")
 
-        assertEquals(expected, open.toSet())
+        val seen = scenarios("en-US").map { it.input.kind }.toSet()
 
-        for (kind in open) {
-            assertFalse(builder().supports(kind))
-            assertThrows(IllegalArgumentException::class.java) { runBlocking { builder().build(MailInput(kind, "en-US", order(), items)) } }
+        assertEquals(MailKind.entries.toSet(), seen, "every kind has a scenario, so the golden files cover it in tr, en-US and ru")
+
+        for (kind in MailKind.entries) for (locale in locales) {
+            val names = scenarios(locale).filter { it.input.kind == kind }.map { it.name }
+
+            assertTrue(names.isNotEmpty())
+            names.forEach { name -> assertTrue(File(goldenDir, "$name.$locale.golden").isFile, "golden file of $name in $locale") }
         }
+    }
+
+    @Test
+    fun `an expiry reminder names the product and the end, and renews through the product page only while the product exists`(): Unit = runBlocking {
+        val s = scenarios("en-US").first { it.name == "expiry-reminder" }
+        val content = builder().build(s.input)
+
+        assertEquals("Gold Rank expires on Jun 27, 2026", content.subject)
+        assertEquals(listOf("Product", "Valid until"), content.details.map { it.label })
+        assertEquals("Renew", content.buttonLabel)
+        assertEquals("https://shop.example/store/gold-rank", content.buttonUrl)
+
+        val gone = builder().build(MailInput(MailKind.EXPIRY_REMINDER, "en-US", order(), items, s.input.params, entitlement = s.input.entitlement, productSlug = null))
+
+        assertNull(gone.buttonUrl, "a deleted or archived product leaves no renew button")
+        assertNull(gone.buttonLabel)
+
+        val bad = builder().build(MailInput(MailKind.EXPIRY_REMINDER, "en-US", order(), items, s.input.params, entitlement = s.input.entitlement, productSlug = "../admin"))
+
+        assertNull(bad.buttonUrl, "a slug with a path in it is never linked")
+        assertThrows(IllegalStateException::class.java) { runBlocking { builder().build(MailInput(MailKind.EXPIRY_REMINDER, "en-US", order(), items, JsonObject(), entitlement = MarketEntitlement(id = 1))) } }
+    }
+
+    @Test
+    fun `a subscription reminder asks a manual subscriber to pay and tells an automatic one what will be charged`(): Unit = runBlocking {
+        val auto = builder().build(scenarios("en-US").first { it.name == "subscription-reminder-gateway" }.input)
+        val manual = builder().build(scenarios("en-US").first { it.name == "subscription-reminder-manual" }.input)
+
+        assertEquals("Gold Rank renews on Jun 27, 2026", auto.subject)
+        assertTrue(auto.paragraphs.any { it.contains("We will charge ₺150.00") })
+        assertTrue(auto.paragraphs.any { it.contains("Visa **** 4242") }, "the stored method is named: ${auto.paragraphs}")
+        assertNull(auto.buttonUrl, "an automatic renewal has nothing to pay")
+        assertEquals("https://shop.example/profile", auto.secondaryUrl)
+        assertEquals("Manage subscription", auto.secondaryLabel)
+
+        assertTrue(manual.paragraphs.any { it.contains("Please pay ₺150.00") })
+        assertEquals("Pay now", manual.buttonLabel)
+        assertEquals("https://shop.example/store/order/PAYLINK0000000000000", manual.buttonUrl, "the renewal order's pay link, made absolute")
+
+        val noLink = builder().build(MailInput(MailKind.SUBSCRIPTION_REMINDER, "en-US", order(), items, JsonObject().put("periodEnd", 1_780_000_000_000L), subscription = manual.let { scenarios("en-US").first { s -> s.name == "subscription-reminder-manual" }.input.subscription }, productSlug = "gold-rank"))
+
+        assertEquals("https://shop.example/store/gold-rank", noLink.buttonUrl, "without a pay link the product page is the target")
+
+        val evil = builder().build(MailInput(MailKind.SUBSCRIPTION_REMINDER, "en-US", order(), items, JsonObject().put("periodEnd", 1_780_000_000_000L).put("payUrl", "javascript:alert(1)"), subscription = scenarios("en-US").first { it.name == "subscription-reminder-manual" }.input.subscription))
+
+        assertNull(evil.buttonUrl, "a stored link that is neither a site path nor http(s) is no button")
+    }
+
+    @Test
+    fun `a failed payment shows the grace date and links the renewal order, else the profile`(): Unit = runBlocking {
+        val failed = scenarios("en-US").first { it.name == "subscription-payment-failed" }.input
+        val content = builder().build(failed)
+
+        assertEquals("Payment failed for Gold Rank", content.subject)
+        assertTrue(content.paragraphs.any { it.contains("until Jun 30, 2026") }, content.paragraphs.toString())
+        assertEquals(listOf("Product", "Amount"), content.details.map { it.label })
+        assertEquals("Update payment", content.buttonLabel)
+        assertEquals("https://shop.example/profile", content.buttonUrl)
+
+        val withOrder = builder().build(MailInput(MailKind.SUBSCRIPTION_PAYMENT_FAILED, "en-US", order(), items, JsonObject().put("payUrl", "/store/order/RENEWAL00000000000000"), subscription = failed.subscription))
+
+        assertEquals("https://shop.example/store/order/RENEWAL00000000000000", withOrder.buttonUrl)
+
+        val noGrace = builder().build(MailInput(MailKind.SUBSCRIPTION_PAYMENT_FAILED, "en-US", order(), items, JsonObject(), subscription = MarketSubscription(id = 1, productName = "Gold Rank", price = 100, currency = "TRY")))
+
+        assertTrue(noGrace.paragraphs.none { it.contains("until") }, "no grace date, no 'until': ${noGrace.paragraphs}")
+    }
+
+    @Test
+    fun `an ended subscription says why, an unknown reason falls back to the neutral sentence`(): Unit = runBlocking {
+        val ended = scenarios("en-US").first { it.name == "subscription-ended" }.input
+        val content = builder().build(ended)
+
+        assertTrue(content.paragraphs.any { it.contains("payment could not be collected") })
+        assertEquals("https://shop.example/store", content.buttonUrl)
+
+        for (reason in listOf("SOMETHING_NEW", "bad reason!", "")) {
+            val other = builder().build(MailInput(MailKind.SUBSCRIPTION_ENDED, "en-US", order(), items, JsonObject().put("endReason", reason), subscription = MarketSubscription(id = 1, productName = "Gold Rank")))
+
+            assertTrue(other.paragraphs.any { it.contains("contact the store") }, "$reason: ${other.paragraphs}")
+        }
+
+        for (reason in listOf("BUYER_CANCEL", "ADMIN_CANCEL", "PAYMENT_FAILED", "GATEWAY_ENDED", "COMPLETED", "REFUND", "CHARGEBACK", "PROVIDER_UNAVAILABLE", "OTHER")) {
+            for (locale in locales) assertTrue(i18n.has(locale, "mail.subscription-ended.reason.$reason"), "$reason in $locale")
+        }
+    }
+
+    @Test
+    fun `a cancelled subscription keeps access until the paid period ends`(): Unit = runBlocking {
+        val content = builder().build(scenarios("en-US").first { it.name == "subscription-cancelled" }.input)
+
+        assertEquals("Gold Rank will not renew", content.subject)
+        assertTrue(content.paragraphs.any { it.contains("until Jun 27, 2026") })
+        assertNull(content.buttonUrl)
+        assertEquals("https://shop.example/profile", content.secondaryUrl)
+
+        val open = builder().build(MailInput(MailKind.SUBSCRIPTION_CANCELLED, "en-US", order(), items, JsonObject(), subscription = MarketSubscription(id = 1, productName = "Gold Rank")))
+
+        assertTrue(open.paragraphs.any { it.contains("end of the current period") })
+    }
+
+    @Test
+    fun `a shipped mail names carrier, tracking number, estimate and parcel lines and tracks through a safe link only`(): Unit = runBlocking {
+        val shipped = scenarios("en-US").first { it.name == "shipment-shipped" }.input
+        val content = builder().build(shipped)
+
+        assertEquals("Your order #1042 is on its way", content.subject)
+        assertEquals(listOf("Order number", "Carrier", "Tracking number", "Estimated delivery", "Shipping to"), content.details.map { it.label })
+        assertEquals("AR123456789", content.details[2].value)
+        assertEquals("Steve Miner, 12 Cube Street, 34000 Istanbul, Turkey", content.details[4].value)
+        assertEquals(listOf("Gold Rank", "Starter Bundle"), content.items.map { it.name })
+        assertEquals(listOf("1", "2"), content.items.map { it.quantity })
+        assertTrue(content.items.all { it.total.isEmpty() }, "a parcel shows no prices")
+        assertTrue(content.paragraphs.any { it.contains("part of your order") }, "the partial note")
+        assertEquals("Track shipment", content.buttonLabel)
+        assertEquals("https://track.example/AR123456789?a=1&b=2", content.buttonUrl)
+        assertEquals("View order", content.secondaryLabel)
+        assertEquals("https://shop.example/store/order/K7M2Q9X4B8D6T3W5Z1RV?token=0f1e2d3c4b5a69788796a5b4c3d2e1f001122334", content.secondaryUrl, "a guest order's link carries the token")
+
+        val unsafe = MarketShipment(id = 8, orderId = 1042, status = ShipmentStatus.IN_TRANSIT, carrierName = "X", trackingUrl = "javascript:alert(1)")
+        val safe = builder().build(MailInput(MailKind.SHIPMENT_SHIPPED, "en-US", shipped.order, items, JsonObject(), shipment = unsafe))
+
+        assertEquals("View order", safe.buttonLabel, "a javascript: tracking url is never a button")
+        assertNull(safe.secondaryLabel)
+        assertEquals(listOf("Order number", "Carrier"), safe.details.map { it.label }, "no tracking row without a number")
+    }
+
+    @Test
+    fun `a shipped mail without a shipment row still renders from the params the shipping service queued`(): Unit = runBlocking {
+        val params = JsonObject().put("carrierName", "Yurtici").put("trackingNumber", "YT1").put("trackingUrl", "https://t.example/YT1").put("estimatedDelivery", "Jun 29, 2026")
+            .put("items", JsonArray().add(JsonObject().put("name", "Poster").put("variantName", "A2").put("quantity", 3)))
+        val content = builder().build(MailInput(MailKind.SHIPMENT_SHIPPED, "en-US", order(), items, params))
+
+        assertEquals(listOf("Poster"), content.items.map { it.name })
+        assertEquals("A2", content.items[0].variant)
+        assertEquals("3", content.items[0].quantity)
+        assertEquals("Jun 29, 2026", content.details.single { it.label == "Estimated delivery" }.value)
+        assertEquals("https://t.example/YT1", content.buttonUrl)
+    }
+
+    @Test
+    fun `a delivered mail names carrier and delivery date and links the order`(): Unit = runBlocking {
+        val content = builder().build(scenarios("en-US").first { it.name == "shipment-delivered" }.input)
+
+        assertEquals("Your order #1042 was delivered", content.subject)
+        assertEquals(listOf("Order number", "Carrier", "Delivered on"), content.details.map { it.label })
+        assertEquals("View order", content.buttonLabel)
+        assertEquals(2, content.items.size)
+    }
+
+    @Test
+    fun `a test order marks the new kinds like the old ones and a missing row is no mail`(): Unit = runBlocking {
+        val testOrder = order(testMode = true)
+        val sub = MarketSubscription(id = 1, productName = "Gold Rank", price = 100, currency = "TRY", currentPeriodEnd = 1_780_000_000_000L)
+        val content = builder().build(MailInput(MailKind.SUBSCRIPTION_REMINDER, "en-US", testOrder, items, JsonObject(), subscription = sub))
+
+        assertTrue(content.subject.startsWith("[TEST] "))
+        assertTrue(content.testMode)
+
+        assertThrows(IllegalStateException::class.java) { runBlocking { builder().build(MailInput(MailKind.SUBSCRIPTION_ENDED, "en-US", order(), items)) } }
+        assertThrows(IllegalStateException::class.java) { runBlocking { builder().build(MailInput(MailKind.SUBSCRIPTION_CANCELLED, "en-US", order(), items)) } }
+    }
+
+    @Test
+    fun `the plain test mail is translated and mentions no order`(): Unit = runBlocking {
+        val subjects = locales.map { builder().test(it).subject }
+
+        assertEquals(3, subjects.toSet().size)
+        assertEquals("Test e-mail from Blocky Store", builder().test("en-US").subject)
+        assertTrue(builder().test("en-US").items.isEmpty())
     }
 
     @Test
