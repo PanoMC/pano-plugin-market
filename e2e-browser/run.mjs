@@ -1,6 +1,6 @@
 // Browser runner (17 section 10, T6). `bun run e2e:browser [-- <filter>...]` runs every scenario file under e2e-browser/ whose id or path
 // contains one of the filters (`smoke/`, `panel/`, `theme/`, `UI-03`); no filter = all. The instance comes from MARKET_E2E_* (e2e-instance.sh
-// start --ui external:<theme>,<panel>); a scenario failing does not stop the others. Ends with one summary line and exits non-zero on a failure.
+// start; `--ui external:<theme>,<panel>` is optional); a scenario failing does not stop the others. Ends with one summary line and exits non-zero on a failure.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';

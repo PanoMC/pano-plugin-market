@@ -14,6 +14,9 @@ import {
 import { assert, assertEqual, open, panelOpen, rawKeys, rawPlaceholders } from '../lib/ui.mjs';
 
 const PAY_NODE = 'pano-plugin-market.manage.market.payments';
+// DOM selectors, not role queries: role queries skip hidden elements, and the Refund entry lives in a closed kebab menu
+const REFUND_ITEM = '.dropdown-item:has-text("Refund")';
+const SETTINGS_LINK = 'a[href*="/market/settings"]';
 const node = (suffix) => `pano.plugin.pano-plugin-market.${suffix}`;
 
 /**
@@ -114,9 +117,20 @@ export const scenarios = [
         p.getByText(`#${order.number}`).first().waitFor({ timeout: 60000 }),
       );
 
+      // positive control of the UI-09 selector: a full admin has the Settings area in the market navigation (a link in the DOM)
+      assert(
+        (await page.locator(SETTINGS_LINK).count()) >= 1,
+        'UI-07: the admin market navigation links to the Settings area (control of the UI-09 selector)',
+      );
+
       // 3. the order detail and its refund dialog: a split order warns before it refunds
       await panelOpen(page, env, `/market/orders/detail/${order.number}`, (p) =>
         p.getByText(`#${order.number}`).first().waitFor({ timeout: 60000 }),
+      );
+      // positive control of the UI-09 selector: the Refund entry sits in the (closed) actions menu, so it is in the DOM
+      assert(
+        (await page.locator(REFUND_ITEM).count()) >= 1,
+        'UI-07: the admin order detail has a Refund entry in its actions menu (control of the UI-09 selector)',
       );
       await page
         .getByRole('button', { name: /Refund/ })
@@ -258,11 +272,11 @@ scenarios.push(
         'UI-09: no "Create Order" button',
       );
 
-      // the section navigation of the market has no Settings entry for this user
-      const marketNav = page.getByRole('navigation').filter({ hasText: 'Orders' });
-      assert(
-        !(await marketNav.filter({ hasText: 'Payment Methods' }).count()),
-        'UI-09: no settings section in the market navigation',
+      // the area navigation of the market has no Settings entry for this user (checked in the DOM, not by visibility)
+      assertEqual(
+        await page.locator(SETTINGS_LINK).count(),
+        0,
+        'UI-09: no link to the Settings area in the market navigation',
       );
 
       // the order detail has no refund entry
@@ -270,9 +284,9 @@ scenarios.push(
         p.getByText(`#${order.number}`).first().waitFor({ timeout: 60000 }),
       );
       assertEqual(
-        await page.getByRole('button', { name: /Refund/ }).count(),
+        await page.locator(REFUND_ITEM).count(),
         0,
-        'UI-09: no refund button on the order detail',
+        'UI-09: no refund entry on the order detail',
       );
 
       // the settings page is refused, not rendered

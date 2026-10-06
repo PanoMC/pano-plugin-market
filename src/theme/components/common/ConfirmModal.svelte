@@ -33,6 +33,7 @@
 <script>
   import { onMount } from 'svelte';
   import { _ } from '../../../i18n.js';
+  import { createConfirmController } from '../../lib/confirmModal.js';
 
   /** id: unique DOM id; title / message / labels: already translated text; open it with bind:this + show(). */
   let {
@@ -50,19 +51,26 @@
 
   let element = $state();
   let modal;
-  let confirmed = false;
+
+  // confirm / dismiss: the action runs once, from the single hidden event (see lib/confirmModal.js)
+  const controller = createConfirmController({
+    getModal: () => modal,
+    getElement: () => element,
+    onconfirm: () => onconfirm(),
+    oncancel: () => oncancel(),
+  });
 
   onMount(() => {
     // Bootstrap is the host's global; the instance lives and dies with this component.
     modal = window.bootstrap?.Modal.getOrCreateInstance(element);
 
-    const onHidden = () => {
-      if (!confirmed) oncancel();
-      confirmed = false;
-    };
+    const onHide = () => controller.hideStarted();
+    const onHidden = () => controller.hidden();
+    element.addEventListener('hide.bs.modal', onHide);
     element.addEventListener('hidden.bs.modal', onHidden);
 
     return () => {
+      element.removeEventListener('hide.bs.modal', onHide);
       element.removeEventListener('hidden.bs.modal', onHidden);
       modal?.dispose();
       modal = undefined;
@@ -72,6 +80,7 @@
   export function show() {
     // a click that lands before onMount has run (a list that has only just rendered) still opens the modal
     modal ??= window.bootstrap?.Modal.getOrCreateInstance(element);
+    controller.reset();
     modal?.show();
   }
 
@@ -79,17 +88,5 @@
     modal?.hide();
   }
 
-  // The action runs after the modal has finished hiding: an action that removes this component (a list that reloads, a row that is
-  // replaced) while Bootstrap is still fading the modal out makes Bootstrap read the removed element ("reading 'style' of null").
-  function confirm() {
-    confirmed = true;
-
-    if (!modal || !element) {
-      onconfirm();
-      return;
-    }
-
-    element.addEventListener('hidden.bs.modal', () => onconfirm(), { once: true });
-    modal.hide();
-  }
+  const confirm = () => controller.confirm();
 </script>

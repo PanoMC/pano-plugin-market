@@ -1,4 +1,4 @@
-// What `scripts/e2e-instance.sh start --ui external:<theme>,<panel>` exported (17 section 8.1, 10). Nothing else is read.
+// What `scripts/e2e-instance.sh start` exported (17 section 8.1, 10); the theme / panel URLs only exist with `--ui external:<theme>,<panel>` and are optional. Nothing else is read.
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -7,7 +7,7 @@ function need(name) {
 
   if (!value) {
     throw new Error(
-      `${name} is not set: start the isolated instance with e2e-instance.sh start --ui external:<themePort>,<panelPort> and eval its output`,
+      `${name} is not set: start the isolated instance with e2e-instance.sh start and eval its output`,
     );
   }
 
@@ -34,8 +34,9 @@ export function loadEnv() {
   return {
     url,
     dir,
-    themeUrl: need('MARKET_E2E_THEME_URL'),
-    panelUrl: need('MARKET_E2E_PANEL_URL'),
+    // only exported by `--ui external:`; the runner goes through `url` (bundled UIs) either way
+    themeUrl: process.env.MARKET_E2E_THEME_URL?.replace(/\/$/, '') || null,
+    panelUrl: process.env.MARKET_E2E_PANEL_URL?.replace(/\/$/, '') || null,
     gatewayPort: Number(process.env.MARKET_E2E_GATEWAY_PORT || 18189),
     adminUser: adminEnv.SMOKE_ADMIN_USER || 'smokeadmin',
     adminPassword: () => {
