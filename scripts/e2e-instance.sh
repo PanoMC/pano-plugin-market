@@ -400,7 +400,23 @@ boot_and_wait() { # $1 = install | keep ; assumes the JVM is not running
     install_pano || abort_boot 15 "the install (smoke-install.sh) failed"
     : > "$INSTANCE/installed"
     post_install_restart
+    trust_loopback_proxy
   fi
+}
+
+# F-18 (evidence/E2E-04.md, CP-3): the real ClientIpResolver trusts X-Forwarded-For only from a listed proxy, so the IP block of F-18 is provable over HTTP only when the
+# instance lists the loopback address of the test JVM. The key is written while the JVM is stopped (Pano rewrites config.conf on shutdown), then the instance boots again.
+# The lifecycle instance keeps its own flow; MARKET_E2E_NO_TRUSTED_LOOPBACK=1 switches this off.
+trust_loopback_proxy() {
+  [ -z "${MARKET_E2E_NO_TRUSTED_LOOPBACK:-}" ] || return 0
+  case "$INSTANCE" in *-lifecycle) return 0 ;; esac
+  [ -f "$INSTANCE/plugins/$(basename "$PLUGIN_JAR")" ] || return 0
+  grep -qE '^[[:space:]]*trusted-proxies[[:space:]]*=[[:space:]]*\[[[:space:]]*\]' "$INSTANCE/config.conf" 2>/dev/null || return 0
+  stop_recorded || abort_boot 19 "the install JVM did not exit to trust the loopback proxy"
+  sed -i -E 's/^([[:space:]]*)trusted-proxies[[:space:]]*=[[:space:]]*\[[[:space:]]*\]/\1trusted-proxies = ["127.0.0.1", "::1"]/' "$INSTANCE/config.conf"
+  mv -f "$INSTANCE/pano.log" "$INSTANCE/pano-trust.log" 2>/dev/null
+  launch_pano || abort_boot 14 "the JVM did not start after trusting the loopback proxy"
+  wait_until "health" health_ok || abort_boot 14 "no GET /api/health 200 after trusting the loopback proxy"
 }
 
 # Finding of MK-012 (see evidence/MK-012.md): the market plugin of a JVM that was booted BEFORE the setup finished does not

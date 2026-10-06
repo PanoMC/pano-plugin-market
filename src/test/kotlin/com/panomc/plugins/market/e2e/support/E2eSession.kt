@@ -154,13 +154,14 @@ class E2eSession private constructor(val env: E2eEnv) {
     fun drainAndCheck() {
         var last: JsonObject? = null
         try {
-            Await.until(30_000, 250, "queues drained") {
+            // the mail job ticks every 15 s and a refund mail renders its invoice PDF: 30 s was tighter than one slow tick on a shared machine (CP-3: RF-05 / RF-08 failed on `mailsPending:1`)
+            Await.until(90_000, 250, "queues drained") {
                 val queues = admin.get("/api/panel/market/health", log = false).obj().getJsonObject("queues")
                 last = queues
                 listOf("deliveriesPending", "webhooksPending", "mailsPending", "deferredEvents").all { (queues?.getInteger(it) ?: 0) == 0 }
             }
         } catch (e: AwaitTimeout) {
-            throw AssertionError("queues did not drain within 30 s, last health queues: ${last?.encode()}", e)
+            throw AssertionError("queues did not drain within 90 s, last health queues: ${last?.encode()}", e)
         }
         runBlocking { InvariantChecker.assertAll(db.pool) }
 
