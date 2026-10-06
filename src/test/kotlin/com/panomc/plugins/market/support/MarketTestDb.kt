@@ -176,6 +176,24 @@ object MarketTestDb {
         }
 
     /**
+     * The subset of [tables] that is not pristine: non-empty (one UNION ALL of `LIMIT 1` probes, one round trip) or
+     * empty with `AUTO_INCREMENT > 1` (read live from information_schema, MariaDB does not cache it). TRUNCATE is slow
+     * in InnoDB (it recreates the tablespace), so the untouched tables are skipped.
+     */
+    private suspend fun dirtyTables(conn: SqlClient, tables: List<String>): List<String> {
+        if (tables.isEmpty()) return tables
+        val dirty = HashSet<String>()
+        conn.query(
+            tables.joinToString(" UNION ALL ") { "(SELECT '$it' AS name FROM `$it` LIMIT 1)" }
+        ).execute().coAwait().forEach { dirty += it.getString("name") }
+        conn.query(
+            "SELECT TABLE_NAME AS name FROM information_schema.TABLES " +
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE' AND AUTO_INCREMENT > 1"
+        ).execute().coAwait().forEach { dirty += it.getString("name") }
+        return tables.filter { it in dirty }
+    }
+
+    /**
      * Empties every `pano_market_*` table and puts the snapshot rows back (the five system credit accounts and the
      * other rows the schema installer seeds), so each test starts from a fresh install. Tables outside the market
      * prefix (platform stubs) are not touched.
@@ -185,7 +203,7 @@ object MarketTestDb {
         try {
             conn.query("SET FOREIGN_KEY_CHECKS = 0").execute().coAwait()
             val tables = marketTables(conn)
-            tables.forEach { conn.query("TRUNCATE TABLE `$it`").execute().coAwait() }
+            dirtyTables(conn, tables).forEach { conn.query("TRUNCATE TABLE `$it`").execute().coAwait() }
             for ((table, snapshot) in baseline) {
                 if (table !in tables || snapshot.rows.isEmpty()) continue
                 val columns = snapshot.columns.joinToString(", ") { "`$it`" }
