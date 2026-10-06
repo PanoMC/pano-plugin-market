@@ -6,6 +6,7 @@ import com.panomc.plugins.market.core.payment.ProviderMoneyPolicy
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.db.dao.MarketPaymentDao
+import com.panomc.plugins.market.db.dao.MarketSubscriptionDao
 import com.panomc.plugins.market.db.dao.isDuplicateKey
 import com.panomc.plugins.market.db.model.MarketPayment
 import com.panomc.plugins.market.db.tx.Locks
@@ -17,6 +18,7 @@ import com.panomc.plugins.market.provider.SecretCipher
 import com.panomc.plugins.market.service.AppliedEvent
 import com.panomc.plugins.market.service.AttemptFacts
 import com.panomc.plugins.market.service.PaymentService
+import com.panomc.plugins.market.service.subscriptionViewOf
 import com.panomc.plugins.market.spi.common.Money
 import com.panomc.plugins.market.spi.payment.PaymentAttemptView
 import com.panomc.plugins.market.spi.payment.PaymentEvent
@@ -114,13 +116,15 @@ class PaymentInboundAttempts(
 
 /**
  * `ctx.payments` of a provider (02 section 5): read-only views of this provider's own attempts. An attempt of another provider answers `null`.
- * Subscriptions are the subscription slice's (MK-121): until it lands `subscriptionByGatewayId` answers `null`.
+ * `subscriptionByGatewayId` answers the provider's own subscriptions (MK-121), `null` for another provider's or an unknown id.
  */
 class AttemptLookup(
     private val providerId: String,
     private val payments: MarketPaymentDao,
     private val orders: MarketOrderDao,
     private val cipher: SecretCipher,
+    /** The subscriptions a provider may look up by its own gateway id (MK-121); `null` answers none. */
+    private val subscriptions: MarketSubscriptionDao? = null,
     private val client: suspend () -> SqlClient
 ) : PaymentLookup {
     private suspend fun view(a: MarketPayment?): PaymentAttemptView? {
@@ -144,7 +148,8 @@ class AttemptLookup(
         return view(payments.getById(id, client()))
     }
 
-    override suspend fun subscriptionByGatewayId(gatewaySubscriptionId: String): SubscriptionView? = null
+    override suspend fun subscriptionByGatewayId(gatewaySubscriptionId: String): SubscriptionView? =
+        subscriptions?.getByGatewaySubscription(providerId, gatewaySubscriptionId, client())?.let { subscriptionViewOf(it, cipher) }
 }
 
 /**

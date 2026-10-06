@@ -74,6 +74,18 @@ fun interface PendingSubscriptions {
 }
 
 /**
+ * A [PendingSubscriptions] that also takes the verdict of the checkout's offer table for the chosen payment method (09 section 4.2: `"AUTO"` /
+ * `"MANUAL"`, after the provider's own `checkEligibility`, which can downgrade an automatic offer to a manual one). [OrderService] calls this form
+ * when the seam implements it and the order draft carries a verdict ([OrderDraft.recurring]); `SubscriptionService` (MK-121) does. A `null` verdict
+ * is "not known": the implementation applies the offer table of the capabilities alone.
+ */
+interface OfferedPendingSubscriptions : PendingSubscriptions {
+    suspend fun createPending(conn: SqlConnection, order: MarketOrder, item: MarketOrderItem, recurring: String?): Long
+
+    override suspend fun createPending(conn: SqlConnection, order: MarketOrder, item: MarketOrderItem): Long = createPending(conn, order, item, null)
+}
+
+/**
  * The ledger operations of an order after O1 (07 sections 5 and 6.4): capture of the outstanding `HOLD` at O2 / O4 (C3), release at
  * O5 to O8 (C4), a new credit part at `/pay` (C2: release the old part when it was above 0, then hold the new one). All run inside the
  * transition's transaction, under the account locks of `Locks.forOrder`, and throw when they cannot post: the transition then rolls
@@ -272,7 +284,9 @@ class OrderDraft(
     val clearCartOfUser: Long?,
     val actorUserId: Long?,
     /** The `CREATED` event of the timeline: the buyer's checkout (default), or the admin of a manual order with its flags in `data`. */
-    val created: CreatedEvent = CreatedEvent.STOREFRONT
+    val created: CreatedEvent = CreatedEvent.STOREFRONT,
+    /** `PaymentMethodOption.recurring` of the chosen method (`"AUTO"` / `"MANUAL"`) for an order with a subscription line, else `null` (09 section 4.3). */
+    val recurring: String? = null
 )
 
 /** The `CREATED` timeline row of an order (06 section 5.3 B11, section 14.3 `audit`). */
@@ -380,7 +394,8 @@ class OrderService(
             rows += orderItems.getById(id, conn)!!
 
             if (draftItem.subscription) {
-                val subscriptionId = subscriptions.createPending(conn, order, rows.last())
+                val seam = subscriptions
+                val subscriptionId = if (seam is OfferedPendingSubscriptions) seam.createPending(conn, order, rows.last(), draft.recurring) else seam.createPending(conn, order, rows.last())
 
                 conn.preparedQuery("UPDATE ${table("market_order")} SET `subscriptionId` = ? WHERE `id` = ?").execute(Tuple.of(subscriptionId, orderId)).coAwait()
             }

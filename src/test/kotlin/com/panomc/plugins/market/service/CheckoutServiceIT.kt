@@ -18,6 +18,7 @@ import com.panomc.plugins.market.db.model.MarketCreditEntry
 import com.panomc.plugins.market.db.model.MarketCreditTx
 import com.panomc.plugins.market.db.model.MarketCurrencyRate
 import com.panomc.plugins.market.db.model.MarketOrder
+import com.panomc.plugins.market.db.model.MarketOrderItem
 import com.panomc.plugins.market.db.model.MarketPayment
 import com.panomc.plugins.market.db.model.MarketProduct
 import com.panomc.plugins.market.db.model.OrderItemKind
@@ -2190,14 +2191,17 @@ internal class CheckoutHarness(val w: TestWiring, private val vertx: Vertx) {
         val checkoutRateLimitPerMinute: Int = 0,
         val currencyMode: CurrencyMode = CurrencyMode.SINGLE,
         val additionalCurrencies: List<String> = emptyList(),
-        val showVatInPrice: Boolean = true
+        val showVatInPrice: Boolean = true,
+        val subscriptionManualFallback: Boolean = true,
+        val subscriptionGraceDays: Int = 3
     ) {
         fun toConfig() = MarketConfig(
             currency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = showVatInPrice, creditValue = 1.0, storeTimeZone = "UTC", allowGuestCheckout = allowGuestCheckout,
             allowGiftPurchase = allowGiftPurchase, minimumOrderAmount = minimumOrderAmount, creditsEnabled = creditsEnabled, allowMixedCreditPayment = allowMixedCreditPayment,
             onlyAcceptCredits = onlyAcceptCredits, testMode = testMode, billingInfoMode = billingInfoMode, legalTextRequired = legalTextRequired,
             creditTopUpEnabled = creditTopUpEnabled, creditTopUpFreeAmount = creditTopUpFreeAmount, creditTopUpMin = creditTopUpMin, creditTopUpMax = creditTopUpMax,
-            cashbackPercent = cashbackPercent, creditName = creditName, checkoutRateLimitPerMinute = checkoutRateLimitPerMinute, currencyMode = currencyMode, additionalCurrencies = additionalCurrencies
+            cashbackPercent = cashbackPercent, creditName = creditName, checkoutRateLimitPerMinute = checkoutRateLimitPerMinute, currencyMode = currencyMode, additionalCurrencies = additionalCurrencies,
+            subscriptionManualFallback = subscriptionManualFallback, subscriptionGraceDays = subscriptionGraceDays
         )
     }
 
@@ -2220,8 +2224,17 @@ internal class CheckoutHarness(val w: TestWiring, private val vertx: Vertx) {
             credits = CreditHolds { conn, userId, credits, orderId, key ->
                 if (ledgerAvailable) holds.hold(conn, userId, credits, orderId, key) else CreditHolds.UNAVAILABLE.hold(conn, userId, credits, orderId, key)
             },
-            subscriptions = PendingSubscriptions { conn, order, item ->
-                if (subscriptionsAvailable) pendingSubscriptions.createPending(conn, order, item) else PendingSubscriptions.UNAVAILABLE.createPending(conn, order, item)
+            // offer-aware (MK-121): a seam that is a `SubscriptionService` gets the checkout's verdict for the chosen method too
+            subscriptions = object : OfferedPendingSubscriptions {
+                override suspend fun createPending(conn: SqlConnection, order: MarketOrder, item: MarketOrderItem, recurring: String?): Long {
+                    val seam = pendingSubscriptions
+
+                    return when {
+                        !subscriptionsAvailable -> PendingSubscriptions.UNAVAILABLE.createPending(conn, order, item)
+                        seam is OfferedPendingSubscriptions -> seam.createPending(conn, order, item, recurring)
+                        else -> seam.createPending(conn, order, item)
+                    }
+                }
             }
         )
         val deps = CheckoutDeps(

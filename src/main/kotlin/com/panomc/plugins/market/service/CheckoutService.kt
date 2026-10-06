@@ -1560,7 +1560,9 @@ class CheckoutService(
                 testMode = testMode, clientIp = caller.clientIp, userAgent = caller.userAgent?.take(255)
             ),
             clearCartOfUser = if (a.usedServerCart) caller.userId else null,
-            actorUserId = caller.userId
+            actorUserId = caller.userId,
+            // 09 section 4.3: the offer table's verdict for the chosen method becomes the provisional mode of the pending subscription row
+            recurring = a.chosen?.recurring
         )
     }
 
