@@ -5,10 +5,12 @@ import com.panomc.plugins.market.e2e.support.E2eResponse
 import com.panomc.plugins.market.e2e.support.E2eTestBase
 import com.panomc.plugins.market.support.Await
 import com.panomc.plugins.market.support.FakePayGateway
+import com.panomc.plugins.market.support.InvariantChecker
 import com.sun.net.httpserver.HttpServer
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.sqlclient.Row
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -630,11 +632,22 @@ class RefundE2E : E2eTestBase() {
 
             assertEquals("SUCCEEDED", view.getString("status"))
             assertEquals(0L, refundRows(paid.orderId).single().getLong("revoke"), "the row records that nothing is revoked")
+
+            // I20 respects the setting (17 section 9.5): REFUNDED + ACTIVE entitlement is consistent while revokeOnRefund is off ...
+            assertEquals("REFUNDED", orderStatus(paid.publicId))
+            assertEquals(setOf("ACTIVE"), entitlements(paid.orderId).map { it.getString("status") }.toSet(), "the entitlement stays ACTIVE")
+            runBlocking { InvariantChecker.assertAll(db.pool, InvariantChecker.Options(revokeOnRefund = false)) }
+
+            // ... and the very same state is a violation once the setting is on, so the check really follows the option
+            assertTrue(
+                runBlocking { InvariantChecker.violations(db.pool, InvariantChecker.Options(revokeOnRefund = true)) }.any { it.id == "I20" },
+                "with revokeOnRefund on, REFUNDED + ACTIVE is an I20 violation"
+            )
         }
 
         assertEquals("REFUNDED", orderStatus(paid.publicId))
         assertEquals(0, deliveries(paid.orderId, "REVOKE").size, "no undo row is planned")
-        assertEquals(setOf("ACTIVE"), entitlements(paid.orderId).map { it.getString("status") }.toSet(), "the entitlement stays ACTIVE (I20 respects the setting)")
+        assertEquals(setOf("ACTIVE"), entitlements(paid.orderId).map { it.getString("status") }.toSet(), "the entitlement stays ACTIVE")
         assertTrue(holdsNode(buyer.userId, node), "the rank stays")
 
         // the setting alone: with revokeOnRefund off and no flag in the request nothing is revoked either; an explicit revoke=true overrides it
@@ -651,7 +664,7 @@ class RefundE2E : E2eTestBase() {
         assertEquals(setOf("REVOKED"), entitlements(other.orderId).map { it.getString("status") }.toSet())
         assertFalse(holdsNode(buyer.userId, otherNode))
 
-        // the kept goods of the first order are taken back later by hand (no money moves); this also leaves the instance consistent for I20, which
+        // cleanup only (I20 under the setting is proven inside the first block): the kept goods of the first order are taken back later by hand (no money moves); this leaves the instance consistent for the @AfterEach I20, which
         // follows the stored setting (true again), not the one of the moment the refund was made
         val taken = admin.post("/api/panel/market/orders/${paid.orderId}/revoke", JsonObject()).ok().obj()
 
