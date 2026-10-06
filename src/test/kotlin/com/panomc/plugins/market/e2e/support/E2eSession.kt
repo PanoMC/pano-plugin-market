@@ -1,6 +1,7 @@
 package com.panomc.plugins.market.e2e.support
 
 import com.panomc.plugins.market.support.Await
+import com.panomc.plugins.market.support.AwaitTimeout
 import com.panomc.plugins.market.support.FakePayGateway
 import com.panomc.plugins.market.support.InvariantChecker
 import io.vertx.core.json.JsonArray
@@ -38,6 +39,15 @@ class E2eSession private constructor(val env: E2eEnv) {
 
         // 2. buyers get a session on registration
         admin.multipart("PUT", "/api/panel/settings", mapOf("requireEmailVerification" to "false")).ok()
+
+        // 2a. mail (17 section 8.3 "the instance has a dummy SMTP host"): the install step points the platform at `smtp.invalid`, where every send fails and the
+        // row would sit PENDING under its 60 s+ retry backoff, so `queues.mailsPending` could never drain. The platform's mail switch is turned off: the mail job
+        // then ends each row SKIPPED (MAIL_DISABLED) at its first claim, a terminal state of the 8.3 contract {SENT, FAILED, SKIPPED}. The outbox rows (kind,
+        // recipient, locale, one per key) are written exactly as before; only the SMTP call is gone.
+        admin.multipart(
+            "PUT", "/api/panel/settings",
+            mapOf("email" to JsonObject().put("enabled", false).put("hostname", "").put("port", 587).put("ssl", false).put("starttls", "DISABLED").put("username", "").put("password", "").put("sender", "").encode())
+        ).ok()
 
         // 2b. 06 section 6.7 "Test mode": a method in test mode is usable only by a session holding SET, PAY or the umbrella node, and never by a guest.
         // The instance runs in test mode (the fake provider is ineligible otherwise, 17 section 6.1), so a buyer without the node is refused with
@@ -142,13 +152,15 @@ class E2eSession private constructor(val env: E2eEnv) {
      * Both are required after every scenario.
      */
     fun drainAndCheck() {
-        Await.until(30_000, 250, "queues drained") {
-            val queues = admin.get("/api/panel/market/health", log = false).obj().getJsonObject("queues")
-            // `mailsPending` of the health answer counts every PENDING / SENDING row. The instance has a dummy SMTP host (17 section 8.3), so a mail that was
-            // tried and failed stays PENDING under its retry backoff for minutes: that row is as drained as the harness can make it. A mail is therefore
-            // drained once the mail job has claimed it at least once (no PENDING row with `attempts = 0`, no row in SENDING).
-            val mailsUntried = db.count("market_mail_outbox", "(`status` = 'PENDING' AND `attempts` = 0) OR `status` = 'SENDING'")
-            listOf("deliveriesPending", "webhooksPending", "deferredEvents").all { (queues?.getInteger(it) ?: 0) == 0 } && mailsUntried == 0L
+        var last: JsonObject? = null
+        try {
+            Await.until(30_000, 250, "queues drained") {
+                val queues = admin.get("/api/panel/market/health", log = false).obj().getJsonObject("queues")
+                last = queues
+                listOf("deliveriesPending", "webhooksPending", "mailsPending", "deferredEvents").all { (queues?.getInteger(it) ?: 0) == 0 }
+            }
+        } catch (e: AwaitTimeout) {
+            throw AssertionError("queues did not drain within 30 s, last health queues: ${last?.encode()}", e)
         }
         runBlocking { InvariantChecker.assertAll(db.pool) }
 
