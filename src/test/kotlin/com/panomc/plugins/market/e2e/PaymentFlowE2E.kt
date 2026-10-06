@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.net.URI
@@ -213,6 +214,18 @@ class PaymentFlowE2E : E2eTestBase() {
         ).ok()
     }
 
+    /** `capabilities.buyerMayPayMore` of the `fake` provider as the panel lists it. */
+    private fun buyerMayPayMore(): Boolean? =
+        admin.get("/api/panel/market/payment-providers", log = false).ok().obj().getJsonArray("providers").map { it as JsonObject }.first { it.getString("id") == "fake" }
+            .getJsonObject("capabilities")?.getBoolean("buyerMayPayMore")
+
+    /** True when the REFUND request body asks the gateway to give back [amount] of payment [gatewayPaymentId]. */
+    private fun refundRequestFor(gatewayPaymentId: String, amount: BigDecimal): Boolean = gateway.requests(FakePayGateway.Op.REFUND).any {
+        val body = JsonObject(it.bodyText())
+
+        body.getString("paymentId") == gatewayPaymentId && body.getString("amount")?.let { a -> BigDecimal(a).compareTo(amount) == 0 } == true
+    }
+
     // ---- F-03 ---------------------------------------------------------------------------------------------------------
 
     @Test
@@ -276,11 +289,17 @@ class PaymentFlowE2E : E2eTestBase() {
 
         assertEquals(1, refunds.size, "one refund row")
         assertEquals(secondReceived.movePointRight(2).toLong(), refunds.single().getLong("amount"), "the refund is for the amount that was received")
-        Await.until(60_000, 250, "the refund reaches the gateway") { gateway.requests(FakePayGateway.Op.REFUND).isNotEmpty() }
+        val gatewayPayment = gateway.payments[secondRef]!!.id
+
+        Await.until(60_000, 250, "the refund of this payment and amount reaches the gateway") { refundRequestFor(gatewayPayment, secondReceived) }
     }
 
     @Test
     fun `F-06 overpaid goes to review, buyerMayPayMore completes`() {
+        // the setting is global state of the shared instance and is merged key by key: start from the declared default, never from what an earlier run left
+        setProviderSettings(JsonObject().put("buyerMayPayMore", false))
+        assertEquals(false, buyerMayPayMore(), "the fake provider starts without buyerMayPayMore")
+
         val (_, publicId, reference) = pending()
         val expected = gateway.payments[reference]!!.amount
 
@@ -298,6 +317,8 @@ class PaymentFlowE2E : E2eTestBase() {
         setProviderSettings(JsonObject().put("buyerMayPayMore", true))
 
         try {
+            assertEquals(true, buyerMayPayMore(), "the provider now declares buyerMayPayMore")
+
             val (_, second, secondRef) = pending()
             val paid = gateway.payments[secondRef]!!.amount + BigDecimal("5.00")
 
@@ -308,8 +329,11 @@ class PaymentFlowE2E : E2eTestBase() {
             assertEquals(paid.movePointRight(2).toLong(), paymentRow(secondRef).getLong("paidAmount"), "the amount actually paid is recorded")
             assertEquals(paid.movePointRight(2).toLong(), orderRow(second).getLong("paidAmount"))
         } finally {
-            setProviderSettings(JsonObject())
+            // the settings form keeps the stored value of every key it does not carry (SettingsCodec.applyForm), so the key is written back explicitly
+            setProviderSettings(JsonObject().put("buyerMayPayMore", false))
         }
+
+        assertEquals(false, buyerMayPayMore(), "buyerMayPayMore is put back for the next scenario")
     }
 
     @Test
@@ -558,7 +582,23 @@ class PaymentFlowE2E : E2eTestBase() {
         assertEquals(0L, paymentRow(first).getLong("duplicate"))
         Await.until(30_000, 250, "the automatic refund exists") { db.count("market_refund", "`orderId` = ? AND `origin` = 'SYSTEM'", orderId(publicId)) == 1L }
         assertEquals(1L, db.count("market_refund", "`orderId` = ?", orderId(publicId)), "exactly one refund")
-        Await.until(60_000, 250, "the refund reaches the gateway") { gateway.requests(FakePayGateway.Op.REFUND).isNotEmpty() }
+
+        val secondPaid = paymentRow(second).getLong("paidAmount")
+        val refundRow = db.sql("SELECT * FROM `pano_market_refund` WHERE `orderId` = ?", orderId(publicId)).single()
+
+        assertEquals("SYSTEM", refundRow.getString("origin"))
+        assertEquals(secondPaid, refundRow.getLong("amount"), "the automatic refund is for what the second attempt paid")
+        assertEquals(paymentRow(second).getLong("id"), refundRow.getLong("paymentId"), "the refund row points at the second attempt")
+
+        val secondAmount = BigDecimal(secondPaid).movePointLeft(2)
+        val secondGatewayId = gateway.payments[second]!!.id
+        val firstGatewayId = gateway.payments[first]!!.id
+
+        Await.until(60_000, 250, "the refund of the second attempt reaches the gateway") { refundRequestFor(secondGatewayId, secondAmount) }
+        assertFalse(
+            gateway.requests(FakePayGateway.Op.REFUND).any { JsonObject(it.bodyText()).getString("paymentId") == firstGatewayId },
+            "no refund request names the first (legitimate) attempt's gateway payment"
+        )
         assertEquals("COMPLETED", orderStatus(publicId), "refunding the duplicate does not touch the order")
     }
 
@@ -681,6 +721,15 @@ class PaymentFlowE2E : E2eTestBase() {
 
     // ---- F-18 ---------------------------------------------------------------------------------------------------------
 
+    /** True when the instance's config lists a loopback address under `server.trusted-proxies` (the file is only rewritten on shutdown, so it holds what the JVM booted with). */
+    private fun loopbackIsTrustedProxy(): Boolean {
+        val file = session.env.dir?.let { java.io.File(it, "config.conf") }?.takeIf { it.isFile } ?: return false
+        // Pano rewrites the list over several lines once it has booted with it: read from the (uncommented) key to the closing bracket
+        val list = Regex("""(?m)^\s*trusted-proxies\s*=\s*\[([^\]]*)]""").find(file.readText())?.groupValues?.get(1) ?: return false
+
+        return list.contains("\"127.0.0.1\"") || list.contains("\"::1\"")
+    }
+
     @Test
     fun `F-18 blocked buyer`() {
         val vip = catalog.fresh("VIP")
@@ -695,22 +744,24 @@ class PaymentFlowE2E : E2eTestBase() {
             return admin.post("/api/panel/market/blocks", body).ok().obj().getLong("id").also { created += it }
         }
 
-        fun assertBlocked(what: String) {
-            val quote = buyer.client.post("/api/market/checkout/quote", cart(line(vip.id))).ok().obj().getJsonObject("quote")
+        var ipEnforcementUnproven = false
+
+        fun assertBlocked(what: String, headers: Map<String, String> = emptyMap()) {
+            val quote = buyer.client.post("/api/market/checkout/quote", cart(line(vip.id)), headers).ok().obj().getJsonObject("quote")
             val messages = quote.getJsonArray("messages")?.map { (it as JsonObject).getString("code") } ?: emptyList()
 
             assertTrue("BUYER_BLOCKED" in messages, "$what: the quote says BUYER_BLOCKED, messages=$messages")
 
             val before = db.count("market_order", "`userId` = ?", buyer.userId)
-            val refused = checkout(buyer.client, cart(line(vip.id)))
+            val refused = checkout(buyer.client, cart(line(vip.id)), headers = headers)
 
             assertEquals(403, refused.status, "$what: ${refused.error}")
             assertEquals("BUYER_BLOCKED", refused.error)
             assertEquals(before, db.count("market_order", "`userId` = ?", buyer.userId), "$what: no order was written")
         }
 
-        fun assertNotBlocked(what: String) {
-            val quote = buyer.client.post("/api/market/checkout/quote", cart(line(vip.id))).ok().obj().getJsonObject("quote")
+        fun assertNotBlocked(what: String, headers: Map<String, String> = emptyMap()) {
+            val quote = buyer.client.post("/api/market/checkout/quote", cart(line(vip.id)), headers).ok().obj().getJsonObject("quote")
             val messages = quote.getJsonArray("messages")?.map { (it as JsonObject).getString("code") } ?: emptyList()
 
             assertFalse("BUYER_BLOCKED" in messages, "$what: the quote has no BUYER_BLOCKED, messages=$messages")
@@ -733,17 +784,26 @@ class PaymentFlowE2E : E2eTestBase() {
             created.remove(email)
             assertNotBlocked("EMAIL removed")
 
-            // IP: DEVIATION from 17 section 9.3. The instance has no trusted proxy configured and the test JVM is a loopback peer, which `ClientIpResolver`
-            // deliberately never judges (an unconfigured reverse proxy on the same host would put every visitor behind one address), so a block on 127.0.0.1
-            // is stored and listed but cannot hit here. The matching itself is proven by the BlockListService component and DB tests.
-            val ip = block("IP", "127.0.0.1")
+            // IP (17 section 9.3, 9.3 "likewise"): a block on a public address applies to quote and checkout when the instance honours X-Forwarded-For from the
+            // loopback peer (`server.trusted-proxies` holding 127.0.0.1). Without that, ClientIpResolver never judges a loopback peer and the block cannot hit
+            // from the test JVM; that case is reported as an aborted (skipped) scenario below, never as a pass.
+            val blockedIp = "203.0.113.77"
+            val ip = block("IP", blockedIp)
 
-            assertNotBlocked("IP 127.0.0.1 (a loopback peer is never judged without a trusted proxy)")
-            assertTrue(
-                admin.get("/api/panel/market/blocks?search=127.0.0.1").ok().obj().toString().contains("127.0.0.1"), "the IP block is stored and listed"
-            )
+            if (loopbackIsTrustedProxy()) {
+                assertBlocked("IP $blockedIp", mapOf("X-Forwarded-For" to blockedIp))
+                assertNotBlocked("another forwarded address", mapOf("X-Forwarded-For" to "203.0.113.78"))
+                assertNotBlocked("no forwarded header (loopback peer, never judged)")
+            } else {
+                assertNotBlocked("IP $blockedIp without a trusted proxy", mapOf("X-Forwarded-For" to blockedIp))
+                ipEnforcementUnproven = true
+            }
+
+            assertTrue(admin.get("/api/panel/market/blocks?search=$blockedIp").ok().obj().toString().contains(blockedIp), "the IP block is stored and listed")
             admin.delete("/api/panel/market/blocks/$ip").ok()
             created.remove(ip)
+
+            if (loopbackIsTrustedProxy()) assertNotBlocked("IP removed", mapOf("X-Forwarded-For" to blockedIp))
 
             // an expired block no longer applies: written with a future expiry, then rewound into the past
             val expiring = block("PLAYER", buyer.username, System.currentTimeMillis() + 3_600_000L)
@@ -761,5 +821,10 @@ class PaymentFlowE2E : E2eTestBase() {
             created.forEach { runCatching { admin.delete("/api/panel/market/blocks/$it") } }
             db.sql("DELETE FROM `pano_market_block` WHERE `reason` = 'e2e F-18'")
         }
+
+        Assumptions.assumeFalse(
+            ipEnforcementUnproven,
+            "IP block enforcement not provable here: the instance does not list 127.0.0.1 in server.trusted-proxies (scripts/e2e-instance.sh must write it, see evidence/E2E-04.md); PLAYER, EMAIL and expiry were asserted"
+        )
     }
 }
