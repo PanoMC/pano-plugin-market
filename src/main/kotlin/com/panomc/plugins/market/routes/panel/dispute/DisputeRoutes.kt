@@ -31,6 +31,7 @@ import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.api.order.creditService
 import com.panomc.plugins.market.routes.api.order.deliveryService
 import com.panomc.plugins.market.routes.api.order.entitlementService
+import com.panomc.plugins.market.routes.api.order.subscriptionService
 import com.panomc.plugins.market.routes.api.order.webhookService
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseEnum
@@ -86,7 +87,7 @@ private fun buildDisputeService(plugin: MarketPlugin): DisputeService {
         deliveries = context.getBean(MarketDeliveryDao::class.java), entitlements = context.getBean(MarketEntitlementDao::class.java),
         creditTxs = context.getBean(MarketCreditTxDao::class.java), credits = creditService(plugin), deliveryService = deliveryService(plugin),
         entitlementService = entitlementService(plugin), refundService = refundService(plugin),
-        effects = StandardDisputeEffects(refundEffects, webhookService(plugin))
+        effects = StandardDisputeEffects(refundEffects, webhookService(plugin)) { conn, order, dispute -> subscriptionService(plugin).onOrderChargeback(conn, order, dispute) }
     )
 }
 

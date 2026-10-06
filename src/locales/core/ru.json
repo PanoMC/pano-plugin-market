@@ -92,6 +92,8 @@
     "REFUNDED_MARKET_ORDER": "<b>{username}</b> вернул <b>{amount}</b> по заказу <b>#{orderId}</b> (возврат <b>#{refundId}</b>).",
     "OPENED_MARKET_DISPUTE": "<b>{username}</b> зарегистрировал чарджбэк по заказу <b>#{orderId}</b> (спор <b>#{disputeId}</b>).",
     "UPDATED_MARKET_DISPUTE": "<b>{username}</b> установил для спора <b>#{disputeId}</b> по заказу <b>#{orderId}</b> статус \"{status}\".",
+    "CANCELLED_MARKET_SUBSCRIPTION": "<b>{username}</b> отменил подписку <b>#{subscriptionId}</b>.",
+    "RETRIED_MARKET_SUBSCRIPTION_CHARGE": "<b>{username}</b> повторил списание по подписке <b>#{subscriptionId}</b>.",
     "RAN_MARKET_CHARGEBACK_ACTIONS": "<b>{username}</b> выполнил отложенные действия чарджбэка по заказу <b>#{orderId}</b> (запланировано доставок: {count}).",
     "CREATED_MARKET_BLOCK": "<b>{username}</b> добавил в список блокировок запись {type} (<b>{value}</b>, источник {source}).",
     "DELETED_MARKET_BLOCK": "<b>{username}</b> удалил из списка блокировок запись {type} (<b>{value}</b>, источник {source}).",

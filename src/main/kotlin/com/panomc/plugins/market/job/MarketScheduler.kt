@@ -266,19 +266,8 @@ internal object MarketJobs {
         )
     }
 
-    /** `SubscriptionJob` on the beans of the plugin (MK-122): merchant charges, manual renewals, the period and grace steps, the remote queue. */
-    private fun subscriptionJob(plugin: MarketPlugin): SubscriptionJob {
-        val context = plugin.beans
-        val databaseManager = { context.getBean(DatabaseManager::class.java) }
-        val db = MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock)
-        val service = { subscriptionService(plugin) }
-        val sink = SubscriptionEventSink(db, service).withPayments { paymentService(plugin) }
-
-        return SubscriptionJob(
-            clock = SystemClock, db = db, subs = service(), subscriptions = context.getBean(MarketSubscriptionDao::class.java), payments = paymentService(plugin),
-            config = { currentConfig(plugin) }, sqlClient = { databaseManager().getSqlClient() }, events = sink
-        )
-    }
+    /** `SubscriptionJob` on the beans of the plugin (MK-122): one instance, shared with the admin retry of MK-123 (`subscriptionJob(plugin)` also wires the cancel use cases of step E). */
+    private fun subscriptionJob(plugin: MarketPlugin): SubscriptionJob = com.panomc.plugins.market.routes.panel.subscription.subscriptionJob(plugin)
 
     /** The renewals, charges, failures and grace of subscriptions, and the remote cancel queue (MK-122). */
     fun subscription(job: SubscriptionJob): MarketScheduler.Job = MarketScheduler.Job("subscription", MarketScheduler.SUBSCRIPTION_MS) { job.runOnce() }

@@ -17,6 +17,7 @@ import com.panomc.plugins.market.routes.api.payment.InboundEventContext
 import com.panomc.plugins.market.service.AttemptFacts
 import com.panomc.plugins.market.service.PaymentEventMapper
 import com.panomc.plugins.market.service.PaymentService
+import com.panomc.plugins.market.service.SubscriptionActions
 import com.panomc.plugins.market.service.SubscriptionEventSink
 import com.panomc.plugins.market.service.SubscriptionService
 import com.panomc.plugins.market.spi.common.ProviderErrorCode
@@ -60,7 +61,9 @@ class SubscriptionJob(
     /** Applies the events a poll of a gateway returned (`SubscriptionUpdated`, `SubscriptionRenewed`, `SubscriptionPaymentFailed`). */
     private val events: SubscriptionEventSink,
     private val batch: Int = BATCH,
-    private val callTimeoutMs: Long = CALL_TIMEOUT_MS
+    private val callTimeoutMs: Long = CALL_TIMEOUT_MS,
+    /** The cancel use cases (MK-123): step E repeats the remote half of a cancel whose second transaction never ran. `null` leaves such a row alone. */
+    private val actions: SubscriptionActions? = null
 ) {
     private fun table(name: String) = "`${subscriptions.prefix()}$name`"
 
@@ -350,6 +353,15 @@ class SubscriptionJob(
             }
 
             if (ok) handled++
+        }
+
+        // a cancel that crashed between its two transactions (09 section 10.1): the gateway is told again and the result applied
+        val repeat = actions
+
+        if (repeat != null) {
+            for (subscription in subs.danglingCancels(client, batch)) {
+                if (row("remote", subscription.id) { repeat.repeatDangling(subscription) }) handled++
+            }
         }
 
         return handled
