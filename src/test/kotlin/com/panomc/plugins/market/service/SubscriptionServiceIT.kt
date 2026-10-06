@@ -112,6 +112,48 @@ internal class SubscriptionFake(val fake: FakePaymentProvider) : PaymentProvider
     }
 
     override suspend fun continuePayment(ctx: PaymentContext, request: ContinuePaymentRequest): StartPaymentResult = onContinue(request)
+
+    // ---- the buyer-side operations of MK-123 (09 sections 9.3, 10.2, 10.4a)
+
+    @Volatile
+    var onResume: (com.panomc.plugins.market.spi.payment.ResumeSubscriptionRequest) -> com.panomc.plugins.market.spi.payment.ResumeSubscriptionResult =
+        { com.panomc.plugins.market.spi.payment.ResumeSubscriptionResult.Resumed() }
+
+    @Volatile
+    var onPortal: (com.panomc.plugins.market.spi.payment.SubscriptionPortalRequest) -> com.panomc.plugins.market.spi.payment.SubscriptionPortalResult =
+        { com.panomc.plugins.market.spi.payment.SubscriptionPortalResult.Redirect("https://gateway.invalid/portal/${it.subscription.id}") }
+
+    @Volatile
+    var onRetry: (com.panomc.plugins.market.spi.payment.QuerySubscriptionRequest) -> com.panomc.plugins.market.spi.payment.SubscriptionQueryResult =
+        { com.panomc.plugins.market.spi.payment.SubscriptionQueryResult.unsupported() }
+
+    val resumeCalls = CopyOnWriteArrayList<com.panomc.plugins.market.spi.payment.ResumeSubscriptionRequest>()
+    val portalCalls = CopyOnWriteArrayList<com.panomc.plugins.market.spi.payment.SubscriptionPortalRequest>()
+    val retryCalls = CopyOnWriteArrayList<com.panomc.plugins.market.spi.payment.QuerySubscriptionRequest>()
+
+    override suspend fun resumeSubscription(
+        ctx: PaymentContext, request: com.panomc.plugins.market.spi.payment.ResumeSubscriptionRequest
+    ): com.panomc.plugins.market.spi.payment.ResumeSubscriptionResult {
+        resumeCalls += request
+
+        return onResume(request)
+    }
+
+    override suspend fun subscriptionPortal(
+        ctx: PaymentContext, request: com.panomc.plugins.market.spi.payment.SubscriptionPortalRequest
+    ): com.panomc.plugins.market.spi.payment.SubscriptionPortalResult {
+        portalCalls += request
+
+        return onPortal(request)
+    }
+
+    override suspend fun retrySubscriptionCharge(
+        ctx: PaymentContext, request: com.panomc.plugins.market.spi.payment.QuerySubscriptionRequest
+    ): com.panomc.plugins.market.spi.payment.SubscriptionQueryResult {
+        retryCalls += request
+
+        return onRetry(request)
+    }
 }
 
 /**

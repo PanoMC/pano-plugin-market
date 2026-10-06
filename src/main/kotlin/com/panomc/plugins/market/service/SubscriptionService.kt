@@ -54,7 +54,10 @@ import com.panomc.plugins.market.db.tx.Locks
 import com.panomc.plugins.market.db.tx.OrderChangedException
 import com.panomc.plugins.market.db.tx.txRestartingOnOrderChange
 import com.panomc.plugins.market.error.InvalidOrderTransition
+import com.panomc.platform.error.NotFound
 import com.panomc.platform.error.NotLoggedIn
+import com.panomc.plugins.market.error.SubscriptionNotCancellable
+import com.panomc.plugins.market.error.SubscriptionNotResumable
 import com.panomc.plugins.market.error.PaymentMethodUnavailable
 import com.panomc.plugins.market.provider.SecretCipher
 import com.panomc.plugins.market.routes.api.payment.InboundEventContext
@@ -565,8 +568,13 @@ class SubscriptionService(
         val renewal: MarketSubscriptionRenewal? = null,
         val failure: Failure? = null,
         /** The instrument a hand payment of the renewal order delivered (09 section 8.4 step 4). */
-        val storedMethod: StoredPaymentMethod? = null
+        val storedMethod: StoredPaymentMethod? = null,
+        /** What the buyer or the admin asked for (09 section 12.3 `SUBSCRIPTION_CANCEL_REQUESTED`: `data{atPeriodEnd, reason}`). */
+        val cancel: CancelInfo? = null
     )
+
+    /** The request behind a cancel: [atPeriodEnd] as asked (the machine may make it immediate), [reason] only from an admin. */
+    private class CancelInfo(val atPeriodEnd: Boolean, val reason: String?)
 
     /** A recorded failure (09 section 9.1): [gateway] = the gateway reported it (`SubscriptionPaymentFailed`, status `PAST_DUE`), else market's own charge. */
     private class Failure(val code: String?, val final: Boolean, val technical: Boolean, val gateway: Boolean, val attemptCount: Int?, val attempts: Int)
@@ -629,7 +637,9 @@ class SubscriptionService(
 
             SubEffect.QueueRenewDeliveries -> linkRenewDeliveries(conn, id, context, now)
 
-            SubEffect.SkipPendingRenewal, SubEffect.RestoreSkippedRenewal -> throw SubscriptionEffectNotOwned(effect, "the cancel slice (MK-123)")
+            SubEffect.SkipPendingRenewal -> skipPendingRenewal(conn, id, now)
+
+            SubEffect.RestoreSkippedRenewal -> restoreSkippedRenewal(conn, id, now)
         }
     }
 
@@ -863,9 +873,12 @@ class SubscriptionService(
     /** `SUBSCRIPTION_CHARGE_FAILED` carries `{code, final, attempts}` (09 section 12.3). */
     private fun eventData(type: String, context: Context): JsonObject {
         val failure = context.failure
+        val cancel = context.cancel
 
         return if (type == SubscriptionStateMachine.ORDER_EVENT_CHARGE_FAILED && failure != null) {
             JsonObject().put("code", failure.code).put("final", failure.final).put("attempts", failure.attempts)
+        } else if (type == SubscriptionStateMachine.ORDER_EVENT_CANCEL_REQUESTED && cancel != null) {
+            JsonObject().put("atPeriodEnd", cancel.atPeriodEnd).put("reason", cancel.reason)
         } else {
             JsonObject()
         }
@@ -1369,10 +1382,26 @@ class SubscriptionService(
                 if (decision.reason == SubscriptionStateMachine.SUBSCRIPTION_CLOSED) throw InvalidOrderTransition(reason = SubscriptionStateMachine.SUBSCRIPTION_CLOSED)
                 else logger.warn("subscription {}: the paid renewal order {} was ignored ({})", subscriptionId, order.id, decision.reason)
 
-            is SubTransition.Apply -> apply(conn, row, decision, Context(initial, OrderActorType.SYSTEM, order, renewal, storedMethod = recorded?.stored))
+            is SubTransition.Apply -> {
+                apply(conn, row, decision, Context(initial, OrderActorType.SYSTEM, order, renewal, storedMethod = recorded?.stored))
+                endGatewayForBlockedBuyer(conn, subscriptionId, initial)
+            }
 
             SubTransition.PollFirst -> error("a paid renewal never polls")
         }
+    }
+
+    /**
+     * A buyer who was added to `market_block` keeps a `GATEWAY` subscription until the gateway bills again (09 section 10.4): the renewal that arrived is accepted
+     * (the money is recorded), then the subscription is scheduled to end at the new period end (S8, `ADMIN_CANCEL`, the gateway is told to stop through the queue).
+     */
+    private suspend fun endGatewayForBlockedBuyer(conn: SqlConnection, subscriptionId: Long, initial: MarketOrder) {
+        val row = subscriptions.getById(subscriptionId, conn) ?: return
+
+        if (row.mode != SubscriptionMode.GATEWAY || row.status != SubscriptionStatus.ACTIVE || row.cancelAtPeriodEnd) return
+        if (!blocks.blocked(row.playerUsername, row.playerUsername, row.email, null, row.userId, conn)) return
+
+        applyDecision(conn, row, decide(row, SubEvent.BuyerBlocked), Context(initial, OrderActorType.SYSTEM))
     }
 
     /** `ApplyRenewal` (09 section 8.4 steps 2 to 5). */
@@ -1740,7 +1769,7 @@ class SubscriptionService(
     }
 
     /**
-     * The renewal orders of ended subscriptions that nobody paid are cancelled (O7, actor `SYSTEM`, open attempt cancelled at the gateway after the commit):
+     * The renewal orders of ended subscriptions (and the skipped renewal of a manual subscription that is cancelled at its period end) that nobody paid are cancelled (O7, actor `SYSTEM`, open attempt cancelled at the gateway after the commit):
      * 09 section 10.5 step 2, in a transaction of its own. Doing it inside the ending would take the product and credit locks of the renewal order after the
      * subscription's, against the order of 00 section 8.3; the ending marks the renewal row, this follows. A payment that arrives before it is diverted to
      * review (`LATE`, 09 section 8.5). Returns the orders cancelled. Without an order service nothing is cancelled and the orders expire.
@@ -1750,7 +1779,8 @@ class SubscriptionService(
         val open = db.tx { client ->
             client.preparedQuery(
                 "SELECT o.`id` FROM ${table("market_order")} o JOIN ${table("market_subscription")} s ON s.`id` = o.`subscriptionId` " +
-                    "WHERE o.`source` = 'RENEWAL' AND o.`status` = 'PENDING' AND s.`status` IN ('EXPIRED', 'CANCELLED', 'COMPLETED')" +
+                    "LEFT JOIN ${table("market_subscription_renewal")} r ON r.`orderId` = o.`id` " +
+                "WHERE o.`source` = 'RENEWAL' AND o.`status` = 'PENDING' AND (s.`status` IN ('EXPIRED', 'CANCELLED', 'COMPLETED') OR r.`status` = 'SKIPPED')" +
                     (if (subscriptionId != null) " AND s.`id` = ?" else "") + " ORDER BY o.`id` LIMIT $CLEANUP_BATCH"
             ).execute(if (subscriptionId != null) Tuple.of(subscriptionId) else Tuple.tuple()).coAwait().map { it.getLong("id") }
         }
@@ -1765,8 +1795,10 @@ class SubscriptionService(
 
                     locks.forOrder(conn, orderId, OrderLockScope.RELEASE) { locked ->
                         val owner = locked.order.subscriptionId?.let { subscriptions.getById(it, conn) }
+                        // an ended subscription, or a manual one whose cancel at the period end skipped this renewal (09 section 10.1); a resumed one has its row back
+                        val dead = owner != null && (owner.status.isTerminal || renewalOf(conn, locked.order)?.status == RenewalStatus.SKIPPED)
 
-                        if (owner != null && owner.status.isTerminal && locked.order.status == OrderStatus.PENDING) {
+                        if (dead && locked.order.status == OrderStatus.PENDING) {
                             val moved = service.transition(conn, locked, OrderEvent.Cancel(OrderActor.SYSTEM))
 
                             after += moved.after
@@ -1848,6 +1880,299 @@ class SubscriptionService(
         update(conn, row.id, linkedMapOf("lastQueriedAt" to now, "nextQueryAt" to next))
     }
 
+
+    // ================================================================================================ 09 section 10: cancel, resume, the endings
+
+    /** What tx1 of a cancel decided (09 section 10.1). */
+    sealed class CancelPlan {
+        /** `ACTIVE` with `cancelAtPeriodEnd = 1` asked again for the period end: 200, no change (idempotent). */
+        class Unchanged(val row: MarketSubscription) : CancelPlan()
+
+        /** A closed row whose remote cancel had given up (`FAILED`) went back in the queue instead of answering 409 (09 section 10.3). */
+        class Requeued(val row: MarketSubscription) : CancelPlan()
+
+        /**
+         * The request is valid. [atPeriodEnd] is what will happen (S8) or not (S7: also for `PAST_DUE` / `PAUSED` whatever was asked); [remote] = the gateway
+         * has to be told before the local change (mode `GATEWAY`, the remote state is not `DONE`), `cancelRequestedAt` is written already.
+         */
+        class Begin(val row: MarketSubscription, val atPeriodEnd: Boolean, val remote: Boolean) : CancelPlan()
+    }
+
+    /** What the gateway said to a cancel, as [applyCancel] needs it (09 section 10.1, tx2). */
+    sealed class RemoteCancel {
+        /** No remote call before the local change (`MERCHANT` / `MANUAL`, or a `GATEWAY` row whose remote cancel is `DONE`). */
+        data object None : RemoteCancel()
+
+        /** `Cancelled`: the gateway stopped billing. */
+        data object Cancelled : RemoteCancel()
+
+        /** `Scheduled`: the gateway will stop billing at the period end (an immediate cancel ends access now, nothing is billed further). */
+        data object Scheduled : RemoteCancel()
+
+        /** The provider is `UNAVAILABLE`: the local change is made and the remote cancel is queued (09 section 10.3). */
+        data object Unavailable : RemoteCancel()
+    }
+
+    /** The row after [applyCancel] and whether this call changed it. */
+    class CancelApplied(val row: MarketSubscription, val changed: Boolean)
+
+    /**
+     * tx1 of a buyer or admin cancel (09 section 10.1): the row is locked, the owner checked (a buyer of another account gets 404), the request validated by
+     * the state machine (409 `SUBSCRIPTION_NOT_CANCELLABLE` for `PENDING` and closed rows), and for a `GATEWAY` row `cancelRequestedAt` is written so that a crash
+     * before tx2 leaves the intent behind (step E repeats the remote call, [danglingCancels]). [ownerUserId] `null` = an admin.
+     */
+    suspend fun beginCancel(conn: SqlConnection, subscriptionId: Long, actor: CancelActor, ownerUserId: Long?, atPeriodEnd: Boolean): CancelPlan {
+        val known = subscriptions.getById(subscriptionId, conn) ?: throw NotFound()
+
+        return locks.orderWithSubscription(conn, known.initialOrderId) {
+            val row = subscriptions.getById(subscriptionId, conn) ?: throw NotFound()
+            val now = clock.now()
+
+            if (ownerUserId != null && row.userId != ownerUserId) throw NotFound()
+
+            if (row.status.isTerminal && actor == CancelActor.ADMIN && row.remoteCancelState == RemoteCancelState.FAILED) {
+                update(conn, row.id, linkedMapOf("remoteCancelState" to "PENDING", "remoteCancelAttempts" to 0, "nextQueryAt" to now))
+
+                return@orderWithSubscription CancelPlan.Requeued(subscriptions.getById(subscriptionId, conn)!!)
+            }
+
+            when (val decision = decide(row, SubEvent.CancelRequested(actor, atPeriodEnd))) {
+                is SubTransition.Ignored ->
+                    if (decision.reason == SubscriptionStateMachine.ALREADY_CANCEL_SCHEDULED) CancelPlan.Unchanged(row) else throw SubscriptionNotCancellable()
+
+                SubTransition.PollFirst -> error("a cancel never polls")
+
+                is SubTransition.Apply -> {
+                    val remote = row.mode == SubscriptionMode.GATEWAY && row.remoteCancelState != RemoteCancelState.DONE
+
+                    if (remote) {
+                        update(
+                            conn, row.id,
+                            linkedMapOf("cancelRequestedAt" to (row.cancelRequestedAt ?: now), "endReason" to if (actor == CancelActor.BUYER) SubscriptionEndReason.BUYER_CANCEL.name else SubscriptionEndReason.ADMIN_CANCEL.name)
+                        )
+                    }
+
+                    CancelPlan.Begin(row, decision.rules.first() == com.panomc.plugins.market.core.subscription.SubRule.S8, remote)
+                }
+            }
+        }
+    }
+
+    /** The provider's call failed or only the buyer can cancel: the intent of tx1 is withdrawn (nothing else changed, 09 section 10.1). */
+    suspend fun withdrawCancel(conn: SqlConnection, subscriptionId: Long) {
+        val known = subscriptions.getById(subscriptionId, conn) ?: return
+
+        locks.orderWithSubscription(conn, known.initialOrderId) {
+            val row = subscriptions.getById(subscriptionId, conn) ?: return@orderWithSubscription
+
+            if (!row.status.isTerminal && !row.cancelAtPeriodEnd) update(conn, row.id, linkedMapOf("cancelRequestedAt" to null, "endReason" to null))
+        }
+    }
+
+    /**
+     * tx2 of a cancel (09 section 10.1): the local change the machine decides under the lock, with what the gateway [remote]ly said. `Cancelled` on a cancel at
+     * the period end is S8 with `remoteCancelState = DONE`; `Scheduled` is S8 alone (the gateway can still take it back); an immediate cancel is S7 either way
+     * (and `DONE`, the gateway bills nothing further); an unavailable provider gives the same local change and puts the remote cancel in the queue. A row that
+     * stopped being cancellable in between (a webhook ended it) is answered unchanged.
+     */
+    suspend fun applyCancel(
+        conn: SqlConnection, subscriptionId: Long, actor: CancelActor, atPeriodEnd: Boolean, reason: String?, remote: RemoteCancel
+    ): CancelApplied {
+        val known = subscriptions.getById(subscriptionId, conn) ?: throw NotFound()
+
+        return locks.orderWithSubscription(conn, known.initialOrderId) { locked ->
+            val row = subscriptions.getById(subscriptionId, conn) ?: throw NotFound()
+            val confirmed = remote == RemoteCancel.Cancelled
+            val decision = decide(row, SubEvent.CancelRequested(actor, atPeriodEnd, confirmed))
+
+            if (decision !is SubTransition.Apply) return@orderWithSubscription CancelApplied(row, false)
+
+            val immediate = decision.rules.first() != com.panomc.plugins.market.core.subscription.SubRule.S8
+            val actorType = if (actor == CancelActor.BUYER) OrderActorType.BUYER else OrderActorType.ADMIN
+
+            apply(conn, row, decision, Context(locked.order, actorType, cancel = CancelInfo(atPeriodEnd, reason?.take(CANCEL_REASON_MAX))))
+
+            when {
+                remote == RemoteCancel.Unavailable && row.mode == SubscriptionMode.GATEWAY ->
+                    update(conn, row.id, linkedMapOf("remoteCancelState" to "PENDING", "remoteCancelAttempts" to 0, "nextQueryAt" to clock.now()))
+
+                immediate && (remote == RemoteCancel.Cancelled || remote == RemoteCancel.Scheduled) ->
+                    update(conn, row.id, linkedMapOf("remoteCancelState" to "DONE", "nextQueryAt" to null))
+            }
+
+            CancelApplied(subscriptions.getById(subscriptionId, conn)!!, true)
+        }
+    }
+
+    /** What tx1 of a resume decided: [remote] = the provider has to be asked before the local change (mode `GATEWAY`). */
+    class ResumePlan(val row: MarketSubscription, val remote: Boolean)
+
+    /**
+     * tx1 of a resume (09 section 10.2): the owner check (404), the conditions of the machine (409 `SUBSCRIPTION_NOT_RESUMABLE`: `ACTIVE`, scheduled cancel,
+     * period not over, `BUYER_CANCEL`, and for `GATEWAY` an untouched remote state and [providerCanResume]). A `MERCHANT` / `MANUAL` row is resumed right here
+     * (S10); a `GATEWAY` row is only checked, the provider is asked next and [applyResume] follows.
+     */
+    suspend fun beginResume(conn: SqlConnection, subscriptionId: Long, ownerUserId: Long, providerCanResume: Boolean): ResumePlan {
+        val known = subscriptions.getById(subscriptionId, conn) ?: throw NotFound()
+
+        return locks.orderWithSubscription(conn, known.initialOrderId) { locked ->
+            val row = subscriptions.getById(subscriptionId, conn) ?: throw NotFound()
+
+            if (row.userId != ownerUserId) throw NotFound()
+
+            val decision = decide(row, SubEvent.ResumeRequested(providerCanResume)) as? SubTransition.Apply ?: throw SubscriptionNotResumable()
+
+            if (row.mode == SubscriptionMode.GATEWAY) return@orderWithSubscription ResumePlan(row, true)
+
+            apply(conn, row, decision, Context(locked.order, OrderActorType.BUYER))
+
+            ResumePlan(subscriptions.getById(subscriptionId, conn)!!, false)
+        }
+    }
+
+    /** tx2 of a resume at the gateway (09 section 10.2): S10 once the provider confirmed; judged again under the lock (409 when the row moved on). */
+    suspend fun applyResume(conn: SqlConnection, subscriptionId: Long): MarketSubscription {
+        val known = subscriptions.getById(subscriptionId, conn) ?: throw NotFound()
+
+        return locks.orderWithSubscription(conn, known.initialOrderId) { locked ->
+            val row = subscriptions.getById(subscriptionId, conn) ?: throw NotFound()
+            val decision = decide(row, SubEvent.ResumeRequested(true)) as? SubTransition.Apply ?: throw SubscriptionNotResumable()
+
+            apply(conn, row, decision, Context(locked.order, OrderActorType.BUYER))
+
+            subscriptions.getById(subscriptionId, conn)!!
+        }
+    }
+
+    /** `SkipPendingRenewal` (S8 on a `MANUAL` row, 09 section 10.1): the open renewal row is skipped; its order is cancelled after the commit ([cancelClosedRenewalOrders]). */
+    private suspend fun skipPendingRenewal(conn: SqlConnection, id: Long, now: Long) {
+        val row = subscriptions.getById(id, conn) ?: return
+        val renewal = renewals.getByPeriod(id, row.cycleCount.coerceAtLeast(1), conn) ?: return
+
+        if (renewal.status == RenewalStatus.PENDING) renewals.transition(renewal.id, RenewalStatus.PENDING, RenewalStatus.SKIPPED, now, conn)
+    }
+
+    /**
+     * `RestoreSkippedRenewal` (S10 on a `MANUAL` row, 09 section 10.2): a `SKIPPED` renewal row is `PENDING` again. Its order is kept when it is still payable
+     * (the cancel after the commit had not run); a closed one is detached so that step B prepares a new order.
+     */
+    private suspend fun restoreSkippedRenewal(conn: SqlConnection, id: Long, now: Long) {
+        val row = subscriptions.getById(id, conn) ?: return
+        val renewal = renewals.getByPeriod(id, row.cycleCount.coerceAtLeast(1), conn) ?: return
+
+        if (renewal.status != RenewalStatus.SKIPPED) return
+
+        val order = renewal.orderId?.let { orders.getById(it, conn) }
+        val keep = order != null && order.status == OrderStatus.PENDING
+
+        conn.preparedQuery(
+            "UPDATE ${table("market_subscription_renewal")} SET `status` = 'PENDING', `orderId` = ${if (keep) "`orderId`" else "NULL"}, `paymentId` = ${if (keep) "`paymentId`" else "NULL"}, " +
+                "`nextAttemptAt` = NULL, `updatedAt` = ? WHERE `id` = ? AND `status` = 'SKIPPED'"
+        ).execute(Tuple.of(now, renewal.id)).coAwait()
+    }
+
+    // ----- 09 section 10.4: refund, chargeback, user deletion
+
+    /** The order of the period that is being paid for: the initial order while `cycleCount = 1`, else the order of the newest `PAID` renewal row (09 section 10.4). */
+    private suspend fun currentPeriodOrderId(conn: SqlClient, row: MarketSubscription): Long? {
+        if (row.cycleCount <= 1) return row.initialOrderId
+
+        return renewals.getBySubscriptionId(row.id, conn).filter { it.status == RenewalStatus.PAID }.maxByOrNull { it.periodIndex }?.orderId
+    }
+
+    /**
+     * Whether [order] is an order of a subscription (its first order or a renewal) that is not the one being paid for any more (09 section 10.4): a refund of it
+     * leaves the subscription alone and never takes the goods back (`RefundService` forces `revoke = 0`, 21 section 3.2 step 4). `false` for any other order.
+     */
+    suspend fun isOlderPeriod(conn: SqlClient, order: MarketOrder): Boolean {
+        val id = order.subscriptionId ?: return false
+        val row = subscriptions.getById(id, conn) ?: return false
+
+        return currentPeriodOrderId(conn, row) != order.id
+    }
+
+    /**
+     * `RefundEffects.subscription` of O10 (09 section 10.4), inside the refund's transaction (the subscription row is locked with the order): a full refund of the
+     * current period's order with `revoke = 1` ends the subscription (S7, `REFUND`; the refund flow's `REVOKE` rows are the undo, so no `EXPIRE` rows: unless it
+     * is a renewal order, whose goods are the subscription's own entitlement, which the ending then expires). A partial refund, `revoke = 0` or the order of an
+     * older period leave it alone.
+     */
+    suspend fun onOrderRefunded(conn: SqlConnection, order: MarketOrder, refund: com.panomc.plugins.market.db.model.MarketRefund) {
+        val id = order.subscriptionId ?: return
+
+        if (order.status != OrderStatus.REFUNDED || !refund.revoke) return
+
+        val row = subscriptions.getById(id, conn) ?: return
+
+        if (currentPeriodOrderId(conn, row) != order.id) return
+
+        endByMoney(conn, row, SubEvent.Refunded, order, OrderActorType.ADMIN)
+    }
+
+    /**
+     * `DisputeEffects.subscription` of O11 (09 section 10.4): a chargeback on any order of the subscription ends it (S7, `CHARGEBACK`); the `REVOKE` rows of the
+     * dispute flow are the undo when `revokeOnChargeback`, else the ending expires the entitlement. A won dispute reactivates nothing.
+     */
+    suspend fun onOrderChargeback(conn: SqlConnection, order: MarketOrder, dispute: com.panomc.plugins.market.db.model.MarketDispute) {
+        val id = order.subscriptionId ?: return
+        val row = subscriptions.getById(id, conn) ?: return
+
+        endByMoney(conn, row, SubEvent.Chargeback(config().revokeOnChargeback), order, OrderActorType.SYSTEM)
+    }
+
+    private suspend fun endByMoney(conn: SqlConnection, row: MarketSubscription, event: SubEvent, order: MarketOrder, actor: OrderActorType) {
+        val initial = orders.getById(row.initialOrderId, conn) ?: return
+        val decision = decide(row, event) as? SubTransition.Apply ?: return
+
+        // a renewal order has no entitlement of its own (09 section 8.4), so the undo of its refund or dispute cannot have ended the subscription's one
+        apply(conn, row, if (order.source == OrderSource.RENEWAL) expiresEntitlement(decision) else decision, Context(initial, actor))
+    }
+
+    private fun expiresEntitlement(decision: SubTransition.Apply): SubTransition.Apply = SubTransition.Apply(
+        decision.steps.map { step -> step.copy(effects = step.effects.map { if (it is SubEffect.EndSubscription) it.copy(undoHandledByCaller = false) else it }) }
+    )
+
+    /**
+     * `PlayerEventListener.onDelete` (01 section 13, 09 section 10.4): every subscription of the deleted user ends (`ACTIVE`, `PAST_DUE`, `PAUSED`: S7 `ADMIN_CANCEL`
+     * without the ended mail; `PENDING`: S3) and loses its personal data (`userId`, `email`, `storedMethod`); a closed one only loses the data. A `GATEWAY` row puts
+     * its remote cancel in the queue. One transaction per row. Returns the number of rows handled.
+     */
+    suspend fun onUserDeleted(db: MarketDb, afterCommit: suspend (List<AfterCommit>) -> Unit, userId: Long): Int {
+        val ids = db.tx { client -> subscriptions.getByUserId(userId, client).map { it.id } }
+
+        for (id in ids) {
+            db.txRestartingOnOrderChange { conn ->
+                val known = subscriptions.getById(id, conn) ?: return@txRestartingOnOrderChange
+
+                locks.orderWithSubscription(conn, known.initialOrderId) { locked ->
+                    val row = subscriptions.getById(id, conn) ?: return@orderWithSubscription
+
+                    when (val decision = decide(row, SubEvent.UserDeleted)) {
+                        is SubTransition.Apply -> apply(conn, row, decision, Context(locked.order, OrderActorType.SYSTEM))
+
+                        else -> update(conn, id, piiCleared())
+                    }
+                }
+            }
+        }
+
+        if (ids.isNotEmpty()) cancelClosedRenewalOrders(db, afterCommit)
+
+        return ids.size
+    }
+
+    // ----- step E: a cancel whose tx2 never ran (09 section 10.1, last paragraph)
+
+    /** The non-closed rows that carry the intent of a cancel older than two minutes without having been applied: `cancelRequestedAt` set, `cancelAtPeriodEnd = 0` (step E). */
+    suspend fun danglingCancels(client: SqlClient, limit: Int): List<MarketSubscription> {
+        val rows = client.preparedQuery(
+            "SELECT `id` FROM ${table("market_subscription")} WHERE `cancelRequestedAt` IS NOT NULL AND `cancelRequestedAt` <= ? AND `cancelAtPeriodEnd` = 0 " +
+                "AND `status` IN ('ACTIVE', 'PAST_DUE', 'PAUSED') ORDER BY `cancelRequestedAt`, `id` LIMIT $limit"
+        ).execute(Tuple.of(clock.now() - DANGLING_CANCEL_AFTER_MS)).coAwait()
+
+        return rows.mapNotNull { subscriptions.getById(it.getLong("id"), client) }
+    }
+
     // ----- SQL
 
     /** `UPDATE market_subscription SET ... WHERE id = ?` (and `status` when [whereStatus] is given); `true` when a row matched. */
@@ -1895,6 +2220,12 @@ class SubscriptionService(
 
         /** Step F: a `PENDING` row is closed 30 days after its order was released (09 section 4.3). */
         const val PENDING_TIMEOUT_MS = 30 * SubscriptionTimings.DAY_MS
+
+        /** Step E repeats the remote half of a cancel whose second transaction never ran after this long (09 section 10.1). */
+        const val DANGLING_CANCEL_AFTER_MS = 2 * SubscriptionTimings.MINUTE_MS
+
+        /** The admin's reason of a cancel (09 section 10.1: at most 255 characters). */
+        private const val CANCEL_REASON_MAX = 255
 
         /** After this many failed remote cancels the queue gives up (`FAILED`, 09 section 10.3). */
         const val REMOTE_CANCEL_MAX_ATTEMPTS = 20

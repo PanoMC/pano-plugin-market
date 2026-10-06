@@ -38,6 +38,13 @@ interface RefundEffects {
     /** `SubscriptionService.onOrderRefunded` (09 section 10.4); the subscription slices install the real one. */
     suspend fun subscription(conn: SqlConnection, order: MarketOrder, refund: MarketRefund)
 
+    /**
+     * Whether [order] belongs to an older period of a subscription than the one being paid for (`SubscriptionService.isOlderPeriod`, 09 section 10.4, 21 section 3.2
+     * step 4): a refund of it never takes the goods back (`revoke` is forced to `false`, the subscription keeps its entitlement) and the preview warns
+     * `OLDER_SUBSCRIPTION_PERIOD`.
+     */
+    suspend fun olderSubscriptionPeriod(conn: io.vertx.sqlclient.SqlClient, order: MarketOrder): Boolean = false
+
     companion object {
         val NONE: RefundEffects = object : RefundEffects {
             override suspend fun creatorReversal(conn: SqlConnection, order: MarketOrder, refundedTotalAfter: Long, fully: Boolean) = Unit
@@ -71,7 +78,8 @@ class StandardRefundEffects(
     private val users: UserDirectory? = null,
     private val webhooks: WebhookService? = null,
     private val defaultLocale: () -> String = { "en-US" },
-    private val subscriptionEnding: suspend (SqlConnection, MarketOrder, MarketRefund) -> Unit = { _, _, _ -> }
+    private val subscriptionEnding: suspend (SqlConnection, MarketOrder, MarketRefund) -> Unit = { _, _, _ -> },
+    private val olderPeriod: suspend (io.vertx.sqlclient.SqlClient, MarketOrder) -> Boolean = { _, _ -> false }
 ) : RefundEffects {
     private fun table(name: String) = "`${tablePrefix()}$name`"
 
@@ -133,4 +141,6 @@ class StandardRefundEffects(
     }
 
     override suspend fun subscription(conn: SqlConnection, order: MarketOrder, refund: MarketRefund) = subscriptionEnding(conn, order, refund)
+
+    override suspend fun olderSubscriptionPeriod(conn: io.vertx.sqlclient.SqlClient, order: MarketOrder): Boolean = olderPeriod(conn, order)
 }

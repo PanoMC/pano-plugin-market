@@ -334,6 +334,10 @@ class RefundService(
             }
         }
 
+        if (effects.olderSubscriptionPeriod(conn, order)) {
+            out += JsonObject().put("code", "OLDER_SUBSCRIPTION_PERIOD").put("subscriptionId", order.subscriptionId)
+        }
+
         for (d in plan.dependents) {
             out += JsonObject().put("code", "UPGRADE_DEPENDENT").put("successorOrderId", d.successorOrderId).put("deduction", MoneyUtil.toDecimal(d.deduction))
         }
@@ -418,7 +422,8 @@ class RefundService(
         val capability = if (input.manual) RefundSplit.GatewayRefund(support ?: RefundSupport.NONE, true) else support?.let { RefundSplit.GatewayRefund(it) }
         val splitOrder = RefundMath.splitOrder(amounts(order), books(order, rows), excluding)
         val request = RefundSplit.Request(splitModeOf(input), requested, input.gatewayAmount, input.creditAmount)
-        val revoke = input.revoke ?: config().revokeOnRefund
+        // the refund of an older period of a subscription never takes the goods back: they are the subscription's, which is still running (09 section 10.4)
+        val revoke = !effects.olderSubscriptionPeriod(conn, order) && (input.revoke ?: config().revokeOnRefund)
 
         suspend fun finish(split: RefundSplit.Split, limits: RefundSplit.Limits, warnings: List<RefundSplit.Warning>, notSupported: Boolean): Plan {
             val full = emptiesOrder(order, split.amount, split.creditPart)
@@ -1351,7 +1356,7 @@ class RefundService(
         val conn = t.conn
         val inFlight = books(order, refunds.getByOrderId(order.id, conn)).filter { it.status == RefundStatus.REQUESTED || it.status == RefundStatus.PENDING }.sumOf { it.amount }
         // a partial dashboard refund revokes nothing; one that empties the order follows `revokeOnRefund` (21 section 4)
-        val revoke = config().revokeOnRefund && order.refundedTotal + inFlight + match.amount >= order.totalPrice
+        val revoke = config().revokeOnRefund && order.refundedTotal + inFlight + match.amount >= order.totalPrice && !effects.olderSubscriptionPeriod(conn, order)
         val insert = RefundStateMachine.insert(RefundOrigin.GATEWAY, event.state)
         val id = refunds.add(
             MarketRefund(

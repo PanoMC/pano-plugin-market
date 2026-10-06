@@ -37,6 +37,7 @@ import com.panomc.plugins.market.routes.api.order.creditService
 import com.panomc.plugins.market.routes.api.order.deliveryService
 import com.panomc.plugins.market.routes.api.order.entitlementService
 import com.panomc.plugins.market.routes.api.order.paymentService
+import com.panomc.plugins.market.routes.api.order.subscriptionService
 import com.panomc.plugins.market.routes.api.order.webhookService
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
@@ -103,7 +104,9 @@ private fun buildRefundService(plugin: MarketPlugin): RefundService {
     val effects = StandardRefundEffects(
         clock = SystemClock, earnings = context.getBean(MarketCreatorEarningDao::class.java), tablePrefix = { orderDao.prefix() }, invoices = invoiceService(plugin),
         mailOutbox = MailOutboxService(config, SystemClock, context.getBean(MarketMailOutboxDao::class.java), context.getBean(MarketOrderEventDao::class.java)),
-        users = PlatformUserDirectory(databaseManager), webhooks = webhookService(plugin)
+        users = PlatformUserDirectory(databaseManager), webhooks = webhookService(plugin),
+        subscriptionEnding = { conn, order, refund -> subscriptionService(plugin).onOrderRefunded(conn, order, refund) },
+        olderPeriod = { client, order -> subscriptionService(plugin).isOlderPeriod(client, order) }
     )
 
     return RefundService(
