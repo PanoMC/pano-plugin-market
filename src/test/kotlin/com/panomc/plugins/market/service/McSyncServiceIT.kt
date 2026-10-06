@@ -4,6 +4,7 @@ import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.delivery.DeliveryError
 import com.panomc.plugins.market.core.delivery.DeliveryEvent
 import com.panomc.plugins.market.core.delivery.ProductAction
+import com.panomc.plugins.market.core.delivery.ResultStatus
 import com.panomc.plugins.market.db.MarketDaoITBase
 import com.panomc.plugins.market.db.model.DeliveryActionType
 import com.panomc.plugins.market.db.model.DeliveryPhase
@@ -11,6 +12,7 @@ import com.panomc.plugins.market.db.model.DeliveryStatus
 import com.panomc.plugins.market.db.model.DeliveryTransport
 import com.panomc.plugins.market.db.model.FulfillmentStatus
 import com.panomc.plugins.market.db.model.MarketDelivery
+import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.db.tx.OrderLockScope
 import com.panomc.plugins.market.db.tx.txRestartingOnOrderChange
 import com.panomc.plugins.market.job.DeliveryJob
@@ -29,6 +31,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * `McSyncService` (08 section 8) driven by [FakeMcComponent] on a real MariaDB (MK-103; tests 56 to 63 of 08 section 20, 19 section 13): the offer of a due
@@ -66,13 +69,39 @@ class McSyncServiceIT : MarketDaoITBase() {
         mc = FakeMcComponent(sync, 7, w.clock, version)
     }
 
-    private fun newService(): McSyncService = McSyncService(
-        w.db, d.locks, w.clock, { w.config }, w.deliveries, w.serverStates, w.orders, w.orderItems, d.service, link, { version }, { ready.get() },
+    private fun newService(db: MarketDb = w.db): McSyncService = McSyncService(
+        db, d.locks, w.clock, { w.config }, w.deliveries, w.serverStates, w.orders, w.orderItems, d.service, link, { version }, { ready.get() },
         storeName = { w.config.storeName }
     )
 
     private fun command(id: String = "c1", requiresOnline: Boolean = false, text: String = "give {username} diamond 1") =
         ProductAction(id = id, type = DeliveryActionType.COMMAND, commands = listOf(text), requiresOnline = requiresOnline)
+
+    private fun revokeCommand() = ProductAction(id = "c2", type = DeliveryActionType.COMMAND, phase = DeliveryPhase.REVOKE, commands = listOf("take {username} diamond 1"))
+
+    /**
+     * The window between two transactions of one service: the pool supplier of its [MarketDb] calls [beforeTransaction] every time a transaction starts, and
+     * the [action] runs when the [fireAt]-th one of the armed sync starts (a request of the same server that is applied at that moment).
+     */
+    private class TxTap {
+        val calls = AtomicInteger()
+
+        @Volatile
+        var fireAt = -1
+
+        @Volatile
+        var action: (suspend () -> Unit)? = null
+
+        @Volatile
+        var fired = false
+
+        suspend fun beforeTransaction() {
+            if (calls.incrementAndGet() == fireAt) {
+                fired = true
+                action?.invoke()
+            }
+        }
+    }
 
     private fun serverPermission(id: String, vararg nodes: String) =
         ProductAction(id = id, type = DeliveryActionType.PERMISSION, via = com.panomc.plugins.market.core.delivery.PermissionVia.SERVER, nodes = nodes.toList())
@@ -91,6 +120,11 @@ class McSyncServiceIT : MarketDaoITBase() {
 
     private suspend fun cancel(row: MarketDelivery, reason: String = DeliveryError.CANCELLED_BY_ADMIN) = w.db.txRestartingOnOrderChange { conn ->
         d.locks.forOrder(conn, row.orderId!!, OrderLockScope.PAYMENT) { d.service.apply(conn, row.id, DeliveryEvent.Cancel(reason)) }
+    }
+
+    /** What another request of the same server does when it applies [status] for [row]: the machine under the order lock, in a transaction of its own. */
+    private suspend fun serverResult(row: MarketDelivery, status: ResultStatus) = w.db.txRestartingOnOrderChange { conn ->
+        d.locks.forOrder(conn, row.orderId!!, OrderLockScope.PAYMENT) { d.service.apply(conn, row.id, DeliveryEvent.ServerResult(status)) }
     }
 
     // ===== offers, results ===============================================================================================
@@ -971,6 +1005,182 @@ class McSyncServiceIT : MarketDaoITBase() {
         assertEquals(DeliveryStatus.CANCELLED, row(undo.id).status)
         assertEquals(DeliveryError.NOTHING_TO_REVOKE, row(undo.id).lastErrorCode)
         assertTrue(mc.commandLog.isEmpty())
+    }
+
+    @Test
+    fun `undo rows with an open gate on a server that is not ready do not keep a ready server from its D22 check (starvation)`(): Unit = runBlocking {
+        val user = w.fixtures.user("Steve")
+        val away = FakeMcComponent(sync, 8, w.clock, version)
+
+        link.add(8)
+        d.roster.granted = listOf(8L)
+
+        // 101 orders on server 8: every grant is run and CONFIRMED, then every order is refunded: 101 open-gate REVOKE rows whose grant took effect
+        val far = (1..101).map { d.place(buyer = "Steve", user = user, actions = listOf(command("c1"), revokeCommand())).also { d.pay(it) } }
+
+        do {
+            val reply = away.sync()
+        } while (reply.offeredKeys.isNotEmpty() || reply.resultKeys.isNotEmpty())
+
+        assertEquals(101, away.executedKeys.size)
+
+        for (p in far) d.revoke(p)
+
+        link.disconnect(8)
+
+        val held = far.map { p -> d.rows(p.order.id).single { it.phase == DeliveryPhase.REVOKE } }
+
+        assertTrue(held.all { it.serverId == 8L && it.status == DeliveryStatus.PENDING })
+        assertTrue(far.all { p -> d.rows(p.order.id).single { it.phase == DeliveryPhase.GRANT }.status == DeliveryStatus.CONFIRMED })
+
+        // server 7: a refund before the component ever asked; its undo row is newer than all 101 of server 8
+        d.roster.granted = listOf(7L)
+
+        val near = d.place(buyer = "Steve", user = user, actions = listOf(command("c1"), revokeCommand()))
+
+        d.pay(near)
+        d.revoke(near)
+
+        val undo = d.rows(near.order.id).single { it.phase == DeliveryPhase.REVOKE }
+
+        assertEquals(7L, undo.serverId)
+        assertEquals(DeliveryStatus.PENDING, undo.status)
+        assertTrue(undo.id > held.maxOf { it.id })
+
+        val reply = mc.sync()
+
+        assertTrue(reply.offeredKeys.isEmpty(), "the revoke of a grant that never ran must not be offered")
+        assertEquals(DeliveryStatus.CANCELLED, row(undo.id).status)
+        assertEquals(DeliveryError.NOTHING_TO_REVOKE, row(undo.id).lastErrorCode)
+        assertTrue(mc.commandLog.isEmpty())
+        assertTrue(held.all { row(it.id).status == DeliveryStatus.PENDING }, "the rows of the server that is not ready are left alone")
+    }
+
+    @Test
+    fun `a queued requiresOnline grant that the component cancels takes its undo row with it in the same sync (08 section 20, 60 and 65)`(): Unit = runBlocking {
+        val (placed, rows) = buy(command("c1", requiresOnline = true), revokeCommand())
+        val grant = rows.single()
+
+        mc.sync()
+        mc.sync()
+        assertEquals(DeliveryStatus.QUEUED, row(grant.id).status)
+
+        // the refund: the cancel of the queued grant is requested, the undo row waits behind it
+        d.revoke(placed)
+
+        val undo = d.rows(placed.order.id).single { it.phase == DeliveryPhase.REVOKE }
+
+        assertNotNull(row(grant.id).cancelRequestedAt)
+        assertEquals(DeliveryStatus.PENDING, undo.status)
+
+        val withCancel = mc.sync()
+
+        assertEquals(listOf(grant.idempotencyKey), withCancel.cancel)
+        assertTrue(withCancel.offeredKeys.isEmpty(), "the undo row is held while its grant is queued")
+        assertEquals("CANCELLED", mc.stateOf(grant.idempotencyKey))
+        assertEquals(DeliveryStatus.PENDING, row(undo.id).status)
+
+        // the sync that carries the component's answer: the grant ends CANCELLED and the undo row NOTHING_TO_REVOKE, nothing runs
+        val answer = mc.sync()
+
+        assertEquals(listOf(grant.idempotencyKey), answer.resultKeys)
+        assertTrue(answer.offeredKeys.isEmpty())
+        assertEquals(DeliveryStatus.CANCELLED, row(grant.id).status)
+        assertEquals(DeliveryStatus.CANCELLED, row(undo.id).status)
+        assertEquals(DeliveryError.NOTHING_TO_REVOKE, row(undo.id).lastErrorCode)
+        assertTrue(mc.commandLog.isEmpty(), "neither the grant nor the revoke command ran")
+        assertTrue(mc.executedKeys.isEmpty())
+        assertTrue(mc.sync().offeredKeys.isEmpty())
+    }
+
+    @Test
+    fun `an undo row whose gate opens after the D22 check is not offered in that sync, the next sync checks it (race)`(): Unit = runBlocking {
+        val tap = TxTap()
+        val tapped = newService(MarketDb({ tap.beforeTransaction(); pool }, w.clock))
+        val component = FakeMcComponent(tapped, 7, w.clock, version)
+        val (placed, rows) = buy(command("c1", requiresOnline = true), revokeCommand())
+        val grant = rows.single()
+
+        component.sync()
+        component.sync()
+        assertEquals(DeliveryStatus.QUEUED, row(grant.id).status)
+
+        d.revoke(placed)
+
+        val undo = d.rows(placed.order.id).single { it.phase == DeliveryPhase.REVOKE }
+
+        assertNotNull(row(grant.id).cancelRequestedAt)
+        assertEquals(DeliveryStatus.PENDING, undo.status)
+
+        // syncs that report nothing: the component takes the cancel (the first one writes the changed queue length to market_server_state) and the undo row
+        // stays held. Once that settled, the third one shows how many transactions such a sync opens; the last of them is the offer.
+        component.muteResults = true
+
+        repeat(2) { component.sync() }
+        tap.calls.set(0)
+
+        val quiet = component.sync()
+        val perSync = tap.calls.get()
+
+        assertTrue(quiet.offeredKeys.isEmpty())
+        assertEquals(DeliveryStatus.PENDING, row(undo.id).status)
+
+        // the same sync again, but just before its offer transaction another request of the server applies the component's CANCELLED answer: the gate of
+        // the undo row opens after the check looked at it
+        tap.calls.set(0)
+        tap.fireAt = perSync
+        tap.action = { serverResult(grant, ResultStatus.CANCELLED) }
+
+        val raced = component.sync()
+
+        assertTrue(tap.fired, "the answer of the other request was applied inside the window")
+        assertEquals(DeliveryStatus.CANCELLED, row(grant.id).status)
+        assertTrue(raced.offeredKeys.isEmpty(), "an undo row that was not checked in this sync is not offered")
+        assertEquals(DeliveryStatus.PENDING, row(undo.id).status)
+        assertTrue(component.commandLog.isEmpty())
+
+        // the next sync checks it: the grant never took effect
+        tap.action = null
+        component.muteResults = false
+
+        val next = component.sync()
+
+        assertTrue(next.offeredKeys.isEmpty())
+        assertEquals(DeliveryStatus.CANCELLED, row(undo.id).status)
+        assertEquals(DeliveryError.NOTHING_TO_REVOKE, row(undo.id).lastErrorCode)
+        assertTrue(component.commandLog.isEmpty())
+        assertTrue(component.executedKeys.isEmpty())
+    }
+
+    @Test
+    fun `an undo row that was offered and lost is offered again with the same key (re-offer needs no new check)`(): Unit = runBlocking {
+        val (placed, rows) = buy(command("c1"), revokeCommand())
+        val grant = rows.single()
+
+        mc.sync()
+        mc.sync()
+        assertEquals(DeliveryStatus.CONFIRMED, row(grant.id).status)
+
+        d.revoke(placed)
+
+        val undo = d.rows(placed.order.id).single { it.phase == DeliveryPhase.REVOKE }
+
+        mc.loseNextResponse()
+        assertEquals(listOf(undo.idempotencyKey), mc.sync().offeredKeys)
+        assertEquals(DeliveryStatus.SENT, row(undo.id).status)
+        assertTrue(mc.knownKeys().none { it == undo.idempotencyKey })
+
+        w.clock.advance(31_000L)
+
+        val again = mc.sync()
+
+        assertEquals(listOf(undo.idempotencyKey), again.offeredKeys)
+        assertEquals(2, row(undo.id).attempts)
+
+        mc.sync()
+
+        assertEquals(DeliveryStatus.CONFIRMED, row(undo.id).status)
+        assertEquals(listOf("give Steve diamond 1", "take Steve diamond 1"), mc.commandLog)
     }
 
     // ===== concurrency ===================================================================================================

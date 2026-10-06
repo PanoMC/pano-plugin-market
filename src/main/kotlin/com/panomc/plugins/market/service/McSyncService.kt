@@ -16,6 +16,7 @@ import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.dao.MarketServerStateDao
 import com.panomc.plugins.market.db.model.DeliveryActionType
+import com.panomc.plugins.market.db.model.DeliveryPhase
 import com.panomc.plugins.market.db.model.DeliveryStatus
 import com.panomc.plugins.market.db.model.DeliveryTransport
 import com.panomc.plugins.market.db.model.MarketDelivery
@@ -346,14 +347,54 @@ class McSyncService(
             "AND (d.`status` IN ('PENDING','WAITING_SERVER') OR (d.`status` = 'SENT' AND d.`nextAttemptAt` IS NOT NULL AND d.`nextAttemptAt` <= $now)) " +
             "AND ${gateOpen("d")} ORDER BY d.`id` LIMIT ?"
 
+    /** The undo rows of one server that the offer select may return for the first time (`PENDING` / `WAITING_SERVER`, gate open): the rows D22 has to look at before they go out. */
+    private fun undoCandidatesSql(now: Long) =
+        "SELECT d.`id` FROM $deliveryTable d WHERE d.`serverId` = ? AND d.`transport` = 'MARKET_MC' AND d.`phase` IN ('EXPIRE','REVOKE') AND d.`orderItemId` IS NOT NULL " +
+            "AND d.`status` IN ('PENDING','WAITING_SERVER') AND d.`runAfter` <= $now AND d.`cancelRequestedAt` IS NULL AND ${gateOpen("d")} ORDER BY d.`id` LIMIT ?"
+
+    /**
+     * D22 before an offer, per row (08 section 11.4: when nothing the undo row undoes ever took effect, neither the grant nor the revoke command may run). The
+     * first `capacity + 1` due undo rows of this server whose gate is open are checked one at a time under their own order lock, which cancels the ones with
+     * nothing to undo (`NOTHING_TO_REVOKE`). Answers the ids that were checked; [offer] offers no other undo row. A global pass over every server's rows would let
+     * rows of a server that is not ready, whose grant took effect and so stay in the set, push the rows of a ready server out of its batch.
+     *
+     * A row whose check failed (a contended order, a database error) is left out of the answer and waits for the next sync; the results of this request are applied already.
+     */
+    private suspend fun checkUndoRows(serverId: Long, capacity: Int): Set<Long> {
+        val now = clock.now()
+        val ids = db.tx { conn -> conn.preparedQuery(undoCandidatesSql(now)).execute(Tuple.of(serverId, capacity + 1)).coAwait().map { it.getLong("id") } }
+        val checked = HashSet<Long>()
+
+        for (id in ids) {
+            try {
+                delivery.cancelIfNothingDelivered(id)
+
+                checked += id
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                logger.warn("the D22 check of delivery {} of server {} failed, the row is not offered in this sync: {}", id, serverId, t.toString())
+            }
+        }
+
+        return checked
+    }
+
+    /**
+     * An undo row that is offered for the first time must have been checked by [checkUndoRows] in this call: the check and the locking select are separate
+     * transactions, so a row whose gate opened or that became due in between (a result of a concurrent request, a refund, D14) has not been looked at and waits for
+     * the next sync. A `SENT` undo row is offered again without a new check: it went out after one, and a grant that took effect stays taken.
+     */
+    private fun MarketDelivery.needsUndoCheck(): Boolean =
+        (phase == DeliveryPhase.EXPIRE || phase == DeliveryPhase.REVOKE) && orderItemId != null && status != DeliveryStatus.SENT
+
     /**
      * Step 6 and 7: selects (and locks) the due rows of the server, decides each with the machine, serialises the ones that fit into the response budget and
      * applies D8 / D9 to exactly those. D10 rows are set aside and failed after the transaction under the order lock.
      */
     private suspend fun offer(serverId: Long, capacity: Int, base: MarketSyncEventResponse): Offers {
-        // An undo row whose predecessors never took effect must not be offered: D22 first (08 section 11.4; the machine takes GateOpened for this).
-        if (hasUndoCandidate(serverId)) delivery.classify()
-
+        // D22 first, per row, and bound to what is offered below (08 section 11.4)
+        val checked = checkUndoRows(serverId, capacity)
         val exhausted = ArrayList<Long>()
         val offered = ArrayList<SyncDeliveryOffer>()
         var more = false
@@ -368,6 +409,9 @@ class McSyncService(
 
             for (id in ids) {
                 val row = deliveries.getById(id, conn) ?: continue
+
+                // not looked at by D22 in this call: not offered now, the next sync checks it
+                if (row.needsUndoCheck() && row.id !in checked) continue
 
                 when (val decision = DeliveryStateMachine.decide(row.toRow(), DeliveryEvent.Offer, now, rules())) {
                     is DeliveryTransition.Move -> if (decision.to == DeliveryStatus.SENT) candidates += row else exhausted += id
@@ -424,15 +468,6 @@ class McSyncService(
         }
 
         return Offers(offered, more)
-    }
-
-    private suspend fun hasUndoCandidate(serverId: Long): Boolean = db.tx { conn ->
-        val now = clock.now()
-
-        conn.preparedQuery(
-            "SELECT 1 FROM $deliveryTable d WHERE d.`serverId` = ? AND d.`transport` = 'MARKET_MC' AND d.`phase` IN ('EXPIRE','REVOKE') AND d.`orderItemId` IS NOT NULL " +
-                "AND d.`status` IN ('PENDING','WAITING_SERVER') AND d.`runAfter` <= $now AND ${gateOpen("d")} LIMIT 1"
-        ).execute(Tuple.of(serverId)).coAwait().iterator().hasNext()
     }
 
     /** The wire form of a row (08 section 8.1), or `null` when its payload cannot be offered (never acknowledged, never marked sent). */
