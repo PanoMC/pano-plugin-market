@@ -8,6 +8,18 @@ import com.panomc.plugins.market.db.model.MailKind
 import com.panomc.plugins.market.db.model.MailRefType
 import com.panomc.plugins.market.db.model.MailStatus
 import com.panomc.plugins.market.db.model.MarketMailOutbox
+import com.panomc.plugins.market.core.delivery.ProductAction
+import com.panomc.plugins.market.db.model.DeliveryPhase
+import com.panomc.plugins.market.db.model.DeliveryStatus
+import com.panomc.plugins.market.db.model.EntitlementStatus
+import com.panomc.plugins.market.db.model.FulfillmentStatus
+import com.panomc.plugins.market.db.model.MarketDelivery
+import com.panomc.plugins.market.db.model.MarketOrderEvent
+import com.panomc.plugins.market.db.model.MarketOrderItem
+import com.panomc.plugins.market.db.model.OrderActorType
+import com.panomc.plugins.market.db.model.OrderSource
+import com.panomc.plugins.market.db.tx.OrderLockScope
+import com.panomc.plugins.market.db.tx.txRestartingOnOrderChange
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.db.model.MarketPayment
 import com.panomc.plugins.market.db.model.OrderEventType
@@ -25,11 +37,13 @@ import com.panomc.plugins.market.service.platform.DirectoryUser
 import com.panomc.plugins.market.service.platform.UserDirectory
 import com.panomc.plugins.market.spi.payment.ReviewReason
 import com.panomc.plugins.market.support.FakeMailGateway
+import com.panomc.plugins.market.support.MarketTestDb
 import com.panomc.plugins.market.support.TestUser
 import com.panomc.plugins.market.support.TestWiring
 import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.Vertx
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.sqlclient.SqlClient
 import kotlinx.coroutines.runBlocking
@@ -90,7 +104,7 @@ class MailEnqueueIT : MarketDaoITBase() {
         w.configure { config() }
         ph = PaymentHarness(w, vertx)
         outbox = MailOutboxService({ w.config }, w.clock, w.mailOutbox, w.orderEvents)
-        mails = OrderMails({ w.config }, w.clock, outbox, w.mailOutbox, w.orderItems, directory)
+        mails = OrderMails({ w.config }, w.clock, outbox, w.mailOutbox, w.orderItems, w.orderEvents, directory)
 
         // the order and payment services of the harness with the mail wiring of production: MailEffects in front of the recording effects, PaymentMails
         val redemptions = RedemptionService(w.clock, ph.locks, w.redemptions)
@@ -509,6 +523,302 @@ class MailEnqueueIT : MarketDaoITBase() {
         runDeliveries(deliveryService(d))
 
         assertEquals(emptyList<MailKind>(), kinds(silent.order.id), "ORDER_DELIVERED is an order mail: the purchase switch turns it off")
+    }
+
+    // ================================================================================== ORDER_DELIVERED: first fulfillment only (review fix)
+
+    private fun permission(id: String, node: String) = ProductAction(id = id, type = DeliveryActionType.PERMISSION, nodes = listOf(node))
+
+    /** A second line on a placed order (before it is paid), with its own product and [actions]; [physical] marks a shipped line. */
+    private suspend fun secondLine(placed: Placed, actions: List<ProductAction>, physical: Boolean = false): MarketOrderItem {
+        val product = w.fixtures.product(actions = JsonArray(actions.map { it.toJson() }).encode())
+        val snapshot = JsonObject().put("slug", product.slug).put("billingMode", "ONE_TIME").put("actions", JsonArray(actions.map { it.toJson() }))
+        val now = w.clock.now()
+        val id = w.orderItems.add(
+            MarketOrderItem(
+                orderId = placed.order.id, productId = product.id, productName = "Extra", quantity = 1, unitPrice = 500, lineTotal = 500, listUnitPrice = 500,
+                physical = physical, snapshot = snapshot.encode(), createdAt = now, updatedAt = now
+            ),
+            pool
+        )
+
+        // the order's money follows its lines (I8), the product's sold count its units (I17)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_product` SET `soldCount` = `soldCount` + 1 WHERE `id` = ?", product.id)
+        MarketTestDb.sql(
+            pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `subtotal` = `subtotal` + 500, `totalPrice` = `totalPrice` + 500, `gatewayAmount` = `gatewayAmount` + 500, " +
+                "`paidAmount` = `paidAmount` + 500 WHERE `id` = ?", placed.order.id
+        )
+
+        return w.orderItems.getById(id, pool)!!
+    }
+
+    private suspend fun fulfillment(orderId: Long) = w.orders.getById(orderId, pool)!!.fulfillmentStatus
+
+    @Test
+    fun `an expiry that is confirmed later makes the order FULFILLED again and sends no second ORDER_DELIVERED`(): Unit = runBlocking {
+        val u = registered("Steve")
+        val d = DeliveryWorld(w)
+        val service = deliveryService(d)
+
+        w.configure { config(deliveredDelayMinutes = 10) }
+
+        val placed = d.place(user = u, actions = listOf(permission("a1", "group.vip")), billing = "TIMED", periodUnit = "DAY", periodCount = 30)
+
+        d.pay(placed)
+        runDeliveries(service)
+
+        assertEquals(FulfillmentStatus.FULFILLED, fulfillment(placed.order.id))
+        assertEquals(emptyList<MailKind>(), kinds(placed.order.id), "instant delivery inside the window: no ORDER_DELIVERED")
+
+        w.clock.advance(31 * 86_400_000L)
+
+        w.db.txRestartingOnOrderChange { conn ->
+            d.locks.forOrder(conn, placed.order.id, OrderLockScope.COMMIT) { locked ->
+                service.planEnd(conn, locked.order, locked.items)
+
+                for (e in w.entitlements.getByOrderItemId(locked.items[0].id, conn)) w.entitlements.end(e.id, EntitlementStatus.EXPIRED, "EXPIRED", w.clock.now(), conn)
+
+                service.refreshFulfillment(conn, locked.order.id)
+            }
+        }
+
+        assertEquals(FulfillmentStatus.PARTIAL, fulfillment(placed.order.id), "the open EXPIRE row keeps the order PARTIAL")
+
+        runDeliveries(service)
+
+        assertEquals(DeliveryStatus.CONFIRMED, d.rows(placed.order.id).single { it.phase == DeliveryPhase.EXPIRE }.status)
+        assertEquals(FulfillmentStatus.FULFILLED, fulfillment(placed.order.id), "the confirmed EXPIRE row brings it back to FULFILLED")
+        assertEquals(emptyList<MailKind>(), kinds(placed.order.id), "weeks after payment: still no 'delivered' mail for an expiry")
+    }
+
+    @Test
+    fun `a partial refund whose REVOKE rows are confirmed sends no ORDER_DELIVERED`(): Unit = runBlocking {
+        val u = registered("Steve")
+        val d = DeliveryWorld(w)
+        val service = deliveryService(d)
+
+        w.configure { config(deliveredDelayMinutes = 10) }
+
+        val placed = d.place(user = u, actions = listOf(permission("a1", "group.vip")))
+
+        secondLine(placed, listOf(credit("a2")))
+        d.pay(placed)
+        runDeliveries(service)
+
+        assertEquals(FulfillmentStatus.FULFILLED, fulfillment(placed.order.id))
+        assertEquals(emptyList<MailKind>(), kinds(placed.order.id))
+
+        w.clock.advance(11 * 60_000L)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `status` = 'PARTIALLY_REFUNDED' WHERE `id` = ?", placed.order.id)
+
+        w.db.txRestartingOnOrderChange { conn ->
+            d.locks.forOrder(conn, placed.order.id, OrderLockScope.COMMIT) { locked ->
+                service.planRevoke(conn, locked.order, locked.items, mapOf(placed.items[0].id to (0..0)))
+
+                for (e in w.entitlements.getByOrderItemId(placed.items[0].id, conn)) w.entitlements.end(e.id, EntitlementStatus.REVOKED, "REFUND", w.clock.now(), conn)
+
+                service.refreshFulfillment(conn, locked.order.id)
+            }
+        }
+
+        assertEquals(FulfillmentStatus.PARTIAL, fulfillment(placed.order.id))
+
+        runDeliveries(service)
+
+        assertTrue(d.rows(placed.order.id).any { it.phase == DeliveryPhase.REVOKE && it.status == DeliveryStatus.CONFIRMED })
+        assertEquals(FulfillmentStatus.FULFILLED, fulfillment(placed.order.id))
+        assertEquals(emptyList<MailKind>(), kinds(placed.order.id), "a refund's confirmed undo is not a delivery")
+    }
+
+    @Test
+    fun `an admin re-run on an already fulfilled order sends no ORDER_DELIVERED`(): Unit = runBlocking {
+        val u = registered("Steve")
+        val d = DeliveryWorld(w)
+        val service = deliveryService(d)
+
+        w.configure { config(deliveredDelayMinutes = 10) }
+
+        val placed = d.place(user = u, actions = listOf(credit("a1")))
+
+        d.pay(placed)
+        runDeliveries(service)
+
+        assertEquals(FulfillmentStatus.FULFILLED, fulfillment(placed.order.id))
+        assertEquals(emptyList<MailKind>(), kinds(placed.order.id))
+
+        w.clock.advance(11 * 60_000L)
+
+        // the planner of the panel re-run: the same logical delivery as attempt group 1
+        val inserted = w.db.txRestartingOnOrderChange { conn ->
+            d.locks.forOrder(conn, placed.order.id, OrderLockScope.COMMIT) { locked ->
+                service.insertPlanned(conn, service.planAgain(conn, locked.order, locked.items, DeliveryPhase.GRANT, 1))
+            }
+        }
+
+        assertEquals(1, inserted.size)
+        assertEquals(FulfillmentStatus.PENDING, fulfillment(placed.order.id))
+
+        runDeliveries(service)
+
+        assertEquals(FulfillmentStatus.FULFILLED, fulfillment(placed.order.id))
+        assertEquals(emptyList<MailKind>(), kinds(placed.order.id), "FULFILLED -> PENDING -> FULFILLED by a re-run is not the first time")
+    }
+
+    @Test
+    fun `firstFulfillment tells the first success from an undo, a renewal and a re-run of a delivery that already succeeded`() {
+        fun row(group: Int, status: DeliveryStatus, phase: DeliveryPhase = DeliveryPhase.GRANT, action: String = "a1") =
+            MarketDelivery(orderId = 1, orderItemId = 1, actionId = action, phase = phase, attemptGroup = group, status = status)
+
+        assertTrue(DeliveryService.firstFulfillment(listOf(row(0, DeliveryStatus.CONFIRMED))))
+        assertTrue(DeliveryService.firstFulfillment(listOf(row(0, DeliveryStatus.CONFIRMED), row(0, DeliveryStatus.CONFIRMED, action = "a2"))))
+
+        // a retry of a delivery that failed first is still the first fulfillment
+        assertTrue(DeliveryService.firstFulfillment(listOf(row(0, DeliveryStatus.FAILED), row(1, DeliveryStatus.CONFIRMED))))
+
+        // a re-run of one that had succeeded is not
+        assertFalse(DeliveryService.firstFulfillment(listOf(row(0, DeliveryStatus.CONFIRMED), row(1, DeliveryStatus.CONFIRMED))))
+
+        for (phase in listOf(DeliveryPhase.RENEW, DeliveryPhase.EXPIRE, DeliveryPhase.REVOKE)) {
+            assertFalse(DeliveryService.firstFulfillment(listOf(row(0, DeliveryStatus.CONFIRMED), row(0, DeliveryStatus.CONFIRMED, phase))), phase.name)
+        }
+    }
+
+    // ================================================================================== manual orders: sendMail = false (06 section 14.3)
+
+    private suspend fun manualOrder(d: DeliveryWorld, u: TestUser, sendMail: Boolean, lineTotal: Long = 1000, source: OrderSource = OrderSource.PANEL): Placed {
+        val placed = d.place(user = u, actions = listOf(credit("a1")), source = source, lineTotal = lineTotal)
+        val now = w.clock.now()
+
+        w.orderEvents.add(
+            MarketOrderEvent(
+                orderId = placed.order.id, type = OrderEventType.CREATED, actorType = OrderActorType.ADMIN,
+                data = JsonObject().put("runDeliveries", true).put("sendMail", sendMail).encode(), createdAt = now, updatedAt = now
+            ),
+            pool
+        )
+
+        return placed
+    }
+
+    @Test
+    fun `a manual order with sendMail = false queues no order mail through any seam, with sendMail = true it queues them`(): Unit = runBlocking {
+        val u = registered("Steve")
+        val d = DeliveryWorld(w)
+        val service = deliveryService(d)
+
+        w.configure { config(deliveredDelayMinutes = 10) }
+
+        val silent = manualOrder(d, u, sendMail = false)
+
+        d.pay(silent)
+        w.clock.advance(11 * 60_000L)
+        runDeliveries(service)
+
+        assertEquals(FulfillmentStatus.FULFILLED, fulfillment(silent.order.id))
+
+        w.db.tx { conn ->
+            val order = w.orders.getById(silent.order.id, conn)!!
+
+            mails.paid(conn, order)
+            mails.received(conn, order)
+        }
+
+        assertEquals(emptyList<MailKind>(), kinds(silent.order.id), "no ORDER_CONFIRMATION, ORDER_RECEIVED or ORDER_DELIVERED for a silent manual order")
+
+        val loud = manualOrder(d, u, sendMail = true)
+
+        d.pay(loud)
+        w.clock.advance(11 * 60_000L)
+        runDeliveries(service)
+
+        w.db.tx { conn -> mails.paid(conn, w.orders.getById(loud.order.id, conn)!!) }
+
+        assertEquals(listOf(MailKind.ORDER_DELIVERED, MailKind.ORDER_CONFIRMATION), kinds(loud.order.id))
+    }
+
+    @Test
+    fun `a bank transfer instruction of a manual order stays a service mail even with sendMail = false`(): Unit = runBlocking {
+        val u = registered("Steve")
+        val d = DeliveryWorld(w)
+        val silent = manualOrder(d, u, sendMail = false)
+
+        // PaymentMails.instructions is not asked for the flag: the payer of a markPaid = false order cannot pay without it
+        val attempt = MarketPayment(orderId = silent.order.id, id = 1)
+        val start = JsonObject().put("instructions", JsonObject().put("body", "Pay").put("fields", JsonArray())).put("expiresAt", w.clock.now() + 1000)
+
+        w.db.tx { conn -> mails.instructions(conn, w.orders.getById(silent.order.id, conn)!!, attempt, start) }
+
+        assertEquals(listOf(MailKind.BANK_TRANSFER_INSTRUCTIONS), kinds(silent.order.id))
+    }
+
+    @Test
+    fun `a renewal that costs nothing queues no confirmation, a paid renewal does`(): Unit = runBlocking {
+        val u = registered("Steve")
+        val d = DeliveryWorld(w)
+        val free = d.place(user = u, actions = listOf(credit("a1")), source = OrderSource.RENEWAL, lineTotal = 0)
+        val paid = d.place(user = u, actions = listOf(credit("b1")), source = OrderSource.RENEWAL, lineTotal = 1000)
+
+        w.db.tx { conn ->
+            mails.paid(conn, w.orders.getById(free.order.id, conn)!!)
+            mails.paid(conn, w.orders.getById(paid.order.id, conn)!!)
+        }
+
+        assertEquals(emptyList<MailKind>(), kinds(free.order.id))
+        assertEquals(listOf(MailKind.ORDER_CONFIRMATION), kinds(paid.order.id))
+    }
+
+    @Test
+    fun `ORDER_DELIVERED needs a non-physical line when the order ships, and a COMPLETED or PARTIALLY_REFUNDED order`(): Unit = runBlocking {
+        val u = registered("Steve")
+        val d = DeliveryWorld(w)
+        val service = deliveryService(d)
+
+        w.configure { config(deliveredDelayMinutes = 0) }
+
+        // only physical lines: the shipment mails tell the story
+        val shipped = d.place(user = u, actions = listOf(credit("a1")))
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `requiresShipping` = 1 WHERE `id` = ?", shipped.order.id)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order_item` SET `physical` = 1 WHERE `orderId` = ?", shipped.order.id)
+        d.pay(shipped)
+        runDeliveries(service)
+
+        assertEquals(FulfillmentStatus.FULFILLED, fulfillment(shipped.order.id))
+        assertEquals(emptyList<MailKind>(), kinds(shipped.order.id), "a shipping order with only physical lines gets no ORDER_DELIVERED")
+
+        // a digital line next to the physical one: that line was delivered
+        val mixed = d.place(user = u, actions = listOf(credit("b1")))
+
+        secondLine(mixed, listOf(credit("b2")))
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `requiresShipping` = 1 WHERE `id` = ?", mixed.order.id)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order_item` SET `physical` = 1 WHERE `id` = ?", mixed.items[0].id)
+        d.pay(mixed)
+        runDeliveries(service)
+
+        assertEquals(listOf(MailKind.ORDER_DELIVERED), kinds(mixed.order.id))
+
+        // the order status condition: a refunded order is not "delivered" (the status is put back, the order is only the seam's input)
+        val refunded = d.place(user = u, actions = listOf(credit("c1")))
+
+        d.pay(refunded)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `status` = 'REFUNDED' WHERE `id` = ?", refunded.order.id)
+        w.db.tx { conn -> mails.fulfilled(conn, w.orders.getById(refunded.order.id, conn)!!) }
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `status` = 'COMPLETED' WHERE `id` = ?", refunded.order.id)
+
+        assertEquals(emptyList<MailKind>(), kinds(refunded.order.id), "REFUNDED: no ORDER_DELIVERED")
+
+        w.db.tx { conn -> mails.fulfilled(conn, w.orders.getById(refunded.order.id, conn)!!) }
+
+        assertEquals(listOf(MailKind.ORDER_DELIVERED), kinds(refunded.order.id), "the same order as COMPLETED does get it")
+
+        // PARTIALLY_REFUNDED is explicitly allowed
+        val partial = d.place(user = u, actions = listOf(credit("d1")))
+
+        d.pay(partial)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `status` = 'PARTIALLY_REFUNDED' WHERE `id` = ?", partial.order.id)
+        runDeliveries(service)
+
+        assertEquals(listOf(MailKind.ORDER_DELIVERED), kinds(partial.order.id))
     }
 
     // ================================================================================== ORDER_REFUNDED (O10)

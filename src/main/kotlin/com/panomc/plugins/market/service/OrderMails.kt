@@ -5,12 +5,14 @@ import com.panomc.plugins.market.core.order.OrderEffect
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.db.dao.MarketMailOutboxDao
 import com.panomc.plugins.market.db.dao.MarketOrderDao
+import com.panomc.plugins.market.db.dao.MarketOrderEventDao
 import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.model.MailKind
 import com.panomc.plugins.market.db.model.MailRefType
 import com.panomc.plugins.market.db.model.MailStatus
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.db.model.MarketPayment
+import com.panomc.plugins.market.db.model.OrderEventType
 import com.panomc.plugins.market.db.model.OrderItemKind
 import com.panomc.plugins.market.db.tx.LockedOrder
 import com.panomc.plugins.market.db.model.OrderSource
@@ -70,12 +72,14 @@ class OrderMails(
     private val outbox: MailOutboxService,
     private val mailOutbox: MarketMailOutboxDao,
     private val orderItems: MarketOrderItemDao,
+    private val orderEvents: MarketOrderEventDao,
     private val users: UserDirectory?,
     private val defaultLocale: () -> String = { MailOutboxService.DEFAULT_LOCALE }
 ) : PaymentMails, FulfillmentMails, ReceivedMails {
     /** O2 / O4: `ORDER_CONFIRMATION` to the payer and, for a gift with a registered recipient who is not the payer, `GIFT_RECEIVED` to the recipient. */
     suspend fun paid(conn: SqlClient, order: MarketOrder) {
         if (order.source == OrderSource.RENEWAL && order.totalPrice <= 0) return
+        if (silenced(conn, order)) return
 
         val payer = payerEmail(conn, order)
 
@@ -95,6 +99,8 @@ class OrderMails(
 
     /** O3 or the attempt reaching `PROCESSING`: only when no bank transfer instructions went out for the order already. */
     private suspend fun queueReceived(conn: SqlClient, order: MarketOrder) {
+        if (silenced(conn, order)) return
+
         val instructed = mailOutbox.getByOrderId(order.id, conn).any { it.kind == MailKind.BANK_TRANSFER_INSTRUCTIONS && it.status != MailStatus.SKIPPED }
 
         if (instructed) return
@@ -126,6 +132,8 @@ class OrderMails(
     override suspend fun fulfilled(conn: SqlClient, order: MarketOrder) {
         val paidAt = order.paidAt ?: return
 
+        if (silenced(conn, order)) return
+
         if (order.status != OrderStatus.COMPLETED && order.status != OrderStatus.PARTIALLY_REFUNDED) return
         if (clock.now() - paidAt < config().mailOrderDeliveredDelayMinutes * MINUTE_MS) return
 
@@ -136,6 +144,19 @@ class OrderMails(
         }
 
         outbox.enqueue(conn, MailKind.ORDER_DELIVERED, MailRefType.ORDER, order.id, "", order.id, order.userId, payerEmail(conn, order), localeOf(order))
+    }
+
+    /**
+     * A manual order the admin created with `sendMail = false` (06 section 14.3) queues no order mail at all: the flag lives in the `data` of the
+     * `CREATED` row ([ManualFlags], the same read as `OrderService.skippedByManualFlags`). `BANK_TRANSFER_INSTRUCTIONS` is deliberately not asked:
+     * it is a service mail (12 section 4.2 step 2), the payer of a `markPaid = false` order cannot pay without it. Every other order costs no read.
+     */
+    private suspend fun silenced(conn: SqlClient, order: MarketOrder): Boolean {
+        if (order.source != OrderSource.PANEL) return false
+
+        val created = orderEvents.getByOrderId(order.id, conn).firstOrNull { it.type == OrderEventType.CREATED }
+
+        return !ManualFlags.of(created?.data).sendMail
     }
 
     private suspend fun payerEmail(conn: SqlClient, order: MarketOrder): String =

@@ -457,7 +457,8 @@ class DeliveryService(
     /** `market_order.fulfillmentStatus` from the rows and entitlements of the order (08 section 13). The caller holds the order lock. */
     suspend fun refreshFulfillment(conn: SqlClient, orderId: Long) {
         val order = orders.getById(orderId, conn) ?: return
-        val rows = deliveries.getByOrderId(orderId, conn).map { it.toRow() }
+        val stored = deliveries.getByOrderId(orderId, conn)
+        val rows = stored.map { it.toRow() }
         val statuses = conn.preparedQuery("SELECT `status` FROM ${table("market_entitlement")} WHERE `orderId` = ?").execute(Tuple.of(orderId)).coAwait()
             .map { EntitlementStatus.valueOf(it.getString("status")) }
         val value = FulfillmentCalculator.calculate(rows, statuses, order.fulfillmentBy).status
@@ -467,7 +468,8 @@ class DeliveryService(
         conn.preparedQuery("UPDATE ${table("market_order")} SET `fulfillmentStatus` = ?, `updatedAt` = GREATEST(?, `updatedAt` + 1) WHERE `id` = ?")
             .execute(Tuple.of(value.name, clock.now(), orderId)).coAwait()
 
-        if (value == FulfillmentStatus.FULFILLED) orders.getById(orderId, conn)?.let { fulfilledMails.fulfilled(conn, it) }
+        // ORDER_DELIVERED only for the first time the order became FULFILLED (12 section 4.1), not when an undo (refund, expiry) or a re-run was confirmed
+        if (value == FulfillmentStatus.FULFILLED && Companion.firstFulfillment(stored)) orders.getById(orderId, conn)?.let { fulfilledMails.fulfilled(conn, it) }
     }
 
     private suspend fun recordFailed(conn: SqlClient, orderId: Long, deliveryId: Long, code: String, now: Long) {
@@ -1174,6 +1176,22 @@ class DeliveryService(
 
     companion object {
         private val logger = LoggerFactory.getLogger(DeliveryService::class.java)
+
+        /**
+         * `false` when [rows] show that the order was `FULFILLED` before: any `RENEW` / `EXPIRE` / `REVOKE` row (the order went `PARTIAL` while an end or
+         * a renewal ran and came back), or a re-run `GRANT` row whose logical delivery (item, source, action, server, unit) already has a `CONFIRMED`
+         * row of a lower attempt group. A retry of a delivery that never succeeded stays a first fulfillment. There is no `fulfilledAt` column and the
+         * timeline's event list is closed (01 section 5.3), so this is derived from the rows, which are append-only.
+         */
+        internal fun firstFulfillment(rows: List<MarketDelivery>): Boolean {
+            if (rows.any { it.phase != DeliveryPhase.GRANT }) return false
+
+            fun key(r: MarketDelivery) = listOf(r.sourceType, r.orderItemId, r.sourceId, r.actionId, r.serverId, r.unitIndex)
+
+            val confirmed = rows.filter { it.status == DeliveryStatus.CONFIRMED }.groupBy { key(it) }
+
+            return rows.none { r -> r.attemptGroup > 0 && confirmed[key(r)].orEmpty().any { it.attemptGroup < r.attemptGroup } }
+        }
 
         /** The action types that have an inline executor; `DeliveryJob` claims nothing else (`WEBHOOK` only on a service with an outbox). */
         val INLINE_TYPES: Set<DeliveryActionType> = setOf(DeliveryActionType.CREDIT, DeliveryActionType.PERMISSION, DeliveryActionType.WEBHOOK)

@@ -206,7 +206,7 @@ internal fun orderMails(plugin: MarketPlugin): OrderMails {
     return OrderMails(
         config = { currentConfig(plugin) }, clock = SystemClock,
         outbox = MailOutboxService({ currentConfig(plugin) }, SystemClock, outboxDao, context.getBean(MarketOrderEventDao::class.java)),
-        mailOutbox = outboxDao, orderItems = context.getBean(MarketOrderItemDao::class.java), users = PlatformUserDirectory(databaseManager),
+        mailOutbox = outboxDao, orderItems = context.getBean(MarketOrderItemDao::class.java), orderEvents = context.getBean(MarketOrderEventDao::class.java), users = PlatformUserDirectory(databaseManager),
         defaultLocale = { runCatching { context.getBean(ConfigManager::class.java).config.locale }.getOrNull()?.takeIf { it.isNotBlank() } ?: MailOutboxService.DEFAULT_LOCALE }
     )
 }
