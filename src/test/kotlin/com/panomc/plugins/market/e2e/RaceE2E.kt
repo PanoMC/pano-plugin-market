@@ -10,8 +10,11 @@ import com.panomc.plugins.market.e2e.support.another
 import com.panomc.plugins.market.support.Await
 import com.panomc.plugins.market.support.FakePayGateway
 import com.panomc.plugins.market.support.HarnessNoConcurrency
+import com.panomc.plugins.market.support.InvariantChecker
 import com.panomc.plugins.market.support.Race
 import io.vertx.core.json.JsonObject
+import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -85,6 +88,7 @@ class RaceE2E : E2eTestBase() {
             // one set of side effects
             assertSingleSetOfSideEffects(orderId)
 
+            settle()
             round
         }
     }
@@ -113,6 +117,7 @@ class RaceE2E : E2eTestBase() {
             assertEquals(1L, productStock(last.id), "the stock is back after the expiry")
             assertEquals(0L, reserved(last.id), "and nothing is reserved any more")
 
+            settle()
             round
         }
     }
@@ -142,6 +147,7 @@ class RaceE2E : E2eTestBase() {
             assertEquals(409, other.status)
             assertEquals("IDEMPOTENCY_CONFLICT", other.error)
 
+            settle()
             round
         }
     }
@@ -204,27 +210,36 @@ class RaceE2E : E2eTestBase() {
 
     @Test
     fun `R-03 the same fact through several channels`() {
-        // Channels fired together: the success webhook, the same fact under another event key, two browser returns (each asks the gateway) and the buyer's status poll.
-        // The panel `POST /payments/:paymentId/query` of the catalogue is not a route yet (MK-171, `permission-matrix.tsv` PENDING); it joins here when it lands.
+        // Channels fired together (17 section 9.4): the success webhook, the same fact under another event key, two browser returns (each asks the gateway),
+        // the buyer's status poll and the panel `POST /payments/:paymentId/query` (MK-171). The gateway reports the payment paid, so every channel carries the
+        // same fact; only the state machine can keep it from completing the order more than once.
         E2eRace.rounds("R-03") { _ ->
             val vip = catalog.fresh("VIP")
             val buyer = buyer()
             val publicId = publicIdOf(checkout(buyer.client, cart(line(vip.id))).ok())
             val reference = referenceOf(publicId)
             val orderId = orderRow(publicId).getLong("id")
+            val paymentId = db.long("SELECT `id` FROM `pano_market_payment` WHERE `reference` = ?", reference)!!
             val first = paidHook(reference)
             val second = paidHook(reference)
             val returnTarget = returnPath(reference, "success")
-            val clients = (0 until 5).map { if (it == 3) buyer.another(baseUrl, "r03-status") else E2eClient(baseUrl, "r03-$it") }
+            val clients = (0 until 6).map {
+                when (it) {
+                    3 -> buyer.another(baseUrl, "r03-status")
+                    5 -> adminClone("r03-query")
+                    else -> E2eClient(baseUrl, "r03-$it")
+                }
+            }
 
             val round = E2eRace.round(
-                5,
+                6,
                 setup = { i -> i.also { clients[it].warm() } },
                 action = { i ->
                     when (i) {
                         0 -> post(clients[0], first)
                         1 -> post(clients[1], second)
                         3 -> clients[3].get("/api/market/orders/$publicId/status")
+                        5 -> clients[5].post("/api/panel/market/payments/$paymentId/query", JsonObject())
                         else -> clients[i].get(returnTarget)
                     }
                 }
@@ -234,12 +249,15 @@ class RaceE2E : E2eTestBase() {
             assertEquals(listOf(200, 200), listOf(answers[0].status, answers[1].status), "both webhooks are answered 200")
             assertEquals(listOf(303, 303), listOf(answers[2].status, answers[4].status), "a return only ever redirects")
             assertEquals(200, answers[3].status, "the status poll is answered 200: ${answers[3].error}")
+            assertEquals(200, answers[5].status, "the panel query is answered 200: ${answers[5].error} ${answers[5].text}")
+            assertEquals("SUCCEEDED", answers[5].obj().getString("status"), "the query answers the attempt as the gateway reports it: paid")
 
             awaitOrder(publicId, "COMPLETED")
             assertEquals("SUCCEEDED", attemptStatus(reference))
             assertEquals(1L, orderEvents(publicId, "PAYMENT_SUCCEEDED"), "one PAYMENT_SUCCEEDED timeline row, whichever channel was first")
             assertEquals(1L, db.count("market_order_event", "`orderId` = ? AND `toStatus` = 'COMPLETED'", orderId), "one transition to COMPLETED: the state machine is the guard, not the event key")
             assertEquals(1L, db.count("market_payment", "`orderId` = ? AND `status` = 'SUCCEEDED' AND `duplicate` = 0", orderId), "one SUCCEEDED attempt (I13)")
+            assertEquals(0L, db.count("market_payment", "`orderId` = ? AND `id` <> ?", orderId, paymentId), "no second attempt was created by any channel")
 
             assertSingleSetOfSideEffects(orderId)
             settle()
@@ -347,6 +365,7 @@ class RaceE2E : E2eTestBase() {
             val owner = buyer()
             val clients = (0 until 2).map { owner.another(baseUrl, "${owner.username}#$it") }
             val holdBefore = holdBalance()
+            val spentBefore = spentBalance()
 
             grant(owner.userId, 100).ok()
 
@@ -368,6 +387,7 @@ class RaceE2E : E2eTestBase() {
             assertEquals(1L, db.count("market_credit_tx", "`orderId` = ? AND `type` = 'CAPTURE'", orderId), "and one CAPTURE: 80.00 went to SPENT")
             assertEquals(8000L, db.long("SELECT COALESCE(SUM(`amount`), 0) FROM `pano_market_credit_tx` WHERE `orderId` = ? AND `type` = 'CAPTURE'", orderId), "of 80.00")
             assertEquals(holdBefore, holdBalance(), "nothing stays on hold")
+            assertEquals(spentBefore + 8000L, spentBalance(), "SPENT grew by 80.00, once")
 
             settle()
             round
@@ -419,6 +439,10 @@ class RaceE2E : E2eTestBase() {
         for ((owner, publicId) in winners) {
             assertEquals(10_000L, creditBalance(owner.userId), "the balance of ${owner.username} is 100.00 again after the expiry")
             assertEquals(1L, db.count("market_credit_tx", "`orderId` = ? AND `type` = 'RELEASE'", orderRow(publicId).getLong("id")), "the hold of $publicId was released once")
+            assertEquals(
+                6000L, db.long("SELECT COALESCE(SUM(`amount`), 0) FROM `pano_market_credit_tx` WHERE `orderId` = ? AND `type` = 'RELEASE'", orderRow(publicId).getLong("id")),
+                "and it released the whole 60.00"
+            )
         }
 
         assertEquals(0L, db.long("SELECT COALESCE(SUM(`balance`), 0) FROM `pano_market_credit_account` WHERE `systemKey` = 'HOLD' AND `balance` < 0"), "the hold is never negative")
@@ -1324,6 +1348,8 @@ class RaceE2E : E2eTestBase() {
 
     private fun holdBalance(): Long = db.long("SELECT `balance` FROM `pano_market_credit_account` WHERE `systemKey` = 'HOLD'") ?: 0L
 
+    private fun spentBalance(): Long = db.long("SELECT `balance` FROM `pano_market_credit_account` WHERE `systemKey` = 'SPENT'") ?: 0L
+
     /** The signed webhook of the fake gateway: the exact bytes and the `X-Fake-Signature` value (the actor that posts it uses its own warmed client). */
     private fun signed(type: String, data: JsonObject, id: String = gateway.nextEventId()): Pair<ByteArray, String> {
         val body = gateway.eventBody(type, data, id)
@@ -1415,7 +1441,33 @@ class RaceE2E : E2eTestBase() {
     private fun availableOf(codeId: Long): Double =
         admin.get("/api/panel/market/creator-codes/report").ok().obj().getJsonArray("creators").map { it as JsonObject }.single { it.getLong("id") == codeId }.getDouble("available")
 
-    private fun settle() = session.drainAndCheck()
+    /**
+     * The end of one round: the queues that act on money, stock and entitlements (deliveries, webhooks, deferred inbound events) are drained and every global
+     * invariant I1 to I22 is checked, none skipped. The mail outbox is deliberately not awaited here (no invariant reads it): the mail job works 20 rows per
+     * 15 s tick and every send against the instance's dummy SMTP host fails after a DNS lookup, so the backlog of an earlier scenario (R-13 queues about 80 mails)
+     * can keep a new row unclaimed for longer than a round may wait. [mailBacklogClaimed] waits for it once per scenario instead, before the base class drain.
+     */
+    private fun settle() {
+        Await.until(30_000, 250, "the queues of the round are drained") {
+            val queues = admin.get("/api/panel/market/health", log = false).obj().getJsonObject("queues")
+
+            listOf("deliveriesPending", "webhooksPending", "deferredEvents").all { (queues?.getInteger(it) ?: 0) == 0 }
+        }
+        runBlocking { InvariantChecker.assertAll(db.pool) }
+
+        val run = InvariantChecker.lastRun
+
+        check(run.ran.isNotEmpty() && run.skipped.isEmpty()) { "invariants ran=${run.ran.size} skipped=${run.skipped}" }
+    }
+
+    /** Mails the mail job has not yet claimed once (`PENDING` with no attempt, or `SENDING`): the definition of "drained" of `E2eSession.drainAndCheck`. */
+    private fun untriedMails(): Long = db.count("market_mail_outbox", "(`status` = 'PENDING' AND `attempts` = 0) OR `status` = 'SENDING'")
+
+    /** Runs before the base class drain (a subclass `@AfterEach` goes first): gives the mail job the time its own pace needs for the backlog this scenario left. */
+    @AfterEach
+    fun mailBacklogClaimed() {
+        Await.until(240_000, 500, "the mail job claimed every queued mail once (${untriedMails()} unclaimed when the wait began)") { untriedMails() == 0L }
+    }
 
     private companion object {
         /** Orders per round of the scenarios that race a batch (R-16, R-17, R-27): many interleavings per round. */
