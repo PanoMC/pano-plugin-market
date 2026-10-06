@@ -87,6 +87,8 @@ import com.panomc.plugins.market.spi.payment.PaymentTarget
 import com.panomc.plugins.market.spi.payment.PaymentProvider
 import com.panomc.plugins.market.spi.payment.QueryPaymentRequest
 import com.panomc.plugins.market.spi.payment.QueryReason
+import com.panomc.plugins.market.spi.payment.RefundRequest
+import com.panomc.plugins.market.spi.payment.RefundResult
 import com.panomc.plugins.market.spi.payment.RefundSupport
 import com.panomc.plugins.market.spi.payment.ReviewReason
 import com.panomc.plugins.market.spi.payment.StartPaymentRequest
@@ -335,6 +337,7 @@ class PaymentService(
     private val cancelTimeoutMs: Long = CANCEL_TIMEOUT_MS,
     private val statusWaitMs: Long = STATUS_WAIT_MS,
     private val queryTimeoutMs: Long = QUERY_TIMEOUT_MS,
+    private val refundTimeoutMs: Long = REFUND_TIMEOUT_MS,
     private val sanitizeHtml: (String) -> String = { HtmlSanitizer.sanitize(it) },
     /** Checks run after [RecipientLimitGuard] before an O2 (MK-151: blocked buyer, MK-121: late renewal). */
     extraPaidGuards: List<PaidGuard> = emptyList(),
@@ -1639,7 +1642,67 @@ class PaymentService(
         return OrderService.RetryView(true, options, credits)
     }
 
+    // ============================================================================================== refunds (MK-111)
+
+    /** What a provider can refund (02 section 5), or `null` when no usable provider is registered under [providerId]. */
+    suspend fun refundSupportOf(providerId: String, sqlClient: SqlClient): RefundSupport? = resolve(providerId, sqlClient)?.caps?.refund
+
+    /** The provider call of a refund did not answer within its deadline: the outcome at the gateway is unknown (21 section 3.3). */
+    class RefundCallTimeout : RuntimeException("the refund call did not answer in time")
+
+    /**
+     * `provider.refund` for [refund] (21 section 3.3), outside any transaction and under the lock of the attempt (02 section 10 guarantee 3). The key sent
+     * is the row's `idempotencyKey`, the amount is the gateway part; a retry sends the same key. Throws [ProviderException] for a provider that refused or
+     * is not available, [RefundCallTimeout] when the deadline passes; every other throwable is an unknown outcome for the caller.
+     */
+    suspend fun callRefund(
+        order: MarketOrder, items: List<MarketOrderItem>, attempt: MarketPayment, refund: com.panomc.plugins.market.db.model.MarketRefund,
+        lines: List<com.panomc.plugins.market.db.model.MarketRefundItem>, full: Boolean, sqlClient: SqlClient
+    ): RefundResult {
+        val resolved = resolve(attempt.providerId, sqlClient) ?: throw ProviderException(ProviderErrorCode.CONFIGURATION, "provider ${attempt.providerId} is not available")
+
+        return attemptLocks.with(attempt.id) {
+            val fresh = payments.getById(attempt.id, sqlClient) ?: attempt
+            val ctx = contexts.create(resolved.provider, resolved.settings, fresh.testMode)
+            val byItem = items.associateBy { it.id }
+            val parts = com.panomc.plugins.market.core.money.Rounding.allocate(refund.gatewayAmount.coerceAtMost(lines.sumOf { it.amount }), lines.map { it.amount }, 1L)
+            val refundLines = if (lines.isEmpty() || parts.sum() == 0L) emptyList() else lines.mapIndexed { i, line ->
+                com.panomc.plugins.market.spi.payment.RefundLine(line.orderItemId, byItem[line.orderItemId]?.gatewayItemRef, line.quantity, Money(parts[i], order.currency))
+            }
+            val request = RefundRequest(
+                refundId = refund.id, idempotencyKey = refund.idempotencyKey, attempt = attemptView(fresh, order.publicId ?: ""), order = spiSnapshot(order, items),
+                amount = Money(refund.gatewayAmount, order.currency), full = full, lines = refundLines, reason = refund.reason, paidAt = fresh.paidAt ?: order.paidAt ?: clock.now()
+            )
+
+            try {
+                withTimeout(refundTimeoutMs) { resolved.provider.refund(ctx, request) }
+            } catch (e: TimeoutCancellationException) {
+                throw RefundCallTimeout()
+            }
+        }
+    }
+
+    /** `provider.queryRefund` for [refund] (21 section 3.3, reconcile): the answer is applied like the answer of the call itself; `Unknown` changes nothing. */
+    suspend fun callQueryRefund(order: MarketOrder, attempt: MarketPayment, refund: com.panomc.plugins.market.db.model.MarketRefund, sqlClient: SqlClient): RefundResult {
+        val resolved = resolve(attempt.providerId, sqlClient) ?: throw ProviderException(ProviderErrorCode.CONFIGURATION, "provider ${attempt.providerId} is not available")
+
+        return attemptLocks.with(attempt.id) {
+            val fresh = payments.getById(attempt.id, sqlClient) ?: attempt
+            val ctx = contexts.create(resolved.provider, resolved.settings, fresh.testMode)
+            val request = com.panomc.plugins.market.spi.payment.QueryRefundRequest(
+                refund.id, refund.idempotencyKey, refund.gatewayRefundId, attemptView(fresh, order.publicId ?: ""), Money(refund.gatewayAmount, order.currency)
+            )
+
+            try {
+                withTimeout(refundTimeoutMs) { resolved.provider.queryRefund(ctx, request) }
+            } catch (e: TimeoutCancellationException) {
+                throw RefundCallTimeout()
+            }
+        }
+    }
+
     companion object {
+        const val REFUND_TIMEOUT_MS = 30_000L
         const val START_TIMEOUT_MS = 30_000L
         const val CANCEL_TIMEOUT_MS = 10_000L
         const val STATUS_WAIT_MS = 8_000L

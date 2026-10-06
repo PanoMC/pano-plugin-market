@@ -185,7 +185,14 @@ private fun buildDispatcher(plugin: MarketPlugin): InboundDispatcher {
     ) { providerId -> ProviderStateStoreImpl(ProviderStateKind.PAYMENT, providerId, stateDao, db, wiring.cipher, SystemClock).values() }
 
     return InboundDispatcher(
-        inboundEventStore(plugin), attempts, providers, PaymentEventApplier(attempts) { event, attempt, ctx -> paymentEventSink.apply(event, attempt, ctx) },
+        inboundEventStore(plugin), attempts, providers, PaymentEventApplier(attempts) { event, attempt, ctx ->
+            // MK-111: a refund notification is applied by the refund service (21 section 4); the other non-attempt events go to the installed sink
+            if (event is com.panomc.plugins.market.spi.payment.PaymentEvent.RefundUpdated && attempt != null) {
+                com.panomc.plugins.market.routes.panel.refund.refundService(plugin).onRefundUpdated(event, attempt, ctx.eventKey, ctx.requestHash)
+            } else {
+                paymentEventSink.apply(event, attempt, ctx)
+            }
+        },
         attemptLocks(plugin), SystemClock, SecureIds(), { wiring.site().baseUrl.trimEnd('/') }
     )
 }

@@ -14,6 +14,7 @@ import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.dao.MarketPaymentDao
 import com.panomc.plugins.market.db.dao.MarketRedemptionDao
 import com.panomc.plugins.market.db.dao.MarketShipmentDao
+import com.panomc.plugins.market.routes.panel.refund.refundReconcileJob
 import com.panomc.plugins.market.routes.panel.server.mcSyncService
 import com.panomc.plugins.market.routes.panel.shipping.shippingService
 import com.panomc.plugins.market.db.tx.Locks
@@ -211,6 +212,9 @@ class MarketScheduler(
         /** `EntitlementExpiryJob` (08 section 10.3: every 30 s). */
         const val ENTITLEMENT_EXPIRY_MS = 30_000L
 
+        /** `RefundReconcileJob` (21 section 3.5: every 60 s). */
+        const val REFUND_RECONCILE_MS = 60_000L
+
         private val logger = LoggerFactory.getLogger(MarketScheduler::class.java)
     }
 }
@@ -249,6 +253,7 @@ internal object MarketJobs {
             inboundRetry(inboundEventRetryJob(plugin)),
             delivery(DeliveryJob(deliveryService(plugin), SystemClock, servers = mcSyncService(plugin))),
             entitlementExpiry(entitlementExpiryJob(plugin)),
+            refundReconcile(refundReconcileJob(plugin)),
             shipmentTracking(ShipmentTrackingJob(SystemClock, context.getBean(MarketShipmentDao::class.java), shippingService(plugin), sqlClient))
         )
     }
@@ -274,6 +279,9 @@ internal object MarketJobs {
 
     /** The end of timed entitlements (MK-107): `EXPIRED` and the `EXPIRE` rows at expiry, the expiry reminder mail. */
     fun entitlementExpiry(job: EntitlementExpiryJob): MarketScheduler.Job = MarketScheduler.Job("entitlement-expiry", MarketScheduler.ENTITLEMENT_EXPIRY_MS) { job.runOnce() }
+
+    /** The `revokeFirst` release and timeout, `queryRefund` and the unsent `SYSTEM` refunds (MK-111). */
+    fun refundReconcile(job: RefundReconcileJob): MarketScheduler.Job = MarketScheduler.Job("refund-reconcile", MarketScheduler.REFUND_RECONCILE_MS) { job.runOnce() }
 
     /** Polling of the carriers for the shipments that are due (MK-134). */
     fun shipmentTracking(job: ShipmentTrackingJob): MarketScheduler.Job = MarketScheduler.Job("shipment-tracking", MarketScheduler.SHIPMENT_TRACKING_MS) { job.runOnce() }
