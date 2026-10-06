@@ -89,8 +89,8 @@ class MarketComparisonDaoImpl : MarketComparisonDao() {
         return rows.toEntities().getOrNull(0)
     }
 
-    override suspend fun getAllPaged(page: Long, status: MarketStatus?, search: String?, sqlClient: SqlClient): List<MarketComparison> {
-        val offset = (page - 1) * 10
+    override suspend fun getAllPaged(page: Long, status: MarketStatus?, search: String?, sqlClient: SqlClient, pageSize: Int): List<MarketComparison> {
+        val offset = (page - 1) * pageSize
         val query = StringBuilder("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE 1=1")
         val params = Tuple.tuple()
 
@@ -104,7 +104,8 @@ class MarketComparisonDaoImpl : MarketComparisonDao() {
             params.addString("%$search%")
         }
 
-        query.append(" ORDER BY `priority` DESC, `id` DESC LIMIT 10 OFFSET ?")
+        query.append(" ORDER BY `priority` DESC, `id` DESC LIMIT ? OFFSET ?")
+        params.addLong(pageSize.toLong())
         params.addLong(offset)
 
         val rows: RowSet<Row> = sqlClient

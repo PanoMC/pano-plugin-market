@@ -10,7 +10,8 @@ import com.panomc.plugins.market.db.dao.MarketCategoryDao
 import com.panomc.plugins.market.db.model.MarketCategory
 import com.panomc.plugins.market.error.InvalidCategoryMove
 import com.panomc.plugins.market.log.SortedMarketCategoriesLog
-import com.panomc.plugins.market.permission.ManageMarketPermission
+import com.panomc.plugins.market.permission.MarketNode
+import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.util.CategoryMovePosition
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
@@ -24,8 +25,10 @@ import io.vertx.json.schema.common.dsl.Schemas.*
 class PanelSortCategoriesAPI(
     private val plugin: MarketPlugin,
     private val marketCategoryDao: MarketCategoryDao
-) : PanelApi() {
+) : MarketPanelApi() {
     override val paths = listOf(Path("/api/panel/market/categories/sort", RouteType.POST))
+
+    override val nodes = setOf(MarketNode.CATALOG)
 
     private val authProvider: AuthProvider by lazy {
         plugin.applicationContext.getBean(AuthProvider::class.java)
@@ -40,20 +43,18 @@ class PanelSortCategoriesAPI(
             .body(
                 Bodies.json(
                     objectSchema()
-                        .requiredProperty("id", numberSchema())
+                        .requiredProperty("id", intSchema())
                         .requiredProperty(
                             "position",
                             enumSchema(*CategoryMovePosition.entries.map { it.name }.toTypedArray())
                         )
-                        .optionalProperty("targetId", numberSchema())
+                        .optionalProperty("targetId", intSchema())
                 )
             )
             .predicate(RequestPredicate.BODY_REQUIRED)
             .build()
 
-    override suspend fun handle(context: RoutingContext): Result {
-        authProvider.requirePermission(ManageMarketPermission(), context)
-
+    override suspend fun handleAuthorized(context: RoutingContext): Result {
         val parameters = getParameters(context)
         val data = parameters.body().jsonObject
 

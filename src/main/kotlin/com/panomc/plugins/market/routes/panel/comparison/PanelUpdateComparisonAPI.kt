@@ -41,7 +41,7 @@ class PanelUpdateComparisonAPI(
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository)
-            .pathParameter(param("id", numberSchema()))
+            .pathParameter(param("id", stringSchema()))
             .body(
                 Bodies.json(
                     objectSchema()

@@ -2,14 +2,14 @@ package com.panomc.plugins.market.routes.panel.stats
 
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.api.config.PluginConfigManager
-import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.db.dao.MarketOrderItemDao
-import com.panomc.plugins.market.permission.ManageMarketPermission
+import com.panomc.plugins.market.permission.MarketNode
+import com.panomc.plugins.market.routes.base.MarketPanelApi
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
 import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
@@ -24,10 +24,11 @@ class PanelGetMarketStatsAPI(
     private val plugin: MarketPlugin,
     private val marketOrderDao: MarketOrderDao,
     private val marketOrderItemDao: MarketOrderItemDao
-) : PanelApi() {
+) : MarketPanelApi() {
     override val paths = listOf(Path("/api/panel/market/stats", RouteType.GET))
 
-    private val authProvider by lazy { plugin.applicationContext.getBean(AuthProvider::class.java) }
+    override val nodes = setOf(MarketNode.STATS)
+
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 
     @Suppress("UNCHECKED_CAST")
@@ -44,9 +45,7 @@ class PanelGetMarketStatsAPI(
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository).build()
 
-    override suspend fun handle(context: RoutingContext): Result {
-        authProvider.requirePermission(ManageMarketPermission(), context)
-
+    override suspend fun handleAuthorized(context: RoutingContext): Result {
         val config = configManager.config
         val statsCurrency = config.statsCurrency
         val salesCurrency = config.currency

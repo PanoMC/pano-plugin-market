@@ -12,6 +12,7 @@ import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.log.CreatedMarketWebhookLog
 import com.panomc.plugins.market.log.DeletedMarketWebhookLog
+import com.panomc.plugins.market.log.RedeliveredMarketWebhookLog
 import com.panomc.plugins.market.log.TestedMarketWebhookLog
 import com.panomc.plugins.market.log.UpdatedMarketWebhookLog
 import com.panomc.plugins.market.permission.MarketNode
@@ -220,7 +221,10 @@ class PanelRedeliverWebhookAPI(plugin: MarketPlugin) : WebhookAdminRoute(plugin)
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = noBodyValidation(schemaRepository)
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
-        service.redeliver(idOf(context))
+        val id = idOf(context)
+
+        service.redeliver(id)
+        log(context) { u, n -> RedeliveredMarketWebhookLog(u, n, plugin.pluginId, id) }
 
         return Successful()
     }

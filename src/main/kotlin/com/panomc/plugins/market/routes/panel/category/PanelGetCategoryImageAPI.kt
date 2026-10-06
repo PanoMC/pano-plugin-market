@@ -1,15 +1,14 @@
 package com.panomc.plugins.market.routes.panel.category
 
 import com.panomc.platform.annotation.Endpoint
-import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
-import com.panomc.platform.model.PanelApi
 import com.panomc.platform.model.Path
 import com.panomc.platform.model.Result
 import com.panomc.platform.model.RouteType
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.db.dao.MarketCategoryDao
-import com.panomc.plugins.market.permission.ManageMarketPermission
+import com.panomc.plugins.market.permission.MarketNode
+import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.util.ImageUtil
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
@@ -25,12 +24,10 @@ import java.io.File
 class PanelGetCategoryImageAPI(
     private val plugin: MarketPlugin,
     private val marketCategoryDao: MarketCategoryDao
-) : PanelApi() {
+) : MarketPanelApi() {
     override val paths = listOf(Path("/api/panel/market/categories/image/:fileName", RouteType.GET))
 
-    private val authProvider: AuthProvider by lazy {
-        plugin.applicationContext.getBean(AuthProvider::class.java)
-    }
+    override val nodes = setOf(MarketNode.CATALOG)
 
     private val databaseManager: DatabaseManager by lazy {
         plugin.applicationContext.getBean(DatabaseManager::class.java)
@@ -46,9 +43,7 @@ class PanelGetCategoryImageAPI(
             .queryParameter(optionalParam("thumbnail", booleanSchema()))
             .build()
 
-    override suspend fun handle(context: RoutingContext): Result? {
-        authProvider.requirePermission(ManageMarketPermission(), context)
-
+    override suspend fun handleAuthorized(context: RoutingContext): Result? {
         val parameters = getParameters(context)
         val fileName = parameters.pathParameter("fileName").string
 

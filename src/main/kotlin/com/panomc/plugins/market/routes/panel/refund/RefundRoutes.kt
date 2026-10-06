@@ -30,7 +30,9 @@ import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.error.PaymentProviderError
 import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.job.RefundReconcileJob
+import com.panomc.plugins.market.log.CancelledMarketRefundLog
 import com.panomc.plugins.market.log.RefundedMarketOrderLog
+import com.panomc.plugins.market.log.RetriedMarketRefundLog
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.api.checkout.PlatformUserDirectory
 import com.panomc.plugins.market.routes.api.order.creditService
@@ -266,8 +268,13 @@ class PanelRetryRefundAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = ValidationHandlerBuilder.create(schemaRepository).build()
 
-    override suspend fun handleAuthorized(context: RoutingContext): Result =
-        answer(found { refundService(plugin).retry(parseId(context.pathParam("refundId"), "refundId")) })
+    override suspend fun handleAuthorized(context: RoutingContext): Result {
+        val outcome = found { refundService(plugin).retry(parseId(context.pathParam("refundId"), "refundId")) }
+
+        logOrderDecision(plugin, context) { userId, username -> RetriedMarketRefundLog(userId, username, plugin.pluginId, outcome.refund.orderId, outcome.refund.id) }
+
+        return answer(outcome)
+    }
 }
 
 /** `POST /api/panel/market/refunds/:refundId/cancel` (`P:PAY`, 21 section 3.3): a refund nothing is running for; `refund`; 409 `INVALID_STATE`. */
@@ -279,6 +286,11 @@ class PanelCancelRefundAPI(private val plugin: MarketPlugin) : MarketPanelApi() 
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = ValidationHandlerBuilder.create(schemaRepository).build()
 
-    override suspend fun handleAuthorized(context: RoutingContext): Result =
-        answer(found { refundService(plugin).cancel(parseId(context.pathParam("refundId"), "refundId")) })
+    override suspend fun handleAuthorized(context: RoutingContext): Result {
+        val outcome = found { refundService(plugin).cancel(parseId(context.pathParam("refundId"), "refundId")) }
+
+        logOrderDecision(plugin, context) { userId, username -> CancelledMarketRefundLog(userId, username, plugin.pluginId, outcome.refund.orderId, outcome.refund.id) }
+
+        return answer(outcome)
+    }
 }

@@ -154,14 +154,15 @@ class MarketOrderDaoImpl : MarketOrderDao() {
         return rows.toEntities().getOrNull(0)
     }
 
-    override suspend fun getAllPaged(page: Long, search: String?, status: OrderStatus?, sqlClient: SqlClient): List<MarketOrder> {
-        val offset = (page - 1) * 10
+    override suspend fun getAllPaged(page: Long, search: String?, status: OrderStatus?, sqlClient: SqlClient, pageSize: Int, searchEmail: Boolean): List<MarketOrder> {
+        val offset = (page - 1) * pageSize
         val query = StringBuilder("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` o WHERE 1=1")
         val params = Tuple.tuple()
 
-        appendFilters(query, params, search, status)
+        appendFilters(query, params, search, status, searchEmail)
 
-        query.append(" ORDER BY `createdAt` DESC LIMIT 10 OFFSET ?")
+        query.append(" ORDER BY `createdAt` DESC LIMIT ? OFFSET ?")
+        params.addLong(pageSize.toLong())
         params.addLong(offset)
 
         val rows: RowSet<Row> = sqlClient
@@ -172,11 +173,11 @@ class MarketOrderDaoImpl : MarketOrderDao() {
         return rows.toEntities()
     }
 
-    override suspend fun count(search: String?, status: OrderStatus?, sqlClient: SqlClient): Long {
+    override suspend fun count(search: String?, status: OrderStatus?, sqlClient: SqlClient, searchEmail: Boolean): Long {
         val query = StringBuilder("SELECT COUNT(`id`) FROM `${prefix() + tableName}` o WHERE 1=1")
         val params = Tuple.tuple()
 
-        appendFilters(query, params, search, status)
+        appendFilters(query, params, search, status, searchEmail)
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query.toString())
@@ -188,7 +189,7 @@ class MarketOrderDaoImpl : MarketOrderDao() {
     }
 
     // Search matches playerUsername / order id / paymentLabel and any order item productName (EXISTS subquery).
-    private fun appendFilters(query: StringBuilder, params: Tuple, search: String?, status: OrderStatus?) {
+    private fun appendFilters(query: StringBuilder, params: Tuple, search: String?, status: OrderStatus?, searchEmail: Boolean) {
         if (status != null) {
             query.append(" AND `status` = ?")
             params.addString(status.name)
@@ -196,13 +197,16 @@ class MarketOrderDaoImpl : MarketOrderDao() {
 
         if (!search.isNullOrBlank()) {
             val like = "%$search%"
+            // The e-mail predicate exists only for the PII tier (11 section 14.5): without it a search would confirm an address the caller sees masked.
             query.append(
                 " AND (`playerUsername` LIKE ? OR `paymentLabel` LIKE ? OR CAST(`id` AS CHAR) LIKE ?" +
+                        (if (searchEmail) " OR `email` LIKE ?" else "") +
                         " OR EXISTS (SELECT 1 FROM `$itemTableName` i WHERE i.`orderId` = o.`id` AND i.`productName` LIKE ?))"
             )
             params.addString(like)
             params.addString(like)
             params.addString(like)
+            if (searchEmail) params.addString(like)
             params.addString(like)
         }
     }

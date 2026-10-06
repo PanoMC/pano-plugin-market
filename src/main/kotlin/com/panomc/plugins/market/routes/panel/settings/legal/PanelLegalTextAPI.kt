@@ -8,7 +8,7 @@ import com.panomc.platform.model.Result
 import com.panomc.platform.model.RouteType
 import com.panomc.platform.model.Successful
 import com.panomc.plugins.market.MarketPlugin
-import com.panomc.plugins.market.log.CreatedMarketLegalTextLog
+import com.panomc.plugins.market.log.UpdatedMarketLegalTextLog
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.api.checkout.legalTextService
 import com.panomc.plugins.market.routes.base.MarketPanelApi
@@ -72,7 +72,7 @@ class PanelLegalTextAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
         )
 
         databaseManager.panelActivityLogDao.add(
-            CreatedMarketLegalTextLog(userId, username, published.locale, published.version, plugin.pluginId),
+            UpdatedMarketLegalTextLog(userId, username, plugin.pluginId, published.locale, published.version),
             sqlClient
         )
 
