@@ -10,8 +10,12 @@ import com.panomc.plugins.market.e2e.support.another
 import com.panomc.plugins.market.support.Await
 import com.panomc.plugins.market.support.FakePayGateway
 import com.panomc.plugins.market.support.HarnessNoConcurrency
+import com.panomc.plugins.market.support.InvariantChecker
 import com.panomc.plugins.market.support.Race
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
+import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -31,61 +35,65 @@ class RaceE2E : E2eTestBase() {
     @Test
     fun `R-01 double webhook concurrent`() {
         E2eRace.rounds("R-01") { _ ->
-            val vip = catalog.fresh("VIP")
-            val buyer = buyer()
-            val publicId = publicIdOf(checkout(buyer.client, cart(line(vip.id))).ok())
-            val reference = referenceOf(publicId)
-            val payment = gateway.payments[reference]!!
-            val event = gateway.nextEventId() + "_" + reference.takeLast(6)
-            val data = JsonObject().put("reference", reference).put("amount", payment.amount.toPlainString()).put("currency", payment.currency)
+            withStoreSink("r01") { sink ->
+                val vip = catalog.fresh("VIP")
+                val buyer = buyer()
+                val publicId = publicIdOf(checkout(buyer.client, cart(line(vip.id))).ok())
+                val reference = referenceOf(publicId)
+                val payment = gateway.payments[reference]!!
+                val event = gateway.nextEventId() + "_" + reference.takeLast(6)
+                val data = JsonObject().put("reference", reference).put("amount", payment.amount.toPlainString()).put("currency", payment.currency)
 
-            gateway.setStatus(reference, "paid")
+                gateway.setStatus(reference, "paid")
 
-            // the two copies are the same signed bytes, posted by two warmed clients released together (17 section 8.4): the spread of the starts
-            // is measured, so a delivery that did not overlap fails the harness check of E2eRace.rounds instead of passing as "concurrent"
-            val body = gateway.eventBody("payment.succeeded", data, event)
-            val signature = checkNotNull(gateway.signatureHeader(body, FakePayGateway.Signature.VALID))
-            val hooks = (1..2).map { E2eClient(baseUrl, "webhook$it") }
-            val round = E2eRace.round(
-                2,
-                setup = { i -> hooks[i].also { it.warm() } },
-                action = { hook -> hook.request("POST", "/api/market/payments/fake/webhook", body, mapOf("X-Fake-Signature" to signature), csrf = false, cookiesOn = false) }
-            )
-            val answers = round.values()
+                // the two copies are the same signed bytes, posted by two warmed clients released together (17 section 8.4): the spread of the starts
+                // is measured, so a delivery that did not overlap fails the harness check of E2eRace.rounds instead of passing as "concurrent"
+                val body = gateway.eventBody("payment.succeeded", data, event)
+                val signature = checkNotNull(gateway.signatureHeader(body, FakePayGateway.Signature.VALID))
+                val hooks = (1..2).map { E2eClient(baseUrl, "webhook$it") }
+                val round = E2eRace.round(
+                    2,
+                    setup = { i -> hooks[i].also { it.warm() } },
+                    action = { hook -> hook.request("POST", "/api/market/payments/fake/webhook", body, mapOf("X-Fake-Signature" to signature), csrf = false, cookiesOn = false) }
+                )
+                val answers = round.values()
 
-            assertEquals(listOf(200, 200), answers.map { it.status }, "both deliveries are answered 200")
-            awaitOrder(publicId, "COMPLETED")
-            assertEquals("SUCCEEDED", attemptStatus(reference))
-            assertEquals(1L, orderEvents(publicId, "PAYMENT_SUCCEEDED"), "one PAYMENT_SUCCEEDED timeline row")
-            val orderId = orderRow(publicId).getLong("id")
-            assertEquals(1L, db.count("market_order_event", "`orderId` = ? AND `toStatus` = 'COMPLETED'", orderId), "one transition to COMPLETED (O2)")
+                assertEquals(listOf(200, 200), answers.map { it.status }, "both deliveries are answered 200")
+                awaitOrder(publicId, "COMPLETED")
+                assertEquals("SUCCEEDED", attemptStatus(reference))
+                assertEquals(1L, orderEvents(publicId, "PAYMENT_SUCCEEDED"), "one PAYMENT_SUCCEEDED timeline row")
+                val orderId = orderRow(publicId).getLong("id")
+                assertEquals(1L, db.count("market_order_event", "`orderId` = ? AND `toStatus` = 'COMPLETED'", orderId), "one transition to COMPLETED (O2)")
 
-            // 02 section 7.3 step 5: one row PROCESSED holds the provider key (uq_event) and counts the second copy, the second copy is settled on its own
-            // `r:<uuid>` row as DUPLICATE. Both rows carry the request hash of the identical body (the duplicate has no payment / order: it applied nothing).
-            val holder = db.sql("SELECT `status`, `duplicateCount`, `verified`, `requestHash` FROM `pano_market_payment_event` WHERE `providerId` = 'fake' AND `eventKey` = ?", "e:$event")
-            assertEquals(1, holder.size, "the event key holds one row (uq_event)")
-            assertEquals("PROCESSED", holder[0].getString("status"))
-            assertEquals(1, holder[0].getInteger("duplicateCount"), "the second delivery is counted on the row that holds the key")
-            assertEquals(1, holder[0].getInteger("verified"))
+                // 02 section 7.3 step 5: one row PROCESSED holds the provider key (uq_event) and counts the second copy, the second copy is settled on its own
+                // `r:<uuid>` row as DUPLICATE. Both rows carry the request hash of the identical body (the duplicate has no payment / order: it applied nothing).
+                val holder = db.sql("SELECT `status`, `duplicateCount`, `verified`, `requestHash` FROM `pano_market_payment_event` WHERE `providerId` = 'fake' AND `eventKey` = ?", "e:$event")
+                assertEquals(1, holder.size, "the event key holds one row (uq_event)")
+                assertEquals("PROCESSED", holder[0].getString("status"))
+                assertEquals(1, holder[0].getInteger("duplicateCount"), "the second delivery is counted on the row that holds the key")
+                assertEquals(1, holder[0].getInteger("verified"))
 
-            val hash = holder[0].getString("requestHash")
-            assertEquals(
-                2L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ?", hash),
-                "every inbound request is stored: two rows for the two copies"
-            )
-            assertEquals(
-                1L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ? AND `status` = 'DUPLICATE' AND `verified` = 1 AND `eventKey` LIKE 'r:%'", hash),
-                "the other copy is settled DUPLICATE on its own row"
-            )
-            assertEquals(
-                0L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ? AND `status` NOT IN ('PROCESSED', 'DUPLICATE')", hash),
-                "no copy is left RECEIVED / FAILED (applied twice or retried forever)"
-            )
+                val hash = holder[0].getString("requestHash")
+                assertEquals(
+                    2L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ?", hash),
+                    "every inbound request is stored: two rows for the two copies"
+                )
+                assertEquals(
+                    1L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ? AND `status` = 'DUPLICATE' AND `verified` = 1 AND `eventKey` LIKE 'r:%'", hash),
+                    "the other copy is settled DUPLICATE on its own row"
+                )
+                assertEquals(
+                    0L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ? AND `status` NOT IN ('PROCESSED', 'DUPLICATE')", hash),
+                    "no copy is left RECEIVED / FAILED (applied twice or retried forever)"
+                )
 
-            // one set of side effects
-            assertSingleSetOfSideEffects(orderId)
+                // one set of side effects
+                assertSingleSetOfSideEffects(orderId, sink)
 
-            round
+                settle()
+                assertOrderPaidReachedSinkOnce(sink, publicId)
+                round
+            }
         }
     }
 
@@ -113,6 +121,7 @@ class RaceE2E : E2eTestBase() {
             assertEquals(1L, productStock(last.id), "the stock is back after the expiry")
             assertEquals(0L, reserved(last.id), "and nothing is reserved any more")
 
+            settle()
             round
         }
     }
@@ -142,6 +151,7 @@ class RaceE2E : E2eTestBase() {
             assertEquals(409, other.status)
             assertEquals("IDEMPOTENCY_CONFLICT", other.error)
 
+            settle()
             round
         }
     }
@@ -154,96 +164,114 @@ class RaceE2E : E2eTestBase() {
     fun `R-02 double webhook sequential x 10`() {
         // sequential: there is nothing to overlap, so no harness round; the five rounds of the catalogue are five fresh orders
         repeat(Race.rounds) { n ->
-            val vip = catalog.fresh("VIP")
-            val buyer = buyer()
-            val publicId = publicIdOf(checkout(buyer.client, cart(line(vip.id))).ok())
-            val reference = referenceOf(publicId)
-            val payment = gateway.payments.getValue(reference)
-            val event = gateway.nextEventId() + "_" + reference.takeLast(6)
+            withStoreSink("r02") { sink ->
+                val vip = catalog.fresh("VIP")
+                val buyer = buyer()
+                val publicId = publicIdOf(checkout(buyer.client, cart(line(vip.id))).ok())
+                val reference = referenceOf(publicId)
+                val payment = gateway.payments.getValue(reference)
+                val event = gateway.nextEventId() + "_" + reference.takeLast(6)
 
-            gateway.setStatus(reference, "paid")
+                gateway.setStatus(reference, "paid")
 
-            // the same signed bytes ten times, one after the other, on one connection
-            val hook = signed("payment.succeeded", JsonObject().put("reference", reference).put("amount", payment.amount.toPlainString()).put("currency", payment.currency), event)
-            val client = E2eClient(baseUrl, "r02-$n").also { it.warm() }
-            val answers = (1..10).map { post(client, hook) }
+                // the same signed bytes ten times, one after the other, on one connection
+                val hook = signed("payment.succeeded", JsonObject().put("reference", reference).put("amount", payment.amount.toPlainString()).put("currency", payment.currency), event)
+                val client = E2eClient(baseUrl, "r02-$n").also { it.warm() }
+                val answers = (1..10).map { post(client, hook) }
 
-            assertEquals(List(10) { 200 }, answers.map { it.status }, "every one of the ten deliveries is answered 200")
-            awaitOrder(publicId, "COMPLETED")
-            assertEquals("SUCCEEDED", attemptStatus(reference))
-            assertEquals(1L, orderEvents(publicId, "PAYMENT_SUCCEEDED"), "one PAYMENT_SUCCEEDED timeline row")
+                assertEquals(List(10) { 200 }, answers.map { it.status }, "every one of the ten deliveries is answered 200")
+                awaitOrder(publicId, "COMPLETED")
+                assertEquals("SUCCEEDED", attemptStatus(reference))
+                assertEquals(1L, orderEvents(publicId, "PAYMENT_SUCCEEDED"), "one PAYMENT_SUCCEEDED timeline row")
 
-            val orderId = orderRow(publicId).getLong("id")
+                val orderId = orderRow(publicId).getLong("id")
 
-            assertEquals(1L, db.count("market_order_event", "`orderId` = ? AND `toStatus` = 'COMPLETED'", orderId), "one transition to COMPLETED (O2)")
-            assertEquals(1L, db.count("market_payment", "`orderId` = ? AND `status` = 'SUCCEEDED' AND `duplicate` = 0", orderId), "one SUCCEEDED attempt (I13)")
+                assertEquals(1L, db.count("market_order_event", "`orderId` = ? AND `toStatus` = 'COMPLETED'", orderId), "one transition to COMPLETED (O2)")
+                assertEquals(1L, db.count("market_payment", "`orderId` = ? AND `status` = 'SUCCEEDED' AND `duplicate` = 0", orderId), "one SUCCEEDED attempt (I13)")
 
-            // 02 section 7.3 step 5: the first copy holds the key (PROCESSED) and counts the nine that follow, each of them is settled DUPLICATE on its own `r:` row
-            val holder = db.sql("SELECT `status`, `duplicateCount`, `verified`, `requestHash` FROM `pano_market_payment_event` WHERE `providerId` = 'fake' AND `eventKey` = ?", "e:$event")
+                // 02 section 7.3 step 5: the first copy holds the key (PROCESSED) and counts the nine that follow, each of them is settled DUPLICATE on its own `r:` row
+                val holder = db.sql("SELECT `status`, `duplicateCount`, `verified`, `requestHash` FROM `pano_market_payment_event` WHERE `providerId` = 'fake' AND `eventKey` = ?", "e:$event")
 
-            assertEquals(1, holder.size, "the event key holds one row (uq_event)")
-            assertEquals("PROCESSED", holder[0].getString("status"))
-            assertEquals(9, holder[0].getInteger("duplicateCount"), "the nine later copies are counted on the row that holds the key")
+                assertEquals(1, holder.size, "the event key holds one row (uq_event)")
+                assertEquals("PROCESSED", holder[0].getString("status"))
+                assertEquals(9, holder[0].getInteger("duplicateCount"), "the nine later copies are counted on the row that holds the key")
 
-            val hash = holder[0].getString("requestHash")
+                val hash = holder[0].getString("requestHash")
 
-            assertEquals(10L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ?", hash), "every inbound request is stored: ten rows for the ten copies")
-            assertEquals(
-                9L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ? AND `status` = 'DUPLICATE' AND `verified` = 1 AND `eventKey` LIKE 'r:%'", hash),
-                "the other nine are DUPLICATE rows of their own"
-            )
-            assertEquals(
-                0L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ? AND `status` NOT IN ('PROCESSED', 'DUPLICATE')", hash),
-                "no copy is left RECEIVED / FAILED"
-            )
+                assertEquals(10L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ?", hash), "every inbound request is stored: ten rows for the ten copies")
+                assertEquals(
+                    9L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ? AND `status` = 'DUPLICATE' AND `verified` = 1 AND `eventKey` LIKE 'r:%'", hash),
+                    "the other nine are DUPLICATE rows of their own"
+                )
+                assertEquals(
+                    0L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ? AND `status` NOT IN ('PROCESSED', 'DUPLICATE')", hash),
+                    "no copy is left RECEIVED / FAILED"
+                )
 
-            assertSingleSetOfSideEffects(orderId)
-            settle()
+                assertSingleSetOfSideEffects(orderId, sink)
+                settle()
+                assertOrderPaidReachedSinkOnce(sink, publicId)
+            }
         }
     }
 
     @Test
     fun `R-03 the same fact through several channels`() {
-        // Channels fired together: the success webhook, the same fact under another event key, two browser returns (each asks the gateway) and the buyer's status poll.
-        // The panel `POST /payments/:paymentId/query` of the catalogue is not a route yet (MK-171, `permission-matrix.tsv` PENDING); it joins here when it lands.
+        // Channels fired together (17 section 9.4): the success webhook, the same fact under another event key, two browser returns (each asks the gateway),
+        // the buyer's status poll and the panel `POST /payments/:paymentId/query` (MK-171). The gateway reports the payment paid, so every channel carries the
+        // same fact; only the state machine can keep it from completing the order more than once.
         E2eRace.rounds("R-03") { _ ->
-            val vip = catalog.fresh("VIP")
-            val buyer = buyer()
-            val publicId = publicIdOf(checkout(buyer.client, cart(line(vip.id))).ok())
-            val reference = referenceOf(publicId)
-            val orderId = orderRow(publicId).getLong("id")
-            val first = paidHook(reference)
-            val second = paidHook(reference)
-            val returnTarget = returnPath(reference, "success")
-            val clients = (0 until 5).map { if (it == 3) buyer.another(baseUrl, "r03-status") else E2eClient(baseUrl, "r03-$it") }
-
-            val round = E2eRace.round(
-                5,
-                setup = { i -> i.also { clients[it].warm() } },
-                action = { i ->
-                    when (i) {
-                        0 -> post(clients[0], first)
-                        1 -> post(clients[1], second)
-                        3 -> clients[3].get("/api/market/orders/$publicId/status")
-                        else -> clients[i].get(returnTarget)
+            withStoreSink("r03") { sink ->
+                val vip = catalog.fresh("VIP")
+                val buyer = buyer()
+                val publicId = publicIdOf(checkout(buyer.client, cart(line(vip.id))).ok())
+                val reference = referenceOf(publicId)
+                val orderId = orderRow(publicId).getLong("id")
+                val paymentId = db.long("SELECT `id` FROM `pano_market_payment` WHERE `reference` = ?", reference)!!
+                val first = paidHook(reference)
+                val second = paidHook(reference)
+                val returnTarget = returnPath(reference, "success")
+                val clients = (0 until 6).map {
+                    when (it) {
+                        3 -> buyer.another(baseUrl, "r03-status")
+                        5 -> adminClone("r03-query")
+                        else -> E2eClient(baseUrl, "r03-$it")
                     }
                 }
-            )
-            val answers = round.values()
 
-            assertEquals(listOf(200, 200), listOf(answers[0].status, answers[1].status), "both webhooks are answered 200")
-            assertEquals(listOf(303, 303), listOf(answers[2].status, answers[4].status), "a return only ever redirects")
-            assertEquals(200, answers[3].status, "the status poll is answered 200: ${answers[3].error}")
+                val round = E2eRace.round(
+                    6,
+                    setup = { i -> i.also { clients[it].warm() } },
+                    action = { i ->
+                        when (i) {
+                            0 -> post(clients[0], first)
+                            1 -> post(clients[1], second)
+                            3 -> clients[3].get("/api/market/orders/$publicId/status")
+                            5 -> clients[5].post("/api/panel/market/payments/$paymentId/query", JsonObject())
+                            else -> clients[i].get(returnTarget)
+                        }
+                    }
+                )
+                val answers = round.values()
 
-            awaitOrder(publicId, "COMPLETED")
-            assertEquals("SUCCEEDED", attemptStatus(reference))
-            assertEquals(1L, orderEvents(publicId, "PAYMENT_SUCCEEDED"), "one PAYMENT_SUCCEEDED timeline row, whichever channel was first")
-            assertEquals(1L, db.count("market_order_event", "`orderId` = ? AND `toStatus` = 'COMPLETED'", orderId), "one transition to COMPLETED: the state machine is the guard, not the event key")
-            assertEquals(1L, db.count("market_payment", "`orderId` = ? AND `status` = 'SUCCEEDED' AND `duplicate` = 0", orderId), "one SUCCEEDED attempt (I13)")
+                assertEquals(listOf(200, 200), listOf(answers[0].status, answers[1].status), "both webhooks are answered 200")
+                assertEquals(listOf(303, 303), listOf(answers[2].status, answers[4].status), "a return only ever redirects")
+                assertEquals(200, answers[3].status, "the status poll is answered 200: ${answers[3].error}")
+                assertEquals(200, answers[5].status, "the panel query is answered 200: ${answers[5].error} ${answers[5].text}")
+                assertEquals("SUCCEEDED", answers[5].obj().getString("status"), "the query answers the attempt as the gateway reports it: paid")
 
-            assertSingleSetOfSideEffects(orderId)
-            settle()
-            round
+                awaitOrder(publicId, "COMPLETED")
+                assertEquals("SUCCEEDED", attemptStatus(reference))
+                assertEquals(1L, orderEvents(publicId, "PAYMENT_SUCCEEDED"), "one PAYMENT_SUCCEEDED timeline row, whichever channel was first")
+                assertEquals(1L, db.count("market_order_event", "`orderId` = ? AND `toStatus` = 'COMPLETED'", orderId), "one transition to COMPLETED: the state machine is the guard, not the event key")
+                assertEquals(1L, db.count("market_payment", "`orderId` = ? AND `status` = 'SUCCEEDED' AND `duplicate` = 0", orderId), "one SUCCEEDED attempt (I13)")
+                assertEquals(0L, db.count("market_payment", "`orderId` = ? AND `id` <> ?", orderId, paymentId), "no second attempt was created by any channel")
+
+                assertSingleSetOfSideEffects(orderId, sink)
+                settle()
+                assertOrderPaidReachedSinkOnce(sink, publicId)
+                round
+            }
         }
     }
 
@@ -347,6 +375,7 @@ class RaceE2E : E2eTestBase() {
             val owner = buyer()
             val clients = (0 until 2).map { owner.another(baseUrl, "${owner.username}#$it") }
             val holdBefore = holdBalance()
+            val spentBefore = spentBalance()
 
             grant(owner.userId, 100).ok()
 
@@ -368,6 +397,7 @@ class RaceE2E : E2eTestBase() {
             assertEquals(1L, db.count("market_credit_tx", "`orderId` = ? AND `type` = 'CAPTURE'", orderId), "and one CAPTURE: 80.00 went to SPENT")
             assertEquals(8000L, db.long("SELECT COALESCE(SUM(`amount`), 0) FROM `pano_market_credit_tx` WHERE `orderId` = ? AND `type` = 'CAPTURE'", orderId), "of 80.00")
             assertEquals(holdBefore, holdBalance(), "nothing stays on hold")
+            assertEquals(spentBefore + 8000L, spentBalance(), "SPENT grew by 80.00, once")
 
             settle()
             round
@@ -419,6 +449,10 @@ class RaceE2E : E2eTestBase() {
         for ((owner, publicId) in winners) {
             assertEquals(10_000L, creditBalance(owner.userId), "the balance of ${owner.username} is 100.00 again after the expiry")
             assertEquals(1L, db.count("market_credit_tx", "`orderId` = ? AND `type` = 'RELEASE'", orderRow(publicId).getLong("id")), "the hold of $publicId was released once")
+            assertEquals(
+                6000L, db.long("SELECT COALESCE(SUM(`amount`), 0) FROM `pano_market_credit_tx` WHERE `orderId` = ? AND `type` = 'RELEASE'", orderRow(publicId).getLong("id")),
+                "and it released the whole 60.00"
+            )
         }
 
         assertEquals(0L, db.long("SELECT COALESCE(SUM(`balance`), 0) FROM `pano_market_credit_account` WHERE `systemKey` = 'HOLD' AND `balance` < 0"), "the hold is never negative")
@@ -1324,6 +1358,8 @@ class RaceE2E : E2eTestBase() {
 
     private fun holdBalance(): Long = db.long("SELECT `balance` FROM `pano_market_credit_account` WHERE `systemKey` = 'HOLD'") ?: 0L
 
+    private fun spentBalance(): Long = db.long("SELECT `balance` FROM `pano_market_credit_account` WHERE `systemKey` = 'SPENT'") ?: 0L
+
     /** The signed webhook of the fake gateway: the exact bytes and the `X-Fake-Signature` value (the actor that posts it uses its own warmed client). */
     private fun signed(type: String, data: JsonObject, id: String = gateway.nextEventId()): Pair<ByteArray, String> {
         val body = gateway.eventBody(type, data, id)
@@ -1365,11 +1401,15 @@ class RaceE2E : E2eTestBase() {
 
     private fun reservedOfVariant(variantId: Long): Long = db.long("SELECT COALESCE(SUM(`stockReserved`), 0) FROM `pano_market_order_item` WHERE `variantId` = ?", variantId) ?: 0L
 
-    /** How many refunds the fake gateway took for the payment of [p] (`POST /v1/refunds` that created a refund). */
+    /**
+     * How many `POST /v1/refunds` calls the fake gateway received for the payment of [p] (17 section 9.4 R-13 / R-14: "called once"). Calls, not
+     * refund records: the gateway answers a repeated `Idempotency-Key` from its cache without creating a second record, and a call under another key
+     * that it refuses creates none, so a record count stays at one however often the provider called.
+     */
     private fun gatewayRefunds(p: Placed): Int {
         val id = gateway.payments.getValue(p.reference).id
 
-        return gateway.refunds.values.count { it.paymentId == id }
+        return gateway.requests(FakePayGateway.Op.REFUND).count { JsonObject(it.bodyText()).getString("paymentId") == id }
     }
 
     /** The path (and query) of the return URL the gateway was given for [reference], with the outcome segment [outcome]. */
@@ -1415,7 +1455,33 @@ class RaceE2E : E2eTestBase() {
     private fun availableOf(codeId: Long): Double =
         admin.get("/api/panel/market/creator-codes/report").ok().obj().getJsonArray("creators").map { it as JsonObject }.single { it.getLong("id") == codeId }.getDouble("available")
 
-    private fun settle() = session.drainAndCheck()
+    /**
+     * The end of one round: the queues that act on money, stock and entitlements (deliveries, webhooks, deferred inbound events) are drained and every global
+     * invariant I1 to I22 is checked, none skipped. The mail outbox is deliberately not awaited here (no invariant reads it): the mail job works 20 rows per
+     * 15 s tick and every send against the instance's dummy SMTP host fails after a DNS lookup, so the backlog of an earlier scenario (R-13 queues about 80 mails)
+     * can keep a new row unclaimed for longer than a round may wait. [mailBacklogClaimed] waits for it once per scenario instead, before the base class drain.
+     */
+    private fun settle() {
+        Await.until(30_000, 250, "the queues of the round are drained") {
+            val queues = admin.get("/api/panel/market/health", log = false).obj().getJsonObject("queues")
+
+            listOf("deliveriesPending", "webhooksPending", "deferredEvents").all { (queues?.getInteger(it) ?: 0) == 0 }
+        }
+        runBlocking { InvariantChecker.assertAll(db.pool) }
+
+        val run = InvariantChecker.lastRun
+
+        check(run.ran.isNotEmpty() && run.skipped.isEmpty()) { "invariants ran=${run.ran.size} skipped=${run.skipped}" }
+    }
+
+    /** Mails the mail job has not yet claimed once (`PENDING` with no attempt, or `SENDING`): the definition of "drained" of `E2eSession.drainAndCheck`. */
+    private fun untriedMails(): Long = db.count("market_mail_outbox", "(`status` = 'PENDING' AND `attempts` = 0) OR `status` = 'SENDING'")
+
+    /** Runs before the base class drain (a subclass `@AfterEach` goes first): gives the mail job the time its own pace needs for the backlog this scenario left. */
+    @AfterEach
+    fun mailBacklogClaimed() {
+        Await.until(240_000, 500, "the mail job claimed every queued mail once (${untriedMails()} unclaimed when the wait began)") { untriedMails() == 0L }
+    }
 
     private companion object {
         /** Orders per round of the scenarios that race a batch (R-16, R-17, R-27): many interleavings per round. */
@@ -1429,30 +1495,78 @@ class RaceE2E : E2eTestBase() {
 
     private fun reserved(productId: Long): Long = db.long("SELECT COALESCE(SUM(`stockReserved`), 0) FROM `pano_market_order_item` WHERE `productId` = ?", productId) ?: 0L
 
+    /** The store webhook endpoint one round registered (`order.paid`) and the name its calls are recorded under in the fake gateway's sink (`/hooks/<hook>`). */
+    private class StoreSink(val endpointId: Long, val hook: String)
+
+    /**
+     * Registers a store webhook endpoint for `order.paid` pointing at the fake gateway's sink, runs [body] and deletes the endpoint again, whatever
+     * happens (17 section 8.2 step 5, section 5.6: the stock `sink` endpoint is not seeded on this instance, each scenario registers its own like
+     * `CheckoutE2E`). The name is unique per call, so the sink only holds this round's calls.
+     */
+    private fun <T> withStoreSink(label: String, body: (StoreSink) -> T): T {
+        val hook = label + System.nanoTime().toString(36).takeLast(8)
+        val endpointId = admin.post(
+            "/api/panel/market/webhooks",
+            JsonObject().put("name", "E2E $hook").put("url", "${gateway.baseUrl}/hooks/$hook").put("events", JsonArray().add("order.paid")).put("format", "JSON")
+                .put("signing", "HMAC_SHA256").put("secret", "whsec_e2e_${label}_" + System.nanoTime().toString(36))
+        ).ok().obj().getLong("id")
+
+        try {
+            return body(StoreSink(endpointId, hook))
+        } finally {
+            admin.delete("/api/panel/market/webhooks/$endpointId")
+        }
+    }
+
+    /**
+     * After the round settled (the webhook queue is drained): the sink got exactly one `order.paid` for the order of [publicId], and its delivery row is
+     * `SUCCEEDED`. A second emission of the event, or a second send of the row, under a duplicated or multi-channel success shows here as a second call.
+     */
+    private fun assertOrderPaidReachedSinkOnce(sink: StoreSink, publicId: String) {
+        val calls = gateway.hooks(sink.hook).map { JsonObject(it.bodyText()) }.filter { it.getJsonObject("data")?.getJsonObject("order")?.getString("publicId") == publicId }
+
+        assertEquals(listOf("order.paid"), calls.map { it.getString("event") }, "the store webhook sink got exactly one call for $publicId, and it is order.paid")
+
+        val orderId = orderRow(publicId).getLong("id")
+
+        assertEquals(
+            listOf("SUCCEEDED"), db.sql("SELECT `status` FROM `pano_market_webhook_delivery` WHERE `orderId` = ? AND `endpointId` = ?", orderId, sink.endpointId).map { it.getString("status") },
+            "the one order.paid delivery row is SUCCEEDED once the queue is drained"
+        )
+    }
+
     /**
      * 17 section 9.4 R-01 "one set of deliveries / mail / webhook": per order no business key appears twice. The expected row count is exact: a
      * table that starts filling must fail here so the slice that fills it states its expected set (and the cardinality check below then bites on
-     * it). Delivery (MK-102): the standard VIP product has four GRANT-phase actions (`a1`, `a2`, `r1`, `r2` of `E2eCatalog.grantAndRevoke`: two
-     * permission and two credit actions), so the O2 transaction plans exactly four rows, however many copies of the webhook race for it. Mail (MK-142):
-     * O2 queues exactly one `ORDER_CONFIRMATION` to the buyer, however many copies of the webhook race for it (E2E-06 states the set; the mail outbox was
-     * empty here before MK-142 landed). The webhook subsystem still writes nothing for a VIP purchase: the catalogue seeds no store webhook endpoint.
+     * it). Delivery (MK-102): the standard VIP product has two GRANT actions (`a1`, `a2` of `E2eCatalog.grantAndRevoke`: a permission and a credit
+     * action; the REVOKE rows are the inverse the planner derives later, CP-1), so the O2 transaction plans exactly two rows, however many copies of the webhook race for it. Mail (MK-142):
+     * O2 queues exactly one `ORDER_CONFIRMATION` to the buyer, however many copies of the webhook race for it. Webhook: O2 emits `order.paid` once per
+     * enabled endpoint; a caller that registered its [StoreSink] expects exactly one `market_webhook_delivery` row of that endpoint for the order (event
+     * `order.paid`), a caller without one expects none.
      */
-    private fun assertSingleSetOfSideEffects(orderId: Long) {
+    private fun assertSingleSetOfSideEffects(orderId: Long, sink: StoreSink? = null) {
         // the confirmation mail is queued by the transition that completed the order, a moment after the status is visible (MAIL_QUEUED follows STATUS_CHANGED)
         Await.until(15_000, 100, "the order confirmation is queued") { db.count("market_mail_outbox", "`orderId` = ?", orderId) >= 1L }
 
         val sideEffects = mapOf(
             "market_delivery" to Triple("orderId", "`orderItemId`, `actionId`, `unitIndex`, `phase`, `attemptGroup`", 2L),
             "market_mail_outbox" to Triple("orderId", "`kind`, `recipient`", 1L),
-            "market_webhook_delivery" to Triple("orderId", "`endpointId`, `event`", 0L)
+            "market_webhook_delivery" to Triple("orderId", "`endpointId`, `event`", if (sink == null) 0L else 1L)
         )
 
         for ((table, spec) in sideEffects) {
             val (column, key, expected) = spec
             val row = db.sql("SELECT COUNT(*) AS n, COUNT(DISTINCT $key) AS d FROM `pano_$table` WHERE `$column` = ?", orderId).first()
 
-            assertEquals(expected, row.getLong("n"), "rows of $table for the order (MK-102: VIP has two GRANT actions, one row each; MK-142: one ORDER_CONFIRMATION mail; no webhook endpoint exists)")
+            assertEquals(expected, row.getLong("n"), "rows of $table for the order (MK-102: VIP has two GRANT actions, one row each; MK-142: one ORDER_CONFIRMATION mail; one order.paid row per registered store endpoint)")
             assertEquals(row.getLong("n"), row.getLong("d"), "no business key of $table exists twice for the order")
+        }
+
+        if (sink != null) {
+            assertEquals(
+                1L, db.count("market_webhook_delivery", "`orderId` = ? AND `endpointId` = ? AND `event` = 'order.paid'", orderId, sink.endpointId),
+                "exactly one order.paid delivery row for the order and the registered endpoint"
+            )
         }
 
         assertEquals(listOf("ORDER_CONFIRMATION"), db.sql("SELECT `kind` FROM `pano_market_mail_outbox` WHERE `orderId` = ?", orderId).map { it.getString("kind") }, "the one mail is the order confirmation")

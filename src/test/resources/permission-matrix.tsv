@@ -3,7 +3,7 @@
 # Columns: method, path, auth, state, slice, note
 GET	/servers	P:ANY	LIVE		
 GET	/context	P:ANY	LIVE		
-GET	/mc-component/download	P:ANY	PENDING	MC-04	
+GET	/mc-component/download	P:ANY	LIVE		
 GET	/categories	P:ANY	LIVE		
 GET	/products/simple	P:ANY	LIVE		
 GET	/products/:id	P:CAT,PAY	LIVE		
@@ -154,5 +154,5 @@ POST	/webhook-deliveries/:id/redeliver	P:SET	LIVE
 POST	/settings/mail/test	P:SET	LIVE		
 GET	/settings/invoice/preview	P:SET	LIVE		
 PUT	/settings/invoice-sequence	P:SET	LIVE		
-PUT	/servers/:id/settings	P:SET	PENDING	MC-04	
+PUT	/servers/:id/settings	P:SET	LIVE		
 GET	/health	P:SET	LIVE		

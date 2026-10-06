@@ -274,7 +274,8 @@ class FakeProvider(override val id: String) : PaymentProvider {
             return InboundResult.rejected(HttpReply.text("bad signature", 400), "bad signature")
         }
         val json = try {
-            http.bodyAsJson()
+            // the signature was checked over the exact bytes above; only the decoded text drops a leading UTF-8 byte order mark (17 section 9.3 F-17)
+            JsonObject(http.bodyAsString().removePrefix("\uFEFF"))
         } catch (e: Exception) {
             return InboundResult.rejected(HttpReply.text("bad body", 400), "body is not a JSON object")
         }

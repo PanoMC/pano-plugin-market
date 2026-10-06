@@ -1,6 +1,5 @@
 package com.panomc.plugins.market.routes.panel.server
 
-import com.panomc.platform.PluginManager
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.server.ServerManager
 import com.panomc.plugins.market.MarketPlugin
@@ -16,6 +15,7 @@ import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.routes.api.order.deliveryService
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.runtime.beans
+import com.panomc.plugins.market.service.McGameService
 import com.panomc.plugins.market.service.McSyncService
 import com.panomc.plugins.market.service.PlatformMcServerLink
 import io.vertx.sqlclient.Pool
@@ -30,7 +30,7 @@ private var cachedSync: Pair<MarketPlugin, McSyncService>? = null
  * server live in it. Shared by the `MARKET_SYNC` event, `GET /servers` and the `DeliveryJob` steps of the server rows.
  *
  * `marketVersion` is the PF4J descriptor version of the running market jar (exact string comparison with the component's version, 08 section 8.3). The
- * `configHash` of `MARKET_CONFIG` is MC-04's: until it lands the response carries none and the component keeps the configuration it has.
+ * `configHash` every response carries is [McGameService.configHash] (MC-04), the hash `MARKET_CONFIG` answers with, so a component that holds another one pulls it.
  */
 internal fun mcSyncService(plugin: MarketPlugin): McSyncService {
     cachedSync?.takeIf { it.first === plugin }?.let { return it.second }
@@ -51,7 +51,16 @@ private fun buildMcSyncService(plugin: MarketPlugin): McSyncService {
         deliveries = context.getBean(MarketDeliveryDao::class.java), serverStates = context.getBean(MarketServerStateDao::class.java), orders = orderDao,
         orderItems = context.getBean(MarketOrderItemDao::class.java), delivery = deliveryService(plugin),
         link = PlatformMcServerLink(databaseManager) { plugin.applicationContext.getBean(ServerManager::class.java) },
-        marketVersion = { plugin.applicationContext.getBean(PluginManager::class.java).getPlugin(plugin.pluginId).descriptor.version },
+        marketVersion = { marketVersion(plugin) }, configHash = { serverId ->
+            // the hash is advice for the component: a failure to compute it must never stop the delivery sync that carries it
+            try {
+                mcGameService(plugin).configHash(serverId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+        },
         storeName = { currentConfig(plugin).storeName }
     )
 }
