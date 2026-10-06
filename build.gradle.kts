@@ -615,6 +615,31 @@ val dbTest by tasks.registering(Test::class) {
     }
 }
 
+// MC-09 (19 section 13): `FakeMcServer` runs the REAL `mc.core` component inside the e2e JVM, over a real socket to the instance. The compiled `mc`
+// source set and the five Core classes the wire types extend (`PlatformRequest`, `PlatformMessage*`, `TextUtil`) are therefore visible to the T4 tests
+// (the Core jar itself is a fat jar with Vert.x, Spring, ... that must never sit next to the host jar, so just those classes are cut out of it).
+// They are on the classpath of every test task, not of `e2eTest` alone: JUnit's discovery reflects over `McE2E` in `test` and `dbTest` too and a
+// method signature naming an `mc` type would fail the whole task with NoClassDefFoundError. The market jar never carries any of this.
+val mcE2eCoreDir = layout.buildDirectory.dir("mc-e2e-core")
+val mcE2eCoreClasses by tasks.registering(Sync::class) {
+    // The Core jar the mc source set compiles against: the local file, or the Ivy artifact when none was found, so both paths behave the same.
+    from({
+        val core = resolvedCoreJar
+            ?: configurations["mcCompileClasspath"].files.single { it.name.startsWith("pano-core-") }
+        zipTree(core)
+    }) {
+        include("com/panomc/plugins/pano/core/platform/PlatformRequest*.class")
+        include("com/panomc/plugins/pano/core/platform/PlatformMessage*.class")
+        include("com/panomc/plugins/pano/core/util/TextUtil*.class")
+    }
+    into(mcE2eCoreDir)
+    dependsOn(checkCoreSource)
+}
+dependencies {
+    "testImplementation"(mc.output)
+    "testImplementation"(files(mcE2eCoreDir).builtBy(mcE2eCoreClasses))
+}
+
 val e2eTest by tasks.registering(Test::class) {
     group = "verification"
     description = "T4: end-to-end scenarios against the isolated instance (scripts/e2e-instance.sh)."
