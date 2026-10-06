@@ -58,6 +58,8 @@
     "CREATED_MARKET_CREATOR_CODE": "<b>{username}</b> создал код автора \"{name}\".",
     "UPDATED_MARKET_CREATOR_CODE": "<b>{username}</b> обновил код автора \"{name}\".",
     "DELETED_MARKET_CREATOR_CODE": "<b>{username}</b> удалил код автора \"{name}\".",
+    "CREATED_MARKET_CREATOR_PAYOUT": "<b>{username}</b> выплатил {amount} по коду автора \"{name}\" ({method}).",
+    "CANCELLED_MARKET_CREATOR_PAYOUT": "<b>{username}</b> отменил выплату {amount} по коду автора \"{name}\".",
     "SORTED_MARKET_CATEGORIES": "<b>{username}</b> изменил позицию категории маркета \"{name}\".",
     "UPDATED_MARKET_SETTINGS": "<b>{username}</b> обновил настройки маркета.",
     "UPDATED_MARKET_PAYMENT_METHOD": "<b>{username}</b> обновил способ оплаты \"{name}\".",

@@ -49,6 +49,7 @@ import com.panomc.plugins.market.db.dao.MarketProductFieldDao
 import com.panomc.plugins.market.db.model.CreditSystemKey
 import com.panomc.plugins.market.db.model.CreditTxType
 import com.panomc.plugins.market.db.model.DeliveryActionType
+import com.panomc.plugins.market.db.model.DeliverySourceType
 import com.panomc.plugins.market.db.model.DeliveryPhase
 import com.panomc.plugins.market.db.model.DeliveryStatus
 import com.panomc.plugins.market.db.model.DeliveryTransport
@@ -126,7 +127,9 @@ class DeliveryService(
     /** The localised texts of `format = DISCORD` action bodies (08 section 16.2); without it the stand-in body of the planner is used. */
     private val discordLabels: DiscordLabelSource? = null,
     /** `ORDER_DELIVERED` (MK-142, 12 section 4.1): told when the fulfillment of an order becomes `FULFILLED`, inside the transaction that did it. */
-    private val fulfilledMails: FulfillmentMails = FulfillmentMails.NONE
+    private val fulfilledMails: FulfillmentMails = FulfillmentMails.NONE,
+    /** The creator payouts of `method = ACTION` (21 section 7.4, MK-114): told when one of the order-less rows of a payout changes, so the payout follows its rows. */
+    private val payouts: PayoutSettlement = PayoutSettlement.NONE
 ) {
     private fun table(name: String) = "`${deliveries.prefix()}$name`"
 
@@ -453,6 +456,28 @@ class DeliveryService(
     }
 
     /**
+     * `planPayoutActions` (08 section 12, MK-114): the rows of the `actions` of the creator payout [payoutId] (phase `GRANT`, `sourceType = CREATOR_PAYOUT`, key prefix
+     * `cp:<payoutId>`, no order). The player is [creator] (`market_creator_code.creator`), `payout.amount` / `payout.currency` are available to the templates. Nothing is
+     * written; the caller hands the rows to [insertPlanned] in the payout transaction.
+     */
+    suspend fun planPayoutActions(conn: SqlConnection, payoutId: Long, creator: String, amount: Long, currency: String, actionsJson: String?): List<PlannedDelivery> {
+        val c = config()
+        val stored = ActionParser.parseStored(actionsJson, ActionParser.Kind.PAYOUT)
+
+        if (stored.actions.isEmpty() && stored.dropped.isEmpty()) return emptyList()
+
+        val servers = roster.snapshot(conn)
+        val settings = PlanSettings(
+            onlineWaitDays = c.deliveryOnlineWaitDays, zone = PeriodCalculator.zoneOf(c.storeTimeZone), store = StoreInfo(c.storeName, ""),
+            webhookBody = webhookBodyRendererFor(stored.actions)
+        )
+
+        return DeliveryPlanner.planPayoutActions(
+            com.panomc.plugins.market.core.delivery.PayoutRequest(payoutId, creator, amount, currency, stored, PlanServers(servers.lookup(), servers.names), settings, clock.now(), 0)
+        )
+    }
+
+    /**
      * Inserts [planned] rows with `INSERT IGNORE` semantics (the unique key `uq_idem`), writes one `DELIVERY_FAILED` timeline row for every row that
      * is born `FAILED`, and recomputes the fulfilment of the orders touched. Answers the ids of the rows that were new.
      */
@@ -700,6 +725,9 @@ class DeliveryService(
 
         set("updatedAt", now)
 
+        // MK-114: a payout row takes the payout lock before it changes, so two rows of one payout never settle it blind to each other
+        if (row.orderId == null && row.sourceType == DeliverySourceType.CREATOR_PAYOUT && row.sourceId != null) payouts.lock(conn, row.sourceId)
+
         var where = "`id` = ? AND `status` = ?"
         val args = ArrayList<Any?>(values)
 
@@ -721,6 +749,9 @@ class DeliveryService(
             failed?.let { recordFailed(conn, orderId, row.id, it, now) }
 
             if (recompute || failed != null) refreshFulfillment(conn, orderId)
+        } else if (row.sourceType == DeliverySourceType.CREATOR_PAYOUT && row.sourceId != null) {
+            // MK-114: the payout of an ACTION creator payout is PAID / FAILED when its rows are (21 section 7.4)
+            payouts.settle(conn, row.sourceId)
         }
 
         return true
