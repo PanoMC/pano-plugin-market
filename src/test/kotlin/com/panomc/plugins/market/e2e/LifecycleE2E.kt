@@ -679,6 +679,13 @@ class LifecycleE2E {
 
         lc.pay(again)
         lc.awaitOrder(again, "COMPLETED")
+
+        // the DEFERRED row keeps its own random key (a redelivery is a new row), so it stays in `queues.deferredEvents` until the admin replays it (04 section 7
+        // `POST /payment-events/:eventId/replay`): the replay applies the stored webhook and the order that waited for it completes
+        val deferredId = lc.db.long("SELECT `id` FROM `pano_market_payment_event` WHERE `status` = 'DEFERRED' ORDER BY `id` DESC LIMIT 1") ?: throw AssertionError("the DEFERRED event row is missing")
+        val replayed = lc.admin.post("/api/panel/market/payment-events/$deferredId/replay", JsonObject()).ok().obj()
+        assertEquals("PROCESSED", replayed.getString("status"), "the replay of the deferred event is processed")
+        lc.awaitOrder(pending, "COMPLETED")
         lc.assertInvariants()
     }
 
@@ -887,6 +894,12 @@ class LifecycleE2E {
         /** 17 section 8.2 steps 3 to 4 on this instance (the catalogue is created by the scenarios that need a product). */
         fun bootstrap() {
             if (gatewayOrNull == null) openGateway()
+            // the install step points the platform at `smtp.invalid`: a mail row would retry under a 60 s backoff and `mailsPending` could never drain (as in E2eSession.bootstrap 2a);
+            // with the platform's mail switch off the mail job ends each row SKIPPED at its first claim
+            admin.multipart(
+                "PUT", "/api/panel/settings",
+                mapOf("email" to JsonObject().put("enabled", false).put("hostname", "").put("port", 587).put("ssl", false).put("starttls", "DISABLED").put("username", "").put("password", "").put("sender", "").encode())
+            ).ok()
             admin.post(
                 "/api/panel/market/settings",
                 JsonObject()
@@ -1008,19 +1021,16 @@ class LifecycleE2E {
         fun holdBalance(): Long = db.long("SELECT `balance` FROM `pano_market_credit_account` WHERE `systemKey` = 'HOLD'") ?: 0L
 
         fun assertInvariants() {
-            var lastQueues: Any? = null
-
+            var last: JsonObject? = null
             try {
                 Await.until(30_000, 250, "queues drained") {
                     val queues = admin.get("/api/panel/market/health", log = false).obj().getJsonObject("queues")
+                    last = queues
 
-                    lastQueues = queues
-
-                    // mailsPending is not drained here: the E2E instance has no mail relay, so the outbox rows of the orders stay PENDING by design (CP-2)
-                    listOf("deliveriesPending", "webhooksPending", "deferredEvents").all { (queues?.getInteger(it) ?: 0) == 0 }
+                    listOf("deliveriesPending", "webhooksPending", "mailsPending", "deferredEvents").all { (queues?.getInteger(it) ?: 0) == 0 }
                 }
-            } catch (e: AwaitTimeout) {
-                throw AssertionError("queues not drained, last health queues: $lastQueues", e)
+            } catch (e: com.panomc.plugins.market.support.AwaitTimeout) {
+                throw AssertionError("queues did not drain within 30 s, last health queues: ${last?.encode()}", e)
             }
             runBlocking { InvariantChecker.assertAll(db.pool) }
             val run = InvariantChecker.lastRun

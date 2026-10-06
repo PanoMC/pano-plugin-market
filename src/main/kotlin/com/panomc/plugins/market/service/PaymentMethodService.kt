@@ -42,6 +42,7 @@ import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.math.BigDecimal
 import java.math.RoundingMode
+import org.slf4j.LoggerFactory
 
 /** Builds the context a provider gets for the settings hooks (`validateSettings`, `onSettingsSaved`, `runAction`). */
 fun interface PaymentContexts {
@@ -333,18 +334,28 @@ class PaymentMethodService(
                 val unreadable = codec.unreadableSecrets(encrypted ?: stored)
 
                 db.tx { conn ->
+                    // the job repeats this: a row the admin saved since the read above is left alone (its save already encrypted)
+                    val current = methods.getByMethodId(row.methodId, conn)
+                    if (current == null || current.settings != row.settings) return@tx
+
                     if (encrypted != null) methods.upsertByMethodId(row.methodId, row.enabled, encrypted.encode(), conn)
 
-                    if (unreadable.isNotEmpty()) methods.setLastError(row.methodId, SECRET_UNREADABLE, clock.now(), conn)
-                    else if (row.lastError == SECRET_UNREADABLE) methods.setLastError(row.methodId, null, null, conn)
+                    if (unreadable.isNotEmpty()) {
+                        if (row.lastError != SECRET_UNREADABLE) methods.setLastError(row.methodId, SECRET_UNREADABLE, clock.now(), conn)
+                    } else if (row.lastError == SECRET_UNREADABLE) methods.setLastError(row.methodId, null, null, conn)
+
+                    Unit
                 }
             } catch (e: Exception) {
                 // one broken provider must not stop the others
+                startupLogger.warn("payment method {} could not be checked at start: {}", row.methodId, e.toString())
             }
         }
     }
 
     // ---- internals
+
+    private val startupLogger = LoggerFactory.getLogger(PaymentMethodService::class.java)
 
     private object ProviderErrorCodes {
         const val INTERNAL = "INTERNAL"
