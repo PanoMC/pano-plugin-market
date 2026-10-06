@@ -11,6 +11,7 @@ import com.panomc.plugins.market.mc.core.feature.LocalConfig
 import com.panomc.plugins.market.mc.core.feature.MarketFeatures
 import com.panomc.plugins.market.mc.core.feature.McSender
 import com.panomc.plugins.market.mc.core.feature.Msg
+import net.minecraft.commands.CommandSource
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.server.MinecraftServer
@@ -145,8 +146,12 @@ class FabricSender(
         val p = player
         val s = server
         if (p == null || s == null) {
-            // Not a player and not the console (never reached for a supported sender): the plain answer to whoever typed it.
-            runCatching { source.sendSystemMessage(FabricText.component(text)) }
+            // Not a supported sender: the refusal goes to whoever typed it. CommandSourceStack.sendSystemMessage would tell the stack's ENTITY,
+            // which `/execute as <someone>` replaced, i.e. the OTHER player (seen live, E2E-21 MC-R7): the answer goes to the original source
+            // (the typer's own command source, the console, a command block) and, when that cannot be read, to the server log, never to an entity.
+            val origin = stackSource(source) as? CommandSource
+            val component = FabricText.component(text)
+            if (origin != null) runCatching { origin.sendSystemMessage(component) } else console.info(LegacyText.plain(text))
             return
         }
         try {
