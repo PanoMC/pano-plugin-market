@@ -100,6 +100,7 @@ import com.panomc.plugins.market.db.model.MarketPaymentMethod
 import com.panomc.plugins.market.db.model.MarketProduct
 import com.panomc.plugins.market.db.model.MarketProductField
 import com.panomc.plugins.market.db.model.MarketProductVariant
+import com.panomc.plugins.market.db.model.MarketSubscription
 import com.panomc.plugins.market.db.model.OrderItemKind
 import com.panomc.plugins.market.db.model.OrderSource
 import com.panomc.plugins.market.db.model.PaymentStatus
@@ -769,7 +770,7 @@ class CheckoutService(
         return Assessment(
             quote = quote, c = c, locale = locale, lines = lines, cart = cart, usedServerCart = topUp == null && input.items == null && caller.userId != null,
             catalog = catalog, rules = rules, recipient = recipient, payerName = payerName, payerKey = payerKey, orderEmail = orderEmail,
-            items = items, breakdown = breakdown, selected = selected, chosen = chosen, selectedId = selectedId, shipping = shippingQuote,
+            items = items, breakdown = breakdown, selected = selected, chosen = chosen, recurring = chosen?.recurring ?: frozen?.recurring, selectedId = selectedId, shipping = shippingQuote,
             topUp = topUp, topUpReason = topUp?.let { topUpProblem(it, c) }, payWithCredits = payWithCredits, legal = legalView,
             requiredFields = requiredFields, messages = distinct, now = now, candidates = candidates
         )
@@ -1109,7 +1110,7 @@ class CheckoutService(
     }
 
     private suspend fun phaseB(request: CheckoutRequest, caller: QuoteCaller, payer: Payer, plan: Assessment, verified: Verified, deps: CheckoutDeps): CreatedOrder {
-        val frozen = Frozen(plan.selected, plan.shipping)
+        val frozen = Frozen(plan.selected, plan.shipping, plan.recurring)
         val planUses = usesOf(plan)
         val products = productIdsOf(plan)
         val variants = variantIdsOf(plan)
@@ -1561,8 +1562,8 @@ class CheckoutService(
             ),
             clearCartOfUser = if (a.usedServerCart) caller.userId else null,
             actorUserId = caller.userId,
-            // 09 section 4.3: the offer table's verdict for the chosen method becomes the provisional mode of the pending subscription row
-            recurring = a.chosen?.recurring
+            // 09 section 4.3: the offer's verdict for the chosen method (offer table, then `checkEligibility`) becomes the provisional mode of the pending subscription row
+            recurring = a.recurring
         )
     }
 
@@ -2229,7 +2230,7 @@ class CheckoutService(
         val usage = orders.usageByProduct(keys, productIds, sqlClient).mapValues { ProductUsage(it.value.used, it.value.lastOrderAt) }
         val owned = keys.flatMap { entitlements.getActiveByOwner(it, now, sqlClient) }.distinctBy { it.id }
         val subscribed = keys.flatMap { subscriptions.getByOwnerKey(it, sqlClient) }
-            .filter { it.status in LIVE_SUBSCRIPTIONS }
+            .filter { row -> isLiveSubscription(row, sqlClient) }
             .map { it.productId }
             .toSet()
 
@@ -2244,6 +2245,19 @@ class CheckoutService(
             },
             subscribed = subscribed
         )
+    }
+
+    /**
+     * 09 section 4.1 (`ALREADY_OWNED`): a subscription the buyer has `ACTIVE`, `PAST_DUE` or `PAUSED`, or `PENDING` while its initial order is still `PENDING` /
+     * `REVIEW` (the payment may yet arrive). A pending row is kept when its order expired, was cancelled or failed (a late payment may still arrive, 09
+     * section 4.3), so such a row does not stop the buyer from buying the product again.
+     */
+    private suspend fun isLiveSubscription(row: MarketSubscription, sqlClient: SqlClient): Boolean {
+        if (row.status != SubscriptionStatus.PENDING) return row.status in LIVE_SUBSCRIPTIONS
+
+        val initial = orders.getById(row.initialOrderId, sqlClient)?.status
+
+        return initial == OrderStatus.PENDING || initial == OrderStatus.REVIEW
     }
 
     // -------------------------------------------------------------------------------------------- pricing input
@@ -2483,8 +2497,12 @@ class CheckoutService(
 
     // ----------------------------------------------------------------------------------------- payment methods
 
-    /** What phase B keeps from phase A: no provider, carrier or block-list call happens inside the order transaction. */
-    private class Frozen(val selected: Candidate?, val shipping: ShippingQuote)
+    /**
+     * What phase B keeps from phase A: no provider, carrier or block-list call happens inside the order transaction. [recurring] is the verdict of phase A's
+     * offer for the chosen method (09 section 4.2: the offer table, then `checkEligibility`): phase B builds no method list, so without it the pending
+     * subscription row would be made from the capabilities alone and a provider that answered `oneOffOnly` would get a recurring row.
+     */
+    private class Frozen(val selected: Candidate?, val shipping: ShippingQuote, val recurring: String? = null)
 
     /** The quote and every internal fact checkout needs to write the order. */
     private class Assessment(
@@ -2504,6 +2522,8 @@ class CheckoutService(
         val breakdown: PriceBreakdown,
         val selected: Candidate?,
         val chosen: PaymentMethodOption?,
+        /** `"AUTO"` / `"MANUAL"`: the offer of the chosen method for a subscription cart (phase A: its option, phase B: what phase A froze), `null` otherwise. */
+        val recurring: String?,
         val selectedId: String?,
         val shipping: ShippingQuote,
         val topUp: TopUpRequest?,
@@ -2773,7 +2793,7 @@ class CheckoutService(
             PricingCode.MIXED_CREDIT_NOT_SUPPORTED, PricingCode.CREDITS_REQUIRED
         )
 
-        private val LIVE_SUBSCRIPTIONS = setOf(SubscriptionStatus.PENDING, SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE, SubscriptionStatus.PAUSED)
+        private val LIVE_SUBSCRIPTIONS = setOf(SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE, SubscriptionStatus.PAUSED)
 
         /** `[{value, label}]` of a `SELECT` (plain strings are accepted too). */
         fun optionValues(raw: String?): List<String> {

@@ -54,6 +54,7 @@ import com.panomc.plugins.market.provider.SecretCipher
 import com.panomc.plugins.market.routes.api.payment.InboundEventContext
 import com.panomc.plugins.market.routes.api.payment.PaymentEventSink
 import com.panomc.plugins.market.spi.common.Money
+import com.panomc.plugins.market.spi.payment.GatewaySubscriptionState
 import com.panomc.plugins.market.spi.payment.GatewaySubscriptionStatus
 import com.panomc.plugins.market.spi.payment.IntervalUnit
 import com.panomc.plugins.market.spi.payment.PaymentCapabilities
@@ -71,21 +72,61 @@ import org.slf4j.LoggerFactory
 
 /**
  * What [PaymentService] asks of the subscription side of a payment (09 section 2). [planFor] is the plan a start carries (`StartPaymentRequest.subscription`,
- * non-null only for an automatic offer); [onPaid] hands over what a `Succeeded` says about the subscription, inside the transaction that applies it, so the
- * activation of O2 / O4 can read it even when an admin accepts the payment long after.
+ * non-null only for an automatic offer); [pendingPlan] and [onMethodChanged] are the retry of the initial order (`/pay` re-tenders it, the `PENDING` row
+ * follows, 09 section 4.3); [onPaid] hands over what a `Succeeded` says about the subscription, inside the transaction that applies it, so the activation of
+ * O2 / O4 can read it even when an admin accepts the payment long after, and answers the gateway subscription that must not be kept (09 section 4.4, last
+ * paragraph) as an [AfterCommit] step.
  */
 interface PaymentSubscriptions {
     suspend fun planFor(order: MarketOrder, sqlClient: SqlClient): SubscriptionPlan?
 
-    suspend fun onPaid(conn: SqlConnection, order: MarketOrder, attempt: MarketPayment, facts: AttemptFacts)
+    /** The plan of the initial order of a subscription whose row is still `PENDING` (the order may be retried); `null` for every other order. */
+    suspend fun pendingPlan(order: MarketOrder, sqlClient: SqlClient): PendingPlan?
+
+    /**
+     * `/pay` re-tendered the initial order of a `PENDING` subscription: [order] is the order as rewritten (provider, fee, total), [recurring] the offer
+     * table's verdict for [providerId] (`"AUTO"` / `"MANUAL"`, `null` = decide from the capabilities). `true` when the row was rewritten.
+     */
+    suspend fun onMethodChanged(conn: SqlConnection, order: MarketOrder, providerId: String, recurring: String?): Boolean
+
+    /** A success on [order] (a subscription order): stores what it says on the row. The returned step, if any, runs after the commit. */
+    suspend fun onPaid(conn: SqlConnection, order: MarketOrder, attempt: MarketPayment, facts: AttemptFacts): AfterCommit?
 
     companion object {
         /** A payment service without subscriptions: no plan, nothing recorded. */
         val NONE: PaymentSubscriptions = object : PaymentSubscriptions {
             override suspend fun planFor(order: MarketOrder, sqlClient: SqlClient): SubscriptionPlan? = null
 
-            override suspend fun onPaid(conn: SqlConnection, order: MarketOrder, attempt: MarketPayment, facts: AttemptFacts) = Unit
+            override suspend fun pendingPlan(order: MarketOrder, sqlClient: SqlClient): PendingPlan? = null
+
+            override suspend fun onMethodChanged(conn: SqlConnection, order: MarketOrder, providerId: String, recurring: String?): Boolean = false
+
+            override suspend fun onPaid(conn: SqlConnection, order: MarketOrder, attempt: MarketPayment, facts: AttemptFacts): AfterCommit? = null
         }
+    }
+}
+
+/** The recurring plan of a subscription that is still being bought: what the offer table and `checkEligibility` judge, and the plan a start carries at a given price. */
+class PendingPlan(val subscriptionId: Long, val productId: Long, val variantId: Long, val productName: String, val recurring: RecurringPlan) {
+    /** `StartPaymentRequest.subscription` / `CheckoutSnapshot.subscription` at [price] (the per-period amount including VAT and payment fee). */
+    fun at(price: Long): SubscriptionPlan = SubscriptionPlan(
+        subscriptionId, CheckoutService.planKey(productId, variantId, price, recurring.currency, recurring), productName, Money(price, recurring.currency),
+        recurring.intervalUnit, recurring.intervalCount, recurring.maxCycles
+    )
+}
+
+/**
+ * 09 section 4.4, last paragraph: a gateway subscription that a payment carried but the subscription row does not keep (the `Succeeded` of a duplicate
+ * attempt, a late success after the row was closed, a second paying attempt of an order in review) is cancelled at the gateway right after the commit,
+ * with [view] built from the event; a failure is written to the order timeline, because the gateway keeps billing the buyer for it.
+ */
+class CancelSurplusSubscription(val orderId: Long, val subscriptionId: Long, val providerId: String, val view: SubscriptionView) : AfterCommit {
+    companion object {
+        /** `CancelSubscriptionRequest.reason` of the call. */
+        const val REASON = "duplicate subscription"
+
+        /** The order event written when the gateway subscription could not be cancelled. */
+        const val FAILED_NOTE = "a gateway subscription of a duplicate payment could not be cancelled, cancel it at the gateway"
     }
 }
 
@@ -109,8 +150,10 @@ class SubscriptionEffectNotOwned(val effect: SubEffect, val owner: String) :
  * - [createPending] is `SubscriptionService.createPending` of 09 section 4.3, called by [OrderService] inside the checkout transaction after the order
  *   and its item exist. The row starts `PENDING` with the per-period price (`order.totalPrice`, including VAT and payment fee), the interval of the
  *   product (a variant's `periodCount` wins), `maxCycles`, and a provisional `mode` from the offer table of 09 section 4.2.
- * - [onPaid] (hook of [PaymentService]) stores the gateway subscription / stored method of a `Succeeded` on the pending row, [onOrderPaid] (the
+ * - [onPaid] (hook of [PaymentService]) stores the gateway subscription / stored method of the order's own paying attempt on the pending row (the one a
+ *   duplicate, a late or a second paying attempt carries is cancelled at the gateway after the commit, [CancelSurplusSubscription]), [onOrderPaid] (the
  *   `SubscriptionOnOrderPaid` effect of O2 / O4, through [SubscriptionEffects]) activates it with the mode the paying attempt actually delivered.
+ * - [pendingPlan] / [onMethodChanged] (hooks of `/pay`): a retry of the initial order re-tenders it and the pending row follows (provider, mode, price).
  * - [onOrderClosedUnpaid] closes a pending row when a review is rejected (O5); an expired, cancelled or failed order leaves it `PENDING` (a late payment
  *   may still arrive, `SubscriptionJob` closes it after 30 days).
  * - [onGatewayEvent] applies a `SubscriptionUpdated` (09 section 7): the gateway's status through the state machine; the period columns are never
@@ -201,10 +244,11 @@ class SubscriptionService(
     }
 
     /**
-     * 09 section 4.3: the buyer picked another method for the initial order while the row is `PENDING`. Rewrites `providerId`, `mode` and `price` (the
-     * re-priced `totalPrice` of [order]); gateway data recorded for the old method goes with it. A row that is not `PENDING` is left alone.
+     * 09 section 4.3: `/pay` re-tendered the initial order while the row is `PENDING` (the buyer picked another method, or retried the same one after the
+     * fee changed). Rewrites `providerId`, `mode` and `price` (the re-priced `totalPrice` of [order]); gateway data recorded for the old method goes with
+     * it. A row that is not `PENDING` is left alone.
      */
-    suspend fun onMethodChanged(conn: SqlConnection, order: MarketOrder, providerId: String, recurring: String?): Boolean {
+    override suspend fun onMethodChanged(conn: SqlConnection, order: MarketOrder, providerId: String, recurring: String?): Boolean {
         val id = order.subscriptionId ?: return false
         val row = subscriptions.getById(id, conn) ?: return false
 
@@ -226,6 +270,24 @@ class SubscriptionService(
 
     // ================================================================================================ the start request
 
+    override suspend fun pendingPlan(order: MarketOrder, sqlClient: SqlClient): PendingPlan? {
+        val id = order.subscriptionId ?: return null
+
+        if (order.source == OrderSource.RENEWAL) return null
+
+        val row = subscriptions.getById(id, sqlClient) ?: return null
+
+        return pendingPlanOf(row)
+    }
+
+    private fun pendingPlanOf(row: MarketSubscription): PendingPlan? {
+        if (row.status != SubscriptionStatus.PENDING) return null
+
+        return PendingPlan(
+            row.id, row.productId, row.variantId, row.productName, RecurringPlan(row.currency, IntervalUnit.valueOf(row.intervalUnit.name), row.intervalCount, row.maxCycles)
+        )
+    }
+
     /** `StartPaymentRequest.subscription` (09 section 4.2): the plan of the pending row, only for an automatic mode and the provider the row was made for. */
     override suspend fun planFor(order: MarketOrder, sqlClient: SqlClient): SubscriptionPlan? {
         val id = order.subscriptionId ?: return null
@@ -234,28 +296,30 @@ class SubscriptionService(
 
         val row = subscriptions.getById(id, sqlClient) ?: return null
 
-        if (row.status != SubscriptionStatus.PENDING || row.mode == SubscriptionMode.MANUAL || row.providerId != order.paymentMethodId) return null
+        if (row.mode == SubscriptionMode.MANUAL || row.providerId != order.paymentMethodId) return null
 
-        val unit = IntervalUnit.valueOf(row.intervalUnit.name)
-        val plan = RecurringPlan(row.currency, unit, row.intervalCount, row.maxCycles)
-
-        return SubscriptionPlan(
-            row.id, CheckoutService.planKey(row.productId, row.variantId, row.price, row.currency, plan), row.productName, Money(row.price, row.currency),
-            unit, row.intervalCount, row.maxCycles
-        )
+        return pendingPlanOf(row)?.at(row.price)
     }
 
     // ================================================================================================ the payment: record, then activate
 
-    override suspend fun onPaid(conn: SqlConnection, order: MarketOrder, attempt: MarketPayment, facts: AttemptFacts) {
-        val id = order.subscriptionId ?: return
-        val row = subscriptions.getById(id, conn) ?: return
-
-        // an `ACTIVE` row is never rewritten by the success of another attempt (09 section 4.4: the duplicate gateway subscription is cancelled by
-        // the duplicate-payment path); a terminal row has nothing to activate
-        if (row.status != SubscriptionStatus.PENDING) return
-
+    /**
+     * What a success says about the subscription (09 section 4.4). Only the attempt that is the order's payment writes the `PENDING` row: the first
+     * success on the order (its `paymentId` is still empty, or it is this attempt). The success of any other attempt (a duplicate on an order that is paid
+     * already, a second paying attempt of an order in review, a late success after the row was closed) leaves the row alone, and the gateway subscription it
+     * carries is cancelled after the commit ([CancelSurplusSubscription]); otherwise the buyer would be billed for it every period and its renewals would be
+     * skipped as an unknown subscription.
+     */
+    override suspend fun onPaid(conn: SqlConnection, order: MarketOrder, attempt: MarketPayment, facts: AttemptFacts): AfterCommit? {
+        val id = order.subscriptionId ?: return null
+        val row = subscriptions.getById(id, conn) ?: return null
         val gateway = facts.subscription
+        val ownPayment = order.paymentId == null || order.paymentId == attempt.id
+        val holdsAnother = gateway != null && row.gatewaySubscriptionId != null && row.gatewaySubscriptionId != gateway.gatewaySubscriptionId
+
+        // an `ACTIVE` row is never rewritten by the success of another attempt, a terminal row has nothing to activate
+        if (row.status != SubscriptionStatus.PENDING || !ownPayment || holdsAnother) return gateway?.let { surplus(row, attempt, it) }
+
         val stored = facts.storedMethod
         val sets = linkedMapOf<String, Any?>("providerId" to attempt.providerId)
 
@@ -272,7 +336,7 @@ class SubscriptionService(
             val json = JsonObject().put("token", stored.token).put("label", stored.label).put("expiresAt", stored.expiresAt).put("gatewayCustomerId", stored.gatewayCustomerId)
 
             sets["storedMethod"] = cipher.encrypt(json.encode())
-            sets["storedMethodLabel"] = (stored.label ?: facts.methodDetail)?.take(LABEL_MAX)
+            sets["storedMethodLabel"] = clip(stored.label ?: facts.methodDetail, LABEL_MAX)
             stored.gatewayCustomerId?.let { sets["gatewayCustomerId"] = it }
         }
 
@@ -287,6 +351,26 @@ class SubscriptionService(
             sets.keys.removeAll(setOf("gatewaySubscriptionId", "gatewayCustomerId", "providerData", "currentPeriodStart", "currentPeriodEnd"))
             update(conn, id, sets, whereStatus = SubscriptionStatus.PENDING)
         }
+
+        return null
+    }
+
+    /** The cancel of a gateway subscription [row] does not keep; `null` when [gateway] is the very subscription the row holds. */
+    private fun surplus(row: MarketSubscription, attempt: MarketPayment, gateway: GatewaySubscriptionState): AfterCommit? {
+        if (gateway.gatewaySubscriptionId == row.gatewaySubscriptionId && attempt.providerId == row.providerId) return null
+
+        logger.warn(
+            "subscription {}: attempt {} on provider {} carried the gateway subscription {}, which the row does not keep (status {}); it is cancelled after the commit",
+            row.id, attempt.id, attempt.providerId, gateway.gatewaySubscriptionId, row.status
+        )
+
+        val view = SubscriptionView(
+            id = row.id, status = gateway.status.name, gatewaySubscriptionId = gateway.gatewaySubscriptionId, gatewayCustomerId = gateway.gatewayCustomerId,
+            price = Money(row.price, row.currency), intervalUnit = IntervalUnit.valueOf(row.intervalUnit.name), intervalCount = row.intervalCount,
+            currentPeriodEnd = gateway.currentPeriodEnd, providerData = gateway.providerData, testMode = attempt.testMode
+        )
+
+        return CancelSurplusSubscription(row.initialOrderId, row.id, attempt.providerId, view)
     }
 
     /**
@@ -523,7 +607,7 @@ class SubscriptionService(
             if (mode == SubscriptionMode.MANUAL) sets["storedMethodLabel"] = null
         }
 
-        if (mode == SubscriptionMode.MERCHANT && row.storedMethodLabel == null) sets["storedMethodLabel"] = payment?.methodDetail?.take(LABEL_MAX)
+        if (mode == SubscriptionMode.MERCHANT && row.storedMethodLabel == null) sets["storedMethodLabel"] = clip(payment?.methodDetail, LABEL_MAX)
 
         update(conn, id, sets)
 
@@ -725,7 +809,15 @@ class SubscriptionService(
             com.panomc.plugins.market.core.order.OrderTimings.BANK_TRANSFER_PROVIDER
         )
 
-        private const val LABEL_MAX = 128
+        /** The width of `market_subscription.storedMethodLabel` (01 section 10.1, `VARCHAR(64)`); `market_payment.methodDetail` is wider (128), so a longer text is legal there. */
+        private const val LABEL_MAX = 64
+
+        /** [text] cut to [max] characters (code points: a surrogate pair is never split), `null` stays `null`. */
+        private fun clip(text: String?, max: Int): String? {
+            if (text == null || text.codePointCount(0, text.length) <= max) return text
+
+            return text.substring(0, text.offsetByCodePoints(0, max))
+        }
         private const val DEFAULT_LOCALE = "en-US"
 
         private val SubscriptionStatus.isTerminal: Boolean

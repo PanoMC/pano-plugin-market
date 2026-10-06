@@ -2136,6 +2136,10 @@ internal class CheckoutHarness(val w: TestWiring, private val vertx: Vertx) {
 
     val fake = FakePaymentProvider()
 
+    /** A scripted `checkEligibility` verdict of the fake provider (MK-121: `oneOffOnly` for a subscription plan); `null` = always eligible. */
+    @Volatile
+    var eligibility: ((com.panomc.plugins.market.spi.payment.CheckoutSnapshot) -> com.panomc.plugins.market.spi.payment.Eligibility)? = null
+
     /** The fake provider with a hook in `checkEligibility`: phase A asks it once per checkout, phase B never does. */
     private val hooked = object : com.panomc.plugins.market.spi.payment.PaymentProvider by fake {
         override fun checkEligibility(ctx: com.panomc.plugins.market.spi.payment.PaymentContext, checkout: com.panomc.plugins.market.spi.payment.CheckoutSnapshot): com.panomc.plugins.market.spi.payment.Eligibility {
@@ -2143,7 +2147,7 @@ internal class CheckoutHarness(val w: TestWiring, private val vertx: Vertx) {
 
             if (hook != null && (!phaseAOnce || phaseAFired.compareAndSet(false, true))) runBlocking { hook() }
 
-            return com.panomc.plugins.market.spi.payment.Eligibility.eligible()
+            return eligibility?.invoke(checkout) ?: com.panomc.plugins.market.spi.payment.Eligibility.eligible()
         }
     }
     private val lookup = StaticProviderLookup(listOf(hooked))
