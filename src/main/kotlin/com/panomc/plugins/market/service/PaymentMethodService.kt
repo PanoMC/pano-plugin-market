@@ -341,7 +341,14 @@ class PaymentMethodService(
                     if (encrypted != null) methods.upsertByMethodId(row.methodId, row.enabled, encrypted.encode(), conn)
 
                     if (unreadable.isNotEmpty()) {
-                        if (row.lastError != SECRET_UNREADABLE) methods.setLastError(row.methodId, SECRET_UNREADABLE, clock.now(), conn)
+                        if (row.lastError != SECRET_UNREADABLE) {
+                            methods.setLastError(row.methodId, SECRET_UNREADABLE, clock.now(), conn)
+                            startupLogger.error(
+                                "payment method {}: stored secrets {} cannot be decrypted (secret.key missing, replaced or damaged); they must be re-entered in the panel",
+                                row.methodId,
+                                unreadable,
+                            )
+                        }
                     } else if (row.lastError == SECRET_UNREADABLE) methods.setLastError(row.methodId, null, null, conn)
 
                     Unit
