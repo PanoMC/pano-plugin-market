@@ -14,6 +14,11 @@
           selected={filter.category}
           {totalCount}
           onselect={onCategorySelect} />
+
+        <!-- 14 §8.2: the modules sit under the categories on large screens and below the grid on small ones (rendered twice on purpose) -->
+        <div class="d-none d-lg-block mt-3">
+          <StoreModules {settings} {widgets} />
+        </div>
       </div>
     </aside>
 
@@ -119,6 +124,10 @@
           {/each}
         </section>
       {/if}
+
+      <div class="d-lg-none">
+        <StoreModules {settings} {widgets} />
+      </div>
     </div>
   </div>
 {/if}
@@ -184,6 +193,7 @@
   import StoreStateCard from '../components/store/StoreStateCard.svelte';
   import StoreToolbar from '../components/store/StoreToolbar.svelte';
   import TestModeBanner from '../components/store/TestModeBanner.svelte';
+  import StoreModules from '../components/widgets/StoreModules.svelte';
   import ErrorAlert from '../components/common/ErrorAlert.svelte';
   import { REFETCH_DELAY_MS } from '../lib/countdown.js';
   import { expiredSaleEnds } from '../lib/sale.js';
@@ -218,6 +228,8 @@
   const emptyGrid = { state: 'READY', products: [], productCount: 0, totalPage: 1 };
 
   let settings = $state(init.settings ?? {});
+  // the store modules (goal, top supporters, recent buyers): one answer of the load, shown by the flags of the settings
+  let widgets = $state(init.widgets ?? {});
   let categories = $state(init.categories ?? []);
   let featured = $state(init.featured ?? []);
   let bestsellers = $state(init.bestsellers ?? []);

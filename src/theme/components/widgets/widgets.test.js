@@ -346,3 +346,28 @@ describe('locales', () => {
     });
   });
 });
+
+describe('the store page shows the store modules (14 section 8.2, E2E-18)', () => {
+  const page = read('../../pages/StorePage.svelte');
+
+  test('StoreModules is rendered twice: under the categories on large screens, below the grid on small ones', () => {
+    expect(page).toContain("import StoreModules from '../components/widgets/StoreModules.svelte'");
+    expect(page.match(/<StoreModules \{settings\} \{widgets\} \/>/g)).toHaveLength(2);
+    expect(page).toMatch(/<div class="d-none d-lg-block mt-3">\s*<StoreModules/);
+    expect(page).toMatch(/<div class="d-lg-none">\s*<StoreModules/);
+  });
+
+  test('the widgets answer of load() is what it shows, and the flags of the settings decide which cards', () => {
+    expect(page).toContain('let widgets = $state(init.widgets ?? {})');
+    expect(
+      storeModules(
+        { modules: { goal: true, topSupporters: false, recentBuyers: true } },
+        {
+          goals: [{ id: 1 }],
+          topSupporters: [{ username: 'a' }],
+          recentBuyers: [{ username: 'b' }],
+        },
+      ),
+    ).toEqual(['goals', 'recentBuyers']);
+  });
+});
