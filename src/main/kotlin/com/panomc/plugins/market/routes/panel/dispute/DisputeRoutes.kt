@@ -31,6 +31,7 @@ import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.api.order.creditService
 import com.panomc.plugins.market.routes.api.order.deliveryService
 import com.panomc.plugins.market.routes.api.order.entitlementService
+import com.panomc.plugins.market.routes.api.order.paymentService
 import com.panomc.plugins.market.routes.api.order.subscriptionService
 import com.panomc.plugins.market.routes.api.order.webhookService
 import com.panomc.plugins.market.routes.base.MarketPanelApi
@@ -87,7 +88,11 @@ private fun buildDisputeService(plugin: MarketPlugin): DisputeService {
         deliveries = context.getBean(MarketDeliveryDao::class.java), entitlements = context.getBean(MarketEntitlementDao::class.java),
         creditTxs = context.getBean(MarketCreditTxDao::class.java), credits = creditService(plugin), deliveryService = deliveryService(plugin),
         entitlementService = entitlementService(plugin), refundService = refundService(plugin),
-        effects = StandardDisputeEffects(refundEffects, webhookService(plugin)) { conn, order, dispute -> subscriptionService(plugin).onOrderChargeback(conn, order, dispute) }
+        // WIRE-2: after the commit the buyer's other subscriptions end too (11 section 10 step 4)
+        effects = StandardDisputeEffects(
+            refundEffects, webhookService(plugin),
+            { order -> subscriptionService(plugin).onChargebackOwner(MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock), { after -> paymentService(plugin).runAfterCommit(after) }, order) }
+        ) { conn, order, dispute -> subscriptionService(plugin).onOrderChargeback(conn, order, dispute) }
     )
 }
 

@@ -70,6 +70,8 @@ class DisputeServiceIT : MarketDaoITBase() {
     private val vertx: Vertx = Vertx.vertx()
     private val alerts = CopyOnWriteArrayList<Triple<Long, String, JsonObject>>()
     private val subscriptionCalls = CopyOnWriteArrayList<Pair<Long, Long>>()
+    private val ownerCalls = CopyOnWriteArrayList<Long>()
+    private var ownerHookFails = false
     private var steveUser: TestUser? = null
 
     @AfterAll
@@ -82,6 +84,8 @@ class DisputeServiceIT : MarketDaoITBase() {
         steveUser = null
         alerts.clear()
         subscriptionCalls.clear()
+        ownerCalls.clear()
+        ownerHookFails = false
         w = TestWiring(pool)
         r = RefundWorld(w, vertx)
         build()
@@ -91,7 +95,11 @@ class DisputeServiceIT : MarketDaoITBase() {
         disputes = DisputeService(
             w.db, r.d.locks, w.clock, { w.config }, w.orders, w.orderItems, w.orderEvents, w.payments, w.disputes, w.blocks, w.deliveries, w.entitlements, w.creditTxs, r.d.credits,
             r.d.service, r.d.entitlementService, r.service,
-            StandardDisputeEffects(r.effects, r.webhooks.service) { _, order, dispute -> subscriptionCalls += order.id to dispute.id },
+            StandardDisputeEffects(r.effects, r.webhooks.service, { order ->
+                ownerCalls += order.id
+
+                if (ownerHookFails) throw IllegalStateException("the owner's subscriptions could not be ended")
+            }) { _, order, dispute -> subscriptionCalls += order.id to dispute.id },
             DisputeAlerts { orderId, code, data -> alerts += Triple(orderId, code, data) }
         )
     }
@@ -1164,6 +1172,35 @@ class DisputeServiceIT : MarketDaoITBase() {
 
         // a charged-back order cannot be refunded any more
         r.expect("INVALID_ORDER_TRANSITION", 400) { r.service.request(paid.order.id, RefundInput(amount = 100), r.key(), null) }
+    }
+
+    @Test
+    fun `WIRE-2 the buyer's other subscriptions are handed over once, after the commit of O11 only, never for an inquiry, a replay or a won dispute`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000)))
+
+        dispute(paid, DisputeState.INQUIRY, "dp_w2")
+        assertTrue(ownerCalls.isEmpty(), "an inquiry is not O11")
+
+        dispute(paid, DisputeState.OPENED, "dp_w2")
+        assertEquals(listOf(paid.order.id), ownerCalls.toList())
+        assertEquals(OrderStatus.CHARGEBACK, r.order(paid.order.id).status, "the hook runs after the order moved and committed")
+
+        dispute(paid, DisputeState.OPENED, "dp_w2")
+        dispute(paid, DisputeState.WON, "dp_w2")
+        assertEquals(listOf(paid.order.id), ownerCalls.toList(), "a replay and O12 hand nothing over")
+    }
+
+    @Test
+    fun `WIRE-2 a failing hand-over is logged and never undoes the committed chargeback`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000)))
+
+        ownerHookFails = true
+        dispute(paid, DisputeState.OPENED, "dp_w2f")
+
+        assertEquals(listOf(paid.order.id), ownerCalls.toList())
+        assertEquals(OrderStatus.CHARGEBACK, r.order(paid.order.id).status)
+        assertEquals(1, disputeRows(paid.order.id).size)
+        assertTrue(alerts.any { it.first == paid.order.id && it.second == "CHARGEBACK_OPENED" })
     }
 
     @Test

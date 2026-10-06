@@ -1172,6 +1172,7 @@ internal class SubscriptionCancelIT : RenewalITBase() {
 
         assertTrue(refund.contains("subscriptionService(plugin).onOrderRefunded(conn, order, refund)"))
         assertTrue(dispute.contains("subscriptionService(plugin).onOrderChargeback(conn, order, dispute)"))
+        assertTrue(dispute.contains("subscriptionService(plugin).onChargebackOwner("), "WIRE-2: the buyer's other subscriptions end after the O11 commit")
         assertTrue(player.contains("subscriptionService(plugin).onUserDeleted("))
         assertTrue(wiring.contains("actions = actions"), "step E repeats a cancel that crashed")
         assertTrue(scheduler.contains("routes.panel.subscription.subscriptionJob(plugin)"), "the scheduler and the admin retry share one job")

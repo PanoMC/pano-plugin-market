@@ -97,6 +97,13 @@ interface DisputeEffects {
     /** The store webhooks `order.chargeback` ([won] false, O11) and `order.chargeback.won` ([won] true, O12). */
     suspend fun webhook(conn: SqlConnection, order: MarketOrder, dispute: MarketDispute, won: Boolean)
 
+    /**
+     * After the commit of O11 (WIRE-2, 11 section 10 step 4): the buyer's other active subscriptions end at once (`CHARGEBACK`). Not inside the O11 transaction, which holds
+     * the lock of one order only; every subscription is its own transaction under its own order lock (the order of 00 section 8.3). A failure is logged, the block list
+     * still stops the charges.
+     */
+    suspend fun afterChargeback(order: MarketOrder) = Unit
+
     companion object {
         val NONE: DisputeEffects = object : DisputeEffects {
             override suspend fun creatorReversal(conn: SqlConnection, order: MarketOrder) = Unit
@@ -113,11 +120,14 @@ interface DisputeEffects {
 class StandardDisputeEffects(
     private val refundEffects: RefundEffects = RefundEffects.NONE,
     private val webhooks: WebhookService? = null,
+    private val ownerSubscriptionsEnding: suspend (MarketOrder) -> Unit = {},
     private val subscriptionEnding: suspend (SqlConnection, MarketOrder, MarketDispute) -> Unit = { _, _, _ -> }
 ) : DisputeEffects {
     override suspend fun creatorReversal(conn: SqlConnection, order: MarketOrder) = refundEffects.creatorReversal(conn, order, order.totalPrice, true)
 
     override suspend fun subscription(conn: SqlConnection, order: MarketOrder, dispute: MarketDispute) = subscriptionEnding(conn, order, dispute)
+
+    override suspend fun afterChargeback(order: MarketOrder) = ownerSubscriptionsEnding(order)
 
     override suspend fun webhook(conn: SqlConnection, order: MarketOrder, dispute: MarketDispute, won: Boolean) {
         val queue = webhooks ?: return
@@ -130,9 +140,10 @@ class StandardDisputeEffects(
 
 private class DisputeAlert(val orderId: Long, val code: String, val data: JsonObject)
 
-/** One transaction's side data: the alerts to raise after the commit. */
+/** One transaction's side data: the alerts to raise and the steps to run after the commit. */
 private class DisputeTx(val conn: SqlConnection) {
     val alerts = ArrayList<DisputeAlert>()
+    val afterCommit = ArrayList<Pair<String, suspend () -> Unit>>()
 }
 
 /** What a dispute fact says: from a provider event or from the panel; [targetDisputeId] names the row of a panel `PUT`. */
@@ -285,6 +296,7 @@ class DisputeService(
         }
 
         raise(result.first)
+        runAfterCommit(result.first)
 
         return result.second
     }
@@ -502,6 +514,8 @@ class DisputeService(
         }
 
         t.alerts += DisputeAlert(order.id, "CHARGEBACK_OPENED", JsonObject().put("disputeId", dispute.id))
+        // 11 section 10 step 4: the buyer's other subscriptions (WIRE-2), each in its own transaction once this one has committed
+        t.afterCommit += "OWNER_SUBSCRIPTIONS" to { effects.afterChargeback(order) }
     }
 
     /** Every item of the order, all units not revoked yet (08 section 11.2), and the upgrade successors of every item (21 section 5.4, always cascading). */
@@ -807,6 +821,18 @@ class DisputeService(
         val now = clock.now()
 
         orderEvents.add(MarketOrderEvent(orderId = orderId, type = type, actorType = actor, actorUserId = actorUserId, message = message, data = data.encode(), createdAt = now, updatedAt = now), conn)
+    }
+
+    private suspend fun runAfterCommit(t: DisputeTx) {
+        for ((name, step) in t.afterCommit) {
+            try {
+                step()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logger.error("the step {} after the commit of a chargeback failed: {}", name, e.toString())
+            }
+        }
     }
 
     private suspend fun raise(t: DisputeTx) {
