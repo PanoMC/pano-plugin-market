@@ -224,8 +224,8 @@ class MarketScheduler(
  * Everything runs only while `MarketRuntime.isReady`, so a degraded store (schema verification failed) runs no job.
  *
  * Open seams (each fails closed: nothing is armed that could not do its work):
- * - `MailOutboxJob` is not registered: its `MailComposition` is `UnwiredMailComposition` until MK-142 / MK-146 land (armed now it would end every row
- *   `FAILED RENDER_ERROR`). They add `Job("mail-outbox", MarketScheduler.MAIL_OUTBOX_MS) { mailJob.runOnce() }` to [jobs].
+ * - `MailOutboxJob` is registered with `MailComposer` (MK-142): the order mails compose; the subscription, expiry and shipment kinds have no composer
+ *   until MK-146 and end `FAILED RENDER_ERROR` (never sent) until then.
  * - The other workers of 00 section 8.5 (`RefundReconcileJob`, `EntitlementExpiryJob`, `SubscriptionJob`,
  *   `HousekeepingJob`) belong to the slices that build them; each adds one `Job` here (`InboundEventRetryJob` is MK-077's, registered below).
  */
@@ -254,7 +254,8 @@ internal object MarketJobs {
             delivery(DeliveryJob(deliveryService(plugin), SystemClock, servers = mcSyncService(plugin))),
             entitlementExpiry(entitlementExpiryJob(plugin)),
             refundReconcile(refundReconcileJob(plugin)),
-            shipmentTracking(ShipmentTrackingJob(SystemClock, context.getBean(MarketShipmentDao::class.java), shippingService(plugin), sqlClient))
+            shipmentTracking(ShipmentTrackingJob(SystemClock, context.getBean(MarketShipmentDao::class.java), shippingService(plugin), sqlClient)),
+            mailOutbox(MailWiring.job(plugin))
         )
     }
 
@@ -282,6 +283,9 @@ internal object MarketJobs {
 
     /** The `revokeFirst` release and timeout, `queryRefund` and the unsent `SYSTEM` refunds (MK-111). */
     fun refundReconcile(job: RefundReconcileJob): MarketScheduler.Job = MarketScheduler.Job("refund-reconcile", MarketScheduler.REFUND_RECONCILE_MS) { job.runOnce() }
+
+    /** The outbox of mails (MK-141 / MK-142): composes and sends the due rows; kinds without a composer yet end `FAILED (RENDER_ERROR)` (MK-146 adds them). */
+    fun mailOutbox(job: MailOutboxJob): MarketScheduler.Job = MarketScheduler.Job("mail-outbox", MarketScheduler.MAIL_OUTBOX_MS) { job.runOnce() }
 
     /** Polling of the carriers for the shipments that are due (MK-134). */
     fun shipmentTracking(job: ShipmentTrackingJob): MarketScheduler.Job = MarketScheduler.Job("shipment-tracking", MarketScheduler.SHIPMENT_TRACKING_MS) { job.runOnce() }

@@ -346,7 +346,9 @@ class OrderService(
      */
     private val refunds: MarketRefundDao? = null,
     /** How the second paying attempt of an accepted review is treated (refund or alert); the default only alerts. */
-    private val duplicates: DuplicateRefundPolicy = DuplicateRefundPolicy.ALERT_ONLY
+    private val duplicates: DuplicateRefundPolicy = DuplicateRefundPolicy.ALERT_ONLY,
+    /** O3 (MK-142, 12 section 4.1): the "we received your order" mail of a payment that waits for a human, queued in the transition's transaction. */
+    private val receivedMails: ReceivedMails = ReceivedMails.NONE
 ) {
     private fun table(name: String) = "`${orders.prefix()}$name`"
 
@@ -712,6 +714,9 @@ class OrderService(
                 is OrderEffect.BlockBuyer, is OrderEffect.RunChargebackActions -> throw EffectNotOwnedYet(effect, "the refund and dispute slices")
             }
         }
+
+        // O3 (12 section 4.1): a payment that waits for a human is acknowledged with `ORDER_RECEIVED` (MK-142; its own seam, the machine's effect list stays as it is)
+        if (decision.to == OrderStatus.REVIEW && order.status == OrderStatus.PENDING) receivedMails.received(conn, order)
 
         // the gateway cancel of what this transition closed: every attempt it set to a closed state, once
         if (closed.isNotEmpty()) after += AfterCommit.CancelAtGateway(closed.distinctBy { it.id })

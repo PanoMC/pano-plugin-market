@@ -1,0 +1,38 @@
+=== subject
+Steve sent you a gift on Blocky Network
+=== preheader
+A gift is waiting for you.
+=== text
+You received a gift!
+
+Steve sent you a gift at Blocky Store. It is delivered to your Minecraft account automatically.
+
+If something is missing, join the server and check again in a few minutes.
+
+> Have fun on the server!
+
+- 1 x Gold Rank (30 days) ... 
+- 2 x Starter Bundle ... 
+  - 2 x Diamond Sword ... 
+
+Visit store: https://shop.example/store
+
+You are receiving this e-mail because of an order at Blocky Store.
+=== html
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html dir="ltr" lang="en"><head><meta content="text/html; charset=UTF-8" http-equiv="Content-Type"/><meta name="x-apple-disable-message-reformatting"/></head><body style="margin-top:0;margin-bottom:0;margin-right:0;margin-left:0"><div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0">A gift is waiting for you.</div><table border="0" width="100%" cellPadding="0" cellSpacing="0" role="presentation" align="center"><tbody><tr><td style="margin-right:auto;margin-left:auto;padding-right:0.5rem;padding-left:0.5rem;font-family:ui-sans-serif,system-ui,sans-serif,&quot;Apple Color Emoji&quot;,&quot;Segoe UI Emoji&quot;,&quot;Segoe UI Symbol&quot;,&quot;Noto Color Emoji&quot;"><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="max-width:600px;margin-right:auto;margin-left:auto;margin-bottom:40px;margin-top:40px;padding:40px"><tbody><tr style="width:100%"><td>
+<table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-bottom:32px;text-align:center"><tbody><tr><td><img alt="Blocky Network" height="80" src="cid:logo" style="display:block;outline:none;border:none;text-decoration:none;margin-right:auto;margin-left:auto;margin-bottom:0rem;margin-top:0rem;border-radius:0.5rem" width="80"/></td></tr></tbody></table>
+<table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-bottom:8px;text-align:center"><tbody><tr><td><h1 style="margin:0;padding:0;text-align:center;font-size:28px;font-weight:700;color:rgb(16,24,40)">Blocky Network</h1></td></tr></tbody></table>
+
+<table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-bottom:16px;margin-top:24px;text-align:center"><tbody><tr><td><h1 style="margin:0;padding:0;text-align:center;font-size:24px;font-weight:600;color:rgb(30,41,57)">You received a gift!</h1></td></tr></tbody></table>
+<p style="font-size:16px;line-height:24px;color:rgb(54,65,83);margin-top:16px;margin-bottom:16px">Steve sent you a gift at Blocky Store. It is delivered to your Minecraft account automatically.</p><p style="font-size:16px;line-height:24px;color:rgb(54,65,83);margin-top:16px;margin-bottom:16px">If something is missing, join the server and check again in a few minutes.</p>
+<table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-top:16px;margin-bottom:16px;border-left-style:solid;border-left-width:4px;border-color:rgb(209,213,219);padding-left:16px"><tbody><tr><td><p style="font-size:15px;line-height:22px;margin:0;font-style:italic;color:rgb(75,85,99)">Have fun on the server!</p></td></tr></tbody></table>
+<table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)"><tbody><tr><td style="padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)">1 &times; Gold Rank <span style="color:rgb(106,114,130)">(30 days)</span></td><td align="right" style="padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap"></td></tr><tr><td style="padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)">2 &times; Starter Bundle</td><td align="right" style="padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap"></td></tr><tr><td style="padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);padding-left:20px">2 &times; Diamond Sword</td><td align="right" style="padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap"></td></tr></tbody></table>
+
+
+
+
+<table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-bottom:16px;margin-top:24px;text-align:center"><tbody><tr><td><a href="https://shop.example/store" style="line-height:100%;text-decoration:none;display:inline-block;max-width:100%;border-radius:0.5rem;background-color:rgb(85,197,90);padding-right:32px;padding-left:32px;padding-bottom:16px;padding-top:16px;text-align:center;font-size:16px;font-weight:600;color:rgb(255,255,255);text-decoration-line:none" target="_blank">Visit store</a></td></tr></tbody></table>
+
+<table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-top:40px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235);padding-top:24px"><tbody><tr><td><p style="font-size:12px;line-height:18px;text-align:left;color:rgb(106,114,130);margin-top:16px;margin-bottom:8px">You are receiving this e-mail because of an order at Blocky Store.</p><p style="font-size:12px;line-height:18px;text-align:left;color:rgb(106,114,130);margin-top:8px;margin-bottom:16px">Blocky Network &middot; https://shop.example</p></td></tr></tbody></table>
+</td></tr></tbody></table></td></tr></tbody></table></body></html>
+
