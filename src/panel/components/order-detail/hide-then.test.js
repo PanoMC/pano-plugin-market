@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { hideThen } from './hide-then.js';
+import { hideThen, submitLocked } from './hide-then.js';
 
 /** A modal element and a Bootstrap whose hide() fires `hidden.bs.modal` after `delay` ms (never when delay is null). */
 function fixture({ shown = true, delay = 10 } = {}) {
@@ -15,7 +15,10 @@ function fixture({ shown = true, delay = 10 } = {}) {
         hide: () => {
           calls.push('hide');
           if (delay !== null)
-            setTimeout(() => listeners.filter((l) => l.type === 'hidden.bs.modal').forEach((l) => l.fn()), delay);
+            setTimeout(
+              () => listeners.filter((l) => l.type === 'hidden.bs.modal').forEach((l) => l.fn()),
+              delay,
+            );
         },
       }),
     },
@@ -66,5 +69,47 @@ describe('hideThen', () => {
     hideThen(null, closed.bootstrap, () => runs++);
     hideThen(closed.element, undefined, () => runs++);
     expect(runs).toBe(3);
+  });
+});
+
+describe('submitLocked', () => {
+  test('a submit is refused while the request is in flight and from the successful response until the modal is reopened', () => {
+    expect(submitLocked({ saving: false, closing: false })).toBe(false);
+    expect(submitLocked({ saving: true, closing: false })).toBe(true);
+    expect(submitLocked({ saving: false, closing: true })).toBe(true);
+    expect(submitLocked({ saving: true, closing: true })).toBe(true);
+    expect(submitLocked()).toBe(false);
+  });
+
+  test('the fade-out window of hideThen stays locked until done runs, so a second click cannot post the form again', async () => {
+    const listeners = [];
+    const element = {
+      classList: { contains: (name) => name === 'show' },
+      addEventListener: (type, fn) => listeners.push({ type, fn }),
+    };
+    const bootstrap = {
+      Modal: {
+        getOrCreateInstance: () => ({
+          hide: () => setTimeout(() => listeners.forEach((l) => l.fn()), 30),
+        }),
+      },
+    };
+
+    // what the modals do: submit() posts at most once while the guard holds
+    let closing = false;
+    let posts = 0;
+    const submit = () => {
+      if (submitLocked({ saving: false, closing })) return;
+      posts += 1;
+      closing = true;
+      hideThen(element, bootstrap, () => {});
+    };
+
+    submit();
+    submit(); // second click during the fade-out
+    await new Promise((r) => setTimeout(r, 10));
+    submit(); // Enter in the still-mounted form
+
+    expect(posts).toBe(1);
   });
 });

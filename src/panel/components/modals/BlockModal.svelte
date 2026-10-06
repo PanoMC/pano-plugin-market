@@ -85,7 +85,7 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="submit" class="btn btn-primary w-100" disabled={saving}>
+          <button type="submit" class="btn btn-primary w-100" disabled={saving || closing}>
             {#if saving}
               <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
             {/if}
@@ -112,6 +112,7 @@
   import { toEpoch } from '../../utils/format.js';
   import { toastError } from '../../utils/toast.js';
   import { hideModalThen, showModal } from '../order-detail/send.js';
+  import { submitLocked } from '../order-detail/hide-then.js';
 
   let { onSaved = () => {} } = $props();
 
@@ -127,6 +128,8 @@
   let form = $state(blank());
   let touched = $state(false);
   let saving = $state(false);
+  // set from the successful response until open(): the form stays locked while the modal fades out
+  let closing = $state(false);
   let serverError = $state(null);
 
   const model = $derived({
@@ -154,13 +157,14 @@
     form = blank();
     touched = false;
     saving = false;
+    closing = false;
     serverError = null;
     showModal(modalElement);
   }
 
   async function submit(event) {
     event.preventDefault();
-    if (saving) return;
+    if (submitLocked({ saving, closing })) return;
     touched = true;
     if (!checked.ok) return;
 
@@ -182,6 +186,7 @@
     showSuccessToast($_('modals.block.toast-added'));
     // the page refresh behind onSaved remounts the page: it waits until the modal is really gone (hide-then.js)
     const saved = result.body;
+    closing = true;
     hideModalThen(modalElement, () => onSaved(saved));
   }
 
