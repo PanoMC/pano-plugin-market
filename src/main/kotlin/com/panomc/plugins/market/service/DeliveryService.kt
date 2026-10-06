@@ -794,8 +794,11 @@ class DeliveryService(
         return moved
     }
 
-    /** D22 for one row under the order lock: cancelled (`NOTHING_TO_REVOKE`) when its gate is open and nothing it undoes ever took effect. `true` when the row moved. */
-    private suspend fun cancelIfNothingDelivered(id: Long): Boolean {
+    /**
+     * D22 for one row under the order lock: cancelled (`NOTHING_TO_REVOKE`) when its gate is open and nothing it undoes ever took effect. `true` when the row moved.
+     * `internal` because `McSyncService` checks every undo row it is about to offer with it, one row at a time (08 section 11.4).
+     */
+    internal suspend fun cancelIfNothingDelivered(id: Long): Boolean {
         val applied = db.txRestartingOnOrderChange { conn ->
             val row = deliveries.getById(id, conn) ?: return@txRestartingOnOrderChange null
 
