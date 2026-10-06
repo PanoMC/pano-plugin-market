@@ -144,7 +144,11 @@ class E2eSession private constructor(val env: E2eEnv) {
     fun drainAndCheck() {
         Await.until(30_000, 250, "queues drained") {
             val queues = admin.get("/api/panel/market/health", log = false).obj().getJsonObject("queues")
-            listOf("deliveriesPending", "webhooksPending", "mailsPending", "deferredEvents").all { (queues?.getInteger(it) ?: 0) == 0 }
+            // `mailsPending` of the health answer counts every PENDING / SENDING row. The instance has a dummy SMTP host (17 section 8.3), so a mail that was
+            // tried and failed stays PENDING under its retry backoff for minutes: that row is as drained as the harness can make it. A mail is therefore
+            // drained once the mail job has claimed it at least once (no PENDING row with `attempts = 0`, no row in SENDING).
+            val mailsUntried = db.count("market_mail_outbox", "(`status` = 'PENDING' AND `attempts` = 0) OR `status` = 'SENDING'")
+            listOf("deliveriesPending", "webhooksPending", "deferredEvents").all { (queues?.getInteger(it) ?: 0) == 0 } && mailsUntried == 0L
         }
         runBlocking { InvariantChecker.assertAll(db.pool) }
 
