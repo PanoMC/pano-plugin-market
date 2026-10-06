@@ -1191,7 +1191,7 @@ class DisputeServiceIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `WIRE-2 a failing hand-over is logged and never undoes the committed chargeback`(): Unit = runBlocking {
+    fun `WIRE-2 a failing hand-over is logged and never undoes the committed chargeback (the job sweep retries it, Wire2IT)`(): Unit = runBlocking {
         val paid = r.place(steve(), listOf(RefundLine(1000)))
 
         ownerHookFails = true

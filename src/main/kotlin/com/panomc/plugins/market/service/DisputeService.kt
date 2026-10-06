@@ -99,8 +99,9 @@ interface DisputeEffects {
 
     /**
      * After the commit of O11 (WIRE-2, 11 section 10 step 4): the buyer's other active subscriptions end at once (`CHARGEBACK`). Not inside the O11 transaction, which holds
-     * the lock of one order only; every subscription is its own transaction under its own order lock (the order of 00 section 8.3). A failure is logged, the block list
-     * still stops the charges.
+     * the lock of one order only; every subscription is its own transaction under its own order lock (the order of 00 section 8.3). A failure is logged and never undoes the
+     * commit; the step is not fire-once: `SubscriptionJob` re-derives it from the committed `CHARGEBACK` orders on every tick, so a hook lost to a JVM stop or a failed one
+     * is made good by the next run (`SubscriptionService.chargebackOwnersPending`).
      */
     suspend fun afterChargeback(order: MarketOrder) = Unit
 
