@@ -58,6 +58,8 @@
     "CREATED_MARKET_CREATOR_CODE": "<b>{username}</b> \"{name}\" yaratıcı kodunu oluşturdu.",
     "UPDATED_MARKET_CREATOR_CODE": "<b>{username}</b> \"{name}\" yaratıcı kodunu güncelledi.",
     "DELETED_MARKET_CREATOR_CODE": "<b>{username}</b> \"{name}\" yaratıcı kodunu sildi.",
+    "CREATED_MARKET_CREATOR_PAYOUT": "<b>{username}</b> \"{name}\" yaratıcı koduna {amount} ödeme yaptı ({method}).",
+    "CANCELLED_MARKET_CREATOR_PAYOUT": "<b>{username}</b> \"{name}\" yaratıcı kodunun {amount} tutarındaki ödemesini iptal etti.",
     "SORTED_MARKET_CATEGORIES": "<b>{username}</b> \"{name}\" market kategorisinin konumunu değiştirdi.",
     "UPDATED_MARKET_SETTINGS": "<b>{username}</b> market ayarlarını güncelledi.",
     "UPDATED_MARKET_PAYMENT_METHOD": "<b>{username}</b> \"{name}\" ödeme yöntemini güncelledi.",
