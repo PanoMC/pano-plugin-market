@@ -573,6 +573,8 @@ class LifecycleE2E {
         lc.awaitOrder(second, "COMPLETED", 150_000)
         // the fake gateway never redelivers by itself and this test sends nothing again. The row was stored with attempts = 1 at step 2 of the crashed run;
         // only claimRetry (InboundEventRetryJob) makes it 2, and the row ends PROCESSED. The attempt was never status-queried: the reconcile job did not help.
+        // the order completes inside the event's run and the row is settled a moment later: wait for it to rest instead of reading it in between
+        runCatching { Await.until(30_000, 250, "the event row is settled") { lc.db.string("SELECT `status` FROM `pano_market_payment_event` WHERE `eventKey` LIKE ?", "%$secondEvent%") == "PROCESSED" } }
         val eventRow = lc.db.sql("SELECT `status`, `attempts` FROM `pano_market_payment_event` WHERE `eventKey` LIKE ?", "%$secondEvent%").single()
 
         assertEquals("PROCESSED", eventRow.getString("status"), "the retry job finished the stored event")
