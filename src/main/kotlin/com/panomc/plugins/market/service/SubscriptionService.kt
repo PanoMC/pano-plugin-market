@@ -1948,7 +1948,10 @@ class SubscriptionService(
                     if (remote) {
                         update(
                             conn, row.id,
-                            linkedMapOf("cancelRequestedAt" to (row.cancelRequestedAt ?: now), "endReason" to if (actor == CancelActor.BUYER) SubscriptionEndReason.BUYER_CANCEL.name else SubscriptionEndReason.ADMIN_CANCEL.name)
+                            // the provisional reason only for a row that is not scheduled yet: an immediate cancel on top of a scheduled one must leave the scheduled
+                            // cancel's reason alone when the gateway call fails (09 section 10.1: nothing else changes; /resume checks it, 09 section 10.2)
+                            linkedMapOf<String, Any?>("cancelRequestedAt" to (row.cancelRequestedAt ?: now)) +
+                                if (!row.cancelAtPeriodEnd) mapOf("endReason" to if (actor == CancelActor.BUYER) SubscriptionEndReason.BUYER_CANCEL.name else SubscriptionEndReason.ADMIN_CANCEL.name) else emptyMap()
                         )
                     }
 
