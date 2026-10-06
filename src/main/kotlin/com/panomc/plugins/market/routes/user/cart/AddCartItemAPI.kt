@@ -24,6 +24,6 @@ class AddCartItemAPI(private val plugin: MarketPlugin) : MarketUserApi() {
         val userId = buyerId(plugin, context)
         val view = cart.addItem(userId, parseStrictLine(getParameters(context).body().jsonObject))
 
-        return Successful(CartJson.render(view))
+        return Successful(CartJson.answer(plugin, userId, view))
     }
 }

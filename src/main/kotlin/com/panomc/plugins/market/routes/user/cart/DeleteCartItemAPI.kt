@@ -31,6 +31,6 @@ class DeleteCartItemAPI(private val plugin: MarketPlugin) : MarketUserApi() {
         val userId = buyerId(plugin, context)
         val view = cart.removeItem(userId, parseId(getParameters(context).pathParameter("itemId").string, "itemId"))
 
-        return Successful(CartJson.render(view))
+        return Successful(CartJson.answer(plugin, userId, view))
     }
 }

@@ -551,6 +551,28 @@ class CheckoutServiceIT : MarketDaoITBase() {
     // ========================================================================================== error codes (04 section 3)
 
     @Test
+    fun `the quote of a server cart names its rows and an empty server cart quotes without failing`(): Unit = runBlocking {
+        val p = fx.product(slug = "vip-rank", name = "VIP Rank", price = 1000, stock = 9)
+        val (alice, caller) = user("Alice")
+
+        val empty = h.service.quote(QuoteInput(items = null), caller, pool)
+
+        assertTrue(empty.lines.isEmpty())
+        assertFalse(empty.canCheckout)
+
+        h.cart.addItem(alice.id, CartLine(p.id, 0, 2, emptyMap(), null))
+
+        val quote = h.service.quote(QuoteInput(items = null), caller, pool)
+        val row = quote.lines.single()
+
+        assertEquals("VIP Rank", row.name)
+        assertEquals("vip-rank", row.slug)
+        assertEquals(2, row.quantity)
+        assertEquals(2000L, row.lineTotal)
+        assertEquals("VIP Rank", quote.toJson().getJsonArray("lines").getJsonObject(0).getString("name"))
+    }
+
+    @Test
     fun `EMPTY_CART for no items and for an empty server cart`(): Unit = runBlocking {
         fx.paymentMethod("fake")
 

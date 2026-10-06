@@ -31,6 +31,6 @@ class GetCartAPI(private val plugin: MarketPlugin) : MarketUserApi() {
         val currency = getParameters(context).queryParameter("currency")?.string?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }
         val view = cart.get(userId, currency)
 
-        return Successful(CartJson.render(view))
+        return Successful(CartJson.answer(plugin, userId, view))
     }
 }

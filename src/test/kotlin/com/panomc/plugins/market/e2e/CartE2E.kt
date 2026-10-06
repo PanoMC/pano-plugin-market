@@ -56,6 +56,7 @@ class CartE2E : E2eTestBase() {
         val read = http.get("/api/market/me/cart").ok()
         assertEquals(1, items(read).size())
         assertEquals(vip.id, quoteLine(read.obj().getJsonObject("quote"), vip.id).getLong("productId"))
+        assertFalse(quoteLine(read.obj().getJsonObject("quote"), vip.id).getString("name").isNullOrBlank(), "the cart quote names its rows")
 
         val removed = http.delete("/api/market/me/cart/items/$itemId").ok()
         assertEquals(0, items(removed).size())

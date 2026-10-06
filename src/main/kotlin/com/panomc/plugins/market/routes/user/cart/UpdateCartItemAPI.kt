@@ -27,6 +27,6 @@ class UpdateCartItemAPI(private val plugin: MarketPlugin) : MarketUserApi() {
         val parameters = getParameters(context)
         val view = cart.updateItem(userId, parseId(parameters.pathParameter("itemId").string, "itemId"), parseItemPatch(parameters.body().jsonObject))
 
-        return Successful(CartJson.render(view))
+        return Successful(CartJson.answer(plugin, userId, view))
     }
 }

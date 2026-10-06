@@ -25,6 +25,6 @@ class MergeCartAPI(private val plugin: MarketPlugin) : MarketUserApi() {
         val request = parseMerge(getParameters(context).body().jsonObject)
         val view = cart.merge(userId, request.lines, request.unreadable)
 
-        return Successful(CartJson.render(view))
+        return Successful(CartJson.answer(plugin, userId, view))
     }
 }
