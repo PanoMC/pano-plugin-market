@@ -196,6 +196,27 @@ class WebhookService(
         return insertRows(conn, targets, WebhookEvents.ORDER_REFUNDED, refundId.toString(), orderId, data, order.testMode)
     }
 
+    /**
+     * `order.chargeback` (O11, [won] false) or `order.chargeback.won` (O12, [won] true) for [orderId] (08 section 15.4): the order, buyer, recipient and lines as of
+     * the commit of the transition plus the [dispute] object `{id, status, amount, currency, reason, gatewayDisputeId}` the dispute service built. The subject key
+     * is the dispute id, so a replayed transition inserts nothing.
+     */
+    suspend fun emitOrderDispute(conn: SqlConnection, orderId: Long, disputeId: Long, won: Boolean, dispute: JsonObject): Int {
+        val event = if (won) WebhookEvents.ORDER_CHARGEBACK_WON else WebhookEvents.ORDER_CHARGEBACK
+        val targets = targets(conn, event)
+        if (targets.isEmpty()) return 0
+
+        val order = orders.getById(orderId, conn) ?: throw IllegalStateException("order $orderId does not exist")
+        val items = orderItems.getByOrderIds(listOf(orderId), conn)
+        val data = EventPayloads.orderPaid(
+            order, items, store(),
+            buyerUuid = uuidOf(order.userId, order.playerUsername),
+            recipientUuid = uuidOf(EventPayloads.recipientUserId(order), EventPayloads.recipientName(order))
+        ).put("dispute", dispute)
+
+        return insertRows(conn, targets, event, disputeId.toString(), orderId, data, order.testMode)
+    }
+
     private suspend fun targets(conn: SqlConnection, event: String): List<MarketWebhookEndpoint> =
         endpoints.getAll(conn).filter { it.enabled && WebhookEvents.matches(it.events, event) }
 

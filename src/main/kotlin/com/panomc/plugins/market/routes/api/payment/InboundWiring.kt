@@ -30,6 +30,7 @@ import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.service.PaymentContexts
+import com.panomc.plugins.market.service.PaymentEventRouter
 import com.panomc.plugins.market.service.SubscriptionEventSink
 import com.panomc.plugins.market.spi.MarketSpi
 import com.panomc.plugins.market.spi.common.ProviderContext
@@ -189,15 +190,17 @@ private fun buildDispatcher(plugin: MarketPlugin): InboundDispatcher {
     ) { providerId -> ProviderStateStoreImpl(ProviderStateKind.PAYMENT, providerId, stateDao, db, wiring.cipher, SystemClock).values() }
 
     return InboundDispatcher(
-        inboundEventStore(plugin), attempts, providers, PaymentEventApplier(attempts) { event, attempt, ctx ->
-            // MK-111: a refund notification is applied by the refund service (21 section 4)
-            if (event is com.panomc.plugins.market.spi.payment.PaymentEvent.RefundUpdated && attempt != null) {
-                com.panomc.plugins.market.routes.panel.refund.refundService(plugin).onRefundUpdated(event, attempt, ctx.eventKey, ctx.requestHash)
-            } else {
-                // MK-121: SubscriptionUpdated is applied by the subscription service, every other non-attempt event goes to the sink a slice installed
-                SubscriptionEventSink(db, { subscriptionService(plugin) }, paymentEventSink).apply(event, attempt, ctx)
-            }
-        },
+        inboundEventStore(plugin), attempts, providers,
+        // MK-111 / MK-112: a refund notification goes to the refund service (21 section 4), a dispute notification to the dispute service (21 section 5); MK-121:
+        // SubscriptionUpdated is applied by the subscription service, every other non-attempt event goes to the sink a slice installed (read on every event)
+        PaymentEventApplier(
+            attempts,
+            PaymentEventRouter(
+                { com.panomc.plugins.market.routes.panel.refund.refundService(plugin) },
+                { com.panomc.plugins.market.routes.panel.dispute.disputeService(plugin) },
+                PaymentEventSink { event, attempt, ctx -> SubscriptionEventSink(db, { subscriptionService(plugin) }, paymentEventSink).apply(event, attempt, ctx) }
+            )
+        ),
         attemptLocks(plugin), SystemClock, SecureIds(), { wiring.site().baseUrl.trimEnd('/') }
     )
 }
