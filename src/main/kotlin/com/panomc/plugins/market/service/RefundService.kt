@@ -946,25 +946,43 @@ class RefundService(
         }
 
         val refundedAfter = order.refundedTotal + booking.amount
+        // A refund whose gateway call was in flight (or `PENDING` at the gateway) when a dispute opened settles on a `CHARGEBACK` order: O11 cancels only the rows nothing
+        // is running for. The money went back all the same, so it is booked against the status O12 will restore (`statusBeforeDispute`), which then follows it; the
+        // order itself stays `CHARGEBACK` (E2E-06 review, 17 section 9.4 R-27: one consistent end).
+        val disputed = order.status == OrderStatus.CHARGEBACK && order.statusBeforeDispute != null
+        val standing = if (disputed) order.statusBeforeDispute!! else order.status
         val decision = OrderStateMachine.decide(
-            OrderState(order.status, order.reservationState, order.expiresAt, false, order.paidAmount, order.statusBeforeDispute, null),
+            OrderState(standing, order.reservationState, order.expiresAt, false, order.paidAmount, order.statusBeforeDispute, null),
             OrderEvent.RefundSucceeded(refundedAfter, order.totalPrice)
         )
         val creditsAfter = order.refundedCreditAmount + booking.creditPart
         val target = when {
             decision is OrderTransition.Move -> decision.to
             // a credits-only order has no money for the machine to count (refundedTotal < 1): its credits say whether it is empty
-            order.status in LIVE_STATES && order.totalPrice == 0L -> if (creditsAfter >= order.creditAmount) OrderStatus.REFUNDED else OrderStatus.PARTIALLY_REFUNDED
-            order.status in LIVE_STATES && refundedAfter > order.totalPrice -> OrderStatus.REFUNDED
+            standing in LIVE_STATES && order.totalPrice == 0L -> if (creditsAfter >= order.creditAmount) OrderStatus.REFUNDED else OrderStatus.PARTIALLY_REFUNDED
+            standing in LIVE_STATES && refundedAfter > order.totalPrice -> OrderStatus.REFUNDED
             else -> null
         }
-        val fully = target == OrderStatus.REFUNDED || order.status == OrderStatus.REFUNDED
+        val fully = target == OrderStatus.REFUNDED || standing == OrderStatus.REFUNDED
 
         // 2. lines
         val lineDeltas = applyLines(conn, order, items, itemRows, effective.amount, fully, now)
 
         // 3. status
-        if (target != null && target != order.status) {
+        if (disputed) {
+            if (target != null && target != standing) {
+                val moved = conn.preparedQuery(
+                    "UPDATE ${table("market_order")} SET `statusBeforeDispute` = ?, `updatedAt` = GREATEST(?, `updatedAt` + 1) WHERE `id` = ? AND `status` = 'CHARGEBACK' AND `statusBeforeDispute` = ?"
+                ).execute(Tuple.of(target.name, now, order.id, standing.name)).coAwait().rowCount()
+
+                if (moved != 1) throw com.panomc.plugins.market.db.tx.OrderChangedException(order.id, "the dispute moved under the lock")
+
+                timeline(
+                    conn, order.id, OrderEventType.NOTE, OrderActorType.SYSTEM, null, "REFUND_DURING_DISPUTE",
+                    JsonObject().put("refundId", refund.id).put("statusBeforeDispute", target.name)
+                )
+            }
+        } else if (target != null && target != order.status) {
             val moved = conn.preparedQuery("UPDATE ${table("market_order")} SET `status` = ?, `updatedAt` = GREATEST(?, `updatedAt` + 1) WHERE `id` = ? AND `status` = ?")
                 .execute(Tuple.of(target.name, now, order.id, order.status.name)).coAwait().rowCount()
 
@@ -1108,7 +1126,8 @@ class RefundService(
                 .execute(Tuple.of(q, a, now, item.id)).coAwait()
         }
 
-        if (!order.testMode) {
+        // a charged-back order's units left the sold count at O11 already (and O12 gives back only what is not refunded): they are not taken twice
+        if (!order.testMode && order.status != OrderStatus.CHARGEBACK) {
             val sold = sortedMapOf<Long, Long>()
 
             for (item in items) {
