@@ -351,7 +351,9 @@ class OrderService(
     /** How the second paying attempt of an accepted review is treated (refund or alert); the default only alerts. */
     private val duplicates: DuplicateRefundPolicy = DuplicateRefundPolicy.ALERT_ONLY,
     /** O3 (MK-142, 12 section 4.1): the "we received your order" mail of a payment that waits for a human, queued in the transition's transaction. */
-    private val receivedMails: ReceivedMails = ReceivedMails.NONE
+    private val receivedMails: ReceivedMails = ReceivedMails.NONE,
+    /** The `shipments[]` of the owner view (04 section 2); without it the member is an empty list. */
+    private val shipmentViews: OrderShipmentViews = OrderShipmentViews.NONE
 ) {
     private fun table(name: String) = "`${orders.prefix()}$name`"
 
@@ -486,7 +488,7 @@ class OrderService(
     /**
      * `OrderView` of 04 section 2 for the owner (the payer, or whoever holds the access token): totals, items, the payment
      * with its stored start, the buyer's own data. [start] is the `PaymentStart` of the newest attempt when it is known.
-     * Shipments, the payment method list of a retry and delivery states arrive with their slices (the keys are present, empty).
+     * The payment method list of a retry and delivery states arrive with their slices (the keys are present, empty); the shipments come from [shipmentViews].
      */
     suspend fun ownerView(order: MarketOrder, sqlClient: SqlClient, start: JsonObject? = null, retry: RetryView? = null): JsonObject {
         val items = orderItems.getByOrderIds(listOf(order.id), sqlClient).filter { it.kind != com.panomc.plugins.market.db.model.OrderItemKind.BUNDLE_CHILD }
@@ -535,7 +537,7 @@ class OrderService(
                 newest?.let { JsonObject().put("methodId", order.paymentMethodId).put("label", order.paymentLabel).put("status", it.status.name).put("start", start) }
             )
             .put("shipping", order.shippingMethodName?.let { JsonObject().put("methodName", it).put("minDays", shippingDays(order, "minDays")).put("maxDays", shippingDays(order, "maxDays")) })
-            .put("shipments", JsonArray())
+            .put("shipments", shipmentViews.forOrder(order.id, sqlClient))
             .put("shippingAddress", order.shippingAddress?.let { parseObject(it) })
             .put("billingInfo", order.billingInfo?.let { parseObject(it) })
             .put("email", order.email)

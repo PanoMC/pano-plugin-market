@@ -32,6 +32,9 @@ import com.panomc.plugins.market.db.dao.MarketRedemptionDao
 import com.panomc.plugins.market.db.dao.MarketMailOutboxDao
 import com.panomc.plugins.market.db.dao.MarketProductVariantDao
 import com.panomc.plugins.market.db.dao.MarketRefundDao
+import com.panomc.plugins.market.db.dao.MarketShipmentDao
+import com.panomc.plugins.market.db.dao.MarketShipmentEventDao
+import com.panomc.plugins.market.db.dao.MarketShipmentItemDao
 import com.panomc.plugins.market.db.dao.MarketSubscriptionDao
 import com.panomc.plugins.market.db.dao.MarketSubscriptionRenewalDao
 import com.panomc.plugins.market.db.dao.MarketWebhookDeliveryDao
@@ -52,6 +55,7 @@ import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.routes.user.cart.cartService
 import com.panomc.plugins.market.routes.panel.block.blockListService
 import com.panomc.plugins.market.service.BlockedBuyerGuard
+import com.panomc.plugins.market.service.BuyerShipmentViews
 import com.panomc.plugins.market.service.CreditEffects
 import com.panomc.plugins.market.service.CreditHoldGuard
 import com.panomc.plugins.market.service.CreditService
@@ -340,7 +344,11 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
         // the duplicates an accepted review finds are judged by the same two questions as a duplicate that arrives on a paid order
         duplicates = DuplicateRefundPolicy { conn, providerId -> payments.duplicateRefundRule(conn, providerId) },
         // MK-142: the "order received" mail of O3
-        receivedMails = orderMails(plugin)
+        receivedMails = orderMails(plugin),
+        // E2E-18: the shipments of the owner view (the tracking link of the order page)
+        shipmentViews = BuyerShipmentViews(
+            context.getBean(MarketShipmentDao::class.java), context.getBean(MarketShipmentItemDao::class.java), context.getBean(MarketShipmentEventDao::class.java)
+        )
     )
 }
 
