@@ -772,6 +772,14 @@ class CheckoutE2E : E2eTestBase() {
             deliveriesOf(orderId, phase).takeIf { rows -> rows.size >= atLeast && rows.all { it.getString("status") == "CONFIRMED" } }
         }
 
+    /** 17 section 8.3: every mail row of the order ends in a terminal state ({SENT, FAILED, SKIPPED}) without help from the scenario. */
+    private fun assertMailsTerminal(orderId: Long) {
+        Await.until(30_000, 250, "every mail row of order $orderId is terminal") {
+            db.sql("SELECT `status` FROM `pano_market_mail_outbox` WHERE `orderId` = ?", orderId).all { it.getString("status") in setOf("SENT", "FAILED", "SKIPPED") }
+        }
+        assertTrue(db.count("market_mail_outbox", "`orderId` = ?", orderId) > 0L, "the order has mail rows")
+    }
+
     private fun mailsOf(orderId: Long, kind: String): List<Row> =
         db.sql("SELECT * FROM `pano_market_mail_outbox` WHERE `orderId` = ? AND `kind` = ? ORDER BY `id`", orderId, kind)
 
@@ -886,7 +894,12 @@ class CheckoutE2E : E2eTestBase() {
             assertEquals("SUCCEEDED", refunded.obj().getJsonObject("refund").getString("status"))
             assertEquals(refundCalls + 1, gateway.requests(FakePayGateway.Op.REFUND).size, "the gateway was asked once")
             assertEquals(refundKey, db.sql("SELECT `idempotencyKey` FROM `pano_market_refund` WHERE `orderId` = ?", orderId).single().getString("idempotencyKey"))
-            assertNotNull(gateway.requests(FakePayGateway.Op.REFUND).last().header("Idempotency-Key"), "the call carries an idempotency key")
+            // the provider call of THIS order's refund (picked by the order's gateway reference) carries the refund's own idempotency key, so a retry cannot refund twice
+            val storedKey = db.sql("SELECT `idempotencyKey` FROM `pano_market_refund` WHERE `orderId` = ?", orderId).single().getString("idempotencyKey")
+            val gatewayPaymentId = gateway.payments.getValue(reference).id
+            val ownCalls = gateway.requests(FakePayGateway.Op.REFUND).filter { JsonObject(it.bodyText()).getString("paymentId") == gatewayPaymentId }
+            assertEquals(1, ownCalls.size, "exactly one provider refund call names this order's gateway payment $gatewayPaymentId")
+            assertEquals(storedKey, ownCalls.single().header("Idempotency-Key"), "the gateway call carries the refund's idempotency key")
             assertEquals("REFUNDED", orderStatus(publicId))
 
             // the undo rows: permission gone, credits taken back (ACTION_REVERSAL), entitlement REVOKED
@@ -904,6 +917,7 @@ class CheckoutE2E : E2eTestBase() {
             verifySignature(refundedHook, storeSecret)
             Await.until(30_000, 250, "the refund mail is queued") { mailsOf(orderId, "ORDER_REFUNDED").isNotEmpty() }
             assertEquals(1, mailsOf(orderId, "ORDER_REFUNDED").size)
+            assertMailsTerminal(orderId)
         } finally {
             admin.delete("/api/panel/market/webhooks/$endpointId")
         }
@@ -948,6 +962,7 @@ class CheckoutE2E : E2eTestBase() {
         // the mail goes to bob
         Await.until(30_000, 250, "the gift mail is queued") { mailsOf(orderId, "GIFT_RECEIVED").isNotEmpty() }
         assertEquals("${bob.username}@example.com", mailsOf(orderId, "GIFT_RECEIVED").single().getString("recipient"))
+        assertMailsTerminal(orderId)
 
         // bob's order list shows it as received, alice's as her own
         val bobs = bob.client.get("/api/market/me/orders").ok().obj().getJsonArray("orders").map { it as JsonObject }.single { it.getString("publicId") == publicId }
@@ -983,15 +998,23 @@ class CheckoutE2E : E2eTestBase() {
         val revenueBefore = gatewayRevenue()
         val creates = gateway.requests(FakePayGateway.Op.CREATE).size
 
-        val answer = checkout(alice.client, cart(line(vip.id)).put("payWithCredits", true), method = null).ok()
-        val publicId = publicIdOf(answer)
+        // stats revenue (17 section 9.2): the panel stats only count paid orders that are NOT test orders, so the credits-only order is placed with the store
+        // out of test mode (nothing needs a gateway: payWithCredits asks none), put back in the finally of withSettings. Its total, weekly and monthly revenue
+        // are read through the panel route before the checkout and after COMPLETED.
+        val statsBefore = stats()
+        val publicId = session.withSettings(JsonObject().put("testMode", false)) {
+            val id = publicIdOf(checkout(alice.client, cart(line(vip.id)).put("payWithCredits", true), method = null).ok())
+
+            awaitOrder(id, "COMPLETED")
+            id
+        }
         val row = orderRow(publicId)
         val orderId = row.getLong("id")
 
+        assertEquals(0L, row.getLong("testMode"), "the order is a live order: the stats do count it")
         assertEquals("credits", row.getString("paymentMethodId"))
         assertEquals(0L, row.getLong("gatewayAmount"), "nothing is asked of the gateway")
         assertEquals(1000L, row.getLong("creditAmount"), "10.00 credits")
-        awaitOrder(publicId, "COMPLETED")
         assertEquals(creates, gateway.requests(FakePayGateway.Op.CREATE).size, "no attempt reached the gateway")
 
         // ledger: the hold, then the capture
@@ -1003,10 +1026,25 @@ class CheckoutE2E : E2eTestBase() {
         Await.until(30_000, 250, "the action credit arrived") { credits(alice.client) >= 92.5 }
         assertEquals(92.5, credits(alice.client), 0.0001)
         assertTrue(holdsNode(alice.userId, node))
-        // revenue = gatewayAmount - refundedGatewayAmount over paid, non-test orders (00 section 6.8): this order adds nothing to it. The panel stats route
-        // still sums totalPrice (MK-171 has not landed), so the route itself is not compared here, see evidence/E2E-02.md
-        assertEquals(0L, orderRow(publicId).getLong("gatewayAmount") - orderRow(publicId).getLong("refundedGatewayAmount"), "the order contributes no revenue")
-        assertEquals(revenueBefore, gatewayRevenue(), "paying with credits moves no store revenue")
+
+        // revenue = gatewayAmount - refundedGatewayAmount of paid, non-test orders (00 section 6.8): credit-paid value is not revenue. The route is the
+        // primary check (the order IS counted as an order, and adds nothing to any revenue figure), the SQL formula the secondary one.
+        val statsAfter = stats()
+        assertEquals(statsBefore.total.getLong("count") + 1, statsAfter.total.getLong("count"), "the live credits-only order is counted by the stats")
+        assertEquals(statsBefore.total.getDouble("revenue"), statsAfter.total.getDouble("revenue"), 0.0001, "paying with credits moves no total revenue")
+        assertEquals(statsBefore.weekly.getDouble("revenue"), statsAfter.weekly.getDouble("revenue"), 0.0001, "nor the weekly revenue")
+        assertEquals(statsBefore.monthly.getDouble("revenue"), statsAfter.monthly.getDouble("revenue"), 0.0001, "nor the monthly revenue")
+        assertEquals(0L, row.getLong("gatewayAmount") - orderRow(publicId).getLong("refundedGatewayAmount"), "the order contributes no revenue")
+        assertEquals(revenueBefore, gatewayRevenue(), "paying with credits moves no store revenue (SQL formula)")
+    }
+
+    private class StatsSummary(val total: JsonObject, val weekly: JsonObject, val monthly: JsonObject)
+
+    /** `GET /api/panel/market/stats`: the three summary blocks (`count`, `revenue`, ...). */
+    private fun stats(): StatsSummary {
+        val summary = admin.get("/api/panel/market/stats").ok().obj().getJsonObject("summary")
+
+        return StatsSummary(summary.getJsonObject("total"), summary.getJsonObject("weekly"), summary.getJsonObject("monthly"))
     }
 
     // --- P-08 ------------------------------------------------------------------------------------------------------------
