@@ -46,6 +46,7 @@ import com.panomc.plugins.market.db.dao.MarketOrderEventDao
 import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.dao.MarketProductFieldDao
+import com.panomc.plugins.market.db.model.CreatorPayoutState
 import com.panomc.plugins.market.db.model.CreditSystemKey
 import com.panomc.plugins.market.db.model.CreditTxType
 import com.panomc.plugins.market.db.model.DeliveryActionType
@@ -726,7 +727,10 @@ class DeliveryService(
         set("updatedAt", now)
 
         // MK-114: a payout row takes the payout lock before it changes, so two rows of one payout never settle it blind to each other
-        if (row.orderId == null && row.sourceType == DeliverySourceType.CREATOR_PAYOUT && row.sourceId != null) payouts.lock(conn, row.sourceId)
+        // and a row of a CANCELLED payout (its money went back) leaves its final state no more: a retry or a late result would run the command again; only the cancel itself passes
+        if (row.orderId == null && row.sourceType == DeliverySourceType.CREATOR_PAYOUT && row.sourceId != null) {
+            if (payouts.lock(conn, row.sourceId) == CreatorPayoutState.CANCELLED && move.to != DeliveryStatus.CANCELLED) return false
+        }
 
         var where = "`id` = ? AND `status` = ?"
         val args = ArrayList<Any?>(values)

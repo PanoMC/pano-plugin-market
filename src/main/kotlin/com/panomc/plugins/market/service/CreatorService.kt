@@ -3,6 +3,7 @@ package com.panomc.plugins.market.service
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.credit.CreditMath
+import com.panomc.plugins.market.core.delivery.DeliveryError
 import com.panomc.plugins.market.core.delivery.DeliveryEvent
 import com.panomc.plugins.market.core.money.Conversions
 import com.panomc.plugins.market.core.money.Rounding
@@ -53,15 +54,22 @@ import java.security.MessageDigest
  * payout changes and [settle] after it did, in the same transaction. [NONE] is a delivery service that has no payouts attached (the delivery tests).
  */
 interface PayoutSettlement {
-    /** Serialises the rows of one payout: the payout row is locked before a row of it changes, so two rows finishing together cannot both miss each other. */
-    suspend fun lock(conn: SqlClient, payoutId: Long)
+    /**
+     * Serialises the rows of one payout: the payout row is locked before a row of it changes, so two rows finishing together cannot both miss each other.
+     * Answers the payout's state under the lock (`null` when there is no such payout): a row of a `CANCELLED` payout must not leave a final state again
+     * (a retry or a late result would run the command for money that was given back), the delivery service refuses every move except the cancel itself.
+     */
+    suspend fun lock(conn: SqlClient, payoutId: Long): CreatorPayoutState?
 
-    /** `PAID` when every effective row is `CONFIRMED`, `FAILED` when none is open and one is `FAILED`; nothing otherwise. */
+    /**
+     * Follows the effective rows of a `PENDING` or `FAILED` payout: any open row => `PENDING` (a `FAILED` payout whose row was retried is open again),
+     * every row `CONFIRMED` => `PAID` (also from `FAILED`: a late result of a row that had failed), none open and one `FAILED` => `FAILED`; nothing otherwise.
+     */
     suspend fun settle(conn: SqlClient, payoutId: Long)
 
     companion object {
         val NONE: PayoutSettlement = object : PayoutSettlement {
-            override suspend fun lock(conn: SqlClient, payoutId: Long) = Unit
+            override suspend fun lock(conn: SqlClient, payoutId: Long): CreatorPayoutState? = null
             override suspend fun settle(conn: SqlClient, payoutId: Long) = Unit
         }
     }
@@ -359,7 +367,12 @@ class CreatorService(
         }
     }
 
-    /** 21 section 7.4: only `PENDING` (an `ACTION` payout whose rows are not settled) or `FAILED`; 409 `INVALID_STATE` otherwise, 404 for an unknown payout. */
+    /**
+     * 21 section 7.4: only `PENDING` (an `ACTION` payout whose rows are not confirmed) or `FAILED`; 409 `INVALID_STATE` otherwise, 404 for an unknown payout.
+     * Refused (409 `INVALID_STATE`) while a command may still run (`DELIVERING`), when one row was confirmed (`PARTIALLY_DELIVERED`: the creator has that part, the whole
+     * amount would be paid again) and when a failed row may have taken effect (`DELIVERING`: `UNKNOWN_OUTCOME`, `ONLINE_WAIT_EXPIRED`, `WEBHOOK_DEAD` end in `CONFIRMED` when
+     * the late result arrives). A cancelled payout's rows cannot move any more ([PayoutSettlement.lock]).
+     */
     suspend fun cancelPayout(payoutId: Long): CreatorPayoutOutcome = db.tx { conn ->
         val first = payouts.getById(payoutId, conn) ?: throw NotFound()
         val code = lockCode(conn, first.creatorCodeId) ?: throw NotFound()
@@ -374,6 +387,12 @@ class CreatorService(
 
         // a row that was sent may still take effect: cancelling the payout would pay the creator twice
         if (rows.any { it.status in IN_FLIGHT }) throw InvalidState(DELIVERING)
+
+        val effective = effectiveRows(rows)
+
+        // a row that took effect (or may have) is money the creator already has: the whole amount must not go back to the balance
+        if (effective.any { it.status == DeliveryStatus.CONFIRMED }) throw InvalidState(PARTIALLY_DELIVERED)
+        if (effective.any { it.status == DeliveryStatus.FAILED && it.lastErrorCode in MAY_HAVE_RUN }) throw InvalidState(DELIVERING)
 
         val now = clock.now()
 
@@ -400,35 +419,43 @@ class CreatorService(
 
     // ===================================================================================================== ACTION payouts follow their rows
 
-    private class PayoutRow(val id: Long, val actionId: String, val serverId: Long, val unitIndex: Int, val attemptGroup: Int, val status: DeliveryStatus)
+    private class PayoutRow(val id: Long, val actionId: String, val serverId: Long, val unitIndex: Int, val attemptGroup: Int, val status: DeliveryStatus, val lastErrorCode: String?)
+
+    /** The effective row of a logical delivery is the one of the highest attempt group, cancelled rows are dropped (08 section 13). */
+    private fun effectiveRows(rows: List<PayoutRow>): List<PayoutRow> =
+        rows.groupBy { Triple(it.actionId, it.serverId, it.unitIndex) }.values.map { group -> group.maxBy { it.attemptGroup } }.filter { it.status != DeliveryStatus.CANCELLED }
 
     private suspend fun payoutRows(c: SqlClient, payoutId: Long): List<PayoutRow> =
         c.preparedQuery(
-            "SELECT `id`, `actionId`, `serverId`, `unitIndex`, `attemptGroup`, `status` FROM ${t("market_delivery")} WHERE `sourceType` = 'CREATOR_PAYOUT' AND `sourceId` = ? ORDER BY `id`"
+            "SELECT `id`, `actionId`, `serverId`, `unitIndex`, `attemptGroup`, `status`, `lastErrorCode` FROM ${t("market_delivery")} WHERE `sourceType` = 'CREATOR_PAYOUT' AND `sourceId` = ? ORDER BY `id`"
         ).execute(Tuple.of(payoutId)).coAwait().map {
-            PayoutRow(it.getLong("id"), it.getString("actionId"), it.getLong("serverId") ?: 0L, it.getInteger("unitIndex") ?: 0, it.getInteger("attemptGroup") ?: 0, DeliveryStatus.valueOf(it.getString("status")))
+            PayoutRow(it.getLong("id"), it.getString("actionId"), it.getLong("serverId") ?: 0L, it.getInteger("unitIndex") ?: 0, it.getInteger("attemptGroup") ?: 0, DeliveryStatus.valueOf(it.getString("status")), it.getString("lastErrorCode"))
         }
 
-    override suspend fun lock(conn: SqlClient, payoutId: Long) {
-        conn.preparedQuery("SELECT `id` FROM ${t("market_creator_payout")} WHERE `id` = ? FOR UPDATE").execute(Tuple.of(payoutId)).coAwait()
-    }
+    override suspend fun lock(conn: SqlClient, payoutId: Long): CreatorPayoutState? =
+        conn.preparedQuery("SELECT `state` FROM ${t("market_creator_payout")} WHERE `id` = ? FOR UPDATE").execute(Tuple.of(payoutId)).coAwait().firstOrNull()
+            ?.getString("state")?.let { CreatorPayoutState.valueOf(it) }
 
     override suspend fun settle(conn: SqlClient, payoutId: Long) {
         val payout = payouts.getById(payoutId, conn) ?: return
 
-        if (payout.method != CreatorPayoutMethod.ACTION || payout.state != CreatorPayoutState.PENDING) return
+        if (payout.method != CreatorPayoutMethod.ACTION || (payout.state != CreatorPayoutState.PENDING && payout.state != CreatorPayoutState.FAILED)) return
 
-        // the effective row of a logical delivery is the one of the highest attempt group, cancelled rows are dropped (08 section 13)
-        val effective = payoutRows(conn, payoutId).groupBy { Triple(it.actionId, it.serverId, it.unitIndex) }.values
-            .map { group -> group.maxBy { it.attemptGroup } }
-            .filter { it.status != DeliveryStatus.CANCELLED }
+        val effective = effectiveRows(payoutRows(conn, payoutId))
 
-        if (effective.isEmpty() || effective.any { it.status != DeliveryStatus.CONFIRMED && it.status != DeliveryStatus.FAILED }) return
+        if (effective.isEmpty()) return
 
         val now = clock.now()
 
-        if (effective.any { it.status == DeliveryStatus.FAILED }) payouts.transition(payoutId, CreatorPayoutState.PENDING, CreatorPayoutState.FAILED, null, null, null, now, conn)
-        else payouts.transition(payoutId, CreatorPayoutState.PENDING, CreatorPayoutState.PAID, null, now, null, now, conn)
+        when {
+            // a failed row that was retried is open again: the payout follows it back
+            effective.any { it.status != DeliveryStatus.CONFIRMED && it.status != DeliveryStatus.FAILED } ->
+                if (payout.state == CreatorPayoutState.FAILED) payouts.transition(payoutId, CreatorPayoutState.FAILED, CreatorPayoutState.PENDING, null, null, null, now, conn)
+
+            effective.all { it.status == DeliveryStatus.CONFIRMED } -> payouts.transition(payoutId, payout.state, CreatorPayoutState.PAID, null, now, null, now, conn)
+
+            payout.state == CreatorPayoutState.PENDING -> payouts.transition(payoutId, CreatorPayoutState.PENDING, CreatorPayoutState.FAILED, null, null, null, now, conn)
+        }
     }
 
     // ===================================================================================================== read models (21 section 7.5, 04 sections 4 and 6)
@@ -620,6 +647,8 @@ class CreatorService(
     companion object {
         const val DAY_MS = 86_400_000L
         const val DELIVERING = "DELIVERING"
+        const val PARTIALLY_DELIVERED = "PARTIALLY_DELIVERED"
+        private val MAY_HAVE_RUN = setOf(DeliveryError.UNKNOWN_OUTCOME, DeliveryError.ONLINE_WAIT_EXPIRED, DeliveryError.WEBHOOK_DEAD)
         private const val MINE_PAYOUTS = 50
         private val IN_FLIGHT = setOf(DeliveryStatus.SENDING, DeliveryStatus.SENT, DeliveryStatus.QUEUED)
         private val TERMINAL = setOf(DeliveryStatus.CONFIRMED, DeliveryStatus.FAILED, DeliveryStatus.CANCELLED)

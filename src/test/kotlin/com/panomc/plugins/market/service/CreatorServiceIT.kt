@@ -83,7 +83,7 @@ class CreatorServiceIT : MarketDaoITBase() {
         }
         // the payout settlement goes both ways: the delivery service tells the creator service, which plans through the delivery service
         val settlement = object : PayoutSettlement {
-            override suspend fun lock(conn: SqlClient, payoutId: Long) = creators.lock(conn, payoutId)
+            override suspend fun lock(conn: SqlClient, payoutId: Long): CreatorPayoutState? = creators.lock(conn, payoutId)
 
             override suspend fun settle(conn: SqlClient, payoutId: Long) = creators.settle(conn, payoutId)
         }
@@ -680,7 +680,7 @@ class CreatorServiceIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `an ACTION payout is FAILED when none of its rows is open and one failed, and cancelling it gives the money back`(): Unit = runBlocking {
+    fun `an ACTION payout is FAILED when none of its rows is open and one failed, and cancelling it (nothing was delivered) gives the money back`(): Unit = runBlocking {
         roster.granted = listOf(7L, 8L)
 
         val streamer = creator()
@@ -691,7 +691,7 @@ class CreatorServiceIT : MarketDaoITBase() {
         assertEquals(CreatorEarningState.PAID, earning(paid.order.id, streamer)!!.state)
 
         send(rows[0])
-        confirm(rows[0])
+        confirm(rows[0], ResultStatus.FAILED, "COMMAND_FAILED")
         send(rows[1])
         confirm(rows[1], ResultStatus.FAILED, "COMMAND_FAILED")
 
@@ -739,6 +739,136 @@ class CreatorServiceIT : MarketDaoITBase() {
 
         expect("INVALID_STATE", 409) { creators.cancelPayout(manual.payout.id) }
         expect("NOT_FOUND", 404) { creators.cancelPayout(987_654) }
+    }
+
+    private suspend fun retry(deliveryId: Long) = w.db.tx { conn -> ds.apply(conn, deliveryId, DeliveryEvent.Retry) }
+
+    private suspend fun payoutState(payoutId: Long) = w.creatorPayouts.getById(payoutId, pool)!!.state
+
+    @Test
+    fun `a FAILED payout follows its row when the admin retries it, so the confirmed retry is PAID and cannot be cancelled and paid again - review, retry`(): Unit = runBlocking {
+        roster.granted = listOf(7L)
+
+        val streamer = creator()
+
+        available(streamer)
+
+        val done = payout(streamer, 400, CreatorPayoutMethod.ACTION, note = null, actions = actionsJson(command("p1", 7)))
+        val row = payoutRows(done.payout.id).single().getLong("id")
+
+        send(row)
+        confirm(row, ResultStatus.FAILED, "COMMAND_FAILED")
+
+        assertEquals(CreatorPayoutState.FAILED, payoutState(done.payout.id))
+
+        val retried = retry(row)
+
+        assertTrue(retried.moved, "COMMAND_ERROR is retryable")
+        assertEquals(CreatorPayoutState.PENDING, payoutState(done.payout.id), "the retried row is open again, the payout follows it")
+
+        send(row)
+        confirm(row)
+
+        val paid = w.creatorPayouts.getById(done.payout.id, pool)!!
+
+        assertEquals(CreatorPayoutState.PAID, paid.state)
+        assertNotNull(paid.paidAt)
+        expect("INVALID_STATE", 409) { creators.cancelPayout(done.payout.id) }
+        assertEquals(400L, codeColumns(streamer).second, "the delivered amount stays paid out")
+    }
+
+    @Test
+    fun `a late DONE after FAILED (ONLINE_WAIT_EXPIRED) settles the FAILED payout as PAID, and until then it cannot be cancelled because the command may have run - review, late result`(): Unit = runBlocking {
+        roster.granted = listOf(7L)
+
+        val streamer = creator()
+
+        available(streamer)
+
+        val done = payout(streamer, 400, CreatorPayoutMethod.ACTION, note = null, actions = actionsJson(command("p1", 7)))
+        val row = payoutRows(done.payout.id).single().getLong("id")
+
+        send(row)
+        confirm(row, ResultStatus.EXPIRED)
+
+        assertEquals(CreatorPayoutState.FAILED, payoutState(done.payout.id))
+        assertEquals("ONLINE_WAIT_EXPIRED", w.deliveries.getById(row, pool)!!.lastErrorCode)
+
+        val refused = expect("INVALID_STATE", 409) { creators.cancelPayout(done.payout.id) }
+
+        assertEquals(DeliveryStatus.FAILED, w.deliveries.getById(row, pool)!!.status)
+        assertEquals(400L, codeColumns(streamer).second, "the money stays reserved ($refused)")
+
+        confirm(row)
+
+        assertEquals(DeliveryStatus.CONFIRMED, w.deliveries.getById(row, pool)!!.status)
+        assertEquals(CreatorPayoutState.PAID, payoutState(done.payout.id))
+        assertNotNull(w.creatorPayouts.getById(done.payout.id, pool)!!.paidAt)
+        expect("INVALID_STATE", 409) { creators.cancelPayout(done.payout.id) }
+        assertEquals(400L, codeColumns(streamer).second)
+    }
+
+    @Test
+    fun `a cancelled payout's failed row cannot be retried or confirmed any more, the cancel itself still passes - review, row of a cancelled payout`(): Unit = runBlocking {
+        roster.granted = listOf(7L)
+
+        val streamer = creator()
+
+        available(streamer)
+
+        val done = payout(streamer, 400, CreatorPayoutMethod.ACTION, note = null, actions = actionsJson(command("p1", 7)))
+        val row = payoutRows(done.payout.id).single().getLong("id")
+
+        send(row)
+        confirm(row, ResultStatus.FAILED, "COMMAND_FAILED")
+
+        assertEquals(CreatorPayoutState.CANCELLED, creators.cancelPayout(done.payout.id).payout.state)
+        assertEquals(0L, codeColumns(streamer).second)
+
+        val retried = retry(row)
+
+        assertFalse(retried.moved, "the money went back: the command must not run for it")
+        assertEquals(DeliveryStatus.FAILED, w.deliveries.getById(row, pool)!!.status)
+        assertEquals(CreatorPayoutState.CANCELLED, payoutState(done.payout.id))
+        assertEquals(0L, codeColumns(streamer).second)
+    }
+
+    @Test
+    fun `a PENDING ACTION payout with a confirmed row cannot be cancelled, the delivered part would be paid again, and a FAILED one with a confirmed row neither - review, partial delivery`(): Unit = runBlocking {
+        roster.granted = listOf(7L, 8L)
+
+        val streamer = creator()
+
+        val paid = available(streamer)
+
+        val done = payout(streamer, 1000, CreatorPayoutMethod.ACTION, note = null, actions = actionsJson(command("p1", 7), command("p2", 8)))
+        val rows = payoutRows(done.payout.id).map { it.getLong("id") }
+
+        send(rows[0])
+        confirm(rows[0])
+
+        assertEquals(CreatorPayoutState.PENDING, payoutState(done.payout.id))
+
+        expect("INVALID_STATE", 409) { creators.cancelPayout(done.payout.id) }
+        assertEquals(1000L, codeColumns(streamer).second, "paidOut unchanged")
+        assertEquals(CreatorPayoutState.PENDING, payoutState(done.payout.id))
+        assertEquals(DeliveryStatus.PENDING, w.deliveries.getById(rows[1], pool)!!.status, "the open row is not cancelled")
+        assertEquals(CreatorEarningState.PAID, earning(paid.order.id, streamer)!!.state, "the earnings stay marked paid")
+
+        // the other row fails: FAILED with one delivered row is refused too
+        send(rows[1])
+        confirm(rows[1], ResultStatus.FAILED, "COMMAND_FAILED")
+
+        assertEquals(CreatorPayoutState.FAILED, payoutState(done.payout.id))
+        expect("INVALID_STATE", 409) { creators.cancelPayout(done.payout.id) }
+        assertEquals(1000L, codeColumns(streamer).second)
+
+        // retrying the failed row and confirming it ends the payout as PAID
+        assertTrue(retry(rows[1]).moved)
+        send(rows[1])
+        confirm(rows[1])
+
+        assertEquals(CreatorPayoutState.PAID, payoutState(done.payout.id))
     }
 
     @Test
