@@ -377,7 +377,9 @@ class PaymentService(
     /** The subscription side of a payment (MK-121, 09 section 2): the plan a start carries, the gateway data of a success, the offer a method change makes. */
     private val subscriptionHooks: PaymentSubscriptions = PaymentSubscriptions.NONE,
     /** The mails of an attempt's transitions (MK-142, 12 section 4.1): bank transfer instructions and "order received", queued in the transition's transaction. */
-    private val mails: PaymentMails = PaymentMails.NONE
+    private val mails: PaymentMails = PaymentMails.NONE,
+    /** The in-game purchase announcement of a paid order (08 section 8.1, 19 section 9): runs after the commit of the transition that stamped the order paid. */
+    private val announcer: PaidOrderAnnouncer = PaidOrderAnnouncer.NONE
 ) : PaymentStarter {
 
     private val paidGuards: List<PaidGuard> = listOf(RecipientLimitGuard(orders, products, entitlements, clock)) + extraPaidGuards
@@ -882,6 +884,8 @@ class PaymentService(
                     }
 
                     is AfterCommit.PanelAlert -> alerts.reviewOpened(item.orderId, item.reason)
+
+                    is AfterCommit.OrderPaid -> announcer.paid(item.orderId, sqlClient)
 
                     is CancelSurplusSubscription -> cancelSurplusSubscription(item, sqlClient)
                 }

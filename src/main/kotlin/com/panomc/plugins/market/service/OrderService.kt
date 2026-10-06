@@ -234,6 +234,9 @@ sealed interface AfterCommit {
 
     /** A panel alert: an order is waiting for a human (`reason` is the `reviewReason` it was opened with). */
     class PanelAlert(val orderId: Long, val reason: String?) : AfterCommit
+
+    /** The order was stamped paid by this transition (O2, and an accepted review): the in-game purchase announcement runs ([PaidOrderAnnouncer], WIRE-3). */
+    class OrderPaid(val orderId: Long) : AfterCommit
 }
 
 /** The answer of [OrderService.transition]: what the state machine decided and what must run after the commit. */
@@ -621,6 +624,8 @@ class OrderService(
 
                 is OrderEffect.StampPaid -> {
                     stampPaid(conn, order, effect)
+
+                    after += AfterCommit.OrderPaid(order.id)
 
                     if (event is OrderEvent.ReviewAccepted) {
                         // every other attempt that brought money is a second payment of a paid order from here on: flagged first, so the order's own attempt can be settled
