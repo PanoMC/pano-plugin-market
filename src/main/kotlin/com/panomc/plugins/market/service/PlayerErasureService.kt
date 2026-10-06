@@ -150,7 +150,11 @@ class PlayerErasureService(
     // ---- 1: orders that never got paid are cancelled through the state machine (O7)
 
     private suspend fun cancelPendingOrders(userId: Long) {
-        val ids = rows(client(), "SELECT `id` FROM ${t("market_order")} WHERE `userId` = ? AND `status` = 'PENDING' ORDER BY `id`", listOf(userId)).map { it.getLong("id") }
+        // the user scope (not `userId` alone): a retry still finds an order whose `userId` the `orders` step has blanked in the meantime
+        val ids = rows(
+            client(), "SELECT `id` FROM ${t("market_order")} WHERE (`userId` = ? OR `buyerKey` = ?) AND `status` = 'PENDING' ORDER BY `id`", listOf(userId, "u:$userId")
+        ).map { it.getLong("id") }
+        var firstError: Throwable? = null
 
         for (id in ids) {
             val after = ArrayList<AfterCommit>()
@@ -175,9 +179,12 @@ class PlayerErasureService(
                 // one order that cannot be cancelled (a provider failure after the commit, a restart limit) does not keep the others from being erased
                 logger.warn("erasure of user {}: order {} could not be cancelled: {}", userId, id, t.toString())
 
-                throw t
+                firstError = firstError ?: t
             }
         }
+
+        // the step is still reported as failed (the marker stays, the housekeeping job tries again), but only after every order had its turn
+        firstError?.let { throw it }
     }
 
     // ---- 2
@@ -296,7 +303,7 @@ class PlayerErasureService(
             ).map { it.getLong("id") }
 
             if (ids.isNotEmpty()) {
-                exec(c, "UPDATE ${t("market_shipment")} SET `toAddress` = '{}' WHERE `id` IN (${ids.joinToString(",") { "?" }})", ids)
+                exec(c, "UPDATE ${t("market_shipment")} SET $BLANK_SHIPMENT WHERE `id` IN (${ids.joinToString(",") { "?" }})", ids)
             }
 
             ids
@@ -407,7 +414,15 @@ class PlayerErasureService(
                 listOf(orderId)
             ).map { it.getLong("id") }
 
-            if (labels.isNotEmpty()) exec(c, "UPDATE ${t("market_shipment")} SET `toAddress` = '{}' WHERE `id` IN (${labels.joinToString(",") { "?" }})", labels.toList())
+            if (labels.isNotEmpty()) exec(c, "UPDATE ${t("market_shipment")} SET $BLANK_SHIPMENT WHERE `id` IN (${labels.joinToString(",") { "?" }})", labels.toList())
+
+            // the e-mail address of a guest order is also in the mail rows and the redemptions that are keyed by the order (the user-keyed steps 10 and 12 never reach them)
+            exec(c, "UPDATE ${t("market_redemption")} SET `email` = NULL WHERE `orderId` = ?", listOf(orderId))
+            exec(
+                c,
+                "UPDATE ${t("market_mail_outbox")} SET `status` = CASE WHEN `status` IN ('PENDING', 'FAILED') THEN 'SKIPPED' ELSE `status` END, `recipient` = CONCAT('erased-', `id`), `params` = '{}' WHERE `orderId` = ?",
+                listOf(orderId)
+            )
 
             webhookDeliveries(c, scope)
 
@@ -430,6 +445,12 @@ class PlayerErasureService(
         const val REASON_ACCOUNT_DELETED = "ACCOUNT_DELETED"
 
         const val MARKER_PREFIX = "erasure-pending:"
+
+        /**
+         * `SET` clause of a finished shipment whose address was blanked: the pointers to the label files go with the address (the files are deleted), so a
+         * handled row no longer matches the selection `toAddress <> '{}' OR labelFile IS NOT NULL` and the deferred job terminates.
+         */
+        const val BLANK_SHIPMENT = "`toAddress` = '{}', `labelFile` = NULL, `labelFormat` = NULL, `documents` = NULL"
 
         fun markerName(userId: Long) = "$MARKER_PREFIX$userId"
     }

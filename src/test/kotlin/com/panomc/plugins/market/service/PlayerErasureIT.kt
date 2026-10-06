@@ -59,7 +59,9 @@ internal class PlayerErasureIT : RenewalITBase() {
         val unshipped: MarketOrder,
         val shippedShipment: Long,
         val unshippedShipment: Long,
-        val invoiceBefore: String
+        val invoiceBefore: String,
+        val caller: QuoteCaller,
+        val product: MarketProduct
     ) {
         val paid get() = listOf(subscriptionOrder.id, shipped.id, unshipped.id)
         val all get() = listOf(subscriptionOrder.id, pending.id, shipped.id, unshipped.id)
@@ -146,6 +148,10 @@ internal class PlayerErasureIT : RenewalITBase() {
         raw("market_mail_outbox", "kind" to "ORDER_CONFIRMATION", "refType" to "ORDER", "refId" to shipped.id, "orderId" to shipped.id, "userId" to user.id, "recipient" to "${name.lowercase()}@example.com", "locale" to "tr", "params" to "{\"a\":1}", "status" to "PENDING")
         raw("market_mail_outbox", "kind" to "ORDER_PAID", "refType" to "ORDER", "refId" to shipped.id, "orderId" to shipped.id, "userId" to user.id, "recipient" to "${name.lowercase()}@example.com", "locale" to "tr", "params" to "{\"a\":2}", "status" to "SENT")
 
+        // the same kinds of rows on another order of the same user: the order-level anonymise action must not touch them
+        raw("market_mail_outbox", "kind" to "ORDER_CONFIRMATION", "refType" to "ORDER", "refId" to unshipped.id, "orderId" to unshipped.id, "userId" to user.id, "recipient" to "${name.lowercase()}@example.com", "locale" to "tr", "params" to "{\"a\":3}", "status" to "PENDING")
+        raw("market_redemption", "kind" to "COUPON", "refId" to 9_998, "orderId" to unshipped.id, "userId" to user.id, "buyerKey" to "u:${user.id}", "email" to "erin@example.com", "currency" to "EUR", "state" to "RELEASED")
+
         // provider state, blocks, throttle
         raw("market_provider_state", "kind" to "CUSTOMER", "providerId" to "fake", "stateKey" to "user:${user.id}:customer", "value" to "cus_1")
         raw("market_provider_state", "kind" to "CUSTOMER", "providerId" to "fake", "stateKey" to "user:${user.id}9:customer", "value" to "cus_other")
@@ -160,7 +166,7 @@ internal class PlayerErasureIT : RenewalITBase() {
 
         val invoice = invoiceDump()
 
-        return Seed(user, subscriptionOrder, active.sub.id, order(pending.id), order(shipped.id), order(unshipped.id), shippedShipment, unshippedShipment, invoice)
+        return Seed(user, subscriptionOrder, active.sub.id, order(pending.id), order(shipped.id), order(unshipped.id), shippedShipment, unshippedShipment, invoice, caller, product)
     }
 
     private suspend fun invoiceDump(): String = sql("SELECT * FROM `pano_market_invoice` ORDER BY `id`").joinToString("|") { row -> (0 until row.size()).joinToString(",") { "${row.getValue(it)}" } }
@@ -260,7 +266,7 @@ internal class PlayerErasureIT : RenewalITBase() {
         assertEquals("u:${s.user.id}", entitlement.getString("ownerKey"))
 
         // 12: mail
-        assertEquals("SKIPPED", sql("SELECT `status` FROM `pano_market_mail_outbox` WHERE `params` = '{}' AND `kind` = 'ORDER_CONFIRMATION'").single().getString("status"))
+        assertEquals("SKIPPED", sql("SELECT `status` FROM `pano_market_mail_outbox` WHERE `params` = '{}' AND `kind` = 'ORDER_CONFIRMATION' AND `orderId` = ?", s.shipped.id).single().getString("status"))
         assertEquals("SENT", sql("SELECT `status` FROM `pano_market_mail_outbox` WHERE `kind` = 'ORDER_PAID' AND `orderId` = ?", s.shipped.id).single().getString("status"))
         assertEquals(2L, count("market_mail_outbox", "`recipient` = '' AND `params` = '{}' AND `orderId` = ?", s.shipped.id))
         assertEquals(0L, count("market_mail_outbox", "`userId` = ? AND `recipient` <> ''", s.user.id))
@@ -429,9 +435,79 @@ internal class PlayerErasureIT : RenewalITBase() {
             assertEquals("{}", one("market_shipment", s.unshippedShipment, "toAddress"))
             assertFalse(Files.exists(label), "the label file of that shipment is deleted")
             assertTrue(Files.exists(other), "the file of another shipment is not")
+            assertNull(one("market_shipment", s.unshippedShipment, "labelFile"), "the pointer goes with the file")
+            assertNull(one("market_shipment", s.unshippedShipment, "labelFormat"))
+            assertNull(one("market_shipment", s.unshippedShipment, "documents"))
+
+            // the handled shipment no longer matches: a second run has nothing left to do
+            assertEquals(0, job.run(HousekeepingJob.Task.ERASURE))
         } finally {
             directory.toFile().deleteRecursively()
         }
+    }
+
+    @Test
+    fun `19_11 case 4b the job blanks more erased shipments than one batch`(): Unit = runBlocking {
+        val bystander = seed("Bob")
+        val s = seed()
+        val bulk = HousekeepingJob.BATCH + 50
+        val service = service()
+        val job = HousekeepingJob(w.clock, { "pano_" }, { w.pool }, null, null, service, null)
+
+        // the order is erased while its shipments are still on their way, then they are all delivered: only the job can blank them
+        service.erase(s.user.id)
+        sql(
+            "INSERT INTO `pano_market_shipment` (`orderId`, `providerId`, `status`, `merchantReference`, `toAddress`, `fromAddress`, `labelFile`, `labelFormat`, `documents`, `createdAt`, `updatedAt`) " +
+                "SELECT ?, 'manual', 'DELIVERED', CONCAT('BULK-', seq), ?, '{}', CONCAT('bulk-', seq, '.pdf'), 'PDF', '[]', 0, 0 FROM seq_1_to_$bulk",
+            s.unshipped.id, address
+        )
+
+        assertTrue(job.run(HousekeepingJob.Task.ERASURE) >= bulk)
+        assertEquals(
+            0L, count("market_shipment", "`orderId` IN (${s.all.joinToString(",")}) AND `status` = 'DELIVERED' AND (`toAddress` <> '{}' OR `labelFile` IS NOT NULL OR `documents` IS NOT NULL)"),
+            "every shipment of the erased orders was handled, not only the first batch"
+        )
+        assertEquals(address, one("market_shipment", bystander.shippedShipment, "toAddress"), "a shipment of an order that was not erased keeps its address")
+        assertEquals("7-0.pdf", one("market_shipment", bystander.shippedShipment, "labelFile"))
+        assertEquals(address, one("market_shipment", s.unshippedShipment, "toAddress"), "a shipment that is still on its way keeps its address")
+        assertEquals(0, job.run(HousekeepingJob.Task.ERASURE))
+    }
+
+    // ------------------------------------------------------------------------------------------------------ cancel step
+
+    @Test
+    fun `19_11 case 6 a pending order that fails to cancel does not keep the later ones from being cancelled and the retry finds it again`(): Unit = runBlocking {
+        val s = seed()
+        val second = plain(s.product, s.caller)
+
+        assertTrue(second.id > s.pending.id)
+
+        // the first pending order cannot be cancelled once (a real failing statement of the transition), the second one can
+        sql(
+            "CREATE TRIGGER `pano_fail_cancel` BEFORE UPDATE ON `pano_market_order` FOR EACH ROW " +
+                "BEGIN IF NEW.`id` = ${s.pending.id} AND NEW.`status` = 'CANCELLED' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'boom'; END IF; END"
+        )
+
+        val report = try {
+            service().erase(s.user.id)
+        } finally {
+            sql("DROP TRIGGER `pano_fail_cancel`")
+        }
+
+        assertEquals(listOf("cancel-orders"), report.failed)
+        assertEquals(OrderStatus.CANCELLED, order(second.id).status, "the later order was cancelled in the same run")
+        assertEquals(OrderStatus.PENDING, order(s.pending.id).status)
+        assertNull(one("market_order", s.pending.id, "email"), "the other steps ran")
+        assertNull(one("market_order", s.pending.id, "userId"), "the orders step blanked the user id of the order that is still pending")
+        assertEquals(1L, count("market_sequence", "`name` = ?", PlayerErasureService.markerName(s.user.id)))
+
+        // the retry selects by the buyer key as well, so it still finds the order, cancels it and removes the marker
+        val job = HousekeepingJob(w.clock, { "pano_" }, { w.pool }, null, null, service(), null)
+
+        job.run(HousekeepingJob.Task.ERASURE)
+
+        assertEquals(OrderStatus.CANCELLED, order(s.pending.id).status, "the housekeeping re-run cancelled the first order")
+        assertEquals(0L, count("market_sequence", "`name` LIKE 'erasure-pending:%'"))
     }
 
     // ------------------------------------------------------------------------------------------------------ 19.11 case 5
@@ -484,11 +560,21 @@ internal class PlayerErasureIT : RenewalITBase() {
         assertEquals(s.shipped.totalPrice, row.getLong("totalPrice"))
         assertEquals(OrderStatus.COMPLETED.name, row.getString("status"))
         assertEquals("{}", one("market_shipment", s.shippedShipment, "toAddress"))
+        assertNull(one("market_shipment", s.shippedShipment, "labelFile"), "the label pointer goes with the address")
         assertEquals(1, events(s.shipped.id, OrderEventType.PII_ERASED).size)
+
+        // the mail rows and the redemption that are keyed by the order lose the e-mail address too (a guest order has no user id to find them by)
+        assertEquals(0L, count("market_mail_outbox", "`orderId` = ? AND (`recipient` LIKE '%@%' OR `params` <> '{}')", s.shipped.id))
+        assertEquals("SKIPPED", sql("SELECT `status` FROM `pano_market_mail_outbox` WHERE `kind` = 'ORDER_CONFIRMATION' AND `orderId` = ?", s.shipped.id).single().getString("status"))
+        assertEquals("SENT", sql("SELECT `status` FROM `pano_market_mail_outbox` WHERE `kind` = 'ORDER_PAID' AND `orderId` = ?", s.shipped.id).single().getString("status"))
+        assertNull(sql("SELECT `email` FROM `pano_market_redemption` WHERE `refId` = 9999 AND `orderId` = ?", s.shipped.id).single().getValue("email"))
 
         // another order of the same user is untouched
         assertNotNull(one("market_order", s.unshipped.id, "email"))
         assertEquals(s.user.id, one("market_order", s.unshipped.id, "userId"))
+        assertEquals("erin@example.com", sql("SELECT `recipient` FROM `pano_market_mail_outbox` WHERE `orderId` = ?", s.unshipped.id).single().getString("recipient"))
+        assertEquals("PENDING", sql("SELECT `status` FROM `pano_market_mail_outbox` WHERE `orderId` = ?", s.unshipped.id).single().getString("status"))
+        assertEquals("erin@example.com", sql("SELECT `email` FROM `pano_market_redemption` WHERE `orderId` = ?", s.unshipped.id).single().getString("email"))
 
         assertFalse(service.anonymizeOrder(s.shipped.id), "the second call changes nothing")
         assertEquals(1, events(s.shipped.id, OrderEventType.PII_ERASED).size)

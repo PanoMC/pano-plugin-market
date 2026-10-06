@@ -169,16 +169,21 @@ class HousekeepingJob(
                 "(o.`shippingStatus` IN ('NOT_REQUIRED', 'DELIVERED', 'RETURNED') OR o.`status` IN ('REFUNDED', 'CANCELLED', 'EXPIRED', 'FAILED'))"
         )
 
-        val shipments = client().preparedQuery(
-            "SELECT s.`id` FROM ${t("market_shipment")} s JOIN ${t("market_order")} o ON o.`id` = s.`orderId` WHERE s.`status` IN ('DELIVERED', 'RETURNED', 'CANCELLED', 'LOST') " +
-                "AND (s.`toAddress` <> '{}' OR s.`labelFile` IS NOT NULL) AND ${erased.format("o")} ORDER BY s.`id` LIMIT $BATCH"
-        ).execute().coAwait().map { it.getLong("id") }
+        // a handled shipment loses its label pointers with the address (BLANK_SHIPMENT), so it no longer matches and the loop ends when the rest is below one batch
+        for (batch in 1..MAX_BATCHES) {
+            val shipments = client().preparedQuery(
+                "SELECT s.`id` FROM ${t("market_shipment")} s JOIN ${t("market_order")} o ON o.`id` = s.`orderId` WHERE s.`status` IN ('DELIVERED', 'RETURNED', 'CANCELLED', 'LOST') " +
+                    "AND (s.`toAddress` <> '{}' OR s.`labelFile` IS NOT NULL) AND ${erased.format("o")} ORDER BY s.`id` LIMIT $BATCH"
+            ).execute().coAwait().map { it.getLong("id") }
 
-        if (shipments.isNotEmpty()) {
-            changed += client().preparedQuery("UPDATE ${t("market_shipment")} SET `toAddress` = '{}' WHERE `id` IN (${shipments.joinToString(",") { "?" }})")
+            if (shipments.isEmpty()) break
+
+            changed += client().preparedQuery("UPDATE ${t("market_shipment")} SET ${PlayerErasureService.BLANK_SHIPMENT} WHERE `id` IN (${shipments.joinToString(",") { "?" }})")
                 .execute(Tuple.from(shipments)).coAwait().rowCount()
 
             erasure?.deleteLabels(shipments)
+
+            if (shipments.size < BATCH) break
         }
 
         changed += batched(
