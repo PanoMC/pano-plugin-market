@@ -79,6 +79,8 @@ class RefundServiceIT : MarketDaoITBase() {
 
     private suspend fun revokeRows(orderId: Long) = r.d.rows(orderId).filter { it.phase == DeliveryPhase.REVOKE }
 
+    private suspend fun pricePaid(orderItemId: Long): Long = w.entitlements.getByOrderItemId(orderItemId, pool).single().pricePaid
+
     private suspend fun ledger(type: CreditTxType) = w.creditTxs.getByUserId(w.users.idOf("Steve")!!, 100, pool).filter { it.type == type }
 
     // ===== RF-01 partial refunds by amount ========================================================================================
@@ -178,11 +180,13 @@ class RefundServiceIT : MarketDaoITBase() {
 
         // an amount-only refund of 30 over a 60 / 40 order spreads 18 / 12 (RD-D8)
         val other = r.place(u, listOf(RefundLine(600), RefundLine(400)))
+        val paidBefore = other.items.sortedBy { it.id }.map { pricePaid(it.id) }
 
         service.request(other.order.id, RefundInput(amount = 300), r.key(), null)
 
         assertEquals(listOf(180L, 120L), r.items(other.order.id).sortedBy { it.id }.map { it.refundedAmount })
         assertEquals(listOf(0, 0), r.items(other.order.id).sortedBy { it.id }.map { it.refundedQuantity }, "quantities move only when the order is empty")
+        assertEquals(listOf(180L, 120L), paidBefore.zip(other.items.sortedBy { it.id }.map { pricePaid(it.id) }) { before, after -> before - after }, "each entitlement lost its refunded share")
     }
 
     // ===== RF-03 mixed refund, preview equals the row =========================================================================
@@ -1010,15 +1014,19 @@ class RefundServiceIT : MarketDaoITBase() {
 
     // ===== tier upgrade (21 section 5.4, RD-D11) =================================================================================
 
-    private suspend fun upgradeChain(): Triple<PaidOrder, PaidOrder, TestUser> {
+    /**
+     * A tier-1 order [low] upgraded by a tier-2 order [high]: the tier-1 entitlement is `UPGRADED` and points to the tier-2 one, whose `pricePaid` is [successorPaid]
+     * (base currency: what the upgrade paid plus the value of the tier it replaced, 05 section 5.2). [low] can be an order in another currency.
+     */
+    private suspend fun upgradeChain(lowCurrency: String = "EUR", lowFx: java.math.BigDecimal = java.math.BigDecimal.ONE, successorPaid: Long = 2500): Triple<PaidOrder, PaidOrder, TestUser> {
         val u = steve()
-        val low = r.place(u, listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+        val low = r.place(u, listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))), currency = lowCurrency, fxRate = lowFx)
         val high = r.place(u, listOf(RefundLine(1500, actions = listOf(permission("b1", "group.vip2")))))
         val e1 = w.entitlements.getByOrderItemId(low.items[0].id, pool).single()
         val e2 = w.entitlements.getByOrderItemId(high.items[0].id, pool).single()
 
         MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_entitlement` SET `status` = 'UPGRADED', `replacedById` = ?, `endReason` = 'UPGRADE', `endedAt` = ? WHERE `id` = ?", e2.id, w.clock.now(), e1.id)
-        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_entitlement` SET `pricePaid` = 2500 WHERE `id` = ?", e2.id)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_entitlement` SET `pricePaid` = ? WHERE `id` = ?", successorPaid, e2.id)
 
         return Triple(low, high, u)
     }
@@ -1058,6 +1066,307 @@ class RefundServiceIT : MarketDaoITBase() {
         assertTrue(revokeRows(high.order.id).isNotEmpty())
         assertEquals(OrderStatus.COMPLETED, r.order(high.order.id).status, "no money moves on the successor order")
         assertTrue(w.orderEvents.getByOrderId(high.order.id, pool).any { it.message == "UPGRADE_CASCADE_REVOKED" })
+    }
+
+    @Test
+    fun `a partial refund of the lower tier takes its value off the live successor along the chain, the last refund adds up to the whole line (RD-D11)`(): Unit = runBlocking {
+        val (low, high, _) = upgradeChain()
+        val e1 = w.entitlements.getByOrderItemId(low.items[0].id, pool).single()
+        val successor = high.items[0].id
+
+        assertEquals(2500, pricePaid(successor))
+
+        // 4.00 of the 10.00 tier 1: no cascade decision (the tier is not gone), the successor loses 4.00, so does the dead tier-1 row
+        service.request(low.order.id, RefundInput(amount = 400), r.key(), null)
+
+        assertEquals(2100, pricePaid(successor), "a later upgrade must not credit refunded money")
+        assertEquals(e1.pricePaid - 400, w.entitlements.getById(e1.id, pool)!!.pricePaid)
+        assertEquals(EntitlementStatus.UPGRADED, w.entitlements.getById(e1.id, pool)!!.status)
+
+        // the rest, without cascade: only this refund's 6.00 come off, together with the first one that is the whole line
+        service.request(low.order.id, RefundInput(cascadeUpgrade = false), r.key(), null)
+
+        assertEquals(1500, pricePaid(successor))
+        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(successor, pool).single().status)
+        assertEquals(0, revokeRows(high.order.id).size)
+    }
+
+    @Test
+    fun `a cascade ends the successor and does not touch its pricePaid`(): Unit = runBlocking {
+        val (low, high, _) = upgradeChain()
+
+        service.request(low.order.id, RefundInput(cascadeUpgrade = true), r.key(), null)
+
+        val e2 = w.entitlements.getByOrderItemId(high.items[0].id, pool).single()
+
+        assertEquals(EntitlementStatus.REVOKED, e2.status)
+        assertEquals(2500, e2.pricePaid, "an ended successor is not reduced")
+    }
+
+    @Test
+    fun `pricePaid is in the base currency, a refund in another currency takes off the converted value`(): Unit = runBlocking {
+        // 10.00 USD at 2 USD per EUR is 5.00 EUR of tier 1; the successor holds 5.00 + 15.00
+        val (low, high, _) = upgradeChain(lowCurrency = "USD", lowFx = java.math.BigDecimal("2"), successorPaid = 2000)
+        val own = low.items[0].id
+
+        assertEquals(500, pricePaid(own))
+
+        // 4.00 USD are 2.00 EUR
+        service.request(low.order.id, RefundInput(amount = 400), r.key(), null)
+
+        assertEquals(300, pricePaid(own))
+        assertEquals(1800, pricePaid(high.items[0].id))
+
+        // the last 6.00 USD are 3.00 EUR: the successor keeps 15.00, what the upgrade itself paid
+        service.request(low.order.id, RefundInput(cascadeUpgrade = false), r.key(), null)
+
+        assertEquals(0, pricePaid(own))
+        assertEquals(1500, pricePaid(high.items[0].id))
+    }
+
+    // ===== revokeFirst keeps the rules of the refund (21 sections 3.5, 5.4) ====================================================================
+
+    /** A `revokeFirst` refund of the upgraded tier 1 with [cascade]: held until the undo is confirmed, then released; returns the successor's order and entitlement. */
+    private suspend fun revokeFirstUpgraded(cascade: Boolean): Pair<PaidOrder, com.panomc.plugins.market.db.model.MarketEntitlement> {
+        val (low, high, _) = upgradeChain()
+        val held = service.request(low.order.id, RefundInput(revokeFirst = true, cascadeUpgrade = cascade), r.key(), null).refund
+
+        assertEquals(RefundStatus.REQUESTED, held.status)
+        assertEquals(0, r.fake.calls(Op.REFUND).size, "nothing is sent before the goods are back")
+
+        // tx1 took the line back: UPGRADED became REVOKED, the link to the successor stays
+        val e1 = w.entitlements.getByOrderItemId(low.items[0].id, pool).single()
+        val successor = w.entitlements.getByOrderItemId(high.items[0].id, pool).single()
+
+        assertEquals(EntitlementStatus.REVOKED, e1.status)
+        assertEquals(successor.id, e1.replacedById)
+        assertEquals(EntitlementStatus.ACTIVE, successor.status, "the successor is untouched while the money has not left")
+
+        r.d.runInline()
+        w.clock.advance(61_000)
+
+        assertEquals(1, r.job.run().released)
+        assertEquals(RefundStatus.SUCCEEDED, r.refund(held.id).status)
+
+        return high to w.entitlements.getByOrderItemId(high.items[0].id, pool).single()
+    }
+
+    @Test
+    fun `revokeFirst on an upgraded tier with cascade ends the successor after the release (RD-D11)`(): Unit = runBlocking {
+        val (high, e2) = revokeFirstUpgraded(cascade = true)
+
+        assertEquals(EntitlementStatus.REVOKED, e2.status, "the successor ends as a refund ends it")
+        assertEquals("REFUND", e2.endReason)
+        assertTrue(revokeRows(high.order.id).isNotEmpty())
+        assertTrue(w.orderEvents.getByOrderId(high.order.id, pool).any { it.message == "UPGRADE_CASCADE_REVOKED" })
+    }
+
+    @Test
+    fun `revokeFirst on an upgraded tier without cascade reduces the pricePaid of the successor after the release (RD-D11)`(): Unit = runBlocking {
+        val (high, e2) = revokeFirstUpgraded(cascade = false)
+
+        assertEquals(EntitlementStatus.ACTIVE, e2.status)
+        assertEquals(1500, e2.pricePaid, "a later upgrade credits only what is still paid")
+        assertEquals(0, revokeRows(high.order.id).size)
+    }
+
+    @Test
+    fun `a revokeFirst refund that timed out leaves the upgrade dependant to the next refund, which must decide again`(): Unit = runBlocking {
+        val (low, high, _) = upgradeChain()
+        val held = service.request(low.order.id, RefundInput(revokeFirst = true, cascadeUpgrade = false), r.key(), null).refund
+
+        w.clock.advance(24 * 3_600_000L + 1000)
+
+        assertEquals(1, r.job.run().timedOut)
+        assertEquals(RefundStatus.CANCELLED, r.refund(held.id).status)
+        assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(low.items[0].id, pool).single().status, "the undo rows were left as they are")
+
+        // the tier is not UPGRADED any more, but the successor still lives on its value: the next refund must say what happens to it
+        val preview = service.preview(low.order.id, RefundInput())
+
+        assertEquals(high.order.id, preview.warnings.single { it.getString("code") == "UPGRADE_DEPENDENT" }.getLong("successorOrderId"))
+        r.expect("CASCADE_DECISION_REQUIRED", 400) { service.request(low.order.id, RefundInput(), r.key(), null) }
+
+        service.request(low.order.id, RefundInput(cascadeUpgrade = true), r.key(), null)
+
+        assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(high.items[0].id, pool).single().status)
+    }
+
+    // ===== credits-only orders (07 section 7.1, 05 row 53) =========================================================================================
+
+    private suspend fun creditsOnly(): PaidOrder =
+        r.place(steve(), listOf(RefundLine(0, actions = listOf(permission("a1", "group.vip")))), creditValue = 0, credits = 4000)
+
+    @Test
+    fun `a full refund of a credits-only order returns the credits once and empties the order`(): Unit = runBlocking {
+        val paid = creditsOnly()
+
+        assertEquals(0, paid.order.totalPrice)
+        assertEquals(4000, paid.order.creditAmount)
+        assertEquals(0, w.fixtures.creditBalance(steve()))
+
+        val preview = service.preview(paid.order.id, RefundInput())
+
+        assertEquals(RefundSplitParts(0, 0, 0, 4000), RefundSplitParts(preview.split.amount, preview.split.gatewayPart, preview.split.creditValuePart, preview.split.creditPart))
+
+        val done = service.request(paid.order.id, RefundInput(), r.key(), null)
+
+        assertEquals(RefundStatus.SUCCEEDED, done.refund.status)
+        assertEquals(0, r.fake.calls(Op.REFUND).size, "there is no money to send back")
+
+        val order = r.order(paid.order.id)
+
+        assertEquals(OrderStatus.REFUNDED, order.status, "the credits were all there was")
+        assertEquals(4000, order.refundedCreditAmount)
+        assertEquals(4000, w.fixtures.creditBalance(steve()))
+        assertEquals(listOf(4000L), ledger(CreditTxType.REFUND).map { it.amount })
+        assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(paid.items[0].id, pool).single().status, "the buyer does not keep the goods")
+        assertEquals(1, r.items(paid.order.id).single().refundedQuantity)
+        assertEquals(0, w.products.getById(paid.products[0].id, pool)!!.soldCount)
+        assertTrue(revokeRows(paid.order.id).isNotEmpty())
+
+        // nothing is left to refund: a REFUNDED order takes no refund
+        r.expect("INVALID_ORDER_TRANSITION", 400) { service.request(paid.order.id, RefundInput(), r.key(), null) }
+    }
+
+    @Test
+    fun `a partial credit refund of a credits-only order keeps it PARTIALLY_REFUNDED and revokes nothing, with or without revokeFirst`(): Unit = runBlocking {
+        val paid = creditsOnly()
+        val first = service.request(paid.order.id, RefundInput(creditAmount = 1500), r.key(), null)
+
+        assertEquals(RefundStatus.SUCCEEDED, first.refund.status)
+        assertEquals(OrderStatus.PARTIALLY_REFUNDED, r.order(paid.order.id).status)
+        assertEquals(1500, r.order(paid.order.id).refundedCreditAmount)
+        assertEquals(1500, w.fixtures.creditBalance(steve()))
+        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(paid.items[0].id, pool).single().status)
+        assertEquals(0, revokeRows(paid.order.id).size, "a partial refund takes nothing back")
+        assertEquals(0, r.items(paid.order.id).single().refundedQuantity)
+
+        // revokeFirst does not turn a partial credit refund into a full one: nothing is revoked in tx1, and the refund settles at the next look
+        val held = service.request(paid.order.id, RefundInput(creditAmount = 1000, revokeFirst = true), r.key(), null).refund
+
+        assertEquals(RefundStatus.REQUESTED, held.status)
+        assertEquals(0, revokeRows(paid.order.id).size)
+        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(paid.items[0].id, pool).single().status)
+
+        w.clock.advance(61_000)
+
+        assertEquals(1, r.job.run().released)
+        assertEquals(RefundStatus.SUCCEEDED, r.refund(held.id).status)
+        assertEquals(OrderStatus.PARTIALLY_REFUNDED, r.order(paid.order.id).status)
+        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(paid.items[0].id, pool).single().status)
+        assertEquals(2500, r.order(paid.order.id).refundedCreditAmount)
+
+        // the rest empties it
+        val rest = service.request(paid.order.id, RefundInput(), r.key(), null)
+
+        assertEquals(RefundStatus.SUCCEEDED, rest.refund.status)
+        assertEquals(1500, rest.refund.creditAmount)
+        assertEquals(OrderStatus.REFUNDED, r.order(paid.order.id).status)
+        assertEquals(4000, r.order(paid.order.id).refundedCreditAmount)
+        assertEquals(4000, w.fixtures.creditBalance(steve()))
+        assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(paid.items[0].id, pool).single().status)
+        assertEquals(3, ledger(CreditTxType.REFUND).size)
+    }
+
+    private data class RefundSplitParts(val amount: Long, val gateway: Long, val creditValue: Long, val credits: Long)
+
+    // ===== revokeFirst holds the call for everything tx1 revoked =================================================================================
+
+    private suspend fun setDelivery(id: Long, status: String) =
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_delivery` SET `status` = ?, `lastErrorCode` = NULL WHERE `id` = ?", status, id)
+
+    @Test
+    fun `revokeFirst holds the gateway call for the children of a bundle line (V-04)`(): Unit = runBlocking {
+        val paid = r.place(
+            steve(),
+            listOf(
+                RefundLine(600, actions = listOf(permission("p1", "group.vip")), children = listOf(RefundChild(listOf(permission("c1", "group.child"))))),
+                RefundLine(400, actions = listOf(permission("o1", "group.other")))
+            )
+        )
+        val bundle = paid.items[0]
+        val child = paid.items.single { it.parentItemId == bundle.id }
+        val held = service.request(paid.order.id, RefundInput(items = listOf(RefundMath.ItemRequest(bundle.id, 1)), revokeFirst = true), r.key(), null).refund
+        val rows = revokeRows(paid.order.id)
+
+        assertEquals(setOf(bundle.id, child.id), rows.map { it.orderItemId }.toSet(), "the revoke of a bundle takes its children with it")
+        assertEquals(OrderStatus.COMPLETED, r.order(paid.order.id).status)
+
+        // the line's own row is done, the child's is not: the gateway still waits
+        setDelivery(rows.single { it.orderItemId == bundle.id }.id, "CONFIRMED")
+        w.clock.advance(61_000)
+
+        assertEquals(0, r.job.run().released)
+        assertEquals(0, r.fake.calls(Op.REFUND).size, "the child's goods are not back yet")
+
+        // the child's row fails (the server is offline): the refund waits and the panel is told which delivery
+        val childRow = rows.single { it.orderItemId == child.id }
+
+        setDelivery(childRow.id, "FAILED")
+        w.clock.advance(61_000)
+
+        assertEquals(0, r.job.run().released)
+        assertEquals(0, r.fake.calls(Op.REFUND).size)
+        assertTrue(r.alerts.any { it.second == "REVOKE_FAILED" && it.third.getLong("deliveryId") == childRow.id })
+        assertEquals(RefundStatus.REQUESTED, r.refund(held.id).status)
+
+        setDelivery(childRow.id, "CONFIRMED")
+        w.clock.advance(61_000)
+
+        assertEquals(1, r.job.run().released)
+        assertEquals(1, r.fake.calls(Op.REFUND).size)
+        assertEquals(RefundStatus.SUCCEEDED, r.refund(held.id).status)
+        assertEquals(OrderStatus.PARTIALLY_REFUNDED, r.order(paid.order.id).status)
+    }
+
+    @Test
+    fun `revokeFirst holds the gateway call for the other lines when the refund empties the order (V-04)`(): Unit = runBlocking {
+        // a free bonus line: refunding the paid line by items takes the whole 10.00, so tx1 takes the bonus line back too
+        val paid = r.place(
+            steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip"))), RefundLine(0, actions = listOf(permission("b1", "group.bonus"))))
+        )
+        val line = paid.items[0]
+        val bonus = paid.items[1]
+        val held = service.request(paid.order.id, RefundInput(items = listOf(RefundMath.ItemRequest(line.id, 1)), revokeFirst = true), r.key(), null).refund
+        val rows = revokeRows(paid.order.id)
+
+        assertEquals(setOf(line.id, bonus.id), rows.map { it.orderItemId }.toSet())
+
+        setDelivery(rows.single { it.orderItemId == line.id }.id, "CONFIRMED")
+        w.clock.advance(61_000)
+
+        assertEquals(0, r.job.run().released)
+        assertEquals(0, r.fake.calls(Op.REFUND).size, "the bonus line is not back yet")
+
+        val bonusRow = rows.single { it.orderItemId == bonus.id }
+
+        setDelivery(bonusRow.id, "FAILED")
+        w.clock.advance(61_000)
+
+        assertEquals(0, r.job.run().released)
+        assertTrue(r.alerts.any { it.second == "REVOKE_FAILED" && it.third.getLong("deliveryId") == bonusRow.id })
+
+        setDelivery(bonusRow.id, "CONFIRMED")
+        w.clock.advance(61_000)
+
+        assertEquals(1, r.job.run().released)
+        assertEquals(1, r.fake.calls(Op.REFUND).size)
+        assertEquals(RefundStatus.SUCCEEDED, r.refund(held.id).status)
+        assertEquals(OrderStatus.REFUNDED, r.order(paid.order.id).status)
+    }
+
+    @Test
+    fun `the preview recommends revokeFirst for a server only a bundle child's action would reach`(): Unit = runBlocking {
+        val server = ProductAction(id = "s1", type = DeliveryActionType.COMMAND, commands = listOf("give {username} diamond 1"), targetServers = listOf(7L))
+        val paid = r.place(steve(), listOf(RefundLine(600, children = listOf(RefundChild(listOf(server)))), RefundLine(400)), grant = false)
+        val input = RefundInput(items = listOf(RefundMath.ItemRequest(paid.items[0].id, 1)))
+
+        assertTrue(service.preview(paid.order.id, input).recommendRevokeFirst)
+
+        w.serverStates.upsertSync(com.panomc.plugins.market.db.model.MarketServerState(serverId = 7, lastSeenAt = w.clock.now(), createdAt = w.clock.now(), updatedAt = w.clock.now()), pool)
+
+        assertFalse(service.preview(paid.order.id, input).recommendRevokeFirst)
     }
 
     // ===== validation =============================================================================================================

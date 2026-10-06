@@ -37,6 +37,7 @@ import com.panomc.plugins.market.db.model.CreditTxType
 import com.panomc.plugins.market.db.model.DeliveryPhase
 import com.panomc.plugins.market.db.model.DeliveryStatus
 import com.panomc.plugins.market.db.model.EntitlementStatus
+import com.panomc.plugins.market.db.model.MarketEntitlement
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.db.model.MarketOrderEvent
 import com.panomc.plugins.market.db.model.MarketOrderItem
@@ -120,11 +121,16 @@ class PaymentServiceRefundGateway(private val payments: PaymentService, private 
     override suspend fun support(providerId: String): RefundSupport? = payments.refundSupportOf(providerId, client())
 
     override suspend fun refund(call: GatewayCall): GatewayAnswer =
-        answer { payments.callRefund(call.order, call.items, call.attempt, call.refund, call.lines, call.full, client()) }
+        answer(asking = false) { payments.callRefund(call.order, call.items, call.attempt, call.refund, call.lines, call.full, client()) }
 
-    override suspend fun query(call: GatewayCall): GatewayAnswer = answer { payments.callQueryRefund(call.order, call.attempt, call.refund, client()) }
+    override suspend fun query(call: GatewayCall): GatewayAnswer = answer(asking = true) { payments.callQueryRefund(call.order, call.attempt, call.refund, client()) }
 
-    private suspend fun answer(block: suspend () -> RefundResult): GatewayAnswer = try {
+    /**
+     * [asking] is `queryRefund`: a question that errors (the gateway is down, the provider plugin is unloaded or being updated) is no answer, so it is
+     * [GatewayAnswer.Unknown] whatever the [ProviderException] says (21 section 3.3 "`Unknown` changes nothing"); only a [RefundResult.Failed] it returns fails a
+     * row. A [ProviderException] of `provider.refund` itself is the provider's refusal (tx2 table: `FAILED`, the admin retries).
+     */
+    private suspend fun answer(asking: Boolean, block: suspend () -> RefundResult): GatewayAnswer = try {
         when (val result = block()) {
             is RefundResult.Succeeded -> GatewayAnswer.Succeeded(result.gatewayRefundId, result.refundedAmount?.amount)
             is RefundResult.Pending -> GatewayAnswer.Pending(result.gatewayRefundId, result.buyerActionUrl)
@@ -134,7 +140,13 @@ class PaymentServiceRefundGateway(private val payments: PaymentService, private 
     } catch (e: PaymentService.RefundCallTimeout) {
         GatewayAnswer.Unknown
     } catch (e: ProviderException) {
-        GatewayAnswer.Failed(e.code.name, (e.adminMessage ?: e.message)?.take(512), e.retryable)
+        if (asking) {
+            LoggerFactory.getLogger(PaymentServiceRefundGateway::class.java).warn("refund query got no answer, the row keeps its state: {}", e.code.name)
+
+            GatewayAnswer.Unknown
+        } else {
+            GatewayAnswer.Failed(e.code.name, (e.adminMessage ?: e.message)?.take(512), e.retryable)
+        }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -332,11 +344,7 @@ class RefundService(
     /** `recommendRevokeFirst` (21 section 3.5): a server a revoke of the refunded lines would have to reach is not ready (never seen, or silent for two minutes). */
     private suspend fun recommendRevokeFirst(conn: SqlClient, plan: Plan, input: RefundInput): Boolean {
         val states = servers ?: return false
-        val refunded = when {
-            plan.itemRows.isNotEmpty() -> plan.itemRows.map { it.itemId }.toSet()
-            plan.becomesFull -> plan.items.map { it.id }.toSet()
-            else -> emptySet()
-        }
+        val refunded = revokeScope(plan.items, plan.itemRows.map { it.itemId }, plan.becomesFull)
         val wanted = HashSet<Long>()
 
         for (item in plan.items.filter { it.id in refunded }) {
@@ -365,6 +373,13 @@ class RefundService(
         refundedTotal = order.refundedTotal, refundedGatewayAmount = order.refundedGatewayAmount, refundedCreditAmount = order.refundedCreditAmount,
         unit = CreditMath.unit(order.currency), anonymised = order.userId == null
     )
+
+    /**
+     * Whether a refund of [amount] money and [creditPart] credits takes the last value of the order. Money decides; an order that has no money (credits only,
+     * `totalPrice = 0`, 05 row 53, the `Split(0, 0, 0, credits)` of MK-090) is empty when its credits are all back, so a partial credit refund of it is not.
+     */
+    private fun emptiesOrder(order: MarketOrder, amount: Long, creditPart: Long): Boolean =
+        order.refundedTotal + amount >= order.totalPrice && (order.totalPrice > 0L || order.refundedCreditAmount + creditPart >= order.creditAmount)
 
     /** A refund whose money is not on the books of the order (see the class comment). */
     private fun moneyOnly(order: MarketOrder, refund: MarketRefund): Boolean =
@@ -406,7 +421,7 @@ class RefundService(
         val revoke = input.revoke ?: config().revokeOnRefund
 
         suspend fun finish(split: RefundSplit.Split, limits: RefundSplit.Limits, warnings: List<RefundSplit.Warning>, notSupported: Boolean): Plan {
-            val full = order.refundedTotal + split.amount >= order.totalPrice
+            val full = emptiesOrder(order, split.amount, split.creditPart)
 
             return Plan(order, items, attempt, split, limits, warnings, itemRows, revoke, full, dependentsOf(conn, order, items, itemRows, full), notSupported)
         }
@@ -425,6 +440,14 @@ class RefundService(
             }
         }
     }
+
+    /**
+     * An entitlement that was upgraded (21 section 5.4): still `UPGRADED`, or `REVOKED` by a refund (`revokeFirst` took the line back before the money, which
+     * turns `UPGRADED` into `REVOKED` and keeps `replacedById`). It is found by its link, not by its status, so the dependant is still there when the refund
+     * succeeds, or when a refund that timed out is made again.
+     */
+    private fun wasUpgraded(e: MarketEntitlement): Boolean =
+        e.replacedById != null && (e.status == EntitlementStatus.UPGRADED || (e.status == EntitlementStatus.REVOKED && e.endReason == END_REASON_REFUND))
 
     /** 21 section 5.4: the refunded lines whose entitlement was upgraded and whose last units go back (an amount-only refund counts when it empties the order). */
     private suspend fun dependentsOf(conn: SqlClient, order: MarketOrder, items: List<MarketOrderItem>, itemRows: List<RefundMath.ItemAmount>, full: Boolean): List<UpgradeDependent> {
@@ -445,7 +468,7 @@ class RefundService(
         val out = ArrayList<UpgradeDependent>()
 
         for ((itemId, deduction) in touched) {
-            val upgraded = entitlements.getByOrderItemId(itemId, conn).firstOrNull { it.status == EntitlementStatus.UPGRADED } ?: continue
+            val upgraded = entitlements.getByOrderItemId(itemId, conn).firstOrNull { wasUpgraded(it) } ?: continue
             val successor = entitlementService.liveSuccessor(conn, upgraded) ?: continue
 
             out += UpgradeDependent(itemId, successor.id, successor.orderId, successor.orderItemId, deduction)
@@ -537,7 +560,7 @@ class RefundService(
                 // 21 section 3.5: the REVOKE rows are planned now, the row waits for them (the reconcile job looks every 60 s)
                 val targets = revokeTargets(plan.items, plan.itemRows.map { MarketRefundItem(orderItemId = it.itemId, quantity = it.quantity, amount = it.amount) }, plan.becomesFull)
 
-                if (targets.isNotEmpty()) entitlementService.revoke(conn, deliveryService, order, plan.items, targets, "REFUND", DeliveryError.ORDER_REVOKED)
+                if (targets.isNotEmpty()) entitlementService.revoke(conn, deliveryService, order, plan.items, targets, END_REASON_REFUND, DeliveryError.ORDER_REVOKED)
 
                 deliveryService.refreshFulfillment(conn, orderId)
                 set(conn, id, linkedMapOf("nextQueryAt" to now + HOLD_RECHECK_MS))
@@ -922,8 +945,11 @@ class RefundService(
             OrderState(order.status, order.reservationState, order.expiresAt, false, order.paidAmount, order.statusBeforeDispute, null),
             OrderEvent.RefundSucceeded(refundedAfter, order.totalPrice)
         )
+        val creditsAfter = order.refundedCreditAmount + booking.creditPart
         val target = when {
             decision is OrderTransition.Move -> decision.to
+            // a credits-only order has no money for the machine to count (refundedTotal < 1): its credits say whether it is empty
+            order.status in LIVE_STATES && order.totalPrice == 0L -> if (creditsAfter >= order.creditAmount) OrderStatus.REFUNDED else OrderStatus.PARTIALLY_REFUNDED
             order.status in LIVE_STATES && refundedAfter > order.totalPrice -> OrderStatus.REFUNDED
             else -> null
         }
@@ -950,9 +976,11 @@ class RefundService(
 
         timeline(conn, order.id, OrderEventType.REFUND_SUCCEEDED, actorOf(refund), refund.initiatedBy, null, refundData(effective))
 
-        // 4. entitlements' price paid and the upgrade dependants (21 section 5.4)
-        reducePricePaid(conn, order, items, lineDeltas.amounts)
-        upgradeDependents(conn, order, items, itemRows, fully, refund)
+        // 4. entitlements' price paid and the upgrade dependants (21 section 5.4): found before the revoke below, found by link in any case
+        val dependents = dependentsOf(conn, order, items, itemRows.map { RefundMath.ItemAmount(it.orderItemId, it.quantity, it.amount) }, fully)
+
+        reducePricePaid(conn, order, items, lineDeltas.amounts, if (refund.cascadeUpgrade == true) dependents.map { it.orderItemId }.toSet() else emptySet())
+        upgradeDependents(conn, order, refund, dependents)
 
         // 5. revoke (08 section 11.2): not when revokeFirst did it before the money went
         var revoked = false
@@ -961,7 +989,7 @@ class RefundService(
             val targets = revokeTargets(items, itemRows, fully)
 
             if (targets.isNotEmpty()) {
-                entitlementService.revoke(conn, deliveryService, order, items, targets, "REFUND", DeliveryError.ORDER_REVOKED)
+                entitlementService.revoke(conn, deliveryService, order, items, targets, END_REASON_REFUND, DeliveryError.ORDER_REVOKED)
 
                 deliveryService.refreshFulfillment(conn, order.id)
 
@@ -1096,8 +1124,13 @@ class RefundService(
         return LineDeltas(clipped, amountsOf)
     }
 
-    /** `pricePaid -= fromOrder(refundedAmount delta / quantity)`, never below 0 (21 section 3.4 step 4). */
-    private suspend fun reducePricePaid(conn: SqlClient, order: MarketOrder, items: List<MarketOrderItem>, amountDeltas: Map<Long, Long>) {
+    /**
+     * `pricePaid -= fromOrder(refundedAmount delta / quantity)`, never below 0 (21 section 3.4 step 4): the amount is in the order currency, `pricePaid` in the
+     * base currency, so one conversion by the order's rate. An entitlement that was upgraded (`replacedById`) is dead and its live successor was partly paid with
+     * this money (05 section 5.2), so the same per-unit delta comes off the successor too ("a partial refund of the lower tier reduces `pricePaid` along the
+     * chain", 21 section 5.4): a later upgrade then credits only what is still paid. Not for a line in [cascaded]: its successor is revoked by this refund.
+     */
+    private suspend fun reducePricePaid(conn: SqlClient, order: MarketOrder, items: List<MarketOrderItem>, amountDeltas: Map<Long, Long>, cascaded: Set<Long>) {
         if (amountDeltas.isEmpty()) return
 
         val c = config()
@@ -1113,33 +1146,48 @@ class RefundService(
             val perUnit = Rounding.ratioQ(BigDecimal.valueOf(delta), order.fxRate.multiply(BigDecimal.valueOf(maxOf(item.quantity, 1).toLong())), conversions.bq)
 
             for (e in entitlements.getByOrderItemId(item.id, conn)) {
-                conn.preparedQuery("UPDATE ${table("market_entitlement")} SET `pricePaid` = GREATEST(`pricePaid` - ?, 0), `updatedAt` = ? WHERE `id` = ?")
-                    .execute(Tuple.of(perUnit, clock.now(), e.id)).coAwait()
+                takeFromPricePaid(conn, e.id, perUnit)
+
+                if (e.replacedById != null && item.id !in cascaded) entitlementService.liveSuccessor(conn, e)?.let { takeFromPricePaid(conn, it.id, perUnit) }
             }
         }
     }
 
+    private suspend fun takeFromPricePaid(conn: SqlClient, entitlementId: Long, amount: Long) {
+        conn.preparedQuery("UPDATE ${table("market_entitlement")} SET `pricePaid` = GREATEST(`pricePaid` - ?, 0), `updatedAt` = ? WHERE `id` = ?")
+            .execute(Tuple.of(amount, clock.now(), entitlementId)).coAwait()
+    }
+
     /**
-     * 21 section 5.4: `cascadeUpgrade = true` ends the live successor of an upgraded line as a refund does (`endReason REFUND`, its `REVOKE` rows); `false` (or a
-     * gateway / system refund that nobody asked) keeps it and reduces its `pricePaid` by the refunded amount, so a later upgrade credits only what is still paid. The
-     * successor's order is not locked (the lock order has no order-to-order step); its rows are written under their own keys.
+     * 21 section 5.4: `cascadeUpgrade = true` ends the live successor of an upgraded line as a refund ends it (`endReason REFUND`, its `REVOKE` rows). Without it
+     * (`false`, or a gateway / system refund that nobody asked) the successor stays and [reducePricePaid] has taken the refunded value off its `pricePaid`
+     * already, so a later upgrade credits only what is still paid. The successor's order is not locked (the lock order has no order-to-order step); its rows are
+     * written under their own keys.
      */
-    private suspend fun upgradeDependents(conn: SqlConnection, order: MarketOrder, items: List<MarketOrderItem>, itemRows: List<MarketRefundItem>, fully: Boolean, refund: MarketRefund) {
-        val rows = itemRows.map { RefundMath.ItemAmount(it.orderItemId, it.quantity, it.amount) }
+    private suspend fun upgradeDependents(conn: SqlConnection, order: MarketOrder, refund: MarketRefund, dependents: List<UpgradeDependent>) {
+        if (refund.cascadeUpgrade != true) return
 
-        for (d in dependentsOf(conn, order, items, rows, fully)) {
-            if (refund.cascadeUpgrade == true) {
-                val successorOrder = orders.getById(d.successorOrderId, conn) ?: continue
-                val successorItems = orderItems.getByOrderIds(listOf(d.successorOrderId), conn)
+        for (d in dependents) {
+            val successorOrder = orders.getById(d.successorOrderId, conn) ?: continue
+            val successorItems = orderItems.getByOrderIds(listOf(d.successorOrderId), conn)
 
-                entitlementService.revoke(conn, deliveryService, successorOrder, successorItems, mapOf(d.successorOrderItemId to null), "REFUND", DeliveryError.ORDER_REVOKED)
-                deliveryService.refreshFulfillment(conn, d.successorOrderId)
-                timeline(conn, d.successorOrderId, OrderEventType.NOTE, OrderActorType.SYSTEM, null, "UPGRADE_CASCADE_REVOKED", JsonObject().put("refundId", refund.id).put("orderId", order.id))
-            } else {
-                conn.preparedQuery("UPDATE ${table("market_entitlement")} SET `pricePaid` = GREATEST(`pricePaid` - ?, 0), `updatedAt` = ? WHERE `id` = ?")
-                    .execute(Tuple.of(d.deduction, clock.now(), d.successorEntitlementId)).coAwait()
-            }
+            entitlementService.revoke(conn, deliveryService, successorOrder, successorItems, mapOf(d.successorOrderItemId to null), END_REASON_REFUND, DeliveryError.ORDER_REVOKED)
+            deliveryService.refreshFulfillment(conn, d.successorOrderId)
+            timeline(conn, d.successorOrderId, OrderEventType.NOTE, OrderActorType.SYSTEM, null, "UPGRADE_CASCADE_REVOKED", JsonObject().put("refundId", refund.id).put("orderId", order.id))
         }
+    }
+
+    /**
+     * The order items a revoke of this refund reaches, the set [revokeTargets] plans rows for: the [named] lines with the children of a bundle line (the revoke of
+     * a bundle takes its children with it, under their own item ids), or every line once the refund [empties] the order. Nothing is named by an amount-only
+     * refund, so a partial one reaches nothing.
+     */
+    private fun revokeScope(items: List<MarketOrderItem>, named: Collection<Long>, empties: Boolean): Set<Long> {
+        if (empties) return items.map { it.id }.toSet()
+
+        val parents = named.toSet()
+
+        return items.filter { it.id in parents || it.parentItemId?.let { p -> p in parents } == true }.map { it.id }.toSet()
     }
 
     /** The units a revoke of this refund covers (08 section 11.2): the refunded range of every named line, or every not-yet-revoked unit of every line once the order is empty. */
@@ -1394,8 +1442,9 @@ class RefundService(
     private class Undo(val state: UndoState, val deliveryId: Long? = null)
 
     /** 21 section 3.5: the effective `REVOKE` / `EXPIRE` rows of the refunded lines: all `CONFIRMED` (or `CANCELLED` as `NOTHING_TO_REVOKE`) is ready, any `FAILED` blocks. */
-    private suspend fun undoState(conn: SqlClient, refund: MarketRefund, items: List<MarketOrderItem>, itemRows: List<MarketRefundItem>): Undo {
-        val itemIds = (if (itemRows.isNotEmpty()) itemRows.map { it.orderItemId } else items.map { it.id }).toSet()
+    private suspend fun undoState(conn: SqlClient, order: MarketOrder, refund: MarketRefund, items: List<MarketOrderItem>, itemRows: List<MarketRefundItem>): Undo {
+        // the rows tx1 planned: the named lines and the children of a bundle line, every line when the refund empties the order (see revokeScope)
+        val itemIds = revokeScope(items, itemRows.map { it.orderItemId }, emptiesOrder(order, refund.amount, refund.creditAmount))
         val rows = deliveries.getByOrderId(refund.orderId, conn).filter { (it.phase == DeliveryPhase.REVOKE || it.phase == DeliveryPhase.EXPIRE) && it.orderItemId in itemIds }
         val effective = rows.groupBy { listOf(it.orderItemId, it.actionId, it.serverId, it.unitIndex, it.phase) }.values.map { group ->
             val live = group.filter { it.status != DeliveryStatus.CANCELLED }
@@ -1423,7 +1472,7 @@ class RefundService(
                 if (row.status != RefundStatus.REQUESTED || !row.revokeFirst || row.queryCount != 0) return@forOrder t
 
                 val now = clock.now()
-                val undo = undoState(conn, row, locked.items, refundItems.getByRefundId(row.id, conn))
+                val undo = undoState(conn, orders.getById(row.orderId, conn) ?: throw OrderChangedExceptionFor(row.orderId), row, locked.items, refundItems.getByRefundId(row.id, conn))
 
                 when {
                     undo.state == UndoState.READY && (row.gatewayAmount == 0L || row.providerId == null) -> move(t, row, RefundEvent.Reported(RefundState.SUCCEEDED))
@@ -1515,6 +1564,9 @@ class RefundService(
         const val SERVER_SILENT_MS = 2L * 60 * 1000
         const val REASON_MIN = 3
         const val REASON_MAX = 255
+
+        /** `endReason` a revoke for a refund writes (also over the `UPGRADE` of an `UPGRADED` row). */
+        private const val END_REASON_REFUND = "REFUND"
 
         private val PAID_STATES = setOf(OrderStatus.COMPLETED, OrderStatus.PARTIALLY_REFUNDED, OrderStatus.REFUNDED, OrderStatus.CHARGEBACK)
         private val LIVE_STATES = setOf(OrderStatus.COMPLETED, OrderStatus.PARTIALLY_REFUNDED)
