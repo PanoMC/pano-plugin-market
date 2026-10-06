@@ -15,6 +15,7 @@ import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.log.RefreshedMarketCurrencyRatesLog
 import com.panomc.plugins.market.log.UpdatedMarketCurrenciesLog
 import com.panomc.plugins.market.permission.MarketNode
+import com.panomc.plugins.market.routes.base.exceptReads
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.service.CurrencyRateService
@@ -66,6 +67,7 @@ class PanelCurrencyRatesAPI(private val plugin: MarketPlugin) : MarketPanelApi()
         ValidationHandlerBuilder.create(schemaRepository)
             .body(Bodies.json(objectSchema().allowAdditionalProperties(true)))
             .build()
+            .exceptReads()
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
         val sqlClient = databaseManager.getSqlClient()

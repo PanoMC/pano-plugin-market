@@ -11,6 +11,7 @@ import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.log.UpdatedMarketLegalTextLog
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.api.checkout.legalTextService
+import com.panomc.plugins.market.routes.base.exceptReads
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.service.LegalTextService
 import io.vertx.core.json.JsonObject
@@ -44,6 +45,7 @@ class PanelLegalTextAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
         ValidationHandlerBuilder.create(schemaRepository)
             .body(Bodies.json(objectSchema().allowAdditionalProperties(true)))
             .build()
+            .exceptReads()
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
         val sqlClient = databaseManager.getSqlClient()
