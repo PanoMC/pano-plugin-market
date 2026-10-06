@@ -92,7 +92,9 @@ private fun buildDisputeService(plugin: MarketPlugin): DisputeService {
         effects = StandardDisputeEffects(
             refundEffects, webhookService(plugin),
             { order -> subscriptionService(plugin).onChargebackOwner(MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock), { after -> paymentService(plugin).runAfterCommit(after) }, order) }
-        ) { conn, order, dispute -> subscriptionService(plugin).onOrderChargeback(conn, order, dispute) }
+        ) { conn, order, dispute -> subscriptionService(plugin).onOrderChargeback(conn, order, dispute) },
+        // MK-172: the dispute alert codes become panel notifications (only with the host registry)
+        alerts = com.panomc.plugins.market.notification.marketAlerts(plugin)
     )
 }
 

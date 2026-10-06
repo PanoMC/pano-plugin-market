@@ -5,18 +5,13 @@ import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.error.PageNotFound
 import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
-import com.panomc.plugins.market.db.dao.MarketOrderDao
-import com.panomc.plugins.market.db.dao.MarketOrderItemDao
-import com.panomc.plugins.market.db.model.MarketOrder
-import com.panomc.plugins.market.db.model.MarketOrderItem
 import com.panomc.plugins.market.permission.FieldGating
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
 import com.panomc.plugins.market.routes.base.parsePagingRequest
 import com.panomc.plugins.market.util.Paging
-import com.panomc.plugins.market.util.MoneyUtil
-import com.panomc.plugins.market.util.OrderStatus
+import io.vertx.core.json.JsonArray
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
 import io.vertx.ext.web.validation.builder.Parameters.optionalParam
@@ -24,86 +19,42 @@ import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
+/**
+ * `GET /api/panel/market/orders` (`P:OV`, 04 section 7, 13 section 5): q `page`, `pageSize`, `status` (csv), `paymentMethodId`, `fulfillmentStatus` (csv),
+ * `shippingStatus` (csv), `from`, `to`, `testMode`, `source` (csv), `search`. The search also matches the `publicId`, the recipient, a gateway transaction id and, only
+ * for a caller with `OM` or `PAY`, the e-mail (no oracle); `email` of a row is masked below that tier. The query is [OrderQueryService.list](com.panomc.plugins.market.service.OrderQueryService.list).
+ */
 @Endpoint
-class PanelGetOrdersAPI(
-    private val plugin: MarketPlugin,
-    private val marketOrderDao: MarketOrderDao,
-    private val marketOrderItemDao: MarketOrderItemDao
-) : MarketPanelApi() {
+class PanelGetOrdersAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
     override val paths = listOf(Path("/api/panel/market/orders", RouteType.GET))
 
     override val nodes = setOf(MarketNode.ORDERS_VIEW)
 
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 
-    override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
-        ValidationHandlerBuilder.create(schemaRepository)
-            .queryParameter(optionalParam("page", stringSchema()))
-            .queryParameter(optionalParam("pageSize", stringSchema()))
-            .queryParameter(optionalParam("search", stringSchema()))
-            .queryParameter(optionalParam("status", stringSchema()))
-            .build()
+    override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler {
+        var builder = ValidationHandlerBuilder.create(schemaRepository)
+
+        for (name in listOf("page", "pageSize") + ORDER_FILTER_QUERY) builder = builder.queryParameter(optionalParam(name, stringSchema()))
+
+        return builder.build()
+    }
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
         val parameters = getParameters(context)
-        val window = parsePagingRequest(
-            parameters.queryParameter("page")?.string?.let { parseId(it, "page") },
-            parameters.queryParameter("pageSize")?.string?.let { parseId(it, "pageSize") }
+
+        fun query(name: String) = parameters.queryParameter(name)?.string
+
+        val window = parsePagingRequest(query("page")?.let { parseId(it, "page") }, query("pageSize")?.let { parseId(it, "pageSize") })
+        val filter = parseOrderFilter(
+            query("status"), query("paymentMethodId"), query("fulfillmentStatus"), query("shippingStatus"), query("from"), query("to"), query("testMode"), query("source"), query("search")
         )
-        val page = window.page.toLong()
         val pii = FieldGating.piiTier(context)
-        val search = parameters.queryParameter("search")?.string
-        val status = parameters.queryParameter("status")?.string?.let { statusName ->
-            OrderStatus.entries.find { it.name == statusName }
-        }
+        val page = orderQueryService(plugin).list(filter, window, pii, databaseManager.getSqlClient())
+        val totalPage = Paging.totalPages(page.count, window.pageSize)
 
-        val sqlClient = databaseManager.getSqlClient()
-        val orders = marketOrderDao.getAllPaged(page, search, status, sqlClient, window.pageSize, pii)
-        val count = marketOrderDao.count(search, status, sqlClient, pii)
+        if (totalPage in 1..<window.page.toLong()) throw PageNotFound()
 
-        val totalPageNum = Paging.totalPages(count, window.pageSize)
-
-        if (totalPageNum in 1..<page) {
-            throw PageNotFound()
-        }
-
-        val itemsByOrder = marketOrderItemDao.getByOrderIds(orders.map { it.id }, sqlClient).groupBy { it.orderId }
-
-        val ordersJson = orders.map { order ->
-            orderToJson(order, itemsByOrder[order.id].orEmpty(), pii)
-        }
-
-        return Successful(
-            mapOf(
-                "orders" to ordersJson,
-                "orderCount" to count,
-                "totalPage" to totalPageNum
-            )
-        )
+        return Successful(mapOf("orders" to JsonArray(page.rows), "orderCount" to page.count, "totalPage" to totalPage))
     }
-
-    private fun orderToJson(order: MarketOrder, items: List<MarketOrderItem>, pii: Boolean): Map<String, Any?> = mapOf(
-        "id" to order.id,
-        "userId" to order.userId,
-        "playerUsername" to order.playerUsername,
-        "totalPrice" to MoneyUtil.toDecimal(order.totalPrice),
-        "currency" to order.currency,
-        "paymentMethodId" to order.paymentMethodId,
-        "paymentLabel" to order.paymentLabel,
-        "status" to order.status.name,
-        "email" to FieldGating.email(order.email, pii),
-        "createdAt" to order.createdAt,
-        "updatedAt" to order.updatedAt,
-        "items" to items.map { itemToJson(it) }
-    )
-
-    private fun itemToJson(item: MarketOrderItem): Map<String, Any?> = mapOf(
-        "id" to item.id,
-        "productId" to item.productId,
-        "productName" to item.productName,
-        "quantity" to item.quantity,
-        "unitPrice" to MoneyUtil.toDecimal(item.unitPrice),
-        "createdAt" to item.createdAt,
-        "updatedAt" to item.updatedAt
-    )
 }
