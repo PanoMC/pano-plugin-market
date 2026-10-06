@@ -1,24 +1,40 @@
 package com.panomc.plugins.market.e2e
 
+import com.panomc.plugins.market.e2e.support.E2eBuyer
+import com.panomc.plugins.market.e2e.support.E2eClient
+import com.panomc.plugins.market.e2e.support.E2eResponse
 import com.panomc.plugins.market.e2e.support.E2eTestBase
+import com.panomc.plugins.market.support.Await
 import com.panomc.plugins.market.support.FakePayGateway
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.math.BigDecimal
 import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 
-/** Payment failure, retry and the trust rules of the inbound routes (17 section 9.3): F-01, F-02, F-04, F-08. */
+/**
+ * Payment failure, retry, review and the trust rules of the inbound routes (17 section 9.3): F-01 to F-18. Time travel is by row rewind only
+ * (`market_payment.nextQueryAt`, `market_order.expiresAt`, `market_block.expiresAt`); settings and providers a scenario changes are global state of the one
+ * instance and are always put back in a `finally`.
+ */
 class PaymentFlowE2E : E2eTestBase() {
     override val tag = "pay"
 
     /** Checks out one fresh VIP as a new buyer and returns (client, publicId, reference). */
-    private fun pending(): Triple<com.panomc.plugins.market.e2e.support.E2eBuyer, String, String> {
-        val vip = catalog.fresh("VIP")
+    private fun pending(): Triple<E2eBuyer, String, String> = pendingOf(catalog.fresh("VIP").id)
+
+    private fun pendingOf(productId: Long): Triple<E2eBuyer, String, String> {
         val buyer = buyer()
-        val publicId = publicIdOf(checkout(buyer.client, cart(line(vip.id))).ok())
+        val publicId = publicIdOf(checkout(buyer.client, cart(line(productId))).ok())
 
         return Triple(buyer, publicId, referenceOf(publicId))
     }
@@ -110,5 +126,610 @@ class PaymentFlowE2E : E2eTestBase() {
         awaitOrder(publicId, "COMPLETED")
         assertEquals("SUCCEEDED", attemptStatus(second))
         assertEquals("FAILED", attemptStatus(first))
+    }
+
+    // ---- shared helpers of the scenarios below ------------------------------------------------------------------------
+
+    private val day = 86_400_000L
+
+    private fun orderId(publicId: String): Long = orderRow(publicId).getLong("id")
+
+    private fun paymentRow(reference: String) = db.sql("SELECT * FROM `pano_market_payment` WHERE `reference` = ?", reference).single()
+
+    private fun reviewOrder(publicId: String, decision: String, refund: Boolean? = null, force: Boolean? = null): E2eResponse {
+        val body = JsonObject().put("decision", decision)
+
+        refund?.let { body.put("refund", it) }
+        force?.let { body.put("force", it) }
+
+        return admin.post("/api/panel/market/orders/${orderId(publicId)}/review", body)
+    }
+
+    private fun stockOf(productId: Long): Long? = productStock(productId)
+
+    private fun deliveries(publicId: String) = db.sql("SELECT `status` FROM `pano_market_delivery` WHERE `orderId` = ?", orderId(publicId)).map { it.getString("status") }
+
+    private fun entitlementStates(publicId: String): List<String> =
+        db.sql("SELECT `status` FROM `pano_market_entitlement` WHERE `orderId` = ?", orderId(publicId)).map { it.getString("status") }
+
+    /** Makes the reconcile / expiry jobs see [publicId] as past its time: the order and its open attempts are moved two hours into the past. */
+    private fun expire(publicId: String) {
+        val id = orderId(publicId)
+
+        db.rewind("market_order", id, "expiresAt", 2 * 3_600_000L)
+        db.sql("UPDATE `pano_market_payment` SET `expiresAt` = `expiresAt` - 7200000 WHERE `orderId` = ? AND `expiresAt` IS NOT NULL", id)
+    }
+
+    private fun grantCredits(buyer: E2eBuyer, amount: Int) {
+        admin.post(
+            "/api/panel/market/credits/accounts/${buyer.userId}/grant", JsonObject().put("amount", amount).put("note", "e2e payment flow"),
+            mapOf("Idempotency-Key" to idempotencyKey())
+        ).ok()
+    }
+
+    private fun creditTx(publicId: String, type: String): Long = db.count("market_credit_tx", "`orderId` = ? AND `type` = ?", orderId(publicId), type)
+
+    private fun creditBalance(buyer: E2eBuyer): Long = db.long("SELECT `balance` FROM `pano_market_credit_account` WHERE `userId` = ?", buyer.userId) ?: 0L
+
+    /** The `data.status` the fake plugin's provider answers in `GET /payment-providers` for [id]. */
+    private fun providerState(id: String): String? =
+        admin.get("/api/panel/market/payment-providers", log = false).ok().obj().getJsonArray("providers").map { it as JsonObject }.firstOrNull { it.getString("id") == id }
+            ?.getString("state")
+
+    private fun eventRow(eventId: String) =
+        db.sql("SELECT * FROM `pano_market_payment_event` WHERE `providerId` = 'fake' AND `direction` = 'IN' AND `eventKey` = ?", eventId).firstOrNull()
+
+    private fun succeededData(reference: String, amount: String, currency: String): JsonObject =
+        JsonObject().put("reference", reference).put("amount", amount).put("currency", currency)
+
+    private fun setProviderSettings(extra: JsonObject) {
+        admin.post(
+            "/api/panel/market/payment-methods/fake",
+            JsonObject().put("settings", JsonObject().put("gatewayUrl", gateway.baseUrl).put("secret", gateway.secret).also { s -> extra.fieldNames().forEach { s.put(it, extra.getValue(it)) } })
+        ).ok()
+    }
+
+    // ---- F-03 ---------------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `F-03 missing webhook is reconciled`() {
+        val (_, publicId, reference) = pending()
+
+        gateway.setStatus(reference, "paid") // paid at the gateway; no webhook, no browser return
+
+        val queries = gateway.requests(FakePayGateway.Op.QUERY).size
+
+        // the reconcile job picks an attempt up once its nextQueryAt is due: make it due
+        db.sql("UPDATE `pano_market_payment` SET `nextQueryAt` = ? WHERE `reference` = ?", System.currentTimeMillis() - 1_000, reference)
+
+        awaitOrder(publicId, "COMPLETED", 120_000)
+
+        assertEquals("SUCCEEDED", attemptStatus(reference))
+        assertTrue(gateway.requests(FakePayGateway.Op.QUERY).size > queries, "the reconcile job asked the gateway")
+        assertEquals(1L, orderEvents(publicId, "PAYMENT_SUCCEEDED"), "the order was paid exactly once")
+    }
+
+    // ---- F-05 / F-06 / F-07 -------------------------------------------------------------------------------------------
+
+    @Test
+    fun `F-05 underpaid goes to review, accept completes, reject refunds`() {
+        val (buyer, publicId, reference) = pending()
+        val expected = gateway.payments[reference]!!.amount
+        val received = expected - BigDecimal("0.01")
+
+        assertEquals(listOf(200), gateway.pay(reference, received).map { it.statusCode() })
+        awaitOrder(publicId, "REVIEW")
+
+        assertEquals("REVIEW", attemptStatus(reference))
+        val row = orderRow(publicId)
+        assertEquals("UNDERPAID", row.getString("reviewReason"))
+        assertEquals("HELD", row.getString("reservationState"), "the reservation stays held while the order waits for a decision")
+        assertEquals(0, deliveries(publicId).size, "nothing is delivered for an order in review")
+        assertEquals("REVIEW", order(buyer.client, publicId).getString("status"))
+
+        // ACCEPT: all the effects of a paid order (O2)
+        reviewOrder(publicId, "ACCEPT").ok()
+        awaitOrder(publicId, "COMPLETED")
+
+        assertEquals("COMPLETED", orderStatus(publicId))
+        assertNotNull(orderRow(publicId).getValue("paidAt"), "paidAt is set")
+        assertEquals("COMMITTED", orderRow(publicId).getString("reservationState"))
+        assertEquals("SUCCEEDED", attemptStatus(reference), "the reviewed attempt is SUCCEEDED once accepted")
+        Await.until(60_000, 250, "deliveries confirmed") { deliveries(publicId).let { it.isNotEmpty() && it.all { s -> s == "CONFIRMED" } } }
+        assertEquals(listOf("ACTIVE"), entitlementStates(publicId))
+
+        // a second order: REJECT with refund=true cancels it and refunds exactly what was received
+        val (_, second, secondRef) = pending()
+        val secondReceived = gateway.payments[secondRef]!!.amount - BigDecimal("0.01")
+
+        gateway.pay(secondRef, secondReceived)
+        awaitOrder(second, "REVIEW")
+
+        reviewOrder(second, "REJECT", refund = true).ok()
+        awaitOrder(second, "CANCELLED")
+
+        val refunds = db.sql("SELECT * FROM `pano_market_refund` WHERE `orderId` = ?", orderId(second))
+
+        assertEquals(1, refunds.size, "one refund row")
+        assertEquals(secondReceived.movePointRight(2).toLong(), refunds.single().getLong("amount"), "the refund is for the amount that was received")
+        Await.until(60_000, 250, "the refund reaches the gateway") { gateway.requests(FakePayGateway.Op.REFUND).isNotEmpty() }
+    }
+
+    @Test
+    fun `F-06 overpaid goes to review, buyerMayPayMore completes`() {
+        val (_, publicId, reference) = pending()
+        val expected = gateway.payments[reference]!!.amount
+
+        gateway.pay(reference, expected + BigDecimal("5.00"))
+        awaitOrder(publicId, "REVIEW")
+
+        assertEquals("REVIEW", attemptStatus(reference))
+        assertEquals("OVERPAID", orderRow(publicId).getString("reviewReason"))
+
+        // leave nothing in review behind: reject it (no money back requested by this scenario's assertion)
+        reviewOrder(publicId, "REJECT", refund = true).ok()
+        awaitOrder(publicId, "CANCELLED")
+
+        // the provider declares buyerMayPayMore: the same overpayment completes the order and records what was paid
+        setProviderSettings(JsonObject().put("buyerMayPayMore", true))
+
+        try {
+            val (_, second, secondRef) = pending()
+            val paid = gateway.payments[secondRef]!!.amount + BigDecimal("5.00")
+
+            gateway.pay(secondRef, paid)
+            awaitOrder(second, "COMPLETED")
+
+            assertEquals("SUCCEEDED", attemptStatus(secondRef))
+            assertEquals(paid.movePointRight(2).toLong(), paymentRow(secondRef).getLong("paidAmount"), "the amount actually paid is recorded")
+            assertEquals(paid.movePointRight(2).toLong(), orderRow(second).getLong("paidAmount"))
+        } finally {
+            setProviderSettings(JsonObject())
+        }
+    }
+
+    @Test
+    fun `F-07 wrong currency goes to review`() {
+        val (_, publicId, reference) = pending()
+        val amount = gateway.payments[reference]!!.amount.toPlainString()
+
+        assertEquals("EUR", gateway.payments[reference]!!.currency)
+        assertEquals(listOf(200), gateway.sendWebhook("payment.succeeded", succeededData(reference, amount, "USD")).map { it.statusCode() })
+        awaitOrder(publicId, "REVIEW")
+
+        assertEquals("REVIEW", attemptStatus(reference))
+        assertEquals("CURRENCY_MISMATCH", orderRow(publicId).getString("reviewReason"))
+
+        reviewOrder(publicId, "REJECT", refund = false).ok()
+        awaitOrder(publicId, "CANCELLED")
+    }
+
+    // ---- F-09 / F-10 --------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `F-09 provider error at start keeps the order payable`() {
+        val vip = catalog.fresh("VIP")
+        val buyer = buyer()
+        val before = db.count("market_payment")
+
+        gateway.failNext(FakePayGateway.Op.CREATE, 500)
+
+        val failed = checkout(buyer.client, cart(line(vip.id)))
+
+        assertEquals(502, failed.status, "the provider failed: ${failed.error}")
+        assertEquals("PAYMENT_PROVIDER_ERROR", failed.error)
+        val view = failed.obj().getJsonObject("order") ?: throw AssertionError("the error answer carries no order")
+        val publicId = view.getString("publicId")
+
+        assertEquals("PENDING", orderStatus(publicId))
+        assertEquals(before + 1, db.count("market_payment"), "one attempt was written")
+        val reference = referenceOf(publicId)
+
+        assertEquals("FAILED", attemptStatus(reference))
+        assertNotNull(paymentRow(reference).getValue("failureCode"), "the attempt carries a failure code")
+        assertEquals("HELD", orderRow(publicId).getString("reservationState"), "the reservation is kept so the buyer can try again")
+        assertEquals(true, order(buyer.client, publicId).getBoolean("canRetryPayment"))
+
+        // the buyer pays with the other method (a new attempt through /pay) and completes the order
+        val retry = buyer.client.post("/api/market/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake-eur")).ok().obj()
+
+        assertNotNull(retry.getJsonObject("payment"))
+        val second = referenceOf(publicId)
+
+        assertNotEquals(reference, second)
+        assertEquals("fake-eur", paymentRow(second).getString("providerId"))
+        gateway.setStatus(second, "paid")
+        // fake-eur has no status query; its events arrive on the route of the provider that created the attempt
+        val answers = gateway.sendWebhook("payment.succeeded", succeededData(second, gateway.payments[second]!!.amount.toPlainString(), "EUR"))
+
+        assertTrue(answers.all { it.statusCode() == 200 }, "answers ${answers.map { it.statusCode() }}")
+        awaitOrder(publicId, "COMPLETED")
+        assertEquals("FAILED", attemptStatus(reference), "the failed attempt stays closed")
+    }
+
+    @Test
+    fun `F-10 provider timeout at start answers within 35 seconds`() {
+        val vip = catalog.fresh("VIP")
+        val buyer = buyer()
+
+        gateway.hang(FakePayGateway.Op.CREATE)
+
+        val publicId: String
+        val started = System.currentTimeMillis()
+
+        try {
+            val failed = checkout(buyer.client, cart(line(vip.id)))
+            val took = System.currentTimeMillis() - started
+
+            assertTrue(took < 35_000, "the answer took ${took} ms")
+            assertEquals(502, failed.status, "answer ${failed.status} ${failed.error}")
+            assertEquals("PAYMENT_PROVIDER_ERROR", failed.error)
+            publicId = failed.obj().getJsonObject("order").getString("publicId")
+        } finally {
+            gateway.release(FakePayGateway.Op.CREATE)
+        }
+
+        val reference = referenceOf(publicId)
+
+        assertEquals("PENDING", orderStatus(publicId))
+        assertEquals("FAILED", attemptStatus(reference))
+        assertNotNull(paymentRow(reference).getValue("failureCode"))
+
+        // late success of the abandoned attempt (00 section 7.2): FAILED -> SUCCEEDED and the order, still PENDING, completes
+        val amount = db.long("SELECT `amount` FROM `pano_market_payment` WHERE `reference` = ?", reference)!!
+        val answers = gateway.sendWebhook("payment.succeeded", succeededData(reference, BigDecimal(amount).movePointLeft(2).toPlainString(), "EUR"))
+
+        assertTrue(answers.all { it.statusCode() == 200 }, "answers ${answers.map { it.statusCode() }}")
+        awaitOrder(publicId, "COMPLETED")
+        assertEquals("SUCCEEDED", attemptStatus(reference))
+    }
+
+    // ---- F-11 / F-12 --------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `F-11 order expiry releases everything`() {
+        val last = catalog.fresh("LAST")
+        val (couponId, code) = catalog.freshCoupon(50, redeemLimit = 3, customerRedeemLimit = 1)
+        val buyer = buyer()
+
+        grantCredits(buyer, 5)
+        val balanceBefore = creditBalance(buyer)
+
+        val publicId = publicIdOf(checkout(buyer.client, cart(line(last.id)).put("couponCode", code).put("useCredits", 1)).ok())
+        val reference = referenceOf(publicId)
+        val coupon = { db.long("SELECT `usedCount` FROM `pano_market_coupon` WHERE `id` = ?", couponId) }
+
+        assertEquals(0L, stockOf(last.id), "the stock is reserved")
+        assertEquals(1L, coupon(), "the coupon use is counted")
+        assertEquals(1L, creditTx(publicId, "HOLD"), "the credits are held")
+        assertTrue(creditBalance(buyer) < balanceBefore)
+
+        expire(publicId)
+        awaitOrder(publicId, "EXPIRED", 120_000)
+
+        assertEquals("RELEASED", orderRow(publicId).getString("reservationState"))
+        assertEquals(1L, stockOf(last.id), "the stock is back")
+        assertEquals(0L, coupon(), "the coupon use is back")
+        assertEquals("RELEASED", db.string("SELECT `state` FROM `pano_market_redemption` WHERE `orderId` = ? AND `kind` = 'COUPON'", orderId(publicId)))
+        assertEquals(1L, creditTx(publicId, "RELEASE"), "the credits were released")
+        assertEquals(balanceBefore, creditBalance(buyer), "the buyer has the credits back")
+        Await.until(30_000, 250, "the gateway got a cancel") { gateway.requests(FakePayGateway.Op.CANCEL).any { it.path.contains(reference) } }
+    }
+
+    @Test
+    fun `F-12 late payment on an expired order goes to review`() {
+        val first = catalog.fresh("LAST")
+        val (_, firstId, firstRef) = pendingOf(first.id)
+
+        expire(firstId)
+        awaitOrder(firstId, "EXPIRED", 120_000)
+        assertEquals(1L, stockOf(first.id))
+
+        gateway.pay(firstRef)
+        awaitOrder(firstId, "REVIEW")
+
+        assertEquals("LATE", orderRow(firstId).getString("reviewReason"))
+        assertEquals(0, deliveries(firstId).size, "nothing was delivered")
+
+        // ACCEPT re-reserves the stock and completes the order
+        reviewOrder(firstId, "ACCEPT").ok()
+        awaitOrder(firstId, "COMPLETED")
+        assertEquals(0L, stockOf(first.id), "the stock was reserved again")
+        assertEquals("COMMITTED", orderRow(firstId).getString("reservationState"))
+
+        // the stock is gone before the late payment: ACCEPT answers 409 OUT_OF_STOCK and the order stays in review
+        val second = catalog.fresh("LAST")
+        val (_, secondId, secondRef) = pendingOf(second.id)
+
+        expire(secondId)
+        awaitOrder(secondId, "EXPIRED", 120_000)
+
+        val other = buyer()
+        val otherId = publicIdOf(checkout(other.client, cart(line(second.id))).ok())
+
+        payViaFake(otherId)
+        awaitOrder(otherId, "COMPLETED")
+        assertEquals(0L, stockOf(second.id))
+
+        gateway.pay(secondRef)
+        awaitOrder(secondId, "REVIEW")
+
+        val refused = reviewOrder(secondId, "ACCEPT")
+
+        assertEquals(409, refused.status)
+        assertEquals("OUT_OF_STOCK", refused.error)
+        assertEquals("REVIEW", orderStatus(secondId), "the order stays in review")
+
+        reviewOrder(secondId, "REJECT", refund = true).ok()
+        awaitOrder(secondId, "CANCELLED")
+    }
+
+    // ---- F-13 ---------------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `F-13 buyer cancels`() {
+        val last = catalog.fresh("LAST")
+        val buyer = buyer()
+        val publicId = publicIdOf(checkout(buyer.client, cart(line(last.id))).ok())
+
+        assertEquals(0L, stockOf(last.id))
+        buyer.client.post("/api/market/orders/$publicId/cancel").ok()
+
+        assertEquals("CANCELLED", orderStatus(publicId))
+        assertEquals("RELEASED", orderRow(publicId).getString("reservationState"))
+        assertEquals(1L, stockOf(last.id), "the stock is back")
+
+        // a completed order cannot be cancelled
+        val vip = catalog.fresh("VIP")
+        val paid = publicIdOf(checkout(buyer.client, cart(line(vip.id))).ok())
+
+        payViaFake(paid)
+        awaitOrder(paid, "COMPLETED")
+        val completed = buyer.client.post("/api/market/orders/$paid/cancel")
+
+        assertEquals(409, completed.status)
+        assertEquals("ORDER_NOT_CANCELLABLE", completed.error)
+        assertEquals("COMPLETED", orderStatus(paid))
+
+        // nor one whose attempt is PROCESSING (the gateway says the buyer notified a transfer / a confirmation is awaited)
+        val processing = publicIdOf(checkout(buyer.client, cart(line(vip.id))).ok())
+        val reference = referenceOf(processing)
+
+        assertEquals(listOf(200), gateway.sendWebhook("payment.pending", JsonObject().put("reference", reference).put("reason", "AWAITING_CONFIRMATIONS")).map { it.statusCode() })
+        Await.until(30_000, 250, "attempt PROCESSING") { attemptStatus(reference) == "PROCESSING" }
+
+        val refused = buyer.client.post("/api/market/orders/$processing/cancel")
+
+        assertEquals(409, refused.status, "answer ${refused.status} ${refused.error}")
+        assertEquals("PENDING", orderStatus(processing))
+        assertEquals("PROCESSING", attemptStatus(reference))
+
+        // leave no open attempt behind
+        gateway.pay(reference)
+        awaitOrder(processing, "COMPLETED")
+    }
+
+    // ---- F-14 ---------------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `F-14 duplicate payment on a paid order is refunded automatically`() {
+        val (buyer, publicId, first) = pending()
+
+        buyer.client.post("/api/market/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake")).ok()
+        val second = referenceOf(publicId)
+
+        assertNotEquals(first, second)
+
+        // the gateway pays both attempts: the first (closed by the retry, a late success) completes the order, the second is the duplicate
+        assertEquals(listOf(200), gateway.pay(first).map { it.statusCode() })
+        awaitOrder(publicId, "COMPLETED")
+        assertEquals(listOf(200), gateway.pay(second).map { it.statusCode() })
+        Await.until(30_000, 250, "the second attempt is SUCCEEDED") { attemptStatus(second) == "SUCCEEDED" }
+
+        assertEquals("COMPLETED", orderStatus(publicId))
+        assertEquals(1L, orderEvents(publicId, "PAYMENT_SUCCEEDED"), "the order was paid once")
+        assertEquals(1L, paymentRow(second).getLong("duplicate"), "the second attempt is flagged duplicate")
+        assertEquals(0L, paymentRow(first).getLong("duplicate"))
+        Await.until(30_000, 250, "the automatic refund exists") { db.count("market_refund", "`orderId` = ? AND `origin` = 'SYSTEM'", orderId(publicId)) == 1L }
+        assertEquals(1L, db.count("market_refund", "`orderId` = ?", orderId(publicId)), "exactly one refund")
+        Await.until(60_000, 250, "the refund reaches the gateway") { gateway.requests(FakePayGateway.Op.REFUND).isNotEmpty() }
+        assertEquals("COMPLETED", orderStatus(publicId), "refunding the duplicate does not touch the order")
+    }
+
+    @Test
+    fun `F-14b duplicate payment with the setting off raises a panel alert`() {
+        session.withSettings(JsonObject().put("autoRefundDuplicatePayments", false)) {
+            val (buyer, publicId, first) = pending()
+
+            buyer.client.post("/api/market/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake")).ok()
+            val second = referenceOf(publicId)
+
+            gateway.pay(first)
+            awaitOrder(publicId, "COMPLETED")
+            gateway.pay(second)
+            Await.until(30_000, 250, "the second attempt is SUCCEEDED") { attemptStatus(second) == "SUCCEEDED" }
+
+            assertEquals(1L, paymentRow(second).getLong("duplicate"))
+            assertEquals(0L, db.count("market_refund", "`orderId` = ?", orderId(publicId)), "no refund without the setting")
+            val alerts = db.sql("SELECT `data` FROM `pano_market_order_event` WHERE `orderId` = ? AND `type` = 'NOTE' AND `message` = 'DUPLICATE_PAYMENT'", orderId(publicId))
+
+            assertEquals(1, alerts.size, "one panel alert event on the order")
+            assertEquals("AUTO_REFUND_OFF", JsonObject(alerts.single().getString("data")).getString("why"))
+        }
+    }
+
+    // ---- F-15 ---------------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `F-15 provider unavailable defers events and a replay completes them`() {
+        val (_, publicId, reference) = pending()
+        val amount = gateway.payments[reference]!!.amount.toPlainString()
+        val eventId = gateway.nextEventId()
+
+        admin.put("/api/panel/plugins/pano-plugin-market-fake", JsonObject().put("status", false)).ok()
+
+        try {
+            Await.until(60_000, 250, "provider fake is not ACTIVE") { providerState("fake") != "ACTIVE" }
+
+            val answers = gateway.sendWebhook("payment.succeeded", succeededData(reference, amount, "EUR"), id = eventId)
+
+            assertEquals(listOf(503), answers.map { it.statusCode() }, "the webhook of a stopped provider is answered 503")
+            assertEquals("UNAVAILABLE", providerState("fake"), "the method state is UNAVAILABLE")
+        } finally {
+            admin.put("/api/panel/plugins/pano-plugin-market-fake", JsonObject().put("status", true)).ok()
+            Await.until(90_000, 500, "provider fake is ACTIVE again") { providerState("fake") == "ACTIVE" && providerState("fake-eur") == "ACTIVE" }
+        }
+
+        val row = eventRow(eventId) ?: throw AssertionError("the deferred event was not stored")
+
+        assertEquals("DEFERRED", row.getString("status"))
+        assertEquals("PENDING", orderStatus(publicId))
+
+        val replayed = admin.post("/api/panel/market/payment-events/${row.getLong("id")}/replay", JsonObject()).ok().obj()
+
+        assertEquals("PROCESSED", replayed.getString("status"))
+        awaitOrder(publicId, "COMPLETED")
+        assertEquals("PROCESSED", eventRow(eventId)!!.getString("status"))
+        assertEquals("SUCCEEDED", attemptStatus(reference))
+    }
+
+    // ---- F-16 / F-17 --------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `F-16 unknown target is skipped, not an error`() {
+        val (_, publicId, reference) = pending()
+        val eventId = gateway.nextEventId()
+        val orders = db.count("market_order")
+
+        val answers = gateway.sendWebhook("payment.succeeded", succeededData("NOSUCHREF0001", "1.00", "EUR"), id = eventId)
+
+        assertEquals(listOf(200), answers.map { it.statusCode() })
+        assertEquals("OK", answers.single().body())
+
+        val row = eventRow(eventId) ?: throw AssertionError("the event was not stored")
+
+        assertEquals("PROCESSED", row.getString("status"))
+        assertEquals(1L, row.getLong("verified"), "the signature was verified")
+        assertEquals(orders, db.count("market_order"), "nothing was created")
+        assertEquals("PENDING", orderStatus(publicId), "the other order is untouched")
+        assertEquals("PENDING", attemptStatus(reference).let { if (it == "CREATED") "PENDING" else it })
+    }
+
+    @Test
+    fun `F-17 raw body passthrough with BOM, odd whitespace and key order`() {
+        val (_, publicId, reference) = pending()
+        val amount = gateway.payments[reference]!!.amount.toPlainString()
+        val eventId = gateway.nextEventId()
+        // reversed key order, tabs and newlines between tokens, a non-ASCII string value, preceded by a UTF-8 byte order mark
+        val text = "\uFEFF{\n\t\"data\" :\t{ \"currency\":\"EUR\",\t\"amount\" : \"$amount\" ,\n \"reference\":\"$reference\", \"note\":\"ödeme ✓\" },\r\n  \"type\"\t:\"payment.succeeded\" ,\n\"id\":\"$eventId\" }\n"
+        val body = text.toByteArray(Charsets.UTF_8)
+
+        assertEquals(0xEF, body[0].toInt() and 0xFF, "the body starts with the UTF-8 BOM")
+
+        val signature = gateway.signatureHeader(body, FakePayGateway.Signature.VALID)!!
+        val answer = HttpClient.newHttpClient().send(
+            HttpRequest.newBuilder(URI.create("$baseUrl/api/market/payments/fake/webhook")).header("Content-Type", "application/json").header("X-Fake-Signature", signature)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body)).build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+
+        val row = eventRow(eventId)
+
+        assertNotNull(row, "the event was stored (answer ${answer.statusCode()})")
+        assertEquals(1L, row!!.getLong("verified"), "the signature over the exact bytes verified (answer ${answer.statusCode()} status ${row.getString("status")})")
+        assertEquals(200, answer.statusCode(), "the event was accepted")
+        awaitOrder(publicId, "COMPLETED")
+        assertEquals("SUCCEEDED", attemptStatus(reference))
+        assertEquals("PROCESSED", eventRow(eventId)!!.getString("status"))
+
+        // the same bytes with one byte changed fail verification (the signature is not satisfied by a re-encoded body)
+        val changed = body.copyOf().also { it[it.size - 2] = 'x'.code.toByte() }
+        val tampered = HttpClient.newHttpClient().send(
+            HttpRequest.newBuilder(URI.create("$baseUrl/api/market/payments/fake/webhook")).header("Content-Type", "application/json").header("X-Fake-Signature", signature)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(changed)).build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+
+        assertEquals(400, tampered.statusCode(), "a changed body fails the signature")
+    }
+
+    // ---- F-18 ---------------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `F-18 blocked buyer`() {
+        val vip = catalog.fresh("VIP")
+        val buyer = buyer()
+        val created = ArrayList<Long>()
+
+        fun block(type: String, value: String, expiresAt: Long? = null): Long {
+            val body = JsonObject().put("type", type).put("value", value).put("reason", "e2e F-18")
+
+            expiresAt?.let { body.put("expiresAt", it) }
+
+            return admin.post("/api/panel/market/blocks", body).ok().obj().getLong("id").also { created += it }
+        }
+
+        fun assertBlocked(what: String) {
+            val quote = buyer.client.post("/api/market/checkout/quote", cart(line(vip.id))).ok().obj().getJsonObject("quote")
+            val messages = quote.getJsonArray("messages")?.map { (it as JsonObject).getString("code") } ?: emptyList()
+
+            assertTrue("BUYER_BLOCKED" in messages, "$what: the quote says BUYER_BLOCKED, messages=$messages")
+
+            val before = db.count("market_order", "`userId` = ?", buyer.userId)
+            val refused = checkout(buyer.client, cart(line(vip.id)))
+
+            assertEquals(403, refused.status, "$what: ${refused.error}")
+            assertEquals("BUYER_BLOCKED", refused.error)
+            assertEquals(before, db.count("market_order", "`userId` = ?", buyer.userId), "$what: no order was written")
+        }
+
+        fun assertNotBlocked(what: String) {
+            val quote = buyer.client.post("/api/market/checkout/quote", cart(line(vip.id))).ok().obj().getJsonObject("quote")
+            val messages = quote.getJsonArray("messages")?.map { (it as JsonObject).getString("code") } ?: emptyList()
+
+            assertFalse("BUYER_BLOCKED" in messages, "$what: the quote has no BUYER_BLOCKED, messages=$messages")
+        }
+
+        try {
+            // PLAYER
+            val player = block("PLAYER", buyer.username)
+
+            assertBlocked("PLAYER")
+            admin.delete("/api/panel/market/blocks/$player").ok()
+            created.remove(player)
+            assertNotBlocked("PLAYER removed")
+
+            // EMAIL
+            val email = block("EMAIL", "${buyer.username}@example.com")
+
+            assertBlocked("EMAIL")
+            admin.delete("/api/panel/market/blocks/$email").ok()
+            created.remove(email)
+            assertNotBlocked("EMAIL removed")
+
+            // IP (the instance sees the test JVM on the loopback address)
+            val ip = block("IP", "127.0.0.1")
+
+            assertBlocked("IP")
+            admin.delete("/api/panel/market/blocks/$ip").ok()
+            created.remove(ip)
+            assertNotBlocked("IP removed")
+
+            // an expired block no longer applies: written with a future expiry, then rewound into the past
+            val expiring = block("PLAYER", buyer.username, System.currentTimeMillis() + 3_600_000L)
+
+            assertBlocked("PLAYER before it expires")
+            db.rewind("market_block", expiring, "expiresAt", 2 * 3_600_000L)
+            assertNotBlocked("expired PLAYER block")
+
+            val ok = checkout(buyer.client, cart(line(vip.id))).ok()
+
+            assertEquals("PENDING", ok.obj().getJsonObject("order").getString("status"))
+            payViaFake(publicIdOf(ok))
+            awaitOrder(publicIdOf(ok), "COMPLETED")
+        } finally {
+            created.forEach { runCatching { admin.delete("/api/panel/market/blocks/$it") } }
+            db.sql("DELETE FROM `pano_market_block` WHERE `reason` = 'e2e F-18'")
+        }
     }
 }
