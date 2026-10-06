@@ -422,6 +422,37 @@ class DeliveryService(
     }
 
     /**
+     * `planChargebackActions` (08 section 12, MK-112): the rows of `MarketConfig.chargebackActions` for the dispute [disputeId] of [order] (phase `GRANT`,
+     * `sourceType = CHARGEBACK_ACTION`, key prefix `cb:<disputeId>`). Nothing is written; the caller hands the rows to [insertPlanned] under the order lock.
+     * The player is the payer of an account order; for a guest order whose payer and recipient differ the planner makes the rows `CANCELLED` /
+     * `NEEDS_CONFIRMATION`. With [confirmed] (the admin's "run chargeback actions", attempt group `+ 1`) the recipient of a guest order is the target, so the
+     * rows are live. `emptyList()` when no action is configured.
+     */
+    suspend fun planChargebackActions(conn: SqlConnection, order: MarketOrder, disputeId: Long, attemptGroup: Int = 0, confirmed: Boolean = false): List<PlannedDelivery> {
+        val c = config()
+        val stored = ActionParser.parseStored(c.chargebackActions, ActionParser.Kind.CHARGEBACK)
+
+        if (stored.actions.isEmpty() && stored.dropped.isEmpty()) return emptyList()
+
+        val servers = roster.snapshot(conn)
+        val recipient = order.recipientUsername.ifBlank { order.playerUsername }
+        val parties = if (confirmed) TargetResolver.Parties(recipientUsername = recipient, payerUsername = recipient, payerUserId = null)
+        else TargetResolver.Parties(recipientUsername = recipient, payerUsername = order.playerUsername.ifBlank { recipient }, payerUserId = order.userId)
+        val planOrder = PlanOrder(
+            id = order.id, publicId = order.publicId.orEmpty(), totalPrice = order.totalPrice, currency = order.currency, parties = parties, giftMessage = order.giftMessage,
+            source = order.source, fulfillmentBy = order.fulfillmentBy, testMode = order.testMode
+        )
+        val settings = PlanSettings(
+            onlineWaitDays = c.deliveryOnlineWaitDays, zone = PeriodCalculator.zoneOf(c.storeTimeZone), store = StoreInfo(c.storeName, ""),
+            webhookBody = webhookBodyRendererFor(stored.actions)
+        )
+
+        return DeliveryPlanner.planChargebackActions(
+            com.panomc.plugins.market.core.delivery.ChargebackRequest(planOrder, disputeId, stored, PlanServers(servers.lookup(), servers.names), settings, clock.now(), attemptGroup)
+        )
+    }
+
+    /**
      * Inserts [planned] rows with `INSERT IGNORE` semantics (the unique key `uq_idem`), writes one `DELIVERY_FAILED` timeline row for every row that
      * is born `FAILED`, and recomputes the fulfilment of the orders touched. Answers the ids of the rows that were new.
      */
@@ -533,9 +564,11 @@ class DeliveryService(
      * The body renderer of `WEBHOOK` actions at plan time: `JSON` keeps the planner's body, `DISCORD` goes through [DiscordRenderer] with the localised labels
      * of the four `action.*` events (read before planning because the planner is not suspending). Without a label source the stand-in body is kept.
      */
-    private suspend fun webhookBodyRenderer(items: Collection<PlanItem>): (WebhookBodyInput) -> String {
+    private suspend fun webhookBodyRenderer(items: Collection<PlanItem>): (WebhookBodyInput) -> String = webhookBodyRendererFor(items.flatMap { it.actions.actions })
+
+    private suspend fun webhookBodyRendererFor(actions: List<ProductAction>): (WebhookBodyInput) -> String {
         val source = discordLabels ?: return DefaultWebhookBody::render
-        val hasDiscord = items.any { item -> item.actions.actions.any { it.type == DeliveryActionType.WEBHOOK && it.webhook?.format == PlanWebhookFormat.DISCORD } }
+        val hasDiscord = actions.any { it.type == DeliveryActionType.WEBHOOK && it.webhook?.format == PlanWebhookFormat.DISCORD }
 
         if (!hasDiscord) return DefaultWebhookBody::render
 

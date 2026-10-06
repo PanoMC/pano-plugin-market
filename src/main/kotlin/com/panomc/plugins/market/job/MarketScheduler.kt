@@ -261,8 +261,8 @@ internal object MarketJobs {
             entitlementExpiry(entitlementExpiryJob(plugin)),
             refundReconcile(refundReconcileJob(plugin)),
             shipmentTracking(ShipmentTrackingJob(SystemClock, context.getBean(MarketShipmentDao::class.java), shippingService(plugin), sqlClient)),
-            mailOutbox(MailWiring.job(plugin)),
-            subscription(subscriptionJob(plugin))
+            subscription(subscriptionJob(plugin)),
+            mailOutbox(MailWiring.job(plugin))
         )
     }
 

@@ -4,11 +4,17 @@ import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.api.config.PluginConfigManager
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
+import com.panomc.platform.error.NoPermission
 import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.log.UpdatedMarketSettingsLog
 import com.panomc.plugins.market.config.SettingsRequest
+import com.panomc.plugins.market.core.webhook.TargetPolicy
+import com.panomc.plugins.market.error.InvalidSettings
+import com.panomc.plugins.market.routes.panel.dispute.ChargebackActionRules
+import com.panomc.plugins.market.routes.panel.product.RoutingCaller
+import com.panomc.plugins.market.service.platform.PlatformServerRoster
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import io.vertx.core.json.JsonObject
@@ -56,6 +62,8 @@ class PanelUpdateSettingsAPI(
         // added as a declared property.
         body.remove("version")
 
+        checkChargebackActions(context, body)
+
         val merged = SettingsRequest.apply(body, JsonObject.mapFrom(configManager.config))
         configManager.saveConfig(merged)
 
@@ -69,5 +77,27 @@ class PanelUpdateSettingsAPI(
         )
 
         return Successful()
+    }
+
+    /**
+     * A body that carries `chargebackActions` goes through [ChargebackActionRules] (11 section 10, MK-112): the actions are parsed like product actions (ids `c<n>`,
+     * `COMMAND` and `WEBHOOK` only, no `BUYER_CHOICE`, no `perUnit`, at most 10) and a changed one passes `ActionGuard` for the caller. 400 `INVALID_SETTINGS
+     * {fieldErrors: {chargebackActions}}`, 403 `NO_PERMISSION`. A webhook action's secret is not encrypted on this path (this route has no cipher): see the MK-112 evidence.
+     */
+    private suspend fun checkChargebackActions(context: RoutingContext, body: JsonObject) {
+        val submitted = body.getValue("chargebackActions") ?: return
+        val text = submitted as? String ?: throw InvalidSettings(mapOf("chargebackActions" to "INVALID"))
+        val roster = PlatformServerRoster({ databaseManager }) { plugin.applicationContext.getBean(com.panomc.platform.server.ServerManager::class.java) }.snapshot(getSqlClient())
+        val allowPrivate = configManager.config.allowPrivateWebhookTargets
+        val verdict = ChargebackActionRules.check(
+            text, configManager.config.chargebackActions, RoutingCaller(plugin, context), roster.granted.toSet(), roster.granted.isNotEmpty(),
+            webhookUrlOk = { url -> TargetPolicy.syntaxOk(url, TargetPolicy.effectiveAllowPrivate(allowPrivate, com.panomc.platform.hosted.HostedEnvConfig.current.isHosted)) }
+        )
+
+        when (verdict) {
+            ChargebackActionRules.Verdict.Ok -> Unit
+            is ChargebackActionRules.Verdict.Invalid -> throw InvalidSettings(mapOf("chargebackActions" to verdict.reason))
+            ChargebackActionRules.Verdict.Forbidden -> throw NoPermission()
+        }
     }
 }

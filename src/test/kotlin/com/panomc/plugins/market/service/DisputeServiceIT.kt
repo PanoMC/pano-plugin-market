@@ -1,0 +1,969 @@
+package com.panomc.plugins.market.service
+
+import com.panomc.plugins.market.config.MarketConfig
+import com.panomc.plugins.market.core.abuse.BlockEntry
+import com.panomc.plugins.market.core.abuse.BlockMatcher
+import com.panomc.plugins.market.core.abuse.BlockSubjects
+import com.panomc.plugins.market.core.delivery.ProductAction
+import com.panomc.plugins.market.db.MarketDaoITBase
+import com.panomc.plugins.market.db.model.CreatorEarningState
+import com.panomc.plugins.market.db.model.CreditTxType
+import com.panomc.plugins.market.db.model.DeliveryActionType
+import com.panomc.plugins.market.db.model.DeliveryPhase
+import com.panomc.plugins.market.db.model.DeliverySourceType
+import com.panomc.plugins.market.db.model.DeliveryStatus
+import com.panomc.plugins.market.db.model.DisputeOrigin
+import com.panomc.plugins.market.db.model.DisputeRecordStatus
+import com.panomc.plugins.market.db.model.DisputeStatus
+import com.panomc.plugins.market.db.model.EntitlementStatus
+import com.panomc.plugins.market.db.model.MarketCreatorEarning
+import com.panomc.plugins.market.db.model.MarketPayment
+import com.panomc.plugins.market.db.model.OrderEventType
+import com.panomc.plugins.market.db.model.PaymentStatus
+import com.panomc.plugins.market.db.model.RefundOrigin
+import com.panomc.plugins.market.db.model.RefundStatus
+import com.panomc.plugins.market.error.InsufficientCredits
+import com.panomc.plugins.market.error.InvalidOrderTransition
+import com.panomc.plugins.market.error.InvalidState
+import com.panomc.plugins.market.routes.api.payment.EventNotHandled
+import com.panomc.plugins.market.routes.api.payment.InboundEventContext
+import com.panomc.plugins.market.routes.api.payment.PaymentEventSink
+import com.panomc.plugins.market.spi.common.Money
+import com.panomc.plugins.market.spi.payment.DisputeState
+import com.panomc.plugins.market.spi.payment.PaymentEvent
+import com.panomc.plugins.market.spi.payment.PaymentTarget
+import com.panomc.plugins.market.spi.payment.RefundState
+import com.panomc.plugins.market.support.MarketTestDb
+import com.panomc.plugins.market.support.Race
+import com.panomc.plugins.market.support.TestUser
+import com.panomc.plugins.market.support.TestWiring
+import com.panomc.plugins.market.util.OrderStatus
+import io.vertx.core.Vertx
+import io.vertx.core.json.JsonArray
+import io.vertx.core.json.JsonObject
+import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import java.util.concurrent.CopyOnWriteArrayList
+
+/**
+ * `DisputeService` on a real MariaDB (MK-112; 21 sections 4 and 5, 07 section 8.5, 11 section 10, 08 sections 11 and 12; tests RF-07, RF-08, V-07 to V-10,
+ * RD-D9 to RD-D11, RD-D18, R-27, F-14): the inbound `DisputeUpdated` and the panel's manual chargeback, O11 (status, revoke, upgrade successors, block list, chargeback
+ * actions, creator earning, cashback and top-up clawback with debt, subscription hook, webhook), O12, and the event routing of the inbound pipeline. Invariants I1 to
+ * I22 are checked after every test by the base class (I3 allows the debt of a `dispute:*` clawback, I17 the `soldCount` that O11 takes away and O12 gives back).
+ */
+class DisputeServiceIT : MarketDaoITBase() {
+    private lateinit var w: TestWiring
+    private lateinit var r: RefundWorld
+    private lateinit var disputes: DisputeService
+    private val vertx: Vertx = Vertx.vertx()
+    private val alerts = CopyOnWriteArrayList<Triple<Long, String, JsonObject>>()
+    private val subscriptionCalls = CopyOnWriteArrayList<Pair<Long, Long>>()
+    private var steveUser: TestUser? = null
+
+    @AfterAll
+    fun closeVertx() {
+        vertx.close()
+    }
+
+    @BeforeEach
+    fun wire() {
+        steveUser = null
+        alerts.clear()
+        subscriptionCalls.clear()
+        w = TestWiring(pool)
+        r = RefundWorld(w, vertx)
+        build()
+    }
+
+    private fun build() {
+        disputes = DisputeService(
+            w.db, r.d.locks, w.clock, { w.config }, w.orders, w.orderItems, w.orderEvents, w.payments, w.disputes, w.blocks, w.deliveries, w.entitlements, w.creditTxs, r.d.credits,
+            r.d.service, r.d.entitlementService, r.service,
+            StandardDisputeEffects(r.effects, r.webhooks.service) { _, order, dispute -> subscriptionCalls += order.id to dispute.id },
+            DisputeAlerts { orderId, code, data -> alerts += Triple(orderId, code, data) }
+        )
+    }
+
+    override suspend fun assertInvariants() {
+        w.assertInvariants()
+    }
+
+    private suspend fun steve(): TestUser = steveUser ?: w.fixtures.user("Steve").also { steveUser = it }
+
+    /** The test store with the dispute switches of one test (a [MarketConfig] cannot be copied). */
+    private fun cfg(
+        chargebackActions: String = "[]",
+        revokeOnChargeback: Boolean = true,
+        autoBlock: Boolean = true,
+        revokeCreditOrders: Boolean = true
+    ) = w.configure {
+        MarketConfig(
+            currency = com.panomc.plugins.market.util.CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC",
+            revokeOnChargeback = revokeOnChargeback, autoBlockOnChargeback = autoBlock, revokeCreditOrdersOnTopUpChargeback = revokeCreditOrders, chargebackActions = chargebackActions
+        )
+    }
+
+    private fun permission(id: String, vararg nodes: String) = ProductAction(id = id, type = DeliveryActionType.PERMISSION, nodes = nodes.toList())
+
+    private fun ban(id: String = "c1", server: Long = 7L) =
+        ProductAction(id = id, type = DeliveryActionType.COMMAND, commands = listOf("ban {username} Chargeback"), targetServers = listOf(server))
+
+    private fun actionsJson(vararg actions: ProductAction) = JsonArray(actions.map { it.toJson() }).encode()
+
+    private suspend fun revokeRows(orderId: Long) = r.d.rows(orderId).filter { it.phase == DeliveryPhase.REVOKE }
+
+    private suspend fun timeline(orderId: Long) = w.orderEvents.getByOrderId(orderId, pool)
+
+    private suspend fun disputeRows(orderId: Long) = w.disputes.getByOrderId(orderId, pool)
+
+    private suspend fun blocks() = MarketTestDb.sql(pool, "SELECT `type`, `value`, `source`, `orderId` FROM `${MarketTestDb.TABLE_PREFIX}market_block` ORDER BY `id`")
+
+    private suspend fun hooks(event: String) =
+        MarketTestDb.sql(pool, "SELECT `event`, `body` FROM `${MarketTestDb.TABLE_PREFIX}market_webhook_delivery` WHERE `event` = ? ORDER BY `id`", event)
+
+    private suspend fun sold(productId: Long): Int = w.products.getById(productId, pool)!!.soldCount
+
+    private suspend fun ledger(user: TestUser, type: CreditTxType) = w.creditTxs.getByUserId(user.id, 100, pool).filter { it.type == type }
+
+    /** An inbound `DisputeUpdated` for the attempt of [paid], applied the way the dispatcher's router does. */
+    private suspend fun dispute(paid: PaidOrder, state: DisputeState, id: String? = "dp_1", amount: Long? = null, reason: String? = null) {
+        val event = PaymentEvent.DisputeUpdated(PaymentTarget.Attempt(paid.attempt.id), state)
+
+        event.gatewayDisputeId = id
+        event.amount = amount?.let { Money(it, "EUR") }
+        event.reason = reason
+
+        disputes.onDisputeUpdated(event, r.attempt(paid.attempt.id), "evt", null)
+    }
+
+    // ===== RF-08: a chargeback ======================================================================================================
+
+    @Test
+    fun `RF-08 a dispute opened at the gateway charges the order back, revokes, blocks the buyer, reverses the earning and queues the webhook, then WON restores it`(): Unit = runBlocking {
+        cfg(chargebackActions = actionsJson(ban()))
+        r.d.roster.granted = listOf(7L)
+
+        val u = steve()
+        val code = w.fixtures.creatorCode(code = "CREATOR")
+        val paid = r.place(u, listOf(RefundLine(10_000, actions = listOf(permission("a1", "group.vip")))), email = "Steve@Example.com")
+        val itemId = paid.items[0].id
+        val now = w.clock.now()
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `creatorCodeId` = ? WHERE `id` = ?", code.id, paid.order.id)
+        w.creatorEarnings.add(
+            MarketCreatorEarning(
+                creatorCodeId = code.id, orderId = paid.order.id, baseAmount = 10_000, commissionPercent = 1000, amount = 1000, currency = "EUR",
+                state = CreatorEarningState.AVAILABLE, availableAt = now, createdAt = now, updatedAt = now
+            ),
+            pool
+        )
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_creator_code` SET `earnings` = 1000 WHERE `id` = ?", code.id)
+        r.webhooks.endpoint("https://hooks.example.com/market", events = "[\"order.chargeback\",\"order.chargeback.won\"]")
+
+        assertEquals(1, sold(paid.products[0].id))
+
+        // a partial dispute amount still charges the whole order back (RD-D18)
+        dispute(paid, DisputeState.OPENED, "dp_1", amount = 4_000, reason = "fraudulent")
+
+        val order = r.order(paid.order.id)
+        val row = disputeRows(paid.order.id).single()
+
+        assertEquals(OrderStatus.CHARGEBACK, order.status)
+        assertEquals(OrderStatus.COMPLETED, order.statusBeforeDispute)
+        assertEquals(DisputeStatus.OPEN, order.disputeStatus)
+        assertEquals(DisputeRecordStatus.OPEN, row.status)
+        assertEquals(DisputeOrigin.GATEWAY, row.origin)
+        assertEquals(4_000, row.amount, "the disputed amount is informational")
+        assertEquals("fake", row.providerId)
+        assertEquals("dp_1", row.gatewayDisputeId)
+        assertEquals(paid.attempt.id, row.paymentId)
+        assertEquals("fraudulent", row.reason)
+
+        // the goods: entitlement ended, REVOKE rows, the units left the sold count
+        assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(itemId, pool).single().status)
+        assertEquals("CHARGEBACK", w.entitlements.getByOrderItemId(itemId, pool).single().endReason)
+        assertEquals(1, revokeRows(paid.order.id).size)
+        assertEquals(0, sold(paid.products[0].id))
+
+        // the block list: the recipient, the payer's account and the exact e-mail, all of this chargeback
+        assertEquals(
+            setOf("PLAYER:steve", "USER:${u.id}", "EMAIL:steve@example.com"), blocks().map { "${it.getString("type")}:${it.getString("value")}" }.toSet()
+        )
+        assertTrue(blocks().all { it.getString("source") == "CHARGEBACK" && it.getLong("orderId") == paid.order.id })
+
+        val matcher = BlockMatcher(blocks().mapIndexed { i, b -> BlockEntry(i + 1L, com.panomc.plugins.market.core.abuse.BlockType.valueOf(b.getString("type")), b.getString("value")) })
+
+        assertNotNull(matcher.match(BlockSubjects(usernames = setOf("STEVE")), w.clock.now()), "the next checkout of that buyer is refused")
+        assertNotNull(matcher.match(BlockSubjects(emails = setOf("steve@example.com")), w.clock.now()))
+        assertNull(matcher.match(BlockSubjects(usernames = setOf("Alex"), emails = setOf("alex@example.com")), w.clock.now()))
+
+        // the earning is taken back in full
+        val earning = w.creatorEarnings.get(paid.order.id, code.id, pool)!!
+
+        assertEquals(1000, earning.reversedAmount)
+        assertEquals(CreatorEarningState.REVERSED, earning.state)
+        assertEquals(0, w.creatorCodes.getById(code.id, pool)!!.earnings)
+
+        // the configured ban: an account order, so the payer is the target and the row is live
+        val ban = r.d.rows(paid.order.id).single { it.sourceType == DeliverySourceType.CHARGEBACK_ACTION }
+
+        assertEquals("Steve", ban.playerUsername)
+        assertEquals("cb:${row.id}:c1:7:0:GRANT:0", ban.idempotencyKey)
+        assertEquals(DeliveryStatus.PENDING, ban.status)
+        assertFalse(ban.requiresOnline, "a ban never waits for the player")
+
+        // the webhook and the timeline
+        val hook = hooks("order.chargeback").single()
+        val sent = JsonObject(hook.getString("body")).getJsonObject("data").getJsonObject("dispute")
+
+        assertEquals(row.id, sent.getLong("id"))
+        assertEquals("OPEN", sent.getString("status"))
+        assertEquals("dp_1", sent.getString("gatewayDisputeId"))
+        assertTrue(timeline(paid.order.id).any { it.type == OrderEventType.STATUS_CHANGED && it.toStatus == "CHARGEBACK" })
+        assertTrue(timeline(paid.order.id).any { it.type == OrderEventType.DISPUTE_OPENED })
+        assertEquals(listOf("PLAYER", "USER", "EMAIL").toSet(), JsonObject(timeline(paid.order.id).single { it.type == OrderEventType.BLOCK_CREATED }.data!!).getJsonArray("types").map { it.toString() }.toSet())
+        assertTrue(alerts.any { it.first == paid.order.id && it.second == "CHARGEBACK_OPENED" })
+
+        // a replay of the same event changes nothing
+        dispute(paid, DisputeState.OPENED, "dp_1", amount = 4_000)
+
+        assertEquals(1, disputeRows(paid.order.id).size)
+        assertEquals(1, hooks("order.chargeback").size)
+        assertEquals(1, revokeRows(paid.order.id).size)
+
+        // WON: the status is back, the blocks go, the webhook says so, nothing is granted again
+        val grantRows = r.d.rows(paid.order.id).count { it.phase == DeliveryPhase.GRANT && it.sourceType == DeliverySourceType.ORDER_ITEM }
+
+        dispute(paid, DisputeState.WON, "dp_1")
+
+        val after = r.order(paid.order.id)
+
+        assertEquals(OrderStatus.COMPLETED, after.status)
+        assertEquals(DisputeStatus.WON, after.disputeStatus)
+        assertEquals(DisputeRecordStatus.WON, disputeRows(paid.order.id).single().status)
+        assertNotNull(disputeRows(paid.order.id).single().resolvedAt)
+        assertTrue(blocks().isEmpty())
+        assertTrue(timeline(paid.order.id).any { it.type == OrderEventType.BLOCK_REMOVED })
+        assertEquals(1, hooks("order.chargeback.won").size)
+        assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(itemId, pool).single().status, "nothing is re-granted automatically")
+        assertEquals(grantRows, r.d.rows(paid.order.id).count { it.phase == DeliveryPhase.GRANT && it.sourceType == DeliverySourceType.ORDER_ITEM })
+        assertEquals(1, sold(paid.products[0].id), "the units are sold again")
+        assertEquals(1000, w.creatorEarnings.get(paid.order.id, code.id, pool)!!.reversedAmount, "earnings are restored by hand")
+    }
+
+    // ===== statusBeforeDispute ======================================================================================================
+
+    @Test
+    fun `WON restores the status the order had, also PARTIALLY_REFUNDED and REFUNDED, and the refunded units stay out of the sold count`(): Unit = runBlocking {
+        val partial = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+
+        r.service.request(partial.order.id, RefundInput(amount = 400), r.key(), null)
+        dispute(partial, DisputeState.OPENED, "dp_p")
+
+        assertEquals(OrderStatus.CHARGEBACK, r.order(partial.order.id).status)
+        assertEquals(OrderStatus.PARTIALLY_REFUNDED, r.order(partial.order.id).statusBeforeDispute)
+        assertEquals(0, sold(partial.products[0].id))
+
+        dispute(partial, DisputeState.WON, "dp_p")
+
+        assertEquals(OrderStatus.PARTIALLY_REFUNDED, r.order(partial.order.id).status)
+        assertEquals(1, sold(partial.products[0].id))
+
+        val full = r.place(steve(), listOf(RefundLine(2000, actions = listOf(permission("b1", "group.vip2")))))
+
+        r.service.request(full.order.id, RefundInput(), r.key(), null)
+
+        assertEquals(OrderStatus.REFUNDED, r.order(full.order.id).status)
+
+        dispute(full, DisputeState.OPENED, "dp_f")
+
+        assertEquals(OrderStatus.REFUNDED, r.order(full.order.id).statusBeforeDispute)
+
+        dispute(full, DisputeState.WON, "dp_f")
+
+        assertEquals(OrderStatus.REFUNDED, r.order(full.order.id).status)
+        assertEquals(0, sold(full.products[0].id))
+    }
+
+    // ===== V-07, RD-D9, RD-D10 ======================================================================================================
+
+    @Test
+    fun `V-07 an inquiry does nothing to the order, OPENED is one O11 and WON delivered twice is one O12 with one block`(): Unit = runBlocking {
+        r.webhooks.endpoint("https://hooks.example.com/market", events = "[\"*\"]")
+
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+
+        dispute(paid, DisputeState.INQUIRY, "dp_7")
+
+        var order = r.order(paid.order.id)
+
+        assertEquals(OrderStatus.COMPLETED, order.status)
+        assertEquals(DisputeStatus.NONE, order.disputeStatus)
+        assertEquals(DisputeRecordStatus.INQUIRY, disputeRows(paid.order.id).single().status)
+        assertTrue(blocks().isEmpty())
+        assertTrue(revokeRows(paid.order.id).isEmpty())
+        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(paid.items[0].id, pool).single().status)
+        assertTrue(timeline(paid.order.id).any { it.type == OrderEventType.DISPUTE_INQUIRY })
+        assertTrue(alerts.any { it.first == paid.order.id && it.second == "DISPUTE_INQUIRY" })
+        assertTrue(hooks("order.chargeback").isEmpty())
+
+        // the inquiry becomes a dispute: the same row, one O11
+        dispute(paid, DisputeState.OPENED, "dp_7")
+        dispute(paid, DisputeState.OPENED, "dp_7")
+
+        order = r.order(paid.order.id)
+
+        assertEquals(OrderStatus.CHARGEBACK, order.status)
+        assertEquals(1, disputeRows(paid.order.id).size)
+        assertEquals(1, hooks("order.chargeback").size)
+        assertEquals(1, revokeRows(paid.order.id).size)
+        assertEquals(2, blocks().size, "the recipient and the payer's account (the order has no e-mail)")
+    }
+
+    @Test
+    fun `RD-D10 events without a gateway id, OPENED twice then WON twice is one dispute row, one O11 and one O12`(): Unit = runBlocking {
+        r.webhooks.endpoint("https://hooks.example.com/market", events = "[\"*\"]")
+
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+
+        dispute(paid, DisputeState.OPENED, id = null)
+        dispute(paid, DisputeState.OPENED, id = null)
+
+        assertEquals(1, disputeRows(paid.order.id).size)
+        assertEquals(OrderStatus.CHARGEBACK, r.order(paid.order.id).status)
+
+        dispute(paid, DisputeState.WON, id = null)
+        dispute(paid, DisputeState.WON, id = null)
+
+        assertEquals(1, disputeRows(paid.order.id).size)
+        assertEquals(DisputeRecordStatus.WON, disputeRows(paid.order.id).single().status)
+        assertEquals(OrderStatus.COMPLETED, r.order(paid.order.id).status)
+        assertEquals(1, hooks("order.chargeback").size)
+        assertEquals(1, hooks("order.chargeback.won").size)
+        assertEquals(1, timeline(paid.order.id).count { it.type == OrderEventType.STATUS_CHANGED && it.toStatus == "CHARGEBACK" })
+        assertEquals(1, timeline(paid.order.id).count { it.type == OrderEventType.STATUS_CHANGED && it.fromStatus == "CHARGEBACK" })
+    }
+
+    @Test
+    fun `RD-D9 a LOST dispute keeps the order charged back for good, a second WON is refused for the panel and ignored for the gateway`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+
+        dispute(paid, DisputeState.OPENED, "dp_l")
+        dispute(paid, DisputeState.LOST, "dp_l")
+
+        assertEquals(OrderStatus.CHARGEBACK, r.order(paid.order.id).status)
+        assertEquals(DisputeStatus.LOST, r.order(paid.order.id).disputeStatus)
+        assertEquals(DisputeRecordStatus.LOST, disputeRows(paid.order.id).single().status)
+
+        // the gateway's late WON for a lost row changes nothing; the panel is told
+        dispute(paid, DisputeState.WON, "dp_l")
+
+        assertEquals(OrderStatus.CHARGEBACK, r.order(paid.order.id).status)
+
+        val id = disputeRows(paid.order.id).single().id
+
+        assertThrows(InvalidState::class.java) { runBlocking { disputes.resolve(id, DisputeRecordStatus.WON, null) } }
+    }
+
+    @Test
+    fun `a dispute that is only reported LOST is still O11 (the money is gone), and a WON for a dispute never opened touches nothing`(): Unit = runBlocking {
+        val lost = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+
+        dispute(lost, DisputeState.LOST, "dp_x")
+
+        assertEquals(OrderStatus.CHARGEBACK, r.order(lost.order.id).status)
+        assertEquals(DisputeStatus.LOST, r.order(lost.order.id).disputeStatus)
+        assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(lost.items[0].id, pool).single().status)
+
+        val won = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("b1", "group.vip2")))))
+
+        dispute(won, DisputeState.WON, "dp_y")
+
+        assertEquals(OrderStatus.COMPLETED, r.order(won.order.id).status)
+        assertEquals(DisputeRecordStatus.WON, disputeRows(won.order.id).single().status)
+        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(won.items[0].id, pool).single().status)
+    }
+
+    // ===== the panel =================================================================================================================
+
+    @Test
+    fun `the panel opens a manual chargeback once and resolves it, a double click opens one dispute and a wrong state is INVALID_STATE`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+        val first = disputes.open(paid.order.id, null, "chargeback by phone", 9)
+        val second = disputes.open(paid.order.id, null, null, 9)
+
+        assertEquals(first.id, second.id)
+        assertEquals(DisputeOrigin.MANUAL, first.origin)
+        assertEquals(1_000, first.amount, "what the attempt took")
+        assertEquals("chargeback by phone", first.reason)
+        assertEquals(9L, first.createdBy)
+        assertEquals(OrderStatus.CHARGEBACK, r.order(paid.order.id).status)
+        assertEquals(1, disputeRows(paid.order.id).size)
+        assertTrue(timeline(paid.order.id).filter { it.type == OrderEventType.STATUS_CHANGED }.all { it.actorType == com.panomc.plugins.market.db.model.OrderActorType.ADMIN })
+
+        val closed = disputes.resolve(first.id, DisputeRecordStatus.CLOSED, 9)
+
+        assertEquals(DisputeRecordStatus.CLOSED, closed.status)
+        assertEquals(OrderStatus.COMPLETED, r.order(paid.order.id).status, "a closed open dispute means the merchant kept the money")
+        // the same state again is a replayed PUT
+        assertEquals(DisputeRecordStatus.CLOSED, disputes.resolve(first.id, DisputeRecordStatus.CLOSED, 9).status)
+        assertThrows(InvalidState::class.java) { runBlocking { disputes.resolve(first.id, DisputeRecordStatus.LOST, 9) } }
+        assertThrows(NoSuchElementException::class.java) { runBlocking { disputes.resolve(first.id + 1000, DisputeRecordStatus.WON, 9) } }
+
+        // an order that was never paid has no O11
+        val unpaid = r.place(steve(), listOf(RefundLine(1000)), grant = false)
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `status` = 'PENDING', `paidAt` = NULL, `reservationState` = 'NONE' WHERE `id` = ?", unpaid.order.id)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_product` SET `soldCount` = 0 WHERE `id` = ?", unpaid.products[0].id)
+        assertThrows(InvalidOrderTransition::class.java) { runBlocking { disputes.open(unpaid.order.id, null, null, 9) } }
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `status` = 'CANCELLED', `reservationState` = 'RELEASED' WHERE `id` = ?", unpaid.order.id)
+    }
+
+    @Test
+    fun `a manual chargeback promotes the single inquiry of the order instead of adding a second dispute`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000)))
+
+        dispute(paid, DisputeState.INQUIRY, "dp_i")
+
+        val promoted = disputes.open(paid.order.id, null, null, 9)
+
+        assertEquals(1, disputeRows(paid.order.id).size)
+        assertEquals(DisputeRecordStatus.OPEN, promoted.status)
+        assertEquals("dp_i", promoted.gatewayDisputeId)
+        assertEquals(OrderStatus.CHARGEBACK, r.order(paid.order.id).status)
+    }
+
+    @Test
+    fun `a second dispute on an order that is charged back is recorded and does nothing else`(): Unit = runBlocking {
+        r.webhooks.endpoint("https://hooks.example.com/market", events = "[\"*\"]")
+
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+
+        dispute(paid, DisputeState.OPENED, "dp_a")
+        dispute(paid, DisputeState.OPENED, "dp_b")
+
+        assertEquals(2, disputeRows(paid.order.id).size)
+        assertEquals(1, hooks("order.chargeback").size)
+        assertEquals(1, revokeRows(paid.order.id).size)
+
+        // WON of the first while the second is still open: the order stays charged back
+        dispute(paid, DisputeState.WON, "dp_a")
+
+        assertEquals(OrderStatus.CHARGEBACK, r.order(paid.order.id).status)
+
+        dispute(paid, DisputeState.WON, "dp_b")
+
+        assertEquals(OrderStatus.COMPLETED, r.order(paid.order.id).status)
+        assertEquals(1, hooks("order.chargeback.won").size)
+    }
+
+    @Test
+    fun `a dispute that was won and is opened again by the gateway is a second chargeback cycle of the same row`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+
+        dispute(paid, DisputeState.OPENED, "dp_cycle")
+        dispute(paid, DisputeState.WON, "dp_cycle")
+
+        assertEquals(OrderStatus.COMPLETED, r.order(paid.order.id).status)
+        assertEquals(1, sold(paid.products[0].id))
+        assertTrue(blocks().isEmpty())
+
+        dispute(paid, DisputeState.OPENED, "dp_cycle")
+
+        val order = r.order(paid.order.id)
+        val row = disputeRows(paid.order.id).single()
+
+        assertEquals(OrderStatus.CHARGEBACK, order.status)
+        assertEquals(OrderStatus.COMPLETED, order.statusBeforeDispute)
+        assertEquals(DisputeRecordStatus.OPEN, row.status)
+        assertNull(row.resolvedAt, "a re-opened row is not resolved")
+        assertEquals(0, sold(paid.products[0].id))
+        assertEquals(2, blocks().size, "the block list is written again")
+        assertEquals(1, revokeRows(paid.order.id).size, "the goods were revoked once, the keys of the first cycle hold")
+    }
+
+    @Test
+    fun `the same OPENED event three times at once is one chargeback`(): Unit = runBlocking {
+        r.webhooks.endpoint("https://hooks.example.com/market", events = "[\"order.chargeback\"]")
+
+        repeat(Race.rounds) { round ->
+            val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a$round", "group.vip$round")))), email = "steve$round@example.com")
+            val outcomes = Race.run(3) { dispute(paid, DisputeState.OPENED, "dp_burst_$round") }
+
+            assertTrue(outcomes.all { it.isSuccess }, "round $round: ${outcomes.mapNotNull { it.exceptionOrNull() }}")
+            assertEquals(OrderStatus.CHARGEBACK, r.order(paid.order.id).status)
+            assertEquals(1, disputeRows(paid.order.id).size, "round $round")
+            assertEquals(1, revokeRows(paid.order.id).size, "round $round")
+            assertEquals(1, timeline(paid.order.id).count { it.type == OrderEventType.STATUS_CHANGED && it.toStatus == "CHARGEBACK" }, "round $round")
+        }
+
+        assertEquals(Race.rounds, hooks("order.chargeback").size, "one webhook per chargeback")
+    }
+
+    // ===== V-10: upgrades ============================================================================================================
+
+    @Test
+    fun `V-10 the chargeback of tier 1 after upgrades 1 to 2 to 3 ends all three entitlements and plans REVOKE rows for each`(): Unit = runBlocking {
+        val u = steve()
+        val one = r.place(u, listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+        val two = r.place(u, listOf(RefundLine(1500, actions = listOf(permission("b1", "group.vip2")))))
+        val three = r.place(u, listOf(RefundLine(2000, actions = listOf(permission("c1", "group.vip3")))))
+        val e1 = w.entitlements.getByOrderItemId(one.items[0].id, pool).single()
+        val e2 = w.entitlements.getByOrderItemId(two.items[0].id, pool).single()
+        val e3 = w.entitlements.getByOrderItemId(three.items[0].id, pool).single()
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_entitlement` SET `status` = 'UPGRADED', `replacedById` = ?, `endReason` = 'UPGRADE', `endedAt` = ? WHERE `id` = ?", e2.id, w.clock.now(), e1.id)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_entitlement` SET `status` = 'UPGRADED', `replacedById` = ?, `endReason` = 'UPGRADE', `endedAt` = ? WHERE `id` = ?", e3.id, w.clock.now(), e2.id)
+
+        dispute(one, DisputeState.OPENED, "dp_u")
+
+        for (e in listOf(e1, e2, e3)) {
+            val now = w.entitlements.getById(e.id, pool)!!
+
+            assertEquals(EntitlementStatus.REVOKED, now.status, "entitlement ${e.id}")
+            assertEquals("CHARGEBACK", now.endReason)
+        }
+
+        assertEquals(1, revokeRows(one.order.id).size)
+        assertEquals(1, revokeRows(two.order.id).size, "the successor order's own grant is taken back")
+        assertEquals(1, revokeRows(three.order.id).size)
+
+        // no money moves on the successor orders and they are not charged back
+        assertEquals(OrderStatus.COMPLETED, r.order(two.order.id).status)
+        assertEquals(OrderStatus.COMPLETED, r.order(three.order.id).status)
+        assertEquals(0, r.order(three.order.id).refundedTotal)
+        assertTrue(timeline(three.order.id).any { it.message == "UPGRADE_CASCADE_REVOKED" })
+
+        val alert = alerts.single { it.second == "UPGRADE_SUCCESSORS_REVOKED" }
+
+        assertEquals(one.order.id, alert.first)
+        assertEquals(setOf(two.order.id, three.order.id), alert.third.getJsonArray("orders").map { (it as Number).toLong() }.toSet())
+    }
+
+    @Test
+    fun `revokeOnChargeback off keeps the goods but the order is still charged back, blocked and its earning reversed`(): Unit = runBlocking {
+        cfg(revokeOnChargeback = false)
+
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+
+        dispute(paid, DisputeState.OPENED, "dp_n")
+
+        assertEquals(OrderStatus.CHARGEBACK, r.order(paid.order.id).status)
+        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(paid.items[0].id, pool).single().status)
+        assertTrue(revokeRows(paid.order.id).isEmpty())
+        assertEquals(2, blocks().size)
+    }
+
+    @Test
+    fun `autoBlockOnChargeback off writes no block row`(): Unit = runBlocking {
+        cfg(autoBlock = false)
+
+        val paid = r.place(steve(), listOf(RefundLine(1000)))
+
+        dispute(paid, DisputeState.OPENED, "dp_nb")
+
+        assertEquals(OrderStatus.CHARGEBACK, r.order(paid.order.id).status)
+        assertTrue(blocks().isEmpty())
+    }
+
+    // ===== V-08: the guest gift =====================================================================================================
+
+    @Test
+    fun `V-08 a guest gift charged back blocks the recipient and the e-mail, never the payer's typed name, and holds the ban for confirmation`(): Unit = runBlocking {
+        cfg(chargebackActions = actionsJson(ban()))
+        r.d.roster.granted = listOf(7L)
+
+        val paid = r.place(null, listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))), email = "attacker@example.com")
+
+        // a guest who typed the name of someone else as payer and gifted to a name of their own
+        MarketTestDb.sql(
+            pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `playerUsername` = 'Victim', `recipientUsername` = 'Attacker', `recipientKey` = 'g:attacker', `isGift` = 1 WHERE `id` = ?",
+            paid.order.id
+        )
+
+        dispute(paid, DisputeState.OPENED, "dp_g")
+
+        val values = blocks().map { "${it.getString("type")}:${it.getString("value")}" }.toSet()
+
+        assertEquals(setOf("PLAYER:attacker", "EMAIL:attacker@example.com"), values)
+        assertFalse(values.any { it.contains("victim") })
+
+        val held = r.d.rows(paid.order.id).filter { it.sourceType == DeliverySourceType.CHARGEBACK_ACTION }.single()
+
+        assertEquals(DeliveryStatus.CANCELLED, held.status)
+        assertEquals("NEEDS_CONFIRMATION", held.lastErrorCode)
+        assertEquals("Attacker", held.playerUsername, "the recipient, where the goods went")
+        assertTrue(alerts.any { it.first == paid.order.id && it.second == "CHARGEBACK_ACTIONS_HELD" })
+
+        // the admin confirms: attempt group 1, live, once
+        assertEquals(1, disputes.runChargebackActions(paid.order.id))
+
+        val live = r.d.rows(paid.order.id).filter { it.sourceType == DeliverySourceType.CHARGEBACK_ACTION && it.attemptGroup == 1 }.single()
+
+        assertEquals(DeliveryStatus.PENDING, live.status)
+        assertEquals("Attacker", live.playerUsername)
+        assertTrue(live.idempotencyKey.endsWith(":GRANT:1"))
+        assertEquals(0, disputes.runChargebackActions(paid.order.id), "nothing is held any more")
+    }
+
+    // ===== V-09: top-up, spend, chargeback ==========================================================================================
+
+    @Test
+    fun `V-09 a charged-back top-up that was spent leaves a debt, writes the shortfall and revokes the credit-paid orders newest first`(): Unit = runBlocking {
+        val u = steve()
+        val topUp = r.place(u, listOf(RefundLine(10_000)), grant = false)
+        val itemId = topUp.items[0].id
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order_item` SET `creditAmount` = 10000 WHERE `id` = ?", itemId)
+        w.db.tx { conn -> r.d.credits.creditOrderItems(w.orders.getById(topUp.order.id, conn)!!, w.orderItems.getByOrderIds(listOf(topUp.order.id), conn), conn) { true } }
+
+        assertEquals(10_000, w.fixtures.creditBalance(u))
+
+        // two orders paid with those credits, and the credits are gone
+        val older = r.place(u, listOf(RefundLine(4_000, actions = listOf(permission("a1", "group.vip")))), creditValue = 4_000, credits = 4_000)
+        val newer = r.place(u, listOf(RefundLine(6_000, actions = listOf(permission("b1", "group.vip2")))), creditValue = 6_000, credits = 6_000)
+        val unrelated = r.place(u, listOf(RefundLine(500, actions = listOf(permission("c1", "group.vip3")))))
+
+        w.db.tx { conn ->
+            r.d.credits.lockAccounts(listOf(u.id), true, conn)
+            r.d.credits.revoke(u.id, 10_000, "test:spend", null, "spent", conn)
+        }
+
+        assertEquals(0, w.fixtures.creditBalance(u))
+
+        // `uncovered` is 100.00: revoking the newer order (60.00) is not enough, the older one (40.00) follows
+        dispute(topUp, DisputeState.OPENED, "dp_t")
+
+        val claw = ledger(u, CreditTxType.REVOKE).single { it.idempotencyKey.startsWith("dispute:") }
+
+        assertEquals(10_000, claw.amount)
+        assertEquals(0, claw.shortfall, "ALLOW_DEBT takes it all")
+        assertTrue(claw.idempotencyKey.endsWith(":clawback:$itemId"))
+        assertEquals(-10_000, w.fixtures.creditBalance(u), "the debt")
+
+        val shortfall = timeline(topUp.order.id).single { it.type == OrderEventType.CLAWBACK_SHORTFALL }
+
+        assertEquals(10_000, JsonObject(shortfall.data!!).getLong("uncovered"))
+
+        for (spent in listOf(older, newer)) {
+            assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(spent.items[0].id, pool).single().status, "order ${spent.order.id}")
+            assertEquals(1, revokeRows(spent.order.id).size)
+            assertEquals(OrderStatus.COMPLETED, r.order(spent.order.id).status, "no refund, no chargeback of its own")
+            assertTrue(timeline(spent.order.id).any { it.message == "CREDIT_ORDER_REVOKED" })
+        }
+
+        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(unrelated.items[0].id, pool).single().status, "an order paid with money is not touched")
+        assertEquals(0, w.refunds.getByOrderId(older.order.id, pool).size)
+
+        val alert = alerts.single { it.second == "CLAWBACK_SHORTFALL" }
+
+        assertEquals(setOf(older.order.id, newer.order.id), alert.third.getJsonArray("revoked").map { (it as Number).toLong() }.toSet())
+
+        // a later hold fails until the debt is repaid
+        assertThrows(InsufficientCredits::class.java) {
+            runBlocking {
+                w.db.tx { conn ->
+                    r.d.credits.lockAccounts(listOf(u.id), true, conn)
+                    r.d.credits.post(
+                        Posting(CreditTxType.HOLD, "test:hold", u.id, 1, AccountRef.User(u.id), AccountRef.System(com.panomc.plugins.market.db.model.CreditSystemKey.HOLD), PostingPolicy.FAIL), conn
+                    )
+                }
+            }
+        }
+
+        // a replayed event takes nothing more
+        dispute(topUp, DisputeState.OPENED, "dp_t")
+
+        assertEquals(-10_000, w.fixtures.creditBalance(u))
+    }
+
+    @Test
+    fun `V-09 only the newest credit-paid orders that cover the shortfall are revoked, and none when revokeCreditOrdersOnTopUpChargeback is off`(): Unit = runBlocking {
+        val u = steve()
+        val topUp = r.place(u, listOf(RefundLine(10_000)), grant = false)
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order_item` SET `creditAmount` = 10000 WHERE `id` = ?", topUp.items[0].id)
+        w.db.tx { conn -> r.d.credits.creditOrderItems(w.orders.getById(topUp.order.id, conn)!!, w.orderItems.getByOrderIds(listOf(topUp.order.id), conn), conn) { true } }
+
+        val older = r.place(u, listOf(RefundLine(4_000, actions = listOf(permission("a1", "group.vip")))), creditValue = 4_000, credits = 4_000)
+        val newer = r.place(u, listOf(RefundLine(7_000, actions = listOf(permission("b1", "group.vip2")))), creditValue = 7_000, credits = 7_000)
+
+        // only 30.00 of the 100.00 are gone: the shortfall is 30.00, which the newest order (70.00) covers alone
+        w.db.tx { conn ->
+            r.d.credits.lockAccounts(listOf(u.id), true, conn)
+            r.d.credits.revoke(u.id, 10_000, "test:spend", null, "spent", conn)
+            r.d.credits.grant(u.id, 7_000, "test:back", null, "returned", conn)
+        }
+
+        dispute(topUp, DisputeState.OPENED, "dp_t2")
+
+        assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(newer.items[0].id, pool).single().status)
+        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(older.items[0].id, pool).single().status)
+        assertEquals(-3_000, w.fixtures.creditBalance(u))
+
+        // the same with the switch off: debt and alert, nothing revoked
+        cfg(revokeCreditOrders = false)
+
+        val u2 = w.fixtures.user("Alex")
+        val topUp2 = r.place(u2, listOf(RefundLine(10_000)), grant = false)
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order_item` SET `creditAmount` = 10000 WHERE `id` = ?", topUp2.items[0].id)
+        w.db.tx { conn -> r.d.credits.creditOrderItems(w.orders.getById(topUp2.order.id, conn)!!, w.orderItems.getByOrderIds(listOf(topUp2.order.id), conn), conn) { true } }
+
+        val spent = r.place(u2, listOf(RefundLine(2_000, actions = listOf(permission("d1", "group.vip4")))), creditValue = 2_000, credits = 2_000)
+
+        w.db.tx { conn ->
+            r.d.credits.lockAccounts(listOf(u2.id), true, conn)
+            r.d.credits.revoke(u2.id, 10_000, "test:spend2", null, "spent", conn)
+        }
+
+        dispute(topUp2, DisputeState.OPENED, "dp_t3")
+
+        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(spent.items[0].id, pool).single().status)
+        assertEquals(-10_000, w.fixtures.creditBalance(u2))
+        assertEquals(listOf(spent.order.id), alerts.last { it.second == "CLAWBACK_SHORTFALL" }.third.getJsonArray("creditOrders").map { (it as Number).toLong() })
+    }
+
+    @Test
+    fun `a charged-back top-up the buyer still holds is taken back without a shortfall, and the cashback of the order is reversed with the same debt policy`(): Unit = runBlocking {
+        val u = steve()
+        val paid = r.place(u, listOf(RefundLine(10_000)), grant = false)
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order_item` SET `creditAmount` = 5000 WHERE `id` = ?", paid.items[0].id)
+        w.db.tx { conn ->
+            val order = w.orders.getById(paid.order.id, conn)!!
+            val items = w.orderItems.getByOrderIds(listOf(paid.order.id), conn)
+
+            r.d.credits.creditOrderItems(order, items, conn) { true }
+            r.d.credits.cashback(order, items, com.panomc.plugins.market.core.credit.Cashback.Settings(true, 1000, 100), conn)
+        }
+
+        // 50.00 top-up + 10.00 cashback (10 % of 100.00)
+        assertEquals(6_000, w.fixtures.creditBalance(u))
+
+        dispute(paid, DisputeState.OPENED, "dp_c")
+
+        val reversal = ledger(u, CreditTxType.CASHBACK_REVERSAL).single()
+
+        assertTrue(reversal.idempotencyKey.startsWith("dispute:") && reversal.idempotencyKey.endsWith(":cashback"))
+        assertEquals(1_000, reversal.amount)
+        assertEquals(0, reversal.shortfall)
+        assertTrue(timeline(paid.order.id).none { it.type == OrderEventType.CLAWBACK_SHORTFALL }, "the balance covered the top-up")
+        assertEquals(0, w.fixtures.creditBalance(u))
+        assertTrue(alerts.none { it.second == "CLAWBACK_SHORTFALL" })
+    }
+
+    @Test
+    fun `the cashback of a charged-back order is reversed in full even when it was spent, the balance goes into debt`(): Unit = runBlocking {
+        val u = steve()
+        val paid = r.place(u, listOf(RefundLine(10_000, actions = listOf(permission("a1", "group.vip")))))
+
+        w.db.tx { conn ->
+            r.d.credits.cashback(
+                w.orders.getById(paid.order.id, conn)!!, w.orderItems.getByOrderIds(listOf(paid.order.id), conn), com.panomc.plugins.market.core.credit.Cashback.Settings(true, 1000, 100), conn
+            )
+            r.d.credits.lockAccounts(listOf(u.id), true, conn)
+            r.d.credits.revoke(u.id, 1_000, "test:spend", null, "spent", conn)
+        }
+
+        assertEquals(0, w.fixtures.creditBalance(u))
+
+        dispute(paid, DisputeState.OPENED, "dp_cb")
+
+        val reversal = ledger(u, CreditTxType.CASHBACK_REVERSAL).single()
+
+        assertEquals(1_000, reversal.amount, "ALLOW_DEBT takes it all")
+        assertEquals(0, reversal.shortfall)
+        assertEquals(-1_000, w.fixtures.creditBalance(u))
+    }
+
+    // ===== the other effects of O11 =================================================================================================
+
+    @Test
+    fun `O11 hands the order to the subscription hook and cancels the refunds nobody sent, a refund in flight is left to settle`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+        val waiting = r.service.request(paid.order.id, RefundInput(amount = 400, revokeFirst = true), r.key(), null).refund
+
+        assertEquals(RefundStatus.REQUESTED, waiting.status)
+
+        dispute(paid, DisputeState.OPENED, "dp_r")
+
+        assertEquals(RefundStatus.CANCELLED, r.refund(waiting.id).status)
+        assertEquals("CHARGEBACK", r.refund(waiting.id).failureCode)
+        assertEquals(listOf(paid.order.id to disputeRows(paid.order.id).single().id), subscriptionCalls.toList())
+        assertTrue(timeline(paid.order.id).any { it.message == "REFUNDS_CANCELLED_BY_CHARGEBACK" })
+
+        // a charged-back order cannot be refunded any more
+        r.expect("INVALID_ORDER_TRANSITION", 400) { r.service.request(paid.order.id, RefundInput(amount = 100), r.key(), null) }
+    }
+
+    @Test
+    fun `a dispute for an attempt of another order is ignored, a missing order stays untouched`(): Unit = runBlocking {
+        val one = r.place(steve(), listOf(RefundLine(1000)))
+        val two = r.place(steve(), listOf(RefundLine(1000)))
+
+        dispute(one, DisputeState.OPENED, "dp_shared")
+        dispute(two, DisputeState.OPENED, "dp_shared")
+
+        assertEquals(OrderStatus.COMPLETED, r.order(two.order.id).status)
+        assertTrue(disputeRows(two.order.id).isEmpty())
+        assertEquals(OrderStatus.CHARGEBACK, r.order(one.order.id).status)
+    }
+
+    @Test
+    fun `an id-less event with two open disputes is ambiguous, noted and alerted, nothing applied`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000)))
+
+        dispute(paid, DisputeState.INQUIRY, "dp_1")
+        dispute(paid, DisputeState.INQUIRY, "dp_2")
+        dispute(paid, DisputeState.WON, id = null)
+
+        assertTrue(disputeRows(paid.order.id).all { it.status == DisputeRecordStatus.INQUIRY })
+        assertTrue(alerts.any { it.second == "DISPUTE_AMBIGUOUS" })
+        assertTrue(timeline(paid.order.id).any { it.message == "DISPUTE_EVENT_AMBIGUOUS" })
+    }
+
+    @Test
+    fun `an OPENED dispute for an order that is not paid is only recorded with an alert`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000)), grant = false)
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `status` = 'CANCELLED', `reservationState` = 'RELEASED', `paidAt` = NULL WHERE `id` = ?", paid.order.id)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_product` SET `soldCount` = 0 WHERE `id` = ?", paid.products[0].id)
+
+        dispute(paid, DisputeState.OPENED, "dp_unpaid")
+
+        assertEquals(OrderStatus.CANCELLED, r.order(paid.order.id).status)
+        assertEquals(DisputeRecordStatus.OPEN, disputeRows(paid.order.id).single().status)
+        assertTrue(alerts.any { it.second == "DISPUTE_ON_UNPAID_ORDER" })
+        assertTrue(blocks().isEmpty())
+    }
+
+    // ===== RF-07 and the event routing ==============================================================================================
+
+    private fun router(next: PaymentEventSink = PaymentEventSink.UNHANDLED) = PaymentEventRouter({ r.service }, { disputes }, next)
+
+    private fun context() = InboundEventContext(1, "fake", "evt-${w.ids.uuid()}", null, w.clock.now())
+
+    @Test
+    fun `RF-07 an unsolicited refund event becomes a GATEWAY refund row and O10 through the routing of the pipeline`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+        val event = PaymentEvent.RefundUpdated(PaymentTarget.Attempt(paid.attempt.id), RefundState.SUCCEEDED, Money(1000, "EUR"))
+
+        event.gatewayRefundId = "re_1"
+
+        router().apply(event, r.attempt(paid.attempt.id), context())
+
+        val row = r.refunds(paid.order.id).single()
+
+        assertEquals(RefundOrigin.GATEWAY, row.origin)
+        assertEquals(RefundStatus.SUCCEEDED, row.status)
+        assertEquals(OrderStatus.REFUNDED, r.order(paid.order.id).status)
+        assertEquals(1000, r.order(paid.order.id).refundedTotal)
+    }
+
+    @Test
+    fun `the router sends a dispute event to the dispute service and everything else to the next sink`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+        val event = PaymentEvent.DisputeUpdated(PaymentTarget.Attempt(paid.attempt.id), DisputeState.OPENED)
+
+        event.gatewayDisputeId = "dp_router"
+
+        router().apply(event, r.attempt(paid.attempt.id), context())
+
+        assertEquals(OrderStatus.CHARGEBACK, r.order(paid.order.id).status)
+
+        // a dispute whose target is not an attempt cannot be placed on an order: it goes on, so that its request stays replayable
+        val passed = CopyOnWriteArrayList<String>()
+        val next = PaymentEventSink { e, _, _ -> passed += e.javaClass.simpleName }
+        val subscriptionTarget = PaymentEvent.DisputeUpdated(PaymentTarget.Subscription("sub_1"), DisputeState.OPENED)
+
+        router(next).apply(subscriptionTarget, null, context())
+        router(next).apply(PaymentEvent.Cancelled(PaymentTarget.Attempt(paid.attempt.id)), r.attempt(paid.attempt.id), context())
+
+        assertEquals(listOf("DisputeUpdated", "Cancelled"), passed.toList())
+        assertThrows(EventNotHandled::class.java) { runBlocking { router().apply(subscriptionTarget, null, context()) } }
+    }
+
+    // ===== F-14: a duplicate payment ================================================================================================
+
+    @Test
+    fun `a duplicate paid attempt is refunded automatically when the provider can, the money never touches the books of the order`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+        val now = w.clock.now()
+        val duplicateId = w.payments.add(
+            MarketPayment(
+                orderId = paid.order.id, providerId = "fake", methodLabel = "Fake", status = PaymentStatus.SUCCEEDED, reference = "REFDUP000000000001", token = "%040x".format(991),
+                amount = 1000, currency = "EUR", orderTotal = 1000, gatewayTransactionId = "txn-dup", paidAmount = 1000, paidCurrency = "EUR", paidAt = now, duplicate = true,
+                createdAt = now, updatedAt = now
+            ),
+            pool
+        )!!
+        val redemptions = RedemptionService(w.clock, r.d.locks, w.redemptions)
+        val orderService = OrderService(
+            w.clock, w.ids, w.orders, w.orderItems, w.orderEvents, w.payments, redemptions, { _, _ -> false }, reservations = ReservationService(w.clock, r.d.locks, redemptions, w.orders),
+            refunds = w.refunds, duplicates = DuplicateRefundPolicy { conn, providerId -> r.payments.duplicateRefundRule(conn, providerId) }
+        )
+        val rule = r.payments.duplicateRefundRule(pool, "fake")
+
+        assertTrue(rule.autoRefund && rule.providerCanRefund)
+
+        w.db.tx { conn -> orderService.onDuplicatePayment(conn, paid.order.id, duplicateId, rule.autoRefund, rule.providerCanRefund, ArrayList()) }
+
+        val queued = r.refunds(paid.order.id).single()
+
+        assertEquals(RefundOrigin.SYSTEM, queued.origin)
+        assertEquals(RefundStatus.REQUESTED, queued.status)
+        assertEquals(duplicateId, queued.paymentId)
+        assertEquals("sys:dup:$duplicateId", queued.idempotencyKey)
+
+        // the reconcile job of the refund service sends it with its own key
+        assertEquals(1, r.service.reconcile().sent)
+
+        val sent = r.refund(queued.id)
+
+        assertEquals(RefundStatus.SUCCEEDED, sent.status)
+        assertEquals(1000, r.attempt(duplicateId).refundedAmount, "the duplicate attempt gave the money back")
+        assertEquals(0, r.attempt(paid.attempt.id).refundedAmount)
+
+        val order = r.order(paid.order.id)
+
+        assertEquals(0, order.refundedTotal, "no O10: it is not a refund of the order")
+        assertEquals(OrderStatus.COMPLETED, order.status)
+        assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(paid.items[0].id, pool).single().status)
+    }
+
+    // ===== R-27: a dispute and a refund at the same time ===========================================================================
+
+    @Test
+    fun `R-27 a dispute and a full panel refund at the same moment end in one consistent state, REVOKE rows once per item`(): Unit = runBlocking {
+        repeat(Race.rounds) { round ->
+            val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a$round", "group.vip$round")))), email = "steve$round@example.com")
+            val outcomes = Race.run(2) { i ->
+                if (i == 0) r.service.request(paid.order.id, RefundInput(), r.key("r27"), null) else dispute(paid, DisputeState.OPENED, "dp_r27_$round")
+            }
+
+            // the dispute always lands; the refund either was first, or is refused because the order is charged back
+            assertTrue(outcomes[1].isSuccess, "round $round: the dispute ${outcomes[1].exceptionOrNull()}")
+            outcomes[0].exceptionOrNull()?.let { assertTrue(it is InvalidOrderTransition || it is com.panomc.platform.model.Error, "round $round: the refund failed with $it") }
+
+            val order = r.order(paid.order.id)
+
+            assertEquals(OrderStatus.CHARGEBACK, order.status, "round $round")
+            assertTrue(order.statusBeforeDispute in setOf(OrderStatus.COMPLETED, OrderStatus.REFUNDED, OrderStatus.PARTIALLY_REFUNDED), "round $round: ${order.statusBeforeDispute}")
+            assertEquals(1, revokeRows(paid.order.id).size, "round $round: one REVOKE row for the one item")
+            assertEquals(1, disputeRows(paid.order.id).size)
+            assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(paid.items[0].id, pool).single().status)
+
+            w.assertInvariants()
+        }
+    }
+}
