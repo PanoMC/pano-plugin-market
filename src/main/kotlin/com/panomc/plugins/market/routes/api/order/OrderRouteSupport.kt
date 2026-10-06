@@ -372,7 +372,9 @@ private fun buildPaymentService(plugin: MarketPlugin): PaymentService {
         // MK-121: the plan of a start, the gateway data of a success (09 sections 4.2 and 4.4)
         subscriptionHooks = subscriptionService(plugin),
         // MK-142: the bank transfer instructions and "order received" mails of an attempt's transitions
-        mails = orderMails(plugin)
+        mails = orderMails(plugin),
+        // MK-172: an order that waits for review raises MARKET_ORDER_REVIEW (only with the host registry)
+        alerts = com.panomc.plugins.market.notification.marketAlerts(plugin)
     )
 }
 

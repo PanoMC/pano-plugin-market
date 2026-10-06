@@ -53,7 +53,9 @@ class BankTransferService(
     private val cashback: () -> Boolean,
     /** `requireBuyerNotice` of the bank transfer settings: the admin may approve only after the buyer's notice. */
     private val requireNotice: suspend () -> Boolean = { false },
-    private val readClient: suspend () -> io.vertx.sqlclient.SqlClient
+    private val readClient: suspend () -> io.vertx.sqlclient.SqlClient,
+    /** MK-172: raised once after the commit of a notice that changed something (the `PAY` holders are told to look at their account); a failure is the callee's to swallow. */
+    private val buyerNoticeAlert: suspend (orderId: Long) -> Unit = {}
 ) {
     /**
      * The buyer's notice (04 section 3). The caller has resolved the owner. 409 `ORDER_NOT_PAYABLE` unless the order is `PENDING` inside its window and its
@@ -99,6 +101,8 @@ class BankTransferService(
         }
 
         if (after.isNotEmpty()) paymentService.runAfterCommit(after, readClient())
+
+        if (changed) buyerNoticeAlert(orderId)
 
         return changed
     }

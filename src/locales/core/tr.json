@@ -347,5 +347,10 @@
       "body": "Bu, {websiteName} sitesindeki {storeName} mağazasından gönderilen bir test e-postasıdır. Bunu okuyabiliyorsanız web sitenizin e-posta ayarları çalışıyor demektir.",
       "footer": "Bu e-postayı, {websiteName} yöneticilerinden biri test gönderdiği için alıyorsunuz."
     }
+  },
+  "notifications": {
+    "MARKET_ORDER_REVIEW": "#{orderId} numaralı sipariş incelemenizi bekliyor.",
+    "MARKET_ORDER_ALERT": "{code, select, BANK_TRANSFER_NOTIFIED {#{orderId} numaralı sipariş: alıcı havaleyi yaptığını bildirdi. Hesabınızı kontrol edip ödemeyi onaylayın.} other {#{orderId} numaralı sipariş ilgi bekliyor ({code}).}}",
+    "MARKET_DELIVERY_WAITING": "{kind, select, UNDO_FAILED {#{orderId} numaralı siparişin geri alınması {serverName} sunucusunda başarısız oldu. Alıcı hem parayı hem ürünü elinde tutuyor olabilir.} UNDO_WAITING {#{orderId} numaralı siparişin geri alınması hâlâ {serverName} sunucusunu bekliyor.} other {{count} teslimat {serverName} sunucusunu bekliyor. Oraya Pano Market eklentisini kurun veya güncelleyin.}}"
   }
 }
