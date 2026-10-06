@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * Checkout and payment, happy paths (17 section 9.2): P-02, P-03, P-05, P-06 and P-12 to P-21 (tier upgrade, legal acceptance, VAT and billing info on the
+ * Checkout and payment, happy paths (17 section 9.2): P-01 to P-11 and P-12 to P-21 (tier upgrade, legal acceptance, VAT and billing info on the
  * invoice, gateway fee, method filtering, minimum order amount, bank transfer, manual order, credit pack, every start kind). Every scenario ends with the
  * drain and the invariants (base class). Settings that a scenario changes are global state of the one instance and are always put back (`withSettings`,
  * or a `finally`).
@@ -732,6 +732,516 @@ class CheckoutE2E : E2eTestBase() {
             setStartKind("REDIRECT")
             open.forEach { (client, publicId) -> cancel(client, publicId) }
         }
+    }
+
+    // --- shared helpers of P-01, P-04 and P-07 to P-11 -------------------------------------------------------------------
+
+    private fun hookName(prefix: String) = prefix + System.nanoTime().toString(36).takeLast(8)
+
+    private fun rawNode(prefix: String) = "essentials.e2e$prefix${System.currentTimeMillis().toString(36)}${unique.incrementAndGet()}"
+
+    private fun action(id: String, type: String, value: Any, phase: String = "GRANT"): JsonObject =
+        JsonObject().put("id", id).put("type", type).put("phase", phase).put("value", value)
+
+    /** A raw game node written to the Pano permission tables (`via = PANO`), the automatic inverse removes it again. */
+    private fun permissionAction(id: String, node: String): JsonObject = action(id, "PERMISSION", JsonArray().add(node)).put("via", "PANO")
+
+    private fun holdsNode(userId: Long, node: String): Boolean =
+        db.count("permission_node", "`holderType` = 'USER' AND `holderId` = ? AND `node` = ? AND `active` = 1", userId, node) > 0
+
+    private fun credits(client: E2eClient): Double = client.get("/api/market/me/credits").ok().obj().getDouble("balance")
+
+    private fun grantCredits(userId: Long, amount: Number) {
+        admin.post(
+            "/api/panel/market/credits/accounts/$userId/grant", JsonObject().put("amount", amount).put("note", "e2e checkout seed"), mapOf("Idempotency-Key" to idempotencyKey())
+        ).ok()
+    }
+
+    private fun deliveriesOf(orderId: Long, phase: String): List<Row> =
+        db.sql("SELECT * FROM `pano_market_delivery` WHERE `orderId` = ? AND `phase` = ? ORDER BY `id`", orderId, phase)
+
+    /** Waits until at least [atLeast] delivery rows of [phase] exist and none is open any more (the delivery job ran them). */
+    private fun settledDeliveries(orderId: Long, phase: String, atLeast: Int): List<Row> =
+        Await.untilValue(120_000, 500, "the $phase deliveries of order $orderId are settled") {
+            deliveriesOf(orderId, phase).takeIf { rows -> rows.size >= atLeast && rows.none { it.getString("status") in setOf("PENDING", "SCHEDULED", "SENDING") } }
+        }
+
+    /** A WEBHOOK delivery is `SENT` until the webhook job got its answer (then `CONFIRMED`): wait until every row of [phase] is `CONFIRMED`. */
+    private fun confirmedDeliveries(orderId: Long, phase: String, atLeast: Int): List<Row> =
+        Await.untilValue(120_000, 500, "the $phase deliveries of order $orderId are CONFIRMED") {
+            deliveriesOf(orderId, phase).takeIf { rows -> rows.size >= atLeast && rows.all { it.getString("status") == "CONFIRMED" } }
+        }
+
+    private fun mailsOf(orderId: Long, kind: String): List<Row> =
+        db.sql("SELECT * FROM `pano_market_mail_outbox` WHERE `orderId` = ? AND `kind` = ? ORDER BY `id`", orderId, kind)
+
+    private fun verifySignature(request: com.panomc.plugins.market.spi.testkit.Recorded, secret: String) {
+        val header = request.header("X-Pano-Signature") ?: throw AssertionError("no X-Pano-Signature")
+        val parts = header.split(',').associate { it.substringBefore('=') to it.substringAfter('=') }
+
+        assertEquals(FakePayGateway.hmac(secret, parts.getValue("t").toLong(), request.body), parts.getValue("v1"), "the signature verifies with the endpoint secret")
+    }
+
+    private fun events(hook: String): List<JsonObject> = gateway.hooks(hook).map { JsonObject(it.bodyText()) }
+
+    private fun storeWebhook(hook: String, secret: String, vararg events: String): Long = admin.post(
+        "/api/panel/market/webhooks",
+        JsonObject().put("name", "E2E $hook").put("url", "${gateway.baseUrl}/hooks/$hook").put("events", JsonArray(events.toList())).put("format", "JSON")
+            .put("signing", "HMAC_SHA256").put("secret", secret)
+    ).ok().obj().getLong("id")
+
+    // --- P-01 ------------------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `P-01 full path browse cart checkout webhook delivery refund`() {
+        val storeHook = hookName("p01s")
+        val actionHook = hookName("p01a")
+        val storeSecret = "whsec_e2e_p01s_" + System.nanoTime().toString(36)
+        val actionSecret = "whsec_e2e_p01a_" + System.nanoTime().toString(36)
+        val node = rawNode("p01")
+        val vip = catalog.fresh(
+            "VIP",
+            "actions" to JsonArray()
+                .add(action("a1", "CREDIT", 2.5))
+                .add(permissionAction("a2", node))
+                .add(
+                    action("a3", "WEBHOOK", JsonObject().put("url", "${gateway.baseUrl}/hooks/$actionHook").put("format", "JSON").put("signing", "HMAC_SHA256").put("secret", actionSecret))
+                ).encode()
+        )
+        val endpointId = storeWebhook(storeHook, storeSecret, "order.paid", "order.refunded")
+
+        try {
+            val alice = buyer()
+            val http = alice.client
+
+            // browse: the product page, then the server cart, then the quote of that cart
+            val detail = visitor("anon").get("/api/market/products/${vip.slug}").ok().obj().getJsonObject("product")
+            assertEquals(vip.slug, detail.getString("slug"))
+            http.post("/api/market/me/cart/items", line(vip.id)).ok()
+            val quoted = quote(http, JsonObject())
+            assertEquals(1000L, cents(quoted, "total"), "VIP costs 10.00")
+            assertTrue(quoted.getBoolean("canCheckout"))
+
+            // checkout from the server cart through the fake provider
+            val key = idempotencyKey()
+            val answer = checkout(http, JsonObject().put("expectedTotal", 10.0), key = key).ok()
+            val publicId = publicIdOf(answer)
+            assertEquals("PENDING", answer.obj().getJsonObject("order").getString("status"))
+            assertEquals("REDIRECT", answer.obj().getJsonObject("payment").getString("kind"))
+            val reference = referenceOf(publicId)
+            assertEquals("PENDING", orderStatus(publicId))
+            val replay = checkout(http, JsonObject().put("expectedTotal", 10.0), key = key).ok()
+            assertEquals(publicId, publicIdOf(replay), "the same Idempotency-Key is the same order")
+
+            // the gateway confirms: webhook -> order COMPLETED
+            payViaFake(publicId)
+            awaitOrder(publicId, "COMPLETED")
+            val row = orderRow(publicId)
+            val orderId = row.getLong("id")
+            assertNotNull(row.getValue("paidAt"))
+            assertEquals("COMMITTED", row.getString("reservationState"))
+            assertEquals("SUCCEEDED", attemptStatus(reference))
+            assertEquals(1000L, row.getLong("paidAmount"))
+
+            // deliveries: PERMISSION + CREDIT + WEBHOOK, all confirmed
+            val grants = confirmedDeliveries(orderId, "GRANT", 3)
+            assertEquals(setOf("PERMISSION", "CREDIT", "WEBHOOK"), grants.map { it.getString("actionType") }.toSet())
+            assertTrue(holdsNode(alice.userId, node), "the permission was granted")
+            Await.until(30_000, 250, "the credit of the action arrived") { credits(http) >= 2.5 }
+            assertEquals(2.5, credits(http), 0.0001, "alice's balance +2.50")
+            assertEquals(1L, db.count("market_credit_tx", "`type` = 'ACTION' AND `orderId` = ?", orderId))
+            val entitlement = entitlements(alice.userId, vip.id).single()
+            assertEquals("ACTIVE", entitlement.getString("status"))
+
+            // the action webhook reached its sink once, signed with the action's own secret
+            Await.until(60_000, 500, "the action webhook reached its sink") { gateway.hooks(actionHook).isNotEmpty() }
+            val actionCalls = gateway.hooks(actionHook)
+            assertEquals(1, actionCalls.size, "the WEBHOOK delivery was sent once")
+            verifySignature(actionCalls.single(), actionSecret)
+
+            // invoice: a row and a PDF the buyer can download
+            Await.until(30_000, 250, "the invoice is issued") { orderRow(publicId).getValue("invoiceId") != null }
+            val invoice = db.sql("SELECT * FROM `pano_market_invoice` WHERE `orderId` = ? AND `type` = 'INVOICE'", orderId).single()
+            assertEquals(1000L, invoice.getLong("total"))
+            val pdf = http.get("/api/market/orders/$publicId/invoice")
+            assertEquals(200, pdf.status)
+            assertEquals("%PDF", String(pdf.body, 0, 4, Charsets.US_ASCII))
+            assertTrue(pdf.header("Content-Disposition").orEmpty().startsWith("attachment"))
+
+            // mail: one ORDER_CONFIRMATION
+            Await.until(30_000, 250, "the confirmation mail is queued") { mailsOf(orderId, "ORDER_CONFIRMATION").isNotEmpty() }
+            assertEquals(1, mailsOf(orderId, "ORDER_CONFIRMATION").size)
+            assertEquals("${alice.username}@example.com", mailsOf(orderId, "ORDER_CONFIRMATION").single().getString("recipient"))
+
+            // the store webhook order.paid with a valid signature
+            Await.until(60_000, 500, "order.paid reached the sink") { events(storeHook).any { it.getString("event") == "order.paid" } }
+            val paid = gateway.hooks(storeHook).single { JsonObject(it.bodyText()).getString("event") == "order.paid" }
+            verifySignature(paid, storeSecret)
+            assertEquals(publicId, JsonObject(paid.bodyText()).getJsonObject("data").getJsonObject("order").getString("publicId"))
+
+            // the panel refunds the whole order: once at the gateway, with the refund's idempotency key
+            val refundCalls = gateway.requests(FakePayGateway.Op.REFUND).size
+            val refundKey = idempotencyKey()
+            val refunded = admin.post("/api/panel/market/orders/$orderId/refunds", JsonObject().put("amount", 10.00).put("revoke", true), mapOf("Idempotency-Key" to refundKey)).ok()
+            assertEquals("SUCCEEDED", refunded.obj().getJsonObject("refund").getString("status"))
+            assertEquals(refundCalls + 1, gateway.requests(FakePayGateway.Op.REFUND).size, "the gateway was asked once")
+            assertEquals(refundKey, db.sql("SELECT `idempotencyKey` FROM `pano_market_refund` WHERE `orderId` = ?", orderId).single().getString("idempotencyKey"))
+            assertNotNull(gateway.requests(FakePayGateway.Op.REFUND).last().header("Idempotency-Key"), "the call carries an idempotency key")
+            assertEquals("REFUNDED", orderStatus(publicId))
+
+            // the undo rows: permission gone, credits taken back (ACTION_REVERSAL), entitlement REVOKED
+            val revokes = confirmedDeliveries(orderId, "REVOKE", 2)
+            assertTrue(revokes.map { it.getString("actionType") }.containsAll(listOf("PERMISSION", "CREDIT")), "undo rows: ${revokes.map { it.getString("actionType") }}")
+            assertFalse(holdsNode(alice.userId, node), "the permission was removed")
+            assertEquals(0.0, credits(http), 0.0001, "the 2.50 credits were taken back")
+            assertEquals(1L, db.count("market_credit_tx", "`type` = 'ACTION_REVERSAL' AND `orderId` = ?", orderId))
+            Await.until(30_000, 250, "the entitlement is REVOKED") { entitlements(alice.userId, vip.id).single().getString("status") == "REVOKED" }
+
+            // credit note, order.refunded webhook, ORDER_REFUNDED mail
+            Await.until(30_000, 250, "the credit note is issued") { db.count("market_invoice", "`orderId` = ? AND `type` = 'CREDIT_NOTE'", orderId) == 1L }
+            Await.until(60_000, 500, "order.refunded reached the sink") { events(storeHook).any { it.getString("event") == "order.refunded" } }
+            val refundedHook = gateway.hooks(storeHook).single { JsonObject(it.bodyText()).getString("event") == "order.refunded" }
+            verifySignature(refundedHook, storeSecret)
+            Await.until(30_000, 250, "the refund mail is queued") { mailsOf(orderId, "ORDER_REFUNDED").isNotEmpty() }
+            assertEquals(1, mailsOf(orderId, "ORDER_REFUNDED").size)
+        } finally {
+            admin.delete("/api/panel/market/webhooks/$endpointId")
+        }
+    }
+
+    // --- P-04 ------------------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `P-04 gift purchase`() {
+        val node = rawNode("p04")
+        val gift = catalog.fresh(
+            "LIMITED",
+            "actions" to JsonArray().add(permissionAction("a1", node)).encode()
+        )
+        val alice = buyer()
+        val bob = buyer()
+
+        val body = cart(line(gift.id)).put("recipientUsername", bob.username).put("giftMessage", "Enjoy!")
+        val publicId = publicIdOf(checkout(alice.client, body).ok())
+        val row = orderRow(publicId)
+
+        assertEquals(1L, row.getLong("isGift"))
+        assertEquals(alice.userId, row.getLong("userId"), "alice pays")
+        assertEquals(bob.userId, row.getLong("recipientUserId"), "bob receives")
+        assertEquals("Enjoy!", row.getString("giftMessage"))
+
+        // an unpaid gift is invisible to the recipient
+        assertTrue(bob.client.get("/api/market/me/orders").ok().obj().getJsonArray("orders").none { (it as JsonObject).getString("publicId") == publicId })
+
+        payViaFake(publicId)
+        awaitOrder(publicId, "COMPLETED")
+        val orderId = orderRow(publicId).getLong("id")
+
+        // deliveries and entitlement target bob
+        val grants = settledDeliveries(orderId, "GRANT", 1)
+        assertTrue(grants.all { it.getString("status") == "CONFIRMED" })
+        assertTrue(holdsNode(bob.userId, node), "bob got the permission")
+        assertFalse(holdsNode(alice.userId, node), "alice did not")
+        assertEquals(1, entitlements(bob.userId, gift.id).size, "the entitlement belongs to bob")
+        assertEquals(0, entitlements(alice.userId, gift.id).size)
+
+        // the mail goes to bob
+        Await.until(30_000, 250, "the gift mail is queued") { mailsOf(orderId, "GIFT_RECEIVED").isNotEmpty() }
+        assertEquals("${bob.username}@example.com", mailsOf(orderId, "GIFT_RECEIVED").single().getString("recipient"))
+
+        // bob's order list shows it as received, alice's as her own
+        val bobs = bob.client.get("/api/market/me/orders").ok().obj().getJsonArray("orders").map { it as JsonObject }.single { it.getString("publicId") == publicId }
+        assertEquals(true, bobs.getBoolean("received"))
+        assertEquals(true, bobs.getBoolean("isGift"))
+        val alices = alice.client.get("/api/market/me/orders").ok().obj().getJsonArray("orders").map { it as JsonObject }.single { it.getString("publicId") == publicId }
+        assertEquals(false, alices.getBoolean("received"))
+
+        // the limit (one per player) is counted on the recipient: another gift of the product to bob is refused, a purchase for alice is not
+        val second = checkout(alice.client, cart(line(gift.id)).put("recipientUsername", bob.username))
+        assertEquals(409, second.status, "a second one-per-player gift to bob: ${second.error} ${second.json}")
+        assertEquals("PURCHASE_LIMIT_REACHED", second.error)
+        assertEquals(gift.id, second.obj().getLong("productId"))
+        assertEquals(1, second.obj().getInteger("limit"))
+        val forAlice = checkout(alice.client, cart(line(gift.id))).ok()
+        cancel(alice.client, publicIdOf(forAlice))
+    }
+
+    // --- P-07 ------------------------------------------------------------------------------------------------------------
+
+    /** The revenue formula of 00 section 6.8, in minor units, over every paid (not test) order of the instance. */
+    private fun gatewayRevenue(): Long = db.long(
+        "SELECT COALESCE(SUM(`gatewayAmount` - `refundedGatewayAmount`), 0) FROM `pano_market_order` WHERE `testMode` = 0 AND `paidAt` IS NOT NULL AND `status` IN ('COMPLETED', 'PARTIALLY_REFUNDED', 'REFUNDED')"
+    ) ?: 0L
+
+    @Test
+    fun `P-07 credits-only payment`() {
+        val node = rawNode("p07")
+        val vip = catalog.fresh("VIP", "actions" to JsonArray().add(action("a1", "CREDIT", 2.5)).add(permissionAction("a2", node)).encode())
+        val alice = buyer()
+        grantCredits(alice.userId, 100)
+        assertEquals(100.0, credits(alice.client), 0.0001)
+        val revenueBefore = gatewayRevenue()
+        val creates = gateway.requests(FakePayGateway.Op.CREATE).size
+
+        val answer = checkout(alice.client, cart(line(vip.id)).put("payWithCredits", true), method = null).ok()
+        val publicId = publicIdOf(answer)
+        val row = orderRow(publicId)
+        val orderId = row.getLong("id")
+
+        assertEquals("credits", row.getString("paymentMethodId"))
+        assertEquals(0L, row.getLong("gatewayAmount"), "nothing is asked of the gateway")
+        assertEquals(1000L, row.getLong("creditAmount"), "10.00 credits")
+        awaitOrder(publicId, "COMPLETED")
+        assertEquals(creates, gateway.requests(FakePayGateway.Op.CREATE).size, "no attempt reached the gateway")
+
+        // ledger: the hold, then the capture
+        val tx = db.sql("SELECT `type` FROM `pano_market_credit_tx` WHERE `orderId` = ? AND `type` IN ('HOLD', 'CAPTURE') ORDER BY `id`", orderId).map { it.getString("type") }
+        assertEquals(listOf("HOLD", "CAPTURE"), tx, "the credits were held, then captured")
+
+        // 100.00 - 10.00 + the 2.50 of the action
+        settledDeliveries(orderId, "GRANT", 2)
+        Await.until(30_000, 250, "the action credit arrived") { credits(alice.client) >= 92.5 }
+        assertEquals(92.5, credits(alice.client), 0.0001)
+        assertTrue(holdsNode(alice.userId, node))
+        // revenue = gatewayAmount - refundedGatewayAmount over paid, non-test orders (00 section 6.8): this order adds nothing to it. The panel stats route
+        // still sums totalPrice (MK-171 has not landed), so the route itself is not compared here, see evidence/E2E-02.md
+        assertEquals(0L, orderRow(publicId).getLong("gatewayAmount") - orderRow(publicId).getLong("refundedGatewayAmount"), "the order contributes no revenue")
+        assertEquals(revenueBefore, gatewayRevenue(), "paying with credits moves no store revenue")
+    }
+
+    // --- P-08 ------------------------------------------------------------------------------------------------------------
+
+    private fun <T> withShipping(block: (Long) -> T): T {
+        val others = admin.get("/api/panel/market/shipping/zones").ok().obj().getJsonArray("zones").map { it as JsonObject }.filter { it.getString("status") == "ACTIVE" }.map { it.getLong("id") }
+
+        others.forEach { admin.put("/api/panel/market/shipping/zones/$it", JsonObject().put("status", "INACTIVE")).ok() }
+        try {
+            val zoneId = admin.post(
+                "/api/panel/market/shipping/zones", JsonObject().put("name", "E2E P-08 zone ${unique.incrementAndGet()}").put("countries", JsonArray().add("DE")).put("status", "ACTIVE")
+            ).ok().obj().getLong("id")
+
+            try {
+                val methodId = admin.post(
+                    "/api/panel/market/shipping/methods",
+                    JsonObject().put("name", "E2E P-08 method ${unique.get()}").put("providerId", "manual").put("rateSource", "RULES").put("status", "ACTIVE")
+                        .put("rates", JsonArray().add(JsonObject().put("zoneId", zoneId).put("basis", "WEIGHT").put("rangeFrom", 0).put("rangeTo", 1999).put("price", 4.9)))
+                ).ok().obj().getLong("id")
+
+                try {
+                    return block(methodId)
+                } finally {
+                    admin.delete("/api/panel/market/shipping/methods/$methodId")
+                }
+            } finally {
+                admin.delete("/api/panel/market/shipping/zones/$zoneId")
+            }
+        } finally {
+            others.forEach { admin.put("/api/panel/market/shipping/zones/$it", JsonObject().put("status", "ACTIVE")) }
+        }
+    }
+
+    @Test
+    fun `P-08 mixed credit and gateway`() {
+        val vip = catalog.fresh("VIP")
+        val s = slug("shirt")
+        val shirt = catalog.product(s, s, "Shirt $s", price = "20.00", stock = 10, extra = mapOf("physical" to "true", "weightGrams" to "250"))
+        val address = JsonObject().put("firstName", "Ada").put("lastName", "Lovelace").put("phone", "+4915112345678").put("country", "DE")
+            .put("city", "Berlin").put("line1", "Unter den Linden 1").put("postalCode", "10117")
+        val alice = buyer()
+
+        grantCredits(alice.userId, 10)
+        assertEquals(10.0, credits(alice.client), 0.0001)
+
+        withShipping { methodId ->
+            fun body() = cart(line(vip.id), line(shirt)).put("shippingAddress", address).put("shippingMethodId", methodId)
+
+            // never applied without useCredits
+            val without = quote(alice.client, body())
+            assertEquals(0L, cents(without.getJsonObject("credits"), "applied"), "credits are not spent unless the buyer asks")
+            assertEquals(3490L, cents(without, "total"), "30.00 of goods + 4.90 shipping")
+            assertEquals(3490L, cents(without, "gatewayAmount"), "the whole total goes to the gateway")
+
+            val withCredits = quote(alice.client, body().put("useCredits", 10))
+            assertEquals(3490L, cents(withCredits, "total"))
+            assertEquals(1000L, cents(withCredits.getJsonObject("credits"), "applied"))
+            assertEquals(1000L, cents(withCredits.getJsonObject("credits"), "appliedValue"))
+            assertEquals(2490L, cents(withCredits, "gatewayAmount"), "gatewayAmount = total - 10.00")
+
+            val publicId = publicIdOf(checkout(alice.client, body().put("useCredits", 10)).ok())
+            val row = orderRow(publicId)
+            val orderId = row.getLong("id")
+
+            assertEquals(3490L, row.getLong("totalPrice"))
+            assertEquals(1000L, row.getLong("creditValue"), "creditValue = 10.00")
+            assertEquals(2490L, row.getLong("gatewayAmount"), "gatewayAmount = total - 10.00")
+            assertEquals(490L, row.getLong("shippingTotal"))
+            assertEquals(2490L, db.sql("SELECT `amount` FROM `pano_market_payment` WHERE `reference` = ?", referenceOf(publicId)).single().getLong("amount"), "the attempt asks for the gateway part only")
+            assertEquals("HOLD", db.sql("SELECT `type` FROM `pano_market_credit_tx` WHERE `orderId` = ? ORDER BY `id`", orderId).first().getString("type"))
+            assertEquals(0.0, credits(alice.client), 0.0001, "the 10 credits are held")
+
+            payViaFake(publicId)
+            awaitOrder(publicId, "COMPLETED")
+            assertEquals(listOf("HOLD", "CAPTURE"), db.sql("SELECT `type` FROM `pano_market_credit_tx` WHERE `orderId` = ? AND `type` IN ('HOLD', 'CAPTURE') ORDER BY `id`", orderId).map { it.getString("type") })
+            assertEquals(3490L, orderRow(publicId).getLong("paidAmount") + orderRow(publicId).getLong("creditValue"), "gateway money plus credits is the total")
+        }
+    }
+
+    // --- P-09 ------------------------------------------------------------------------------------------------------------
+
+    private fun bankTransferOn() {
+        val accounts = JsonArray().add(JsonObject().put("bank", "E2E Bank").put("holder", "E2E Store").put("iban", "DE89370400440532013000").put("currency", "EUR"))
+
+        admin.post(
+            "/api/panel/market/payment-methods/bank-transfer",
+            JsonObject().put("settings", JsonObject().put("accounts", accounts.encode()).put("instructions", "Transfer the exact amount."))
+        ).ok()
+        admin.post("/api/panel/market/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", true)).ok()
+    }
+
+    @Test
+    fun `P-09 coupon and creator code`() {
+        val vip = catalog.fresh("VIP")
+        val streamer = buyer()
+        val (couponId, coupon) = catalog.freshCoupon(10)
+        val code = "STR" + System.currentTimeMillis().toString(36).uppercase() + unique.incrementAndGet()
+        val codeId = admin.post(
+            "/api/panel/market/creator-codes",
+            JsonObject().put("creator", streamer.username).put("code", code).put("discount", 5).put("unit", "PERCENT").put("commissionPercent", 10)
+        ).ok().obj().getLong("id")
+
+        // a store in test mode never pays a creator commission (21 section 7.1) and the fake gateway needs test mode, so the order is a LIVE bank
+        // transfer, approved from the panel; settings are put back by withSettings
+        bankTransferOn()
+        try {
+            session.withSettings(JsonObject().put("testMode", false).put("creatorEarningHoldDays", 0)) {
+                for (combine in listOf(true, false)) {
+                    session.withSettings(JsonObject().put("combineDiscountsAndCoupons", combine)) {
+                        val buyer = buyer()
+                        val body = { cart(line(vip.id, 2)).put("couponCode", coupon).put("creatorCode", code) }
+                        val quoted = quote(buyer.client, body())
+
+                        assertEquals(2000L, cents(quoted, "subtotal"))
+                        assertEquals(200L, cents(quoted, "couponDiscount"), "combine=$combine: TEN takes 10 % of 20.00")
+                        assertEquals(90L, cents(quoted, "creatorDiscount"), "combine=$combine: STREAMER takes 5 % of the remaining 18.00")
+                        assertEquals(1710L, cents(quoted, "total"))
+
+                        val used = db.long("SELECT `usedCount` FROM `pano_market_coupon` WHERE `id` = ?", couponId)!!
+                        val publicId = publicIdOf(checkout(buyer.client, body(), method = "bank-transfer").ok())
+
+                        buyer.client.post("/api/market/orders/$publicId/bank-transfer/notify", JsonObject().put("senderName", "Ada").put("note", "paid")).ok()
+                        admin.post("/api/panel/market/orders/${orderRow(publicId).getLong("id")}/bank-transfer", JsonObject().put("decision", "APPROVE")).ok()
+                        awaitOrder(publicId, "COMPLETED")
+
+                        val row = orderRow(publicId)
+                        val orderId = row.getLong("id")
+
+                        assertEquals(0L, row.getLong("testMode"))
+                        assertEquals(1710L, row.getLong("totalPrice"))
+                        assertEquals(200L, row.getLong("couponDiscount"))
+                        assertEquals(90L, row.getLong("creatorDiscount"))
+                        assertEquals(codeId, row.getLong("creatorCodeId"))
+                        assertEquals(used + 1, db.long("SELECT `usedCount` FROM `pano_market_coupon` WHERE `id` = ?", couponId))
+
+                        // one earning, written with the payment: base = lineTotal - VAT, commission 10 %
+                        val earning = Await.untilValue(30_000, 250, "the creator earning of $publicId") { db.sql("SELECT * FROM `pano_market_creator_earning` WHERE `orderId` = ?", orderId).singleOrNull() }
+                        val base = row.getLong("totalPrice") - row.getLong("vatTotal")
+
+                        assertEquals(base, earning.getLong("baseAmount"), "the base excludes VAT")
+                        assertTrue(Math.abs(earning.getLong("amount") - Math.round(base * 0.10)) <= 1, "10 % of $base is ${earning.getLong("amount")}")
+                        assertEquals("AVAILABLE", earning.getString("state"), "0 hold days: available at once")
+                        assertEquals(1L, db.count("market_creator_earning", "`creatorCodeId` = ? AND `orderId` = ?", codeId, orderId))
+                    }
+                }
+
+                // the totals of the code say the same thing as its two earnings, and the creator sees them
+                val earned = db.long("SELECT COALESCE(SUM(`amount`), 0) FROM `pano_market_creator_earning` WHERE `creatorCodeId` = ?", codeId)!!
+                assertEquals(earned, db.long("SELECT `earnings` FROM `pano_market_creator_code` WHERE `id` = ?", codeId), "earnings is updated with every earning")
+
+                val mine = streamer.client.get("/api/market/me/creator").ok().obj()
+                assertEquals(2, mine.getJsonArray("earnings").size(), "the creator's page lists both earnings")
+                assertEquals(earned / 100.0, mine.getJsonObject("totals").getDouble("earned"), 0.0001)
+                assertTrue(mine.getJsonArray("earnings").map { it as JsonObject }.all { it.getString("state") == "AVAILABLE" })
+            }
+        } finally {
+            admin.post("/api/panel/market/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", false))
+        }
+    }
+
+    // --- P-10 ------------------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `P-10 variant and custom field`() {
+        val crate = catalog.fresh("VAR")
+        val large = db.long("SELECT `id` FROM `pano_market_product_variant` WHERE `productId` = ? AND `name` = 'L'", crate.id)!!
+        val buyer = buyer()
+
+        // no variant chosen: refused, nothing is created
+        val orders = db.count("market_order", "`userId` = ?", buyer.userId)
+        val missing = checkout(buyer.client, cart(line(crate.id)))
+        assertEquals(400, missing.status)
+        assertEquals("INVALID_CART", missing.error)
+        val lineErrors = missing.obj().getJsonObject("lineErrors")
+        assertTrue(lineErrors.fieldNames().all { key -> lineErrors.getJsonArray(key).list.contains("VARIANT_REQUIRED") } && !lineErrors.isEmpty, "VARIANT_REQUIRED: $lineErrors")
+        assertEquals(orders, db.count("market_order", "`userId` = ?", buyer.userId))
+
+        val body = cart(line(crate.id, 1, large).put("fieldValues", JsonObject().put("note", "hello")))
+        val quoted = quote(buyer.client, body)
+        assertEquals(700L, cents(quoted, "total"), "variant L costs 7.00")
+
+        val publicId = buy(buyer.client, cart(line(crate.id, 1, large).put("fieldValues", JsonObject().put("note", "hello"))))
+        val item = db.sql("SELECT * FROM `pano_market_order_item` WHERE `orderId` = ?", orderRow(publicId).getLong("id")).single()
+
+        assertEquals(large, item.getLong("variantId"))
+        assertEquals("L", item.getString("variantName"))
+        assertEquals(700L, item.getLong("listUnitPrice"))
+        assertEquals("hello", JsonObject(item.getString("fieldValues")).getString("note"))
+        val view = order(buyer.client, publicId).getJsonArray("items").getJsonObject(0)
+        assertEquals("L", view.getString("variantName"))
+    }
+
+    // --- P-11 ------------------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `P-11 bundle`() {
+        val node = rawNode("p11")
+        val vip = catalog.fresh("VIP", "actions" to JsonArray().add(action("a1", "CREDIT", 2.5)).add(permissionAction("a2", node)).encode())
+        val last = catalog.fresh("LAST")
+        val s = slug("bundle")
+        val bundle = catalog.product(
+            s, s, "Bundle $s", price = "12.00",
+            extra = mapOf("kind" to "BUNDLE", "bundleItems" to """[{"productId":${vip.id},"variantId":0,"quantity":1},{"productId":${last.id},"variantId":0,"quantity":1}]""")
+        )
+        val buyer = buyer()
+        val stock = productStock(last.id)
+        assertEquals(1L, stock)
+
+        val publicId = buy(buyer.client, cart(line(bundle)))
+        val orderId = orderRow(publicId).getLong("id")
+        val items = db.sql("SELECT * FROM `pano_market_order_item` WHERE `orderId` = ? ORDER BY `id`", orderId)
+        val parent = items.single { it.getString("kind") == "BUNDLE" }
+        val children = items.filter { it.getString("kind") == "BUNDLE_CHILD" }
+
+        assertEquals(3, items.size, "one BUNDLE line and two BUNDLE_CHILD lines")
+        assertEquals(1200L, parent.getLong("lineTotal"), "the bundle line carries the price")
+        assertEquals(setOf(vip.id, last.id), children.map { it.getLong("productId") }.toSet())
+        assertTrue(children.all { it.getLong("lineTotal") == 0L && it.getLong("unitPrice") == 0L && it.getLong("parentItemId") == parent.getLong("id") }, "the children are free and point at the bundle line")
+        assertEquals(1200L, orderRow(publicId).getLong("totalPrice"))
+
+        // the shelf: the child with stock 1 is gone, and nothing was reserved or sold twice
+        assertEquals(0L, productStock(last.id), "child stock is decremented")
+
+        // deliveries come from the children (the VIP child), never from the bundle line itself
+        val grants = settledDeliveries(orderId, "GRANT", 2)
+        val vipChild = children.single { it.getLong("productId") == vip.id }.getLong("id")
+        assertTrue(grants.all { it.getLong("orderItemId") == vipChild }, "deliveries belong to the VIP child: ${grants.map { it.getLong("orderItemId") }}")
+        assertTrue(grants.all { it.getString("status") == "CONFIRMED" })
+        assertTrue(holdsNode(buyer.userId, node))
+        Await.until(30_000, 250, "the child's credit arrived") { credits(buyer.client) >= 2.5 }
+        assertEquals(1, entitlements(buyer.userId, vip.id).size, "the entitlement is the child product's")
+
+        // sold out: the same bundle cannot be bought again
+        val again = quote(buyer().client, cart(line(bundle)))
+        assertEquals(false, again.getBoolean("canCheckout"), "the bundle is as available as its weakest child")
     }
 
     private fun E2eClient.userIdOrLookup(): Long =
