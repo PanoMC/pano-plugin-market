@@ -8,9 +8,9 @@ import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.log.UpdatedMarketOrderExchangeRateLog
-import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
+import com.panomc.plugins.market.routes.base.parseExchangeRate
 import com.panomc.plugins.market.routes.base.parseId
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
@@ -52,9 +52,7 @@ class PanelUpdateOrderExchangeRateAPI(
 
         val parameters = getParameters(context)
         val data = parameters.body().jsonObject
-        val exchangeRate = data.getDouble("exchangeRate")
-
-        if (!exchangeRate.isFinite() || exchangeRate <= 0.0) throw RequestValueException("exchangeRate", "MUST_BE_POSITIVE")
+        val exchangeRate = parseExchangeRate(data.getDouble("exchangeRate"))
 
         val sqlClient = databaseManager.getSqlClient()
         marketOrderDao.getById(id, sqlClient) ?: throw NotFound()

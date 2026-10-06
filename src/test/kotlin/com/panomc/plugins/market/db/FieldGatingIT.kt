@@ -3,6 +3,15 @@ package com.panomc.plugins.market.db
 import com.panomc.platform.error.NoPermission
 import com.panomc.plugins.market.db.impl.MarketComparisonDaoImpl
 import com.panomc.plugins.market.db.impl.MarketOrderDaoImpl
+import com.panomc.plugins.market.db.impl.MarketSubscriptionDaoImpl
+import com.panomc.plugins.market.db.impl.MarketSubscriptionRenewalDaoImpl
+import com.panomc.plugins.market.db.model.MarketSubscription
+import com.panomc.plugins.market.db.model.SubscriptionMode
+import com.panomc.plugins.market.db.model.SubscriptionStatus
+import com.panomc.plugins.market.core.time.Clock
+import com.panomc.plugins.market.routes.user.subscription.SubscriptionFilter
+import com.panomc.plugins.market.routes.user.subscription.SubscriptionViews
+import com.panomc.plugins.market.util.Paging
 import com.panomc.plugins.market.db.model.MarketComparison
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.permission.FieldGating
@@ -30,7 +39,23 @@ class FieldGatingIT : MarketDaoITBase() {
 
     private val comparisons = MarketComparisonDaoImpl()
 
+    private val subscriptions = MarketSubscriptionDaoImpl()
+
+    private val views = SubscriptionViews(object : Clock { override fun now() = 5_000L }, subscriptions, MarketSubscriptionRenewalDaoImpl()) { _, _ -> null }
+
     private var sequence = 0
+
+    private suspend fun subscription(email: String?, username: String = "Steve", gatewayId: String? = null): Long {
+        val n = ++sequence
+
+        return subscriptions.add(
+            MarketSubscription(
+                userId = 7, playerUsername = username, ownerKey = "u:7:$n", email = email, productId = 5, variantId = 6, productName = "VIP", initialOrderId = 100, providerId = "fake",
+                mode = SubscriptionMode.MERCHANT, status = SubscriptionStatus.ACTIVE, price = 1999, currency = "EUR", gatewaySubscriptionId = gatewayId, createdAt = 1000L + n, updatedAt = 1000L + n
+            ),
+            pool
+        )!!
+    }
 
     private suspend fun order(email: String?, username: String = "Steve", billing: String? = "{\"type\":\"COMPANY\",\"name\":\"Acme\"}", address: String? = "{\"city\":\"Izmir\",\"country\":\"TR\"}"): MarketOrder {
         val n = ++sequence
@@ -128,6 +153,39 @@ class FieldGatingIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a subscription detail masks the e-mail below the PII tier and returns it with the tier`(): Unit = runBlocking {
+        val id = subscription("john@example.com")
+
+        assertEquals("j***@e***.com", views.panelDetail(id, pool, pii = false)!!.getJsonObject("subscription").getString("email"))
+        assertEquals("j***@e***.com", views.panelDetail(id, pool)!!.getJsonObject("subscription").getString("email"), "the default is the masked tier")
+        assertEquals("john@example.com", views.panelDetail(id, pool, pii = true)!!.getJsonObject("subscription").getString("email"))
+        assertFalse(views.panelDetail(id, pool, pii = false)!!.encode().contains("john@example.com"))
+    }
+
+    @Test
+    fun `the subscription search matches the e-mail only for the PII tier and is no oracle below it`(): Unit = runBlocking {
+        val john = subscription("john@example.com", username = "Steve", gatewayId = "sub_john")
+        subscription("mary@example.org", username = "Alex", gatewayId = "sub_mary")
+
+        suspend fun count(search: String, tier: Boolean) = views.panelList(SubscriptionFilter(search = search), Paging.Window(1, 10), pool, searchEmail = tier).count
+
+        assertEquals(0L, count("john@example", false))
+        assertEquals(1L, count("john@example", true))
+        assertEquals(listOf(john), views.panelList(SubscriptionFilter(search = "john@example"), Paging.Window(1, 10), pool, searchEmail = true).rows.map { it.getLong("id") })
+        assertEquals(0L, views.panelList(SubscriptionFilter(search = "john@example"), Paging.Window(1, 10), pool).count, "the default is the masked tier")
+
+        // an existing and an unknown address give the same answer below the tier
+        assertEquals(count("zzz@nowhere", false), count("mary@example", false))
+
+        // the other search keys work in both tiers
+        for (tier in listOf(false, true)) {
+            assertEquals(1L, count("Steve", tier), "player name, tier=$tier")
+            assertEquals(1L, count("sub_john", tier), "gateway id, tier=$tier")
+            assertEquals(2L, count("VIP", tier), "product name, tier=$tier")
+        }
+    }
+
+    @Test
     fun `payment event bodies need the raw tier`() {
         val without = FieldGating.eventRaw("{\"a\":1}", "{\"h\":\"v\"}", "https://hook.invalid/x", raw = false)
 
@@ -165,5 +223,14 @@ class FieldGatingIT : MarketDaoITBase() {
         assertTrue(list.contains("getAllPaged(page, search, status, sqlClient, window.pageSize, pii)"), "the e-mail predicate only with the tier")
         assertTrue(list.contains("marketOrderDao.count(search, status, sqlClient, pii)"), "the count uses the same predicate as the rows")
         assertTrue(detail.contains("FieldGating.piiTier(context)") && detail.contains("FieldGating.orderPii(order, pii)"), "the detail goes through the projection")
+    }
+
+    @Test
+    fun `the panel subscription routes ask for the tier and pass it on`() {
+        val routes = File("src/main/kotlin/com/panomc/plugins/market/routes/panel/subscription/SubscriptionRoutes.kt").readText()
+
+        assertTrue(routes.contains("panelList(filter, window, client, searchEmail = FieldGating.piiTier(context))"), "the list search uses the tier")
+        assertTrue(routes.contains("panelDetail(id, client, pii = FieldGating.piiTier(context))"), "the detail masks with the tier")
+        assertTrue(File("src/main/kotlin/com/panomc/plugins/market/routes/user/subscription/SubscriptionViews.kt").readText().contains(".put(\"email\", FieldGating.email(row.email, pii))"), "the projection masks the e-mail")
     }
 }

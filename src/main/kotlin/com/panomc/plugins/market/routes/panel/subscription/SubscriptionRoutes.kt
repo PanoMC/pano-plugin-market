@@ -15,6 +15,7 @@ import com.panomc.plugins.market.db.model.SubscriptionStatus
 import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.log.CancelledMarketSubscriptionLog
 import com.panomc.plugins.market.log.RetriedMarketSubscriptionChargeLog
+import com.panomc.plugins.market.permission.FieldGating
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
@@ -68,7 +69,7 @@ class PanelGetSubscriptionsAPI(private val plugin: MarketPlugin) : MarketPanelAp
         val mode = request.getParam("mode")?.trim()?.takeIf { it.isNotEmpty() }?.let { name -> SubscriptionMode.entries.firstOrNull { it.name == name } ?: throw RequestValueException("mode", "UNKNOWN_MODE") }
         val filter = SubscriptionFilter(parseStatuses(request.getParam("status")), mode, parseText(request.getParam("providerId"), "providerId", maxLength = 64), parseText(request.getParam("search"), "search"))
         val client = plugin.applicationContext.getBean(DatabaseManager::class.java).getSqlClient()
-        val page = subscriptionViews(plugin).panelList(filter, window, client)
+        val page = subscriptionViews(plugin).panelList(filter, window, client, searchEmail = FieldGating.piiTier(context))
 
         if (Paging.isBeyondLast(window.page, page.totalPage)) throw PageNotFound()
 
@@ -87,7 +88,8 @@ class PanelGetSubscriptionAPI(private val plugin: MarketPlugin) : MarketPanelApi
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
         val client = plugin.applicationContext.getBean(DatabaseManager::class.java).getSqlClient()
-        val detail = subscriptionViews(plugin).panelDetail(parseId(context.pathParam("id")), client) ?: throw NotFound()
+        val id = parseId(context.pathParam("id"))
+        val detail = subscriptionViews(plugin).panelDetail(id, client, pii = FieldGating.piiTier(context)) ?: throw NotFound()
 
         return Successful(detail.map)
     }
