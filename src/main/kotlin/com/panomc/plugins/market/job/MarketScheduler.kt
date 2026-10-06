@@ -14,6 +14,9 @@ import com.panomc.plugins.market.db.dao.MarketOrderItemDao
 import com.panomc.plugins.market.db.dao.MarketPaymentDao
 import com.panomc.plugins.market.db.dao.MarketRedemptionDao
 import com.panomc.plugins.market.db.dao.MarketShipmentDao
+import com.panomc.plugins.market.db.dao.MarketSubscriptionDao
+import com.panomc.plugins.market.routes.api.order.subscriptionService
+import com.panomc.plugins.market.service.SubscriptionEventSink
 import com.panomc.plugins.market.routes.panel.refund.refundReconcileJob
 import com.panomc.plugins.market.routes.panel.server.mcSyncService
 import com.panomc.plugins.market.routes.panel.shipping.shippingService
@@ -215,6 +218,9 @@ class MarketScheduler(
         /** `RefundReconcileJob` (21 section 3.5: every 60 s). */
         const val REFUND_RECONCILE_MS = 60_000L
 
+        /** `SubscriptionJob` (09 section 11: every 60 s). */
+        const val SUBSCRIPTION_MS = 60_000L
+
         private val logger = LoggerFactory.getLogger(MarketScheduler::class.java)
     }
 }
@@ -255,9 +261,27 @@ internal object MarketJobs {
             entitlementExpiry(entitlementExpiryJob(plugin)),
             refundReconcile(refundReconcileJob(plugin)),
             shipmentTracking(ShipmentTrackingJob(SystemClock, context.getBean(MarketShipmentDao::class.java), shippingService(plugin), sqlClient)),
+            subscription(subscriptionJob(plugin)),
             mailOutbox(MailWiring.job(plugin))
         )
     }
+
+    /** `SubscriptionJob` on the beans of the plugin (MK-122): merchant charges, manual renewals, the period and grace steps, the remote queue. */
+    private fun subscriptionJob(plugin: MarketPlugin): SubscriptionJob {
+        val context = plugin.beans
+        val databaseManager = { context.getBean(DatabaseManager::class.java) }
+        val db = MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock)
+        val service = { subscriptionService(plugin) }
+        val sink = SubscriptionEventSink(db, service).withPayments { paymentService(plugin) }
+
+        return SubscriptionJob(
+            clock = SystemClock, db = db, subs = service(), subscriptions = context.getBean(MarketSubscriptionDao::class.java), payments = paymentService(plugin),
+            config = { currentConfig(plugin) }, sqlClient = { databaseManager().getSqlClient() }, events = sink
+        )
+    }
+
+    /** The renewals, charges, failures and grace of subscriptions, and the remote cancel queue (MK-122). */
+    fun subscription(job: SubscriptionJob): MarketScheduler.Job = MarketScheduler.Job("subscription", MarketScheduler.SUBSCRIPTION_MS) { job.runOnce() }
 
     /** The inline delivery worker (MK-102): promote, claim and execute CREDIT / PERMISSION rows, stale claims, re-assertion, D22. */
     fun delivery(job: DeliveryJob): MarketScheduler.Job = MarketScheduler.Job("delivery", MarketScheduler.DELIVERY_MS) { job.runOnce() }

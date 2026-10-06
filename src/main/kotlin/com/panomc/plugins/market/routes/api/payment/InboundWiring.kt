@@ -198,7 +198,9 @@ private fun buildDispatcher(plugin: MarketPlugin): InboundDispatcher {
             PaymentEventRouter(
                 { com.panomc.plugins.market.routes.panel.refund.refundService(plugin) },
                 { com.panomc.plugins.market.routes.panel.dispute.disputeService(plugin) },
-                PaymentEventSink { event, attempt, ctx -> SubscriptionEventSink(db, { subscriptionService(plugin) }, paymentEventSink).apply(event, attempt, ctx) }
+                PaymentEventSink { event, attempt, ctx ->
+                    SubscriptionEventSink(db, { subscriptionService(plugin) }, paymentEventSink).withPayments { paymentService(plugin) }.apply(event, attempt, ctx)
+                }
             )
         ),
         attemptLocks(plugin), SystemClock, SecureIds(), { wiring.site().baseUrl.trimEnd('/') }
