@@ -9,6 +9,8 @@ import com.panomc.plugins.market.e2e.support.E2eTestBase
 import com.panomc.plugins.market.e2e.support.another
 import com.panomc.plugins.market.support.Await
 import com.panomc.plugins.market.support.FakePayGateway
+import com.panomc.plugins.market.support.HarnessNoConcurrency
+import com.panomc.plugins.market.support.Race
 import io.vertx.core.json.JsonObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -17,8 +19,9 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 
 /**
- * Race conditions over HTTP (17 section 9.4): R-01, R-04, R-10 (MK-080) and R-15 to R-28 (E2E-06). Each runs [com.panomc.plugins.market.support.Race.rounds]
- * rounds with fresh fixtures; the harness proves that the requests of a round overlapped ([E2eRace]).
+ * Race conditions over HTTP (17 section 9.4), all 28 scenarios: R-01, R-04, R-10 (MK-080), R-02, R-03, R-05 to R-09 and R-11 to R-14 (E2E-05) and R-15 to R-28
+ * (E2E-06). Each runs [com.panomc.plugins.market.support.Race.rounds] rounds with fresh fixtures; the harness proves that the requests of a round overlapped
+ * ([E2eRace]), except R-02 whose ten deliveries are sequential by definition.
  */
 class RaceE2E : E2eTestBase() {
     override val tag = "race"
@@ -139,6 +142,437 @@ class RaceE2E : E2eTestBase() {
             assertEquals(409, other.status)
             assertEquals("IDEMPOTENCY_CONFLICT", other.error)
 
+            round
+        }
+    }
+
+    // ==============================================================================================================================
+    // E2E-05: R-02, R-03, R-05 to R-09 and R-11 to R-14 (17 section 9.4), completing the class to the 28 scenarios of the catalogue.
+    // ==============================================================================================================================
+
+    @Test
+    fun `R-02 double webhook sequential x 10`() {
+        // sequential: there is nothing to overlap, so no harness round; the five rounds of the catalogue are five fresh orders
+        repeat(Race.rounds) { n ->
+            val vip = catalog.fresh("VIP")
+            val buyer = buyer()
+            val publicId = publicIdOf(checkout(buyer.client, cart(line(vip.id))).ok())
+            val reference = referenceOf(publicId)
+            val payment = gateway.payments.getValue(reference)
+            val event = gateway.nextEventId() + "_" + reference.takeLast(6)
+
+            gateway.setStatus(reference, "paid")
+
+            // the same signed bytes ten times, one after the other, on one connection
+            val hook = signed("payment.succeeded", JsonObject().put("reference", reference).put("amount", payment.amount.toPlainString()).put("currency", payment.currency), event)
+            val client = E2eClient(baseUrl, "r02-$n").also { it.warm() }
+            val answers = (1..10).map { post(client, hook) }
+
+            assertEquals(List(10) { 200 }, answers.map { it.status }, "every one of the ten deliveries is answered 200")
+            awaitOrder(publicId, "COMPLETED")
+            assertEquals("SUCCEEDED", attemptStatus(reference))
+            assertEquals(1L, orderEvents(publicId, "PAYMENT_SUCCEEDED"), "one PAYMENT_SUCCEEDED timeline row")
+
+            val orderId = orderRow(publicId).getLong("id")
+
+            assertEquals(1L, db.count("market_order_event", "`orderId` = ? AND `toStatus` = 'COMPLETED'", orderId), "one transition to COMPLETED (O2)")
+            assertEquals(1L, db.count("market_payment", "`orderId` = ? AND `status` = 'SUCCEEDED' AND `duplicate` = 0", orderId), "one SUCCEEDED attempt (I13)")
+
+            // 02 section 7.3 step 5: the first copy holds the key (PROCESSED) and counts the nine that follow, each of them is settled DUPLICATE on its own `r:` row
+            val holder = db.sql("SELECT `status`, `duplicateCount`, `verified`, `requestHash` FROM `pano_market_payment_event` WHERE `providerId` = 'fake' AND `eventKey` = ?", "e:$event")
+
+            assertEquals(1, holder.size, "the event key holds one row (uq_event)")
+            assertEquals("PROCESSED", holder[0].getString("status"))
+            assertEquals(9, holder[0].getInteger("duplicateCount"), "the nine later copies are counted on the row that holds the key")
+
+            val hash = holder[0].getString("requestHash")
+
+            assertEquals(10L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ?", hash), "every inbound request is stored: ten rows for the ten copies")
+            assertEquals(
+                9L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ? AND `status` = 'DUPLICATE' AND `verified` = 1 AND `eventKey` LIKE 'r:%'", hash),
+                "the other nine are DUPLICATE rows of their own"
+            )
+            assertEquals(
+                0L, db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `requestHash` = ? AND `status` NOT IN ('PROCESSED', 'DUPLICATE')", hash),
+                "no copy is left RECEIVED / FAILED"
+            )
+
+            assertSingleSetOfSideEffects(orderId)
+            settle()
+        }
+    }
+
+    @Test
+    fun `R-03 the same fact through several channels`() {
+        // Channels fired together: the success webhook, the same fact under another event key, two browser returns (each asks the gateway) and the buyer's status poll.
+        // The panel `POST /payments/:paymentId/query` of the catalogue is not a route yet (MK-171, `permission-matrix.tsv` PENDING); it joins here when it lands.
+        E2eRace.rounds("R-03") { _ ->
+            val vip = catalog.fresh("VIP")
+            val buyer = buyer()
+            val publicId = publicIdOf(checkout(buyer.client, cart(line(vip.id))).ok())
+            val reference = referenceOf(publicId)
+            val orderId = orderRow(publicId).getLong("id")
+            val first = paidHook(reference)
+            val second = paidHook(reference)
+            val returnTarget = returnPath(reference, "success")
+            val clients = (0 until 5).map { if (it == 3) buyer.another(baseUrl, "r03-status") else E2eClient(baseUrl, "r03-$it") }
+
+            val round = E2eRace.round(
+                5,
+                setup = { i -> i.also { clients[it].warm() } },
+                action = { i ->
+                    when (i) {
+                        0 -> post(clients[0], first)
+                        1 -> post(clients[1], second)
+                        3 -> clients[3].get("/api/market/orders/$publicId/status")
+                        else -> clients[i].get(returnTarget)
+                    }
+                }
+            )
+            val answers = round.values()
+
+            assertEquals(listOf(200, 200), listOf(answers[0].status, answers[1].status), "both webhooks are answered 200")
+            assertEquals(listOf(303, 303), listOf(answers[2].status, answers[4].status), "a return only ever redirects")
+            assertEquals(200, answers[3].status, "the status poll is answered 200: ${answers[3].error}")
+
+            awaitOrder(publicId, "COMPLETED")
+            assertEquals("SUCCEEDED", attemptStatus(reference))
+            assertEquals(1L, orderEvents(publicId, "PAYMENT_SUCCEEDED"), "one PAYMENT_SUCCEEDED timeline row, whichever channel was first")
+            assertEquals(1L, db.count("market_order_event", "`orderId` = ? AND `toStatus` = 'COMPLETED'", orderId), "one transition to COMPLETED: the state machine is the guard, not the event key")
+            assertEquals(1L, db.count("market_payment", "`orderId` = ? AND `status` = 'SUCCEEDED' AND `duplicate` = 0", orderId), "one SUCCEEDED attempt (I13)")
+
+            assertSingleSetOfSideEffects(orderId)
+            settle()
+            round
+        }
+    }
+
+    @Test
+    fun `R-05 last units at variant level`() {
+        E2eRace.rounds("R-05") { _ ->
+            val crate = catalog.fresh("VAR")
+            val small = db.long("SELECT `id` FROM `pano_market_product_variant` WHERE `productId` = ? ORDER BY `position` LIMIT 1", crate.id)!!
+            val clients = buyers.map { it.client }
+
+            assertEquals(2L, variantStock(small), "variant S starts with stock 2")
+
+            val round = E2eRace.round(
+                20,
+                setup = { i -> clients[i].also { it.warm() } },
+                action = { client -> checkout(client, cart(line(crate.id, 1, small)), key = idempotencyKey()) }
+            )
+            val answers = round.values()
+
+            assertEquals(2, answers.count { it.status == 200 }, "exactly two buyers win: ${answers.map { it.status }}")
+            assertEquals(18, answers.count { it.status == 409 && it.error == "OUT_OF_STOCK" }, "the others get 409 OUT_OF_STOCK: ${answers.map { it.status to it.error }}")
+            assertEquals(0L, variantStock(small), "the variant stock is 0")
+            assertEquals(2L, reservedOfVariant(small), "two units are reserved (the sum of the stockReserved of the order items)")
+            assertEquals(2L, db.count("market_order_item", "`variantId` = ?", small), "exactly two orders hold the variant")
+
+            // the winners cancel: both units are back and nothing stays booked (the expiry path is R-04's)
+            for ((i, answer) in answers.withIndex()) if (answer.status == 200) buyers[i].client.post("/api/market/orders/${publicIdOf(answer)}/cancel", JsonObject()).ok()
+
+            assertEquals(2L, variantStock(small), "the stock is back after the cancellations")
+            assertEquals(0L, reservedOfVariant(small), "and nothing is reserved any more")
+
+            settle()
+            round
+        }
+    }
+
+    @Test
+    fun `R-06 coupon global limit`() {
+        E2eRace.rounds("R-06") { _ ->
+            val product = catalog.fresh("VIP")
+            val (couponId, code) = catalog.freshCoupon(10, redeemLimit = 3)
+            val clients = buyers.map { it.client }
+
+            val round = E2eRace.round(
+                20,
+                setup = { i -> clients[i].also { it.warm() } },
+                action = { client -> checkout(client, cart(line(product.id)).put("couponCode", code), key = idempotencyKey()) }
+            )
+            val answers = round.values()
+            val refused = answers.filter { it.status != 200 }
+
+            assertEquals(3, answers.count { it.status == 200 }, "exactly three orders take the coupon: ${answers.map { it.status to it.error }}")
+            assertEquals(17, refused.count { it.status == 400 && it.error == "INVALID_COUPON" }, "the other 17 are refused: ${refused.map { it.status to it.error }}")
+            assertEquals(List(17) { "CODE_LIMIT_REACHED" }, refused.map { it.obj().getString("reason") }, "with the reason of the limit: ${refused.firstOrNull()?.text}")
+            assertEquals(3L, db.count("market_redemption", "`kind` = 'COUPON' AND `refId` = ? AND `state` = 'HELD'", couponId), "three HELD redemptions")
+            assertEquals(3L, db.long("SELECT `usedCount` FROM `pano_market_coupon` WHERE `id` = ?", couponId), "usedCount is 3")
+            assertEquals(3L, db.long("SELECT COUNT(DISTINCT `orderId`) FROM `pano_market_redemption` WHERE `kind` = 'COUPON' AND `refId` = ?", couponId), "on three different orders")
+
+            // the winners cancel (their buyers are shared with other scenarios): the uses go back
+            for ((i, answer) in answers.withIndex()) if (answer.status == 200) buyers[i].client.post("/api/market/orders/${publicIdOf(answer)}/cancel", JsonObject()).ok()
+
+            assertEquals(0L, db.count("market_redemption", "`kind` = 'COUPON' AND `refId` = ? AND `state` = 'HELD'", couponId), "no redemption is held after the cancellations")
+            assertEquals(0L, db.long("SELECT `usedCount` FROM `pano_market_coupon` WHERE `id` = ?", couponId), "usedCount is back to 0")
+
+            settle()
+            round
+        }
+    }
+
+    @Test
+    fun `R-07 coupon per-customer limit`() {
+        E2eRace.rounds("R-07") { _ ->
+            val product = catalog.fresh("VIP")
+            val (couponId, code) = catalog.freshCoupon(10, customerRedeemLimit = 1)
+            val owner = buyer()
+            val clients = (0 until 8).map { owner.another(baseUrl, "${owner.username}#$it") }
+
+            val round = E2eRace.round(
+                8,
+                setup = { i -> clients[i].also { it.warm() } },
+                action = { client -> checkout(client, cart(line(product.id)).put("couponCode", code), key = idempotencyKey()) }
+            )
+            val answers = round.values()
+
+            assertEquals(1, answers.count { it.status == 200 }, "exactly one of the eight checkouts succeeds: ${answers.map { it.status to it.error }}")
+            assertTrue(answers.filter { it.status != 200 }.all { it.status == 400 && it.error == "INVALID_COUPON" }, "the others are refused for the coupon: ${answers.map { it.status to it.error }}")
+            assertEquals(1L, db.count("market_order", "`userId` = ?", owner.userId), "one order of the buyer")
+            assertEquals(1L, db.count("market_redemption", "`kind` = 'COUPON' AND `refId` = ? AND `state` = 'HELD'", couponId), "one HELD redemption")
+            assertEquals(1L, db.long("SELECT `usedCount` FROM `pano_market_coupon` WHERE `id` = ?", couponId), "usedCount is 1")
+
+            settle()
+            round
+        }
+    }
+
+    @Test
+    fun `R-08 double spend of credits, credits only`() {
+        E2eRace.rounds("R-08") { _ ->
+            // a product without actions: the VIP's credit action would grant credits at the delivery job's tick and move the balance this scenario asserts
+            val product = catalog.fresh("LAST", "price" to "80.00", "creditPrice" to "80.00", "stock" to "")
+            val owner = buyer()
+            val clients = (0 until 2).map { owner.another(baseUrl, "${owner.username}#$it") }
+            val holdBefore = holdBalance()
+
+            grant(owner.userId, 100).ok()
+
+            val round = E2eRace.round(
+                2,
+                setup = { i -> clients[i].also { it.warm() } },
+                action = { client -> checkout(client, cart(line(product.id)).put("payWithCredits", true), method = "credits", key = idempotencyKey()) }
+            )
+            val answers = round.values()
+
+            assertEquals(listOf(200, 400), answers.map { it.status }.sorted(), "one purchase succeeds, the other is refused: ${answers.map { it.status to it.error }}")
+            assertEquals("INSUFFICIENT_CREDITS", answers.single { it.status == 400 }.error)
+
+            val orderId = db.long("SELECT `id` FROM `pano_market_order` WHERE `userId` = ?", owner.userId)
+
+            assertEquals(1L, db.count("market_order", "`userId` = ?", owner.userId), "one order")
+            assertEquals(2000L, creditBalance(owner.userId), "the balance is 20.00")
+            assertEquals(1L, db.count("market_credit_tx", "`orderId` = ? AND `type` = 'HOLD'", orderId), "one HOLD for the order")
+            assertEquals(1L, db.count("market_credit_tx", "`orderId` = ? AND `type` = 'CAPTURE'", orderId), "and one CAPTURE: 80.00 went to SPENT")
+            assertEquals(8000L, db.long("SELECT COALESCE(SUM(`amount`), 0) FROM `pano_market_credit_tx` WHERE `orderId` = ? AND `type` = 'CAPTURE'", orderId), "of 80.00")
+            assertEquals(holdBefore, holdBalance(), "nothing stays on hold")
+
+            settle()
+            round
+        }
+    }
+
+    @Test
+    fun `R-09 double spend of credits, mixed`() {
+        val winners = ArrayList<Pair<E2eBuyer, String>>()
+
+        E2eRace.rounds("R-09") { _ ->
+            val product = catalog.fresh("LAST", "price" to "100.00", "stock" to "")
+            val owner = buyer()
+            val clients = (0 until 5).map { owner.another(baseUrl, "${owner.username}#$it") }
+
+            grant(owner.userId, 100).ok()
+
+            val holdBefore = holdBalance()
+            val round = E2eRace.round(
+                5,
+                setup = { i -> clients[i].also { it.warm() } },
+                action = { client -> checkout(client, cart(line(product.id)).put("useCredits", 60), key = idempotencyKey()) }
+            )
+            val answers = round.values()
+
+            assertEquals(1, answers.count { it.status == 200 }, "exactly one checkout holds the credits: ${answers.map { it.status to it.error }}")
+            assertTrue(answers.filter { it.status != 200 }.all { it.status == 400 && it.error == "INSUFFICIENT_CREDITS" }, "the others are refused: ${answers.map { it.status to it.error }}")
+
+            val publicId = publicIdOf(answers.single { it.status == 200 })
+            val row = orderRow(publicId)
+
+            assertEquals(6000L, row.getLong("creditAmount"), "the order holds 60.00 of credits")
+            assertEquals(1L, db.count("market_order", "`userId` = ?", owner.userId), "one order")
+            assertEquals(1L, db.count("market_credit_tx", "`orderId` = ? AND `type` = 'HOLD'", row.getLong("id")), "one HOLD")
+            assertEquals(6000L, db.long("SELECT COALESCE(SUM(`amount`), 0) FROM `pano_market_credit_tx` WHERE `orderId` = ? AND `type` = 'HOLD'", row.getLong("id")), "of 60.00")
+            assertEquals(4000L, creditBalance(owner.userId), "100.00 - 60.00 held")
+            assertEquals(holdBefore + 6000L, holdBalance(), "HOLD holds the 60.00")
+
+            winners += owner to publicId
+            settle()
+            round
+        }
+
+        // the five unpaid orders expire together (one wait for the job instead of one per round): the hold is released and every balance is whole again
+        for ((_, publicId) in winners) db.rewind("market_order", orderRow(publicId).getLong("id"), "expiresAt", 2 * 3_600_000L)
+
+        Await.until(90_000, 500, "the five orders expired") { winners.all { orderStatus(it.second) == "EXPIRED" } }
+
+        for ((owner, publicId) in winners) {
+            assertEquals(10_000L, creditBalance(owner.userId), "the balance of ${owner.username} is 100.00 again after the expiry")
+            assertEquals(1L, db.count("market_credit_tx", "`orderId` = ? AND `type` = 'RELEASE'", orderRow(publicId).getLong("id")), "the hold of $publicId was released once")
+        }
+
+        assertEquals(0L, db.long("SELECT COALESCE(SUM(`balance`), 0) FROM `pano_market_credit_account` WHERE `systemKey` = 'HOLD' AND `balance` < 0"), "the hold is never negative")
+        settle()
+    }
+
+    @Test
+    fun `R-11 per-player limit`() {
+        E2eRace.rounds("R-11") { _ ->
+            // the product keeps limitPerPlayer = 1 and loses its cooldown (R-12's), so a refusal can only be the limit
+            val product = catalog.fresh("LIMITED", "cooldownSeconds" to "")
+            val recipient = buyer()
+            val gifters = (0 until 5).map { buyer() }
+            val own = (0 until 5).map { recipient.another(baseUrl, "${recipient.username}#$it") }
+
+            // actors 0 to 4 buy for themselves (the recipient, five connections of one login), actors 5 to 9 are other buyers sending it as a gift
+            val round = E2eRace.round(
+                10,
+                setup = { i -> i.also { if (it < 5) own[it].warm() else gifters[it - 5].client.warm() } },
+                action = { i ->
+                    if (i < 5) checkout(own[i], cart(line(product.id)), key = idempotencyKey())
+                    else checkout(gifters[i - 5].client, cart(line(product.id)).put("recipientUsername", recipient.username), key = idempotencyKey())
+                }
+            )
+            val answers = round.values()
+
+            assertEquals(1, answers.count { it.status == 200 }, "exactly one of the ten checkouts succeeds: ${answers.map { it.status to it.error }}")
+            assertEquals(9, answers.count { it.status == 409 && it.error == "PURCHASE_LIMIT_REACHED" }, "the other nine are refused: ${answers.map { it.status to it.error }}")
+            assertEquals(1L, db.long("SELECT COUNT(DISTINCT `orderId`) FROM `pano_market_order_item` WHERE `productId` = ?", product.id), "exactly one order holds the product")
+
+            settle()
+            round
+        }
+    }
+
+    @Test
+    fun `R-12 cooldown`() {
+        E2eRace.rounds("R-12") { _ ->
+            // limitPerPlayer is taken off (R-11's), the cooldown of 3600 s stays
+            val product = catalog.fresh("LIMITED", "limitPerPlayer" to "")
+            val owner = buyer()
+            val clients = (0 until 6).map { owner.another(baseUrl, "${owner.username}#$it") }
+
+            val round = E2eRace.round(
+                6,
+                setup = { i -> clients[i].also { it.warm() } },
+                action = { client -> checkout(client, cart(line(product.id)), key = idempotencyKey()) }
+            )
+            val answers = round.values()
+            val refused = answers.filter { it.status != 200 }
+
+            assertEquals(1, answers.count { it.status == 200 }, "exactly one checkout succeeds: ${answers.map { it.status to it.error }}")
+            assertEquals(5, refused.count { it.status == 409 && it.error == "COOLDOWN_ACTIVE" }, "the other five are refused: ${refused.map { it.status to it.error }}")
+            assertTrue(refused.all { (it.obj().getInteger("retryAfter") ?: 0) in 1..3600 }, "each tells when to come back: ${refused.map { it.json?.getValue("retryAfter") }}")
+            assertEquals(1L, db.long("SELECT COUNT(DISTINCT `orderId`) FROM `pano_market_order_item` WHERE `productId` = ?", product.id), "exactly one order holds the product")
+
+            settle()
+            round
+        }
+    }
+
+    @Test
+    fun `R-13 concurrent full refunds`() {
+        val ends = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+        E2eRace.rounds("R-13") { round ->
+            // a product without actions: nothing is delivered, so the refund has nothing to revoke first
+            val placed = (0 until BATCH).map { place(catalog.fresh("LAST", "stock" to ""), buyers[it]) }
+
+            for (p in placed) {
+                payViaFake(p.publicId)
+                awaitOrder(p.publicId, "COMPLETED")
+            }
+
+            val callsBefore = placed.map { gatewayRefunds(it) }
+            val payers = placed.map { Pair(adminClone("r13a-${it.publicId.takeLast(4)}"), adminClone("r13b-${it.publicId.takeLast(4)}")) }
+
+            // actors 2k and 2k + 1 refund order k in full under different keys, the second [sweep] ms after the gate: the offsets walk it from "while the first
+            // is being recorded" to "after the first is done"
+            val raced = E2eRace.round(
+                placed.size * 2,
+                setup = { i -> i.also { (if (it % 2 == 0) payers[it / 2].first else payers[it / 2].second).warm() } },
+                action = { i ->
+                    val k = i / 2
+
+                    if (i % 2 == 0) payers[k].first.post("/api/panel/market/orders/${placed[k].orderId}/refunds", JsonObject(), keyed())
+                    else {
+                        Thread.sleep(sweep(k, round))
+                        payers[k].second.post("/api/panel/market/orders/${placed[k].orderId}/refunds", JsonObject(), keyed())
+                    }
+                }
+            )
+            val answers = raced.values()
+
+            for ((k, p) in placed.withIndex()) {
+                val own = listOf(answers[2 * k], answers[2 * k + 1])
+
+                assertEquals(listOf(200, 400), own.map { it.status }.sorted(), "${p.publicId}: one refund is accepted, the other is refused, not failed: ${own.map { it.status to it.error }}")
+
+                val refused = own.single { it.status == 400 }
+
+                // the other refund meets either the first one still in flight (nothing left to refund, max 0) or an order that is refunded already
+                ends.merge(refused.error.orEmpty(), 1, Int::plus)
+                assertTrue(refused.error == "INVALID_REFUND_AMOUNT" || refused.error == "INVALID_ORDER_TRANSITION", "${p.publicId}: refused as ${refused.error}: ${refused.text}")
+
+                if (refused.error == "INVALID_REFUND_AMOUNT") assertEquals(0.0, refused.obj().getDouble("max"), 0.0001, "${p.publicId}: nothing is left to refund")
+
+                val row = orderRow(p.publicId)
+
+                assertEquals("SUCCEEDED", own.single { it.status == 200 }.obj().getJsonObject("refund").getString("status"), "${p.publicId}: the accepted refund is settled")
+                assertEquals(1L, db.count("market_refund", "`orderId` = ?", p.orderId), "${p.publicId}: one refund row")
+                assertEquals(1L, db.count("market_refund", "`orderId` = ? AND `status` = 'SUCCEEDED'", p.orderId), "${p.publicId}: and it is SUCCEEDED")
+                assertEquals(row.getLong("totalPrice"), row.getLong("refundedTotal"), "${p.publicId}: refundedTotal = totalPrice")
+                assertEquals("REFUNDED", row.getString("status"))
+                assertEquals(callsBefore[k] + 1, gatewayRefunds(p), "${p.publicId}: the gateway was asked once")
+            }
+
+            settle()
+            raced
+        }
+
+        println("e2e race R-13 refusals over ${5 * BATCH} orders: $ends")
+
+        // the outcome of the catalogue (the loser sees the first refund in flight: max 0) must have happened, or the race did not reach it
+        if ((ends["INVALID_REFUND_AMOUNT"] ?: 0) == 0) throw HarnessNoConcurrency("R-13")
+    }
+
+    @Test
+    fun `R-14 refund replay`() {
+        E2eRace.rounds("R-14") { _ ->
+            val p = place(catalog.fresh("LAST", "stock" to ""), buyers[0])
+
+            payViaFake(p.publicId)
+            awaitOrder(p.publicId, "COMPLETED")
+
+            val key = idempotencyKey()
+            val before = gatewayRefunds(p)
+            val clients = (0 until 5).map { adminClone("r14-$it") }
+
+            val round = E2eRace.round(
+                5,
+                setup = { i -> i.also { clients[it].warm() } },
+                action = { i -> clients[i].post("/api/panel/market/orders/${p.orderId}/refunds", JsonObject(), keyed(key)) }
+            )
+            val answers = round.values()
+
+            assertEquals(List(5) { 200 }, answers.map { it.status }, "all five requests are answered 200: ${answers.map { it.status to it.error }}")
+            assertEquals(1, answers.map { it.obj().getJsonObject("refund").encode() }.toSet().size, "five identical responses: ${answers.map { it.text }.toSet()}")
+            assertEquals(1L, db.count("market_refund", "`orderId` = ?", p.orderId), "one refund row")
+            assertEquals(1L, db.count("market_refund", "`orderId` = ? AND `idempotencyKey` = ?", p.orderId, key), "under the key")
+            assertEquals(before + 1, gatewayRefunds(p), "one call reached the gateway")
+            assertEquals("REFUNDED", orderStatus(p.publicId))
+
+            settle()
             round
         }
     }
@@ -706,6 +1140,9 @@ class RaceE2E : E2eTestBase() {
 
     @Test
     fun `R-27 dispute and refund together`() {
+        // every end of every order is counted over all rounds: the scenario proves nothing unless both ends happened (refund first, dispute first)
+        val ends = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
         E2eRace.rounds("R-27") { round ->
             // buyers of their own: a chargeback blocks its buyer (autoBlockOnChargeback), so a buyer is never reused
             val placed = (0 until BATCH).map { place(catalog.fresh("VIP"), buyer()) }
@@ -726,21 +1163,28 @@ class RaceE2E : E2eTestBase() {
             val webhookClients = placed.map { E2eClient(baseUrl, "r27w-${it.publicId.takeLast(4)}") }
             val refunders = placed.map { adminClone("r27r-${it.publicId.takeLast(4)}") }
 
-            // actor 2k opens the dispute of order k, actor 2k + 1 refunds it in full from the panel, [sweep] ms after the gate (the offsets walk the refund through
-            // the window in which the dispute is being applied)
+            // actor 2k opens the dispute of order k, actor 2k + 1 refunds it in full from the panel. Both directions are swept: on an even order the refund is the
+            // late actor ([sweep] ms after the gate: the dispute takes the order lock first, or catches the refund between its two transactions), on an odd one the
+            // dispute is ([disputeLag]: 0.3 to 3.5 s, the span a refund needs under the load of a batch for its first transaction, the gateway call and its second
+            // transaction), so a round holds dispute-first, refund-in-flight and refund-first orders
             val raced = E2eRace.round(
                 placed.size * 2,
                 setup = { i -> i.also { if (it % 2 == 0) webhookClients[it / 2].warm() else refunders[it / 2].warm() } },
                 action = { i ->
-                    if (i % 2 == 0) post(webhookClients[i / 2], disputes[i / 2])
-                    else {
-                        Thread.sleep(sweep(i / 2, round))
-                        refunders[i / 2].post("/api/panel/market/orders/${placed[i / 2].orderId}/refunds", JsonObject(), keyed())
+                    val k = i / 2
+
+                    if (i % 2 == 0) {
+                        if (k % 2 == 1) Thread.sleep(disputeLag(k, round))
+
+                        post(webhookClients[k], disputes[k])
+                    } else {
+                        if (k % 2 == 0) Thread.sleep(sweep(k, round))
+
+                        refunders[k].post("/api/panel/market/orders/${placed[k].orderId}/refunds", JsonObject(), keyed())
                     }
                 }
             )
             val answers = raced.values()
-            val ends = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
             for ((k, p) in placed.withIndex()) {
                 val dispute = answers[2 * k]
@@ -754,34 +1198,60 @@ class RaceE2E : E2eTestBase() {
 
                 ends.merge("refund ${refund.status}, before $before", 1, Int::plus)
 
+                // when the refund was applied relative to the chargeback: its REFUND_SUCCEEDED row comes after the CHARGEBACK transition when the gateway call was in flight
+                val chargedAt = db.long("SELECT MIN(`id`) FROM `pano_market_order_event` WHERE `orderId` = ? AND `type` = 'STATUS_CHANGED' AND `toStatus` = 'CHARGEBACK'", p.orderId)!!
+                val refundedAt = db.long("SELECT MIN(`id`) FROM `pano_market_order_event` WHERE `orderId` = ? AND `type` = 'REFUND_SUCCEEDED'", p.orderId)
+                val inFlight = refundedAt != null && refundedAt > chargedAt
+
                 assertTrue(before in setOf("COMPLETED", "REFUNDED", "PARTIALLY_REFUNDED"), "${p.publicId}: statusBeforeDispute is $before")
 
                 if (refund.status != 200) {
+                    // the dispute came first: the refund meets a charged-back order and is refused for that reason (21 section 3.1), nothing of it was written
                     assertEquals(400, refund.status, "${p.publicId}: a refund that lost is refused, not failed: ${refund.text}")
+                    assertEquals("INVALID_ORDER_TRANSITION", refund.error, "${p.publicId}: refused because the order is charged back: ${refund.text}")
                     assertEquals("COMPLETED", before, "${p.publicId}: a refused refund means the dispute came first")
+                    assertEquals(0L, row.getLong("refundedTotal"), "${p.publicId}: nothing was refunded")
+                    assertEquals(0L, db.count("market_refund", "`orderId` = ? AND `status` = 'SUCCEEDED'", p.orderId), "${p.publicId}: a refused refund left no SUCCEEDED row")
                 } else {
-                    assertTrue(before == "REFUNDED" || before == "COMPLETED", "${p.publicId}: a refund that was accepted was applied before or after the dispute")
+                    // the refund went through, before the dispute or while its call was in flight: either way the order was refunded in full, so that is the status a won
+                    // dispute gives it back (never COMPLETED with the whole price refunded)
+                    assertEquals("REFUNDED", before, "${p.publicId}: a refund that was answered 200 is what the order returns to after the dispute: ${refund.text}")
+                    ends.merge(if (inFlight) "  of these: refund settled on the charged-back order" else "  of these: refund settled first", 1, Int::plus)
+                    assertEquals(
+                        if (inFlight) 1L else 0L, db.count("market_order_event", "`orderId` = ? AND `message` = 'REFUND_DURING_DISPUTE'", p.orderId),
+                        "${p.publicId}: a refund that settled on the charged-back order says so on the timeline, one that settled first does not"
+                    )
+                    assertEquals(row.getLong("totalPrice"), row.getLong("refundedTotal"), "${p.publicId}: the whole price is refunded")
+                    assertEquals(1L, db.count("market_refund", "`orderId` = ? AND `status` = 'SUCCEEDED'", p.orderId), "${p.publicId}: one SUCCEEDED refund row")
+                    assertEquals(1L, db.count("market_refund", "`orderId` = ?", p.orderId), "${p.publicId}: and no other refund row")
+                    assertEquals(
+                        db.long("SELECT COALESCE(SUM(`quantity`), 0) FROM `pano_market_order_item` WHERE `orderId` = ?", p.orderId),
+                        db.long("SELECT COALESCE(SUM(`refundedQuantity`), 0) FROM `pano_market_order_item` WHERE `orderId` = ?", p.orderId),
+                        "${p.publicId}: every unit counts as refunded"
+                    )
                 }
 
                 assertEquals(1L, db.count("market_dispute", "`orderId` = ?", p.orderId), "${p.publicId}: one dispute row")
-                assertEquals(
-                    if (refund.status == 200) 1L else 0L, db.count("market_refund", "`orderId` = ? AND `status` = 'SUCCEEDED'", p.orderId),
-                    "${p.publicId}: a refund that was answered 200 is one SUCCEEDED row, a refused one left none"
-                )
 
-                val revokes = db.sql("SELECT `orderItemId`, `actionId`, `unitIndex` FROM `pano_market_delivery` WHERE `orderId` = ? AND `phase` = 'REVOKE'", p.orderId)
+                // the two planners of REVOKE rows (O10 step 5 of the refund, O11 step 1 of the chargeback) meet on this order: each unit is taken back once, by whoever came first
+                val revokes = db.sql("SELECT `orderItemId`, `actionId`, `unitIndex`, `attemptGroup` FROM `pano_market_delivery` WHERE `orderId` = ? AND `phase` = 'REVOKE'", p.orderId)
 
                 assertEquals(
                     revokes.size, revokes.map { listOf(it.getLong("orderItemId"), it.getString("actionId"), it.getInteger("unitIndex")) }.toSet().size,
                     "${p.publicId}: no REVOKE row twice for an item and action (whatever the attempt group)"
                 )
                 assertEquals(REVOKES_OF_VIP, revokes.size.toLong(), "${p.publicId}: the REVOKE rows of the delivered VIP actions exist once")
+                assertEquals(1, revokes.map { it.getInteger("attemptGroup") }.toSet().size, "${p.publicId}: and all of them belong to one attempt group")
             }
 
-            println("e2e race R-27 round outcomes: $ends")
             settle()
             raced
         }
+
+        println("e2e race R-27 outcomes over ${5 * BATCH} orders: $ends")
+
+        // the race is only proven when both directions happened: a refund that finished first (the order returns to REFUNDED) and a dispute that finished first (the refund is refused)
+        if (ends.none { (end, _) -> end == "refund 200, before REFUNDED" } || ends.none { (end, _) -> end.startsWith("refund 400, ") }) throw HarnessNoConcurrency("R-27")
     }
 
     @Test
@@ -837,6 +1307,9 @@ class RaceE2E : E2eTestBase() {
     /** The delay of the second actor of order [k] in round [round]: 0 to 78 ms, so that a round sweeps the window between the two requests. */
     private fun sweep(k: Int, round: Int): Long = k * 10L + round * 2L
 
+    /** The delay of the dispute of odd order [k] in round [round] of R-27: 0.3 to 3.5 s, the span of a refund's own run time under the load of a batch. */
+    private fun disputeLag(k: Int, round: Int): Long = 300L + k * 450L + round * 20L
+
     private fun keyed(key: String = idempotencyKey()): Map<String, String> = mapOf("Idempotency-Key" to key)
 
     /** A client of the admin session of its own connection (the platform keeps few sessions per user, so a race actor adopts the login of [admin]). */
@@ -886,6 +1359,27 @@ class RaceE2E : E2eTestBase() {
         Await.until(45_000, 250, "order $publicId is COMPLETED or in REVIEW") { orderStatus(publicId) in setOf("COMPLETED", "REVIEW") }
 
         return orderStatus(publicId)
+    }
+
+    private fun variantStock(variantId: Long): Long? = db.long("SELECT `stock` FROM `pano_market_product_variant` WHERE `id` = ?", variantId)
+
+    private fun reservedOfVariant(variantId: Long): Long = db.long("SELECT COALESCE(SUM(`stockReserved`), 0) FROM `pano_market_order_item` WHERE `variantId` = ?", variantId) ?: 0L
+
+    /** How many refunds the fake gateway took for the payment of [p] (`POST /v1/refunds` that created a refund). */
+    private fun gatewayRefunds(p: Placed): Int {
+        val id = gateway.payments.getValue(p.reference).id
+
+        return gateway.refunds.values.count { it.paymentId == id }
+    }
+
+    /** The path (and query) of the return URL the gateway was given for [reference], with the outcome segment [outcome]. */
+    private fun returnPath(reference: String, outcome: String): String {
+        val url = gateway.payments[reference]!!.returnSuccess ?: error("the gateway got no return URL")
+        val uri = java.net.URI.create(url)
+
+        assertTrue(uri.path.endsWith("/success"), "the success return URL ends in /success: ${uri.path}")
+
+        return (uri.rawPath.removeSuffix("/success") + "/" + outcome) + (uri.rawQuery?.let { "?$it" } ?: "")
     }
 
     private fun deliveryRows(orderId: Long): Long = db.count("market_delivery", "`orderId` = ?", orderId)
