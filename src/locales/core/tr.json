@@ -95,6 +95,8 @@
     "CANCELLED_MARKET_SUBSCRIPTION": "<b>{username}</b>, <b>#{subscriptionId}</b> numaralı aboneliği iptal etti.",
     "RETRIED_MARKET_SUBSCRIPTION_CHARGE": "<b>{username}</b>, <b>#{subscriptionId}</b> numaralı aboneliğin ödeme çekimini yeniden denedi.",
     "RAN_MARKET_CHARGEBACK_ACTIONS": "<b>{username}</b>, <b>#{orderId}</b> numaralı siparişin bekletilen chargeback eylemlerini çalıştırdı ({count} teslimat planlandı).",
+    "CREATED_MARKET_BLOCK": "<b>{username}</b>, engelleme listesine bir {type} engeli ekledi (<b>{value}</b>, kaynak {source}).",
+    "DELETED_MARKET_BLOCK": "<b>{username}</b>, engelleme listesinden bir {type} engelini kaldırdı (<b>{value}</b>, kaynak {source}).",
     "CREATED_MARKET_ORDER": "<b>{username}</b>, <b>{playerUsername}</b> için <b>#{orderId}</b> numaralı siparişi oluşturdu ({total}).",
     "APPROVED_MARKET_BANK_TRANSFER": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin havalesini onayladı.",
     "REJECTED_MARKET_BANK_TRANSFER": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin havalesini reddetti.",

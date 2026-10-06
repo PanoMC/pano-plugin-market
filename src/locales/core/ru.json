@@ -95,6 +95,8 @@
     "CANCELLED_MARKET_SUBSCRIPTION": "<b>{username}</b> отменил подписку <b>#{subscriptionId}</b>.",
     "RETRIED_MARKET_SUBSCRIPTION_CHARGE": "<b>{username}</b> повторил списание по подписке <b>#{subscriptionId}</b>.",
     "RAN_MARKET_CHARGEBACK_ACTIONS": "<b>{username}</b> выполнил отложенные действия чарджбэка по заказу <b>#{orderId}</b> (запланировано доставок: {count}).",
+    "CREATED_MARKET_BLOCK": "<b>{username}</b> добавил в список блокировок запись {type} (<b>{value}</b>, источник {source}).",
+    "DELETED_MARKET_BLOCK": "<b>{username}</b> удалил из списка блокировок запись {type} (<b>{value}</b>, источник {source}).",
     "CREATED_MARKET_ORDER": "<b>{username}</b> создал заказ <b>#{orderId}</b> для <b>{playerUsername}</b> ({total}).",
     "APPROVED_MARKET_BANK_TRANSFER": "<b>{username}</b> подтвердил банковский перевод по заказу <b>#{orderId}</b>.",
     "REJECTED_MARKET_BANK_TRANSFER": "<b>{username}</b> отклонил банковский перевод по заказу <b>#{orderId}</b>.",

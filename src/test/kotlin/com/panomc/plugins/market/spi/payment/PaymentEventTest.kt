@@ -121,7 +121,8 @@ class PaymentEventTest {
     @Test
     fun `event enums keep their documented values and order`() {
         assertEquals(listOf("AWAITING_BUYER", "AWAITING_CONFIRMATIONS", "AWAITING_BANK", "FRAUD_REVIEW", "AWAITING_CAPTURE", "OTHER"), PendingReason.values().map { it.name })
-        assertEquals(listOf("UNDERPAID", "OVERPAID", "LATE", "WRONG_ASSET", "AMOUNT_MISMATCH", "CURRENCY_MISMATCH", "FRAUD_REVIEW", "OTHER"), ReviewReason.values().map { it.name })
+        // BLOCKED_BUYER (01 section 5.1, 06 section 6.8, 11 section 9.3) is the market's own review reason for a payer blocked after checkout (MK-151); a gateway never reports it
+        assertEquals(listOf("UNDERPAID", "OVERPAID", "LATE", "WRONG_ASSET", "AMOUNT_MISMATCH", "CURRENCY_MISMATCH", "FRAUD_REVIEW", "BLOCKED_BUYER", "OTHER"), ReviewReason.values().map { it.name })
         assertEquals(listOf("PENDING", "SUCCEEDED", "FAILED", "CANCELLED"), RefundState.values().map { it.name })
         assertEquals(listOf("INQUIRY", "OPENED", "WON", "LOST", "CLOSED"), DisputeState.values().map { it.name })
         assertEquals(listOf("ACTIVE", "PAST_DUE", "PAUSED", "CANCEL_SCHEDULED", "CANCELLED", "ENDED"), GatewaySubscriptionStatus.values().map { it.name })

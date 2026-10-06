@@ -11,6 +11,7 @@ import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.routes.api.checkout.useCredits
 import com.panomc.plugins.market.routes.base.MarketPublicMutationApi
+import com.panomc.plugins.market.routes.panel.block.blockListService
 import com.panomc.plugins.market.service.PayRequest
 import com.panomc.plugins.market.service.UseCredits
 import io.vertx.core.json.JsonObject
@@ -76,6 +77,7 @@ class PayOrderAPI(private val plugin: MarketPlugin) : MarketPublicMutationApi() 
         val caller = payCaller(plugin, context)
 
         limiter.check(caller.clientIp, order.buyerKey)
+        blockListService(plugin).requireOrderBuyerAllowed(order, caller.clientIp, sqlClient)
 
         val request = parsePayRequest(getParameters(context).body().jsonObject)
         val payment = paymentService(plugin).pay(order, request, caller, sqlClient)
@@ -108,6 +110,7 @@ class ContinueOrderPaymentAPI(private val plugin: MarketPlugin) : MarketPublicMu
         val caller = payCaller(plugin, context)
 
         limiter.check(caller.clientIp, order.buyerKey)
+        blockListService(plugin).requireOrderBuyerAllowed(order, caller.clientIp, sqlClient)
 
         val body = getParameters(context).body().jsonObject
         val values = body.getValue("values") as? JsonObject ?: throw BadRequest()
