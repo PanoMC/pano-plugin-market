@@ -677,6 +677,34 @@ class RefundServiceIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a dispute cancels the refunds nothing is running for and leaves a call in flight alone (O11 step 4)`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))))
+        val waiting = service.request(paid.order.id, RefundInput(amount = 300, revokeFirst = true), r.key(), null).refund
+        val now = w.clock.now()
+        val inFlight = w.refunds.add(
+            com.panomc.plugins.market.db.model.MarketRefund(
+                orderId = paid.order.id, paymentId = paid.attempt.id, providerId = "fake", status = RefundStatus.REQUESTED, origin = RefundOrigin.PANEL,
+                idempotencyKey = "in-flight-key-00000000001", amount = 200, gatewayAmount = 200, currency = "EUR", queryCount = 1, nextQueryAt = now + 60_000, createdAt = now, updatedAt = now
+            ),
+            pool
+        )!!
+
+        val cancelled = w.db.tx { conn ->
+            r.d.locks.forOrder(conn, paid.order.id, com.panomc.plugins.market.db.tx.OrderLockScope.RELEASE, cashback = true) {
+                r.d.locks.children(conn, paid.order.id, com.panomc.plugins.market.db.tx.OrderChild.REFUND)
+
+                service.cancelUnsentForChargeback(conn, paid.order.id)
+            }
+        }
+
+        assertEquals(1, cancelled)
+        assertEquals(RefundStatus.CANCELLED, r.refund(waiting.id).status)
+        assertEquals("CHARGEBACK", r.refund(waiting.id).failureCode)
+        assertEquals(RefundStatus.REQUESTED, r.refund(inFlight).status)
+        assertEquals(0, r.fake.calls(Op.REFUND).size)
+    }
+
+    @Test
     fun `the preview recommends revokeFirst when a server the undo would reach has not been seen`(): Unit = runBlocking {
         val server = ProductAction(id = "s1", type = DeliveryActionType.COMMAND, commands = listOf("give {username} diamond 1"), targetServers = listOf(7L))
         val paid = r.place(steve(), listOf(RefundLine(1000, actions = listOf(server))), grant = false)

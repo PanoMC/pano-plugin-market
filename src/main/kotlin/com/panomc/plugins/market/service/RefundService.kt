@@ -843,6 +843,22 @@ class RefundService(
         return RefundOutcome(db.tx { refunds.getById(refundId, it)!! }, false, null)
     }
 
+    /**
+     * O11 step 4 (21 section 5.2), for `DisputeService`: the refunds of the order that nothing is running for (`REQUESTED`, unsent or `revokeFirst`-waiting, or of
+     * unknown outcome) become `CANCELLED` (`failureCode = CHARGEBACK`); a call in flight settles itself and `PENDING` rows are the gateway's. The caller holds
+     * `Locks.forOrder(RELEASE)` and the refund rows of the order (`Locks.children`) on [conn]; returns how many rows were cancelled.
+     */
+    suspend fun cancelUnsentForChargeback(conn: SqlConnection, orderId: Long): Int {
+        val t = Tx(conn)
+        var cancelled = 0
+
+        for (row in refunds.getByOrderId(orderId, conn)) {
+            if (row.status == RefundStatus.REQUESTED && move(t, row, RefundEvent.ChargebackOpened)) cancelled++
+        }
+
+        return cancelled
+    }
+
     // ============================================================================================================ O10 (21 section 3.4)
 
     /**
