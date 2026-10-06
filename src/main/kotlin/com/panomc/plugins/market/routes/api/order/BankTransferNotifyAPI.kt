@@ -20,6 +20,7 @@ import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.provider.BankTransferProvider
 import com.panomc.plugins.market.routes.base.MarketPublicMutationApi
+import com.panomc.plugins.market.routes.panel.block.blockListService
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.plugins.market.service.BankTransferService
@@ -114,6 +115,7 @@ class BankTransferNotifyAPI(private val plugin: MarketPlugin) : MarketPublicMuta
         val caller = payCaller(plugin, context)
 
         limiter.check(caller.clientIp, order.buyerKey)
+        blockListService(plugin).requireOrderBuyerAllowed(order, caller.clientIp, sqlClient)
 
         val (senderName, note) = parseBankTransferNotice(context.body().asJsonObject())
 

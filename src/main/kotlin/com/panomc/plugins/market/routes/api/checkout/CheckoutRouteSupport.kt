@@ -55,6 +55,7 @@ import com.panomc.plugins.market.service.RedemptionService
 import com.panomc.plugins.market.service.ReservationService
 import com.panomc.plugins.market.service.QuoteCaller
 import com.panomc.plugins.market.service.ClientIpResolver
+import com.panomc.plugins.market.routes.panel.block.blockListService
 import com.panomc.plugins.market.service.platform.DirectoryUser
 import com.panomc.plugins.market.service.platform.ServerDirectory
 import com.panomc.plugins.market.service.platform.UserDirectory
@@ -158,6 +159,7 @@ internal fun checkoutService(plugin: MarketPlugin, withCheckout: Boolean = false
         legal = legalTextService(plugin),
         users = PlatformUserDirectory(databaseManager),
         servers = PlatformServerDirectory(databaseManager),
+        blocks = blockListService(plugin).asBuyerBlocks(),
         shipping = shippingService(plugin),
         addresses = context.getBean(MarketAddressDao::class.java),
         checkout = deps,

@@ -135,7 +135,7 @@ sealed class PaymentEvent(val target: PaymentTarget) {
 /** New values only at the end; both sides treat an unknown value as OTHER. */
 enum class PendingReason { AWAITING_BUYER, AWAITING_CONFIRMATIONS, AWAITING_BANK, FRAUD_REVIEW, AWAITING_CAPTURE, OTHER }
 
-enum class ReviewReason { UNDERPAID, OVERPAID, LATE, WRONG_ASSET, AMOUNT_MISMATCH, CURRENCY_MISMATCH, FRAUD_REVIEW, OTHER }
+enum class ReviewReason { UNDERPAID, OVERPAID, LATE, WRONG_ASSET, AMOUNT_MISMATCH, CURRENCY_MISMATCH, FRAUD_REVIEW, BLOCKED_BUYER, OTHER }
 
 enum class RefundState { PENDING, SUCCEEDED, FAILED, CANCELLED }
 

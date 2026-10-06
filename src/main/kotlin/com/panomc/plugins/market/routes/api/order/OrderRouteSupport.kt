@@ -49,6 +49,8 @@ import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.routes.user.cart.cartService
+import com.panomc.plugins.market.routes.panel.block.blockListService
+import com.panomc.plugins.market.service.BlockedBuyerGuard
 import com.panomc.plugins.market.service.CreditEffects
 import com.panomc.plugins.market.service.CreditHoldGuard
 import com.panomc.plugins.market.service.CreditService
@@ -241,7 +243,9 @@ private fun buildSubscriptionService(plugin: MarketPlugin): SubscriptionService 
         mail = MailOutboxService({ currentConfig(plugin) }, SystemClock, context.getBean(MarketMailOutboxDao::class.java), orderEvents),
         webhooks = SubscriptionWebhooks { conn, event, subjectKey, orderId, data, testMode -> webhookService(plugin).emit(conn, event, subjectKey, orderId, data, testMode) },
         // MK-122: the renewal orders and attempts (random ids) and the cancel of the unpaid renewal order of an ended subscription (the order service is looked up late)
-        ids = SecureIds(), orderService = { orderService(plugin) }
+        ids = SecureIds(), orderService = { orderService(plugin) },
+        // MK-151: a blocked owner is not charged again (09 section 8.3, 11 section 9.3)
+        blocks = blockListService(plugin).asBuyerBlocks()
     )
 }
 
@@ -351,7 +355,8 @@ private fun buildPaymentService(plugin: MarketPlugin): PaymentService {
         products = context.getBean(MarketProductDao::class.java), entitlements = context.getBean(MarketEntitlementDao::class.java),
         // MK-091 (07 section 5 C3): an order whose credit part is not backed by its hold in the ledger is never completed by a payment
         // MK-121 (09 section 8.5): a payment for a renewal of a closed subscription goes to review (LATE)
-        extraPaidGuards = listOf(CreditHoldGuard(creditService(plugin)), SubscriptionClosedGuard { subscriptionService(plugin) }),
+        // MK-151 (11 section 9.3, PP-5): a payer or recipient blocked after checkout sends the paid order to review (BLOCKED_BUYER)
+        extraPaidGuards = listOf(CreditHoldGuard(creditService(plugin)), SubscriptionClosedGuard { subscriptionService(plugin) }, BlockedBuyerGuard(blockListService(plugin))),
         // WIRE-1 (MK-077 seam): the query paths and `continue` run under the attempt locks the inbound pipeline holds
         attemptLocks = attemptLocks(plugin),
         // MK-121: the plan of a start, the gateway data of a success (09 sections 4.2 and 4.4)

@@ -93,6 +93,8 @@
     "OPENED_MARKET_DISPUTE": "<b>{username}</b> recorded a chargeback on order <b>#{orderId}</b> (dispute <b>#{disputeId}</b>).",
     "UPDATED_MARKET_DISPUTE": "<b>{username}</b> set dispute <b>#{disputeId}</b> of order <b>#{orderId}</b> to \"{status}\".",
     "RAN_MARKET_CHARGEBACK_ACTIONS": "<b>{username}</b> ran the held chargeback actions of order <b>#{orderId}</b> ({count} deliveries planned).",
+    "CREATED_MARKET_BLOCK": "<b>{username}</b> added a {type} block (<b>{value}</b>, source {source}) to the block list.",
+    "DELETED_MARKET_BLOCK": "<b>{username}</b> removed a {type} block (<b>{value}</b>, source {source}) from the block list.",
     "CREATED_MARKET_ORDER": "<b>{username}</b> created order <b>#{orderId}</b> for <b>{playerUsername}</b> ({total}).",
     "APPROVED_MARKET_BANK_TRANSFER": "<b>{username}</b> approved the bank transfer of order <b>#{orderId}</b>.",
     "REJECTED_MARKET_BANK_TRANSFER": "<b>{username}</b> rejected the bank transfer of order <b>#{orderId}</b>.",

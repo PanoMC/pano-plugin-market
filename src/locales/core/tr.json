@@ -93,6 +93,8 @@
     "OPENED_MARKET_DISPUTE": "<b>{username}</b>, <b>#{orderId}</b> numaralı sipariş için bir ters ibraz (chargeback) kaydetti (itiraz <b>#{disputeId}</b>).",
     "UPDATED_MARKET_DISPUTE": "<b>{username}</b>, <b>#{orderId}</b> numaralı siparişin <b>#{disputeId}</b> numaralı itirazını \"{status}\" olarak ayarladı.",
     "RAN_MARKET_CHARGEBACK_ACTIONS": "<b>{username}</b>, <b>#{orderId}</b> numaralı siparişin bekletilen chargeback eylemlerini çalıştırdı ({count} teslimat planlandı).",
+    "CREATED_MARKET_BLOCK": "<b>{username}</b>, engelleme listesine bir {type} engeli ekledi (<b>{value}</b>, kaynak {source}).",
+    "DELETED_MARKET_BLOCK": "<b>{username}</b>, engelleme listesinden bir {type} engelini kaldırdı (<b>{value}</b>, kaynak {source}).",
     "CREATED_MARKET_ORDER": "<b>{username}</b>, <b>{playerUsername}</b> için <b>#{orderId}</b> numaralı siparişi oluşturdu ({total}).",
     "APPROVED_MARKET_BANK_TRANSFER": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin havalesini onayladı.",
     "REJECTED_MARKET_BANK_TRANSFER": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin havalesini reddetti.",
