@@ -691,6 +691,47 @@ export const scenarios = [
         .getByText(text('theme.errors.AMOUNT_BELOW_MINIMUM'))
         .waitFor({ timeout: 10000 });
       await ctx.close();
+
+      // a method whose admin currency restriction leaves out the store's currency (EUR): the `fake` method is
+      // limited to USD (the provider itself takes any currency), the store sells in EUR
+      const setCurrencies = async (currencies) =>
+        must(
+          await admin.post('/api/panel/market/payment-methods/fake', { config: { currencies } }),
+          `fake currencies ${JSON.stringify(currencies)}`,
+        );
+      const account3 = await payBuyer(buyer, admin, 'cur');
+
+      await setCurrencies(['USD']);
+
+      try {
+        await sleep(1500);
+
+        const ctx3 = await signedIn(browser, account3);
+        const page3 = await ctx3.page();
+
+        await putInCart(account3, vip, 1);
+        await openCheckout(page3, env);
+        await waitQuoted(page3);
+        assertEqual(
+          await methodRadio(page3, 'fake').isDisabled(),
+          true,
+          'fake is disabled: its currency list leaves out EUR',
+        );
+        await page3
+          .locator('label.list-group-item')
+          .filter({ has: methodRadio(page3, 'fake') })
+          .getByText(text('theme.errors.CURRENCY_NOT_SUPPORTED'))
+          .waitFor({ timeout: 10000 });
+        assertEqual(
+          await methodRadio(page3, 'fake-eur').isDisabled(),
+          false,
+          'fake-eur still serves the EUR order',
+        );
+        await ctx3.close();
+      } finally {
+        await setCurrencies(null);
+        await sleep(1500);
+      }
     },
   },
 
