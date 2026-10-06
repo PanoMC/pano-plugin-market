@@ -1,0 +1,836 @@
+{
+ "recordedFrom": "c58d57a",
+ "how": "read from the 54 handlers of that commit (git show c58d57a:<route file>), not recorded over HTTP: the old build cannot run on the current platform",
+ "convention": "a path is a dotted key path of the JSON answer, an array element level is written []; dynamic-key maps (cellValues, paymentMethods.<id>, reveal settings) are listed down to the map itself only. The test requires every listed key to be present in the live answer (additive keys are allowed, a missing key fails).",
+ "endpoints": [
+  {
+   "tag": "CHANGE",
+   "method": "GET",
+   "path": "/api/market/store",
+   "kind": "JSON",
+   "keys": [
+    "bestsellers",
+    "categories",
+    "categories[].children",
+    "categories[].children[].children",
+    "categories[].children[].color",
+    "categories[].children[].description",
+    "categories[].children[].icon",
+    "categories[].children[].id",
+    "categories[].children[].imageFileName",
+    "categories[].children[].name",
+    "categories[].children[].parentId",
+    "categories[].children[].position",
+    "categories[].children[].productsCount",
+    "categories[].color",
+    "categories[].description",
+    "categories[].icon",
+    "categories[].id",
+    "categories[].imageFileName",
+    "categories[].name",
+    "categories[].parentId",
+    "categories[].position",
+    "categories[].productsCount",
+    "comparisons",
+    "comparisons[].cellValues",
+    "comparisons[].features",
+    "comparisons[].id",
+    "comparisons[].name",
+    "comparisons[].productIds",
+    "products",
+    "products[].categoryId",
+    "products[].creditPrice",
+    "products[].featured",
+    "products[].icon",
+    "products[].id",
+    "products[].imageFileName",
+    "products[].name",
+    "products[].price",
+    "products[].priority",
+    "products[].slug",
+    "products[].stock",
+    "result",
+    "settings",
+    "settings.creditName",
+    "settings.creditsEnabled",
+    "settings.currency",
+    "settings.currencySymbol",
+    "settings.removeCents",
+    "settings.showBestsellers",
+    "settings.showComparisons",
+    "settings.showFeaturedProducts",
+    "settings.storeDescription",
+    "settings.storeName"
+   ],
+   "intentionalRemovals": [
+    {
+     "key": "products[].description",
+     "why": "04 section 3: the store list is the first page of ProductCard (no description); the description moved to GET /api/market/products/:slug"
+    }
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "GET",
+   "path": "/api/market/products/:slug",
+   "kind": "JSON",
+   "keys": [
+    "product",
+    "product.categoryId",
+    "product.categoryName",
+    "product.createdAt",
+    "product.creditPrice",
+    "product.description",
+    "product.durationExpiry",
+    "product.durationStart",
+    "product.durationType",
+    "product.featured",
+    "product.icon",
+    "product.id",
+    "product.imageFileName",
+    "product.name",
+    "product.price",
+    "product.priority",
+    "product.requireOnlyOne",
+    "product.requiredProducts",
+    "product.slug",
+    "product.stock",
+    "product.updatedAt",
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "GET",
+   "path": "/api/market/products/image/:fileName",
+   "kind": "FILE",
+   "keys": []
+  },
+  {
+   "tag": "KEEP",
+   "method": "GET",
+   "path": "/api/market/categories/image/:fileName",
+   "kind": "FILE",
+   "keys": []
+  },
+  {
+   "tag": "KEEP",
+   "method": "GET",
+   "path": "/api/panel/market/categories",
+   "kind": "JSON",
+   "keys": [
+    "categories",
+    "categories[].children",
+    "categories[].children[].children",
+    "categories[].children[].color",
+    "categories[].children[].createdAt",
+    "categories[].children[].description",
+    "categories[].children[].icon",
+    "categories[].children[].id",
+    "categories[].children[].imageFileName",
+    "categories[].children[].name",
+    "categories[].children[].parentId",
+    "categories[].children[].position",
+    "categories[].children[].productsCount",
+    "categories[].children[].status",
+    "categories[].children[].updatedAt",
+    "categories[].color",
+    "categories[].createdAt",
+    "categories[].description",
+    "categories[].icon",
+    "categories[].id",
+    "categories[].imageFileName",
+    "categories[].name",
+    "categories[].parentId",
+    "categories[].position",
+    "categories[].productsCount",
+    "categories[].status",
+    "categories[].updatedAt",
+    "categoryCount",
+    "result",
+    "totalPage"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "POST",
+   "path": "/api/panel/market/categories",
+   "kind": "JSON",
+   "keys": [
+    "id",
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "PUT",
+   "path": "/api/panel/market/categories/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "DELETE",
+   "path": "/api/panel/market/categories/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "POST",
+   "path": "/api/panel/market/categories/sort",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "GET",
+   "path": "/api/panel/market/categories/image/:fileName",
+   "kind": "FILE",
+   "keys": []
+  },
+  {
+   "tag": "CHANGE",
+   "method": "GET",
+   "path": "/api/panel/market/products",
+   "kind": "JSON",
+   "keys": [
+    "productCount",
+    "products",
+    "products[].categoryId",
+    "products[].categoryName",
+    "products[].creditPrice",
+    "products[].featured",
+    "products[].icon",
+    "products[].id",
+    "products[].imageFileName",
+    "products[].name",
+    "products[].price",
+    "products[].priority",
+    "products[].slug",
+    "products[].status",
+    "products[].stock",
+    "result",
+    "totalPage"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "GET",
+   "path": "/api/panel/market/products/simple",
+   "kind": "JSON",
+   "keys": [
+    "products",
+    "products[].id",
+    "products[].name",
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "GET",
+   "path": "/api/panel/market/products/:id",
+   "kind": "JSON",
+   "keys": [
+    "product",
+    "product.actions",
+    "product.categoryId",
+    "product.createdAt",
+    "product.creditPrice",
+    "product.description",
+    "product.durationExpiry",
+    "product.durationStart",
+    "product.durationType",
+    "product.featured",
+    "product.icon",
+    "product.id",
+    "product.imageFileName",
+    "product.name",
+    "product.price",
+    "product.priority",
+    "product.requireOnlyOne",
+    "product.requiredPermission",
+    "product.requiredProducts",
+    "product.slug",
+    "product.status",
+    "product.stock",
+    "product.updatedAt",
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "POST",
+   "path": "/api/panel/market/products",
+   "kind": "JSON",
+   "keys": [
+    "id",
+    "result",
+    "slug"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "PUT",
+   "path": "/api/panel/market/products/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "POST",
+   "path": "/api/panel/market/products/:id/clone",
+   "kind": "JSON",
+   "keys": [
+    "id",
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "DELETE",
+   "path": "/api/panel/market/products/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "GET",
+   "path": "/api/panel/market/products/image/:fileName",
+   "kind": "FILE",
+   "keys": []
+  },
+  {
+   "tag": "KEEP",
+   "method": "GET",
+   "path": "/api/panel/market/comparisons",
+   "kind": "JSON",
+   "keys": [
+    "comparisonCount",
+    "comparisons",
+    "comparisons[].createdAt",
+    "comparisons[].id",
+    "comparisons[].name",
+    "comparisons[].priority",
+    "comparisons[].products",
+    "comparisons[].status",
+    "comparisons[].updatedAt",
+    "result",
+    "totalPage"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "GET",
+   "path": "/api/panel/market/comparisons/:id",
+   "kind": "JSON",
+   "keys": [
+    "cellValues",
+    "features",
+    "id",
+    "name",
+    "priority",
+    "result",
+    "selectedProducts",
+    "status"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "POST",
+   "path": "/api/panel/market/comparisons",
+   "kind": "JSON",
+   "keys": [
+    "id",
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "PUT",
+   "path": "/api/panel/market/comparisons/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "POST",
+   "path": "/api/panel/market/comparisons/:id/clone",
+   "kind": "JSON",
+   "keys": [
+    "id",
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "DELETE",
+   "path": "/api/panel/market/comparisons/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "GET",
+   "path": "/api/panel/market/discounts",
+   "kind": "JSON",
+   "keys": [
+    "discountCount",
+    "discounts",
+    "discounts[].categoryIds",
+    "discounts[].createdAt",
+    "discounts[].expiryDate",
+    "discounts[].id",
+    "discounts[].minPaymentAmount",
+    "discounts[].name",
+    "discounts[].productIds",
+    "discounts[].products",
+    "discounts[].scope",
+    "discounts[].startDate",
+    "discounts[].status",
+    "discounts[].unit",
+    "discounts[].updatedAt",
+    "discounts[].usageLimit",
+    "discounts[].usedCount",
+    "discounts[].value",
+    "result",
+    "totalPage"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "POST",
+   "path": "/api/panel/market/discounts",
+   "kind": "JSON",
+   "keys": [
+    "id",
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "PUT",
+   "path": "/api/panel/market/discounts/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "DELETE",
+   "path": "/api/panel/market/discounts/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "GET",
+   "path": "/api/panel/market/coupons",
+   "kind": "JSON",
+   "keys": [
+    "couponCount",
+    "coupons",
+    "coupons[].code",
+    "coupons[].createdAt",
+    "coupons[].customerRedeemLimit",
+    "coupons[].discount",
+    "coupons[].expiryDate",
+    "coupons[].id",
+    "coupons[].minPaymentAmount",
+    "coupons[].name",
+    "coupons[].productIds",
+    "coupons[].redeemLimit",
+    "coupons[].scope",
+    "coupons[].startDate",
+    "coupons[].status",
+    "coupons[].unit",
+    "coupons[].updatedAt",
+    "coupons[].usedCount",
+    "result",
+    "totalPage"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "POST",
+   "path": "/api/panel/market/coupons",
+   "kind": "JSON",
+   "keys": [
+    "id",
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "PUT",
+   "path": "/api/panel/market/coupons/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "DELETE",
+   "path": "/api/panel/market/coupons/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "GET",
+   "path": "/api/panel/market/creator-codes",
+   "kind": "JSON",
+   "keys": [
+    "creatorCodeCount",
+    "creatorCodes",
+    "creatorCodes[].code",
+    "creatorCodes[].commissionPercent",
+    "creatorCodes[].createdAt",
+    "creatorCodes[].creator",
+    "creatorCodes[].discount",
+    "creatorCodes[].earnings",
+    "creatorCodes[].expiryDate",
+    "creatorCodes[].id",
+    "creatorCodes[].redeemLimit",
+    "creatorCodes[].startDate",
+    "creatorCodes[].status",
+    "creatorCodes[].unit",
+    "creatorCodes[].updatedAt",
+    "creatorCodes[].usedCount",
+    "result",
+    "totalPage"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "POST",
+   "path": "/api/panel/market/creator-codes",
+   "kind": "JSON",
+   "keys": [
+    "id",
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "PUT",
+   "path": "/api/panel/market/creator-codes/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "DELETE",
+   "path": "/api/panel/market/creator-codes/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "GET",
+   "path": "/api/panel/market/gifts",
+   "kind": "JSON",
+   "keys": [
+    "giftCount",
+    "gifts",
+    "gifts[].code",
+    "gifts[].createdAt",
+    "gifts[].creditAmount",
+    "gifts[].expiryDate",
+    "gifts[].id",
+    "gifts[].productId",
+    "gifts[].productIds",
+    "gifts[].productName",
+    "gifts[].productNames",
+    "gifts[].startDate",
+    "gifts[].status",
+    "gifts[].type",
+    "gifts[].updatedAt",
+    "result",
+    "totalPage"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "POST",
+   "path": "/api/panel/market/gifts",
+   "kind": "JSON",
+   "keys": [
+    "id",
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "PUT",
+   "path": "/api/panel/market/gifts/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "DELETE",
+   "path": "/api/panel/market/gifts/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "GET",
+   "path": "/api/panel/market/orders",
+   "kind": "JSON",
+   "keys": [
+    "orderCount",
+    "orders",
+    "orders[].createdAt",
+    "orders[].currency",
+    "orders[].id",
+    "orders[].items",
+    "orders[].items[].createdAt",
+    "orders[].items[].id",
+    "orders[].items[].productId",
+    "orders[].items[].productName",
+    "orders[].items[].quantity",
+    "orders[].items[].unitPrice",
+    "orders[].items[].updatedAt",
+    "orders[].paymentLabel",
+    "orders[].paymentMethodId",
+    "orders[].playerUsername",
+    "orders[].status",
+    "orders[].totalPrice",
+    "orders[].updatedAt",
+    "orders[].userId",
+    "result",
+    "totalPage"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "GET",
+   "path": "/api/panel/market/orders/:id",
+   "kind": "JSON",
+   "keys": [
+    "items",
+    "items[].createdAt",
+    "items[].id",
+    "items[].productId",
+    "items[].productName",
+    "items[].quantity",
+    "items[].unitPrice",
+    "items[].updatedAt",
+    "order",
+    "order.createdAt",
+    "order.currency",
+    "order.exchangeRate",
+    "order.id",
+    "order.paymentLabel",
+    "order.paymentMethodId",
+    "order.playerUsername",
+    "order.statsCurrency",
+    "order.statsCurrencySymbol",
+    "order.statsValue",
+    "order.status",
+    "order.totalPrice",
+    "order.updatedAt",
+    "order.userId",
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "PUT",
+   "path": "/api/panel/market/orders/:id/status",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "PUT",
+   "path": "/api/panel/market/orders/:id/exchange-rate",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "POST",
+   "path": "/api/panel/market/orders/:id/exchange-rate/refresh",
+   "kind": "JSON",
+   "keys": [
+    "exchangeRate",
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "GET",
+   "path": "/api/panel/market/stats",
+   "kind": "JSON",
+   "keys": [
+    "charts",
+    "charts.monthlyRevenue",
+    "charts.monthlyRevenue.labels",
+    "charts.monthlyRevenue.values",
+    "charts.paymentMethods",
+    "charts.paymentMethods.labels",
+    "charts.paymentMethods.values",
+    "charts.topProducts",
+    "charts.topProducts.labels",
+    "charts.topProducts.values",
+    "charts.weeklyRevenue",
+    "charts.weeklyRevenue.labels",
+    "charts.weeklyRevenue.values",
+    "result",
+    "statsCurrency",
+    "statsCurrencySymbol",
+    "summary",
+    "summary.monthly",
+    "summary.monthly.count",
+    "summary.monthly.previous",
+    "summary.monthly.revenue",
+    "summary.monthly.spark",
+    "summary.monthly.trend",
+    "summary.total",
+    "summary.total.count",
+    "summary.total.previous",
+    "summary.total.revenue",
+    "summary.total.spark",
+    "summary.total.trend",
+    "summary.weekly",
+    "summary.weekly.count",
+    "summary.weekly.previous",
+    "summary.weekly.revenue",
+    "summary.weekly.spark",
+    "summary.weekly.trend"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "GET",
+   "path": "/api/panel/market/settings",
+   "kind": "JSON",
+   "keys": [
+    "allowGuestCheckout",
+    "cashbackPercent",
+    "combineDiscountsAndCoupons",
+    "creditName",
+    "creditsEnabled",
+    "currency",
+    "currencySymbol",
+    "exchangeRate",
+    "exchangeRateAutoIntervalHours",
+    "exchangeRateMode",
+    "exchangeRateUpdatedAt",
+    "minimumOrderAmount",
+    "onlyAcceptCredits",
+    "paymentMethods",
+    "removeCents",
+    "result",
+    "sendEmailAfterPurchase",
+    "showBestsellers",
+    "showComparisons",
+    "showFeaturedProducts",
+    "showVatInPrice",
+    "statsCurrency",
+    "statsCurrencySymbol",
+    "storeDescription",
+    "storeName",
+    "testMode",
+    "vatPercent",
+    "version"
+   ],
+   "note": "paymentMethods.<id> are dynamic keys; the registry decides which exist"
+  },
+  {
+   "tag": "CHANGE",
+   "method": "POST",
+   "path": "/api/panel/market/settings",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "POST",
+   "path": "/api/panel/market/settings/credits",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "POST",
+   "path": "/api/panel/market/settings/exchange-rate/refresh",
+   "kind": "JSON",
+   "keys": [
+    "currency",
+    "exchangeRate",
+    "exchangeRateUpdatedAt",
+    "result",
+    "statsCurrency"
+   ]
+  },
+  {
+   "tag": "CHANGE",
+   "method": "POST",
+   "path": "/api/panel/market/payment-methods/:id",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "POST",
+   "path": "/api/panel/market/payment-methods/:id/toggle",
+   "kind": "JSON",
+   "keys": [
+    "result"
+   ]
+  },
+  {
+   "tag": "KEEP",
+   "method": "POST",
+   "path": "/api/panel/market/payment-methods/:id/reveal",
+   "kind": "JSON",
+   "keys": [
+    "result",
+    "settings"
+   ],
+   "note": "the old answer carried the whole settings object; the new one only the secret fields of the schema (04 section 6)"
+  }
+ ]
+}
