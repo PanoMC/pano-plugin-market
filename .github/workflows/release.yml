@@ -102,7 +102,7 @@ jobs:
         env:
           PANO_IT_MARIADB: 127.0.0.1:3306
           PANO_IT_MARIADB_PASSWORD: market-it-root
-        run: ./gradlew dbTest -Pnoui -Pfabric -Pversion=${{ needs.get-next-version.outputs.new_tag_version }}
+        run: ./gradlew dbTest -PdbForks=2 -Pnoui -Pfabric -Pversion=${{ needs.get-next-version.outputs.new_tag_version }}
 
       # check = unit tests, Minecraft-side tests (mcTest), jar rules; -Pfabric also builds build/mc/*-fabric-<v>.jar
       - name: Build
