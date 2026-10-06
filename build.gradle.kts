@@ -603,7 +603,9 @@ val dbTest by tasks.registering(Test::class) {
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     useJUnitPlatform { includeTags("db") }
-    maxParallelForks = 1
+    // Each fork is its own JVM; database names carry the pid (`pano_market_it_<pid>_<n>`), so forks never share a database.
+    // 6 forks x pool of 16 + admin pools stay well below MariaDB's max_connections=151.
+    maxParallelForks = 6
     // The gate lives in doFirst and in the TEST-SUMMARY listener; the database is not a task input, so a green run
     // must never be replayed as UP-TO-DATE or FROM-CACHE (17 section 3.2).
     outputs.upToDateWhen { false }
