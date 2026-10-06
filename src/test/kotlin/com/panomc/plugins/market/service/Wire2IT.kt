@@ -3,6 +3,7 @@ package com.panomc.plugins.market.service
 import com.panomc.plugins.market.db.model.BlockSource
 import com.panomc.plugins.market.db.model.BlockType
 import com.panomc.plugins.market.db.model.DeliveryPhase
+import com.panomc.plugins.market.db.model.DisputeRecordStatus
 import com.panomc.plugins.market.db.model.EntitlementStatus
 import com.panomc.plugins.market.db.model.MarketBlock
 import com.panomc.plugins.market.db.model.MarketDispute
@@ -312,5 +313,102 @@ internal class Wire2IT : RenewalITBase() {
         assertEquals("CHARGEBACK", subscription(gw.id).endReason)
         assertEquals(RemoteCancelState.PENDING, subscription(gw.id).remoteCancelState, "the gateway is told to stop billing")
         assertEquals(SubscriptionStatus.ACTIVE, subscription(charged.sub.id).status)
+    }
+
+    // ==================================================================================== the step is recoverable (review fix)
+
+    /** The order as the O11 transaction leaves it (status `CHARGEBACK`, a dispute row opened at [at]) plus its own subscription's ending; the after-commit hook is NOT run. */
+    private suspend fun committedChargeback(a: Active, at: Long) {
+        chargedBack(a.order)
+        sql("UPDATE `pano_market_order` SET `status` = 'CHARGEBACK' WHERE `id` = ?", a.order.id)
+        // revokeOnChargeback (default): the dispute flow's REVOKE rows end the order's own entitlements (I20)
+        sql("UPDATE `pano_market_entitlement` SET `status` = 'REVOKED' WHERE `orderId` = ?", a.order.id)
+        // O11 takes the units out of the product's soldCount (I17)
+        sql("UPDATE `pano_market_product` SET `soldCount` = `soldCount` - 1 WHERE `id` = ?", a.product.id)
+        w.disputes.add(MarketDispute(orderId = a.order.id, status = DisputeRecordStatus.OPEN, openedAt = at, createdAt = at, updatedAt = at), pool)
+    }
+
+    private fun failUpdatesOf(subscriptionId: Long) = runBlocking {
+        sql(
+            "CREATE TRIGGER `w2_fail_sub` BEFORE UPDATE ON `pano_market_subscription` FOR EACH ROW BEGIN " +
+                "IF NEW.`id` = $subscriptionId THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'injected failure'; END IF; END"
+        )
+    }
+
+    private fun stopFailing() = runBlocking { sql("DROP TRIGGER IF EXISTS `w2_fail_sub`") }
+
+    @Test
+    fun `one sibling that fails to end does not stop the next, and the sweep of the job ends it afterwards`(): Unit = runBlocking {
+        val charged = activeMerchant(name = "Ivo")
+        val first = anotherFor(charged)
+        val second = anotherFor(charged)
+
+        committedChargeback(charged, at = Long.MAX_VALUE - 1)
+        failUpdatesOf(first.sub.id)
+
+        try {
+            assertEquals(1, rw.subs.onChargebackOwner(sw.db, { }, order(charged.order.id)), "the failing one is skipped, the next one ends")
+        } finally {
+            stopFailing()
+        }
+
+        assertEquals(SubscriptionStatus.ACTIVE, subscription(first.sub.id).status, "the failure rolled that one back")
+        assertEquals(SubscriptionStatus.CANCELLED, subscription(second.sub.id).status)
+        assertEquals("CHARGEBACK", subscription(second.sub.id).endReason)
+
+        // nothing re-runs the hook; the next job tick derives the leftover from committed state
+        rw.job.runOnce()
+
+        assertEquals(SubscriptionStatus.CANCELLED, subscription(first.sub.id).status)
+        assertEquals("CHARGEBACK", subscription(first.sub.id).endReason)
+    }
+
+    @Test
+    fun `a hook that never ran is made good by the next job run, once, and only for the owner's earlier subscriptions of a chargeback that still stands`(): Unit = runBlocking {
+        val charged = activeMerchant(name = "Jan")
+        val early = anotherFor(charged)
+        val late = anotherFor(charged)
+        val stranger = activeMerchant(name = "Kim")
+        val won = activeMerchant(name = "Lea")
+        val wonSibling = anotherFor(won)
+
+        sql("UPDATE `pano_market_subscription` SET `createdAt` = 1000")
+        sql("UPDATE `pano_market_subscription` SET `createdAt` = 3000 WHERE `id` = ?", late.sub.id)
+
+        committedChargeback(charged, at = 2000)
+
+        // a dispute that was won: the order is back to COMPLETED, so nothing is owed
+        w.disputes.add(MarketDispute(orderId = won.order.id, status = DisputeRecordStatus.WON, openedAt = 2000, createdAt = 2000, updatedAt = 2000), pool)
+
+        rw.job.runOnce()
+
+        assertEquals(SubscriptionStatus.CANCELLED, subscription(early.sub.id).status)
+        assertEquals("CHARGEBACK", subscription(early.sub.id).endReason)
+        assertTrue(expireRows(early.order.id) > 0, "expired, not revoked")
+        assertEquals(SubscriptionStatus.ACTIVE, subscription(late.sub.id).status, "it started after the chargeback")
+        assertEquals(SubscriptionStatus.ACTIVE, subscription(stranger.sub.id).status)
+        assertEquals(SubscriptionStatus.ACTIVE, subscription(wonSibling.sub.id).status, "a won dispute leaves the order out of the sweep")
+        assertEquals(0, rw.subs.chargebackOwnersPending(pool, "pano_", 50).size, "the late subscription is not the sweep's, nothing else is pending")
+
+        val events = count("market_order_event", "`orderId` = ?", early.order.id)
+
+        rw.job.runOnce()
+
+        assertEquals(events, count("market_order_event", "`orderId` = ?", early.order.id), "a repeat changes nothing")
+    }
+
+    @Test
+    fun `the sweep sees a charged-back order whose buyer still has an open subscription and nothing after they ended`(): Unit = runBlocking {
+        val charged = activeMerchant(name = "Max")
+        val sibling = anotherFor(charged)
+
+        assertEquals(0, rw.subs.chargebackOwnersPending(pool, "pano_", 50).size, "no chargeback, nothing pending")
+
+        committedChargeback(charged, at = Long.MAX_VALUE - 1)
+
+        assertEquals(listOf(charged.order.id), rw.subs.chargebackOwnersPending(pool, "pano_", 50).map { it.first })
+        assertEquals(1, rw.subs.onChargebackOwnerOf(sw.db, { }, charged.order.id, Long.MAX_VALUE))
+        assertEquals(SubscriptionStatus.CANCELLED, subscription(sibling.sub.id).status)
+        assertTrue(rw.subs.chargebackOwnersPending(pool, "pano_", 50).isEmpty())
     }
 }

@@ -90,6 +90,7 @@ import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.sqlclient.SqlClient
 import io.vertx.sqlclient.SqlConnection
 import io.vertx.sqlclient.Tuple
+import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 
 /**
@@ -2143,34 +2144,80 @@ class SubscriptionService(
      * ends at once (S7, `CHARGEBACK`). Their goods come from other, paid orders, so the ending expires the entitlement (`EXPIRE` rows) instead of revoking it. One
      * transaction per subscription under its own initial order's lock (never two order locks in one transaction, 00 section 8.3); the remote cancel of a `GATEWAY` row
      * is queued by the ending. Returns the number of subscriptions that ended. The subscription of [order] itself is `onOrderChargeback`'s.
+     *
+     * Recoverable, not fire-once: a subscription that fails to end is logged and the others go on, and `SubscriptionJob` re-derives the work from the committed state
+     * ([chargebackOwnersPending], [onChargebackOwnerOf]) so a hook that never ran (JVM stop between the commit and the hook) or failed is made good by the next tick. The
+     * method is idempotent. [createdUntil] (the sweep's cut-off) leaves the subscriptions that started later than the chargeback alone.
      */
-    suspend fun onChargebackOwner(db: MarketDb, afterCommit: suspend (List<AfterCommit>) -> Unit, order: MarketOrder): Int {
+    suspend fun onChargebackOwner(db: MarketDb, afterCommit: suspend (List<AfterCommit>) -> Unit, order: MarketOrder, createdUntil: Long? = null): Int {
         val ownerKey = order.buyerKey.takeIf { it.isNotBlank() } ?: return 0
         val ids = db.tx { client ->
-            subscriptions.getByOwnerKey(ownerKey, client).filter { it.id != order.subscriptionId && it.status.isOpenForChargeback() }.map { it.id }
+            subscriptions.getByOwnerKey(ownerKey, client)
+                .filter { it.id != order.subscriptionId && it.status.isOpenForChargeback() && (createdUntil == null || it.createdAt <= createdUntil) }
+                .map { it.id }
         }
         var ended = 0
 
         for (id in ids) {
-            db.txRestartingOnOrderChange { conn ->
-                val known = subscriptions.getById(id, conn) ?: return@txRestartingOnOrderChange
+            try {
+                db.txRestartingOnOrderChange { conn ->
+                    val known = subscriptions.getById(id, conn) ?: return@txRestartingOnOrderChange
 
-                locks.orderWithSubscription(conn, known.initialOrderId) { locked ->
-                    val row = subscriptions.getById(id, conn) ?: return@orderWithSubscription
+                    locks.orderWithSubscription(conn, known.initialOrderId) { locked ->
+                        val row = subscriptions.getById(id, conn) ?: return@orderWithSubscription
 
-                    if (row.ownerKey != ownerKey) return@orderWithSubscription
+                        if (row.ownerKey != ownerKey) return@orderWithSubscription
 
-                    val decision = decide(row, SubEvent.Chargeback(revokeOnChargeback = false)) as? SubTransition.Apply ?: return@orderWithSubscription
+                        val decision = decide(row, SubEvent.Chargeback(revokeOnChargeback = false)) as? SubTransition.Apply ?: return@orderWithSubscription
 
-                    apply(conn, row, decision, Context(locked.order, OrderActorType.SYSTEM))
-                    ended++
+                        apply(conn, row, decision, Context(locked.order, OrderActorType.SYSTEM))
+                        ended++
+                    }
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logger.error("subscription {} of the owner of the charged-back order {} did not end, the next sweep retries: {}", id, order.id, e.toString())
             }
         }
 
-        if (ids.isNotEmpty()) cancelClosedRenewalOrders(db, afterCommit)
+        if (ids.isNotEmpty()) {
+            try {
+                cancelClosedRenewalOrders(db, afterCommit)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logger.error("the renewal orders of the subscriptions ended by the chargeback of order {} were not cancelled, the hourly sweep retries: {}", order.id, e.toString())
+            }
+        }
 
         return ended
+    }
+
+    /**
+     * The sweep of O11 step 4: the charged-back orders (`status = CHARGEBACK`, so a won dispute drops out by itself) whose buyer still has an open subscription that
+     * started no later than the dispute and is not the order's own one, as `(orderId, createdUntil)` (the dispute row's creation time), oldest order first. Derived
+     * from committed state, so it finds what a lost or failed hook left behind.
+     */
+    suspend fun chargebackOwnersPending(client: SqlClient, tablePrefix: String, limit: Int): List<Pair<Long, Long>> {
+        val open = "('ACTIVE', 'PAST_DUE', 'PAUSED')"
+
+        return client.query(
+            "SELECT o.`id` AS orderId, (SELECT MAX(d.`createdAt`) FROM `${tablePrefix}market_dispute` d WHERE d.`orderId` = o.`id`) AS cutoff FROM `${tablePrefix}market_order` o " +
+                "WHERE o.`status` = 'CHARGEBACK' AND o.`buyerKey` <> '' AND EXISTS (SELECT 1 FROM `${tablePrefix}market_subscription` s WHERE s.`ownerKey` = o.`buyerKey` " +
+                "AND s.`status` IN $open AND (o.`subscriptionId` IS NULL OR s.`id` <> o.`subscriptionId`) " +
+                "AND s.`createdAt` <= COALESCE((SELECT MAX(d.`createdAt`) FROM `${tablePrefix}market_dispute` d WHERE d.`orderId` = o.`id`), 9223372036854775807)) " +
+                "ORDER BY o.`id` LIMIT $limit"
+        ).execute().coAwait().map { it.getLong("orderId") to (it.getLong("cutoff") ?: Long.MAX_VALUE) }
+    }
+
+    /** One entry of [chargebackOwnersPending]: [onChargebackOwner] of that order. Answers the number of subscriptions that ended. */
+    suspend fun onChargebackOwnerOf(db: MarketDb, afterCommit: suspend (List<AfterCommit>) -> Unit, orderId: Long, createdUntil: Long): Int {
+        val order = db.tx { client -> orders.getById(orderId, client) } ?: return 0
+
+        if (order.status != OrderStatus.CHARGEBACK) return 0
+
+        return onChargebackOwner(db, afterCommit, order, createdUntil)
     }
 
     private fun SubscriptionStatus.isOpenForChargeback() = this == SubscriptionStatus.ACTIVE || this == SubscriptionStatus.PAST_DUE || this == SubscriptionStatus.PAUSED

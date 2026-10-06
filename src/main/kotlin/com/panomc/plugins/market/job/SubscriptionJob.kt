@@ -81,6 +81,7 @@ class SubscriptionJob(
         handled += step("periodOver") { periodOver(client) }
         handled += step("graceOver") { graceOver(client) }
         handled += step("remote") { remote(client) }
+        handled += step("chargebackOwners") { chargebackOwners(client) }
 
         val now = clock.now()
 
@@ -447,6 +448,23 @@ class SubscriptionJob(
         }
 
         db.txRestartingOnOrderChange { conn -> subs.scheduleNextPoll(conn, subscriptions.getById(subscription.id, conn) ?: subscription, supported = !result.unsupported) }
+    }
+
+    // ================================================================================================== O11 step 4: the buyer's other subscriptions
+
+    /**
+     * The sweep behind the after-commit hook of a chargeback (11 section 10 step 4): every charged-back order whose buyer still has an open subscription of its own
+     * making (not the order's) ends them as `CHARGEBACK`. Derived from committed state, so a hook lost to a JVM stop or failed on a database error is made good on the
+     * next tick; a repeat finds nothing. Counts the subscriptions ended.
+     */
+    private suspend fun chargebackOwners(client: SqlClient): Int {
+        var handled = 0
+
+        for ((orderId, cutoff) in subs.chargebackOwnersPending(client, subscriptions.prefix(), batch)) {
+            row("chargebackOwners", orderId) { handled += subs.onChargebackOwnerOf(db, { after -> payments.runAfterCommit(after) }, orderId, cutoff) }
+        }
+
+        return handled
     }
 
     // ================================================================================================== F: pending rows, renewal orders of ended subscriptions
