@@ -40,15 +40,25 @@ import com.panomc.plugins.market.routes.api.payment.EventNotHandled
 import com.panomc.plugins.market.routes.api.payment.InboundEventContext
 import com.panomc.plugins.market.routes.api.payment.PaymentEventSink
 import com.panomc.plugins.market.spi.common.Money
+import com.panomc.plugins.market.spi.common.ProviderErrorCode
+import com.panomc.plugins.market.spi.common.ProviderException
+import com.panomc.plugins.market.spi.payment.CancelSubscriptionRequest
+import com.panomc.plugins.market.spi.payment.CancelSubscriptionResult
+import com.panomc.plugins.market.spi.payment.CheckoutSnapshot
+import com.panomc.plugins.market.spi.payment.ContinuePaymentRequest
+import com.panomc.plugins.market.spi.payment.Eligibility
 import com.panomc.plugins.market.spi.payment.GatewaySubscriptionState
 import com.panomc.plugins.market.spi.payment.GatewaySubscriptionStatus
 import com.panomc.plugins.market.spi.payment.IntervalUnit
 import com.panomc.plugins.market.spi.payment.PaymentCapabilities
+import com.panomc.plugins.market.spi.payment.PaymentContext
 import com.panomc.plugins.market.spi.payment.PaymentEvent
+import com.panomc.plugins.market.spi.payment.PaymentProvider
 import com.panomc.plugins.market.spi.payment.PaymentTarget
 import com.panomc.plugins.market.spi.payment.RecurringSupport
 import com.panomc.plugins.market.spi.payment.ReviewReason
 import com.panomc.plugins.market.spi.payment.StartPaymentRequest
+import com.panomc.plugins.market.spi.payment.StartPaymentResult
 import com.panomc.plugins.market.spi.payment.StoredPaymentMethod
 import com.panomc.plugins.market.spi.testkit.TestContexts
 import com.panomc.plugins.market.support.FakePaymentProvider
@@ -83,6 +93,28 @@ import java.time.ZonedDateTime
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
+ * A scriptable provider for the subscription tests: [fake] plus a `continuePayment` and a scripted `checkEligibility` verdict ([onEligibility], every
+ * snapshot it was asked about is in [eligibilityCalls]). `null` = the fake's own answer (eligible).
+ */
+internal class SubscriptionFake(val fake: FakePaymentProvider) : PaymentProvider by fake {
+    @Volatile
+    var onContinue: (ContinuePaymentRequest) -> StartPaymentResult = { StartPaymentResult.Redirect("https://gateway.invalid/step2/${it.attempt.reference}") }
+
+    @Volatile
+    var onEligibility: ((CheckoutSnapshot) -> Eligibility)? = null
+
+    val eligibilityCalls = CopyOnWriteArrayList<CheckoutSnapshot>()
+
+    override fun checkEligibility(ctx: PaymentContext, checkout: CheckoutSnapshot): Eligibility {
+        eligibilityCalls += checkout
+
+        return onEligibility?.invoke(checkout) ?: fake.checkEligibility(ctx, checkout)
+    }
+
+    override suspend fun continuePayment(ctx: PaymentContext, request: ContinuePaymentRequest): StartPaymentResult = onContinue(request)
+}
+
+/**
  * The object graph of a subscription test (17 section 5.3): the checkout harness of MK-075 with the real [PaymentService] as its payment starter, the real
  * [SubscriptionService] on every seam it fills in production (the pending row of O1, the effects of O2 / O4 / O5, the gateway data of a success, the plan of a
  * start, the late-renewal guard), the real delivery engine and entitlement service behind it, and the ledger stand-in of the credits slice.
@@ -100,7 +132,12 @@ internal class SubscriptionWorld(val w: TestWiring, val vertx: Vertx) {
 
     /** The real store webhook writer behind the recording hook: an endpoint that listens gets a delivery row, as in production. */
     val webhookRows = WebhookHarness(w, vertx)
-    val lookup = StaticProviderLookup(listOf(ContinuableFake(h.fake), FreeProvider(), CreditsProvider(), BankTransferProvider()))
+
+    /** The provider of the checkout (`fake`, behind [first]) and a second one a buyer can switch to on a retry. */
+    val first = SubscriptionFake(h.fake)
+    val secondFake = FakePaymentProvider("second")
+    val second = SubscriptionFake(secondFake)
+    val lookup = StaticProviderLookup(listOf(first, second, FreeProvider(), CreditsProvider(), BankTransferProvider()))
 
     lateinit var db: MarketDb
         private set
@@ -122,6 +159,8 @@ internal class SubscriptionWorld(val w: TestWiring, val vertx: Vertx) {
 
     init {
         dw.roster.granted = listOf(1L)
+        // a remote cancel succeeds unless a test scripts it otherwise (the fake's own default is "local only", which a gateway subscription does not accept)
+        h.fake.onCancelSubscription = { CancelSubscriptionResult.Cancelled(null) }
         rebuild()
     }
 
@@ -169,6 +208,17 @@ internal class SubscriptionWorld(val w: TestWiring, val vertx: Vertx) {
             it.recurring = recurring
             it.change()
         }
+    }
+
+    fun capsOfSecond(recurring: RecurringSupport) {
+        secondFake.caps = PaymentCapabilities().also { it.recurring = recurring }
+    }
+
+    /** The `checkEligibility` verdict of the checkout's provider, on the checkout path and on the `/pay` path alike. */
+    fun eligibility(verdict: ((CheckoutSnapshot) -> Eligibility)?) {
+        h.eligibility = verdict
+        first.onEligibility = verdict
+        second.onEligibility = verdict
     }
 }
 
@@ -242,13 +292,14 @@ class SubscriptionServiceIT : MarketDaoITBase() {
         subscription: GatewaySubscriptionState? = null,
         stored: StoredPaymentMethod? = null,
         amount: Long? = null,
-        attempt: MarketPayment? = null
+        attempt: MarketPayment? = null,
+        detail: String? = "Visa 4242"
     ): AppliedEvent {
         val a = attempt ?: attemptOf(order)
         val event = PaymentEvent.Succeeded(PaymentTarget.Attempt(a.id), Money(amount ?: a.amount, a.currency)).also {
             it.subscription = subscription
             it.storedMethod = stored
-            it.methodDetail = "Visa 4242"
+            it.methodDetail = detail
         }
 
         return sw.payments.applyEvent(order.id, a.id, PaymentEventMapper.attemptEvent(event)!!, AttemptFacts.of(event, sw.cipher))
@@ -359,6 +410,81 @@ class SubscriptionServiceIT : MarketDaoITBase() {
         assertNotEquals(first.subscriptionId, again.subscriptionId)
     }
 
+    private suspend fun lineErrors(product: MarketProduct, caller: QuoteCaller): List<String> =
+        h.service.quote(QuoteInput(items = listOf(CartLine(product.id, 0, 1, emptyMap(), null))), caller, pool).lines.single().errors
+
+    private suspend fun alreadyOwned(product: MarketProduct, caller: QuoteCaller) {
+        val body = expect("INVALID_CART", 400) { h.checkout(h.body("items" to listOf(h.line(product)), "paymentMethodId" to "fake"), caller = caller) }
+        val errors = body.getJsonObject("lineErrors")
+
+        assertEquals(listOf("ALREADY_OWNED"), errors.getJsonArray(errors.fieldNames().single()).map { it.toString() })
+    }
+
+    @Test
+    fun `a pending row counts as owned only while its initial order is PENDING or in REVIEW, an abandoned, cancelled or failed one does not`(): Unit = runBlocking {
+        val sub = subProduct()
+
+        fx.paymentMethod("fake")
+        sw.caps(RecurringSupport.GATEWAY_MANAGED)
+
+        val (_, alex) = user("Alex")
+        val first = buy(sub, alex)
+
+        // the order waits for the payment: the buyer owns the subscription in the making
+        assertEquals(listOf("ALREADY_OWNED"), lineErrors(sub, alex))
+        alreadyOwned(sub, alex)
+
+        // abandoned: the order expired, its row stays PENDING (a late payment may arrive, 09 section 4.3), but the buyer may try again
+        expire(first)
+        assertEquals(SubscriptionStatus.PENDING, subscriptionOf(first).status)
+        assertEquals(emptyList<String>(), lineErrors(sub, alex))
+
+        val second = buy(sub, alex)
+
+        assertNotEquals(first.id, second.id)
+        assertNotEquals(first.subscriptionId, second.subscriptionId, "a new pending row for the new order")
+        assertEquals(SubscriptionStatus.PENDING, subscriptionOf(second).status)
+        assertEquals(SubscriptionStatus.PENDING, subscriptionOf(first).status, "the old row is left to step F")
+        assertEquals(listOf("ALREADY_OWNED"), lineErrors(sub, alex))
+        alreadyOwned(sub, alex)
+
+        // cancelled by the buyer
+        transition(second, OrderEvent.Cancel(OrderActor.BUYER))
+        assertEquals(OrderStatus.CANCELLED, order(second.id).status)
+        assertEquals(emptyList<String>(), lineErrors(sub, alex))
+
+        val third = buy(sub, alex)
+
+        // failed
+        transition(third, OrderEvent.Fail(OrderActor.ADMIN))
+        assertEquals(OrderStatus.FAILED, order(third.id).status)
+        assertEquals(emptyList<String>(), lineErrors(sub, alex))
+
+        val fourth = buy(sub, alex)
+
+        assertEquals(4, count("market_subscription", "`userId` = ${order(fourth.id).userId}"))
+
+        // paid: an active subscription is owned until it ends
+        succeed(fourth, subscription = gateway("sub_a"))
+        assertEquals(listOf("ALREADY_OWNED"), lineErrors(sub, alex))
+
+        // in review: the money arrived late and a human has not decided yet
+        val (_, bea) = user("Bea")
+        val waiting = buy(sub, bea)
+
+        expire(waiting)
+        assertEquals(emptyList<String>(), lineErrors(sub, bea))
+        assertEquals(OrderStatus.REVIEW, succeed(waiting, subscription = gateway("sub_b")).orderStatus)
+        assertEquals(listOf("ALREADY_OWNED"), lineErrors(sub, bea), "the order waits for a human: the pending row counts")
+        alreadyOwned(sub, bea)
+
+        // the rejection closes the order and the row: bought again
+        sw.review.review(waiting.id, ReviewDecision.REJECT, refund = false, force = false, note = null, adminUserId = 7)
+        assertEquals(SubscriptionStatus.CANCELLED, subscriptionOf(waiting).status)
+        assertEquals(emptyList<String>(), lineErrors(sub, bea))
+        assertNotEquals(waiting.id, buy(sub, bea).id)
+    }
+
     // ==================================================================================== methods per recurring capability
 
     @Test
@@ -412,6 +538,46 @@ class SubscriptionServiceIT : MarketDaoITBase() {
             h.config = h.config.copy(subscriptionManualFallback = false)
             assertEquals("RECURRING_NOT_SUPPORTED", quoteOptions(sub, caller).unavailableReason, "misfit $index, fallback off")
         }
+    }
+
+    @Test
+    fun `an eligibility verdict oneOffOnly makes the pending row MANUAL and sends no plan, without the fallback it refuses the method`(): Unit = runBlocking {
+        val sub = subProduct()
+
+        fx.paymentMethod("fake")
+        // the offer table says AUTO (gateway-managed billing that fits), the provider's own verdict says it cannot bill this plan
+        sw.caps(RecurringSupport.GATEWAY_MANAGED)
+        sw.eligibility { snapshot -> if (snapshot.subscription != null) Eligibility.oneOffOnly("NO_PLAN") else Eligibility.eligible() }
+
+        val (_, caller) = user("Alice")
+
+        assertEquals("MANUAL", quoteOptions(sub, caller).recurring, "the quote shows the downgrade")
+
+        val order = buy(sub, caller)
+        val row = subscriptionOf(order)
+
+        assertEquals(SubscriptionMode.MANUAL, row.mode, "the checkout's verdict, not the capabilities alone, decides the pending row")
+        assertNull((fake.calls(FakePaymentProvider.Op.START).last().request as StartPaymentRequest).subscription, "no recurring plan goes to a provider that said it cannot bill it")
+        assertNull(sw.subs.planFor(order(order.id), pool))
+
+        // a plain success activates it MANUAL, and that is no downgrade: nothing recurring was promised
+        succeed(order)
+
+        subscriptionOf(order).let {
+            assertEquals(SubscriptionStatus.ACTIVE, it.status)
+            assertEquals(SubscriptionMode.MANUAL, it.mode)
+        }
+        assertEquals(0, events(order.id, OrderEventType.NOTE).count { it.message == SubscriptionService.DOWNGRADE_NOTE })
+
+        // without the manual fallback the method is not offered for this plan at all, and a checkout through it leaves nothing behind
+        h.config = h.config.copy(subscriptionManualFallback = false)
+
+        val (bea, other) = user("Bea")
+
+        assertEquals("RECURRING_NOT_SUPPORTED", quoteOptions(sub, other).unavailableReason)
+        assertEquals("RECURRING_NOT_SUPPORTED", expect("PAYMENT_METHOD_UNAVAILABLE", 400) { buy(sub, other) }.getString("reason"))
+        assertEquals(0, count("market_subscription", "`userId` = ${bea.id}"))
+        assertEquals(0, count("market_order", "`userId` = ${bea.id}"))
     }
 
     // ==================================================================================== the pending row at O1 (tests 21, 22)
@@ -491,58 +657,203 @@ class SubscriptionServiceIT : MarketDaoITBase() {
         assertEquals(3, (fake.calls(FakePaymentProvider.Op.START).last().request as StartPaymentRequest).subscription!!.intervalCount)
     }
 
+    // ==================================================================================== the retry of the initial order (09 section 4.3, test 22)
+
+    private suspend fun pay(order: MarketOrder, method: String): JsonObject? = sw.payments.pay(order(order.id), PayRequest(method, null, null), PayCaller(), pool)
+
+    private fun startOf(provider: FakePaymentProvider) = provider.calls(FakePaymentProvider.Op.START).last().request as StartPaymentRequest
+
     @Test
-    fun `a method change on a retry rewrites provider, mode and price of the pending row and nothing else once it is active`(): Unit = runBlocking {
+    fun `a retry through another method moves the PENDING row to its provider, mode and price, and the new start carries that plan`(): Unit = runBlocking {
+        val sub = subProduct(price = 600, maxCycles = 12)
+
+        fx.paymentMethod("fake", feeMode = PaymentFeeMode.BUYER, feeFixed = 50)
+        fx.paymentMethod("second", feeMode = PaymentFeeMode.BUYER, feeFixed = 200)
+        sw.caps(RecurringSupport.GATEWAY_MANAGED)
+        sw.capsOfSecond(RecurringSupport.MERCHANT_INITIATED)
+
+        val (_, caller) = user("Alice")
+        val order = buy(sub, caller)
+
+        subscriptionOf(order).let {
+            assertEquals("fake", it.providerId)
+            assertEquals(SubscriptionMode.GATEWAY, it.mode)
+            assertEquals(650, it.price)
+        }
+
+        val firstAttempt = attemptOf(order)
+
+        pay(order, "second")
+
+        val moved = order(order.id)
+        val row = subscriptionOf(moved)
+
+        assertEquals("second", moved.paymentMethodId)
+        assertEquals(800, moved.totalPrice, "price + the fee of the new method")
+        assertEquals("second", row.providerId)
+        assertEquals(SubscriptionMode.MERCHANT, row.mode, "the offer of the new method decides the mode")
+        assertEquals(moved.totalPrice, row.price, "the per-period price follows the re-priced order")
+        assertEquals(SubscriptionStatus.PENDING, row.status)
+        assertEquals(PaymentStatus.CANCELLED, w.payments.getById(firstAttempt.id, pool)!!.status)
+
+        // the start of the new attempt asks for what the plan says, at the provider the row names
+        val start = startOf(sw.secondFake)
+        val plan = start.subscription
+
+        assertNotNull(plan)
+        assertEquals(row.id, plan!!.subscriptionId)
+        assertEquals(Money(moved.totalPrice, "EUR"), plan.price)
+        assertEquals(start.amount, plan.price, "the provider gets the plan price it will actually charge")
+        assertEquals(CheckoutService.planKey(sub.id, 0, moved.totalPrice, "EUR", RecurringPlan("EUR", IntervalUnit.MONTH, 1, 12)), plan.planKey)
+        assertEquals(plan.planKey, sw.second.eligibilityCalls.last().subscription!!.planKey, "the provider was asked about the plan it is going to bill")
+
+        // the success of the new method activates with its mode
+        succeed(moved, stored = StoredPaymentMethod("tok_2").also { it.label = "Visa 4242" })
+
+        subscriptionOf(order).let {
+            assertEquals(SubscriptionStatus.ACTIVE, it.status)
+            assertEquals(SubscriptionMode.MERCHANT, it.mode)
+            assertEquals("second", it.providerId)
+            assertEquals(800, it.price)
+        }
+    }
+
+    @Test
+    fun `a retry through the same method follows a changed fee, the row and the plan carry the re-priced total`(): Unit = runBlocking {
+        val sub = subProduct(price = 600)
+
+        fx.paymentMethod("fake", feeMode = PaymentFeeMode.BUYER, feeFixed = 50)
+        sw.caps(RecurringSupport.GATEWAY_MANAGED)
+
+        val (_, caller) = user("Alice")
+        val order = buy(sub, caller)
+
+        assertEquals(650, subscriptionOf(order).price)
+
+        // the store raised the fee of the method meanwhile
+        fx.paymentMethod("fake", feeMode = PaymentFeeMode.BUYER, feeFixed = 120)
+        pay(order, "fake")
+
+        val retried = order(order.id)
+        val row = subscriptionOf(retried)
+
+        assertEquals(720, retried.totalPrice)
+        assertEquals(720, row.price, "09 section 4.3: price = the re-priced totalPrice while PENDING")
+        assertEquals("fake", row.providerId)
+        assertEquals(SubscriptionMode.GATEWAY, row.mode, "the same method keeps its mode")
+
+        val start = startOf(fake)
+
+        assertEquals(Money(720, "EUR"), start.subscription!!.price, "the plan price and the planKey follow the order")
+        assertEquals(start.amount, start.subscription!!.price)
+        assertEquals(CheckoutService.planKey(sub.id, 0, 720, "EUR", RecurringPlan("EUR", IntervalUnit.MONTH, 1, null)), start.subscription!!.planKey)
+        assertEquals(sw.subs.planFor(retried, pool)!!.planKey, start.subscription!!.planKey)
+    }
+
+    @Test
+    fun `a retry asks the provider about the plan, oneOffOnly downgrades the row to MANUAL and without the fallback the retry is refused`(): Unit = runBlocking {
         val sub = subProduct()
 
         fx.paymentMethod("fake")
-        fx.paymentMethod("bank-transfer")
         sw.caps(RecurringSupport.GATEWAY_MANAGED)
 
         val (_, caller) = user("Alice")
         val order = buy(sub, caller)
 
         assertEquals(SubscriptionMode.GATEWAY, subscriptionOf(order).mode)
-        // the gateway data of the first method goes with it
-        sql("UPDATE `pano_market_subscription` SET `gatewaySubscriptionId` = 'sub_old', `gatewayCustomerId` = 'cus_old' WHERE `id` = ?", order.subscriptionId!!)
-        sql("UPDATE `pano_market_order` SET `totalPrice` = 720, `gatewayAmount` = 720, `paymentMethodId` = 'bank-transfer' WHERE `id` = ?", order.id)
 
-        assertTrue(sw.db.tx { conn -> sw.subs.onMethodChanged(conn, order(order.id), "bank-transfer", null) })
+        sw.eligibility { snapshot -> if (snapshot.subscription != null) Eligibility.oneOffOnly("NO_PLAN") else Eligibility.eligible() }
+
+        // fallback off: the method cannot sell this plan, nothing of the order or the row changes, the open attempt is not cancelled
+        h.config = h.config.copy(subscriptionManualFallback = false)
+
+        val open = attemptOf(order)
+
+        assertEquals("RECURRING_NOT_SUPPORTED", expect("PAYMENT_METHOD_UNAVAILABLE", 400) { pay(order, "fake") }.getString("reason"))
+        assertEquals(SubscriptionMode.GATEWAY, subscriptionOf(order).mode)
+        assertEquals(PaymentStatus.PENDING, w.payments.getById(open.id, pool)!!.status)
+        assertEquals(1, w.payments.getByOrderId(order.id, pool).size)
+
+        // fallback on: the retry is a one-off payment with a reminder, no plan goes to the provider
+        h.config = h.config.copy(subscriptionManualFallback = true)
+        pay(order, "fake")
+
+        assertEquals(SubscriptionMode.MANUAL, subscriptionOf(order).mode)
+        assertNull(startOf(fake).subscription)
+        assertNull(sw.subs.planFor(order(order.id), pool))
+
+        succeed(order)
+
+        assertEquals(SubscriptionStatus.ACTIVE, subscriptionOf(order).status)
+        assertEquals(SubscriptionMode.MANUAL, subscriptionOf(order).mode)
+        assertEquals(0, events(order.id, OrderEventType.NOTE).count { it.message == SubscriptionService.DOWNGRADE_NOTE }, "the row was MANUAL before the success: no downgrade")
+    }
+
+    @Test
+    fun `a retry through a method that cannot bill the plan is MANUAL with the fallback and refused without it`(): Unit = runBlocking {
+        val sub = subProduct()
+
+        fx.paymentMethod("fake")
+        fx.paymentMethod("second")
+        sw.caps(RecurringSupport.GATEWAY_MANAGED)
+        sw.capsOfSecond(RecurringSupport.NONE)
+
+        val (_, caller) = user("Alice")
+        val order = buy(sub, caller)
+
+        h.config = h.config.copy(subscriptionManualFallback = false)
+        assertEquals("RECURRING_NOT_SUPPORTED", expect("PAYMENT_METHOD_UNAVAILABLE", 400) { pay(order, "second") }.getString("reason"))
+        subscriptionOf(order).let {
+            assertEquals("fake", it.providerId, "the refused retry left the row as it was")
+            assertEquals(SubscriptionMode.GATEWAY, it.mode)
+        }
+        assertEquals("fake", order(order.id).paymentMethodId)
+
+        h.config = h.config.copy(subscriptionManualFallback = true)
+        pay(order, "second")
 
         subscriptionOf(order).let {
-            assertEquals("bank-transfer", it.providerId)
-            assertEquals(SubscriptionMode.MANUAL, it.mode, "bank transfer has no recurring billing: the fallback sells it as a one-off")
-            assertEquals(720, it.price)
-            assertNull(it.gatewaySubscriptionId)
-            assertNull(it.gatewayCustomerId)
-            assertEquals(SubscriptionStatus.PENDING, it.status)
+            assertEquals("second", it.providerId)
+            assertEquals(SubscriptionMode.MANUAL, it.mode)
         }
+        assertNull(startOf(sw.secondFake).subscription, "a manual offer carries no plan")
+    }
 
-        // back to the gateway: the verdict of the checkout says AUTO (and the order is as it was placed again)
-        sql("UPDATE `pano_market_order` SET `paymentMethodId` = 'fake', `totalPrice` = ?, `gatewayAmount` = ? WHERE `id` = ?", order.totalPrice, order.gatewayAmount, order.id)
-        assertTrue(sw.db.tx { conn -> sw.subs.onMethodChanged(conn, order(order.id), "fake", "AUTO") })
-        assertEquals(SubscriptionMode.GATEWAY, subscriptionOf(order).mode)
+    @Test
+    fun `the method of a credit-paid subscription and of a running or renewal order stays locked and an active row is never rewritten`(): Unit = runBlocking {
+        val sub = subProduct()
 
-        // without the fallback a method that cannot bill the plan is refused, and the row stays as it was; the built-in methods are always manual
-        h.config = h.config.copy(subscriptionManualFallback = false)
-        sw.caps(RecurringSupport.NONE)
-        assertEquals("RECURRING_NOT_SUPPORTED", expect("PAYMENT_METHOD_UNAVAILABLE", 400) { sw.db.tx { conn -> sw.subs.onMethodChanged(conn, order(order.id), "fake", null) } }.getString("reason"))
-        assertEquals("fake", subscriptionOf(order).providerId)
-        assertEquals(SubscriptionMode.GATEWAY, subscriptionOf(order).mode)
-        assertTrue(sw.db.tx { conn -> sw.subs.onMethodChanged(conn, order(order.id), "bank-transfer", null) })
-        assertEquals(SubscriptionMode.MANUAL, subscriptionOf(order).mode)
+        fx.paymentMethod("fake")
+        fx.paymentMethod("second")
         sw.caps(RecurringSupport.GATEWAY_MANAGED)
-        assertTrue(sw.db.tx { conn -> sw.subs.onMethodChanged(conn, order(order.id), "fake", "AUTO") })
+        sw.capsOfSecond(RecurringSupport.GATEWAY_MANAGED)
 
-        // active: the method of a running subscription is not rewritten by an order of the past
+        val (alex, caller) = user("Alex")
+        val pending = buy(sub, caller)
+
+        // a pending subscription order that is paid with credits keeps `credits` (the precondition is set directly: a credit-paid order completes at checkout)
+        sql("UPDATE `pano_market_order` SET `paymentMethodId` = 'credits' WHERE `id` = ?", pending.id)
+        assertEquals("METHOD_LOCKED", expect("PAYMENT_METHOD_UNAVAILABLE", 400) { pay(pending, "second") }.getString("reason"))
+        assertEquals("credits", order(pending.id).paymentMethodId)
+        assertEquals("fake", subscriptionOf(pending).providerId, "a refused retry changes nothing")
+
+        // a pending row has a plan to judge, an active row has none and an order of the past does not rewrite it
+        sql("UPDATE `pano_market_order` SET `paymentMethodId` = 'fake' WHERE `id` = ?", pending.id)
+        assertNotNull(sw.subs.pendingPlan(order(pending.id), pool))
+
         val (_, other) = user("Bea")
-        val paid = buy(sub, other)
+        val paid = buy(subProduct(), other)
 
         succeed(paid, subscription = gateway("sub_1"))
-        assertEquals(SubscriptionStatus.ACTIVE, subscriptionOf(paid).status)
+        assertNull(sw.subs.pendingPlan(order(paid.id), pool))
         assertFalse(sw.db.tx { conn -> sw.subs.onMethodChanged(conn, order(paid.id), "bank-transfer", "MANUAL") })
         assertEquals("fake", subscriptionOf(paid).providerId)
         assertEquals(SubscriptionMode.GATEWAY, subscriptionOf(paid).mode)
+
+        // a renewal order of the subscription is not the initial order: it keeps its provider whatever the row says
+        val renewal = sw.dw.place(user = alex, actions = emptyList(), status = OrderStatus.PENDING, reservation = ReservationState.HELD, source = OrderSource.RENEWAL, subscriptionId = paid.subscriptionId)
+
+        assertNull(sw.subs.pendingPlan(renewal.order, pool))
     }
 
     // ==================================================================================== activation (tests 23 to 26)
@@ -746,6 +1057,159 @@ class SubscriptionServiceIT : MarketDaoITBase() {
         assertEquals(1, w.entitlements.getByOrderItemId(after.initialOrderItemId, pool).size)
     }
 
+    private fun completed(request: StartPaymentRequest, change: PaymentEvent.Succeeded.() -> Unit): StartPaymentResult =
+        StartPaymentResult.Completed(PaymentEvent.Succeeded(PaymentTarget.Attempt(request.attempt.id), request.amount).also { it.change() })
+
+    @Test
+    fun `a synchronous Completed start carries the stored method and the gateway subscription into the activation`(): Unit = runBlocking {
+        val sub = subProduct()
+
+        fx.paymentMethod("fake")
+
+        // a stored-method charge that settles on the spot (MERCHANT)
+        sw.caps(RecurringSupport.MERCHANT_INITIATED)
+        fake.onStart = { request ->
+            completed(request) {
+                storedMethod = StoredPaymentMethod("tok_sync").also { it.label = "Visa 4242"; it.expiresAt = w.clock.now() + 400 * 86_400_000L; it.gatewayCustomerId = "cus_sync" }
+                methodDetail = "Visa 4242"
+            }
+        }
+
+        val (_, alice) = user("Alice")
+        val merchant = buy(sub, alice)
+        val m = subscriptionOf(merchant)
+
+        assertEquals(OrderStatus.COMPLETED, order(merchant.id).status)
+        assertEquals(SubscriptionStatus.ACTIVE, m.status)
+        assertEquals(SubscriptionMode.MERCHANT, m.mode, "the token reached the activation: not the MANUAL downgrade")
+        assertEquals("tok_sync", JsonObject(sw.cipher.decrypt(m.storedMethod!!)!!).getString("token"))
+        assertEquals("Visa 4242", m.storedMethodLabel)
+        assertEquals("cus_sync", m.gatewayCustomerId)
+        assertEquals(m.currentPeriodEnd, m.nextChargeAt)
+        assertEquals(0, events(merchant.id, OrderEventType.NOTE).count { it.message == SubscriptionService.DOWNGRADE_NOTE })
+
+        // a subscription the gateway created during the start (GATEWAY)
+        sw.caps(RecurringSupport.GATEWAY_MANAGED)
+
+        val periodStart = w.clock.now()
+        val periodEnd = periodStart + 30 * 86_400_000L
+
+        fake.onStart = { request -> completed(request) { subscription = gateway("sub_sync", periodStart = periodStart, periodEnd = periodEnd) } }
+
+        val (_, bea) = user("Bea")
+        val managed = buy(sub, bea)
+        val g = subscriptionOf(managed)
+
+        assertEquals(OrderStatus.COMPLETED, order(managed.id).status)
+        assertEquals(SubscriptionStatus.ACTIVE, g.status)
+        assertEquals(SubscriptionMode.GATEWAY, g.mode)
+        assertEquals("sub_sync", g.gatewaySubscriptionId, "the remote subscription id is stored, so its renewals and its cancel find the row")
+        assertEquals(periodStart, g.currentPeriodStart)
+        assertEquals(periodEnd, g.currentPeriodEnd)
+        assertEquals(periodEnd + 3_600_000L, g.nextQueryAt)
+        assertEquals(0, events(managed.id, OrderEventType.NOTE).count { it.message == SubscriptionService.DOWNGRADE_NOTE })
+
+        // its status events find the row (they were skipped as an unknown subscription when the id was not stored)
+        val outcome = gatewayEvent("sub_sync", GatewaySubscriptionStatus.PAUSED)
+
+        assertTrue(outcome is SubscriptionService.GatewayOutcome.Applied, outcome.toString())
+        assertEquals(SubscriptionStatus.PAUSED, subscriptionOf(managed).status)
+    }
+
+    @Test
+    fun `the Completed step of an embedded form carries the stored method and the gateway subscription into the activation`(): Unit = runBlocking {
+        val sub = subProduct()
+
+        fx.paymentMethod("fake")
+        fake.onStart = { StartPaymentResult.Embedded(JsonObject().put("step", 1)) }
+
+        // MERCHANT
+        sw.caps(RecurringSupport.MERCHANT_INITIATED)
+
+        val (_, alice) = user("Alice")
+        val merchant = buy(sub, alice)
+
+        sw.first.onContinue = { request ->
+            StartPaymentResult.Completed(PaymentEvent.Succeeded(PaymentTarget.Attempt(request.attempt.id), request.attempt.amount).also {
+                it.storedMethod = StoredPaymentMethod("tok_step").also { m -> m.label = "Mastercard 5555" }
+            })
+        }
+
+        val done = sw.payments.continuePayment(order(merchant.id), JsonObject().put("pan", "x"), PayCaller(), pool)
+
+        assertEquals("COMPLETED", done!!.getString("kind"))
+        subscriptionOf(merchant).let {
+            assertEquals(SubscriptionStatus.ACTIVE, it.status)
+            assertEquals(SubscriptionMode.MERCHANT, it.mode)
+            assertEquals("tok_step", JsonObject(sw.cipher.decrypt(it.storedMethod!!)!!).getString("token"))
+            assertEquals("Mastercard 5555", it.storedMethodLabel)
+            assertEquals(it.currentPeriodEnd, it.nextChargeAt)
+        }
+
+        // GATEWAY
+        sw.caps(RecurringSupport.GATEWAY_MANAGED)
+
+        val (_, bea) = user("Bea")
+        val managed = buy(sub, bea)
+
+        sw.first.onContinue = { request ->
+            StartPaymentResult.Completed(PaymentEvent.Succeeded(PaymentTarget.Attempt(request.attempt.id), request.attempt.amount).also { it.subscription = gateway("sub_step") })
+        }
+
+        assertEquals("COMPLETED", sw.payments.continuePayment(order(managed.id), JsonObject(), PayCaller(), pool)!!.getString("kind"))
+        subscriptionOf(managed).let {
+            assertEquals(SubscriptionStatus.ACTIVE, it.status)
+            assertEquals(SubscriptionMode.GATEWAY, it.mode)
+            assertEquals("sub_step", it.gatewaySubscriptionId)
+            assertNotNull(it.nextQueryAt)
+        }
+    }
+
+    @Test
+    fun `a stored method label or method detail wider than the label column is cut to its 64 characters and the order still completes`(): Unit = runBlocking {
+        val sub = subProduct()
+
+        fx.paymentMethod("fake")
+        sw.caps(RecurringSupport.MERCHANT_INITIATED)
+
+        val wide = "x".repeat(100)
+
+        // a 100-character label
+        val (_, alice) = user("Alice")
+        val labelled = buy(sub, alice)
+
+        assertEquals(OrderStatus.COMPLETED, succeed(labelled, stored = StoredPaymentMethod("tok_a").also { it.label = wide }).orderStatus)
+        subscriptionOf(labelled).let {
+            assertEquals(SubscriptionStatus.ACTIVE, it.status)
+            assertEquals(wide.take(64), it.storedMethodLabel)
+            assertEquals(wide, JsonObject(sw.cipher.decrypt(it.storedMethod!!)!!).getString("label"), "the encrypted token record keeps the whole text")
+        }
+
+        // no label, a 100-character method detail (legal on the payment row, 128 wide)
+        val (_, bea) = user("Bea")
+        val detailed = buy(sub, bea)
+
+        assertEquals(OrderStatus.COMPLETED, succeed(detailed, stored = StoredPaymentMethod("tok_b"), detail = wide).orderStatus)
+        assertEquals(wide.take(64), subscriptionOf(detailed).storedMethodLabel)
+        assertEquals(wide, attemptOf(detailed).methodDetail, "the payment row keeps its 100 characters")
+
+        // a cut never splits a surrogate pair
+        val emoji = "😀"
+        val (_, cem) = user("Cem")
+        val pair = buy(sub, cem)
+
+        assertEquals(OrderStatus.COMPLETED, succeed(pair, stored = StoredPaymentMethod("tok_c").also { it.label = "y".repeat(63) + emoji + "tail" }).orderStatus)
+        assertEquals("y".repeat(63) + emoji, subscriptionOf(pair).storedMethodLabel)
+
+        // a method detail wider than its own column no longer fails the payment (and with it the activation of a paid order)
+        val (_, dan) = user("Dan")
+        val huge = buy(sub, dan)
+
+        assertEquals(OrderStatus.COMPLETED, succeed(huge, stored = StoredPaymentMethod("tok_d"), detail = "z".repeat(200)).orderStatus)
+        assertEquals("z".repeat(128), attemptOf(huge).methodDetail)
+        assertEquals("z".repeat(64), subscriptionOf(huge).storedMethodLabel)
+    }
+
     // ==================================================================================== the late success and the review (tests 27, 28)
 
     @Test
@@ -884,6 +1348,182 @@ class SubscriptionServiceIT : MarketDaoITBase() {
             assertEquals(SubscriptionStatus.PENDING, subscriptionOf(o).status, "step F of SubscriptionJob closes it after 30 days, not the order")
             assertNull(subscriptionOf(o).endedAt)
         }
+    }
+
+    // ==================================================================================== a gateway subscription the row does not keep (09 section 4.4)
+
+    private fun cancelCalls() = fake.calls(FakePaymentProvider.Op.CANCEL_SUBSCRIPTION).map { it.request as CancelSubscriptionRequest }
+
+    @Test
+    fun `the gateway subscription of a duplicate attempt is cancelled after the commit and the stored one stays`(): Unit = runBlocking {
+        val sub = subProduct()
+
+        fx.paymentMethod("fake")
+        sw.caps(RecurringSupport.GATEWAY_MANAGED)
+
+        val (_, caller) = user("Alex")
+        val order = buy(sub, caller)
+        val first = attemptOf(order)
+
+        pay(order, "fake")
+
+        val second = attemptOf(order)
+
+        assertNotEquals(first.id, second.id)
+
+        // the newer attempt pays first: the order completes and the row is active with ITS gateway subscription
+        succeed(order, subscription = gateway("sub_b"), attempt = second)
+
+        val active = subscriptionOf(order)
+
+        assertEquals(SubscriptionStatus.ACTIVE, active.status)
+        assertEquals("sub_b", active.gatewaySubscriptionId)
+        assertEquals(0, cancelCalls().size, "the kept subscription is not cancelled")
+
+        // the earlier attempt's money arrives too, with a subscription of its own: a duplicate payment (00 section 7.2)
+        val duplicate = succeed(order, subscription = gateway("sub_a"), attempt = first)
+
+        assertTrue(duplicate.duplicate)
+
+        val cancels = cancelCalls()
+
+        assertEquals(1, cancels.size, "exactly one remote cancel")
+        assertEquals("sub_a", cancels.single().subscription.gatewaySubscriptionId)
+        assertEquals("cus_sub_a", cancels.single().subscription.gatewayCustomerId)
+        assertEquals(active.id, cancels.single().subscription.id)
+        assertFalse(cancels.single().atPeriodEnd, "immediate")
+        assertNull(cancels.single().storedMethod)
+        assertFalse(cancels.single().subscription.testMode)
+
+        subscriptionOf(order).let {
+            assertEquals("sub_b", it.gatewaySubscriptionId, "the stored subscription is untouched")
+            assertEquals(SubscriptionStatus.ACTIVE, it.status)
+            assertEquals(active.currentPeriodEnd, it.currentPeriodEnd)
+            assertEquals(active.nextQueryAt, it.nextQueryAt)
+        }
+        assertEquals(0, events(order.id, OrderEventType.NOTE).count { it.message == CancelSurplusSubscription.FAILED_NOTE })
+
+        // the same subscription again (a replayed event, a second delivery of the same attempt) is no duplicate to cancel
+        succeed(order, subscription = gateway("sub_a"), attempt = first)
+        assertEquals(1, cancelCalls().size)
+    }
+
+    @Test
+    fun `a refused or failed remote cancel of a surplus subscription is written to the order timeline`(): Unit = runBlocking {
+        val sub = subProduct()
+
+        fx.paymentMethod("fake")
+        sw.caps(RecurringSupport.GATEWAY_MANAGED)
+
+        // what the provider does with the cancel, and what the timeline row says about it
+        val cases = listOf<Triple<String, String, () -> Unit>>(
+            Triple("failed", "gateway said no") { fake.onCancelSubscription = { CancelSubscriptionResult.Failed("gateway said no") } },
+            Triple("buyer action", "only the buyer can cancel it") { fake.onCancelSubscription = { CancelSubscriptionResult.BuyerActionRequired("https://gateway.invalid/manage") } },
+            Triple("local only", "cancelled nothing") { fake.onCancelSubscription = { CancelSubscriptionResult.localOnly() } },
+            Triple("thrown", "boom") {
+                fake.failNext(FakePaymentProvider.Op.CANCEL_SUBSCRIPTION, ProviderException(ProviderErrorCode.GATEWAY_UNREACHABLE, "down", adminMessage = "boom"))
+            }
+        )
+
+        for ((index, case) in cases.withIndex()) {
+            val (label, expected, script) = case
+            val (_, caller) = user("Buyer$index")
+            val order = buy(sub, caller)
+            val first = attemptOf(order)
+
+            pay(order, "fake")
+
+            val second = attemptOf(order)
+
+            script()
+            succeed(order, subscription = gateway("sub_keep_$index"), attempt = second)
+            succeed(order, subscription = gateway("sub_surplus_$index"), attempt = first)
+
+            val notes = events(order.id, OrderEventType.NOTE).filter { it.message == CancelSurplusSubscription.FAILED_NOTE }
+
+            assertEquals(1, notes.size, "$label: the failure is on the timeline once")
+
+            val data = JsonObject(notes.single().data!!)
+
+            assertEquals("sub_surplus_$index", data.getString("gatewaySubscriptionId"), label)
+            assertEquals(subscriptionOf(order).id, data.getLong("subscriptionId"), label)
+            assertEquals("fake", data.getString("providerId"), label)
+            assertTrue(data.getString("error").contains(expected), "$label: ${data.getString("error")}")
+            assertEquals(com.panomc.plugins.market.db.model.OrderActorType.SYSTEM, notes.single().actorType, label)
+            assertEquals("sub_keep_$index", subscriptionOf(order).gatewaySubscriptionId, "$label: the row keeps its own subscription")
+            assertEquals(index + 1, cancelCalls().size, "$label: one cancel attempt per surplus subscription")
+
+            fake.onCancelSubscription = { CancelSubscriptionResult.localOnly() }
+        }
+    }
+
+    @Test
+    fun `a late success after the row was closed leaves the row closed and cancels its gateway subscription`(): Unit = runBlocking {
+        val sub = subProduct()
+
+        fx.paymentMethod("fake")
+        sw.caps(RecurringSupport.GATEWAY_MANAGED)
+
+        val (_, caller) = user("Alex")
+        val order = buy(sub, caller)
+
+        expire(order)
+
+        // step F closed the pending row 30 days after the order was released
+        sql("UPDATE `pano_market_subscription` SET `status` = 'CANCELLED', `endReason` = 'PAYMENT_FAILED', `endedAt` = ? WHERE `id` = ?", w.clock.now(), order.subscriptionId!!)
+
+        assertEquals(OrderStatus.REVIEW, succeed(order, subscription = gateway("sub_late")).orderStatus)
+
+        val cancels = cancelCalls()
+
+        assertEquals(1, cancels.size)
+        assertEquals("sub_late", cancels.single().subscription.gatewaySubscriptionId)
+        assertFalse(cancels.single().atPeriodEnd)
+
+        subscriptionOf(order).let {
+            assertEquals(SubscriptionStatus.CANCELLED, it.status)
+            assertNull(it.gatewaySubscriptionId, "the closed row did not take the subscription, it was cancelled instead")
+        }
+    }
+
+    @Test
+    fun `while an order waits in review the first paying attempt's subscription is the row's, the second attempt's is cancelled and the accept activates the first`(): Unit = runBlocking {
+        val sub = subProduct()
+
+        fx.paymentMethod("fake")
+        sw.caps(RecurringSupport.GATEWAY_MANAGED)
+
+        val (_, caller) = user("Alex")
+        val order = buy(sub, caller)
+        val first = attemptOf(order)
+
+        pay(order, "fake")
+
+        val second = attemptOf(order)
+
+        expire(order)
+
+        // the first attempt's money arrives late: the order waits for a human, the row keeps what the gateway said
+        assertEquals(OrderStatus.REVIEW, succeed(order, subscription = gateway("sub_1"), attempt = first).orderStatus)
+        assertEquals("sub_1", subscriptionOf(order).gatewaySubscriptionId)
+        assertEquals(first.id, order(order.id).paymentId)
+
+        // the second attempt pays too while the order is still in review: its subscription must not replace the first's
+        assertEquals(OrderStatus.REVIEW, succeed(order, subscription = gateway("sub_2"), attempt = second).orderStatus)
+        assertEquals(first.id, order(order.id).paymentId, "the order's own payment is still the first attempt")
+        assertEquals("sub_1", subscriptionOf(order).gatewaySubscriptionId, "the second attempt did not overwrite the row")
+        assertEquals(listOf("sub_2"), cancelCalls().map { it.subscription.gatewaySubscriptionId })
+
+        // the accept activates the subscription of the attempt that is accepted
+        val change = sw.review.review(order.id, ReviewDecision.ACCEPT, refund = false, force = false, note = null, adminUserId = 7)
+
+        assertEquals(OrderStatus.COMPLETED, change.order.status)
+        subscriptionOf(order).let {
+            assertEquals(SubscriptionStatus.ACTIVE, it.status)
+            assertEquals(SubscriptionMode.GATEWAY, it.mode)
+            assertEquals("sub_1", it.gatewaySubscriptionId)
+        }
+        assertEquals(1, cancelCalls().size, "nothing more was cancelled by the accept")
     }
 
     // ==================================================================================== gateway status events (09 section 7, S-04)
