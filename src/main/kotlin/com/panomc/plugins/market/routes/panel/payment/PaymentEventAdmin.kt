@@ -39,6 +39,8 @@ class PaymentEventPage(val rows: List<JsonObject>, val count: Long, val totalPag
  * - `POST /payment-events/:eventId/replay`: [replay] re-runs the stored request through the inbound pipeline; only `DEFERRED`, `FAILED` and a `RECEIVED` row
  *   older than 60 s qualify (11 IN-4), anything else is 409 `INVALID_STATE` (a rejected row's body is already truncated and redacted, a processed row is done);
  * - `POST /payments/:paymentId/query`: [query] asks the provider now (`queryPayment`) and answers the attempt's status.
+ * Every response passes through the redactor of the row's provider ([redactorFor]: its decrypted secret settings and `market_provider_state` values, 11
+ * section 8.4, the same one the dispatcher uses; the plain [Redactor] for a provider the plugin does not know).
  * [prefix] is the table prefix. [replayEvent] is the dispatcher's `replay`, [reconcile] the payment service's provider query.
  */
 class PaymentEventAdmin(
@@ -47,7 +49,7 @@ class PaymentEventAdmin(
     private val orders: MarketOrderDao,
     private val replayEvent: suspend (eventId: Long) -> ReplayResult,
     private val reconcile: suspend (order: MarketOrder, attempt: MarketPayment, client: SqlClient) -> PaymentService.ReconcileQuery,
-    private val redactor: Redactor = Redactor()
+    private val redactorFor: suspend (providerId: String) -> Redactor = { Redactor() }
 ) {
     companion object {
         /** The statuses of the default list (02 section 7.3: the rows that did not go through). */
@@ -85,10 +87,20 @@ class PaymentEventAdmin(
         val rows = client.preparedQuery("SELECT $COLUMNS FROM ${table("market_payment_event")} WHERE $where ORDER BY $order LIMIT ? OFFSET ?")
             .execute(Tuple.from(args + window.pageSize + window.offset)).coAwait()
 
-        return PaymentEventPage(rows.map { json(it, raw) }, count, Paging.totalPages(count, window.pageSize))
+        val redactors = HashMap<String, Redactor>()
+        val out = ArrayList<JsonObject>()
+
+        for (row in rows) {
+            val providerId = row.getString("providerId")
+            val redactor = redactors[providerId] ?: redactorFor(providerId).also { redactors[providerId] = it }
+
+            out += json(row, raw, redactor)
+        }
+
+        return PaymentEventPage(out, count, Paging.totalPages(count, window.pageSize))
     }
 
-    private fun json(row: Row, raw: Boolean): JsonObject {
+    private fun json(row: Row, raw: Boolean, redactor: Redactor): JsonObject {
         val out = JsonObject()
             .put("id", row.getLong("id")).put("providerId", row.getString("providerId")).put("direction", row.getString("direction"))
             .put("channel", row.getString("channel")).put("eventKey", row.getString("eventKey"))
@@ -100,7 +112,7 @@ class PaymentEventAdmin(
             .put("createdAt", row.getLong("createdAt"))
 
         // the raw tier (SET): url, headers and body, redacted again on the way out
-        val parts = FieldGating.eventRaw(redactor.redactOrNull(row.getString("body")), redactedHeaders(row.getString("headers")), redactor.redactOrNull(row.getString("url")), raw)
+        val parts = FieldGating.eventRaw(redactor.redactOrNull(row.getString("body")), redactedHeaders(row.getString("headers"), redactor), row.getString("url")?.let { redactor.redactUrl(it) }, raw)
 
         parts.forEach { (key, value) -> out.put(key, if (key == "headers" && value is String) runCatching { JsonObject(value) }.getOrDefault(null) ?: value else value) }
 
@@ -108,7 +120,7 @@ class PaymentEventAdmin(
     }
 
     /** The stored header JSON with the credentials of well-known headers and every secret-looking value removed; the text is returned when it is not a JSON object. */
-    private fun redactedHeaders(stored: String?): String? {
+    private fun redactedHeaders(stored: String?, redactor: Redactor): String? {
         if (stored == null) return null
 
         val parsed = runCatching { JsonObject(stored) }.getOrNull() ?: return redactor.redact(stored)

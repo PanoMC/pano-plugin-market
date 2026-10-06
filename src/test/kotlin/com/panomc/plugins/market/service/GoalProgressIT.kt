@@ -243,6 +243,47 @@ class GoalProgressIT : MarketDaoITBase() {
         }
     }
 
+    @Test
+    fun `orders paid at once as the first of a new week roll the goal once, no increment of the new week is wiped`(): Unit = runBlocking {
+        repeat(Race.rounds) {
+            val orders = goal(GoalMetric.ORDERS, period = GoalPeriod.WEEKLY, periodStart = at(2026, 9, 28, 0), progress = 5)
+            val revenue = goal(GoalMetric.REVENUE, period = GoalPeriod.WEEKLY, periodStart = at(2026, 9, 28, 0), progress = 900)
+            val ids = List(20) { paidOrder(gateway = 1000, lines = listOf(Triple(10L, 1, 1000L))) }
+
+            // one transaction per order, as the payment path runs it: every one of them reads the goal as stale (REPEATABLE READ keeps it so) before the first commit
+            val results = Race.run(20) { i -> w.db.tx { conn -> progress.onOrderPaid(conn, ids[i]) } }
+
+            assertTrue(results.all { it.isSuccess }, "$results")
+
+            for (id in listOf(orders to 20L, revenue to 20_000L)) {
+                val goal = w.goals.getById(id.first, pool)!!
+
+                assertEquals(id.second, goal.progress, "the 20 orders of the new week are all there, the old week's progress is gone")
+                assertEquals(at(2026, 10, 5, 0), goal.periodStart)
+            }
+
+            MarketTestDb.sql(pool, "DELETE FROM `${MarketTestDb.TABLE_PREFIX}market_goal`")
+        }
+    }
+
+    @Test
+    fun `the period roll happens once per period, a second roll into the same period changes nothing`(): Unit = runBlocking {
+        val id = goal(period = GoalPeriod.WEEKLY, periodStart = at(2026, 9, 28, 0), progress = 7)
+
+        assertTrue(w.goals.rollPeriod(id, at(2026, 10, 5, 0), w.clock.now(), pool))
+
+        w.goals.addProgress(id, 3, w.clock.now(), pool)
+
+        assertFalse(w.goals.rollPeriod(id, at(2026, 10, 5, 0), w.clock.now(), pool), "already in that period")
+        assertEquals(3L, progressOf(id))
+
+        // a goal that never had a period start is rolled
+        val fresh = goal(period = GoalPeriod.MONTHLY, progress = 4)
+
+        assertTrue(w.goals.rollPeriod(fresh, at(2026, 10, 1, 0), w.clock.now(), pool))
+        assertEquals(0L, progressOf(fresh))
+    }
+
     // ================================================================================================== seams
 
     private fun locked(orderId: Long) = LockedOrder(MarketOrder(id = orderId), emptyList(), emptyList(), OrderLockScope.RELEASE)

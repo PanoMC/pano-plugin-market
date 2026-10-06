@@ -17,6 +17,7 @@ import com.panomc.plugins.market.permission.FieldGating
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.api.order.paymentService
 import com.panomc.plugins.market.routes.api.payment.inboundDispatcher
+import com.panomc.plugins.market.routes.api.payment.providerRedactorFor
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
 import com.panomc.plugins.market.routes.base.parsePagingRequest
@@ -47,7 +48,8 @@ internal fun paymentEventAdmin(plugin: MarketPlugin): PaymentEventAdmin {
         PaymentEventAdmin(
             { orders.prefix() }, context.getBean(MarketPaymentDao::class.java), orders,
             { id -> inboundDispatcher(plugin).replay(id) },
-            { order, attempt, client -> paymentService(plugin).reconcileQuery(order, attempt, client) }
+            { order, attempt, client -> paymentService(plugin).reconcileQuery(order, attempt, client) },
+            providerRedactorFor(plugin)
         )
     }
 

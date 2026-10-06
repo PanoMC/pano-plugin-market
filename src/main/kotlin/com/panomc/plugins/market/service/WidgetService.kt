@@ -350,12 +350,13 @@ class GoalProgress(
         for (goal in goals.getActive(conn)) {
             var current = goal
 
-            // a new week / month: the old progress belongs to a finished period
+            // a new week / month: the old progress belongs to a finished period. The roll is conditional on the stored periodStart still being older, so of
+            // several orders that all saw the finished period only the first resets; the others (their snapshot is stale) change nothing and just add
             GoalMath.periodStart(goal.period, zone, now)?.let { start ->
                 if (GoalMath.stale(goal, zone, now)) {
-                    goals.resetPeriod(goal.id, start, now, conn)
+                    goals.rollPeriod(goal.id, start, now, conn)
 
-                    current = goals.getById(goal.id, conn) ?: continue
+                    current = rolledTo(goal, start)
                 }
             }
 
@@ -370,6 +371,12 @@ class GoalProgress(
             if (change > 0) goals.getById(current.id, conn)?.let { if (it.progress >= it.target) goals.markCompleted(it.id, now, conn) }
         }
     }
+
+    /** The goal as it is once rolled into the period that began at [start] (the stored row is not re-read: its snapshot may predate the roll of a concurrent order). */
+    private fun rolledTo(goal: MarketGoal, start: Long) = MarketGoal(
+        goal.id, goal.name, goal.description, goal.metric, goal.productIds, goal.target, goal.progress, goal.currency, goal.period, start, goal.startsAt, goal.endsAt,
+        goal.status, goal.showOnStore, goal.completedAt, goal.position, goal.createdAt, goal.updatedAt
+    )
 
     private suspend fun guarded(what: String, block: suspend () -> Unit) {
         try {

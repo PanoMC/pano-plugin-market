@@ -26,6 +26,13 @@ abstract class MarketGoalDao : MarketDao<MarketGoal>(MarketGoal::class.java) {
     /** Starts a new period: `progress = 0`, `periodStart`, `completedAt = NULL`. */
     abstract suspend fun resetPeriod(id: Long, periodStart: Long, now: Long, sqlClient: SqlClient): Boolean
 
+    /**
+     * Rolls a periodic goal into the period that began at [periodStart], once: the reset only happens while the stored `periodStart` is older (or unset), so of
+     * several writers that saw the same finished period the first one resets and the others change nothing (`false`) and must not wipe the progress that
+     * was added after the roll.
+     */
+    abstract suspend fun rollPeriod(id: Long, periodStart: Long, now: Long, sqlClient: SqlClient): Boolean
+
     /** Sets `completedAt` once: `false` when it was set already. */
     abstract suspend fun markCompleted(id: Long, now: Long, sqlClient: SqlClient): Boolean
 

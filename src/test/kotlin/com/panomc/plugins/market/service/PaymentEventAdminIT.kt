@@ -63,6 +63,7 @@ class PaymentEventAdminIT : MarketDaoITBase() {
     private lateinit var store: DbInboundEventStore
     private lateinit var dispatcher: InboundDispatcher
     private lateinit var admin: PaymentEventAdmin
+    private lateinit var contexts: PaymentContexts
     private val locks = AttemptLocks()
     private val vertx: Vertx = Vertx.vertx()
 
@@ -79,7 +80,7 @@ class PaymentEventAdminIT : MarketDaoITBase() {
         store = DbInboundEventStore(w.paymentEvents) { pool }
 
         val attempts = PaymentInboundAttempts(w.payments, w.orders, ph.payments, ph.cipher, ph.db, ph.locks, w.clock) { pool }
-        val contexts = PaymentContexts { provider, settings, testMode ->
+        contexts = PaymentContexts { provider, settings, testMode ->
             AttemptPaymentContext(TestContexts.payment(provider.id, settings, vertx, testMode), AttemptLookup(provider.id, w.payments, w.orders, ph.cipher) { pool }, locks)
         }
         val lookup: ProviderLookup = ph.lookup
@@ -233,6 +234,57 @@ class PaymentEventAdminIT : MarketDaoITBase() {
 
         assertEquals(all.sorted(), all, "oldest first across the pages")
         assertEquals(5, all.toSet().size)
+    }
+
+    @Test
+    fun `a provider secret in the stored body, a header, the replay metadata, the error and the url is redacted on the read path`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val secret = "merchant-key-Zq81xT"
+        val (_, attempt) = pending()
+
+        // the redactor of the provider is built from its secret settings and state values, exactly as the dispatcher builds it
+        val providers = RegistryInboundProviders(ph.lookup, w.paymentMethods, ph.cipher, contexts, { ph.h.config.toConfig() }, { pool }, { setOf(secret) })
+        val withSecrets = PaymentEventAdmin(
+            { w.orders.prefix() }, w.payments, w.orders, { id -> dispatcher.replay(id) }, { order, a, client -> ph.payments.reconcileQuery(order, a, client) },
+            { id -> (providers.resolve(id, true) as? com.panomc.plugins.market.routes.api.payment.ProviderAccess.Ready)?.redactor ?: com.panomc.plugins.market.core.abuse.Redactor() }
+        )
+
+        // a row kept verbatim (FAILED): the provider echoes its key in the body, a header, the form and the error; the url carries it as a path token
+        val id = w.paymentEvents.add(
+            MarketPaymentEvent(
+                providerId = "fake", channel = "NOTIFY", eventKey = "r:secret", paymentId = attempt.id, status = PaymentEventStatus.FAILED,
+                body = "{\"merchant\":\"$secret\",\"ok\":true}", headers = JsonObject().put("x-merchant", io.vertx.core.json.JsonArray().add("k=$secret")).put(":form", "key=$secret&amount=5").encode(),
+                url = "/api/market/payments/fake/notify/abcdefghij0123456789klmno?ref=$secret", error = "gateway said: $secret rejected",
+                createdAt = w.clock.now(), updatedAt = w.clock.now()
+            ),
+            pool
+        )!!
+
+        val plain = admin.forPayment(attempt.id, window, true, pool).rows.single { it.getLong("id") == id }
+
+        // the panel without the provider's secrets (the old wiring) would have let it through: this is what the fix prevents
+        assertTrue(plain.encode().contains(secret), "the plain redactor knows no provider secret")
+
+        val rows = withSecrets.forPayment(attempt.id, window, true, pool).rows.single { it.getLong("id") == id }
+
+        assertFalse(rows.encode().contains(secret), rows.encodePrettily())
+        assertTrue(rows.getString("body").contains("[REDACTED]"))
+        assertTrue(rows.getString("error").contains("[REDACTED]"))
+        assertTrue(rows.getJsonObject("headers").getJsonArray("x-merchant").getString(0).contains("[REDACTED]"))
+        assertFalse(rows.getJsonObject("headers").getString(":form").contains(secret))
+
+        // the same on the default list, and the url passes through the path-token rule as well
+        val listedRow = withSecrets.list(emptySet(), null, window, true, pool).rows.single { it.getLong("id") == id }
+
+        assertFalse(listedRow.encode().contains(secret), listedRow.encodePrettily())
+        assertEquals("/api/market/payments/fake/notify/abcdef\u2026?ref=[REDACTED]", listedRow.getString("url"), "path token shortened, secret removed")
+
+        // below the raw tier nothing of body / headers / url is there, and the error is redacted too
+        val below = withSecrets.list(emptySet(), null, window, false, pool).rows.single { it.getLong("id") == id }
+
+        assertNull(below.getValue("body"))
+        assertFalse(below.encode().contains(secret))
     }
 
     // ================================================================================================== the list
