@@ -10,11 +10,45 @@
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
     [
+      "@PanoMC/semantic-release-pano",
+      {
+        "file": "build/libs/pano-plugin-market-${version}.jar",
+        "panoVersion": "1.0.0",
+        "useGitHubLink": false,
+        "configs": [
+          {
+            "resourceId": "pano-plugin-market",
+            "panoUrl": "https://api-dev.panomc.com",
+            "tokenVar": "PANO_TOKEN",
+            "branches": [
+              "dev"
+            ]
+          },
+          {
+            "resourceId": "pano-plugin-market",
+            "panoUrl": "https://api.panomc.com",
+            "tokenVar": "PANO_PROD_TOKEN",
+            "branches": [
+              "main"
+            ]
+          }
+        ]
+      }
+    ],
+    [
       "@semantic-release/github",
       {
         "assets": [
           {
             "path": "build/libs/*.jar",
+            "label": false
+          },
+          {
+            "path": "build/api/*.jar",
+            "label": false
+          },
+          {
+            "path": "build/mc/*.jar",
             "label": false
           },
           {

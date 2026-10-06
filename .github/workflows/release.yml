@@ -34,10 +34,13 @@ jobs:
       - name: Dry run to get next release version
         id: get-next-version
         run: |
+          npm install -D git+https://github.com/PanoMC/semantic-release-pano.git
           export NEXT_TAG_VERSION=$(npx semantic-release --dry-run | grep 'next release version is ' | awk -F"next release version is " '{print $2}')
           echo "new_tag_version=${NEXT_TAG_VERSION}" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
+          PANO_TOKEN: ${{ secrets.PANO_TOKEN }}
+          PANO_PROD_TOKEN: ${{ secrets.PANO_PROD_TOKEN }}
 
       - name: Echo new_tag_version
         run: |
@@ -51,6 +54,18 @@ jobs:
     runs-on: ubuntu-latest
     needs: get-next-version
     if: ${{needs.get-next-version.outputs.new_tag_version != ''}}
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: market-it-root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     permissions:
       contents: write # to be able to publish a GitHub release
       issues: write # to be able to comment on released issues
@@ -79,13 +94,27 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
+      - name: UI checks
+        run: bun run check:ui
+
+      # T2 database tier (17 section 3.4): a red dbTest blocks the release. The E2E tier (needs a full Pano instance) is not run here.
+      - name: Database tests
+        env:
+          PANO_IT_MARIADB: 127.0.0.1:3306
+          PANO_IT_MARIADB_PASSWORD: market-it-root
+        run: ./gradlew dbTest -Pnoui -Pfabric -Pversion=${{ needs.get-next-version.outputs.new_tag_version }}
+
+      # check = unit tests, Minecraft-side tests (mcTest), jar rules; -Pfabric also builds build/mc/*-fabric-<v>.jar
       - name: Build
         run: |
-          ./gradlew build \
-            -Pversion=${{ needs.get-next-version.outputs.new_tag_version }} \
-            -PtimeStamp=${{ steps.time.outputs.time }}
+          ./gradlew build -Pfabric \
+            -Pversion=${{ needs.get-next-version.outputs.new_tag_version }}
 
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN_GITHUB }}
-        run: npx semantic-release
+          PANO_TOKEN: ${{ secrets.PANO_TOKEN }}
+          PANO_PROD_TOKEN: ${{ secrets.PANO_PROD_TOKEN }}
+        run: |
+          npm install -D git+https://github.com/PanoMC/semantic-release-pano.git
+          npx semantic-release
