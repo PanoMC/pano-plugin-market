@@ -28,7 +28,11 @@ import com.panomc.plugins.market.db.dao.MarketPaymentMethodDao
 import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.dao.MarketProductFieldDao
 import com.panomc.plugins.market.db.dao.MarketRedemptionDao
+import com.panomc.plugins.market.db.dao.MarketMailOutboxDao
+import com.panomc.plugins.market.db.dao.MarketProductVariantDao
 import com.panomc.plugins.market.db.dao.MarketRefundDao
+import com.panomc.plugins.market.db.dao.MarketSubscriptionDao
+import com.panomc.plugins.market.db.dao.MarketSubscriptionRenewalDao
 import com.panomc.plugins.market.db.dao.MarketWebhookDeliveryDao
 import com.panomc.plugins.market.db.dao.MarketWebhookEndpointDao
 import com.panomc.plugins.market.db.tx.Locks
@@ -56,6 +60,11 @@ import com.panomc.plugins.market.service.DuplicateRefundPolicy
 import com.panomc.plugins.market.service.ForeignEffects
 import com.panomc.plugins.market.service.InvoiceEffects
 import com.panomc.plugins.market.service.ShippingEffects
+import com.panomc.plugins.market.service.MailOutboxService
+import com.panomc.plugins.market.service.SubscriptionClosedGuard
+import com.panomc.plugins.market.service.SubscriptionEffects
+import com.panomc.plugins.market.service.SubscriptionService
+import com.panomc.plugins.market.service.SubscriptionWebhooks
 import com.panomc.plugins.market.routes.panel.shipping.shippingService
 import com.panomc.plugins.market.routes.panel.webhook.discordLabelSource
 import com.panomc.plugins.market.routes.panel.webhook.discordWebhookRenderer
@@ -100,6 +109,9 @@ private var cachedDeliveries: Pair<MarketPlugin, DeliveryService>? = null
 
 @Volatile
 private var cachedEntitlements: Pair<MarketPlugin, EntitlementService>? = null
+
+@Volatile
+private var cachedSubscriptions: Pair<MarketPlugin, SubscriptionService>? = null
 
 /**
  * The store webhook writer on the plugin's beans (MK-105): [OrderService] uses its `emitOrderPaid` at O2 / O4. The sender is built as the job
@@ -181,6 +193,38 @@ private fun buildDeliveryService(plugin: MarketPlugin): DeliveryService {
 }
 
 /**
+ * The subscription service on the plugin's beans (MK-121): the pending row of checkout (`OrderService.subscriptions`), the activation and the closing of
+ * O2 / O4 / O5 (`SubscriptionEffects`), the gateway data of a success and the plan of a start (`PaymentService.subscriptionHooks`), the late-renewal guard
+ * and the `SubscriptionUpdated` half of the inbound sink. One per plugin instance; the payment service is looked up when it is asked for capabilities
+ * (never at construction, the two build each other).
+ */
+internal fun subscriptionService(plugin: MarketPlugin): SubscriptionService {
+    cachedSubscriptions?.takeIf { it.first === plugin }?.let { return it.second }
+
+    return synchronized(OrderWiringHolder) {
+        cachedSubscriptions?.takeIf { it.first === plugin }?.second ?: buildSubscriptionService(plugin).also { cachedSubscriptions = plugin to it }
+    }
+}
+
+private fun buildSubscriptionService(plugin: MarketPlugin): SubscriptionService {
+    val context = plugin.beans
+    val orderDao = context.getBean(MarketOrderDao::class.java)
+    val orderEvents = context.getBean(MarketOrderEventDao::class.java)
+    val locks = Locks(orderDao, context.getBean(MarketOrderItemDao::class.java), context.getBean(MarketRedemptionDao::class.java), context.getBean(MarketCreditAccountDao::class.java))
+
+    return SubscriptionService(
+        clock = SystemClock, config = { currentConfig(plugin) }, locks = locks, subscriptions = context.getBean(MarketSubscriptionDao::class.java),
+        renewals = context.getBean(MarketSubscriptionRenewalDao::class.java), orders = orderDao, orderItems = context.getBean(MarketOrderItemDao::class.java),
+        orderEvents = orderEvents, payments = context.getBean(MarketPaymentDao::class.java), products = context.getBean(MarketProductDao::class.java),
+        variants = context.getBean(MarketProductVariantDao::class.java), entitlements = context.getBean(MarketEntitlementDao::class.java),
+        cipher = paymentWiring(plugin).cipher, capabilities = { providerId, sqlClient -> paymentService(plugin).capabilitiesOf(providerId, sqlClient) },
+        deliveries = deliveryService(plugin),
+        mail = MailOutboxService({ currentConfig(plugin) }, SystemClock, context.getBean(MarketMailOutboxDao::class.java), orderEvents),
+        webhooks = SubscriptionWebhooks { conn, event, subjectKey, orderId, data, testMode -> webhookService(plugin).emit(conn, event, subjectKey, orderId, data, testMode) }
+    )
+}
+
+/**
  * The credit ledger on the plugin's beans (MK-091): the hold of checkout ([CreditService.checkoutHolds]) and the capture, release, re-tender and re-hold of the
  * order transitions ([CreditService] is the order service's `CreditSettlement`); one per plugin instance.
  */
@@ -227,6 +271,8 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
         context.getBean(MarketPaymentDao::class.java), redemptions, { conn, userId -> cart.clearAfterCheckout(conn, userId) },
         // MK-091: the credit hold of O1 and the capture / release / re-tender / re-hold of the transitions are real ledger postings
         credits = credits.checkoutHolds, settlement = credits,
+        // MK-121: the pending subscription row of O1 (09 section 4.3), created in the order transaction
+        subscriptions = subscriptionService(plugin),
         reservations = ReservationService(clock, locks, redemptions, orderDao),
         webhooks = PaidWebhooks { conn, orderId -> webhooks.emitOrderPaid(conn, orderId) },
         // O2 / O4 issue the invoice inside the transition (12 section 6.1, MK-144), then the entitlements and the GRANT / RENEW delivery rows are written (MK-102);
@@ -239,7 +285,8 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
                 invoiceService(plugin), orderDao,
                 DeliveryEffects(
                     entitlementService(plugin), deliveryService(plugin), orderDao,
-                    ShippingEffects({ shippingService(plugin) }, ForeignEffects.PENDING_SLICES)
+                    // MK-121: SubscriptionOnOrderPaid / SubscriptionOnClosedUnpaid go to the subscription service; the rest still to PENDING_SLICES
+                    ShippingEffects({ shippingService(plugin) }, SubscriptionEffects({ subscriptionService(plugin) }, ForeignEffects.PENDING_SLICES))
                 )
             )
         ),
@@ -278,9 +325,12 @@ private fun buildPaymentService(plugin: MarketPlugin): PaymentService {
         orderService = orderService(plugin), site = wiring.site, readClient = { databaseManager().getSqlClient() },
         products = context.getBean(MarketProductDao::class.java), entitlements = context.getBean(MarketEntitlementDao::class.java),
         // MK-091 (07 section 5 C3): an order whose credit part is not backed by its hold in the ledger is never completed by a payment
-        extraPaidGuards = listOf(CreditHoldGuard(creditService(plugin))),
+        // MK-121 (09 section 8.5): a payment for a renewal of a closed subscription goes to review (LATE)
+        extraPaidGuards = listOf(CreditHoldGuard(creditService(plugin)), SubscriptionClosedGuard { subscriptionService(plugin) }),
         // WIRE-1 (MK-077 seam): the query paths and `continue` run under the attempt locks the inbound pipeline holds
-        attemptLocks = attemptLocks(plugin)
+        attemptLocks = attemptLocks(plugin),
+        // MK-121: the plan of a start, the gateway data of a success (09 sections 4.2 and 4.4)
+        subscriptionHooks = subscriptionService(plugin)
     )
 }
 

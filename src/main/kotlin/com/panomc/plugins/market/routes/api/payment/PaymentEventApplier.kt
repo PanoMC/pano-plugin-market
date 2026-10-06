@@ -106,5 +106,5 @@ internal fun AttemptFacts.withReceived(amount: Long, currency: String, note: Str
     startKind = startKind, startPayload = startPayload, startedAt = startedAt, nextQueryAt = nextQueryAt, expiresAt = expiresAt,
     failureCode = failureCode, failureMessage = failureMessage,
     adminMessage = listOfNotNull(adminMessage, note).joinToString("; ").take(com.panomc.plugins.market.service.PaymentService.ADMIN_MESSAGE_MAX),
-    receivedAmount = amount, receivedCurrency = currency
+    receivedAmount = amount, receivedCurrency = currency, subscription = subscription, storedMethod = storedMethod
 )

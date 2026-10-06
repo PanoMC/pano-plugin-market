@@ -14,6 +14,7 @@ import com.panomc.plugins.market.db.dao.MarketPaymentEventDao
 import com.panomc.plugins.market.db.dao.MarketPaymentMethodDao
 import com.panomc.plugins.market.db.dao.MarketProviderStateDao
 import com.panomc.plugins.market.db.dao.MarketRedemptionDao
+import com.panomc.plugins.market.db.dao.MarketSubscriptionDao
 import com.panomc.plugins.market.db.model.ProviderStateKind
 import com.panomc.plugins.market.db.tx.Locks
 import com.panomc.plugins.market.db.tx.MarketDb
@@ -23,11 +24,13 @@ import com.panomc.plugins.market.provider.ProviderLogImpl
 import com.panomc.plugins.market.provider.ProviderStateStoreImpl
 import com.panomc.plugins.market.provider.StoredProviderSettings
 import com.panomc.plugins.market.routes.api.order.paymentService
+import com.panomc.plugins.market.routes.api.order.subscriptionService
 import com.panomc.plugins.market.routes.api.shipping.shippingInboundDispatcher
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.routes.panel.settings.payment.providerLookup
 import com.panomc.plugins.market.service.PaymentContexts
+import com.panomc.plugins.market.service.SubscriptionEventSink
 import com.panomc.plugins.market.spi.MarketSpi
 import com.panomc.plugins.market.spi.common.ProviderContext
 import com.panomc.plugins.market.spi.payment.AttemptUrls
@@ -126,6 +129,7 @@ private fun buildContexts(plugin: MarketPlugin): PaymentContexts {
     val vertx = context.getBean(Vertx::class.java)
     val http by lazy { context.getBean(WebClient::class.java) }
     val locks = attemptLocks(plugin)
+    val subscriptions = context.getBean(MarketSubscriptionDao::class.java)
 
     return PaymentContexts { provider, settings, testMode ->
         val secrets = (settings as? StoredProviderSettings)?.valuesOf(provider.settingsSchema().secretKeys) ?: emptySet()
@@ -133,7 +137,7 @@ private fun buildContexts(plugin: MarketPlugin): PaymentContexts {
         val state = ProviderStateStoreImpl(ProviderStateKind.PAYMENT, provider.id, stateDao, db, wiring.cipher, SystemClock)
         val base = ProviderContextImpl(provider.id, settings, testMode, http, vertx, log, state, wiring.site(), SystemClock)
 
-        AttemptPaymentContext(base, AttemptLookup(provider.id, payments, orders, wiring.cipher) { databaseManager.getSqlClient() }, locks)
+        AttemptPaymentContext(base, AttemptLookup(provider.id, payments, orders, wiring.cipher, subscriptions) { databaseManager.getSqlClient() }, locks)
     }
 }
 
@@ -185,7 +189,9 @@ private fun buildDispatcher(plugin: MarketPlugin): InboundDispatcher {
     ) { providerId -> ProviderStateStoreImpl(ProviderStateKind.PAYMENT, providerId, stateDao, db, wiring.cipher, SystemClock).values() }
 
     return InboundDispatcher(
-        inboundEventStore(plugin), attempts, providers, PaymentEventApplier(attempts) { event, attempt, ctx -> paymentEventSink.apply(event, attempt, ctx) },
+        inboundEventStore(plugin), attempts, providers,
+        // MK-121: SubscriptionUpdated is applied by the subscription service, every other non-attempt event goes to the sink a slice installed
+        PaymentEventApplier(attempts) { event, attempt, ctx -> SubscriptionEventSink(db, { subscriptionService(plugin) }, paymentEventSink).apply(event, attempt, ctx) },
         attemptLocks(plugin), SystemClock, SecureIds(), { wiring.site().baseUrl.trimEnd('/') }
     )
 }

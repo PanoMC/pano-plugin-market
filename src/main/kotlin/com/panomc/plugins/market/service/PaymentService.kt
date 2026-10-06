@@ -79,6 +79,9 @@ import com.panomc.plugins.market.spi.payment.BuyerInfo
 import com.panomc.plugins.market.spi.payment.CancelPaymentRequest
 import com.panomc.plugins.market.spi.payment.CheckoutSnapshot
 import com.panomc.plugins.market.spi.payment.ContinuePaymentRequest
+import com.panomc.plugins.market.spi.payment.GatewaySubscriptionState
+import com.panomc.plugins.market.spi.payment.StoredPaymentMethod
+import com.panomc.plugins.market.spi.payment.SubscriptionPlan
 import com.panomc.plugins.market.spi.payment.OrderLine
 import com.panomc.plugins.market.spi.payment.PaymentAttemptView
 import com.panomc.plugins.market.spi.payment.PaymentCapabilities
@@ -251,7 +254,14 @@ class AttemptFacts(
      * rejection with a refund returns it (06 section 9.4). `null` when the event states no amount.
      */
     val receivedAmount: Long? = null,
-    val receivedCurrency: String? = null
+    val receivedCurrency: String? = null,
+    /**
+     * What a `Succeeded` carries for a subscription (09 section 4.4): the gateway's subscription (`GATEWAY_MANAGED`) and the stored payment method
+     * (`MERCHANT_INITIATED`). Not an attempt column: [PaymentSubscriptions.onPaid] writes it onto the pending subscription row in the same
+     * transaction, where the activation of O2 / O4 finds it even when an admin accepts the payment later.
+     */
+    val subscription: GatewaySubscriptionState? = null,
+    val storedMethod: StoredPaymentMethod? = null
 ) {
     companion object {
         val NONE = AttemptFacts()
@@ -270,7 +280,8 @@ class AttemptFacts(
                 // a gateway failure keeps its code (17 section 5.5: `card_declined` surfaces as `failureCode`); its text is the admin's, the buyer gets market's generic key
                 failureCode = failed?.code?.take(PaymentService.FAILURE_CODE_MAX), failureMessage = failed?.let { PaymentService.PAYMENT_FAILED_TEXT },
                 adminMessage = listOfNotNull(event.note, failed?.message).filter { it.isNotBlank() }.joinToString("; ").takeIf { it.isNotEmpty() }?.take(PaymentService.ADMIN_MESSAGE_MAX),
-                receivedAmount = received?.amount, receivedCurrency = received?.currency
+                receivedAmount = received?.amount, receivedCurrency = received?.currency,
+                subscription = succeeded?.subscription, storedMethod = succeeded?.storedMethod
             )
         }
     }
@@ -343,7 +354,9 @@ class PaymentService(
      * of the attempt they are about, the same lock the inbound pipeline and `ctx.payments.withAttemptLock` take, so a `queryPayment` and a
      * `handleInbound` of one attempt never run side by side. Production passes the registry the pipeline uses; the default is a private one.
      */
-    private val attemptLocks: AttemptLocks = AttemptLocks()
+    private val attemptLocks: AttemptLocks = AttemptLocks(),
+    /** The subscription side of a payment (MK-121, 09 section 2): the plan a start carries, the gateway data of a success, the offer a method change makes. */
+    private val subscriptionHooks: PaymentSubscriptions = PaymentSubscriptions.NONE
 ) : PaymentStarter {
 
     private val paidGuards: List<PaidGuard> = listOf(RecipientLimitGuard(orders, products, entitlements, clock)) + extraPaidGuards
@@ -364,6 +377,9 @@ class PaymentService(
     ) {
         val policy get() = ProviderMoneyPolicy(caps.buyerMayPayMore, caps.priceAuthority)
     }
+
+    /** The capabilities [providerId] answers right now (settings decrypted), `null` for a provider that is not registered or threw while it described itself. */
+    suspend fun capabilitiesOf(providerId: String, sqlClient: SqlClient): PaymentCapabilities? = resolve(providerId, sqlClient)?.caps
 
     /** The two answers that decide whether a duplicate payment on [providerId] is refunded automatically (`autoRefundDuplicatePayments`, refund support of the provider). */
     suspend fun duplicateRefundRule(sqlClient: SqlClient, providerId: String): DuplicateRefundRule =
@@ -461,7 +477,7 @@ class PaymentService(
         }
 
         val items = orderItems.getByOrderIds(listOf(orderId), sqlClient)
-        val request = requestFor(order, items, attempt, superseded.firstOrNull(), resolved)
+        val request = requestFor(order, items, attempt, superseded.firstOrNull(), resolved, subscriptionHooks.planFor(order, sqlClient))
         val ctx = contexts.create(resolved.provider, resolved.settings, attempt.testMode)
 
         // 2. the provider call, never inside a transaction
@@ -700,7 +716,9 @@ class PaymentService(
         )
     }
 
-    private fun requestFor(order: MarketOrder, items: List<MarketOrderItem>, attempt: MarketPayment, replaces: MarketPayment?, resolved: Resolved): StartPaymentRequest {
+    private fun requestFor(
+        order: MarketOrder, items: List<MarketOrderItem>, attempt: MarketPayment, replaces: MarketPayment?, resolved: Resolved, plan: SubscriptionPlan?
+    ): StartPaymentRequest {
         val snapshot = spiSnapshot(order, items)
         val billing = order.billingInfo?.let { runCatching { JsonObject(it) }.getOrNull() }
         val locale = order.locale ?: site().defaultLocale
@@ -709,7 +727,7 @@ class PaymentService(
             attempt = AttemptRef(attempt.id, attempt.reference, attempt.token), amount = Money(attempt.amount, attempt.currency), order = snapshot,
             buyer = buyerOf(order, attempt.clientIp, attempt.userAgent, billing, locale), billing = addressOf(billing),
             shipping = addressOf(order.shippingAddress?.let { runCatching { JsonObject(it) }.getOrNull() }),
-            subscription = null, urls = urlsFor(attempt, order.publicId ?: "", resolved.provider.id), idempotencyKey = "pay:" + attempt.reference, locale = locale,
+            subscription = plan, urls = urlsFor(attempt, order.publicId ?: "", resolved.provider.id), idempotencyKey = "pay:" + attempt.reference, locale = locale,
             expiresAt = attempt.expiresAt ?: (clock.now() + OrderTimings.MIN_ATTEMPT_MS), replaces = replaces?.let { attemptView(it, order.publicId ?: "") }
         )
     }
@@ -937,6 +955,10 @@ class PaymentService(
         if (!updateAttempt(conn, attemptId, sets, whereStatus = attempt.status)) throw com.panomc.plugins.market.db.tx.OrderChangedException(orderId, "attempt $attemptId moved under the lock")
 
         timeline(conn, orderId, attempt, decision.to, event, actor, paid, decision.effects.any { it is PaymentEffect.NotifyOrder }, duplicate)
+
+        // 09 section 4.4: what a success says about the subscription (gateway subscription, stored method) goes onto the pending row now, so the activation
+        // of O2 / O4 (also an admin's accept long after) reads it from there; the subscription row is locked by every scope that can reach a Succeeded
+        if (paid != null && order.subscriptionId != null && order.source != OrderSource.RENEWAL) subscriptionHooks.onPaid(conn, order, attempt, facts)
 
         // ---- what the machine names besides the attempt row, in its order
         var orderStatus = order.status
