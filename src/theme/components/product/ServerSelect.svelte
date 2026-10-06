@@ -2,7 +2,7 @@
   <div class="small">
     <i class="fa-solid fa-server me-1 text-body-secondary" aria-hidden="true"></i>{$_(
       'theme.product.server-fixed',
-      { server: choices[0].name },
+      { values: { server: choices[0].name } },
     )}
   </div>
 {:else if choices.length > 1}

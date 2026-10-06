@@ -79,6 +79,14 @@ describe('list order and filters', () => {
     expect(logoPath('', 'a b')).toBe('/api/market/payment-providers/a%20b/logo');
     expect(logoPath('', 'x')).not.toContain('favicon');
   });
+  test('the provider card asks for the logo at the site root, not below the /panel base', async () => {
+    // The browser smoke (E2E-13) saw five 404s: /panel/api/... is the panel UI's own API prefix, the market route lives at /api/market/...
+    const source = await Bun.file(new URL('../components/settings/PaymentMethods.svelte', import.meta.url)).text();
+    expect(source).toContain("logoPath('', provider.id)");
+    expect(source).not.toContain('logoPath(base,');
+    // a provider without a logo answers 404 on that route, which the browser reports as a console error: no request is made for it
+    expect(source).toContain('provider.descriptor?.logoUrl && !logoFailed[provider.id]');
+  });
 });
 
 describe('per-state behaviour (13 §16.1)', () => {

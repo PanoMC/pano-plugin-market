@@ -12,7 +12,7 @@
               type="button"
               class="page-link"
               aria-current={item.current ? 'page' : undefined}
-              aria-label={$_('theme.store.page-n', { page: item.page })}
+              aria-label={$_('theme.store.page-n', { values: { page: item.page } })}
               onclick={() => !item.current && onpage?.(item.page)}>
               {item.page}
             </button>

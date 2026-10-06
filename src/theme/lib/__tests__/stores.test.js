@@ -70,6 +70,25 @@ describe('session', () => {
     expect(runs).toBe(3);
   });
 
+  test('hostSession: server side never calls getContext; the browser reads the context; a throwing getContext is a guest', () => {
+    let calls = 0;
+    const read = (key) => {
+      calls++;
+      return key === 'session' ? 'the-store' : undefined;
+    };
+    expect(session.hostSession(read)).toBeNull();
+    expect(calls).toBe(0);
+
+    globalThis.window = {};
+    expect(session.hostSession(read)).toBe('the-store');
+    expect(session.hostSession(() => undefined)).toBeNull();
+    expect(
+      session.hostSession(() => {
+        throw new Error('lifecycle_outside_component');
+      }),
+    ).toBeNull();
+  });
+
   test('a throwing initializer does not stop the others', () => {
     globalThis.window = {};
     const warn = console.warn;

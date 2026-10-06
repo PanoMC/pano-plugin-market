@@ -50,8 +50,10 @@
 
     const period = formatPeriod(product.period.unit, product.period.count, $_);
 
-    if (product.billingMode === 'SUBSCRIPTION') return $_('theme.store.per-period', { period });
-    if (product.billingMode === 'TIMED') return $_('theme.store.for-period', { period });
+    if (product.billingMode === 'SUBSCRIPTION')
+      return $_('theme.store.per-period', { values: { period } });
+    if (product.billingMode === 'TIMED')
+      return $_('theme.store.for-period', { values: { period } });
 
     return '';
   });

@@ -5,7 +5,7 @@
         <h2 class="h5 mb-1" id="market-sub-{sub.id}-title">{sub.productName}</h2>
         <div class="text-body-secondary">
           {formatMoney(sub.price, sub.currency)}
-          {$_('theme.store.per-period', { period })}
+          {$_('theme.store.per-period', { values: { period } })}
         </div>
       </div>
       <span class={['badge', sub.badge.className]}>

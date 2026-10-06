@@ -64,10 +64,12 @@
       {#if product.upgrade}
         <div class="alert alert-info mb-0" role="status">
           {$_('theme.product.upgrade', {
-            fromName: product.upgrade.fromName,
-            deduction: formatMoney(product.upgrade.deduction, product.currency, {
-              removeCents: settings.removeCents,
-            }),
+            values: {
+              fromName: product.upgrade.fromName,
+              deduction: formatMoney(product.upgrade.deduction, product.currency, {
+                removeCents: settings.removeCents,
+              }),
+            },
           })}
         </div>
       {/if}
@@ -131,7 +133,7 @@
         {/if}
         {#if product.limitPerPlayer}
           <li>
-            {$_('theme.product.limit-per-player', { count: product.limitPerPlayer })}
+            {$_('theme.product.limit-per-player', { values: { count: product.limitPerPlayer } })}
           </li>
         {/if}
       </ul>
@@ -234,12 +236,12 @@
     needsCurrencyRefetch,
     preferred,
   } from '../stores/currency.js';
-  import { bindSession } from '../stores/session.js';
+  import { bindSession, hostSession } from '../stores/session.js';
   import { formatMoney } from '../utils/format.js';
 
   let { data } = $props();
 
-  bindSession(getContext('session'));
+  bindSession(hostSession(getContext));
 
   // The page is re-mounted whenever load() runs again (14 F2), so the loaded data only seeds the state.
   const init = untrack(() => data);

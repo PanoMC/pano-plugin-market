@@ -1,6 +1,6 @@
 {#if product.stock != null && product.stock > 0}
   <div class="small text-warning-emphasis">
-    {$_('theme.store.stock-left', { count: product.stock })}
+    {$_('theme.store.stock-left', { values: { count: product.stock } })}
   </div>
 {/if}
 

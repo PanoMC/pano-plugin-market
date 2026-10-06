@@ -9,7 +9,7 @@
       <i class="fa-solid fa-cart-shopping me-2" aria-hidden="true"></i>{$_('theme.cart.title')}
     </h5>
     <span class="visually-hidden" aria-live="polite" aria-atomic="true"
-      >{$_('theme.cart.items-in-cart', { count: $cart.count })}</span>
+      >{$_('theme.cart.items-in-cart', { values: { count: $cart.count } })}</span>
     <button
       type="button"
       class="btn-close"

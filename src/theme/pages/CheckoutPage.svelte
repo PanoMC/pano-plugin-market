@@ -320,14 +320,14 @@
   import { checkoutDraft, ownerKeyOf } from '../stores/checkoutDraft.js';
   import { now } from '../stores/clock.js';
   import { effectiveCurrency, initCurrency, preferred } from '../stores/currency.js';
-  import { bindSession, isLoggedIn, user } from '../stores/session.js';
+  import { bindSession, isLoggedIn, user, hostSession } from '../stores/session.js';
   import { storeSettings } from '../stores/storeSettings.js';
   import { formatCredits, formatMoney } from '../utils/format.js';
   import { loginUrl, registerUrl } from '../utils/host.js';
 
   let { data } = $props();
 
-  bindSession(getContext('session'));
+  bindSession(hostSession(getContext));
 
   // The page is re-mounted whenever load() runs again (14 F2), so the loaded data only seeds the state.
   const init = untrack(() => data);

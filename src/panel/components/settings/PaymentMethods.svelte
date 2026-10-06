@@ -77,9 +77,9 @@
                 <div
                   class="d-flex align-items-center justify-content-center rounded flex-shrink-0 overflow-hidden bg-body-secondary"
                   style="width: 40px; height: 40px;">
-                  {#if !logoFailed[provider.id]}
+                  {#if provider.descriptor?.logoUrl && !logoFailed[provider.id]}
                     <img
-                      src={logoPath(base, provider.id)}
+                      src={logoPath('', provider.id)}
                       alt={$_('settings.payments.logo-alt', { values: { name: label } })}
                       loading="lazy"
                       style="max-width: 70%; max-height: 70%; object-fit: contain;"

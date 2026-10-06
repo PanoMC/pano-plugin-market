@@ -234,12 +234,12 @@
   import { listSearch } from '../../lib/profileModel.js';
   import { createSequencer } from '../../lib/storeFilter.js';
   import { readEarnings } from '../../lib/subscriptionModel.js';
-  import { bindSession } from '../../stores/session.js';
+  import { bindSession, hostSession } from '../../stores/session.js';
   import { formatDate, formatMoney } from '../../utils/format.js';
 
   let { data } = $props();
 
-  bindSession(getContext('session'));
+  bindSession(hostSession(getContext));
 
   // The page is re-mounted whenever load() runs again (14 F2), so the loaded data only seeds the state.
   const init = untrack(() => data);

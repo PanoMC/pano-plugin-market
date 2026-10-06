@@ -71,7 +71,7 @@
               : $_('theme.store.all-products')}
           </h2>
           <span class="text-body-secondary small">
-            {$_('theme.store.products-count', { count: grid.productCount })}
+            {$_('theme.store.products-count', { values: { count: grid.productCount } })}
           </span>
         </div>
 
@@ -207,11 +207,11 @@
     preferred,
     setPreferred,
   } from '../stores/currency.js';
-  import { bindSession } from '../stores/session.js';
+  import { bindSession, hostSession } from '../stores/session.js';
 
   let { data } = $props();
 
-  bindSession(getContext('session'));
+  bindSession(hostSession(getContext));
 
   // The page is re-mounted whenever load() runs again (14 F2), so the loaded data only seeds the state.
   const init = untrack(() => data);

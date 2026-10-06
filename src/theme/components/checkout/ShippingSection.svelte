@@ -167,9 +167,9 @@
     const hasMax = Number.isFinite(max) && max > 0;
 
     if (hasMin && hasMax && min !== max)
-      return $_('theme.checkout.shipping-days', { minDays: min, maxDays: max });
+      return $_('theme.checkout.shipping-days', { values: { minDays: min, maxDays: max } });
     if (hasMax || hasMin)
-      return $_('theme.checkout.shipping-days-single', { days: hasMax ? max : min });
+      return $_('theme.checkout.shipping-days-single', { values: { days: hasMax ? max : min } });
 
     return '';
   }

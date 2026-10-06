@@ -34,14 +34,14 @@
           {/each}
           {#if row.targetServerId}
             <div class="small text-body-secondary">
-              {$_('theme.cart.server', { id: row.targetServerId })}
+              {$_('theme.cart.server', { values: { id: row.targetServerId } })}
             </div>
           {/if}
         </div>
         <button
           type="button"
           class="btn btn-sm btn-link text-danger p-0"
-          aria-label={$_('theme.cart.remove-item', { name: row.name })}
+          aria-label={$_('theme.cart.remove-item', { values: { name: row.name } })}
           onclick={() => cart.remove(row.key)}>
           <i class="fa-solid fa-trash" aria-hidden="true"></i>
         </button>
@@ -61,7 +61,7 @@
       <div class="d-flex justify-content-between align-items-center mt-2">
         {#if row.maxQuantity === 1}
           <span class="small text-body-secondary"
-            >{$_('theme.cart.quantity-short', { count: row.quantity })}</span>
+            >{$_('theme.cart.quantity-short', { values: { count: row.quantity } })}</span>
         {:else}
           <div class="btn-group btn-group-sm" role="group" aria-label={$_('theme.cart.quantity')}>
             <button

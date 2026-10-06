@@ -1,4 +1,4 @@
-// Session binding (14 §4.3). Pages and slot components call bindSession(getContext('session')) first.
+// Session binding (14 §4.3). Pages and slot components call bindSession(hostSession(getContext)) first.
 import { derived, writable } from 'svelte/store';
 
 const bound = writable(null);
@@ -63,6 +63,21 @@ export function bindSession(sessionStore) {
     lastUserKey = key;
     if (changed) runInitializers();
   });
+}
+
+/**
+ * The host's `session` context, or null where it cannot be read. The server bundle of this plugin carries its own copy of
+ * the Svelte server runtime (the host's is only shared in the browser), so `getContext` throws `lifecycle_outside_component`
+ * during SSR; the page then renders as a guest and the client binds the real store on hydration (E2E-13).
+ */
+export function hostSession(getContext) {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    return getContext('session') || null;
+  } catch {
+    return null;
+  }
 }
 
 /** Test helper: forget all module state. */

@@ -11,8 +11,8 @@
       class="badge rounded-pill text-bg-danger position-absolute top-0 start-100 translate-middle"
       aria-live="polite"
       aria-atomic="true"
-      >{count}<span class="visually-hidden">
-        {$_('theme.cart.items-in-cart', { count })}</span
+      ><span aria-hidden="true">{count}</span><span class="visually-hidden">
+        {$_('theme.cart.items-in-cart', { values: { count } })}</span
       ></span>
   </button>
 {/if}
@@ -24,7 +24,7 @@
   import { cart } from '../../stores/cart.js';
   import { user } from '../../stores/session.js';
   import { COUNT_KEY, STORAGE_KEY } from '../../lib/cartModel.js';
-  import { countCacheValue, resolveNavCount } from './cartView.js';
+  import { countCacheValue, navVisible, resolveNavCount } from './cartView.js';
 
   // Rendered in the browser only (after mount): the count and the path are unknown during SSR.
   let mounted = $state(false);

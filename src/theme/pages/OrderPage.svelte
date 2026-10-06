@@ -128,13 +128,13 @@
   import { createPoller, signatureOfOrder } from '../lib/polling.js';
   import { now } from '../stores/clock.js';
   import * as orderTokens from '../stores/orderTokens.js';
-  import { bindSession } from '../stores/session.js';
+  import { bindSession, hostSession } from '../stores/session.js';
   import { storeSettings } from '../stores/storeSettings.js';
   import { loginUrl } from '../utils/host.js';
 
   let { data } = $props();
 
-  bindSession(getContext('session'));
+  bindSession(hostSession(getContext));
 
   // The page is re-mounted whenever load() runs again (14 F2), so the loaded data only seeds the state.
   const init = untrack(() => data);

@@ -70,6 +70,8 @@
   });
 
   export function show() {
+    // a click that lands before onMount has run (a list that has only just rendered) still opens the modal
+    modal ??= window.bootstrap?.Modal.getOrCreateInstance(element);
     modal?.show();
   }
 
@@ -77,9 +79,17 @@
     modal?.hide();
   }
 
+  // The action runs after the modal has finished hiding: an action that removes this component (a list that reloads, a row that is
+  // replaced) while Bootstrap is still fading the modal out makes Bootstrap read the removed element ("reading 'style' of null").
   function confirm() {
     confirmed = true;
-    modal?.hide();
-    onconfirm();
+
+    if (!modal || !element) {
+      onconfirm();
+      return;
+    }
+
+    element.addEventListener('hidden.bs.modal', () => onconfirm(), { once: true });
+    modal.hide();
   }
 </script>
