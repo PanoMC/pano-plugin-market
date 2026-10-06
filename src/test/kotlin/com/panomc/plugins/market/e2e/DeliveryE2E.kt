@@ -2,14 +2,19 @@ package com.panomc.plugins.market.e2e
 
 import com.panomc.plugins.market.e2e.support.E2eTestBase
 import com.panomc.plugins.market.support.Await
+import com.panomc.plugins.market.support.FakePayGateway
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.sqlclient.Row
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Test
+import java.security.KeyPairGenerator
+import java.util.Base64
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -20,6 +25,10 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * The scheduler stats are not part of `GET /health` yet (its `jobs` array is a stub), so the job's registration is proven by its effect: rows that
  * only the `delivery` job can move (`PENDING` to `CONFIRMED` with `attempts = 1`) after the payment webhook.
+ *
+ * E2E-08 adds the scenarios D-01 to D-06 of 17 section 9.6 (a command that waits for a server, the explicit re-run, the action webhook with its HMAC and
+ * retries, the webhook target policy, a timed product that expires, a refund before a delayed delivery ran). Time travel is by row rewind only
+ * (`market_webhook_delivery.nextAttemptAt`, `market_entitlement.startsAt` / `expiresAt`).
  */
 class DeliveryE2E : E2eTestBase() {
     override val tag = "dlv"
@@ -29,13 +38,15 @@ class DeliveryE2E : E2eTestBase() {
     private val sequence = AtomicInteger()
 
     /** `group.<name>` needs a group to join: created through the permission snapshot the way the panel does, read-modify-write of the whole grid. */
-    private fun ensureRankGroup() {
+    private fun ensureRankGroup() = ensureGroup(rankGroup)
+
+    private fun ensureGroup(name: String) {
         val snapshot = admin.get("/api/panel/permission/snapshot").ok().obj()
         val groups = snapshot.getJsonArray("groups") ?: JsonArray()
 
-        if (groups.any { (it as JsonObject).getString("name") == rankGroup }) return
+        if (groups.any { (it as JsonObject).getString("name") == name }) return
 
-        groups.add(JsonObject().put("name", rankGroup).put("displayName", rankGroup))
+        groups.add(JsonObject().put("name", name).put("displayName", name))
         admin.post(
             "/api/panel/permission/snapshot",
             JsonObject().put("groups", groups).put("tracks", snapshot.getJsonArray("tracks") ?: JsonArray()).put("nodes", snapshot.getJsonArray("nodes") ?: JsonArray())
@@ -166,5 +177,341 @@ class DeliveryE2E : E2eTestBase() {
 
         // one delivered, one failed: PARTIAL (08 section 13)
         assertEquals("PARTIAL", orderRow(publicId).getString("fulfillmentStatus"))
+    }
+
+    // --- E2E-08: D-01 to D-06 ------------------------------------------------------------------------------------------
+
+    private val oneDayMs = 86_400_000L
+    private var registeredServerId: Long? = null
+
+    @AfterAll
+    fun removeRegisteredServer() {
+        val id = registeredServerId ?: return
+
+        // the server only exists for D-01 (its delivery was cancelled by the scenario): remove it so later classes of the run see the instance without one
+        val answer = admin.post("/api/panel/servers/$id/delete", JsonObject().put("currentPassword", session.env.adminPassword()))
+
+        check(answer.status in 200..299) { "removing the test server answered ${answer.status} ${answer.error}" }
+    }
+
+    /**
+     * A server the platform has accepted but that never connects: `POST /api/server/connect` is the same REST call the Minecraft plugin makes first
+     * (it answers a token and the AES key, wrapped for the public key we send), then the panel accepts the connect request. The row is
+     * `permissionGranted = 1`, so a `COMMAND` action can be saved against it, and it is not connected, so its deliveries wait.
+     */
+    private fun grantedServer(): Long {
+        registeredServerId?.let { return it }
+
+        val keys = KeyPairGenerator.getInstance("RSA").also { it.initialize(2048) }.generateKeyPair()
+        val platformCode = admin.get("/api/panel/basicData").ok().obj().getValue("platformServerMatchKey").toString()
+        val name = "e2e-srv-" + System.nanoTime().toString(36).takeLast(8)
+
+        visitor("mc").post(
+            "/api/server/connect",
+            JsonObject().put("platformCode", platformCode).put("serverName", name).put("host", "127.0.0.1").put("port", 25565).put("playerCount", 0)
+                .put("maxPlayerCount", 20).put("serverType", "PAPER").put("serverVersion", "1.21").put("startTime", System.currentTimeMillis())
+                .put("publicKey", Base64.getEncoder().encodeToString(keys.public.encoded))
+        ).ok()
+
+        val id = db.long("SELECT `id` FROM `pano_server` WHERE `name` = ? ORDER BY `id` DESC LIMIT 1", name) ?: throw AssertionError("the connect request created no server row")
+
+        admin.post("/api/panel/servers/$id/accept", JsonObject()).ok()
+        registeredServerId = id
+
+        return id
+    }
+
+    private fun action(id: String, type: String, value: Any, phase: String = "GRANT"): JsonObject =
+        JsonObject().put("id", id).put("type", type).put("phase", phase).put("value", value)
+
+    private fun product(name: String, price: String, actions: JsonArray, extra: Map<String, String> = emptyMap()): Long {
+        val n = sequence.incrementAndGet()
+
+        return catalog.product(key = "DLV${name.uppercase()}$n", slug = "e2e-${name.lowercase()}-${System.currentTimeMillis().toString(36)}-$n", name = "$name $n", price = price, actions = actions.encode(), extra = extra)
+    }
+
+    private fun flag(row: Row, column: String): Boolean = row.getValue(column).let { it == true || (it as? Number)?.toInt() == 1 }
+
+    private fun webhookRows(deliveryId: Long): List<Row> = db.sql("SELECT * FROM `pano_market_webhook_delivery` WHERE `deliveryId` = ? ORDER BY `id`", deliveryId)
+
+    @Test
+    fun `D-01 a command waits for a server - WAITING_SERVER, fulfillment PENDING, listed, the sale is not blocked`() {
+        val serverId = grantedServer()
+        val productId = product(
+            "Diamonds", "2.00",
+            JsonArray().add(
+                action("a1", "COMMAND", JsonArray().add("give {username} diamond {quantity}")).put("serverMode", "FIXED").put("targetServers", JsonArray().add(serverId)).put("requiresOnline", false)
+            )
+        )
+        val buyer = buyer()
+        val publicId = payAndAwaitCompleted(buyer.client, cart(line(productId)))
+
+        // the sale was not blocked by the missing server: the order is COMPLETED, the row waits
+        assertEquals("COMPLETED", orderStatus(publicId))
+
+        val row = Await.untilValue(120_000, 1000, "the COMMAND row of $publicId is WAITING_SERVER") {
+            deliveries(publicId).singleOrNull()?.takeIf { it.getString("status") == "WAITING_SERVER" }
+        }
+
+        assertEquals("COMMAND", row.getString("actionType"))
+        assertEquals("GRANT", row.getString("phase"))
+        assertEquals(serverId, row.getLong("serverId"))
+        assertEquals("PENDING", orderRow(publicId).getString("fulfillmentStatus"), "nothing was delivered yet")
+        assertEquals(0L, orderEvents(publicId, "DELIVERY_FAILED"))
+
+        // listed under the status filter (search = the buyer's name, so the rows of other scenarios do not matter)
+        val listed = admin.get("/api/panel/market/deliveries?status=WAITING_SERVER&search=${buyer.username}").ok().obj().getJsonArray("deliveries").map { it as JsonObject }
+
+        assertEquals(listOf(row.getLong("id")), listed.map { it.getLong("id") })
+        assertEquals("WAITING_SERVER", listed.single().getString("status"))
+        assertEquals("COMMAND", listed.single().getString("actionType"))
+
+        // an open row is not part of the health queue (it would never drain), and the admin can cancel it
+        admin.post("/api/panel/market/deliveries/${row.getLong("id")}/cancel", JsonObject()).ok()
+
+        assertEquals("CANCELLED", deliveries(publicId).single().getString("status"))
+        assertEquals(0L, admin.get("/api/panel/market/deliveries?status=WAITING_SERVER&search=${buyer.username}").ok().obj().getLong("deliveryCount"))
+    }
+
+    @Test
+    fun `D-02 an explicit re-run creates new rows with attemptGroup 1, leaves the old rows alone and grants the credit a second time through the new row only`() {
+        val productId = product("Rerun", "3.00", JsonArray().add(action("a1", "CREDIT", 5)))
+        val buyer = buyer()
+        val publicId = payAndAwaitCompleted(buyer.client, cart(line(productId)))
+        val orderId = orderRow(publicId).getLong("id")
+        val first = awaitSettled(publicId, 1).single()
+        val itemId = db.long("SELECT `id` FROM `pano_market_order_item` WHERE `orderId` = ?", orderId)
+
+        assertEquals("CONFIRMED", first.getString("status"))
+        assertEquals(0, first.getInteger("attemptGroup"))
+        assertEquals("$itemId:a1:0:0:GRANT:0", first.getString("idempotencyKey"))
+        assertEquals(500L, db.long("SELECT `balance` FROM `pano_market_credit_account` WHERE `userId` = ?", buyer.userId))
+
+        fun snapshot(row: Row) = listOf(row.getLong("id"), row.getString("status"), row.getInteger("attempts"), row.getInteger("attemptGroup"), row.getString("idempotencyKey"), row.getLong("confirmedAt"), row.getString("result"))
+
+        val before = snapshot(first)
+
+        // the effective row took effect, so this grants again: the admin holds PAY as well as OM
+        val answer = admin.post("/api/panel/market/orders/$orderId/deliveries/rerun", JsonObject().put("all", true)).ok().obj()
+
+        assertEquals(1, answer.getInteger("created"))
+        assertEquals(0, answer.getInteger("skipped"))
+
+        val rows = awaitSettled(publicId, 2)
+        val second = rows.single { it.getInteger("attemptGroup") == 1 }
+
+        assertNotEquals(first.getLong("id"), second.getLong("id"))
+        assertEquals("CONFIRMED", second.getString("status"))
+        assertEquals("$itemId:a1:0:0:GRANT:1", second.getString("idempotencyKey"))
+        assertEquals(before, snapshot(rows.single { it.getLong("id") == first.getLong("id") }), "the old row is untouched")
+
+        // one ACTION transaction per row, keyed by the row: the second grant comes from the new row only
+        val firstTx = db.sql("SELECT * FROM `pano_market_credit_tx` WHERE `type` = 'ACTION' AND `deliveryId` = ?", first.getLong("id"))
+        val secondTx = db.sql("SELECT * FROM `pano_market_credit_tx` WHERE `type` = 'ACTION' AND `deliveryId` = ?", second.getLong("id"))
+
+        assertEquals(1, firstTx.size)
+        assertEquals(1, secondTx.size)
+        assertEquals("delivery:${second.getLong("id")}", secondTx.single().getString("idempotencyKey"))
+        assertEquals(500L, secondTx.single().getLong("amount"))
+        assertEquals(1000L, db.long("SELECT `balance` FROM `pano_market_credit_account` WHERE `userId` = ?", buyer.userId))
+        assertEquals(1, orderEvents(publicId, "DELIVERY_RERUN").toInt())
+
+        // the identical request again re-runs the (now second) effective row: again exactly one more row, never a repeat of an old key
+        admin.post("/api/panel/market/orders/$orderId/deliveries/rerun", JsonObject().put("all", true)).ok()
+
+        val three = awaitSettled(publicId, 3)
+
+        assertEquals(listOf(0, 1, 2), three.map { it.getInteger("attemptGroup") }.sorted())
+        assertEquals(3, three.map { it.getString("idempotencyKey") }.toSet().size)
+        assertEquals(1500L, db.long("SELECT `balance` FROM `pano_market_credit_account` WHERE `userId` = ?", buyer.userId))
+    }
+
+    @Test
+    fun `D-03 an action webhook is signed with the HMAC, retried with backoff after 500 and 500, sends the same event id each time and ends SUCCEEDED`() {
+        val hook = "d03" + System.nanoTime().toString(36).takeLast(8)
+        val secret = "whsec_e2e_" + System.nanoTime().toString(36)
+
+        gateway.hookStatus(hook, 500, 500, 200)
+
+        val productId = product(
+            "Hooked", "2.00",
+            JsonArray().add(
+                action("a1", "WEBHOOK", JsonObject().put("url", "${gateway.baseUrl}/hooks/$hook").put("format", "JSON").put("signing", "HMAC_SHA256").put("secret", secret))
+            )
+        )
+        val buyer = buyer()
+        val publicId = payAndAwaitCompleted(buyer.client, cart(line(productId)))
+        val delivery = Await.untilValue(60_000, 500, "the WEBHOOK row of $publicId") { deliveries(publicId).singleOrNull() }
+        val deliveryId = delivery.getLong("id")
+
+        assertEquals("WEBHOOK", delivery.getString("actionType"))
+
+        // attempt 1 and 2 answer 500: the row waits for its backoff, which the scenario skips by rewinding nextAttemptAt
+        for (attempt in 1..2) {
+            val failed = Await.untilValue(90_000, 500, "webhook attempt $attempt failed") {
+                webhookRows(deliveryId).singleOrNull()?.takeIf { it.getInteger("attempts") == attempt && it.getString("status") == "FAILED" }
+            }
+
+            assertEquals(500, failed.getInteger("lastStatusCode"))
+            assertTrue(failed.getLong("nextAttemptAt") > System.currentTimeMillis(), "the backoff is in the future")
+
+            db.rewind("market_webhook_delivery", failed.getLong("id"), "nextAttemptAt", 3_600_000)
+        }
+
+        val done = Await.untilValue(90_000, 500, "the webhook of $publicId succeeded") { webhookRows(deliveryId).singleOrNull()?.takeIf { it.getString("status") == "SUCCEEDED" } }
+
+        assertEquals(3, done.getInteger("attempts"))
+        assertEquals(200, done.getInteger("lastStatusCode"))
+
+        // the log: three attempts of one row (one event id), and the panel detail says the same
+        val detail = admin.get("/api/panel/market/webhook-deliveries/${done.getLong("id")}").ok().obj()
+        val view = detail.getJsonObject("delivery") ?: detail
+
+        assertEquals(3, view.getInteger("attempts"))
+        assertEquals("SUCCEEDED", view.getString("status"))
+
+        // what the sink saw
+        val requests = gateway.hooks(hook)
+
+        assertEquals(3, requests.size)
+        assertEquals(listOf("1", "2", "3"), requests.map { it.header("X-Pano-Attempt") })
+        assertEquals(1, requests.map { it.header("X-Pano-Event-Id") }.toSet().size, "the event id is stable across the retries")
+        assertEquals(done.getString("eventId"), requests.first().header("X-Pano-Event-Id"))
+        assertEquals(1, requests.map { it.bodyText() }.toSet().size, "the body is identical on every attempt")
+        assertEquals(deliveryId, done.getLong("deliveryId"))
+
+        for (request in requests) {
+            val header = request.header("X-Pano-Signature") ?: throw AssertionError("no X-Pano-Signature")
+            val parts = header.split(',').associate { it.substringBefore('=') to it.substringAfter('=') }
+
+            assertEquals(FakePayGateway.hmac(secret, parts.getValue("t").toLong(), request.body), parts.getValue("v1"), "the signature verifies with the action's secret")
+        }
+
+        // D12: the delivery engine heard about it
+        val settled = awaitSettled(publicId, 1).single()
+
+        assertEquals("CONFIRMED", settled.getString("status"))
+        assertEquals("FULFILLED", orderRow(publicId).getString("fulfillmentStatus"))
+    }
+
+    @Test
+    fun `D-04 the webhook target policy refuses a private address and a file URL when private targets are not allowed`() {
+        session.withSettings(JsonObject().put("allowPrivateWebhookTargets", false)) {
+            val before = admin.get("/api/panel/market/webhooks").ok().obj().getJsonArray("webhooks").size()
+
+            for (url in listOf("http://169.254.169.254/", "file:///etc/passwd")) {
+                val refused = admin.post(
+                    "/api/panel/market/webhooks",
+                    JsonObject().put("name", "E2E policy").put("url", url).put("events", JsonArray().add("order.paid")).put("format", "JSON").put("signing", "NONE")
+                )
+
+                assertEquals(400, refused.status, "$url: ${refused.json}")
+                assertEquals("INVALID_WEBHOOK_URL", refused.error, url)
+            }
+
+            assertEquals(before, admin.get("/api/panel/market/webhooks").ok().obj().getJsonArray("webhooks").size(), "no endpoint was stored")
+
+            // the same rule guards a WEBHOOK action of a product
+            val n = sequence.incrementAndGet()
+            val product = admin.multipart(
+                "POST", "/api/panel/market/products",
+                mapOf(
+                    "name" to "Policy $n", "slug" to "e2e-policy-${System.currentTimeMillis().toString(36)}-$n", "price" to "1.00", "status" to "ACTIVE",
+                    "actions" to JsonArray().add(action("a1", "WEBHOOK", JsonObject().put("url", "http://169.254.169.254/latest").put("format", "JSON").put("signing", "NONE"))).encode()
+                )
+            )
+
+            assertEquals(400, product.status, "${product.json}")
+            assertTrue(product.json.toString().contains("INVALID_WEBHOOK_URL"), "the field error names the rule: ${product.json}")
+        }
+    }
+
+    @Test
+    fun `D-05 a timed product reminds, then expires - the entitlement ends, the EXPIRE row removes the permission, one reminder mail`() {
+        val group = "e2e-timed"
+
+        ensureGroup(group)
+
+        val productId = product(
+            "Timed", "8.00", JsonArray().add(action("a1", "PERMISSION", JsonArray().add("group.$group"))),
+            mapOf("billingMode" to "TIMED", "periodUnit" to "DAY", "periodCount" to "30")
+        )
+        val buyer = buyer()
+        val publicId = payAndAwaitCompleted(buyer.client, cart(line(productId)))
+        val orderId = orderRow(publicId).getLong("id")
+        val grant = awaitSettled(publicId, 1).single()
+        val entitlement = db.sql("SELECT * FROM `pano_market_entitlement` WHERE `orderId` = ?", orderId).single()
+        val entitlementId = entitlement.getLong("id")
+
+        assertEquals("CONFIRMED", grant.getString("status"))
+        assertEquals("ACTIVE", entitlement.getString("status"))
+        assertTrue("group.$group" in nodesOf(buyer.userId), "the rank was granted")
+        assertEquals(30 * oneDayMs, entitlement.getLong("expiresAt") - entitlement.getLong("startsAt"), "a period of 30 days")
+        assertEquals(0L, db.count("market_mail_outbox", "`kind` = 'EXPIRY_REMINDER' AND `refId` = ?", entitlementId))
+
+        // 2 days before the end: inside subscriptionReminderDays (3) and the period (42 days) is at least twice the lead
+        db.rewind("market_entitlement", entitlementId, "startsAt", 40 * oneDayMs)
+        db.rewind("market_entitlement", entitlementId, "expiresAt", 28 * oneDayMs)
+
+        val mail = Await.untilValue(90_000, 1000, "the EXPIRY_REMINDER of entitlement $entitlementId") {
+            db.sql("SELECT * FROM `pano_market_mail_outbox` WHERE `kind` = 'EXPIRY_REMINDER' AND `refId` = ?", entitlementId).singleOrNull()
+        }
+
+        assertEquals("ENTITLEMENT", mail.getString("refType"))
+        assertEquals("${buyer.username}@example.com", mail.getString("recipient"))
+        assertTrue(mail.getString("status") in setOf("PENDING", "SENDING", "SENT", "FAILED", "SKIPPED"), "status ${mail.getString("status")}")
+        assertEquals("ACTIVE", db.string("SELECT `status` FROM `pano_market_entitlement` WHERE `id` = ?", entitlementId), "a reminder does not end anything")
+        assertTrue(db.long("SELECT `reminderSentAt` FROM `pano_market_entitlement` WHERE `id` = ?", entitlementId) != null)
+        assertTrue("group.$group" in nodesOf(buyer.userId))
+
+        // past the end: expired, and the automatic inverse of the PERMISSION action runs as an EXPIRE row
+        db.rewind("market_entitlement", entitlementId, "expiresAt", 3 * oneDayMs)
+
+        Await.until(90_000, 1000, "entitlement $entitlementId EXPIRED") { db.string("SELECT `status` FROM `pano_market_entitlement` WHERE `id` = ?", entitlementId) == "EXPIRED" }
+
+        val rows = Await.untilValue(90_000, 1000, "the EXPIRE row of $publicId is settled") {
+            deliveries(publicId).takeIf { r -> r.size == 2 && r.none { it.getString("status") in setOf("PENDING", "SCHEDULED", "SENDING") } }
+        }
+        val expire = rows.single { it.getString("phase") == "EXPIRE" }
+        val ended = db.sql("SELECT * FROM `pano_market_entitlement` WHERE `id` = ?", entitlementId).single()
+
+        assertEquals("PERMISSION", expire.getString("actionType"))
+        assertEquals("a1", expire.getString("actionId"))
+        assertEquals("CONFIRMED", expire.getString("status"), expire.getString("lastErrorCode"))
+        assertEquals("EXPIRED", ended.getString("endReason"))
+        assertTrue(ended.getLong("endedAt") != null)
+        assertFalse("group.$group" in nodesOf(buyer.userId), "the permission was removed: ${nodesOf(buyer.userId).keys}")
+        assertEquals(1L, db.count("market_mail_outbox", "`kind` = 'EXPIRY_REMINDER' AND `refId` = ?", entitlementId), "still exactly one reminder")
+        assertEquals("CONFIRMED", rows.single { it.getString("phase") == "GRANT" }.getString("status"), "the grant row is history, not rewritten")
+    }
+
+    @Test
+    fun `D-06 a refund before a delayed delivery ran cancels the GRANT row and plans no REVOKE`() {
+        val productId = product("Delayed", "4.00", JsonArray().add(action("a1", "CREDIT", 5).put("delay", 3600)))
+        val buyer = buyer()
+        val publicId = payAndAwaitCompleted(buyer.client, cart(line(productId)))
+        val orderId = orderRow(publicId).getLong("id")
+        val scheduled = Await.untilValue(30_000, 500, "the delayed row of $publicId") { deliveries(publicId).singleOrNull() }
+
+        assertEquals("SCHEDULED", scheduled.getString("status"))
+        assertEquals("GRANT", scheduled.getString("phase"))
+        assertTrue(scheduled.getLong("runAfter") > System.currentTimeMillis() + 3_000_000L, "an hour away")
+        assertEquals(0L, db.count("market_credit_tx", "`deliveryId` = ?", scheduled.getLong("id")))
+
+        // a full refund with revoke: the row that never ran is cancelled, nothing has to be undone. `manual` (money returned outside the gateway, 21 section 3.6)
+        // because the fake gateway only refunds a payment whose id it was told in the paid event, and ids of one JVM (`pay_<n>`) repeat across runs on a kept database
+        admin.post(
+            "/api/panel/market/orders/$orderId/refunds", JsonObject().put("revoke", true).put("manual", true).put("reason", "E2E D-06"), mapOf("Idempotency-Key" to idempotencyKey())
+        ).ok()
+        awaitOrder(publicId, "REFUNDED")
+
+        val rows = deliveries(publicId)
+
+        assertEquals(1, rows.size, "no REVOKE row was planned: ${rows.map { it.getString("phase") + "/" + it.getString("status") }}")
+        assertEquals("GRANT", rows.single().getString("phase"))
+        assertEquals("CANCELLED", rows.single().getString("status"))
+        assertEquals(scheduled.getLong("id"), rows.single().getLong("id"))
+        assertEquals(0L, db.count("market_credit_tx", "`userId` = ? AND `type` = 'ACTION'", buyer.userId), "the credit was never granted, and so never taken back")
+        assertEquals(0L, db.long("SELECT COALESCE(SUM(`balance`), 0) FROM `pano_market_credit_account` WHERE `userId` = ?", buyer.userId))
     }
 }
