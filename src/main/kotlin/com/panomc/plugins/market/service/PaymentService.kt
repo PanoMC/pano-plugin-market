@@ -8,6 +8,8 @@ import com.panomc.plugins.market.routes.api.payment.PaymentEventApplier
 import com.panomc.plugins.market.routes.api.payment.resolveAttemptTarget
 import com.panomc.plugins.market.routes.api.payment.withReceived
 import com.panomc.plugins.market.core.order.OrderEvent
+import com.panomc.plugins.market.core.subscription.ModeOffer
+import com.panomc.plugins.market.core.subscription.ModeResolver
 import com.panomc.plugins.market.core.order.OrderTimings
 import com.panomc.plugins.market.core.order.RequiredBuyerFields
 import com.panomc.plugins.market.core.order.TimingConfig
@@ -77,6 +79,8 @@ import com.panomc.plugins.market.spi.payment.AttemptRef
 import com.panomc.plugins.market.spi.payment.AttemptUrls
 import com.panomc.plugins.market.spi.payment.BuyerInfo
 import com.panomc.plugins.market.spi.payment.CancelPaymentRequest
+import com.panomc.plugins.market.spi.payment.CancelSubscriptionRequest
+import com.panomc.plugins.market.spi.payment.CancelSubscriptionResult
 import com.panomc.plugins.market.spi.payment.CheckoutSnapshot
 import com.panomc.plugins.market.spi.payment.ContinuePaymentRequest
 import com.panomc.plugins.market.spi.payment.GatewaySubscriptionState
@@ -278,7 +282,7 @@ class AttemptFacts(
                 gatewayTransactionId = event.gatewayTransactionId, gatewayRefs = event.gatewayRefs,
                 providerData = event.providerData?.let { cipher.encrypt(it.encode()) },
                 gatewayFee = succeeded?.gatewayFee?.amount, net = succeeded?.net?.amount, settlementCurrency = succeeded?.settlementCurrency,
-                settlementAmount = succeeded?.settlementAmount, installments = succeeded?.installments, methodDetail = succeeded?.methodDetail,
+                settlementAmount = succeeded?.settlementAmount, installments = succeeded?.installments, methodDetail = succeeded?.methodDetail?.take(PaymentService.METHOD_DETAIL_MAX),
                 // a gateway failure keeps its code (17 section 5.5: `card_declined` surfaces as `failureCode`); its text is the admin's, the buyer gets market's generic key
                 failureCode = failed?.code?.take(PaymentService.FAILURE_CODE_MAX), failureMessage = failed?.let { PaymentService.PAYMENT_FAILED_TEXT },
                 adminMessage = listOfNotNull(event.note, failed?.message).filter { it.isNotBlank() }.joinToString("; ").takeIf { it.isNotEmpty() }?.take(PaymentService.ADMIN_MESSAGE_MAX),
@@ -564,7 +568,9 @@ class PaymentService(
                         AttemptFacts(
                             f.gatewayTransactionId ?: result.gatewayTransactionId, f.gatewayRefs + result.gatewayRefs, f.providerData, f.gatewayFee, f.net,
                             f.settlementCurrency, f.settlementAmount, f.installments, f.methodDetail, startKind = if (awaited) "COMPLETED" else null,
-                            startedAt = if (awaited) now else null, adminMessage = f.adminMessage
+                            startedAt = if (awaited) now else null, adminMessage = f.adminMessage,
+                            // a synchronous success carries the subscription / stored method of 09 section 4.4 exactly like an event does
+                            subscription = f.subscription, storedMethod = f.storedMethod
                         )
                     }
                     val applied = applyIn(
@@ -794,6 +800,58 @@ class PaymentService(
         }
     }
 
+    /**
+     * 09 section 4.4, last paragraph: the gateway subscription a payment carried but the subscription row does not keep is cancelled now (immediately), with
+     * the view built from the event. Anything but a cancel or a scheduled end is written to the order timeline, because the gateway keeps billing the buyer.
+     */
+    private suspend fun cancelSurplusSubscription(item: CancelSurplusSubscription, sqlClient: SqlClient) {
+        val failure: String? = try {
+            val resolved = resolve(item.providerId, sqlClient)
+
+            if (resolved == null) {
+                "the provider ${item.providerId} is not available"
+            } else {
+                val ctx = contexts.create(resolved.provider, resolved.settings, item.view.testMode)
+                val request = CancelSubscriptionRequest(item.view, atPeriodEnd = false, reason = CancelSurplusSubscription.REASON, storedMethod = null)
+
+                when (val result = withTimeout(cancelTimeoutMs) { resolved.provider.cancelSubscription(ctx, request) }) {
+                    is CancelSubscriptionResult.Cancelled, is CancelSubscriptionResult.Scheduled -> null
+                    is CancelSubscriptionResult.LocalOnly -> "the provider cancelled nothing at the gateway"
+                    is CancelSubscriptionResult.BuyerActionRequired -> "only the buyer can cancel it at the gateway"
+                    is CancelSubscriptionResult.Failed -> result.message
+                }
+            }
+        } catch (e: TimeoutCancellationException) {
+            "the cancel call timed out"
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: ProviderException) {
+            e.adminMessage ?: e.code.name
+        } catch (e: Throwable) {
+            e.javaClass.simpleName
+        }
+
+        if (failure == null) {
+            logger.info("the surplus gateway subscription {} of order {} was cancelled at {}", item.view.gatewaySubscriptionId, item.orderId, item.providerId)
+
+            return
+        }
+
+        logger.warn("the surplus gateway subscription {} of order {} could not be cancelled at {}: {}", item.view.gatewaySubscriptionId, item.orderId, item.providerId, failure)
+
+        val now = clock.now()
+
+        orderEvents.add(
+            MarketOrderEvent(
+                orderId = item.orderId, type = OrderEventType.NOTE, actorType = OrderActorType.SYSTEM, message = CancelSurplusSubscription.FAILED_NOTE,
+                data = JsonObject().put("subscriptionId", item.subscriptionId).put("providerId", item.providerId)
+                    .put("gatewaySubscriptionId", item.view.gatewaySubscriptionId).put("error", failure.take(ADMIN_MESSAGE_MAX)).encode(),
+                createdAt = now, updatedAt = now
+            ),
+            sqlClient
+        )
+    }
+
     private suspend fun runAfter(after: List<AfterCommit>, sqlClient: SqlClient) {
         for (item in after) {
             try {
@@ -805,6 +863,8 @@ class PaymentService(
                     }
 
                     is AfterCommit.PanelAlert -> alerts.reviewOpened(item.orderId, item.reason)
+
+                    is CancelSurplusSubscription -> cancelSurplusSubscription(item, sqlClient)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -961,7 +1021,7 @@ class PaymentService(
 
         // 09 section 4.4: what a success says about the subscription (gateway subscription, stored method) goes onto the pending row now, so the activation
         // of O2 / O4 (also an admin's accept long after) reads it from there; the subscription row is locked by every scope that can reach a Succeeded
-        if (paid != null && order.subscriptionId != null && order.source != OrderSource.RENEWAL) subscriptionHooks.onPaid(conn, order, attempt, facts)
+        if (paid != null && order.subscriptionId != null && order.source != OrderSource.RENEWAL) subscriptionHooks.onPaid(conn, order, attempt, facts)?.let { after += it }
 
         // ---- what the machine names besides the attempt row, in its order
         var orderStatus = order.status
@@ -1125,9 +1185,13 @@ class PaymentService(
         val methodId = request.paymentMethodId?.trim()?.takeIf { it.isNotEmpty() } ?: throw BadRequest()
         val fullCredit = methodId == MethodInput.CREDITS
 
-        // 2. orders priced by a gateway, subscription orders and full-credit orders keep their provider
+        // 2. orders priced by a gateway, full-credit orders and the orders of a running subscription keep their provider. The initial order of a subscription whose
+        // row is still PENDING may switch to another gateway (09 section 2, section 4.3, test 22: the row follows); a credit-paid subscription keeps `credits`
+        val pending = subscriptionHooks.pendingPlan(order, conn)
+        val subscriptionLocked = order.subscriptionId != null && (pending == null || fullCredit || order.paymentMethodId == MethodInput.CREDITS)
+
         if (methodId == MethodInput.FREE) throw PaymentMethodUnavailable(METHOD_NOT_OFFERED)
-        if ((order.pricingMode != PricingMode.MARKET || order.subscriptionId != null) && methodId != order.paymentMethodId) throw PaymentMethodUnavailable(METHOD_LOCKED)
+        if ((order.pricingMode != PricingMode.MARKET || subscriptionLocked) && methodId != order.paymentMethodId) throw PaymentMethodUnavailable(METHOD_LOCKED)
 
         // the method: enabled, configured, registered, in test mode only for SET / PAY holders (PP-7), guests only where it takes them
         val target: Resolved? = if (fullCredit) null else resolve(methodId, conn)?.takeIf { it.configured && it.row?.enabled == true }
@@ -1158,15 +1222,30 @@ class PaymentService(
         val newMethodId = tender.paymentMethodId ?: throw PaymentMethodUnavailable(METHOD_NOT_OFFERED)
         val chosen: Resolved? = if (newMethodId == methodId) target else resolve(newMethodId, conn)
 
-        // eligibility is a pure question of the provider (02 section 5)
+        // eligibility is a pure question of the provider (02 section 5). A subscription goes through the offer table of 09 section 4.2 first: the verdict
+        // (AUTO / MANUAL) decides the mode of the PENDING row, an AUTO offer asks the provider about the plan, `oneOffOnly` downgrades it to MANUAL
+        var recurring: String? = null
+
         if (target != null && tender.gatewayAmount > 0) {
+            val fallback = config().subscriptionManualFallback
+            var offer: ModeOffer? = pending?.let { ModeResolver.offer(target.caps, it.recurring, fallback) }
+
+            if (offer is ModeOffer.Unavailable) throw PaymentMethodUnavailable(offer.reason)
+
+            val plan = if (offer is ModeOffer.Auto) pending?.at(tender.total) else null
             val eligibility = try {
-                target.provider.checkEligibility(contexts.create(target.provider, target.settings, target.testMode), snapshotOf(order, items, tender))
+                target.provider.checkEligibility(contexts.create(target.provider, target.settings, target.testMode), snapshotOf(order, items, tender, plan))
             } catch (e: Exception) {
                 null
             }
 
             if (eligibility == null || !eligibility.eligible) throw PaymentMethodUnavailable(PROVIDER_INELIGIBLE)
+
+            if (offer is ModeOffer.Auto) offer = ModeResolver.applyEligibility(offer, eligibility, fallback)
+
+            if (offer is ModeOffer.Unavailable) throw PaymentMethodUnavailable(offer.reason)
+
+            recurring = offer?.recurring
         }
 
         // 5. billing info and the buyer fields the provider requires
@@ -1201,6 +1280,10 @@ class PaymentService(
                 "gatewayAmount" to tender.gatewayAmount, "paymentMethodId" to newMethodId, "paymentLabel" to label, "billingInfo" to billing?.encode()
             )
         )
+
+        // 09 section 4.3: the PENDING row of a subscription follows the re-tendered order (provider, mode, per-period price), so the plan the new start
+        // carries is the amount the new attempt asks for
+        if (pending != null) subscriptionHooks.onMethodChanged(conn, orders.getById(order.id, conn)!!, newMethodId, recurring)
 
         // 6. the open attempts are cancelled before the new one exists (the gateway is told after the commit, before the new start)
         val cancelled = orderService.closeOpenAttempts(conn, order.id, PaymentStatus.CANCELLED)
@@ -1255,7 +1338,9 @@ class PaymentService(
         return array.mapNotNull { (it as? String)?.trim()?.uppercase() }.toSet()
     }
 
-    private fun snapshotOf(order: MarketOrder, items: List<MarketOrderItem>, tender: com.panomc.plugins.market.core.pricing.TenderBreakdown): CheckoutSnapshot {
+    private fun snapshotOf(
+        order: MarketOrder, items: List<MarketOrderItem>, tender: com.panomc.plugins.market.core.pricing.TenderBreakdown, plan: SubscriptionPlan? = null
+    ): CheckoutSnapshot {
         val base = spiSnapshot(order, items)
         val currency = order.currency
 
@@ -1265,7 +1350,7 @@ class PaymentService(
                 Money(tender.vatTotal, currency), Money(tender.total, currency), Money(tender.creditValue, currency), base.requiresShipping, base.recipientUsername, base.gift, base.pricingMode
             ),
             buyer = buyerOf(order, null, null, order.billingInfo?.let { runCatching { JsonObject(it) }.getOrNull() }, order.locale ?: site().defaultLocale),
-            subscription = null, hasPanoPriceModifiers = order.discountTotal > 0 || tender.creditValue > 0 || tender.paymentFee > 0
+            subscription = plan, hasPanoPriceModifiers = order.discountTotal > 0 || tender.creditValue > 0 || tender.paymentFee > 0
         )
     }
 
@@ -1735,6 +1820,9 @@ class PaymentService(
         /** `market_payment.adminMessage` is `VARCHAR(512)`; `failureCode` is `VARCHAR(64)`. */
         const val ADMIN_MESSAGE_MAX = 512
         const val FAILURE_CODE_MAX = 64
+
+        /** The width of `market_payment.methodDetail`. */
+        const val METHOD_DETAIL_MAX = 128
 
         /** The generic text key a failed start stores for the buyer (the gateway's own text is the admin's, 02 section 6). */
         const val START_FAILED_TEXT = "payment.start-failed"
