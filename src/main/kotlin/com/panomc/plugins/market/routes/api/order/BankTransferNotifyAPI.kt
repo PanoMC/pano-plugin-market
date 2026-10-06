@@ -61,7 +61,9 @@ private fun buildBankTransferService(plugin: MarketPlugin): BankTransferService 
         payments = context.getBean(MarketPaymentDao::class.java), events = context.getBean(MarketOrderEventDao::class.java), paymentService = paymentService(plugin),
         cashback = { currentConfig(plugin).cashbackPercent > 0 },
         requireNotice = { requireBuyerNotice(methods.getByMethodId(BankTransferProvider.ID, databaseManager().getSqlClient())?.settings) },
-        readClient = { databaseManager().getSqlClient() }
+        readClient = { databaseManager().getSqlClient() },
+        // MK-172 (the open seam of MK-094): the PAY holders get a panel notification when the buyer says the transfer was made
+        buyerNoticeAlert = { orderId -> com.panomc.plugins.market.notification.marketAlerts(plugin).alert(orderId, com.panomc.plugins.market.notification.AlertCodes.BANK_TRANSFER_NOTIFIED, JsonObject()) }
     )
 }
 

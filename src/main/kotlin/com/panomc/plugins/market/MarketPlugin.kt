@@ -150,6 +150,9 @@ class MarketPlugin : PanoPlugin() {
         }
     }
 
+    /** The counters of the scheduler jobs for `GET /health` (MK-172); empty while no scheduler is armed. */
+    internal fun jobStats(): List<MarketScheduler.JobStats> = jobScheduler?.stats().orEmpty()
+
     private fun stopJobScheduler() {
         jobScheduler?.stop(vertx)
     }

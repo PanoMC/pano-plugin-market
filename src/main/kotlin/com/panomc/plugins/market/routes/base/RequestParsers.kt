@@ -51,6 +51,13 @@ fun parseId(raw: String?, name: String = "id"): Long {
     return id
 }
 
+/** The `exchangeRate` of `PUT /orders/:id/exchange-rate` (money-critical): a finite number above zero; `null`, `0`, a negative, `NaN` and infinity are refused. */
+fun parseExchangeRate(value: Double?): Double {
+    if (value == null || !value.isFinite() || value <= 0.0) throw RequestValueException("exchangeRate", "MUST_BE_POSITIVE")
+
+    return value
+}
+
 /** An id from a JSON body: an integral number >= 1 (`1.5` is refused, a string is refused). */
 fun parseBodyId(raw: Any?, name: String): Long {
     val id = when (raw) {

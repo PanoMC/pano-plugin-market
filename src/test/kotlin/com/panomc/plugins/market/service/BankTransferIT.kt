@@ -319,6 +319,18 @@ class BankTransferIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a notice that changed something raises the buyer notice alert once, a repeated one does not`(): Unit = runBlocking {
+        val (order, _) = bankOrder()
+        val raised = mutableListOf<Long>()
+        val withAlert = BankTransferService(ph.db, ph.locks, w.clock, w.orders, w.payments, w.orderEvents, rig.payments, { false }, { false }, { w.pool }) { raised += it }
+
+        assertTrue(withAlert.notify(order.id, "Ali", "EFT", null))
+        assertFalse(withAlert.notify(order.id, "Ali", "EFT", null))
+
+        assertEquals(listOf(order.id), raised)
+    }
+
+    @Test
     fun `a repeated notice is a no-op that says nothing new, text is cleaned and cut at 255 characters`(): Unit = runBlocking {
         val (order, _) = bankOrder()
         val long = "x".repeat(300)

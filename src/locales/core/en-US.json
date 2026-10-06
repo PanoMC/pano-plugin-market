@@ -347,5 +347,10 @@
       "body": "This is a test e-mail from {storeName} on {websiteName}. If you can read it, the e-mail settings of your website are working.",
       "footer": "You are receiving this e-mail because an administrator of {websiteName} sent a test."
     }
+  },
+  "notifications": {
+    "MARKET_ORDER_REVIEW": "Order #{orderId} is waiting for your review.",
+    "MARKET_ORDER_ALERT": "{code, select, BANK_TRANSFER_NOTIFIED {Order #{orderId}: the buyer says the bank transfer was made. Check your account, then approve the payment.} other {Order #{orderId} needs attention ({code}).}}",
+    "MARKET_DELIVERY_WAITING": "{kind, select, UNDO_FAILED {Taking back the purchase of order #{orderId} failed on {serverName}. The buyer may hold both the money and the goods.} UNDO_WAITING {Taking back the purchase of order #{orderId} is still waiting for {serverName}.} other {{count} deliveries are waiting for {serverName}. Install or update the Pano Market plugin there.}}"
   }
 }

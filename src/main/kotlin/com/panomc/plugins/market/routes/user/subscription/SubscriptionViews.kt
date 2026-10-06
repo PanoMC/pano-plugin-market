@@ -8,6 +8,7 @@ import com.panomc.plugins.market.db.model.MarketSubscription
 import com.panomc.plugins.market.db.model.RemoteCancelState
 import com.panomc.plugins.market.db.model.SubscriptionMode
 import com.panomc.plugins.market.db.model.SubscriptionStatus
+import com.panomc.plugins.market.permission.FieldGating
 import com.panomc.plugins.market.spi.payment.PaymentCapabilities
 import com.panomc.plugins.market.util.MoneyUtil
 import com.panomc.plugins.market.util.Paging
@@ -85,8 +86,11 @@ class SubscriptionViews(
 
     // ================================================================================================== panel
 
-    /** `GET /subscriptions` (`P:OV`): filtered, newest first. `PENDING` rows only when `status` asks for them. */
-    suspend fun panelList(filter: SubscriptionFilter, window: Paging.Window, client: SqlClient): SubscriptionPage {
+    /**
+     * `GET /subscriptions` (`P:OV`): filtered, newest first. `PENDING` rows only when `status` asks for them. [searchEmail] is the PII tier of 11 section 14.5
+     * (`OM` or `PAY`): below it the search never matches the e-mail, so the list is no oracle for a buyer's address.
+     */
+    suspend fun panelList(filter: SubscriptionFilter, window: Paging.Window, client: SqlClient, searchEmail: Boolean = false): SubscriptionPage {
         val where = ArrayList<String>()
         val params = ArrayList<Any?>()
 
@@ -102,8 +106,13 @@ class SubscriptionViews(
         filter.search?.trim()?.takeIf { it.isNotEmpty() }?.let { text ->
             val like = "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
-            where += "(`playerUsername` LIKE ? OR `email` LIKE ? OR `productName` LIKE ? OR `gatewaySubscriptionId` LIKE ?)"
-            repeat(4) { params += like }
+            if (searchEmail) {
+                where += "(`playerUsername` LIKE ? OR `email` LIKE ? OR `productName` LIKE ? OR `gatewaySubscriptionId` LIKE ?)"
+                repeat(4) { params += like }
+            } else {
+                where += "(`playerUsername` LIKE ? OR `productName` LIKE ? OR `gatewaySubscriptionId` LIKE ?)"
+                repeat(3) { params += like }
+            }
         }
 
         val condition = where.joinToString(" AND ")
@@ -124,13 +133,14 @@ class SubscriptionViews(
         .put("cancelAtPeriodEnd", row.cancelAtPeriodEnd).put("failCount", row.failCount).put("endReason", row.endReason).put("testMode", row.testMode)
         .put("createdAt", row.createdAt)
 
-    /** `GET /subscriptions/:id` (`P:OV`): every column but `storedMethod` and `providerData`, the renewals, the orders and what the panel may do; `null` for an unknown id. */
-    suspend fun panelDetail(id: Long, client: SqlClient): JsonObject? {
+    /** `GET /subscriptions/:id` (`P:OV`): every column but `storedMethod` and `providerData`, the renewals, the orders and what the panel may do; `null` for an unknown id.
+     * The e-mail is masked (`PiiMask.email`) unless [pii] is set, the PII tier of 11 section 14.5 (`OM` or `PAY`). */
+    suspend fun panelDetail(id: Long, client: SqlClient, pii: Boolean = false): JsonObject? {
         val row = subscriptions.getById(id, client) ?: return null
         val now = clock.now()
         val caps = if (row.mode == SubscriptionMode.GATEWAY && row.status.isOpen()) capabilities(row.providerId, client) else null
         val subscription = panelRow(row)
-            .put("email", row.email).put("productId", row.productId).put("variantId", row.variantId).put("initialOrderId", row.initialOrderId)
+            .put("email", FieldGating.email(row.email, pii)).put("productId", row.productId).put("variantId", row.variantId).put("initialOrderId", row.initialOrderId)
             .put("currentPeriodStart", row.currentPeriodStart).put("nextQueryAt", row.nextQueryAt).put("lastQueriedAt", row.lastQueriedAt)
             .put("remoteCancelState", row.remoteCancelState.name).put("remoteCancelAttempts", row.remoteCancelAttempts).put("cancelRequestedAt", row.cancelRequestedAt)
             .put("cancelledAt", row.cancelledAt).put("endedAt", row.endedAt).put("gatewaySubscriptionId", row.gatewaySubscriptionId)

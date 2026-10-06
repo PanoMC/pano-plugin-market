@@ -119,7 +119,9 @@ private fun buildRefundService(plugin: MarketPlugin): RefundService {
         entitlements = context.getBean(MarketEntitlementDao::class.java), creditTxs = context.getBean(MarketCreditTxDao::class.java), credits = creditService(plugin),
         deliveryService = deliveryService(plugin), entitlementService = entitlementService(plugin),
         gateway = PaymentServiceRefundGateway(paymentService(plugin)) { databaseManager().getSqlClient() },
-        servers = context.getBean(MarketServerStateDao::class.java), effects = effects
+        servers = context.getBean(MarketServerStateDao::class.java), effects = effects,
+        // MK-172: OVER_REFUND / REVOKE_TIMEOUT / REVOKE_FAILED become panel notifications (only with the host registry)
+        alerts = com.panomc.plugins.market.notification.marketAlerts(plugin)
     )
 }
 

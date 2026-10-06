@@ -76,7 +76,7 @@ class MarketScheduler(
     }
 
     /** What [stats] says about a job. [lastError] is the class and message of the last failure, kept until a run succeeds. */
-    class JobStats(val name: String, val runs: Long, val failures: Long, val lastHandled: Int, val lastError: String?, val lastStartedAt: Long?)
+    class JobStats(val name: String, val runs: Long, val failures: Long, val lastHandled: Int, val lastError: String?, val lastStartedAt: Long?, val everyMs: Long = 0)
 
     private class State(val job: Job) {
         val running = AtomicBoolean(false)
@@ -167,7 +167,7 @@ class MarketScheduler(
 
     /** The counters of every job, in registration order. */
     fun stats(): List<JobStats> = states.map {
-        JobStats(it.job.name, it.runs.get(), it.failures.get(), it.lastHandled.get(), it.lastError.get(), it.lastStartedAt.get().takeIf { at -> at >= 0 })
+        JobStats(it.job.name, it.runs.get(), it.failures.get(), it.lastHandled.get(), it.lastError.get(), it.lastStartedAt.get().takeIf { at -> at >= 0 }, it.job.everyMs)
     }
 
     /** `true` while the periodic timer is armed. */
@@ -233,6 +233,9 @@ class MarketScheduler(
         /** `SubscriptionJob` (09 section 11: every 60 s). */
         const val SUBSCRIPTION_MS = 60_000L
 
+        /** `DeliveryAlertSweep` (08 section 8.5: every 5 minutes). */
+        const val DELIVERY_ALERT_MS = 5 * 60_000L
+
         /** `HousekeepingJob` ticks every minute and runs its own tasks on their own cadence (MK-153). */
         const val HOUSEKEEPING_MS = 60_000L
 
@@ -278,9 +281,13 @@ internal object MarketJobs {
             shipmentTracking(ShipmentTrackingJob(SystemClock, context.getBean(MarketShipmentDao::class.java), shippingService(plugin), sqlClient)),
             subscription(subscriptionJob(plugin)),
             mailOutbox(MailWiring.job(plugin)),
-            housekeepingTask(housekeepingJob(plugin))
+            housekeepingTask(housekeepingJob(plugin)),
+            deliveryAlerts(com.panomc.plugins.market.notification.deliveryAlertSweep(plugin))
         )
     }
+
+    /** The panel notifications for deliveries that wait for a server and for undo rows that fail or wait (MK-172, 08 section 8.5). */
+    fun deliveryAlerts(job: com.panomc.plugins.market.notification.DeliveryAlertSweep): MarketScheduler.Job = MarketScheduler.Job("delivery-alerts", MarketScheduler.DELIVERY_ALERT_MS) { job.runOnce() }
 
     /** `SubscriptionJob` on the beans of the plugin (MK-122): one instance, shared with the admin retry of MK-123 (`subscriptionJob(plugin)` also wires the cancel use cases of step E). */
     private fun subscriptionJob(plugin: MarketPlugin): SubscriptionJob = com.panomc.plugins.market.routes.panel.subscription.subscriptionJob(plugin)

@@ -347,5 +347,10 @@
       "body": "Это тестовое письмо магазина {storeName} на сайте {websiteName}. Если вы его прочитали, настройки почты вашего сайта работают.",
       "footer": "Вы получили это письмо, потому что администратор {websiteName} отправил тест."
     }
+  },
+  "notifications": {
+    "MARKET_ORDER_REVIEW": "Заказ #{orderId} ждёт вашей проверки.",
+    "MARKET_ORDER_ALERT": "{code, select, BANK_TRANSFER_NOTIFIED {Заказ #{orderId}: покупатель сообщил, что банковский перевод выполнен. Проверьте счёт и подтвердите платёж.} other {Заказ #{orderId} требует внимания ({code}).}}",
+    "MARKET_DELIVERY_WAITING": "{kind, select, UNDO_FAILED {Отзыв покупки по заказу #{orderId} не удался на сервере {serverName}. У покупателя могут остаться и деньги, и товар.} UNDO_WAITING {Отзыв покупки по заказу #{orderId} всё ещё ждёт сервер {serverName}.} other {Доставок в ожидании сервера {serverName}: {count}. Установите или обновите там плагин Pano Market.}}"
   }
 }
