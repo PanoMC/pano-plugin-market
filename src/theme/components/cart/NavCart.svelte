@@ -18,13 +18,17 @@
 {/if}
 
 <script>
-  import { onMount } from 'svelte';
+  import { getContext, onMount } from 'svelte';
   import { _ } from '../../../i18n.js';
   import { call } from '../../utils/api.js';
   import { cart } from '../../stores/cart.js';
-  import { user } from '../../stores/session.js';
+  import { bindSession, hostSession, user } from '../../stores/session.js';
   import { COUNT_KEY, STORAGE_KEY } from '../../lib/cartModel.js';
   import { countCacheValue, navVisible, resolveNavCount } from './cartView.js';
+
+  // A slot component outside the market pages: nothing else has bound the session there (14 §4.3), and without it a signed-in
+  // visitor counts as a guest and the badge never shows their account cart (found by the browser scenario TH-15).
+  bindSession(hostSession(getContext));
 
   // Rendered in the browser only (after mount): the count and the path are unknown during SSR.
   let mounted = $state(false);

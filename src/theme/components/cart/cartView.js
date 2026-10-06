@@ -45,8 +45,14 @@ export function viewState(s) {
   return 'QUOTE_ROWS';
 }
 
+/** `errors` of a row plus the notice for a line the theme lowered to the available stock (`reduced` = lineKeys of the cart state). */
+const withReduced = (errors, key, reduced) =>
+  Array.isArray(reduced) && reduced.includes(key) && !errors.includes('QUANTITY_REDUCED')
+    ? [...errors, 'QUANTITY_REDUCED']
+    : errors;
+
 /** Rows drawn from the local lines' display meta (no quote yet, or a stale one). */
-export function metaRows(lines) {
+export function metaRows(lines, reduced = []) {
   return lines.map((line) => ({
     key: lineKey(line),
     slug: line.meta?.slug || '',
@@ -61,12 +67,12 @@ export function metaRows(lines) {
     lineTotal: (Number(line.meta?.price) || 0) * line.quantity,
     fieldValues: line.fieldValues || {},
     targetServerId: line.targetServerId ?? null,
-    errors: [],
+    errors: withReduced([], lineKey(line), reduced),
   }));
 }
 
 /** Rows of a quote; bundle children are part of their bundle line and not shown on their own. */
-export function quoteRows(quote) {
+export function quoteRows(quote, reduced = []) {
   return (quote?.lines || [])
     .filter((q) => q.kind !== 'BUNDLE_CHILD')
     .map((q) => ({
@@ -83,7 +89,7 @@ export function quoteRows(quote) {
       lineTotal: q.lineTotal,
       fieldValues: q.fieldValues || {},
       targetServerId: q.targetServerId ?? null,
-      errors: Array.isArray(q.errors) ? q.errors : [],
+      errors: withReduced(Array.isArray(q.errors) ? q.errors : [], lineKey(q), reduced),
     }));
 }
 

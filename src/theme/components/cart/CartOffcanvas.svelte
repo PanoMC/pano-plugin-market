@@ -90,11 +90,12 @@
 <ReplaceCartModal />
 
 <script>
-  import { onMount } from 'svelte';
+  import { getContext, onMount } from 'svelte';
   import { base } from '@panomc/sdk/svelte';
   import { NoContent } from '@panomc/sdk/components/theme';
   import { _ } from '../../../i18n.js';
   import { cart } from '../../stores/cart.js';
+  import { bindSession, hostSession } from '../../stores/session.js';
   import { storeSettings } from '../../stores/storeSettings.js';
   import { formatMoney } from '../../utils/format.js';
   import ConfirmModal from '../common/ConfirmModal.svelte';
@@ -103,11 +104,19 @@
   import ReplaceCartModal from './ReplaceCartModal.svelte';
   import { metaRows, quoteRows, subtotalOf, viewState } from './cartView.js';
 
+  // a slot component (theme:top hook): on the pages that are not the store nothing else binds the session, and the cart would open
+  // as the guest's browser cart for a signed-in visitor (14 §4.3)
+  bindSession(hostSession(getContext));
+
   let element = $state();
   let confirmClear = $state();
 
   const view = $derived(viewState($cart));
-  const rows = $derived(view === 'QUOTE_ROWS' ? quoteRows($cart.quote) : metaRows($cart.lines));
+  const rows = $derived(
+    view === 'QUOTE_ROWS'
+      ? quoteRows($cart.quote, $cart.reduced)
+      : metaRows($cart.lines, $cart.reduced),
+  );
   const currency = $derived(
     view === 'QUOTE_ROWS' ? $cart.quote.currency : $storeSettings?.currency,
   );
