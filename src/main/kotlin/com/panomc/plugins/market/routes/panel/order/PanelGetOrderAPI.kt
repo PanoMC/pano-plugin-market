@@ -1,21 +1,15 @@
 package com.panomc.plugins.market.routes.panel.order
 
 import com.panomc.platform.annotation.Endpoint
-import com.panomc.platform.api.config.PluginConfigManager
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.error.NotFound
 import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
-import com.panomc.plugins.market.config.MarketConfig
-import com.panomc.plugins.market.db.dao.MarketOrderDao
-import com.panomc.plugins.market.db.dao.MarketOrderItemDao
-import com.panomc.plugins.market.db.model.MarketOrder
-import com.panomc.plugins.market.db.model.MarketOrderItem
 import com.panomc.plugins.market.permission.FieldGating
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
-import com.panomc.plugins.market.util.MoneyUtil
+import com.panomc.plugins.market.service.OrderViewer
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
 import io.vertx.ext.web.validation.builder.Parameters.param
@@ -23,22 +17,18 @@ import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
+/**
+ * `GET /api/panel/market/orders/:id` (`P:OV`, 04 section 7, 13 section 6): the order (every column but the tokens, the personal fields only with `OM` or `PAY`), `items[]`,
+ * `payments[]`, `refunds[]`, `disputes[]`, `deliveries[]`, `shipments[]`, `events[]`, `invoices[]`, `mails[]`, `subscription`, `revokePending`, `revokeFailed` and `allowed{}`
+ * (what this caller can do with this order now), in the row shapes pinned in 04 section 7. Built by [com.panomc.plugins.market.service.OrderQueryService.detail].
+ */
 @Endpoint
-class PanelGetOrderAPI(
-    private val plugin: MarketPlugin,
-    private val marketOrderDao: MarketOrderDao,
-    private val marketOrderItemDao: MarketOrderItemDao
-) : MarketPanelApi() {
+class PanelGetOrderAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
     override val paths = listOf(Path("/api/panel/market/orders/:id", RouteType.GET))
 
     override val nodes = setOf(MarketNode.ORDERS_VIEW)
 
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
-
-    @Suppress("UNCHECKED_CAST")
-    private val configManager by lazy {
-        plugin.pluginBeanContext.getBean(PluginConfigManager::class.java) as PluginConfigManager<MarketConfig>
-    }
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository)
@@ -47,57 +37,9 @@ class PanelGetOrderAPI(
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
         val id = parseId(context.pathParam("id"))
-        val pii = FieldGating.piiTier(context)
+        val viewer = OrderViewer.of(manage = has(context, MarketNode.ORDERS_MANAGE), pay = has(context, MarketNode.PAYMENTS))
+        val detail = orderQueryService(plugin).detail(id, viewer, databaseManager.getSqlClient()) ?: throw NotFound()
 
-        val sqlClient = databaseManager.getSqlClient()
-        val order = marketOrderDao.getById(id, sqlClient) ?: throw NotFound()
-
-        val items = marketOrderItemDao.getByOrderIds(listOf(order.id), sqlClient)
-
-        val config = configManager.config
-        val statsCurrency = config.statsCurrency
-        val effectiveRate = effectiveRate(order, config)
-        val statsValue = Math.round(order.totalPrice / 100.0 * effectiveRate * 100.0) / 100.0
-
-        return Successful(
-            mapOf(
-                "order" to mapOf(
-                    "id" to order.id,
-                    "userId" to order.userId,
-                    "playerUsername" to order.playerUsername,
-                    "totalPrice" to MoneyUtil.toDecimal(order.totalPrice),
-                    "currency" to order.currency,
-                    "paymentMethodId" to order.paymentMethodId,
-                    "paymentLabel" to order.paymentLabel,
-                    "status" to order.status.name,
-                    "createdAt" to order.createdAt,
-                    "updatedAt" to order.updatedAt,
-                    "exchangeRate" to order.exchangeRate,
-                    "statsValue" to statsValue,
-                    "statsCurrency" to statsCurrency.name,
-                    "statsCurrencySymbol" to statsCurrency.symbol
-                ) + FieldGating.orderPii(order, pii),
-                "items" to items.map { itemToJson(it) }
-            )
-        )
+        return Successful(detail.map)
     }
-
-    // Frozen per-order rate when present, else the currency-based fallback:
-    // statsCurrency -> 1.0, salesCurrency -> the current view rate, otherwise 1.0.
-    private fun effectiveRate(order: MarketOrder, config: MarketConfig): Double =
-        order.exchangeRate ?: when (order.currency) {
-            config.statsCurrency.name -> 1.0
-            config.currency.name -> config.exchangeRate
-            else -> 1.0
-        }
-
-    private fun itemToJson(item: MarketOrderItem): Map<String, Any?> = mapOf(
-        "id" to item.id,
-        "productId" to item.productId,
-        "productName" to item.productName,
-        "quantity" to item.quantity,
-        "unitPrice" to MoneyUtil.toDecimal(item.unitPrice),
-        "createdAt" to item.createdAt,
-        "updatedAt" to item.updatedAt
-    )
 }
