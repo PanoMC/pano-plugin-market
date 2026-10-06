@@ -23,9 +23,13 @@ abstract class MarketOrderDao : MarketDao<MarketOrder>(MarketOrder::class.java) 
 
     abstract suspend fun getByBuyerAndIdempotencyKey(buyerKey: String, idempotencyKey: String, sqlClient: SqlClient): MarketOrder?
 
-    abstract suspend fun getAllPaged(page: Long, search: String?, status: OrderStatus?, sqlClient: SqlClient): List<MarketOrder>
+    /**
+     * One page of the panel order list. [searchEmail] adds the order e-mail to what [search] matches; it is true only for a caller with the
+     * PII tier (`OM` or `PAY`, 11 section 14.5), so the search is no oracle for the e-mail of an order the caller sees masked.
+     */
+    abstract suspend fun getAllPaged(page: Long, search: String?, status: OrderStatus?, sqlClient: SqlClient, pageSize: Int = 10, searchEmail: Boolean = false): List<MarketOrder>
 
-    abstract suspend fun count(search: String?, status: OrderStatus?, sqlClient: SqlClient): Long
+    abstract suspend fun count(search: String?, status: OrderStatus?, sqlClient: SqlClient, searchEmail: Boolean = false): Long
 
     abstract suspend fun getById(id: Long, sqlClient: SqlClient): MarketOrder?
 

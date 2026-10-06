@@ -12,7 +12,9 @@ import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.error.ExchangeRateFetchFailed
 import com.panomc.plugins.market.log.UpdatedMarketOrderExchangeRateLog
-import com.panomc.plugins.market.permission.ManageMarketPermission
+import com.panomc.plugins.market.permission.MarketNode
+import com.panomc.plugins.market.routes.base.MarketPanelApi
+import com.panomc.plugins.market.routes.base.parseId
 import com.panomc.plugins.market.service.ExchangeRateService
 import com.panomc.plugins.market.util.CurrencyType
 import io.vertx.ext.web.RoutingContext
@@ -20,7 +22,7 @@ import io.vertx.ext.web.validation.ValidationHandler
 import io.vertx.ext.web.validation.builder.Parameters.param
 import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
-import io.vertx.json.schema.common.dsl.Schemas.numberSchema
+import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
 /**
  * Admin endpoint: re-fetches an order's frozen sales -> stats rate, preferring the historical rate on
@@ -31,8 +33,10 @@ import io.vertx.json.schema.common.dsl.Schemas.numberSchema
 class PanelRefreshOrderExchangeRateAPI(
     private val plugin: MarketPlugin,
     private val marketOrderDao: MarketOrderDao
-) : PanelApi() {
+) : MarketPanelApi() {
     override val paths = listOf(Path("/api/panel/market/orders/:id/exchange-rate/refresh", RouteType.POST))
+
+    override val nodes = setOf(MarketNode.PAYMENTS)
 
     private val authProvider by lazy { plugin.applicationContext.getBean(AuthProvider::class.java) }
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
@@ -48,13 +52,11 @@ class PanelRefreshOrderExchangeRateAPI(
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository)
-            .pathParameter(param("id", numberSchema()))
+            .pathParameter(param("id", stringSchema()))
             .build()
 
-    override suspend fun handle(context: RoutingContext): Result {
-        authProvider.requirePermission(ManageMarketPermission(), context)
-
-        val id = context.pathParam("id").toLong()
+    override suspend fun handleAuthorized(context: RoutingContext): Result {
+        val id = parseId(context.pathParam("id"))
 
         val sqlClient = databaseManager.getSqlClient()
         val order = marketOrderDao.getById(id, sqlClient) ?: throw NotFound()

@@ -13,7 +13,7 @@ import com.panomc.plugins.market.core.time.SystemClock
 import com.panomc.plugins.market.db.dao.MarketCurrencyRateDao
 import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.log.RefreshedMarketCurrencyRatesLog
-import com.panomc.plugins.market.log.UpdatedMarketCurrencyRatesLog
+import com.panomc.plugins.market.log.UpdatedMarketCurrenciesLog
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
@@ -80,7 +80,7 @@ class PanelCurrencyRatesAPI(private val plugin: MarketPlugin) : MarketPanelApi()
         val username = databaseManager.userDao.getUsernameFromUserId(userId, sqlClient)!!
 
         databaseManager.panelActivityLogDao.add(
-            UpdatedMarketCurrencyRatesLog(userId, username, plugin.pluginId, entries.mapNotNull { it.currency?.trim()?.uppercase() }.joinToString(", ")),
+            UpdatedMarketCurrenciesLog(userId, username, plugin.pluginId, entries.mapNotNull { it.currency?.trim()?.uppercase() }.joinToString(", ")),
             sqlClient
         )
 

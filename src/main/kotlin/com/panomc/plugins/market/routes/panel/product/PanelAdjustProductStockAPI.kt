@@ -9,7 +9,7 @@ import com.panomc.platform.model.RouteType
 import com.panomc.platform.model.Successful
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.catalog.StockRequest
-import com.panomc.plugins.market.log.UpdatedMarketProductLog
+import com.panomc.plugins.market.log.UpdatedMarketProductStockLog
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import io.vertx.core.json.JsonObject
@@ -56,10 +56,7 @@ class PanelAdjustProductStockAPI(private val plugin: MarketPlugin) : MarketPanel
         val username = databaseManager.userDao.getUsernameFromUserId(userId, sqlClient)!!
 
         databaseManager.panelActivityLogDao.add(
-            UpdatedMarketProductLog(
-                userId, username, plugin.pluginId, before.name,
-                JsonObject().put("stock", result.stock).put("mode", request.mode.name).apply { request.variantId?.let { put("variantId", it) } }
-            ),
+            UpdatedMarketProductStockLog(userId, username, plugin.pluginId, before.name, request.mode.name, request.value, request.variantId),
             sqlClient
         )
 

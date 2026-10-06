@@ -14,7 +14,7 @@ abstract class MarketComparisonDao : MarketDao<MarketComparison>(MarketCompariso
 
     abstract suspend fun getById(id: Long, sqlClient: SqlClient): MarketComparison?
 
-    abstract suspend fun getAllPaged(page: Long, status: MarketStatus?, search: String?, sqlClient: SqlClient): List<MarketComparison>
+    abstract suspend fun getAllPaged(page: Long, status: MarketStatus?, search: String?, sqlClient: SqlClient, pageSize: Int = 10): List<MarketComparison>
 
     // Public storefront: all comparisons of a given status, unpaged, ordered priority DESC then id DESC.
     abstract suspend fun getAllByStatus(status: MarketStatus, sqlClient: SqlClient): List<MarketComparison>

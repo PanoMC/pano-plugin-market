@@ -9,7 +9,8 @@ import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.error.ExchangeRateFetchFailed
 import com.panomc.plugins.market.log.RefreshedExchangeRateLog
-import com.panomc.plugins.market.permission.ManageMarketPermission
+import com.panomc.plugins.market.permission.MarketNode
+import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.service.ExchangeRateService
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
@@ -25,8 +26,10 @@ import io.vertx.json.schema.SchemaRepository
 @Endpoint
 class PanelRefreshExchangeRateAPI(
     private val plugin: MarketPlugin
-) : PanelApi() {
+) : MarketPanelApi() {
     override val paths = listOf(Path("/api/panel/market/settings/exchange-rate/refresh", RouteType.POST))
+
+    override val nodes = setOf(MarketNode.SETTINGS)
 
     private val authProvider by lazy {
         plugin.applicationContext.getBean(AuthProvider::class.java)
@@ -48,9 +51,7 @@ class PanelRefreshExchangeRateAPI(
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository).build()
 
-    override suspend fun handle(context: RoutingContext): Result {
-        authProvider.requirePermission(ManageMarketPermission(), context)
-
+    override suspend fun handleAuthorized(context: RoutingContext): Result {
         val config = configManager.config
 
         val rate = exchangeRateService.fetchRate(config.currency, config.statsCurrency)

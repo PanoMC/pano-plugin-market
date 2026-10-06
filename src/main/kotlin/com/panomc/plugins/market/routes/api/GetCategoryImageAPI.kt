@@ -2,12 +2,12 @@ package com.panomc.plugins.market.routes.api
 
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
-import com.panomc.platform.model.Api
 import com.panomc.platform.model.Path
 import com.panomc.platform.model.Result
 import com.panomc.platform.model.RouteType
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.db.dao.MarketCategoryDao
+import com.panomc.plugins.market.routes.base.MarketApi
 import com.panomc.plugins.market.util.ImageUtil
 import com.panomc.plugins.market.util.MarketStatus
 import io.vertx.ext.web.RoutingContext
@@ -21,7 +21,7 @@ import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 import java.io.File
 
 /**
- * Public category image. The URL fileName is only ever a DB lookup key ([getByImageFileName]) — the
+ * Public category image (04 section 3, `PUB`). The URL fileName is only ever a DB lookup key ([getByImageFileName]) — the
  * file actually served is the stored path from the row, so no arbitrary client path can be reached.
  * INACTIVE categories' images 404 (indistinguishable from missing).
  */
@@ -29,7 +29,7 @@ import java.io.File
 class GetCategoryImageAPI(
     private val plugin: MarketPlugin,
     private val marketCategoryDao: MarketCategoryDao
-) : Api() {
+) : MarketApi() {
     override val paths = listOf(Path("/api/market/categories/image/:fileName", RouteType.GET))
 
     private val databaseManager: DatabaseManager by lazy {
@@ -46,7 +46,7 @@ class GetCategoryImageAPI(
             .queryParameter(optionalParam("thumbnail", booleanSchema()))
             .build()
 
-    override suspend fun handle(context: RoutingContext): Result? {
+    override suspend fun handleMarket(context: RoutingContext): Result? {
         val parameters = getParameters(context)
         val fileName = parameters.pathParameter("fileName").string
 

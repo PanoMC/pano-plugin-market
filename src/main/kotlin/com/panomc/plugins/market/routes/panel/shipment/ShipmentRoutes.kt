@@ -69,9 +69,9 @@ abstract class ShipmentRoute(protected val plugin: MarketPlugin, override val no
     protected suspend fun canSeeAddress(context: RoutingContext): Boolean = has(context, MarketNode.ORDERS_MANAGE, MarketNode.PAYMENTS)
 }
 
-/** `GET /api/panel/market/orders/:id/shipping` (`P:OV`): lines, suggested parcels, providers, the frozen quote; the address only with `OM` or `PAY`. */
+/** `GET /api/panel/market/orders/:id/shipping` (`P:OM` or `P:PAY`, 11 section 14.3: the view holds the address): lines, suggested parcels, providers, the frozen quote. */
 @Endpoint
-class PanelGetOrderShippingAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_VIEW)) {
+class PanelGetOrderShippingAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_MANAGE, MarketNode.PAYMENTS)) {
     override val paths = listOf(Path("/api/panel/market/orders/:id/shipping", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = noBody(schemaRepository)
