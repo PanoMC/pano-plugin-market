@@ -218,11 +218,13 @@ class FieldGatingIT : MarketDaoITBase() {
         val root = "src/main/kotlin/com/panomc/plugins/market/routes/panel/order/"
         val list = File(root + "PanelGetOrdersAPI.kt").readText()
         val detail = File(root + "PanelGetOrderAPI.kt").readText()
+        val query = File("src/main/kotlin/com/panomc/plugins/market/service/OrderQueryService.kt").readText()
 
-        assertTrue(list.contains("FieldGating.piiTier(context)") && list.contains("FieldGating.email(order.email, pii)"), "list rows mask the e-mail")
-        assertTrue(list.contains("getAllPaged(page, search, status, sqlClient, window.pageSize, pii)"), "the e-mail predicate only with the tier")
-        assertTrue(list.contains("marketOrderDao.count(search, status, sqlClient, pii)"), "the count uses the same predicate as the rows")
-        assertTrue(detail.contains("FieldGating.piiTier(context)") && detail.contains("FieldGating.orderPii(order, pii)"), "the detail goes through the projection")
+        assertTrue(list.contains("FieldGating.piiTier(context)") && list.contains("orderQueryService(plugin).list(filter, window, pii"), "the list asks for the tier and passes it on")
+        assertTrue(query.contains("FieldGating.email(r.getString(\"email\"), pii)"), "list rows mask the e-mail")
+        assertTrue(query.contains("if (pii) {") && query.contains("o.`email` LIKE ?"), "the e-mail predicate only with the tier")
+        assertTrue(detail.contains("has(context, MarketNode.ORDERS_MANAGE)") && detail.contains("has(context, MarketNode.PAYMENTS)"), "the detail derives the tier from OM and PAY")
+        assertTrue(query.contains("FieldGating.orderPii(order, pii)"), "the detail goes through the projection")
     }
 
     @Test

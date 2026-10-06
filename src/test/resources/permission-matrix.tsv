@@ -78,7 +78,7 @@ POST	/subscriptions/:id/cancel	P:PAY	LIVE
 POST	/subscriptions/:id/retry	P:PAY	LIVE		
 GET	/orders	P:OV	LIVE		
 GET	/orders/:id	P:OV	LIVE		
-GET	/orders/export	P:OV	PENDING	MK-170	
+GET	/orders/export	P:OV	LIVE		
 GET	/deliveries	P:OV	LIVE		
 GET	/mails	P:OV	LIVE		
 GET	/payments/:paymentId/events	P:OV	PENDING	MK-171	
@@ -97,7 +97,7 @@ PUT	/orders/:id/shipping-address	P:OM	LIVE
 POST	/deliveries/:id/retry	P:OM	LIVE		
 POST	/deliveries/:id/cancel	P:OM	LIVE		
 POST	/orders/:id/mails/resend	P:OM	LIVE		
-PUT	/orders/:id/note	P:OM	PENDING	MK-170	
+PUT	/orders/:id/note	P:OM	LIVE		
 POST	/orders/:id/invoice/regenerate	P:OM	LIVE		
 POST	/payments/:paymentId/query	P:OM	PENDING	MK-171	
 GET	/blocks	P:OM	LIVE		
