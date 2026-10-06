@@ -118,10 +118,7 @@ class ActivityLogCatalogTest {
     private val extras = setOf("REFRESHED_MARKET_CURRENCY_RATES", "RAN_MARKET_SHIPPING_ACTION", "SORTED_MARKET_SHIPPING_ZONES", "SORTED_MARKET_SHIPPING_METHODS")
 
     /** Types whose writing endpoint is a later slice; each is exempt from the "written by main code" rule until it lands (the class and the key exist now). */
-    private val writtenLater = mapOf(
-        "GRANTED_MARKET_CREDITS_INGAME" to "MC-04", "REVOKED_MARKET_CREDITS_INGAME" to "MC-04", "SET_MARKET_CREDITS_INGAME" to "MC-04",
-        "GRANTED_MARKET_PRODUCT_INGAME" to "MC-04", "UPDATED_MARKET_SERVER_SETTINGS" to "MC-04", "IMPORTED_MARKET_CATALOG" to "GW (provider catalogue import)"
-    )
+    private val writtenLater = mapOf("IMPORTED_MARKET_CATALOG" to "GW (provider catalogue import)")
 
     private val sourceRoot = File("src/main/kotlin/com/panomc/plugins/market")
 
