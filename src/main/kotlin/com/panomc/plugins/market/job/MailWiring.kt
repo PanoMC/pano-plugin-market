@@ -5,13 +5,22 @@ import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.mail.MailManager
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.time.SystemClock
+import com.panomc.plugins.market.db.dao.MarketEntitlementDao
 import com.panomc.plugins.market.db.dao.MarketInvoiceDao
 import com.panomc.plugins.market.db.dao.MarketMailOutboxDao
 import com.panomc.plugins.market.db.dao.MarketOrderDao
 import com.panomc.plugins.market.db.dao.MarketOrderEventDao
 import com.panomc.plugins.market.db.dao.MarketOrderItemDao
+import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.dao.MarketRefundDao
 import com.panomc.plugins.market.db.dao.MarketRefundItemDao
+import com.panomc.plugins.market.db.dao.MarketShipmentDao
+import com.panomc.plugins.market.db.dao.MarketShipmentItemDao
+import com.panomc.plugins.market.db.dao.MarketSubscriptionDao
+import com.panomc.plugins.market.db.tx.MarketDb
+import com.panomc.plugins.market.routes.api.checkout.PlatformUserDirectory
+import com.panomc.plugins.market.routes.panel.mail.MailAdmin
+import io.vertx.sqlclient.Pool
 import com.panomc.plugins.market.mail.MailComposer
 import com.panomc.plugins.market.mail.MailContentBuilder
 import com.panomc.plugins.market.mail.MailGateway
@@ -35,29 +44,63 @@ import io.vertx.sqlclient.SqlClient
  * `SKIPPED (HOST_TOO_OLD)` before it ever calls it.
  */
 internal object MailWiring {
-    fun job(plugin: MarketPlugin): MailOutboxJob {
+    /** The pieces the job and the panel routes share (one per plugin instance). */
+    internal class Parts(val job: MailOutboxJob, val admin: MailAdmin)
+
+    private object Holder
+
+    @Volatile
+    private var cached: Pair<MarketPlugin, Parts>? = null
+
+    fun job(plugin: MarketPlugin): MailOutboxJob = parts(plugin).job
+
+    fun admin(plugin: MarketPlugin): MailAdmin = parts(plugin).admin
+
+    private fun parts(plugin: MarketPlugin): Parts {
+        cached?.takeIf { it.first === plugin }?.let { return it.second }
+
+        return synchronized(Holder) { cached?.takeIf { it.first === plugin }?.second ?: build(plugin).also { cached = plugin to it } }
+    }
+
+    private fun build(plugin: MarketPlugin): Parts {
         val context = plugin.beans
         val databaseManager = { context.getBean(DatabaseManager::class.java) }
         val sqlClient: suspend () -> SqlClient = { databaseManager().getSqlClient() }
         val config = { currentConfig(plugin) }
         val platformConfig = { context.getBean(ConfigManager::class.java).config }
-        val service = MailOutboxService(config, SystemClock, context.getBean(MarketMailOutboxDao::class.java), context.getBean(MarketOrderEventDao::class.java))
+        val mailOutbox = context.getBean(MarketMailOutboxDao::class.java)
+        val service = MailOutboxService(config, SystemClock, mailOutbox, context.getBean(MarketOrderEventDao::class.java))
         val (i18n, format) = marketI18n(plugin)
         val site = { MailSite(platformConfig().websiteName, platformConfig().websiteUrl.trim().trimEnd('/')) }
+        val builder = MailContentBuilder(i18n, format, config, site)
+        val orders = context.getBean(MarketOrderDao::class.java)
+        val orderItems = context.getBean(MarketOrderItemDao::class.java)
+        val refunds = context.getBean(MarketRefundDao::class.java)
+        val shipments = context.getBean(MarketShipmentDao::class.java)
+        val subscriptions = context.getBean(MarketSubscriptionDao::class.java)
+        val entitlements = context.getBean(MarketEntitlementDao::class.java)
         val composer = MailComposer(
-            MailContentBuilder(i18n, format, config, site), context.getBean(MarketOrderDao::class.java), context.getBean(MarketOrderItemDao::class.java),
-            context.getBean(MarketRefundDao::class.java), context.getBean(MarketRefundItemDao::class.java), context.getBean(MarketInvoiceDao::class.java),
-            invoiceWiring(plugin).mailAttachments, config
+            builder, orders, orderItems, refunds, context.getBean(MarketRefundItemDao::class.java), context.getBean(MarketInvoiceDao::class.java),
+            invoiceWiring(plugin).mailAttachments, config, subscriptions, entitlements, shipments, context.getBean(MarketShipmentItemDao::class.java),
+            context.getBean(MarketProductDao::class.java), { SystemClock.now() }
         )
         val platform by lazy { PlatformMailGateway(context.getBean(MailManager::class.java), context.getBean(ConfigManager::class.java), sqlClient) }
         val gateway = object : MailGateway {
             override suspend fun send(message: OutboundMail): MailSendResult =
                 if (MarketRuntime.capabilities.mail) platform.send(message) else UnavailableMailGateway.send(message)
         }
-
-        return MailOutboxJob(
-            config = config, clock = SystemClock, service = service, gateway = gateway, composition = composer, sqlClient = sqlClient,
-            mailEnabled = { runCatching { platformConfig().email.enabled }.getOrDefault(false) }
+        val mailEnabled = { runCatching { platformConfig().email.enabled }.getOrDefault(false) }
+        val job = MailOutboxJob(
+            config = config, clock = SystemClock, service = service, gateway = gateway, composition = composer, sqlClient = sqlClient, mailEnabled = mailEnabled
         )
+        val admin = MailAdmin(
+            db = MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock), config = config, clock = SystemClock, orders = orders, orderItems = orderItems,
+            mailOutbox = mailOutbox, outbox = service, job = job, refunds = refunds, shipments = shipments, subscriptions = subscriptions, entitlements = entitlements,
+            users = PlatformUserDirectory(databaseManager), builder = builder, gateway = gateway, mailEnabled = mailEnabled,
+            mailOptionsAvailable = { MarketRuntime.capabilities.mail },
+            defaultLocale = { runCatching { platformConfig().locale }.getOrNull()?.takeIf { it.isNotBlank() } ?: MailOutboxService.DEFAULT_LOCALE }
+        )
+
+        return Parts(job, admin)
     }
 }

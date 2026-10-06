@@ -109,7 +109,10 @@
     "UPDATED_MARKET_CURRENCY_RATES": "<b>{username}</b> сохранил(а) курсы дополнительных валют ({currencies}).",
     "REFRESHED_MARKET_CURRENCY_RATES": "<b>{username}</b> обновил(а) курсы дополнительных валют ({currencies}).",
     "REGENERATED_MARKET_INVOICE": "<b>{username}</b> пересоздал документы заказа <b>#{orderId}</b> ({numbers}).",
-    "UPDATED_MARKET_INVOICE_SEQUENCE": "<b>{username}</b> установил следующий номер серии счетов <b>{series}</b>: <b>{nextNumber}</b>."
+    "UPDATED_MARKET_INVOICE_SEQUENCE": "<b>{username}</b> установил следующий номер серии счетов <b>{series}</b>: <b>{nextNumber}</b>.",
+    "RESENT_MARKET_ORDER_MAIL": "<b>{username}</b> повторно отправил письмо «{kind}» по заказу магазина #{orderId}.",
+    "RETRIED_MARKET_MAIL": "<b>{username}</b> повторил отправку письма магазина #{mailId} ({kind}).",
+    "SENT_MARKET_TEST_MAIL": "<b>{username}</b> отправил тестовое письмо магазина."
   },
   "invoice": {
     "title": "Счёт",
@@ -191,7 +194,19 @@
       "refund-to-method": "Возвращено на способ оплаты",
       "refund-to-credits": "Возвращено кредитами",
       "refund-reason": "Причина",
-      "hello": "Здравствуйте, {username}!"
+      "hello": "Здравствуйте, {username}!",
+      "product": "Товар",
+      "valid-until": "Действует до",
+      "renews-on": "Продление",
+      "amount": "Сумма",
+      "carrier": "Перевозчик",
+      "tracking-number": "Номер отслеживания",
+      "estimated-delivery": "Ожидаемая доставка",
+      "delivered-on": "Дата доставки",
+      "shipment-items": "Товары в посылке",
+      "manage-subscription": "Управление подпиской",
+      "payment-method-stored": "Способ оплаты",
+      "ship-to": "Адрес доставки"
     },
     "order-received": {
       "subject": "Мы получили ваш заказ {orderNumber}",
@@ -242,6 +257,80 @@
       "credit-note-attached": "Кредит-нота приложена к этому письму в формате PDF.",
       "button": "Открыть заказ",
       "button-claim": "Получить возврат"
+    },
+    "expiry-reminder": {
+      "subject": "{productName} истекает {date}",
+      "preheader": "Продлите, чтобы сохранить доступ.",
+      "heading": "Срок вашей покупки скоро истекает",
+      "body": "Ваш {productName} из магазина {storeName} действует до {date}. После этого доступ будет потерян.",
+      "body-2": "Продлите до окончания срока, чтобы ничего не прервалось.",
+      "button": "Продлить"
+    },
+    "subscription-reminder": {
+      "subject": "{productName} продлевается {date}",
+      "preheader": "Ваша подписка скоро продлится.",
+      "heading": "Ваша подписка скоро продлится",
+      "body": "Ваша подписка на {productName} в магазине {storeName} продлится {date}. Тогда мы спишем {amount}.",
+      "body-method": "Списание будет с: {method}.",
+      "body-manual": "Ваша подписка на {productName} в магазине {storeName} заканчивается {date}. Чтобы сохранить её, оплатите {amount} до этой даты.",
+      "button": "Оплатить"
+    },
+    "subscription-payment-failed": {
+      "subject": "Не удалось оплатить {productName}",
+      "preheader": "Не удалось списать оплату.",
+      "heading": "Платёж не прошёл",
+      "body": "Не удалось списать {amount} за подписку на {productName} в магазине {storeName}. Доступ сохраняется до {graceEndsAt}.",
+      "body-no-grace": "Не удалось списать {amount} за подписку на {productName} в магазине {storeName}.",
+      "body-2": "Обновите способ оплаты, чтобы сохранить подписку.",
+      "button": "Обновить оплату"
+    },
+    "subscription-cancelled": {
+      "subject": "{productName} не будет продлён",
+      "preheader": "Ваша подписка отменена.",
+      "heading": "Подписка отменена",
+      "body": "Ваша подписка на {productName} в магазине {storeName} не будет продлена. Доступ сохраняется до {accessUntil}.",
+      "body-no-date": "Ваша подписка на {productName} в магазине {storeName} не будет продлена. Доступ сохраняется до конца текущего периода."
+    },
+    "subscription-ended": {
+      "subject": "{productName} завершён",
+      "preheader": "Ваша подписка завершена.",
+      "heading": "Подписка завершена",
+      "body": "Ваша подписка на {productName} в магазине {storeName} завершена.",
+      "button": "Перейти в магазин",
+      "reason": {
+        "BUYER_CANCEL": "Она завершена, потому что вы её отменили.",
+        "ADMIN_CANCEL": "Она отменена командой магазина.",
+        "PAYMENT_FAILED": "Она завершена, потому что не удалось получить оплату.",
+        "GATEWAY_ENDED": "Она завершена платёжным провайдером.",
+        "COMPLETED": "Достигнут последний расчётный период.",
+        "REFUND": "Она завершена, потому что заказ возвращён.",
+        "CHARGEBACK": "Она завершена, потому что платёж оспорен.",
+        "PROVIDER_UNAVAILABLE": "Она завершена, потому что способ оплаты больше недоступен.",
+        "OTHER": "Если вы этого не ожидали, свяжитесь с магазином."
+      }
+    },
+    "shipment-shipped": {
+      "subject": "Ваш заказ {orderNumber} в пути",
+      "preheader": "Посылка передана перевозчику.",
+      "heading": "Ваш заказ в пути",
+      "body": "Отличные новости! Ваш заказ {orderNumber} в магазине {storeName} отправлен.",
+      "partial-note": "В этой посылке часть вашего заказа. Остальное придёт отдельной отправкой.",
+      "button": "Открыть заказ",
+      "button-track": "Отследить посылку"
+    },
+    "shipment-delivered": {
+      "subject": "Ваш заказ {orderNumber} доставлен",
+      "preheader": "Посылка прибыла.",
+      "heading": "Посылка доставлена",
+      "body": "Посылка по вашему заказу {orderNumber} в магазине {storeName} доставлена.",
+      "button": "Открыть заказ"
+    },
+    "test": {
+      "subject": "Тестовое письмо от {storeName}",
+      "preheader": "Ваш магазин может отправлять письма.",
+      "heading": "Всё работает",
+      "body": "Это тестовое письмо магазина {storeName} на сайте {websiteName}. Если вы его прочитали, настройки почты вашего сайта работают.",
+      "footer": "Вы получили это письмо, потому что администратор {websiteName} отправил тест."
     }
   }
 }

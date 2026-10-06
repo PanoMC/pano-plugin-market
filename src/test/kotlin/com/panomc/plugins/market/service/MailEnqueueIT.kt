@@ -928,10 +928,10 @@ class MailEnqueueIT : MarketDaoITBase() {
         assertTrue(quiet.sent.none { it.content.footerNote!!.contains("attached") })
     }
 
-    // ================================================================================== a kind without a composer fails closed
+    // ================================================================================== a row without its reference is never sent (MK-146 owns the other kinds)
 
     @Test
-    fun `a kind the composer does not know yet ends FAILED RENDER_ERROR and is never sent`(): Unit = runBlocking {
+    fun `a shipment mail whose parcel does not exist ends SKIPPED OBSOLETE and is never sent`(): Unit = runBlocking {
         fx.paymentMethod("fake")
 
         val order = buy()
@@ -944,8 +944,8 @@ class MailEnqueueIT : MarketDaoITBase() {
 
         val row = rows(order.id).single()
 
-        assertEquals(MailStatus.FAILED, row.status)
-        assertTrue(row.lastError!!.startsWith("RENDER_ERROR"), row.lastError)
+        assertEquals(MailStatus.SKIPPED, row.status)
+        assertEquals("OBSOLETE", row.lastError)
         assertEquals(0, gateway.sent.size)
     }
 }

@@ -61,6 +61,12 @@ class MailOutboxJob(
         return handled
     }
 
+    /**
+     * Works one row now (the panel retry, 04 section 7 `POST /mails/:id/retry`): the same claim and the same path as a tick; `false` when the row
+     * was not claimable (the tick got it first, or it is no longer `PENDING`).
+     */
+    suspend fun runNow(seen: MarketMailOutbox): Boolean = process(seen, sqlClient())
+
     private suspend fun process(seen: MarketMailOutbox, client: SqlClient): Boolean {
         val now = clock.now()
         val wasStale = seen.status == MailStatus.SENDING

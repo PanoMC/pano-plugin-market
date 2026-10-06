@@ -1,0 +1,37 @@
+=== subject
+Gold Rank истекает 27.06.2026
+=== preheader
+Продлите, чтобы сохранить доступ.
+=== text
+Срок вашей покупки скоро истекает
+
+Здравствуйте, Steve!
+
+Ваш Gold Rank из магазина Blocky Store действует до 27.06.2026. После этого доступ будет потерян.
+
+Продлите до окончания срока, чтобы ничего не прервалось.
+
+Товар: Gold Rank
+Действует до: 27.06.2026 23:31
+
+Продлить: https://shop.example/store/gold-rank
+
+Вы получили это письмо из-за заказа в магазине Blocky Store.
+=== html
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html dir="ltr" lang="en"><head><meta content="text/html; charset=UTF-8" http-equiv="Content-Type"/><meta name="x-apple-disable-message-reformatting"/></head><body style="margin-top:0;margin-bottom:0;margin-right:0;margin-left:0"><div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0">Продлите, чтобы сохранить доступ.</div><table border="0" width="100%" cellPadding="0" cellSpacing="0" role="presentation" align="center"><tbody><tr><td style="margin-right:auto;margin-left:auto;padding-right:0.5rem;padding-left:0.5rem;font-family:ui-sans-serif,system-ui,sans-serif,&quot;Apple Color Emoji&quot;,&quot;Segoe UI Emoji&quot;,&quot;Segoe UI Symbol&quot;,&quot;Noto Color Emoji&quot;"><table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="max-width:600px;margin-right:auto;margin-left:auto;margin-bottom:40px;margin-top:40px;padding:40px"><tbody><tr style="width:100%"><td>
+<table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-bottom:32px;text-align:center"><tbody><tr><td><img alt="Blocky Network" height="80" src="cid:logo" style="display:block;outline:none;border:none;text-decoration:none;margin-right:auto;margin-left:auto;margin-bottom:0rem;margin-top:0rem;border-radius:0.5rem" width="80"/></td></tr></tbody></table>
+<table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-bottom:8px;text-align:center"><tbody><tr><td><h1 style="margin:0;padding:0;text-align:center;font-size:28px;font-weight:700;color:rgb(16,24,40)">Blocky Network</h1></td></tr></tbody></table>
+
+<table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-bottom:16px;margin-top:24px;text-align:center"><tbody><tr><td><h1 style="margin:0;padding:0;text-align:center;font-size:24px;font-weight:600;color:rgb(30,41,57)">Срок вашей покупки скоро истекает</h1></td></tr></tbody></table>
+<p style="font-size:16px;line-height:24px;color:rgb(54,65,83);margin-top:16px;margin-bottom:16px">Здравствуйте, Steve!</p><p style="font-size:16px;line-height:24px;color:rgb(54,65,83);margin-top:16px;margin-bottom:16px">Ваш Gold Rank из магазина Blocky Store действует до 27.06.2026. После этого доступ будет потерян.</p><p style="font-size:16px;line-height:24px;color:rgb(54,65,83);margin-top:16px;margin-bottom:16px">Продлите до окончания срока, чтобы ничего не прервалось.</p>
+
+
+
+<table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px"><tbody><tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Товар</td><td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">Gold Rank</td></tr><tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Действует до</td><td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">27.06.2026 23:31</td></tr></tbody></table>
+
+
+<table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-bottom:16px;margin-top:24px;text-align:center"><tbody><tr><td><a href="https://shop.example/store/gold-rank" style="line-height:100%;text-decoration:none;display:inline-block;max-width:100%;border-radius:0.5rem;background-color:rgb(85,197,90);padding-right:32px;padding-left:32px;padding-bottom:16px;padding-top:16px;text-align:center;font-size:16px;font-weight:600;color:rgb(255,255,255);text-decoration-line:none" target="_blank">Продлить</a></td></tr></tbody></table>
+
+<table align="center" width="100%" border="0" cellPadding="0" cellSpacing="0" role="presentation" style="margin-top:40px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235);padding-top:24px"><tbody><tr><td><p style="font-size:12px;line-height:18px;text-align:left;color:rgb(106,114,130);margin-top:16px;margin-bottom:8px">Вы получили это письмо из-за заказа в магазине Blocky Store.</p><p style="font-size:12px;line-height:18px;text-align:left;color:rgb(106,114,130);margin-top:8px;margin-bottom:16px">Blocky Network &middot; https://shop.example</p></td></tr></tbody></table>
+</td></tr></tbody></table></td></tr></tbody></table></body></html>
+
