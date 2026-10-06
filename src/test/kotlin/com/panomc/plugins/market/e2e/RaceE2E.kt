@@ -155,7 +155,8 @@ class RaceE2E : E2eTestBase() {
 
         try {
             E2eRace.rounds("R-15") { _ ->
-                val product = catalog.fresh("VIP", "price" to "30.00", "creditPrice" to "30.00")
+                // a product without actions: the VIP's credit action would grant 2.50 credits at an unpredictable moment (the delivery job's tick) and move the balance
+                val product = catalog.fresh("LAST", "price" to "30.00", "stock" to "")
                 val buyer = buyer()
 
                 grant(buyer.userId, 10).ok()
@@ -444,7 +445,8 @@ class RaceE2E : E2eTestBase() {
         val outcomes = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
         E2eRace.rounds("R-22") { round ->
-            val product = catalog.fresh("VIP", "price" to "80.00", "creditPrice" to "80.00")
+            // a product without actions: the VIP's credit action would grant 2.50 credits at an unpredictable moment (the delivery job's tick) and move the balances
+            val product = catalog.fresh("LAST", "price" to "80.00", "creditPrice" to "80.00", "stock" to "")
             val owners = (0 until BATCH).map { buyer() }
             val revokers = owners.indices.map { adminClone("r22-revoke-$it") }
 
