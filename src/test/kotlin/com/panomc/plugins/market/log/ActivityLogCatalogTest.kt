@@ -119,7 +119,6 @@ class ActivityLogCatalogTest {
 
     /** Types whose writing endpoint is a later slice; each is exempt from the "written by main code" rule until it lands (the class and the key exist now). */
     private val writtenLater = mapOf(
-        "REPLAYED_MARKET_PAYMENT_EVENT" to "MK-171",
         "GRANTED_MARKET_CREDITS_INGAME" to "MC-04", "REVOKED_MARKET_CREDITS_INGAME" to "MC-04", "SET_MARKET_CREDITS_INGAME" to "MC-04",
         "GRANTED_MARKET_PRODUCT_INGAME" to "MC-04", "UPDATED_MARKET_SERVER_SETTINGS" to "MC-04", "IMPORTED_MARKET_CATALOG" to "GW (provider catalogue import)"
     )

@@ -68,7 +68,7 @@ POST	/orders/:id/review	P:PAY	LIVE
 POST	/orders/:id/bank-transfer	P:PAY	LIVE		
 POST	/orders/:id/disputes	P:PAY	LIVE		
 PUT	/disputes/:disputeId	P:PAY	LIVE		
-POST	/payment-events/:eventId/replay	P:PAY	PENDING	MK-171	
+POST	/payment-events/:eventId/replay	P:PAY	LIVE		
 GET	/credits/accounts	P:PAY	LIVE		
 GET	/credits/accounts/:userId	P:PAY	LIVE		
 GET	/credits/transactions	P:PAY	LIVE		
@@ -81,13 +81,13 @@ GET	/orders/:id	P:OV	LIVE
 GET	/orders/export	P:OV	LIVE		
 GET	/deliveries	P:OV	LIVE		
 GET	/mails	P:OV	LIVE		
-GET	/payments/:paymentId/events	P:OV	PENDING	MK-171	
-GET	/payment-events	P:OV	PENDING	MK-171	
+GET	/payments/:paymentId/events	P:OV	LIVE		
+GET	/payment-events	P:OV	LIVE		
 GET	/subscriptions	P:OV	LIVE		
 GET	/subscriptions/:id	P:OV	LIVE		
 GET	/shipments	P:OV	LIVE		
 GET	/shipments/:id	P:OV	LIVE		
-GET	/players/:username/summary	P:OV,PAY	PENDING	MK-171	
+GET	/players/:username/summary	P:OV,PAY	LIVE		
 GET	/orders/:id/invoice	P:OM,PAY	LIVE		
 GET	/orders/:id/shipping	P:OM,PAY	LIVE		
 POST	/orders/:id/deliveries/rerun	P:OM	LIVE		PAY is also required when a selected row already took effect (checked in the route)
@@ -99,7 +99,7 @@ POST	/deliveries/:id/cancel	P:OM	LIVE
 POST	/orders/:id/mails/resend	P:OM	LIVE		
 PUT	/orders/:id/note	P:OM	LIVE		
 POST	/orders/:id/invoice/regenerate	P:OM	LIVE		
-POST	/payments/:paymentId/query	P:OM	PENDING	MK-171	
+POST	/payments/:paymentId/query	P:OM	LIVE		
 GET	/blocks	P:OM	LIVE		
 POST	/blocks	P:OM	LIVE		
 DELETE	/blocks/:id	P:OM	LIVE		

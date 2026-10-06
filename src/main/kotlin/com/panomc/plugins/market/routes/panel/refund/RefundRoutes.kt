@@ -48,6 +48,7 @@ import com.panomc.plugins.market.routes.panel.invoice.invoiceService
 import com.panomc.plugins.market.routes.panel.order.actingUserId
 import com.panomc.plugins.market.routes.panel.order.logOrderDecision
 import com.panomc.plugins.market.routes.panel.order.panelOrder
+import com.panomc.plugins.market.routes.api.store.goalProgress
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.plugins.market.service.MailOutboxService
@@ -108,7 +109,8 @@ private fun buildRefundService(plugin: MarketPlugin): RefundService {
         mailOutbox = MailOutboxService(config, SystemClock, context.getBean(MarketMailOutboxDao::class.java), context.getBean(MarketOrderEventDao::class.java)),
         users = PlatformUserDirectory(databaseManager), webhooks = webhookService(plugin),
         subscriptionEnding = { conn, order, refund -> subscriptionService(plugin).onOrderRefunded(conn, order, refund) },
-        olderPeriod = { client, order -> subscriptionService(plugin).isOlderPeriod(client, order) }
+        olderPeriod = { client, order -> subscriptionService(plugin).isOlderPeriod(client, order) },
+        goals = goalProgress(plugin)
     )
 
     return RefundService(
