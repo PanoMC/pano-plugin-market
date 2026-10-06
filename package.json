@@ -20,7 +20,8 @@
     "check:i18n": "bun scripts/check-i18n.js",
     "check:static": "bun scripts/check-static.js",
     "check:ui": "bun run check:build && bun run check:i18n && bun run check:static && bun run lint:prettier",
-    "lint:prettier": "prettier -c rollup.config.js package.json scripts src/main.js src/main.test.js src/i18n.js src/panel/register.js src/theme/register.js --config .prettierrc",
+    "lint:prettier": "prettier -c rollup.config.js package.json scripts src/main.js src/main.test.js src/i18n.js src/panel/register.js src/theme/register.js e2e-browser --config .prettierrc",
+    "e2e:browser": "bun e2e-browser/run.mjs",
     "lint:prettier:all": "prettier -c . --config .prettierrc",
     "format:prettier": "prettier --write . --config .prettierrc"
   },
@@ -29,6 +30,7 @@
     "@rollup/plugin-node-resolve": "^16.0.0",
     "@rollup/plugin-terser": "^0.4.4",
     "cross-env": "^10.1.0",
+    "playwright": "1.61.1",
     "prettier": "^3.4.2",
     "prettier-plugin-svelte": "^3.3.3",
     "rollup": "^4.32.1",
