@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.e2e
 
+import com.panomc.plugins.market.core.abuse.PiiMask
 import com.panomc.plugins.market.e2e.support.E2eClient
 import com.panomc.plugins.market.e2e.support.E2eResponse
 import com.panomc.plugins.market.e2e.support.E2eSession
@@ -943,7 +944,8 @@ class ApiContractE2E : E2eTestBase() {
 
     private val forbiddenDetailKeys = Regex("(secret|token|password|email|mail|address|passwd|apikey|api_key)", RegexOption.IGNORE_CASE)
 
-    private fun assertOneLog(expected: String, from: Long, what: String): JsonObject {
+    /** [masked] lists the already masked values a log may legitimately carry (an e-mail mask keeps its `@`); they are cut out before the e-mail check. */
+    private fun assertOneLog(expected: String, from: Long, what: String, masked: List<String> = emptyList()): JsonObject {
         val rows = db.sql("SELECT `type`, `userId`, `pluginId`, `details` FROM `pano_panel_activity_log` WHERE `id` > ? ORDER BY `id`", from)
 
         assertEquals(listOf(expected), rows.map { it.getString("type") }, "$what: exactly one activity log of the type listed in 04 section 10")
@@ -959,21 +961,20 @@ class ApiContractE2E : E2eTestBase() {
         assertTrue(keys.none { forbiddenDetailKeys.containsMatchIn(it) }, "$what: a detail key that looks like a secret, token, address or e-mail: $keys")
 
         val flat = details.encode()
+        val unmasked = masked.fold(flat) { text, mask -> text.replace(mask, "") }
 
-        assertFalse(flat.contains("@"), "$what: an e-mail in the details: $flat")
+        assertFalse(unmasked.contains("@"), "$what: an e-mail in the details: $flat")
         assertFalse(flat.contains(gateway.secret), "$what: the provider secret in the details")
         assertFalse(Regex("[0-9a-f]{32,}").containsMatchIn(flat), "$what: a long hex token in the details: $flat")
 
         return details
     }
 
-    private fun logged(expected: String, what: String, call: () -> E2eResponse): E2eResponse {
+    private fun logged(expected: String, what: String, masked: List<String> = emptyList(), call: () -> E2eResponse): Pair<E2eResponse, JsonObject> {
         val from = lastLogId()
         val answer = call().ok()
 
-        assertOneLog(expected, from, what)
-
-        return answer
+        return answer to assertOneLog(expected, from, what, masked)
     }
 
     @Test
@@ -983,7 +984,10 @@ class ApiContractE2E : E2eTestBase() {
         val key = { mapOf("Idempotency-Key" to idempotencyKey()) }
         var performed = 0
 
-        fun step(expected: String, what: String, call: () -> E2eResponse): E2eResponse = logged(expected, what, call).also { performed++ }
+        fun stepLog(expected: String, what: String, masked: List<String> = emptyList(), call: () -> E2eResponse): Pair<E2eResponse, JsonObject> =
+            logged(expected, what, masked, call).also { performed++ }
+
+        fun step(expected: String, what: String, call: () -> E2eResponse): E2eResponse = stepLog(expected, what, emptyList(), call).first
 
         // catalogue
         val categoryId = step("CREATED_MARKET_CATEGORY", "create category") { admin.multipart("POST", "$p/categories", mapOf("name" to "api9 $n", "status" to "ACTIVE")) }.obj().getLong("id")
@@ -1044,6 +1048,56 @@ class ApiContractE2E : E2eTestBase() {
 
         step("CANCELLED_MARKET_ORDER", "order status CANCELLED") { admin.put("$p/orders/${orderRow(cancelPublicId).getLong("id")}/status", JsonObject().put("status", "CANCELLED")) }
 
+        // money: a paid order is refunded (RF scenarios); the log names the order and the amount, never the provider's references
+        val refundPaid = publicIdOf(checkout(orderBuyer.client, cart(line(catalog.fresh("VIP").id))).ok())
+        val paymentReference = payViaFake(refundPaid)
+
+        awaitOrder(refundPaid, "COMPLETED")
+
+        val refundOrderId = orderRow(refundPaid).getLong("id")
+        val refundDetails = stepLog("REFUNDED_MARKET_ORDER", "refund") {
+            admin.post("$p/orders/$refundOrderId/refunds", JsonObject().put("amount", 4.00), key())
+        }.second
+        val gatewayRefundId = db.string("SELECT `gatewayRefundId` FROM `pano_market_refund` WHERE `orderId` = ? ORDER BY `id` DESC LIMIT 1", refundOrderId)
+
+        assertEquals(refundOrderId, refundDetails.getLong("orderId"), "the refund log names the order: $refundDetails")
+        assertEquals(4.0, refundDetails.getDouble("amount"), 0.0001, "the refund log names the amount: $refundDetails")
+        assertFalse(refundDetails.encode().contains(paymentReference), "the refund log carries no payment reference: $refundDetails")
+        gatewayRefundId?.let { assertFalse(refundDetails.encode().contains(it), "the refund log carries no gateway refund id: $refundDetails") }
+
+        // money: a manual order for a named player (P-19)
+        val manualProduct = catalog.fresh("VIP").id
+        val manualDetails = stepLog("CREATED_MARKET_ORDER", "manual order") {
+            admin.post("$p/orders", JsonObject().put("playerUsername", orderBuyer.username).put("items", JsonArray().add(line(manualProduct))), key())
+        }.second
+
+        assertNotNull(manualDetails.getLong("orderId"), "the manual order log names the order: $manualDetails")
+        assertEquals(orderBuyer.username, manualDetails.getString("playerUsername"), "the manual order log names the player: $manualDetails")
+
+        // provider settings: the save carries the secret, the log must not; the reveal and a failed reveal are logged by method id only
+        val methodLogs = listOf(
+            stepLog("UPDATED_MARKET_PAYMENT_METHOD", "payment method settings save") {
+                admin.post("$p/payment-methods/fake", JsonObject().put("settings", JsonObject().put("gatewayUrl", gateway.baseUrl).put("secret", gateway.secret)))
+            }.second,
+            stepLog("REVEALED_MARKET_PAYMENT_SECRET", "secret reveal") {
+                admin.post("$p/payment-methods/fake/reveal", JsonObject().put("password", session.env.adminPassword()))
+            }.second
+        )
+
+        methodLogs.forEach { assertEquals("fake", it.getString("name"), "the method log names the provider id only: $it") }
+
+        val wrongFrom = lastLogId()
+        val wrong = admin.post("$p/payment-methods/fake/reveal", JsonObject().put("password", "api9-wrong-$n"))
+
+        assertFalse(wrong.status in 200..299, "a wrong password never reveals: ${wrong.status}")
+        assertEquals("fake", assertOneLog("FAILED_MARKET_SECRET_REVEAL", wrongFrom, "failed secret reveal").getString("name"))
+        performed++
+        // the reveal throttle counts the wrong attempt; put it back so AbuseE2E (which counts five wrong attempts itself) is not affected
+        db.sql("SELECT `id`, `lockedUntil` FROM `pano_market_throttle` WHERE `scope` = 'REVEAL' AND `subject` = ?", "u:$adminId").forEach { row ->
+            db.rewind("market_throttle", row.getLong("id"), "windowStart", 3_600_000)
+            if (row.getValue("lockedUntil") != null) db.rewind("market_throttle", row.getLong("id"), "lockedUntil", 3_600_000)
+        }
+
         // settings and providers
         val storeName = admin.get("$p/settings").ok().obj().getString("storeName")
 
@@ -1062,6 +1116,23 @@ class ApiContractE2E : E2eTestBase() {
 
         step("DELETED_MARKET_BLOCK", "delete block") { admin.delete("$p/blocks/$block") }
 
+        // an e-mail block: the log carries only the mask (`j***@e***.com`), never the address nor its local part
+        val local = "api9mail${n.lowercase()}"
+        val address = "$local@api9-example.test"
+        val mask = PiiMask.email(address)!!
+        val mailBlock = stepLog("CREATED_MARKET_BLOCK", "create e-mail block", masked = listOf(mask)) {
+            admin.post("$p/blocks", JsonObject().put("type", "EMAIL").put("value", address).put("reason", "api9"))
+        }
+        val mailDetails = JsonObject(db.sql("SELECT `details` FROM `pano_panel_activity_log` WHERE `type` = 'CREATED_MARKET_BLOCK' ORDER BY `id` DESC LIMIT 1").single().getValue("details").toString())
+
+        assertEquals(mask, mailDetails.getString("value"), "the e-mail block log holds the masked value: $mailDetails")
+        assertFalse(mailDetails.encode().contains(address) || mailDetails.encode().contains(local), "the e-mail block log holds no address: $mailDetails")
+
+        val deleteMailDetails = stepLog("DELETED_MARKET_BLOCK", "delete e-mail block", masked = listOf(mask)) { admin.delete("$p/blocks/${mailBlock.first.obj().getLong("id")}") }.second
+
+        assertEquals(mask, deleteMailDetails.getString("value"), "the e-mail block deletion log holds the masked value too: $deleteMailDetails")
+        assertFalse(deleteMailDetails.encode().contains(address) || deleteMailDetails.encode().contains(local), "the e-mail block deletion log holds no address: $deleteMailDetails")
+
         val zone = step("CREATED_MARKET_SHIPPING_ZONE", "create zone") {
             admin.post("$p/shipping/zones", JsonObject().put("name", "api9 $n").put("countries", JsonArray().add("LU")).put("status", "INACTIVE"))
         }.obj().getLong("id")
@@ -1077,7 +1148,7 @@ class ApiContractE2E : E2eTestBase() {
         assertEquals(before, lastLogId(), "a refused call writes no activity log")
 
         println("API-09 performed=$performed")
-        assertTrue(performed >= 39, "performed $performed logged calls")
+        assertTrue(performed >= 46, "performed $performed logged calls")
     }
 
     // --- API-10 --------------------------------------------------------------------------------------------------------
