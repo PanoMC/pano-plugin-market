@@ -30,6 +30,7 @@
 #   MARKET_E2E_READY_TIMEOUT  seconds to wait for each readiness phase (default 300)
 #   MARKET_E2E_ALLOW_DEGRADED set to 1: start / restart accept a market that runs DEGRADED (503 STORE_UNAVAILABLE, ERROR in the log); only the log
 #                             marker and GET /api/health are awaited (LifecycleE2E L-04)
+#   MARKET_E2E_LEGACY_EXTRA_SQL  install-legacy: a SQL file loaded after seed-v2.sql, before the migrating boot (LifecycleE2E L-01b)
 #   MARKET_E2E_THEME_DIR / MARKET_E2E_PANEL_DIR   host UI checkouts for --ui external
 #
 # Exit codes (printed as `e2e-instance: FAIL <code> <text>`; 17 section 14, plus the two this script needs):
@@ -542,6 +543,11 @@ cmd_install_legacy() {
   [ -f "$fx/schema-v2.sql" ] && [ -f "$fx/seed-v2.sql" ] || die 13 "fixtures missing under $fx"
   db_run "" -i < "$fx/schema-v2.sql" 2>"$BASE/db.err" || die 13 "schema-v2.sql did not load: $(head -c 200 "$BASE/db.err")"
   db_run "" -i < "$fx/seed-v2.sql" 2>"$BASE/db.err" || die 13 "seed-v2.sql did not load: $(head -c 200 "$BASE/db.err")"
+  # Optional extra fixture rows of a scenario (LifecycleE2E L-01b adds a legacy payment method row of an installed provider): a file of SQL.
+  if [ -n "${MARKET_E2E_LEGACY_EXTRA_SQL:-}" ]; then
+    [ -f "$MARKET_E2E_LEGACY_EXTRA_SQL" ] || die 13 "MARKET_E2E_LEGACY_EXTRA_SQL is not a file: $MARKET_E2E_LEGACY_EXTRA_SQL"
+    db_run "" -i < "$MARKET_E2E_LEGACY_EXTRA_SQL" 2>"$BASE/db.err" || die 13 "MARKET_E2E_LEGACY_EXTRA_SQL did not load: $(head -c 200 "$BASE/db.err")"
+  fi
   # Without this row the platform runs initPluginDB (fresh install) instead of the migration chain.
   db_run "USE \`$DB_NAME\`; INSERT INTO \`pano_scheme_version\` (\`pluginId\`, \`key\`, \`extra\`) VALUES ('$PLUGIN_ID', '2', 'e2e legacy fixture')" >/dev/null 2>"$BASE/db.err" \
     || die 13 "the plugin scheme-version row could not be inserted: $(head -c 200 "$BASE/db.err")"

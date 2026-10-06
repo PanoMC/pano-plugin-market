@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit
  * class that may write schema and fixture SQL (17 section 8.3): L-01 loads `schema-v2.sql` / `seed-v2.sql` through the script, L-04 drops and
  * re-creates an index, L-02 / L-03 / L-06 move due times with SQL (time travel) or hold a row lock from a second connection.
  *
- * Order matters (`@Order`): the class runs last of the E2E classes in a full run, L-04 (the destructive one) runs at the very end and leaves a healthy
+ * Order matters (`@Order`): the class runs last of the E2E classes in a full run, L-04 (the destructive one) runs near the end (then L-04b, L-02b: the known-gap scenarios) and leaves a healthy
  * instance behind. The buyer is the panel admin (it holds the umbrella node, so the test-mode fake provider is usable without the payer-group dance of
  * `E2eSession`; the harness of the other classes is not shared on purpose: it bootstraps against `MARKET_E2E_URL`).
  *
@@ -51,6 +51,11 @@ import java.util.concurrent.TimeUnit
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
 class LifecycleE2E {
     private val lc = Lifecycle()
+
+    private companion object {
+        /** The plaintext secret of the legacy `fake` payment method row that [Lifecycle.script] adds to the `install-legacy` fixture. */
+        const val LEGACY_FAKE_SECRET = "fixture-fake-plaintext-secret"
+    }
 
     @AfterAll
     fun tearDown() {
@@ -163,12 +168,11 @@ class LifecycleE2E {
         assertEquals(listOf("Starter Crate", "Credit Pack 500"), top.getJsonArray("labels").map { it.toString() })
         assertEquals(listOf(650.0, 162.5), top.getJsonArray("values").map { (it as Number).toDouble() })
 
-        // the legacy payment method row survived with its secret (see the evidence file: the re-encryption of legacy plaintext at start is [UNPROVEN],
-        // MarketBootstrap's secrets step is not wired and the 'tebex' provider is not installed on this instance)
+        // the legacy payment method row of a provider that is NOT installed on this instance (tebex) survived with its secret: nothing can encrypt it (the provider
+        // schema is unknown) and nothing may lose it. The re-encryption of a legacy plaintext secret of an installed provider is proven by `L-01b`.
         val settings = JsonObject(lc.db.string("SELECT `settings` FROM `pano_market_payment_method` WHERE `methodId` = 'tebex'")!!)
         assertEquals("fixture-store", settings.getString("webstoreId"))
-        assertNotNull(settings.getString("secret"), "the secret was not lost")
-        if (settings.getString("secret") != "fixture-plaintext-secret") assertTrue(settings.getString("secret").startsWith("v1:"), "a re-encrypted secret is a v1: value")
+        assertTrue(settings.getString("secret") == "fixture-plaintext-secret" || settings.getString("secret").startsWith("v1:"), "the secret was not lost: ${settings.getString("secret")?.take(3)}")
 
         // the public side serves the migrated catalogue
         val store = E2eClient(lc.url, "visitor").get("/api/market/store").ok().obj()
@@ -186,6 +190,30 @@ class LifecycleE2E {
         assertEquals(before, snapshot(), "the data is the same after the second start")
     }
 
+    /**
+     * 17 section 9.10 L-01 / 01 section 14.4 step 6: after the upgrade the legacy plaintext secret of an installed provider (the fixture row `fake`, written by
+     * [Lifecycle.script] `install-legacy` through `MARKET_E2E_LEGACY_EXTRA_SQL`) is stored encrypted (`v1:`, 01 section 14.4) and reveals to the same value.
+     * Runs on the instance L-01 left behind (migrated, running). No guard on purpose: while the plugin does not run `PaymentMethodService.startup()` at start
+     * this test FAILS, which is the truth (the evidence file names the product gap).
+     */
+    @Test
+    @Order(2)
+    fun `L-01b a legacy plaintext provider secret is encrypted after the upgrade and still reveals to the same value`() {
+        lc.login()
+        assertHealthy()
+
+        val stored = JsonObject(lc.db.string("SELECT `settings` FROM `pano_market_payment_method` WHERE `methodId` = 'fake'") ?: throw AssertionError("the legacy `fake` row is missing"))
+        val secret = stored.getString("secret")
+
+        assertNotNull(secret, "the secret was not lost")
+        assertTrue(secret.startsWith("v1:"), "the legacy plaintext secret is encrypted at rest after the upgrade (is plaintext: ${secret == LEGACY_FAKE_SECRET})")
+        assertNotEquals(LEGACY_FAKE_SECRET, secret)
+
+        val revealed = lc.admin.post("/api/panel/market/payment-methods/fake/reveal", JsonObject().put("password", lc.adminPassword())).ok().obj()
+
+        assertEquals(LEGACY_FAKE_SECRET, revealed.getJsonObject("settings").getString("secret"), "the encrypted secret reveals to the same value")
+    }
+
     /** What must not change when the migrated database is booted again. */
     private fun snapshot(): List<Any?> = listOf(
         lc.db.sql("SELECT `id`, `publicId`, `accessToken`, `subtotal`, `paidAt`, `reservationState` FROM `pano_market_order` ORDER BY `id`").map { it.toJson().encode() },
@@ -199,7 +227,7 @@ class LifecycleE2E {
     // ----------------------------------------------------------------------------------------------------------------------------------
 
     @Test
-    @Order(2)
+    @Order(3)
     fun `L-05 market present before setup, then the stop gate`() {
         lc.closeGateway()
         lc.script("start-presetup")
@@ -273,7 +301,7 @@ class LifecycleE2E {
     // ----------------------------------------------------------------------------------------------------------------------------------
 
     @Test
-    @Order(3)
+    @Order(4)
     fun `L-02 SIGTERM restart mid-flight completes a pending order, an unsent webhook and a scheduled delivery exactly once`() {
         lc.ensureStandard()
 
@@ -381,7 +409,7 @@ class LifecycleE2E {
     // ----------------------------------------------------------------------------------------------------------------------------------
 
     @Test
-    @Order(4)
+    @Order(5)
     fun `L-03 SIGKILL between the intent and the result of the gateway call`() {
         lc.ensureStandard()
 
@@ -470,7 +498,7 @@ class LifecycleE2E {
     // ----------------------------------------------------------------------------------------------------------------------------------
 
     @Test
-    @Order(5)
+    @Order(6)
     fun `L-06 a failed inbound event is taken over by the redelivery, a crashed one is finished by the retry job`() {
         lc.ensureStandard()
 
@@ -520,6 +548,9 @@ class LifecycleE2E {
         val secondData = JsonObject().put("reference", secondRef).put("amount", lc.gateway.payments.getValue(secondRef).amount.toPlainString()).put("currency", "EUR")
         val lock = lc.lockOrder(secondOrderId)
 
+        // Take the payment reconcile job out of the picture: the gateway says `paid` and the attempt is due for a status query 60 s after its creation, which
+        // would complete the order through the query alone. With the due time a day ahead only InboundEventRetryJob can finish this order.
+        lc.sql("UPDATE `pano_market_payment` SET `nextQueryAt` = ? WHERE `reference` = ?", System.currentTimeMillis() + 86_400_000L, secondRef)
         lc.gateway.setStatus(secondRef, "paid")
         val call = lc.async { lc.gateway.sendWebhook("payment.succeeded", secondData, id = secondEvent) }
 
@@ -538,8 +569,13 @@ class LifecycleE2E {
         lc.afterStart()
         lc.sql("UPDATE `pano_market_payment_event` SET `createdAt` = `createdAt` - 600000 WHERE `eventKey` LIKE ?", "%$secondEvent%")
         lc.awaitOrder(second, "COMPLETED", 150_000)
-        // the fake gateway never redelivers by itself and this test sends nothing again: the row's own run counter shows the retry job did the work
-        assertTrue(lc.db.long("SELECT `attempts` FROM `pano_market_payment_event` WHERE `eventKey` LIKE ?", "%$secondEvent%")!! >= 1, "the retry job ran the stored event")
+        // the fake gateway never redelivers by itself and this test sends nothing again. The row was stored with attempts = 1 at step 2 of the crashed run;
+        // only claimRetry (InboundEventRetryJob) makes it 2, and the row ends PROCESSED. The attempt was never status-queried: the reconcile job did not help.
+        val eventRow = lc.db.sql("SELECT `status`, `attempts` FROM `pano_market_payment_event` WHERE `eventKey` LIKE ?", "%$secondEvent%").single()
+
+        assertEquals("PROCESSED", eventRow.getString("status"), "the retry job finished the stored event")
+        assertEquals(2, eventRow.getInteger("attempts"), "step 2 stored attempts = 1, the retry job's claim is the second run")
+        assertEquals(0L, lc.db.long("SELECT `queryCount` FROM `pano_market_payment` WHERE `reference` = ?", secondRef), "the payment reconcile job never queried the attempt")
         assertEquals(1, lc.db.count("market_payment_event", "`providerId` = 'fake' AND `direction` = 'IN' AND `eventKey` LIKE ?", "%$secondEvent%"), "one event row, no redelivery")
         assertEquals(1, lc.db.count("market_payment", "`orderId` = ? AND `status` = 'SUCCEEDED'", secondOrderId))
         assertEquals(1, orderEventCount(second, "PAYMENT_SUCCEEDED"))
@@ -551,18 +587,19 @@ class LifecycleE2E {
     // ----------------------------------------------------------------------------------------------------------------------------------
 
     @Test
-    @Order(6)
+    @Order(7)
     fun `L-04 degraded schema is repaired by ensure and, when it cannot be, the store answers 503 and the platform keeps running`() {
         lc.ensureStandard()
 
         val product = lc.product("L04", "4.00")
         val pending = lc.publicIdOf(lc.checkout(lc.admin, product).ok())
         val pendingRef = lc.reference(pending)
-        // A unique index of 00 section 8.1 that the schema declares as added by a later scheme version (market_order.uq_publicId, scheme version 5): those are
-        // the indexes ensure() re-creates (CREATE UNIQUE INDEX IF NOT EXISTS). An index of a table's first CREATE (e.g. market_credit_tx.uq_idem) is NOT
-        // repaired by ensure() today, see the evidence file.
-        val index = "uq_publicId"
+        // A unique index of the 00 section 8.1 idempotency table that ensure() can repair today: market_order.uq_buyer_idem (buyerKey, idempotencyKey), declared in
+        // the `added {}` block of scheme version 5 (CREATE UNIQUE INDEX IF NOT EXISTS). The keys declared in a table's first CREATE (market_credit_tx.uq_idem, ...) are
+        // not re-created by ensure(): that gap is proven by its own scenario, `L-04b`.
+        val index = "uq_buyer_idem"
         val table = "pano_market_order"
+        val wanted = listOf("buyerKey", "idempotencyKey")
 
         fun indexColumns(): List<String> =
             lc.db.sql(
@@ -570,20 +607,26 @@ class LifecycleE2E {
                 lc.database, table, index
             ).map { it.getString("COLUMN_NAME") }
 
-        assertEquals(listOf("publicId"), indexColumns(), "the unique index of 00 section 8.1 exists")
+        assertEquals(wanted, indexColumns(), "the unique index of 00 section 8.1 exists")
 
         // 1. drop it, restart: ensure() creates it again and the market is READY
         lc.sql("ALTER TABLE `$table` DROP INDEX `$index`")
         assertEquals(emptyList<String>(), indexColumns())
         lc.script("restart")
         lc.afterStart()
-        assertEquals(listOf("publicId"), indexColumns(), "ensure() recreated the index")
+        assertEquals(wanted, indexColumns(), "ensure() recreated the index")
         assertHealthy()
 
-        // 2. make recreating it impossible: drop it again, then a second order row with the same publicId (a copy of the pending order), then the restart
+        // 2. make recreating it impossible: drop it again, then a second order row with the same buyerKey and idempotencyKey (a copy of the pending order that
+        // only gets another publicId and accessToken), then the restart
         lc.sql("ALTER TABLE `$table` DROP INDEX `$index`")
+        val keys = lc.db.sql("SELECT `buyerKey`, `idempotencyKey` FROM `$table` WHERE `publicId` = ?", pending).single()
+        val buyerKey = keys.getString("buyerKey")
+        val idempotencyKey = keys.getString("idempotencyKey")
+
+        assertNotNull(idempotencyKey, "the pending order was created with an Idempotency-Key")
         val duplicate = lc.duplicateOrder(lc.orderId(pending))
-        assertEquals(2L, lc.db.count("market_order", "`publicId` = ?", pending))
+        assertEquals(2L, lc.db.count("market_order", "`buyerKey` = ? AND `idempotencyKey` = ?", buyerKey, idempotencyKey), "two rows share the 8.1 key")
         lc.script("restart", degraded = true)
         lc.login()
 
@@ -616,7 +659,7 @@ class LifecycleE2E {
         lc.sql("DELETE FROM `$table` WHERE `id` = ?", duplicate)
         lc.script("restart")
         lc.afterStart()
-        assertEquals(listOf("publicId"), indexColumns(), "the index is back")
+        assertEquals(wanted, indexColumns(), "the index is back")
         assertHealthy()
         assertEquals(200, visitor.get("/api/market/store").status)
         val again = lc.publicIdOf(lc.checkout(lc.admin, product).ok())
@@ -624,6 +667,69 @@ class LifecycleE2E {
         lc.pay(again)
         lc.awaitOrder(again, "COMPLETED")
         lc.assertInvariants()
+    }
+
+    // ----------------------------------------------------------------------------------------------------------------------------------
+    // L-04b (the 8.1 keys of a table's first CREATE) and L-02b (the default plugin data folder): both are KNOWN PRODUCT GAPS, they fail until fixed
+    // ----------------------------------------------------------------------------------------------------------------------------------
+
+    /**
+     * 17 L-04 names "one unique index of 00 section 8.1": the credit movement key `market_credit_tx.uq_idem` is declared in its table's first CREATE.
+     * `MarketSchema.ensure()` re-creates only the indexes of `added {}` blocks, so after the drop the store stays DEGRADED on every start (MISSING_INDEX).
+     * This test expects the repair and FAILS until `ensure()` creates every declared unique index. It puts the index back itself, so the instance stays usable.
+     */
+    @Test
+    @Order(8)
+    fun `L-04b a unique key of a table's first CREATE (market_credit_tx uq_idem) is re-created by ensure on the next start`() {
+        lc.ensureStandard()
+
+        val table = "pano_market_credit_tx"
+        val index = "uq_idem"
+
+        fun indexColumns(): List<String> =
+            lc.db.sql(
+                "SELECT `COLUMN_NAME` FROM `information_schema`.`STATISTICS` WHERE `TABLE_SCHEMA` = ? AND `TABLE_NAME` = ? AND `INDEX_NAME` = ? AND `NON_UNIQUE` = 0 ORDER BY `SEQ_IN_INDEX`",
+                lc.database, table, index
+            ).map { it.getString("COLUMN_NAME") }
+
+        assertEquals(listOf("idempotencyKey"), indexColumns(), "the 8.1 credit movement key exists")
+        lc.sql("ALTER TABLE `$table` DROP INDEX `$index`")
+
+        try {
+            lc.script("restart", degraded = true)
+            lc.login()
+            assertEquals(listOf("idempotencyKey"), indexColumns(), "ensure() re-created the declared unique index of the first CREATE")
+            assertHealthy()
+        } finally {
+            if (indexColumns().isEmpty()) lc.sql("CREATE UNIQUE INDEX `$index` ON `$table` (`idempotencyKey`)")
+            lc.script("restart", degraded = true)
+            lc.login()
+        }
+    }
+
+    /**
+     * The scenario "SIGTERM restart keeps the settings and the provider secrets" on the DEFAULT data folder (no `-Dpano.pluginDataDir`), the layout of a real
+     * install and of every other E2E class. Known failure while the host's plugin-UI sync takes `config.conf` / `secret.key` away (evidence file, finding 1):
+     * the settings revert and both fake providers are NOT_CONFIGURED after the restart.
+     */
+    @Test
+    @Order(9)
+    fun `L-02b restart on the default plugin data folder keeps the settings and the provider secrets`() {
+        lc.closeGateway()
+        lc.defaultDataDir = true
+
+        try {
+            lc.script("start")
+            lc.login()
+            lc.bootstrap()
+            assertEquals(true, E2eClient(lc.url, "visitor").get("/api/market/store").obj().getJsonObject("settings").getBoolean("testMode"), "the settings were saved")
+
+            lc.script("restart")
+            lc.afterStart()
+            assertHealthy()
+        } finally {
+            lc.defaultDataDir = !System.getenv("MARKET_E2E_LIFECYCLE_DEFAULT_DATA_DIR").isNullOrBlank()
+        }
     }
 
     // ----------------------------------------------------------------------------------------------------------------------------------
@@ -658,6 +764,9 @@ class LifecycleE2E {
         var gatewayOrNull: FakePayGateway? = null
             private set
         private var standard = false
+
+        /** `true`: instances start with the host's default plugin data folder (`plugins/<id>`), no `-Dpano.pluginDataDir` workaround. */
+        var defaultDataDir = !System.getenv("MARKET_E2E_LIFECYCLE_DEFAULT_DATA_DIR").isNullOrBlank()
         private var eventSeed = System.currentTimeMillis().toString(36)
 
         val db: E2eDb get() = dbOrNull ?: E2eDb(database).also { dbOrNull = it }
@@ -684,16 +793,32 @@ class LifecycleE2E {
             val args = listOf("bash", File(market, "scripts/e2e-instance.sh").path, command, *extra, "--name", name, "--http-port", httpPort.toString(), "--gateway-port", gatewayPort.toString())
             val builder = ProcessBuilder(args).directory(market).redirectErrorStream(true)
 
-            // The plugin's data folder (config.conf, secret.key, uploads) lives outside `plugins/<id>`: the host UI sync removes and re-creates `plugins/<id>`
-            // (the market jar carries a plugin-ui.zip of a local build), which would take the config and the encryption key with it on every start. The
-            // platform reads `pano.pluginDataDir` for exactly this (PanoPlugin.pluginDataFolder, PluginConfigManager); see the evidence file.
-            // MARKET_E2E_LIFECYCLE_DEFAULT_DATA_DIR=1 leaves the default layout in place: that is the way to reproduce the finding (L-02 then fails with
-            // both fake providers NOT_CONFIGURED after the first restart).
-            if (System.getenv("MARKET_E2E_LIFECYCLE_DEFAULT_DATA_DIR").isNullOrBlank()) {
-                builder.environment().putIfAbsent("MARKET_E2E_JAVA_OPTS", "-XX:MaxRAMPercentage=40 -Dpano.pluginDataDir=${File(dir, "plugin-data").path}")
+            // INTERIM WORKAROUND (finding: the host's plugin-UI sync removes and re-creates `plugins/<id>`, taking `config.conf` and `secret.key` with it, see the
+            // evidence file): the plugin's data folder is moved out of `plugins/<id>` with `-Dpano.pluginDataDir` (read by PanoPlugin.pluginDataFolder /
+            // PluginConfigManager). The option is APPENDED to a MARKET_E2E_JAVA_OPTS the caller exported (the script default is used when there is none), so a
+            // caller's own options never switch the workaround off silently. The default layout, the one a real install and every other E2E class use, is proven
+            // by `L-02b`, which sets [defaultDataDir] and is expected to FAIL until the product separates config and key from the UI extraction folder.
+            // MARKET_E2E_LIFECYCLE_DEFAULT_DATA_DIR=1 runs the WHOLE class on the default layout.
+            if (!defaultDataDir) {
+                val option = "-Dpano.pluginDataDir=${File(dir, "plugin-data").path}"
+                val given = System.getenv("MARKET_E2E_JAVA_OPTS")?.takeIf { it.isNotBlank() } ?: "-XX:MaxRAMPercentage=40"
+
+                builder.environment()["MARKET_E2E_JAVA_OPTS"] = if (given.contains("-Dpano.pluginDataDir=")) given else "$given $option"
             }
 
             if (degraded) builder.environment()["MARKET_E2E_ALLOW_DEGRADED"] = "1"
+
+            if (command == "install-legacy") {
+                // a second legacy payment method row, of a provider that IS installed on the instance (the fake provider), with a plaintext secret (L-01b)
+                val extra = File(market, "build/market-e2e/legacy-extra-$name.sql")
+
+                extra.parentFile.mkdirs()
+                extra.writeText(
+                    "INSERT INTO `pano_market_payment_method` (`id`, `methodId`, `enabled`, `settings`, `createdAt`, `updatedAt`) VALUES " +
+                        "(3, 'fake', 0, '{\"gatewayUrl\":\"http://127.0.0.1:$gatewayPort\",\"secret\":\"$LEGACY_FAKE_SECRET\"}', 1700000062000, 1700000062000);\n"
+                )
+                builder.environment()["MARKET_E2E_LEGACY_EXTRA_SQL"] = extra.path
+            }
 
             val process = builder.start()
             val out = process.inputStream.bufferedReader().readText()
@@ -724,6 +849,8 @@ class LifecycleE2E {
         // ---- sessions -----------------------------------------------------------------------------------------------------------
 
         private fun env() = E2eEnv(url, dir.path, gatewayPort, database)
+
+        fun adminPassword(): String = env().adminPassword()
 
         fun login() {
             val env = env()
@@ -879,14 +1006,23 @@ class LifecycleE2E {
             check(run.ran.isNotEmpty() && run.skipped.isEmpty()) { "invariants ran=${run.ran.size} skipped=${run.skipped}" }
         }
 
-        /** Copies one `market_order` row (every column but `id`; `idempotencyKey` is altered so `uq_buyer_idem` does not refuse the copy) and returns the new id. */
+        /**
+         * Copies one `market_order` row (every column but `id`; `publicId` and `accessToken` are replaced by random values so only `uq_buyer_idem`
+         * (`buyerKey`, `idempotencyKey`) is violated by the copy) and returns the new id.
+         */
         fun duplicateOrder(orderId: Long): Long {
             val columns = db.sql(
                 "SELECT `COLUMN_NAME` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA` = ? AND `TABLE_NAME` = 'pano_market_order' AND `COLUMN_NAME` <> 'id' ORDER BY `ORDINAL_POSITION`",
                 database
             ).map { it.getString("COLUMN_NAME") }
             val insert = columns.joinToString(", ") { "`$it`" }
-            val select = columns.joinToString(", ") { if (it == "idempotencyKey") "CONCAT('dup-', COALESCE(`idempotencyKey`, ''))" else "`$it`" }
+            val select = columns.joinToString(", ") {
+                when (it) {
+                    "publicId" -> "SUBSTRING(REPLACE(UUID(), '-', ''), 1, 20)"
+                    "accessToken" -> "SUBSTRING(CONCAT(REPLACE(UUID(), '-', ''), REPLACE(UUID(), '-', '')), 1, 40)"
+                    else -> "`$it`"
+                }
+            }
 
             sql("INSERT INTO `pano_market_order` ($insert) SELECT $select FROM `pano_market_order` WHERE `id` = ?", orderId)
 
