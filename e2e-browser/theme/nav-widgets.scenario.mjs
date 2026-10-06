@@ -1,8 +1,11 @@
 // Theme browser scenarios 47 and 48 of 14 section 20.3 (profile navigation, store widgets), vanilla theme. Ids TH-47 and TH-48 are the numbers of the spec.
 //
-// Both scenarios have a half that needs a host which announces `profile-nav` / `page-sidebar-id` through `pano.features` (15 section 4.1) and a half
-// that does not. The browser bundle of the plugin is asked what the host announces (`hostFeatures`); a half that needs a capability the host does not
-// announce FAILS the scenario with that reason after the other half ran, it is never skipped silently and never counted as a pass.
+// Both scenarios need a host that announces `profile-nav` / `page-sidebar-id` through `pano.features` (15 section 4.1): the checkout of
+// themes/vanilla-theme that `e2e-instance.sh start --ui external:<theme>,<panel>` runs with `vite dev` (env.themeUrl; the theme zip bundled in the
+// Pano jar is older than theme-core and announces nothing). Opening that vite port directly makes the theme's dev helper `checkDomainRedirection`
+// (sdk core/js/variables.js) bounce the browser to the instance's own port, i.e. to the bundled theme; `patchBundle` switches that dev bounce off
+// for the page, otherwise the plugin would never see the vite host. A half that needs a capability the host does not announce FAILS the scenario with
+// that reason, it is never skipped silently and never counted as a pass.
 import { must } from '../lib/api.mjs';
 import { actions, grantCredits, product as panelProduct, run } from '../lib/bootstrap.mjs';
 import { newContext } from '../lib/browser.mjs';
@@ -31,19 +34,35 @@ async function openAccountMenu(page) {
 }
 
 /**
- * Patches the plugin's browser bundle at its start (`onLoad`): `window.__E2E_HOST_FEATURES__` gets what the host announces in `pano.features`
- * (null when the host has no `pano.features`), and with `mask` the plugin is then told that the host has neither `profile-nav` nor
- * `page-sidebar-id`, which is what an older theme build looks like to it (14 section 4.1). Only the browser bundle changes, so the server-rendered
- * first page is the ordinary one: a masked scenario starts on a page that has nothing to do with the profile and walks there client-side.
+ * Patches what the browser loads, before the page starts:
+ * - the dev bounce of the theme (`checkDomainRedirection`, see the header) is switched off, so a page opened on the vite port stays there;
+ * - the plugin's browser bundle records at its start (`onLoad`) what the host announces in `pano.features` into `window.__E2E_HOST_FEATURES__`
+ *   (null when the host has no `pano.features`), and with `mask` the plugin is then told that the host has neither `profile-nav` nor
+ *   `page-sidebar-id`, which is what an older theme build looks like to it (14 section 4.1). The mask reports what it did in `window.__E2E_MASKED__`
+ *   (`[has('profile-nav'), has('page-sidebar-id')]` after masking, `'failed'` when it could not be applied), so a mask that does nothing is caught.
+ * Only the browser bundle changes, so the server-rendered first page is the ordinary one: a masked scenario starts on a page that has nothing to do
+ * with the profile and walks there client-side.
  */
 async function patchBundle(context, { mask = false } = {}) {
+  await context.route(/\/sdk\/core\/js\/variables\.js/, async (route) => {
+    const response = await route.fetch();
+    const source = await response.text();
+
+    await route.fulfill({
+      response,
+      body: source.replace(
+        'export function checkDomainRedirection() {',
+        'export function checkDomainRedirection() { return;',
+      ),
+    });
+  });
   await context.route(BUNDLE, async (route) => {
     const response = await route.fetch();
     const source = await response.text();
     const record =
       'window.__E2E_HOST_FEATURES__=(this.pano.features&&this.pano.features.list)?this.pano.features.list():null;';
     const hide = mask
-      ? "try{const f=this.pano.features;const has=f.has;this.pano.features=Object.freeze({has:(id)=>id==='profile-nav'||id==='page-sidebar-id'?false:has(id),list:f.list})}catch(e){}"
+      ? "try{const f=this.pano.features;const has=f.has;this.pano.features=Object.freeze({has:(id)=>id==='profile-nav'||id==='page-sidebar-id'?false:has(id),list:f.list});window.__E2E_MASKED__=[this.pano.features.has('profile-nav'),this.pano.features.has('page-sidebar-id')]}catch(e){window.__E2E_MASKED__='failed'}"
       : '';
 
     await route.fulfill({
@@ -57,6 +76,21 @@ async function patchBundle(context, { mask = false } = {}) {
 const hostBase = (env) => env.themeUrl ?? env.url;
 
 const hostFeatures = (page) => page.evaluate(() => window.__E2E_HOST_FEATURES__ ?? null);
+
+/** Fails unless the host announced both ids before the mask and the mask turned both off: a mask that is a no-op proves nothing. */
+async function assertMaskEffective(page, label) {
+  const announced = await hostFeatures(page);
+
+  assert(
+    announced?.includes('profile-nav') && announced?.includes('page-sidebar-id'),
+    `${label}: the host announced profile-nav and page-sidebar-id before the mask (got ${JSON.stringify(announced)})`,
+  );
+  assertEqual(
+    JSON.stringify(await page.evaluate(() => window.__E2E_MASKED__ ?? null)),
+    JSON.stringify([false, false]),
+    `${label}: after the mask the plugin sees neither profile-nav nor page-sidebar-id`,
+  );
+}
 
 export const scenarios = [
   {
@@ -99,16 +133,31 @@ export const scenarios = [
         'the subscription of the second buyer',
       );
 
+      // the balance of the second buyer settles at the 3 granted credits plus the credit the subscription's first payment delivers (delivery is
+      // asynchronous: wait for it, so the pages below are compared with a balance that no longer moves)
+      const richBalance = '4';
+
+      await waitUntil(
+        async () =>
+          String((await rich.get('/api/market/me/summary')).json?.creditBalance) === richBalance,
+        30000,
+        'the credit of the subscription delivered to the second buyer',
+      );
+
       // ---- without profile-nav and page-sidebar-id (an older theme build, as the plugin sees it) ----------------------------------
+      // Same host as the half below (the vite checkout announces both ids); the plugin is told it announces neither, and `assertMaskEffective`
+      // proves the mask took (announced before, gone after) so this half cannot pass on a host that never announced anything.
+      const themeBase = hostBase(env);
       const old = await signedIn(browser, plain);
 
       await patchBundle(old.context, { mask: true });
 
       const oldPage = await old.page();
 
-      await open(oldPage, `${env.url}/store`, (p) =>
+      await open(oldPage, `${themeBase}/store`, (p) =>
         p.locator('.card h3 a, h1').first().waitFor({ timeout: 60000 }),
       );
+      await assertMaskEffective(oldPage, 'TH-47 without, plain buyer');
       await oldPage.evaluate(() => {
         window.__E2E_SAME_DOCUMENT__ = true;
       });
@@ -116,14 +165,21 @@ export const scenarios = [
       await oldPage.locator('.dropdown-menu a.dropdown-item[href="/profile"]').first().click();
       await oldPage.waitForURL((url) => url.pathname === '/profile', { timeout: 30000 });
 
-      // the Store block of /profile: a card with the title and the purchases link (the other links follow `me/summary`, which the host's
-      // profile-content slot has to hand to the block: on the host of this run it does not, so only the always-visible link is asserted)
-      const block = oldPage.locator('.card', {
-        has: oldPage.locator('.card-header', { hasText: text('theme.profile.block.title') }),
-      });
+      // the Store block of /profile: a card with the title and the links the summary of this buyer allows (credits only for the plain buyer)
+      const blockOf = (p) =>
+        p.locator('.card', {
+          has: p.locator('.card-header', { hasText: text('theme.profile.block.title') }),
+        });
+      const block = blockOf(oldPage);
 
       await block.waitFor({ timeout: 60000 });
       await block.locator('a[href="/profile/purchases"]').waitFor({ timeout: 30000 });
+      await block.locator('a[href="/profile/credits"]').waitFor({ timeout: 30000 });
+      assertEqual(
+        (await block.locator('a[href="/profile/credits"] .badge').innerText()).trim(),
+        '7',
+        'the credits link of the block carries the balance of this buyer',
+      );
       assertEqual(
         await block.locator('a[href="/profile/creator"]').count(),
         0,
@@ -167,12 +223,31 @@ export const scenarios = [
       old.expectNoErrors('TH-47 without');
       await old.close();
 
-      // ---- with profile-nav: the host that announces it ----------------------------------------------------------------------------
-      // The instance's own pages (env.url) are served by the theme build bundled with the Pano jar (vanilla dev.269, from before theme-core: it
-      // announces no feature at all, which is the "without" half above). The host that announces profile-nav is the checkout of the theme that
-      // e2e-instance.sh starts with `--ui external:` (env.themeUrl); its API calls go to this instance and the session cookie is shared.
-      const themeBase = hostBase(env);
+      // the buyer with a creator code and a subscription, masked the same way: the block shows the links that this buyer's summary adds (the
+      // positive counterpart of the "none" assertions above: the block does follow the summary)
+      const oldRich = await signedIn(browser, rich);
 
+      await patchBundle(oldRich.context, { mask: true });
+
+      const oldRichPage = await oldRich.page();
+
+      await open(oldRichPage, `${themeBase}/profile`);
+      await assertMaskEffective(oldRichPage, 'TH-47 without, rich buyer');
+
+      const richBlock = blockOf(oldRichPage);
+
+      await richBlock.waitFor({ timeout: 60000 });
+      await richBlock.locator('a[href="/profile/creator"]').waitFor({ timeout: 30000 });
+      await richBlock.locator('a[href="/profile/subscriptions"]').waitFor({ timeout: 30000 });
+      assertEqual(
+        (await richBlock.locator('a[href="/profile/credits"] .badge').innerText()).trim(),
+        richBalance,
+        'the block of the second buyer carries the balance of that buyer',
+      );
+      oldRich.expectNoErrors('TH-47 without, rich buyer');
+      await oldRich.close();
+
+      // ---- with profile-nav: the host as it is (no mask) -----------------------------------------------------------------------------
       const ctx = await signedIn(browser, plain);
 
       await patchBundle(ctx.context);
@@ -290,7 +365,7 @@ export const scenarios = [
       );
       assertEqual(
         (await navLink(richPage, '/profile/credits').first().locator('.badge').innerText()).trim(),
-        '3',
+        richBalance,
         'with the balance of this buyer',
       );
       richCtx.expectNoErrors('TH-47 with, rich buyer');
