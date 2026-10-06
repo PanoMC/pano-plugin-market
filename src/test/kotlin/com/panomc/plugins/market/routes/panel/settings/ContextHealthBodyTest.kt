@@ -14,7 +14,7 @@ class ContextHealthBodyTest {
     private val input = MarketContextInput(
         currency = "TRY", currencySymbol = "₺", statsCurrency = "USD", statsCurrencySymbol = "$",
         creditsEnabled = true, creditName = "Gold", vatPercent = 20.0, showVatInPrice = true, testMode = false,
-        mailEnabled = true, storeUrl = "https://x.test/store", runtimeState = "READY"
+        mailEnabled = true, shippingEnabled = false, storeUrl = "https://x.test/store", runtimeState = "READY"
     )
 
     @Test
@@ -43,7 +43,7 @@ class ContextHealthBodyTest {
             invoiceEnabled = false
         )
 
-        val body = marketContextBody(marketContextInput(config, storeUrl = "https://x.test/store", mailEnabled = true, runtimeState = "READY"), includeProductMeta = false)
+        val body = marketContextBody(marketContextInput(config, storeUrl = "https://x.test/store", mailEnabled = true, shippingEnabled = false, runtimeState = "READY"), includeProductMeta = false)
 
         assertEquals("MULTI", body["currencyMode"])
         assertEquals(listOf("USD", "GBP"), body["additionalCurrencies"])
@@ -58,8 +58,17 @@ class ContextHealthBodyTest {
     }
 
     @Test
+    fun `the context reports shippingEnabled from the input, true when a shipping method is active`() {
+        val on = marketContextBody(marketContextInput(MarketConfig(), storeUrl = "", mailEnabled = false, shippingEnabled = true, runtimeState = "READY"), includeProductMeta = false)
+        val off = marketContextBody(marketContextInput(MarketConfig(), storeUrl = "", mailEnabled = false, shippingEnabled = false, runtimeState = "READY"), includeProductMeta = false)
+
+        assertEquals(true, on["shippingEnabled"])
+        assertEquals(false, off["shippingEnabled"])
+    }
+
+    @Test
     fun `a default configuration gives the documented defaults`() {
-        val body = marketContextBody(marketContextInput(MarketConfig(), storeUrl = "", mailEnabled = false, runtimeState = "READY"), includeProductMeta = false)
+        val body = marketContextBody(marketContextInput(MarketConfig(), storeUrl = "", mailEnabled = false, shippingEnabled = false, runtimeState = "READY"), includeProductMeta = false)
 
         assertEquals("SINGLE", body["currencyMode"])
         assertEquals(emptyList<String>(), body["additionalCurrencies"])

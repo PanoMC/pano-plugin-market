@@ -128,7 +128,7 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="submit" class="btn btn-primary w-100" disabled={saving}>
+          <button type="submit" class="btn btn-primary w-100" disabled={saving || closing}>
             {#if saving}
               <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
             {/if}
@@ -160,6 +160,7 @@
   import ActionEditor from '../ActionEditor.svelte';
   import ErrorText from '../discounts/ErrorText.svelte';
   import { hideModalThen, showModal } from '../order-detail/send.js';
+  import { submitLocked } from '../order-detail/hide-then.js';
   import PlayerCell from '../PlayerCell.svelte';
 
   // open({ creator: { id, creator, code, available }, currency }) for one creator code row of the report.
@@ -172,6 +173,8 @@
   let form = $state({ amount: '', method: 'MANUAL', note: '', actions: [] });
   let submitted = $state(false);
   let saving = $state(false);
+  // set from the successful response until open(): the form stays locked while the modal fades out
+  let closing = $state(false);
   let amountRejected = $state(false);
   let noAccount = $state(false);
   let servers = $state.raw(null);
@@ -241,6 +244,7 @@
     };
     submitted = false;
     saving = false;
+    closing = false;
     amountRejected = false;
     noAccount = false;
     resetIdempotency(idempotency);
@@ -249,7 +253,7 @@
 
   async function submit(event) {
     event.preventDefault();
-    if (saving) return;
+    if (submitLocked({ saving, closing })) return;
     submitted = true;
     amountRejected = false;
     noAccount = false;
@@ -293,6 +297,7 @@
     showSuccessToast($_('modals.payout.toast-paid'));
     // the page refresh behind onSaved remounts the page: it waits until the modal is really gone (hide-then.js)
     const saved = result.body;
+    closing = true;
     hideModalThen(modalElement, () => onSaved(saved));
   }
 

@@ -161,10 +161,36 @@ export const scenarios = [
       );
       assertEqual(sent.length, 0, 'PANEL-66: a MANUAL payout without a note sends no request');
       await note.fill('paid outside the store');
-      await modal.getByRole('button', { name: 'Pay Out', exact: true }).click();
-      await page.getByText(enUS.modals.payout['toast-paid']).first().waitFor({ timeout: 15000 });
+      // one click, then (in the page, the moment the success toast shows, while the modal is still fading out, filled in and mounted) a second submit by
+      // Enter / requestSubmit and by click: the form is locked from the response until it is reopened, so exactly one payout is posted and recorded
+      sent.length = 0;
+      const window = await page.evaluate(async (toast) => {
+        const form = document.querySelector('.modal.show form');
+        const button = form.querySelector('button[type=submit]');
+        button.click();
+        const deadline = Date.now() + 15000;
+        while (!document.body.innerText.includes(toast)) {
+          if (Date.now() > deadline) return { toast: false };
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+        }
+        // hide() drops `.show` at once and the fade-out follows: the form is in the window while it is attached and its modal is still displayed
+        const stillMounted =
+          form.isConnected && getComputedStyle(form.closest('.modal')).display !== 'none';
+        const disabled = button.disabled;
+        form.requestSubmit();
+        form.requestSubmit();
+        button.click();
+        return { toast: true, stillMounted, disabled };
+      }, enUS.modals.payout['toast-paid']);
+      assert(window.toast, 'PANEL-66: the payout toast showed');
+      assert(
+        window.stillMounted,
+        'PANEL-66: the second submit was attempted while the modal was still mounted (the window was exercised)',
+      );
+      assert(window.disabled, 'PANEL-66: the Pay Out button is disabled during the fade-out');
       await modalsClosed(page);
       await refreshSettled(page);
+      assertEqual(sent.length, 1, 'PANEL-66: a repeated submit during the fade-out posts nothing');
       assertEqual(
         must(await admin.get(`/api/panel/market/creator-codes/${made.id}/payouts`), 'payouts').json
           .payouts.length,

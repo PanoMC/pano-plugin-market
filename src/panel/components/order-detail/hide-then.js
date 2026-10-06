@@ -23,3 +23,12 @@ export function hideThen(element, bootstrap, done, { timeout = FALLBACK_MS } = {
   bootstrap.Modal.getOrCreateInstance(element).hide();
   setTimeout(run, timeout);
 }
+
+/**
+ * A submit is refused while a request is in flight (`saving`) and from the successful response until the modal is reopened (`closing`): the modal stays
+ * mounted, filled in and clickable for the whole fade-out of [hideThen], and a second click or Enter in that window would post the same money-moving form
+ * again with a fresh Idempotency-Key.
+ */
+export function submitLocked({ saving = false, closing = false } = {}) {
+  return Boolean(saving || closing);
+}

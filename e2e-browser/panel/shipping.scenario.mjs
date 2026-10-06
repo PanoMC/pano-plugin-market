@@ -134,6 +134,21 @@ export const scenarios = [
             'PANEL-69: nothing shipped yet',
           );
 
+          // --- an active method exists, so GET /context reports shippingEnabled and the orders list shows its shipping status column (13 section 3.1)
+          assertEqual(
+            must(await admin.get('/api/panel/market/context'), 'context').json.shippingEnabled,
+            true,
+            'PANEL-69: the context reports shippingEnabled with an active method',
+          );
+          await openMarket(page, env, '/market/orders', (p) =>
+            p.getByText(`#${order.number}`).first().waitFor({ timeout: 60000 }),
+          );
+          assertEqual(
+            await page.locator('thead th', { hasText: enUS.pages.orders.table.shipping }).count(),
+            1,
+            'PANEL-69: the orders list shows the shipping status column',
+          );
+
           await openMarket(page, env, `/market/orders/detail/${order.number}`, (p) =>
             p.getByText(`#${order.number}`).first().waitFor({ timeout: 60000 }),
           );

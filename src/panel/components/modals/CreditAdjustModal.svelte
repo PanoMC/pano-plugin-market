@@ -102,7 +102,7 @@
             class="btn w-100"
             class:btn-primary={currentMode !== 'revoke'}
             class:btn-danger={currentMode === 'revoke'}
-            disabled={saving}>
+            disabled={saving || closing}>
             {#if saving}
               <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
             {/if}
@@ -130,6 +130,7 @@
   import { fmt } from '../../utils/locale.js';
   import { toastError } from '../../utils/toast.js';
   import { hideModalThen, showModal } from '../order-detail/send.js';
+  import { submitLocked } from '../order-detail/hide-then.js';
   import PlayerCell from '../PlayerCell.svelte';
 
   // mode: 'grant' | 'revoke'; account: { userId, username, balance } or null (lookup mode).
@@ -145,6 +146,8 @@
   let touched = $state(false);
   let amountRejected = $state(false);
   let saving = $state(false);
+  // set from the successful response until open(): the form stays locked while the modal fades out
+  let closing = $state(false);
   let lookupTag = 0;
 
   // One idempotency state per opening: same body => same key, changed body => a new one.
@@ -169,6 +172,7 @@
     touched = false;
     amountRejected = false;
     saving = false;
+    closing = false;
     resetIdempotency(idempotency);
     showModal(modalElement);
   }
@@ -198,7 +202,7 @@
 
   async function submit(event) {
     event.preventDefault();
-    if (saving) return;
+    if (submitLocked({ saving, closing })) return;
     touched = true;
     amountRejected = false;
     if (!currentAccount && lookup.status === 'IDLE' && username.trim()) await resolveUser();
@@ -255,6 +259,7 @@
 
     // the page refresh behind onSaved remounts the page: it waits until the modal is really gone (hide-then.js)
     const saved = result.body;
+    closing = true;
     hideModalThen(modalElement, () => onSaved(saved));
   }
 

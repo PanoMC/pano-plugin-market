@@ -3,15 +3,18 @@ package com.panomc.plugins.market.routes.panel.settings
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.api.config.PluginConfigManager
 import com.panomc.platform.config.ConfigManager
+import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.model.Path
 import com.panomc.platform.model.Result
 import com.panomc.platform.model.RouteType
 import com.panomc.platform.model.Successful
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.config.MarketConfig
+import com.panomc.plugins.market.db.dao.MarketShippingMethodDao
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.runtime.MarketRuntime
+import com.panomc.plugins.market.runtime.beans
 import com.panomc.plugins.market.util.CurrencyType
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
@@ -43,7 +46,7 @@ data class MarketContextInput(
     val billingInfoMode: String = "OPTIONAL",
     val invoiceEnabled: Boolean = true,
     val mailEnabled: Boolean,
-    val shippingEnabled: Boolean = false,
+    val shippingEnabled: Boolean,
     val storeUrl: String,
     val runtimeState: String
 )
@@ -110,10 +113,20 @@ class PanelGetContextAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
             .getOrDefault("")
 
         val input = marketContextInput(
-            config, storeUrl = marketStoreUrl(websiteUrl), mailEnabled = MarketRuntime.capabilities.mail, runtimeState = MarketRuntime.state.name
+            config, storeUrl = marketStoreUrl(websiteUrl), mailEnabled = MarketRuntime.capabilities.mail, shippingEnabled = shippingEnabled(), runtimeState = MarketRuntime.state.name
         )
 
         return Successful(marketContextBody(input, includeProductMeta = has(context, MarketNode.CATALOG)))
+    }
+
+    /** `true` when at least one shipping method is `ACTIVE` and not deleted (13 section 3.1); `false` while the database is not reachable (the context must still answer). */
+    private suspend fun shippingEnabled(): Boolean = try {
+        val methods = plugin.beans.getBean(MarketShippingMethodDao::class.java)
+        val databaseManager = plugin.applicationContext.getBean(DatabaseManager::class.java)
+
+        methods.getActive(databaseManager.getSqlClient()).isNotEmpty()
+    } catch (e: Exception) {
+        false
     }
 }
 
@@ -122,7 +135,7 @@ class PanelGetContextAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
  * keys and left the rest at the data class defaults, so the context said `currencyMode = SINGLE` with no additional currency whatever the settings were, and the
  * product form never offered the per-currency price grid (found by the panel browser scenario 71).
  */
-internal fun marketContextInput(config: MarketConfig, storeUrl: String, mailEnabled: Boolean, runtimeState: String) = MarketContextInput(
+internal fun marketContextInput(config: MarketConfig, storeUrl: String, mailEnabled: Boolean, shippingEnabled: Boolean, runtimeState: String) = MarketContextInput(
     currency = config.currency.name,
     currencySymbol = config.currency.symbol,
     statsCurrency = config.statsCurrency.name,
@@ -142,6 +155,7 @@ internal fun marketContextInput(config: MarketConfig, storeUrl: String, mailEnab
     billingInfoMode = config.billingInfoMode.name,
     invoiceEnabled = config.invoiceEnabled,
     mailEnabled = mailEnabled,
+    shippingEnabled = shippingEnabled,
     storeUrl = storeUrl,
     runtimeState = runtimeState
 )
