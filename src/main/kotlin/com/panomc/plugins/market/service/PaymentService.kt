@@ -133,9 +133,11 @@ fun interface PanelAlerts {
 
 /**
  * Why a verified payment does not complete the order (06 section 9.4, first row): O2 is diverted to O3. [reason] is the order's `reviewReason`,
- * [note] the text of the `STATUS_CHANGED` row of the timeline (06 section 6.4: "recipient limit").
+ * [note] the text of the `STATUS_CHANGED` row of the timeline (06 section 6.4: "recipient limit"). [refundAtOnce]: money the store may not keep (09 section 8.5,
+ * the renewal of a closed subscription) is refunded in the same transaction when `autoRefundDuplicatePayments` is on and the provider can refund (O3, then O5
+ * with a `SYSTEM` refund); otherwise the order waits in `REVIEW` for the admin like any other diversion.
  */
-class PaidDiversion(val reason: ReviewReason, val note: String)
+class PaidDiversion(val reason: ReviewReason, val note: String, val refundAtOnce: Boolean = false)
 
 /**
  * A check that runs under the `COMMIT` locks right before an order that is `PENDING` is told `Paid` (O2) by a payment event; the first guard
@@ -1088,6 +1090,7 @@ class PaymentService(
                         else -> e
                     }
                     var note: String? = null
+                    var refundLocks: LockedOrder? = null
                     val paidEvent = orderEvent as? OrderEvent.Paid
 
                     // O2 or O3 (06 section 9.4): a guard may divert a payment that would complete a PENDING order into a review
@@ -1099,14 +1102,30 @@ class PaymentService(
 
                             orderEvent = OrderEvent.NeedsReview(diversion.reason, paidEvent.attemptId, paidEvent.actor)
                             note = diversion.note
+
+                            // 09 section 8.5: money the store may not keep goes back at once when the switch is on and the provider can refund it
+                            if (diversion.refundAtOnce) {
+                                val rule = duplicateRefundRule(conn, attempt.providerId)
+
+                                if (rule.autoRefund && rule.providerCanRefund) refundLocks = releaseLocksOf(locked, order)
+                            }
                         }
                     }
 
                     val moved = orderService.transition(conn, locked, orderEvent, message = note)
 
-                    after += moved.after
+                    // the panel is alerted about a review that waits for a human; one the system rejects in the same transaction needs nobody
+                    after += if (refundLocks != null) moved.after.filterNot { it is AfterCommit.PanelAlert } else moved.after
 
                     if (moved.moved) orderStatus = moved.to
+
+                    if (refundLocks != null && moved.moved && moved.to == OrderStatus.REVIEW) {
+                        val rejected = orderService.transition(conn, refundLocks, OrderEvent.ReviewRejected(refund = true, system = true), message = LATE_REFUND_NOTE)
+
+                        after += rejected.after
+
+                        if (rejected.moved) orderStatus = rejected.to
+                    }
                 }
 
                 else -> Unit
@@ -1122,6 +1141,18 @@ class PaymentService(
 
         return AppliedEvent(decision.to, orderStatus, changed = true, duplicate = duplicate)
     }
+
+    /**
+     * The lock set O5 needs for [order], a renewal order that a gateway paid (09 section 8.5). O5's release step asks for the `RELEASE` scope, which differs from the
+     * `COMMIT` set the caller holds by the code, variant and `REVOKED` rows; a renewal order reserves nothing (no stock, no redemption, no credit hold: I22), so there
+     * is no such row to protect. `null` for any order that is not of that kind: it is left in `REVIEW` for the admin.
+     */
+    private fun releaseLocksOf(locked: LockedOrder, order: MarketOrder): LockedOrder? =
+        if (order.source == OrderSource.RENEWAL && order.creditAmount == 0L && locked.redemptions.isEmpty() && locked.items.all { it.stockReserved == 0 }) {
+            LockedOrder(locked.order, locked.items, locked.redemptions, OrderLockScope.RELEASE)
+        } else {
+            null
+        }
 
     /** The first [PaidGuard] that diverts O2, `null` when the payment may complete the order. The caller holds the `COMMIT` locks (or wider). */
     private suspend fun divertPaid(conn: SqlConnection, locked: LockedOrder, order: MarketOrder): PaidDiversion? {
@@ -1902,6 +1933,9 @@ class PaymentService(
 
         /** The generic text key of a payment the gateway reported as `Failed` (06 section 9.4: `failureMessage` is buyer-safe). */
         const val PAYMENT_FAILED_TEXT = "payment.failed"
+
+        /** The `STATUS_CHANGED` note of the O5 the system applies to the late payment of a closed subscription's renewal (09 section 8.5). */
+        const val LATE_REFUND_NOTE = "subscription closed, refunded"
 
         const val METHOD_NOT_OFFERED = "METHOD_NOT_OFFERED"
         const val METHOD_LOCKED = "METHOD_LOCKED"

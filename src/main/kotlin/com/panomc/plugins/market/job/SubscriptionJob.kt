@@ -21,6 +21,7 @@ import com.panomc.plugins.market.service.SubscriptionEventSink
 import com.panomc.plugins.market.service.SubscriptionService
 import com.panomc.plugins.market.spi.common.ProviderErrorCode
 import com.panomc.plugins.market.spi.common.ProviderException
+import com.panomc.plugins.market.spi.common.TestModeSupport
 import com.panomc.plugins.market.spi.payment.CancelSubscriptionRequest
 import com.panomc.plugins.market.spi.payment.CancelSubscriptionResult
 import com.panomc.plugins.market.spi.payment.PaymentEvent
@@ -135,8 +136,12 @@ class SubscriptionJob(
     suspend fun chargeOne(subscriptionId: Long, admin: Boolean = false): SubscriptionService.ChargePreparation {
         val client = sqlClient()
         val row = subscriptions.getById(subscriptionId, client) ?: return SubscriptionService.ChargePreparation.Skipped(SubscriptionService.SKIP_GONE)
-        val handle = payments.providerHandle(row.providerId, null, client)
-        val facts = SubscriptionService.ProviderFacts(handle != null, handle?.testMode ?: false, handle?.caps?.statusQuery == true)
+        // the call runs in the environment of the subscription (what its attempt row says), not in the provider's current one: while the store is in test mode a
+        // live subscription must still be charged live, and it never reaches a sandbox (the provider's own mode stays in the facts, it decides S7)
+        val handle = payments.providerHandle(row.providerId, row.testMode, client)
+        // a provider whose keys decide the environment cannot be told to charge live: when its keys are test keys a live subscription waits like for an unavailable provider
+        val sandboxed = handle != null && !row.testMode && handle.testMode && handle.caps.testMode == TestModeSupport.DERIVED
+        val facts = SubscriptionService.ProviderFacts(handle != null && !sandboxed, handle?.testMode ?: false, handle?.caps?.statusQuery == true)
         val prepared = db.txRestartingOnOrderChange { conn -> subs.prepareCharge(conn, subscriptionId, facts, admin) }
 
         when (prepared) {
@@ -214,8 +219,10 @@ class SubscriptionJob(
 
     /**
      * An attempt of this period has not settled (09 section 8.3): when the provider has `statusQuery` it is asked after the commit (`RECONCILE`) and what it reports
-     * is applied; a `CREATED` attempt older than 15 minutes that the gateway does not know is closed `EXPIRED` (`UNKNOWN_OUTCOME`) and counts as a failure. Without
-     * `statusQuery` it stays: the panel shows "outcome unknown" and offers the retry.
+     * is applied; a `CREATED` attempt older than 15 minutes for which the query **answers** `unknown()` is closed `EXPIRED` (`UNKNOWN_OUTCOME`) and counts as a failure.
+     * A query that got no answer (the provider threw, timed out or is not there) closes nothing: the first charge may well have gone through while the gateway is
+     * down, and a failure would schedule a second charge with a new key. The attempt stays and the question is asked again a lease later ([SubscriptionService.askAgainLater]).
+     * Without `statusQuery` it stays: the panel shows "outcome unknown" and offers the retry.
      */
     private suspend fun resolveInFlight(prepared: SubscriptionService.ChargePreparation.InFlight, client: SqlClient) {
         val answer = payments.reconcileQuery(prepared.order, prepared.attempt, client)
@@ -224,11 +231,18 @@ class SubscriptionJob(
 
         val current = client.preparedQuery("SELECT `status`, `createdAt` FROM ${table("market_payment")} WHERE `id` = ?").execute(Tuple.of(prepared.attempt.id)).coAwait().firstOrNull() ?: return
 
-        if (current.getString("status") == PaymentStatus.CREATED.name && clock.now() - current.getLong("createdAt") >= UNKNOWN_OUTCOME_AFTER_MS) {
+        if (current.getString("status") != PaymentStatus.CREATED.name) return
+
+        if (answer is PaymentService.ReconcileQuery.Unknown && clock.now() - current.getLong("createdAt") >= UNKNOWN_OUTCOME_AFTER_MS) {
             payments.applyEvent(
                 prepared.order.id, prepared.attempt.id, PaymentAttemptEvent.Expired, AttemptFacts(failureCode = UNKNOWN_OUTCOME, failureMessage = PaymentService.PAYMENT_FAILED_TEXT), OrderActor.SYSTEM
             )
+
+            return
         }
+
+        // no answer, or too early to call it unknown: the attempt stays open and nothing else asks about a `CREATED` attempt
+        db.txRestartingOnOrderChange { conn -> subs.askAgainLater(conn, prepared.subscription.id, prepared.attempt.id) }
     }
 
     // ================================================================================================== B: manual renewals and notices

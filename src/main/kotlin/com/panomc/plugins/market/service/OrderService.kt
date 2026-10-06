@@ -951,7 +951,8 @@ class OrderService(
         is OrderEvent.Fail -> actor(event.actor)
         is OrderEvent.Expire, is OrderEvent.Create -> OrderActorType.SYSTEM
         is OrderEvent.LatePayment -> OrderActorType.GATEWAY
-        is OrderEvent.ReviewAccepted, is OrderEvent.ReviewRejected -> OrderActorType.ADMIN
+        is OrderEvent.ReviewAccepted -> OrderActorType.ADMIN
+        is OrderEvent.ReviewRejected -> if (event.system) OrderActorType.SYSTEM else OrderActorType.ADMIN
         is OrderEvent.RefundSucceeded, is OrderEvent.DisputeOpened, is OrderEvent.DisputeWon -> OrderActorType.GATEWAY
     }
 
