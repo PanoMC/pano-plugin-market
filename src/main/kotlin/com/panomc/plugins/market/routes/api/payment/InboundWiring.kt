@@ -195,7 +195,7 @@ private fun buildDispatcher(plugin: MarketPlugin): InboundDispatcher {
                 com.panomc.plugins.market.routes.panel.refund.refundService(plugin).onRefundUpdated(event, attempt, ctx.eventKey, ctx.requestHash)
             } else {
                 // MK-121: SubscriptionUpdated is applied by the subscription service, every other non-attempt event goes to the sink a slice installed
-                SubscriptionEventSink(db, { subscriptionService(plugin) }, paymentEventSink).apply(event, attempt, ctx)
+                SubscriptionEventSink(db, { subscriptionService(plugin) }, paymentEventSink).withPayments { paymentService(plugin) }.apply(event, attempt, ctx)
             }
         },
         attemptLocks(plugin), SystemClock, SecureIds(), { wiring.site().baseUrl.trimEnd('/') }

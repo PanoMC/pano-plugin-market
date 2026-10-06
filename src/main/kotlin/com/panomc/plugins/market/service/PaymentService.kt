@@ -91,6 +91,7 @@ import com.panomc.plugins.market.spi.payment.PaymentAttemptView
 import com.panomc.plugins.market.spi.payment.PaymentCapabilities
 import com.panomc.plugins.market.spi.payment.PaymentEvent
 import com.panomc.plugins.market.spi.payment.PaymentTarget
+import com.panomc.plugins.market.spi.payment.PaymentContext
 import com.panomc.plugins.market.spi.payment.PaymentProvider
 import com.panomc.plugins.market.spi.payment.QueryPaymentRequest
 import com.panomc.plugins.market.spi.payment.QueryReason
@@ -267,9 +268,18 @@ class AttemptFacts(
      * transaction, where the activation of O2 / O4 finds it even when an admin accepts the payment later.
      */
     val subscription: GatewaySubscriptionState? = null,
-    val storedMethod: StoredPaymentMethod? = null
+    val storedMethod: StoredPaymentMethod? = null,
+    /**
+     * How `SubscriptionJob` classifies a failed merchant-initiated charge when the provider call itself failed (09 section 8.3): [RECURRING_TECHNICAL] (the
+     * charge never reached a decision: configuration, authentication, unreachable, rate limited, invalid request) or [RECURRING_UNSUPPORTED] (the provider
+     * cannot charge a stored method). `null` for everything a gateway reported, a decline included.
+     */
+    val recurringOutcome: String? = null
 ) {
     companion object {
+        const val RECURRING_TECHNICAL = "TECHNICAL"
+        const val RECURRING_UNSUPPORTED = "UNSUPPORTED"
+
         val NONE = AttemptFacts()
 
         /** The facts of a provider event (the encrypted `providerData` needs [cipher]). */
@@ -893,10 +903,20 @@ class PaymentService(
         val applied = db.txRestartingOnOrderChange { conn ->
             after.clear()
 
-            locks.forOrder(conn, orderId, scopeFor(event), cashback = config().cashbackPercent > 0) { locked ->
+            val body: suspend (LockedOrder) -> AppliedEvent = { locked ->
                 val attempt = payments.getById(attemptId, conn) ?: throw NoSuchElementException("attempt $attemptId does not exist")
 
                 applyIn(conn, locked, attemptId, event, facts, policy ?: resolve(attempt.providerId, conn)?.policy ?: ProviderMoneyPolicy(), actor, after)
+            }
+            val scope = scopeFor(event)
+
+            // a failure of an attempt of a renewal order reaches the subscription (09 section 9.1): its row is locked before the order, as in every scope but PAYMENT
+            if (scope == OrderLockScope.PAYMENT && (event is PaymentAttemptEvent.Failed || event is PaymentAttemptEvent.Expired) &&
+                orders.getById(orderId, conn)?.let { it.source == OrderSource.RENEWAL && it.subscriptionId != null } == true
+            ) {
+                locks.orderWithSubscription(conn, orderId, body)
+            } else {
+                locks.forOrder(conn, orderId, scope, cashback = config().cashbackPercent > 0, block = body)
             }
         }
 
@@ -1021,7 +1041,13 @@ class PaymentService(
 
         // 09 section 4.4: what a success says about the subscription (gateway subscription, stored method) goes onto the pending row now, so the activation
         // of O2 / O4 (also an admin's accept long after) reads it from there; the subscription row is locked by every scope that can reach a Succeeded
-        if (paid != null && order.subscriptionId != null && order.source != OrderSource.RENEWAL) subscriptionHooks.onPaid(conn, order, attempt, facts)?.let { after += it }
+        // (a success on a renewal order is handed over too: the stored method of a payment by hand replaces the card, 09 section 8.4 step 4)
+        if (paid != null && order.subscriptionId != null) subscriptionHooks.onPaid(conn, order, attempt, facts)?.let { after += it }
+
+        // 09 section 9.1: a closed attempt of a renewal order is a failed charge of the subscription (or only a note on the renewal when it was the buyer's own attempt)
+        if (order.subscriptionId != null && order.source == OrderSource.RENEWAL && (decision.to == PaymentStatus.FAILED || decision.to == PaymentStatus.EXPIRED)) {
+            subscriptionHooks.onAttemptFailed(conn, order, attempt, event is PaymentAttemptEvent.Failed && event.final, facts)
+        }
 
         // ---- what the machine names besides the attempt row, in its order
         var orderStatus = order.status
@@ -1188,7 +1214,8 @@ class PaymentService(
         // 2. orders priced by a gateway, full-credit orders and the orders of a running subscription keep their provider. The initial order of a subscription whose
         // row is still PENDING may switch to another gateway (09 section 2, section 4.3, test 22: the row follows); a credit-paid subscription keeps `credits`
         val pending = subscriptionHooks.pendingPlan(order, conn)
-        val subscriptionLocked = order.subscriptionId != null && (pending == null || fullCredit || order.paymentMethodId == MethodInput.CREDITS)
+        // a renewal order is paid with any offered method (09 section 8.1 and 8.4: a buyer pays it by hand, with credits too); only the gateway-priced rule still holds
+        val subscriptionLocked = order.subscriptionId != null && order.source != OrderSource.RENEWAL && (pending == null || fullCredit || order.paymentMethodId == MethodInput.CREDITS)
 
         if (methodId == MethodInput.FREE) throw PaymentMethodUnavailable(METHOD_NOT_OFFERED)
         if ((order.pricingMode != PricingMode.MARKET || subscriptionLocked) && methodId != order.paymentMethodId) throw PaymentMethodUnavailable(METHOD_LOCKED)
@@ -1384,6 +1411,10 @@ class PaymentService(
 
     /** `H = createdAt + max(24 h, W(first provider))`: retries cannot keep stock reserved beyond it (06 section 9.1). */
     private suspend fun hardCapOf(order: MarketOrder, attempts: List<MarketPayment>, sqlClient: SqlClient): Long {
+        // a renewal order reserves nothing, so the cap that keeps stock from being held for ever does not apply: its own window (`expiresAt`) is its limit, and a
+        // manual renewal is prepared days before the period ends (09 section 8.6)
+        if (order.source == OrderSource.RENEWAL) order.expiresAt?.let { return it }
+
         val first = attempts.firstOrNull()
         val minutes = first?.let { resolve(it.providerId, sqlClient)?.caps?.paymentWindowMinutes }
 
@@ -1678,8 +1709,40 @@ class PaymentService(
         return if (applied == 0) ReconcileQuery.Unknown(result.pollAgainAfterSeconds) else ReconcileQuery.Applied(applied, result.pollAgainAfterSeconds)
     }
 
+    /**
+     * A provider as the subscription job calls it (09 sections 8.3 and 11, MK-122): the provider itself, its capabilities, whether its context is in test mode
+     * and a context for the call. [testMode] is the environment a call for [attemptTestMode] runs in (`null` = the provider's own).
+     */
+    class ProviderHandle(val provider: PaymentProvider, val caps: PaymentCapabilities, val ctx: PaymentContext, val testMode: Boolean)
+
+    /** The handle of [providerId]; `null` when it is not registered, incompatible or throws while it describes itself (`UNAVAILABLE` / `INCOMPATIBLE`, 02 section 11). A disabled method is still returned: it keeps charging its subscriptions. */
+    suspend fun providerHandle(providerId: String, attemptTestMode: Boolean?, sqlClient: SqlClient): ProviderHandle? {
+        val resolved = resolve(providerId, sqlClient) ?: return null
+
+        return ProviderHandle(resolved.provider, resolved.caps, contexts.create(resolved.provider, resolved.settings, attemptTestMode ?: resolved.testMode), resolved.testMode)
+    }
+
+    /** The request of `chargeRecurring` for the renewal [order] and its [attempt] (09 section 8.3): the stored method of [subscription] is the instrument to charge. */
+    suspend fun recurringChargeRequest(
+        order: MarketOrder, attempt: MarketPayment, subscription: com.panomc.plugins.market.spi.payment.SubscriptionView, stored: StoredPaymentMethod,
+        idempotencyKey: String, sqlClient: SqlClient
+    ): com.panomc.plugins.market.spi.payment.RecurringChargeRequest {
+        val items = orderItems.getByOrderIds(listOf(order.id), sqlClient)
+        val billing = order.billingInfo?.let { runCatching { JsonObject(it) }.getOrNull() }
+        val locale = order.locale ?: site().defaultLocale
+
+        return com.panomc.plugins.market.spi.payment.RecurringChargeRequest(
+            attempt = AttemptRef(attempt.id, attempt.reference, attempt.token), amount = Money(attempt.amount, attempt.currency), subscription = subscription,
+            storedMethod = stored, order = spiSnapshot(order, items), buyer = buyerOf(order, null, null, billing, locale), idempotencyKey = idempotencyKey,
+            notifyUrl = urlsFor(attempt, order.publicId ?: "", attempt.providerId).notify
+        )
+    }
+
     /** Runs the follow-up work a transaction of a job collected ([TransitionResult.after]): gateway cancels (failures ignored) and panel alerts. */
     suspend fun runAfterCommit(after: List<AfterCommit>, sqlClient: SqlClient) = runAfter(after, sqlClient)
+
+    /** [runAfterCommit] on the plugin's own read client (the subscription job and the inbound sink have none of their own). */
+    suspend fun runAfterCommit(after: List<AfterCommit>) = runAfter(after, readClient())
 
     /** The `OrderView` of [order] for [role]: the owner view with the stored start and the retry data, cut to the role's allow-list (11 section 5.2). */
     suspend fun viewFor(order: MarketOrder, role: com.panomc.plugins.market.routes.api.OrderRole, caller: PayCaller, sqlClient: SqlClient): JsonObject {

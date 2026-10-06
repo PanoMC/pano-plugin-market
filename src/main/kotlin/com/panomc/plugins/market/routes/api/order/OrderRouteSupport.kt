@@ -220,7 +220,9 @@ private fun buildSubscriptionService(plugin: MarketPlugin): SubscriptionService 
         cipher = paymentWiring(plugin).cipher, capabilities = { providerId, sqlClient -> paymentService(plugin).capabilitiesOf(providerId, sqlClient) },
         deliveries = deliveryService(plugin),
         mail = MailOutboxService({ currentConfig(plugin) }, SystemClock, context.getBean(MarketMailOutboxDao::class.java), orderEvents),
-        webhooks = SubscriptionWebhooks { conn, event, subjectKey, orderId, data, testMode -> webhookService(plugin).emit(conn, event, subjectKey, orderId, data, testMode) }
+        webhooks = SubscriptionWebhooks { conn, event, subjectKey, orderId, data, testMode -> webhookService(plugin).emit(conn, event, subjectKey, orderId, data, testMode) },
+        // MK-122: the renewal orders and attempts (random ids) and the cancel of the unpaid renewal order of an ended subscription (the order service is looked up late)
+        ids = SecureIds(), orderService = { orderService(plugin) }
     )
 }
 
@@ -283,11 +285,12 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
             PlatformUserDirectory { context.getBean(DatabaseManager::class.java) },
             InvoiceEffects(
                 invoiceService(plugin), orderDao,
-                DeliveryEffects(
+                // MK-121: SubscriptionOnOrderPaid / SubscriptionOnClosedUnpaid go to the subscription service; MK-122: it is the outermost of the delivery chain because a
+                // renewal order must not reach GrantEntitlements (the subscription's own entitlement runs on); the rest still to PENDING_SLICES
+                SubscriptionEffects({ subscriptionService(plugin) }, DeliveryEffects(
                     entitlementService(plugin), deliveryService(plugin), orderDao,
-                    // MK-121: SubscriptionOnOrderPaid / SubscriptionOnClosedUnpaid go to the subscription service; the rest still to PENDING_SLICES
-                    ShippingEffects({ shippingService(plugin) }, SubscriptionEffects({ subscriptionService(plugin) }, ForeignEffects.PENDING_SLICES))
-                )
+                    ShippingEffects({ shippingService(plugin) }, ForeignEffects.PENDING_SLICES)
+                ))
             )
         ),
         rates = { sqlClient -> rates.getAll(sqlClient).filter { it.rate.signum() > 0 }.associate { it.currency to it.rate } },
