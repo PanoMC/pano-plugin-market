@@ -239,8 +239,9 @@ class CreditReconciler(
         }
     }
 
+    // an erased user (11 section 16 step 3) leaves a USER account and its transactions without a user id: both sides null is consistent, one side null is not
     private fun side(expected: String, type: String, systemKey: String?, accountUser: Long?, txUser: Long?): Boolean =
-        if (expected == USER) type == "USER" && accountUser != null && accountUser == txUser else type == "SYSTEM" && systemKey == expected
+        if (expected == USER) type == "USER" && accountUser == txUser else type == "SYSTEM" && systemKey == expected
 
     private fun describe(type: String, systemKey: String?, userId: Long?): String = if (type == "USER") "user $userId" else systemKey ?: "?"
 

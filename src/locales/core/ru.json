@@ -87,6 +87,7 @@
     "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> изменил статус заказа <b>#{orderId}</b> на \"{status}\".",
     "CANCELLED_MARKET_ORDER": "<b>{username}</b> отменил заказ <b>#{orderId}</b>.",
     "REVIEWED_MARKET_ORDER": "<b>{username}</b> принял решение \"{decision}\" по проверке заказа <b>#{orderId}</b>.",
+    "ANONYMIZED_MARKET_ORDER": "<b>{username}</b> удалил(а) персональные данные заказа <b>#{orderId}</b>.",
     "RERAN_MARKET_DELIVERY": "<b>{username}</b> повторно запустил доставок: {count} по заказу <b>#{orderId}</b>.",
     "RETRIED_MARKET_DELIVERY": "<b>{username}</b> повторил доставку <b>#{deliveryId}</b> заказа <b>#{orderId}</b>.",
     "CANCELLED_MARKET_DELIVERY": "<b>{username}</b> отменил доставку <b>#{deliveryId}</b> заказа <b>#{orderId}</b>.",

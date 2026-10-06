@@ -87,6 +87,7 @@
     "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin durumunu \"{status}\" olarak değiştirdi.",
     "CANCELLED_MARKET_ORDER": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişi iptal etti.",
     "REVIEWED_MARKET_ORDER": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin incelemesinde \"{decision}\" kararı verdi.",
+    "ANONYMIZED_MARKET_ORDER": "<b>{username}</b> <b>#{orderId}</b> numaralı siparişin kişisel verilerini sildi.",
     "RERAN_MARKET_DELIVERY": "<b>{username}</b>, <b>#{orderId}</b> numaralı siparişin {count} teslimatını yeniden çalıştırdı.",
     "RETRIED_MARKET_DELIVERY": "<b>{username}</b>, <b>#{orderId}</b> numaralı siparişin <b>#{deliveryId}</b> numaralı teslimatını yeniden denedi.",
     "CANCELLED_MARKET_DELIVERY": "<b>{username}</b>, <b>#{orderId}</b> numaralı siparişin <b>#{deliveryId}</b> numaralı teslimatını iptal etti.",

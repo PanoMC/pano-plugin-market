@@ -221,6 +221,9 @@ class MarketScheduler(
         /** `SubscriptionJob` (09 section 11: every 60 s). */
         const val SUBSCRIPTION_MS = 60_000L
 
+        /** `HousekeepingJob` ticks every minute and runs its own tasks on their own cadence (MK-153). */
+        const val HOUSEKEEPING_MS = 60_000L
+
         private val logger = LoggerFactory.getLogger(MarketScheduler::class.java)
     }
 }
@@ -232,8 +235,8 @@ class MarketScheduler(
  * Open seams (each fails closed: nothing is armed that could not do its work):
  * - `MailOutboxJob` is registered with `MailComposer` (MK-142): the order mails compose; the subscription, expiry and shipment kinds have no composer
  *   until MK-146 and end `FAILED RENDER_ERROR` (never sent) until then.
- * - The other workers of 00 section 8.5 (`RefundReconcileJob`, `EntitlementExpiryJob`, `SubscriptionJob`,
- *   `HousekeepingJob`) belong to the slices that build them; each adds one `Job` here (`InboundEventRetryJob` is MK-077's, registered below).
+ * - The other workers of 00 section 8.5 belong to the slices that build them; each adds one `Job` here (`InboundEventRetryJob` is MK-077's,
+ *   `HousekeepingJob` is MK-153's, both registered below).
  */
 internal object MarketJobs {
     fun scheduler(plugin: MarketPlugin): MarketScheduler = MarketScheduler(SystemClock, jobs(plugin), enabled = { MarketRuntime.isReady })
@@ -262,7 +265,8 @@ internal object MarketJobs {
             refundReconcile(refundReconcileJob(plugin)),
             shipmentTracking(ShipmentTrackingJob(SystemClock, context.getBean(MarketShipmentDao::class.java), shippingService(plugin), sqlClient)),
             subscription(subscriptionJob(plugin)),
-            mailOutbox(MailWiring.job(plugin))
+            mailOutbox(MailWiring.job(plugin)),
+            housekeepingTask(housekeepingJob(plugin))
         )
     }
 

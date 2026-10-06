@@ -8,6 +8,9 @@ import com.panomc.platform.server.ServerManager
 import com.panomc.platform.setup.SetupManager
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.db.MarketTables
+import com.panomc.plugins.market.core.time.SystemClock
+import com.panomc.plugins.market.event.UninstallExport
+import com.panomc.plugins.market.event.exportThenDrop
 import com.panomc.plugins.market.event.server.MarketSyncEvent
 import com.panomc.plugins.market.job.MarketJobs
 import com.panomc.plugins.market.job.MarketScheduler
@@ -263,7 +266,20 @@ class MarketPlugin : PanoPlugin() {
     override suspend fun onUninstall() {
         logger.info("Uninstalling...")
 
-        pluginDatabaseManager.uninstall(this)
+        if (!setupManager.isSetupDone()) {
+            // no database was ever set up for the store: nothing to export
+            pluginDatabaseManager.uninstall(this)
+        } else {
+            // 00 section 8.7: the financial records are exported as CSV before the tables are dropped; an export that fails aborts the uninstall (the tables stay)
+            val exported = exportThenDrop(
+                export = {
+                    UninstallExport(SystemClock, { MarketTables.prefixOverride ?: databaseManager.getTablePrefix() }, { databaseManager.getSqlClient() }, pluginDataFolder).export()
+                },
+                drop = { pluginDatabaseManager.uninstall(this) }
+            )
+
+            logger.info("The orders, payments, refunds, credit ledger and invoices were exported to {} before the tables were dropped", exported.dir)
+        }
 
         if (uploadsDir.exists()) {
             uploadsDir.deleteRecursively()
