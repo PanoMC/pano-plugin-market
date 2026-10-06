@@ -89,6 +89,7 @@
     "RETRIED_MARKET_DELIVERY": "<b>{username}</b> retried delivery <b>#{deliveryId}</b> of order <b>#{orderId}</b>.",
     "CANCELLED_MARKET_DELIVERY": "<b>{username}</b> cancelled delivery <b>#{deliveryId}</b> of order <b>#{orderId}</b>.",
     "REVOKED_MARKET_ORDER": "<b>{username}</b> revoked the goods of order <b>#{orderId}</b> ({count} undo deliveries planned).",
+    "REFUNDED_MARKET_ORDER": "<b>{username}</b> refunded <b>{amount}</b> of order <b>#{orderId}</b> (refund <b>#{refundId}</b>).",
     "CREATED_MARKET_ORDER": "<b>{username}</b> created order <b>#{orderId}</b> for <b>{playerUsername}</b> ({total}).",
     "APPROVED_MARKET_BANK_TRANSFER": "<b>{username}</b> approved the bank transfer of order <b>#{orderId}</b>.",
     "REJECTED_MARKET_BANK_TRANSFER": "<b>{username}</b> rejected the bank transfer of order <b>#{orderId}</b>.",

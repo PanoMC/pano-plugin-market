@@ -132,7 +132,10 @@ object InvariantChecker {
         Check(
             "I9", listOf("market_order", "market_refund"),
             "SELECT o.`id` FROM `{market_order}` o WHERE o.`refundedTotal` > o.`totalPrice` OR o.`refundedGatewayAmount` > o.`paidAmount` OR " +
-                "o.`refundedTotal` <> (SELECT COALESCE(SUM(r.`amount`), 0) FROM `{market_refund}` r WHERE r.`orderId` = o.`id` AND r.`status` = 'SUCCEEDED')"
+                "o.`refundedTotal` <> (SELECT COALESCE(SUM(r.`amount`), 0) FROM `{market_refund}` r WHERE r.`orderId` = o.`id` AND r.`status` = 'SUCCEEDED' " +
+                // MK-111: money that is not on the books of the order (the refund of a duplicate attempt, the money of a rejected review) only moves the attempt's refundedAmount
+                "AND NOT ((r.`paymentId` IS NOT NULL AND (o.`paymentId` IS NULL OR r.`paymentId` <> o.`paymentId`)) OR " +
+                "(r.`origin` <> 'PANEL' AND o.`status` NOT IN ('COMPLETED','PARTIALLY_REFUNDED','REFUNDED','CHARGEBACK'))))"
         ),
         Check(
             "I10", listOf("market_payment"),

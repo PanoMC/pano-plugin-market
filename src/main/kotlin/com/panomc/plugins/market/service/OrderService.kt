@@ -522,7 +522,7 @@ class OrderService(
             .put("invoiceAvailable", order.invoiceId != null)
             .put("canCancel", pending && order.source != OrderSource.RENEWAL && !processing)
             .put("canRetryPayment", canRetry)
-            .put("refundPending", false)
+            .put("refundPending", refunds?.getByOrderId(order.id, sqlClient)?.any { it.status == RefundStatus.PENDING } ?: false)
             .also { view ->
                 if (canRetry && retry != null) {
                     view.put("paymentMethods", retry.methods)

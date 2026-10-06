@@ -176,6 +176,26 @@ class WebhookService(
         return insertRows(conn, targets, WebhookEvents.ORDER_PAID, orderId.toString(), orderId, data, order.testMode)
     }
 
+    /**
+     * `order.refunded` for [orderId] (O10, 08 section 15.4): the order, buyer, recipient and lines as of the commit of the transition plus the [refund] object
+     * the refund service built (`{id, amount, gatewayAmount, creditAmount, currency, reason, origin, full, revoked, items[]}`). The subject key is the refund id,
+     * so a replayed O10 inserts nothing.
+     */
+    suspend fun emitOrderRefunded(conn: SqlConnection, orderId: Long, refundId: Long, refund: JsonObject): Int {
+        val targets = targets(conn, WebhookEvents.ORDER_REFUNDED)
+        if (targets.isEmpty()) return 0
+
+        val order = orders.getById(orderId, conn) ?: throw IllegalStateException("order $orderId does not exist")
+        val items = orderItems.getByOrderIds(listOf(orderId), conn)
+        val data = EventPayloads.orderPaid(
+            order, items, store(),
+            buyerUuid = uuidOf(order.userId, order.playerUsername),
+            recipientUuid = uuidOf(EventPayloads.recipientUserId(order), EventPayloads.recipientName(order))
+        ).put("refund", refund)
+
+        return insertRows(conn, targets, WebhookEvents.ORDER_REFUNDED, refundId.toString(), orderId, data, order.testMode)
+    }
+
     private suspend fun targets(conn: SqlConnection, event: String): List<MarketWebhookEndpoint> =
         endpoints.getAll(conn).filter { it.enabled && WebhookEvents.matches(it.events, event) }
 
