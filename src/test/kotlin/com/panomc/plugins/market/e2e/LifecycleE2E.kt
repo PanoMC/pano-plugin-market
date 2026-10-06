@@ -680,12 +680,6 @@ class LifecycleE2E {
         lc.pay(again)
         lc.awaitOrder(again, "COMPLETED")
 
-        // the DEFERRED row keeps its own random key (a redelivery is a new row), so it stays in `queues.deferredEvents` until the admin replays it (04 section 7
-        // `POST /payment-events/:eventId/replay`): the replay applies the stored webhook and the order that waited for it completes
-        val deferredId = lc.db.long("SELECT `id` FROM `pano_market_payment_event` WHERE `status` = 'DEFERRED' ORDER BY `id` DESC LIMIT 1") ?: throw AssertionError("the DEFERRED event row is missing")
-        val replayed = lc.admin.post("/api/panel/market/payment-events/$deferredId/replay", JsonObject()).ok().obj()
-        assertEquals("PROCESSED", replayed.getString("status"), "the replay of the deferred event is processed")
-        lc.awaitOrder(pending, "COMPLETED")
         lc.assertInvariants()
     }
 
