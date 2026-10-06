@@ -1165,6 +1165,7 @@ internal class SubscriptionCancelIT : RenewalITBase() {
         val refund = root.resolve("routes/panel/refund/RefundRoutes.kt").readText()
         val dispute = root.resolve("routes/panel/dispute/DisputeRoutes.kt").readText()
         val player = root.resolve("event/PlayerEventHandler.kt").readText()
+        val erasure = root.resolve("job/HousekeepingJob.kt").readText()
         val wiring = root.resolve("routes/panel/subscription/SubscriptionWiring.kt").readText()
         val scheduler = root.resolve("job/MarketScheduler.kt").readText()
         val panel = root.resolve("routes/panel/subscription/SubscriptionRoutes.kt").readText()
@@ -1172,7 +1173,9 @@ internal class SubscriptionCancelIT : RenewalITBase() {
 
         assertTrue(refund.contains("subscriptionService(plugin).onOrderRefunded(conn, order, refund)"))
         assertTrue(dispute.contains("subscriptionService(plugin).onOrderChargeback(conn, order, dispute)"))
-        assertTrue(player.contains("subscriptionService(plugin).onUserDeleted("))
+        // MK-153: the deleted account goes through the erasure service, whose first steps end the subscriptions
+        assertTrue(player.contains("playerErasureService(plugin).erase("))
+        assertTrue(erasure.contains("subscriptionService(plugin).onUserDeleted("))
         assertTrue(wiring.contains("actions = actions"), "step E repeats a cancel that crashed")
         assertTrue(scheduler.contains("routes.panel.subscription.subscriptionJob(plugin)"), "the scheduler and the admin retry share one job")
 

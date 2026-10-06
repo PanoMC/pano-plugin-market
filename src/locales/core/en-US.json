@@ -87,6 +87,7 @@
     "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> changed the status of order <b>#{orderId}</b> to \"{status}\".",
     "CANCELLED_MARKET_ORDER": "<b>{username}</b> cancelled order <b>#{orderId}</b>.",
     "REVIEWED_MARKET_ORDER": "<b>{username}</b> decided \"{decision}\" on the review of order <b>#{orderId}</b>.",
+    "ANONYMIZED_MARKET_ORDER": "<b>{username}</b> erased the personal data of order <b>#{orderId}</b>.",
     "RERAN_MARKET_DELIVERY": "<b>{username}</b> re-ran {count} deliveries of order <b>#{orderId}</b>.",
     "RETRIED_MARKET_DELIVERY": "<b>{username}</b> retried delivery <b>#{deliveryId}</b> of order <b>#{orderId}</b>.",
     "CANCELLED_MARKET_DELIVERY": "<b>{username}</b> cancelled delivery <b>#{deliveryId}</b> of order <b>#{orderId}</b>.",

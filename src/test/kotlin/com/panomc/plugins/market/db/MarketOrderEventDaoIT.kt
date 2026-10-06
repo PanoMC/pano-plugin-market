@@ -42,7 +42,7 @@ class MarketOrderEventDaoIT : MarketDaoITBase() {
 
     @Test
     fun `every event type of the closed list is stored and read back`(): Unit = runBlocking {
-        assertEquals(33, OrderEventType.entries.size)
+        assertEquals(34, OrderEventType.entries.size)
         for (type in OrderEventType.entries) dao.add(MarketOrderEvent(orderId = 1, type = type), pool)
         assertEquals(OrderEventType.entries.toList(), dao.getByOrderId(1, pool).map { it.type })
     }
