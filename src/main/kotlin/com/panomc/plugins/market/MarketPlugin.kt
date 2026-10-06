@@ -27,6 +27,9 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** Delay of the second provider-secrets pass: providers of other plugins resolve only after those plugins started. */
+private const val SECRETS_RETRY_MS = 10_000L
+
 class MarketPlugin : PanoPlugin() {
     private val pluginDatabaseManager by lazy {
         applicationContext.getBean(PluginDatabaseManager::class.java)
@@ -154,6 +157,27 @@ class MarketPlugin : PanoPlugin() {
         }
     }
 
+    /**
+     * Bootstrap step 6 (01 section 14.4): legacy plaintext provider secrets are encrypted and unreadable ones flagged ([PaymentMethodService.startup]). A provider
+     * that lives in another plugin is only resolvable once that plugin has started, which is after this one, so the pass is repeated once after
+     * [SECRETS_RETRY_MS]; it is idempotent (an encrypted secret is never touched again) and never throws.
+     */
+    private suspend fun encryptLegacySecrets() {
+        runSecretsPass()
+
+        vertx.setTimer(SECRETS_RETRY_MS) {
+            CoroutineScope(vertx.dispatcher()).launch { runSecretsPass() }
+        }
+    }
+
+    private suspend fun runSecretsPass() {
+        try {
+            com.panomc.plugins.market.routes.panel.settings.payment.paymentMethodService(this).startup()
+        } catch (e: Exception) {
+            logger.warn("The provider secrets could not be checked at start", e)
+        }
+    }
+
     /** The counters of the scheduler jobs for `GET /health` (MK-172); empty while no scheduler is armed. */
     internal fun jobStats(): List<MarketScheduler.JobStats> = jobScheduler?.stats().orEmpty()
 
@@ -186,6 +210,7 @@ class MarketPlugin : PanoPlugin() {
             prefix = { MarketTables.prefixOverride ?: databaseManager.getTablePrefix() },
             pool = { databaseManager.getSqlClient() as Pool },
             initDatabase = { pluginDatabaseManager.initialize(this) },
+            secrets = { encryptLegacySecrets() },
             armScheduler = {
                 seedShipping()
                 startExchangeRateScheduler(configManager, exchangeRateService)

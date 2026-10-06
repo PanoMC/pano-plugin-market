@@ -399,8 +399,24 @@ boot_and_wait() { # $1 = install | keep ; assumes the JVM is not running
   if [ "$1" = install ] && [ ! -f "$INSTANCE/installed" ]; then
     install_pano || abort_boot 15 "the install (smoke-install.sh) failed"
     : > "$INSTANCE/installed"
+    trust_loopback_proxy
     post_install_restart
   fi
+}
+
+# CP-2: the block-list IP case of F-18 (17 9.3) needs the instance to trust the loopback peer as a proxy, otherwise X-Forwarded-For is never
+# judged (ClientIpResolver) and the scenario ends as a skipped assumption. Pano rewrites config.conf on shutdown, so the key is set while the
+# JVM is stopped and the JVM is booted again with it. MARKET_E2E_NO_TRUSTED_PROXY=1 switches this off (and makes F-18 skip).
+trust_loopback_proxy() {
+  [ -z "${MARKET_E2E_NO_TRUSTED_PROXY:-}" ] || return 0
+  [ -f "$INSTANCE/plugins/$(basename "$PLUGIN_JAR")" ] || return 0 # install-legacy installs without the market
+  stop_recorded || abort_boot 19 "the install JVM did not exit for the trusted-proxies edit"
+  [ -f "$INSTANCE/config.conf" ] || abort_boot 14 "no config.conf in the instance after the install"
+  sed -i -E 's/^([[:space:]]*trusted-proxies[[:space:]]*=[[:space:]]*)\[[^]]*\]/\1["127.0.0.1", "::1"]/' "$INSTANCE/config.conf"
+  grep -Eq '^[[:space:]]*trusted-proxies[[:space:]]*=[[:space:]]*\[[^]]*127\.0\.0\.1' "$INSTANCE/config.conf" || abort_boot 14 "trusted-proxies could not be written to config.conf (single-line form expected)"
+  mv -f "$INSTANCE/pano.log" "$INSTANCE/pano-install.log" 2>/dev/null
+  launch_pano || abort_boot 14 "the JVM did not start after the trusted-proxies edit"
+  wait_until "health" health_ok || abort_boot 14 "no GET /api/health 200 after the trusted-proxies edit"
 }
 
 # Finding of MK-012 (see evidence/MK-012.md): the market plugin of a JVM that was booted BEFORE the setup finished does not
