@@ -469,6 +469,58 @@ internal class SubscriptionCancelIT : RenewalITBase() {
     }
 
     @Test
+    fun `a failed immediate cancel on top of a scheduled one leaves the scheduled cancel's reason alone, so resume still belongs to whoever scheduled it`(): Unit = runBlocking {
+        fake.onCancelSubscription = { CancelSubscriptionResult.Scheduled(w.clock.now() + 30 * day) }
+
+        // an admin schedules the cancel, the buyer's immediate cancel fails at the gateway: ADMIN_CANCEL stays, the buyer cannot resume
+        val (admin, _) = gateway("Ada", "sub_adm")
+
+        actions.cancel(admin.sub.id, CancelActor.ADMIN, null, true)
+
+        val scheduledByAdmin = subscription(admin.sub.id)
+
+        assertEquals("ADMIN_CANCEL", scheduledByAdmin.endReason)
+        assertTrue(scheduledByAdmin.cancelAtPeriodEnd)
+
+        fake.onCancelSubscription = { CancelSubscriptionResult.Failed("gateway said no") }
+        failsWith<PaymentProviderError> { actions.cancel(admin.sub.id, CancelActor.BUYER, admin.user.id, false) }
+
+        val afterBuyerFailure = subscription(admin.sub.id)
+
+        assertEquals("ADMIN_CANCEL", afterBuyerFailure.endReason)
+        assertEquals(scheduledByAdmin.cancelRequestedAt, afterBuyerFailure.cancelRequestedAt)
+        assertTrue(afterBuyerFailure.cancelAtPeriodEnd)
+        assertEquals(SubscriptionStatus.ACTIVE, afterBuyerFailure.status)
+        failsWith<SubscriptionNotResumable> { actions.resume(admin.sub.id, admin.user.id) }
+
+        // the mirror: the buyer schedules it, a failed admin immediate cancel leaves BUYER_CANCEL and the buyer can still resume
+        fake.onCancelSubscription = { CancelSubscriptionResult.Scheduled(w.clock.now() + 30 * day) }
+
+        val (buyer, _) = gateway("Bea", "sub_buy")
+
+        actions.cancel(buyer.sub.id, CancelActor.BUYER, buyer.user.id, true)
+
+        val scheduledByBuyer = subscription(buyer.sub.id)
+
+        assertEquals("BUYER_CANCEL", scheduledByBuyer.endReason)
+
+        fake.onCancelSubscription = { CancelSubscriptionResult.Failed("gateway said no") }
+        failsWith<PaymentProviderError> { actions.cancel(buyer.sub.id, CancelActor.ADMIN, null, false) }
+
+        val afterAdminFailure = subscription(buyer.sub.id)
+
+        assertEquals("BUYER_CANCEL", afterAdminFailure.endReason)
+        assertEquals(scheduledByBuyer.cancelRequestedAt, afterAdminFailure.cancelRequestedAt)
+
+        sw.first.onResume = { ResumeSubscriptionResult.Resumed() }
+
+        val resumed = actions.resume(buyer.sub.id, buyer.user.id)
+
+        assertFalse(resumed.cancelAtPeriodEnd)
+        assertNull(resumed.endReason)
+    }
+
+    @Test
     fun `79 LocalOnly from a gateway subscription is a failure, 502 and nothing changes`(): Unit = runBlocking {
         val (g, _) = gateway()
 
