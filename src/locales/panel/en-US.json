@@ -1773,6 +1773,7 @@
       "credits": "Pays {credits}",
       "credits-unknown": "The credit value is unknown.",
       "note": "Note (optional)",
+      "note-required": "Note",
       "submit": "Pay Out",
       "toast-paid": "Payout recorded.",
       "error": {

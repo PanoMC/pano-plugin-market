@@ -4,6 +4,7 @@ import ApiUtil from '@panomc/sdk/utils/api';
 import { call } from '../../utils/api.js';
 import { toastError } from '../../utils/toast.js';
 import { isStaleError } from './actions.js';
+import { hideThen } from './hide-then.js';
 
 /** `{ method, path, body }` of requests.js -> normalised `call()` result. */
 export function send(request) {
@@ -47,6 +48,11 @@ export function hideModal(element) {
   if (element && typeof window !== 'undefined' && window.bootstrap) {
     window.bootstrap.Modal.getOrCreateInstance(element).hide();
   }
+}
+
+/** Hides the modal, then runs `done` once it is gone (see hide-then.js): the safe moment for a page refresh or a navigation. */
+export function hideModalThen(element, done) {
+  hideThen(element, typeof window !== 'undefined' ? window.bootstrap : undefined, done);
 }
 
 /** True while any Bootstrap modal is open (auto refresh pauses). */

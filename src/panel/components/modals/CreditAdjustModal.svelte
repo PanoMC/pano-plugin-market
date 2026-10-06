@@ -129,7 +129,7 @@
   } from '../../utils/credits.js';
   import { fmt } from '../../utils/locale.js';
   import { toastError } from '../../utils/toast.js';
-  import { hideModal, showModal } from '../order-detail/send.js';
+  import { hideModalThen, showModal } from '../order-detail/send.js';
   import PlayerCell from '../PlayerCell.svelte';
 
   // mode: 'grant' | 'revoke'; account: { userId, username, balance } or null (lookup mode).
@@ -253,8 +253,9 @@
         { variant: 'warning' },
       );
 
-    hideModal(modalElement);
-    onSaved(result.body);
+    // the page refresh behind onSaved remounts the page: it waits until the modal is really gone (hide-then.js)
+    const saved = result.body;
+    hideModalThen(modalElement, () => onSaved(saved));
   }
 
   // Cleanup is returned from the effect (no top-level onDestroy).

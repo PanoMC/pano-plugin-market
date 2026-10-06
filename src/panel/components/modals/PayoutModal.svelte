@@ -93,7 +93,9 @@
                   onRemove={() => removeAction(index)} />
               {/each}
               {#if shown.actions}
-                <div class="invalid-feedback d-block">{$_(`modals.payout.error.${shown.actions}`)}</div>
+                <div class="invalid-feedback d-block">
+                  {$_(`modals.payout.error.${shown.actions}`)}
+                </div>
               {/if}
               <div class="d-flex flex-wrap gap-2">
                 {#each addable as type (type)}
@@ -115,8 +117,12 @@
               class="form-control"
               class:is-invalid={shown.note}
               style="height: 80px"
-              placeholder={$_('modals.payout.note')}
-              aria-label={$_('modals.payout.note')}
+              placeholder={form.method === 'MANUAL'
+                ? $_('modals.payout.note-required')
+                : $_('modals.payout.note')}
+              aria-label={form.method === 'MANUAL'
+                ? $_('modals.payout.note-required')
+                : $_('modals.payout.note')}
               bind:value={form.note}></textarea>
             <ErrorText code={shown.note} />
           </div>
@@ -153,7 +159,7 @@
   import { toastError } from '../../utils/toast.js';
   import ActionEditor from '../ActionEditor.svelte';
   import ErrorText from '../discounts/ErrorText.svelte';
-  import { hideModal, showModal } from '../order-detail/send.js';
+  import { hideModalThen, showModal } from '../order-detail/send.js';
   import PlayerCell from '../PlayerCell.svelte';
 
   // open({ creator: { id, creator, code, available }, currency }) for one creator code row of the report.
@@ -260,7 +266,11 @@
     let result;
     try {
       result = await call(
-        ApiUtil.post({ path: marketPath(request.path), body: request.body, headers: request.headers }),
+        ApiUtil.post({
+          path: marketPath(request.path),
+          body: request.body,
+          headers: request.headers,
+        }),
       );
     } finally {
       saving = false;
@@ -281,8 +291,9 @@
 
     resetIdempotency(idempotency);
     showSuccessToast($_('modals.payout.toast-paid'));
-    hideModal(modalElement);
-    onSaved(result.body);
+    // the page refresh behind onSaved remounts the page: it waits until the modal is really gone (hide-then.js)
+    const saved = result.body;
+    hideModalThen(modalElement, () => onSaved(saved));
   }
 
   $effect(() => {

@@ -1773,6 +1773,7 @@
       "credits": "{credits} ödenecek",
       "credits-unknown": "Kredi değeri bilinmiyor.",
       "note": "Not (isteğe bağlı)",
+      "note-required": "Not",
       "submit": "Ödeme Yap",
       "toast-paid": "Ödeme kaydedildi.",
       "error": {

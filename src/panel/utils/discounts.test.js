@@ -129,7 +129,9 @@ describe('coupon and creator forms', () => {
   });
 
   test('coupon body: category ids next to products when scope is SELECTED', () => {
-    const { body } = buildCouponBody(coupon({ scope: 'SELECTED', categoryIds: [3], productIds: [] }));
+    const { body } = buildCouponBody(
+      coupon({ scope: 'SELECTED', categoryIds: [3], productIds: [] }),
+    );
     expect(body.categoryIds).toEqual([3]);
     expect(body.productIds).toEqual([]);
     expect(body.status).toBe('INACTIVE');
@@ -190,8 +192,32 @@ describe('payout', () => {
     expect(checkPayoutAmount('5', -2).error).toBe('NOTHING_AVAILABLE');
     expect(checkPayoutAmount('', 10).error).toBe('REQUIRED');
     expect(checkPayoutAmount('1.234', 10).error).toBe('INVALID');
-    const { errors } = buildPayoutBody({ amount: '11', method: 'MANUAL' }, { available: 10 });
+    const { errors } = buildPayoutBody(
+      { amount: '11', method: 'MANUAL', note: 'wire' },
+      { available: 10 },
+    );
     expect(errors).toEqual({ amount: 'EXCEEDS_AVAILABLE' });
+  });
+
+  test('a MANUAL payout needs a note (the endpoint answers 400 note: REQUIRED), CREDIT and ACTION do not', () => {
+    const manual = { amount: '3', method: 'MANUAL' };
+    expect(buildPayoutBody({ ...manual, note: '' }, { available: 10 }).errors).toEqual({
+      note: 'REQUIRED',
+    });
+    expect(buildPayoutBody({ ...manual, note: '   ' }, { available: 10 }).errors.note).toBe(
+      'REQUIRED',
+    );
+    expect(buildPayoutBody({ ...manual, note: 'bank wire' }, { available: 10 }).body).toEqual({
+      amount: 3,
+      method: 'MANUAL',
+      note: 'bank wire',
+    });
+    expect(
+      buildPayoutBody({ amount: '3', method: 'CREDIT', note: '' }, { available: 10 }).body,
+    ).toEqual({
+      amount: 3,
+      method: 'CREDIT',
+    });
   });
 
   test('credits preview is half-up and needs a credit value', () => {
@@ -230,14 +256,16 @@ describe('payout', () => {
 
   test('request: same body keeps the idempotency key, another body gets a new one', () => {
     const state = newIdempotency();
-    const form = { amount: '4', method: 'MANUAL', note: '' };
+    const form = { amount: '4', method: 'MANUAL', note: 'wire' };
     const a = buildPayoutRequest(9, form, { available: 10 }, state);
     const b = buildPayoutRequest(9, form, { available: 10 }, state);
     expect(a.path).toBe('/creator-codes/9/payouts');
     expect(a.headers['Idempotency-Key']).toBe(b.headers['Idempotency-Key']);
     const c = buildPayoutRequest(9, { ...form, amount: '5' }, { available: 10 }, state);
     expect(c.headers['Idempotency-Key']).not.toBe(a.headers['Idempotency-Key']);
-    expect(buildPayoutRequest(9, { ...form, amount: '50' }, { available: 10 }, state).errors).toEqual({
+    expect(
+      buildPayoutRequest(9, { ...form, amount: '50' }, { available: 10 }, state).errors,
+    ).toEqual({
       amount: 'EXCEEDS_AVAILABLE',
     });
   });

@@ -199,6 +199,7 @@
       </div>
       <div slot="middle" style="width: 250px;">
         <SearchInput
+          autofocus
           initialValue={search}
           searching={isSearching}
           placeholderKey="plugins.pano-plugin-market.search.gifts"

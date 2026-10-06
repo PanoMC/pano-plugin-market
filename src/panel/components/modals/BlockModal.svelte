@@ -111,7 +111,7 @@
   } from '../../utils/blocks.js';
   import { toEpoch } from '../../utils/format.js';
   import { toastError } from '../../utils/toast.js';
-  import { hideModal, showModal } from '../order-detail/send.js';
+  import { hideModalThen, showModal } from '../order-detail/send.js';
 
   let { onSaved = () => {} } = $props();
 
@@ -167,7 +167,9 @@
     saving = true;
     let result;
     try {
-      result = await call(ApiUtil.post({ path: marketPath('/blocks'), body: buildBlockBody(model) }));
+      result = await call(
+        ApiUtil.post({ path: marketPath('/blocks'), body: buildBlockBody(model) }),
+      );
     } finally {
       saving = false;
     }
@@ -178,8 +180,9 @@
       return;
     }
     showSuccessToast($_('modals.block.toast-added'));
-    hideModal(modalElement);
-    onSaved(result.body);
+    // the page refresh behind onSaved remounts the page: it waits until the modal is really gone (hide-then.js)
+    const saved = result.body;
+    hideModalThen(modalElement, () => onSaved(saved));
   }
 
   // Cleanup is returned from the effect (no top-level onDestroy).

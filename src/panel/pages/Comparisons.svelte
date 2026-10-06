@@ -224,6 +224,7 @@
       </div>
       <div slot="middle" style="width: 250px;">
         <SearchInput
+          autofocus
           initialValue={currentSearch}
           {searching}
           placeholderKey="plugins.pano-plugin-market.search.comparisons"

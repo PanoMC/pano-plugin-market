@@ -265,6 +265,8 @@ export function buildPayoutBody(form, { available, servers = null, exponent = 2 
   const method = PAYOUT_METHODS.includes(form.method) ? form.method : null;
   if (!method) errors.method = 'INVALID';
   if (text(form.note).length > NOTE_MAX) errors.note = 'TOO_LONG';
+  // the endpoint refuses a MANUAL payout without a note (400 note: REQUIRED): the record of a payment made outside the store
+  else if (method === 'MANUAL' && text(form.note) === '') errors.note = 'REQUIRED';
 
   let actions = null;
   if (method === 'ACTION') {
