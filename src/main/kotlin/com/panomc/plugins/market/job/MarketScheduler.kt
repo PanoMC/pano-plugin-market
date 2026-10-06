@@ -118,7 +118,19 @@ class MarketScheduler(
         if (!active) return 0
 
         val now = clock.now()
-        val due = states.filter { now >= it.nextDueAt.get() && it.running.compareAndSet(false, true) }
+        // the slot is checked again once the running flag is won: a tick that read `nextDueAt` before another tick finished the same job
+        // (slot set, flag released) must not run it a second time for the same slot
+        val due = states.filter { s ->
+            when {
+                now < s.nextDueAt.get() -> false
+                !s.running.compareAndSet(false, true) -> false
+                now >= s.nextDueAt.get() -> true
+                else -> {
+                    s.running.set(false)
+                    false
+                }
+            }
+        }
 
         if (due.isEmpty()) return 0
 
