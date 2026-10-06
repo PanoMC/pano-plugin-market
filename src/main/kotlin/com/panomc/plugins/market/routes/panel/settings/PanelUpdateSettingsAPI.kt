@@ -82,7 +82,7 @@ class PanelUpdateSettingsAPI(
     /**
      * A body that carries `chargebackActions` goes through [ChargebackActionRules] (11 section 10, MK-112): the actions are parsed like product actions (ids `c<n>`,
      * `COMMAND` and `WEBHOOK` only, no `BUYER_CHOICE`, no `perUnit`, at most 10) and a changed one passes `ActionGuard` for the caller. 400 `INVALID_SETTINGS
-     * {fieldErrors: {chargebackActions}}`, 403 `NO_PERMISSION`. A webhook action's secret is not encrypted on this path (this route has no cipher): see the MK-112 evidence.
+     * {fieldErrors: {chargebackActions}}`, 403 `NO_PERMISSION`. A webhook action must be unsigned: this route has no cipher, so `HMAC_SHA256` (and any secret) is refused by [ChargebackActionRules] (fail closed).
      */
     private suspend fun checkChargebackActions(context: RoutingContext, body: JsonObject) {
         val submitted = body.getValue("chargebackActions") ?: return

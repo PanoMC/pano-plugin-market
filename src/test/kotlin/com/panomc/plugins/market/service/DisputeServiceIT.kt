@@ -4,8 +4,11 @@ import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.abuse.BlockEntry
 import com.panomc.plugins.market.core.abuse.BlockMatcher
 import com.panomc.plugins.market.core.abuse.BlockSubjects
+import com.panomc.plugins.market.core.abuse.BlockType as CoreBlockType
 import com.panomc.plugins.market.core.delivery.ProductAction
 import com.panomc.plugins.market.db.MarketDaoITBase
+import com.panomc.plugins.market.db.model.BlockSource
+import com.panomc.plugins.market.db.model.BlockType
 import com.panomc.plugins.market.db.model.CreatorEarningState
 import com.panomc.plugins.market.db.model.CreditTxType
 import com.panomc.plugins.market.db.model.DeliveryActionType
@@ -16,6 +19,7 @@ import com.panomc.plugins.market.db.model.DisputeOrigin
 import com.panomc.plugins.market.db.model.DisputeRecordStatus
 import com.panomc.plugins.market.db.model.DisputeStatus
 import com.panomc.plugins.market.db.model.EntitlementStatus
+import com.panomc.plugins.market.db.model.MarketBlock
 import com.panomc.plugins.market.db.model.MarketCreatorEarning
 import com.panomc.plugins.market.db.model.MarketPayment
 import com.panomc.plugins.market.db.model.OrderEventType
@@ -126,10 +130,54 @@ class DisputeServiceIT : MarketDaoITBase() {
 
     private suspend fun blocks() = MarketTestDb.sql(pool, "SELECT `type`, `value`, `source`, `orderId` FROM `${MarketTestDb.TABLE_PREFIX}market_block` ORDER BY `id`")
 
+    private suspend fun blockRows() = MarketTestDb.sql(
+        pool, "SELECT `id`, `type`, `value`, `source`, `orderId`, `reason`, `createdBy`, `expiresAt` FROM `${MarketTestDb.TABLE_PREFIX}market_block` ORDER BY `id`"
+    )
+
+    private suspend fun blockKeys() = blockRows().map { "${it.getString("type")}:${it.getString("value")}" }.toSet()
+
+    /** What the block list says about [subjects] right now (the matcher of the checkout, over the rows as they are). */
+    private suspend fun blockedBy(subjects: BlockSubjects) = BlockMatcher(
+        blockRows().map { BlockEntry(it.getLong("id"), CoreBlockType.valueOf(it.getString("type")), it.getString("value"), it.getLong("expiresAt")) }
+    ).match(subjects, w.clock.now())
+
+    private suspend fun blockedNow(user: TestUser, email: String) = blockedBy(BlockSubjects(usernames = setOf(user.username), userIds = setOf(user.id), emails = setOf(email)))
+
+    private suspend fun blockEventTypes(orderId: Long, type: OrderEventType): Set<String> =
+        timeline(orderId).filter { it.type == type }.flatMap { e -> JsonObject(e.data!!).getJsonArray("types").map { it.toString() } }.toSet()
+
+    private suspend fun manualBlock(type: BlockType, value: String, expiresAt: Long? = null): Long {
+        val now = w.clock.now()
+
+        return w.blocks.add(
+            MarketBlock(type = type, value = value, reason = "manual ban", source = BlockSource.MANUAL, orderId = null, createdBy = 9, expiresAt = expiresAt, createdAt = now, updatedAt = now), pool
+        )!!
+    }
+
     private suspend fun hooks(event: String) =
         MarketTestDb.sql(pool, "SELECT `event`, `body` FROM `${MarketTestDb.TABLE_PREFIX}market_webhook_delivery` WHERE `event` = ? ORDER BY `id`", event)
 
     private suspend fun sold(productId: Long): Int = w.products.getById(productId, pool)!!.soldCount
+
+    /** A paid credit top-up order of [credits] (x100) whose grant is in the ledger. */
+    private suspend fun topUp(user: TestUser, credits: Long = 10_000): PaidOrder {
+        val paid = r.place(user, listOf(RefundLine(credits)), grant = false)
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order_item` SET `creditAmount` = ? WHERE `id` = ?", credits, paid.items[0].id)
+        w.db.tx { conn -> r.d.credits.creditOrderItems(w.orders.getById(paid.order.id, conn)!!, w.orderItems.getByOrderIds(listOf(paid.order.id), conn), conn) { true } }
+
+        return paid
+    }
+
+    /** The credits are gone: a plain `REVOKE` of [amount] from the user's balance. */
+    private suspend fun spend(user: TestUser, amount: Long, key: String) {
+        w.db.tx { conn ->
+            r.d.credits.lockAccounts(listOf(user.id), true, conn)
+            r.d.credits.revoke(user.id, amount, key, null, "spent", conn)
+        }
+    }
+
+    private suspend fun entitlementOf(paid: PaidOrder) = w.entitlements.getByOrderItemId(paid.items[0].id, pool).single()
 
     private suspend fun ledger(user: TestUser, type: CreditTxType) = w.creditTxs.getByUserId(user.id, 100, pool).filter { it.type == type }
 
@@ -575,6 +623,210 @@ class DisputeServiceIT : MarketDaoITBase() {
         assertTrue(blocks().isEmpty())
     }
 
+    // ===== the block list at O11 and O12 (11 section 10, 19.8 cases 10 and 12) =====================================================
+
+    @Test
+    fun `O12 re-points the chargeback blocks to another order of the same buyer that is still OPEN, and removes them with the last one`(): Unit = runBlocking {
+        val u = steve()
+        val a = r.place(u, listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))), email = "Steve@Example.com")
+        val b = r.place(u, listOf(RefundLine(1500, actions = listOf(permission("b1", "group.vip2")))), email = "Steve@Example.com")
+        val all = setOf("PLAYER:steve", "USER:${u.id}", "EMAIL:steve@example.com")
+
+        dispute(a, DisputeState.OPENED, "dp_a")
+        dispute(b, DisputeState.OPENED, "dp_b")
+
+        // the rows exist once and belong to the first chargeback: an existing row is left untouched
+        assertEquals(all, blockKeys())
+        assertTrue(blockRows().all { it.getLong("orderId") == a.order.id })
+        assertNotNull(blockedNow(u, "steve@example.com"))
+
+        dispute(a, DisputeState.WON, "dp_a")
+
+        assertEquals(OrderStatus.COMPLETED, r.order(a.order.id).status)
+        assertEquals(OrderStatus.CHARGEBACK, r.order(b.order.id).status)
+        assertEquals(all, blockKeys(), "B is still disputed: the buyer stays blocked")
+        assertTrue(blockRows().all { it.getLong("orderId") == b.order.id && it.getString("source") == "CHARGEBACK" })
+        assertTrue(timeline(a.order.id).none { it.type == OrderEventType.BLOCK_REMOVED }, "nothing was removed, so nothing is said")
+        assertNotNull(blockedNow(u, "steve@example.com"))
+
+        dispute(b, DisputeState.WON, "dp_b")
+
+        assertTrue(blockRows().isEmpty())
+        assertEquals(setOf("PLAYER", "USER", "EMAIL"), blockEventTypes(b.order.id, OrderEventType.BLOCK_REMOVED))
+        assertNull(blockedNow(u, "steve@example.com"))
+    }
+
+    @Test
+    fun `O12 re-points only the rows whose subject the other open order shares and deletes the rest, matched by e-mail, by account and by recipient`(): Unit = runBlocking {
+        // by e-mail alone: a guest order with the same address, another recipient
+        val steve = steve()
+        val byMail = r.place(steve, listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))), email = "shared@example.com")
+        val guest = r.place(null, listOf(RefundLine(1000, actions = listOf(permission("g1", "group.g")))), email = "Shared@Example.com")
+
+        dispute(byMail, DisputeState.OPENED, "dp_m1")
+        dispute(guest, DisputeState.OPENED, "dp_m2")
+        dispute(byMail, DisputeState.WON, "dp_m1")
+
+        val afterMail = blockRows().associate { "${it.getString("type")}:${it.getString("value")}" to it.getLong("orderId") }
+
+        assertEquals(setOf("PLAYER:guest", "EMAIL:shared@example.com"), afterMail.keys, "the PLAYER and USER rows of the first order are gone")
+        assertEquals(guest.order.id, afterMail["EMAIL:shared@example.com"], "the e-mail row went to the order that shares it")
+        assertEquals(setOf("PLAYER", "USER"), blockEventTypes(byMail.order.id, OrderEventType.BLOCK_REMOVED))
+
+        // by account alone: the same account, a gift to another player under another address
+        val alex = w.fixtures.user("Alex")
+        val friend = w.fixtures.user("Friend")
+        val own = r.place(alex, listOf(RefundLine(1000, actions = listOf(permission("o1", "group.o")))), email = "alex@example.com")
+        val gift = r.place(alex, listOf(RefundLine(1000, actions = listOf(permission("o2", "group.o2")))), email = "friend@example.com")
+
+        // Alex paid, Friend (another account) received
+        MarketTestDb.sql(
+            pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `recipientUsername` = 'Friend', `recipientUserId` = ?, `recipientKey` = ?, `isGift` = 1 WHERE `id` = ?",
+            friend.id, "u:${friend.id}", gift.order.id
+        )
+        dispute(own, DisputeState.OPENED, "dp_u1")
+        dispute(gift, DisputeState.OPENED, "dp_u2")
+        dispute(own, DisputeState.WON, "dp_u1")
+
+        val afterUser = blockRows().filter { it.getLong("orderId") == gift.order.id }.map { "${it.getString("type")}:${it.getString("value")}" }.toSet()
+
+        assertTrue("USER:${alex.id}" in afterUser, "the account row went to the order of the same account")
+        assertTrue("PLAYER:friend" in afterUser && "EMAIL:friend@example.com" in afterUser)
+        assertTrue(blockKeys().none { it == "PLAYER:alex" || it == "EMAIL:alex@example.com" }, "another recipient and another address do not keep the first order's rows")
+        assertEquals(setOf("PLAYER", "EMAIL"), blockEventTypes(own.order.id, OrderEventType.BLOCK_REMOVED))
+
+        // by recipient alone: the same player name bought as a guest, another address
+        val carl = w.fixtures.user("Carl")
+        val first = r.place(carl, listOf(RefundLine(1000, actions = listOf(permission("c1", "group.c")))), email = "carl@example.com")
+        val second = r.place(null, listOf(RefundLine(1000, actions = listOf(permission("c2", "group.c2")))), email = "other@example.com")
+
+        MarketTestDb.sql(
+            pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `playerUsername` = 'Someone', `recipientUsername` = 'CARL', `recipientKey` = 'g:carl', `isGift` = 1 WHERE `id` = ?", second.order.id
+        )
+        dispute(first, DisputeState.OPENED, "dp_r1")
+        dispute(second, DisputeState.OPENED, "dp_r2")
+        dispute(first, DisputeState.WON, "dp_r1")
+
+        assertEquals(second.order.id, blockRows().single { it.getString("type") == "PLAYER" && it.getString("value") == "carl" }.getLong("orderId"), "the player row followed the recipient")
+        assertTrue(blockKeys().none { it == "USER:${carl.id}" || it == "EMAIL:carl@example.com" })
+    }
+
+    @Test
+    fun `O12 keeps the chargeback blocks for good while another order of the buyer is LOST, and a replayed WON does not move them`(): Unit = runBlocking {
+        val u = steve()
+        val a = r.place(u, listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))), email = "steve@example.com")
+        val b = r.place(u, listOf(RefundLine(1500, actions = listOf(permission("b1", "group.vip2")))), email = "steve@example.com")
+
+        dispute(a, DisputeState.OPENED, "dp_a")
+        dispute(b, DisputeState.OPENED, "dp_b")
+        dispute(b, DisputeState.LOST, "dp_b")
+
+        assertEquals(DisputeStatus.LOST, r.order(b.order.id).disputeStatus)
+
+        dispute(a, DisputeState.WON, "dp_a")
+
+        assertEquals(3, blockRows().size)
+        assertTrue(blockRows().all { it.getLong("orderId") == b.order.id && it.getString("source") == "CHARGEBACK" })
+        assertNotNull(blockedNow(u, "steve@example.com"))
+
+        // the lost order never gets its money back: a late WON for it is refused or ignored, the rows stay
+        dispute(b, DisputeState.WON, "dp_b")
+        dispute(a, DisputeState.WON, "dp_a")
+
+        assertEquals(OrderStatus.CHARGEBACK, r.order(b.order.id).status)
+        assertEquals(3, blockRows().size)
+        assertTrue(blockRows().all { it.getLong("orderId") == b.order.id })
+        assertNotNull(blockedNow(u, "steve@example.com"))
+    }
+
+    @Test
+    fun `a manual block of the recipient is left untouched by O11 and survives O12, only the rows the chargeback made are removed`(): Unit = runBlocking {
+        val u = steve()
+        val future = w.clock.now() + 86_400_000L
+        val player = manualBlock(BlockType.PLAYER, "steve")
+        val mail = manualBlock(BlockType.EMAIL, "steve@example.com", expiresAt = future)
+        val paid = r.place(u, listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))), email = "steve@example.com")
+        val order = paid.order.id
+
+        dispute(paid, DisputeState.OPENED, "dp_man")
+
+        // only the missing subject got a row; the manual ones keep their source, order, reason, author and expiry
+        for (id in listOf(player, mail)) {
+            val row = w.blocks.getById(id, pool)!!
+
+            assertEquals(BlockSource.MANUAL, row.source)
+            assertNull(row.orderId)
+            assertEquals("manual ban", row.reason)
+            assertEquals(9L, row.createdBy)
+        }
+
+        assertNull(w.blocks.getById(player, pool)!!.expiresAt)
+        assertEquals(future, w.blocks.getById(mail, pool)!!.expiresAt)
+        assertEquals(setOf("USER"), blockEventTypes(order, OrderEventType.BLOCK_CREATED), "only the USER row was new")
+        assertEquals(3, blockRows().size)
+        assertEquals(listOf("USER"), blockRows().filter { it.getString("source") == "CHARGEBACK" }.map { it.getString("type") })
+
+        dispute(paid, DisputeState.WON, "dp_man")
+
+        assertEquals(setOf("PLAYER:steve", "EMAIL:steve@example.com"), blockKeys())
+        assertTrue(blockRows().all { it.getString("source") == "MANUAL" && it.getLong("orderId") == null })
+        assertEquals(setOf("USER"), blockEventTypes(order, OrderEventType.BLOCK_REMOVED))
+    }
+
+    @Test
+    fun `an expired manual block of the recipient becomes this chargeback's active row at O11 and is deleted at O12, an unexpired one is left alone`(): Unit = runBlocking {
+        val u = steve()
+        val expired = manualBlock(BlockType.PLAYER, "steve", expiresAt = w.clock.now() - 1_000L)
+        val live = manualBlock(BlockType.USER, u.id.toString(), expiresAt = w.clock.now() + 86_400_000L)
+        val liveUntil = w.blocks.getById(live, pool)!!.expiresAt
+        val paid = r.place(u, listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))), email = "steve@example.com")
+        val order = paid.order.id
+
+        // before the chargeback the expired row blocks nobody
+        assertNull(blockedBy(BlockSubjects(usernames = setOf("Steve"))))
+
+        dispute(paid, DisputeState.OPENED, "dp_exp")
+
+        val revived = w.blocks.getById(expired, pool)!!
+
+        assertEquals(BlockSource.CHARGEBACK, revived.source)
+        assertEquals(order, revived.orderId)
+        assertNull(revived.expiresAt, "it blocks now")
+        assertNull(revived.createdBy)
+        assertEquals("Chargeback on order #$order", revived.reason)
+        assertEquals(BlockSource.MANUAL, w.blocks.getById(live, pool)!!.source, "an unexpired row is left untouched")
+        assertNull(w.blocks.getById(live, pool)!!.orderId)
+        assertEquals(liveUntil, w.blocks.getById(live, pool)!!.expiresAt)
+        assertEquals(setOf("PLAYER", "EMAIL"), blockEventTypes(order, OrderEventType.BLOCK_CREATED), "the revived row counts as created, the live USER row does not")
+        assertNotNull(blockedBy(BlockSubjects(usernames = setOf("Steve"))), "the player name is blocked by the revived row now")
+
+        dispute(paid, DisputeState.WON, "dp_exp")
+
+        assertNull(w.blocks.getById(expired, pool), "the chargeback's row is gone, it is not an expired manual row any more")
+        assertNotNull(w.blocks.getById(live, pool))
+        assertEquals(setOf("USER:${u.id}"), blockKeys())
+        assertEquals(setOf("PLAYER", "EMAIL"), blockEventTypes(order, OrderEventType.BLOCK_REMOVED))
+    }
+
+    @Test
+    fun `a guest order blocks the recipient and the e-mail only, no USER row and never an IP row`(): Unit = runBlocking {
+        val paid = r.place(null, listOf(RefundLine(1000, actions = listOf(permission("a1", "group.vip")))), email = "guest@example.com")
+
+        dispute(paid, DisputeState.OPENED, "dp_guest")
+
+        assertEquals(setOf("PLAYER:guest", "EMAIL:guest@example.com"), blockKeys())
+        assertEquals(setOf("PLAYER", "EMAIL"), blockEventTypes(paid.order.id, OrderEventType.BLOCK_CREATED))
+        assertTrue(blockRows().none { it.getString("type") == "USER" || it.getString("type") == "IP" })
+
+        // an order without an address blocks the player (and the account, when there is one) only
+        val noMail = r.place(null, listOf(RefundLine(1000, actions = listOf(permission("b1", "group.vip2")))))
+
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `recipientUsername` = 'Nomail', `recipientKey` = 'g:nomail' WHERE `id` = ?", noMail.order.id)
+        dispute(noMail, DisputeState.OPENED, "dp_nomail")
+
+        assertEquals(setOf("PLAYER:guest", "EMAIL:guest@example.com", "PLAYER:nomail"), blockKeys())
+    }
+
     // ===== V-08: the guest gift =====================================================================================================
 
     @Test
@@ -731,6 +983,114 @@ class DisputeServiceIT : MarketDaoITBase() {
         assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(spent.items[0].id, pool).single().status)
         assertEquals(-10_000, w.fixtures.creditBalance(u2))
         assertEquals(listOf(spent.order.id), alerts.last { it.second == "CLAWBACK_SHORTFALL" }.third.getJsonArray("creditOrders").map { (it as Number).toLong() })
+    }
+
+    @Test
+    fun `V-09 two charged-back top-ups, the second chargeback skips the order the first one revoked and takes the next one, so both credit-paid orders end revoked`(): Unit = runBlocking {
+        val u = steve()
+        val t1 = topUp(u)
+        val t2 = topUp(u)
+        val x = r.place(u, listOf(RefundLine(10_000, actions = listOf(permission("x1", "group.x")))), creditValue = 10_000, credits = 10_000)
+        val y = r.place(u, listOf(RefundLine(10_000, actions = listOf(permission("y1", "group.y")))), creditValue = 10_000, credits = 10_000)
+
+        spend(u, 20_000, "test:spend")
+
+        assertEquals(0, w.fixtures.creditBalance(u))
+
+        // the first chargeback: 100.00 uncovered, the newest credit-paid order (Y, 100.00) covers it
+        dispute(t1, DisputeState.OPENED, "dp_t1")
+
+        assertEquals(EntitlementStatus.REVOKED, entitlementOf(y).status)
+        assertEquals(EntitlementStatus.ACTIVE, entitlementOf(x).status)
+        assertEquals(-10_000, w.fixtures.creditBalance(u))
+        assertEquals(listOf(y.order.id), alerts.single { it.second == "CLAWBACK_SHORTFALL" }.third.getJsonArray("revoked").map { (it as Number).toLong() })
+
+        // the second: Y is still COMPLETED with creditAmount > 0 but has nothing left to give back, so it must not count: X is taken
+        dispute(t2, DisputeState.OPENED, "dp_t2")
+
+        assertEquals(EntitlementStatus.REVOKED, entitlementOf(x).status, "the buyer must not keep 100.00 of goods that the charged-back top-up paid for")
+        assertEquals("CHARGEBACK", entitlementOf(x).endReason)
+        assertEquals(EntitlementStatus.REVOKED, entitlementOf(y).status)
+        assertEquals(-20_000, w.fixtures.creditBalance(u))
+        assertEquals(1, revokeRows(x.order.id).size)
+        assertEquals(1, revokeRows(y.order.id).size, "Y is not revoked a second time")
+        assertEquals(1, timeline(y.order.id).count { it.message == "CREDIT_ORDER_REVOKED" })
+        assertEquals(1, timeline(x.order.id).count { it.message == "CREDIT_ORDER_REVOKED" })
+
+        val shortfalls = alerts.filter { it.second == "CLAWBACK_SHORTFALL" }
+
+        assertEquals(2, shortfalls.size)
+        assertEquals(listOf(x.order.id), shortfalls[1].third.getJsonArray("revoked").map { (it as Number).toLong() }, "the alert names what was revoked this time, not Y again")
+        assertEquals(OrderStatus.COMPLETED, r.order(x.order.id).status)
+        assertEquals(OrderStatus.COMPLETED, r.order(y.order.id).status)
+
+        // a replay of either event changes nothing
+        dispute(t1, DisputeState.OPENED, "dp_t1")
+        dispute(t2, DisputeState.OPENED, "dp_t2")
+
+        assertEquals(-20_000, w.fixtures.creditBalance(u))
+        assertEquals(1, revokeRows(x.order.id).size)
+        assertEquals(1, revokeRows(y.order.id).size)
+    }
+
+    @Test
+    fun `V-09 a credit-paid order that was revoked by hand before does not cover the shortfall, the next older one is taken`(): Unit = runBlocking {
+        val u = steve()
+        val t = topUp(u)
+        val older = r.place(u, listOf(RefundLine(4_000, actions = listOf(permission("a1", "group.vip")))), creditValue = 4_000, credits = 4_000)
+        val newer = r.place(u, listOf(RefundLine(7_000, actions = listOf(permission("b1", "group.vip2")))), creditValue = 7_000, credits = 7_000)
+
+        // only 30.00 of the 100.00 are gone: the shortfall is 30.00, which the newest order (70.00) would cover alone
+        spend(u, 10_000, "test:spend")
+        w.db.tx { conn -> r.d.credits.grant(u.id, 7_000, "test:back", null, "returned", conn) }
+
+        // the admin already took the newer order's goods back
+        w.db.tx { conn ->
+            val order = w.orders.getById(newer.order.id, conn)!!
+            val items = w.orderItems.getByOrderIds(listOf(newer.order.id), conn)
+
+            r.d.entitlementService.revoke(conn, r.d.service, order, items, mapOf(items[0].id to null), "ADMIN")
+        }
+
+        assertEquals(EntitlementStatus.REVOKED, entitlementOf(newer).status)
+        assertEquals(1, revokeRows(newer.order.id).size)
+
+        dispute(t, DisputeState.OPENED, "dp_manual")
+
+        assertEquals(EntitlementStatus.REVOKED, entitlementOf(older).status, "the older order is taken instead")
+        assertEquals("CHARGEBACK", entitlementOf(older).endReason)
+        assertEquals("ADMIN", entitlementOf(newer).endReason, "the manual revoke is left as it was")
+        assertEquals(1, revokeRows(newer.order.id).size)
+        assertEquals(1, revokeRows(older.order.id).size)
+        assertTrue(timeline(newer.order.id).none { it.message == "CREDIT_ORDER_REVOKED" })
+        assertTrue(timeline(older.order.id).any { it.message == "CREDIT_ORDER_REVOKED" })
+        assertEquals(listOf(older.order.id), alerts.single { it.second == "CLAWBACK_SHORTFALL" }.third.getJsonArray("revoked").map { (it as Number).toLong() })
+        assertEquals(-3_000, w.fixtures.creditBalance(u))
+    }
+
+    @Test
+    fun `V-09 a partially refunded credit-paid order counts only the credits that did not go back to the ledger`(): Unit = runBlocking {
+        val u = steve()
+        val t = topUp(u)
+        val older = r.place(u, listOf(RefundLine(0, actions = listOf(permission("a1", "group.vip")))), creditValue = 0, credits = 4_000)
+        val newer = r.place(u, listOf(RefundLine(0, actions = listOf(permission("b1", "group.vip2")))), creditValue = 0, credits = 6_000)
+
+        // 80.00 of the 100.00 are gone, then 30.00 of the newer order's credits are refunded back: the balance is 50.00
+        spend(u, 8_000, "test:spend")
+        r.service.request(newer.order.id, RefundInput(creditAmount = 3_000), r.key(), null)
+
+        assertEquals(OrderStatus.PARTIALLY_REFUNDED, r.order(newer.order.id).status)
+        assertEquals(3_000, r.order(newer.order.id).refundedCreditAmount)
+        assertEquals(5_000, w.fixtures.creditBalance(u))
+        assertEquals(EntitlementStatus.ACTIVE, entitlementOf(newer).status)
+
+        // uncovered = 100.00 - 50.00 = 50.00: the newer order is worth 60.00 - 30.00 = 30.00 of that, so the older one (40.00) is needed too
+        dispute(t, DisputeState.OPENED, "dp_partial")
+
+        assertEquals(EntitlementStatus.REVOKED, entitlementOf(newer).status)
+        assertEquals(EntitlementStatus.REVOKED, entitlementOf(older).status, "the refunded credits do not cover the shortfall a second time")
+        assertEquals(listOf(newer.order.id, older.order.id), alerts.single { it.second == "CLAWBACK_SHORTFALL" }.third.getJsonArray("revoked").map { (it as Number).toLong() })
+        assertEquals(-5_000, w.fixtures.creditBalance(u))
     }
 
     @Test

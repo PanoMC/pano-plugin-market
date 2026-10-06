@@ -542,7 +542,8 @@ class DisputeService(
         t.alerts += DisputeAlert(order.id, "UPGRADE_SUCCESSORS_REVOKED", JsonObject().put("disputeId", dispute.id).put("orders", JsonArray(byOrder.keys.toList())))
     }
 
-    private suspend fun revokeOrder(conn: SqlConnection, order: MarketOrder, items: List<MarketOrderItem>, endReason: String) {
+    /** Revokes every not-yet-revoked unit of the order; true when units were taken back now, false when nothing was left to take (all revoked before, or no revocable line). */
+    private suspend fun revokeOrder(conn: SqlConnection, order: MarketOrder, items: List<MarketOrderItem>, endReason: String): Boolean {
         val targets = LinkedHashMap<Long, IntRange?>()
 
         for (item in items) {
@@ -551,10 +552,13 @@ class DisputeService(
             targets[item.id] = null
         }
 
-        if (targets.isEmpty()) return
+        if (targets.isEmpty()) return false
 
-        entitlementService.revoke(conn, deliveryService, order, items, targets, endReason, DeliveryError.ORDER_REVOKED)
+        val revoked = entitlementService.revoke(conn, deliveryService, order, items, targets, endReason, DeliveryError.ORDER_REVOKED)
+
         deliveryService.refreshFulfillment(conn, order.id)
+
+        return revoked.units.values.any { !it.isEmpty() }
     }
 
     /** The order rows other than the one of the dispute, locked by row in ascending id order (the lock order has no order-to-order step; this is the one place it is needed). */
@@ -745,11 +749,15 @@ class DisputeService(
                 // read again under the lock
                 if (other.status != OrderStatus.COMPLETED && other.status != OrderStatus.PARTIALLY_REFUNDED) continue
 
-                revokeOrder(conn, other, orderItems.getByOrderIds(listOf(id), conn), END_REASON)
+                // an order that an earlier chargeback or a manual revoke already emptied still has status COMPLETED and creditAmount > 0: it gives nothing back now,
+                // so it neither counts as revoked nor covers any of the shortfall (the next, older order is taken instead)
+                if (!revokeOrder(conn, other, orderItems.getByOrderIds(listOf(id), conn), END_REASON)) continue
+
                 timeline(conn, id, OrderEventType.NOTE, OrderActorType.SYSTEM, null, "CREDIT_ORDER_REVOKED", JsonObject().put("disputeId", dispute.id).put("orderId", topUp.id))
 
                 revoked += id
-                remaining -= other.creditAmount
+                // the credits of a partial refund already went back to the ledger: only the rest of what paid the order is clawed back with it
+                remaining -= maxOf(0L, other.creditAmount - other.refundedCreditAmount)
             }
         }
 

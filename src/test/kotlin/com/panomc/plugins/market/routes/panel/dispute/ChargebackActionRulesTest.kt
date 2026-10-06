@@ -77,6 +77,38 @@ class ChargebackActionRulesTest {
         assertTrue(invalid(check(json(ban()), serverIds = emptySet(), hasServers = false)).isNotEmpty(), "no server at all")
     }
 
+    private fun webhook(id: String, signing: String? = null, secret: String? = null): JsonObject {
+        val value = JsonObject().put("url", "https://hooks.example.com/cb").put("format", "JSON")
+
+        if (signing != null) value.put("signing", signing)
+
+        if (secret != null) value.put("secret", secret)
+
+        return JsonObject().put("id", id).put("type", "WEBHOOK").put("phase", "GRANT").put("value", value)
+    }
+
+    @Test
+    fun `a signed webhook action is refused whether it carries a secret or not, until the settings route can store the secret encrypted`() {
+        // without a secret it would die at send time (SECRET_UNREADABLE), with one it would sit in the config, the delivery rows and GET /settings in plaintext
+        assertEquals("actions.0.value.signing:INVALID", invalid(check(JsonArray().add(webhook("c1", "HMAC_SHA256")).encode())))
+        assertEquals("actions.0.value.signing:INVALID", invalid(check(JsonArray().add(webhook("c1", "HMAC_SHA256", "a-secret-of-at-least-16-chars")).encode())))
+        assertEquals("actions.0.value.signing:INVALID", invalid(check(JsonArray().add(webhook("c1", "HMAC_SHA256", "********")).encode())))
+        // the index is the position in the list, and the refusal does not depend on the caller's rights
+        assertEquals("actions.1.value.signing:INVALID", invalid(check(JsonArray().add(ban().toJson()).add(webhook("c2", "HMAC_SHA256")).encode())))
+        assertEquals("actions.0.value.signing:INVALID", invalid(check(JsonArray().add(webhook("c1", "HMAC_SHA256")).encode(), caller = ActionGuard.NOBODY)))
+        // an unknown signing name stays the parser's own refusal
+        assertTrue(invalid(check(JsonArray().add(webhook("c1", "RSA")).encode())).startsWith("actions.0.value.signing"))
+    }
+
+    @Test
+    fun `an unsigned webhook action must not carry a secret either, and signing left out or NONE is accepted`() {
+        assertEquals("actions.0.value.secret:INVALID", invalid(check(JsonArray().add(webhook("c1", "NONE", "a-secret-of-at-least-16-chars")).encode())))
+        assertEquals("actions.0.value.secret:INVALID", invalid(check(JsonArray().add(webhook("c1", null, "********")).encode())))
+        assertEquals(ChargebackActionRules.Verdict.Ok, check(JsonArray().add(webhook("c1")).encode(), caller = ActionGuard.NOBODY))
+        assertEquals(ChargebackActionRules.Verdict.Ok, check(JsonArray().add(webhook("c1", "NONE", "")).encode(), caller = ActionGuard.NOBODY))
+        assertEquals(ChargebackActionRules.Verdict.Ok, check(JsonArray().add(ban().toJson()).add(webhook("c2", "NONE")).encode()))
+    }
+
     @Test
     fun `an action without an id is accepted, the parser gives it a c-number`() {
         assertEquals(ChargebackActionRules.Verdict.Ok, check(JsonArray().add(ban().toJson().apply { remove("id") }).encode()))
