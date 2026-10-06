@@ -176,6 +176,20 @@ class MarketSchemaIT : MarketDbTestBase() {
     }
 
     @Test
+    fun `ensure re-creates a unique key of a table's first CREATE that a degraded table lost`(): Unit = runBlocking {
+        try {
+            sql("ALTER TABLE `pano_market_credit_tx` DROP INDEX `uq_idem`")
+            sql("ALTER TABLE `pano_market_credit_tx` DROP INDEX `idx_order`")
+            assertTrue(SchemaVerifier.verify(pool, prefix).findings.isNotEmpty(), "the verifier sees the lost keys")
+            val report = MarketSchema.ensure(pool, prefix)
+            assertTrue(report.ddlErrors.isEmpty(), "no DDL error: ${report.ddlErrors}")
+            assertTrue(SchemaVerifier.verify(pool, prefix).ok, "unique and plain key are back")
+        } finally {
+            rebuild()
+        }
+    }
+
+    @Test
     fun `a failing CREATE is recorded and the other tables are still created`(): Unit = runBlocking {
         MarketTestDb.dropAllTables(pool)
         val broken = MarketSchema.Table(

@@ -256,6 +256,22 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
         assertEquals("DISABLED", entry().getString("state"))
     }
 
+    @Test
+    fun `an unreadable secret is stamped once and a repeated start leaves the row untouched (the payment-secrets job runs startup every minute)`(): Unit = runBlocking {
+        gateway()
+        val foreign = SecretCipher(ByteArray(32) { 99 })
+        w.paymentMethods.upsertByMethodId("gate", false, json("merchantId" to "M", "apiKey" to foreign.encrypt("sk_other_key_1234")).encode(), pool)
+
+        service.startup()
+        val first = row()!!
+        service.startup()
+        service.startup()
+
+        assertEquals("SECRET_UNREADABLE", row()!!.lastError)
+        assertEquals(first.lastErrorAt, row()!!.lastErrorAt, "the stamp is not rewritten by the next run")
+        assertEquals(first.settings, row()!!.settings)
+    }
+
     // ---- legacy flags
 
     @Test

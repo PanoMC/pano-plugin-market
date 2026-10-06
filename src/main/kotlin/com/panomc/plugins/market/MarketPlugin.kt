@@ -186,6 +186,7 @@ class MarketPlugin : PanoPlugin() {
             prefix = { MarketTables.prefixOverride ?: databaseManager.getTablePrefix() },
             pool = { databaseManager.getSqlClient() as Pool },
             initDatabase = { pluginDatabaseManager.initialize(this) },
+            secrets = { com.panomc.plugins.market.routes.panel.settings.payment.paymentMethodService(this).startup() },
             armScheduler = {
                 seedShipping()
                 startExchangeRateScheduler(configManager, exchangeRateService)

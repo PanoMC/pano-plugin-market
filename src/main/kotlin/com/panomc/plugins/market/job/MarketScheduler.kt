@@ -236,6 +236,9 @@ class MarketScheduler(
         /** `DeliveryAlertSweep` (08 section 8.5: every 5 minutes). */
         const val DELIVERY_ALERT_MS = 5 * 60_000L
 
+        /** `PaymentMethodService.startup()` again, so a provider plugin that starts after the market gets its legacy plaintext secrets encrypted (CP-3, L-01b). */
+        const val PAYMENT_SECRETS_MS = 60_000L
+
         /** `HousekeepingJob` ticks every minute and runs its own tasks on their own cadence (MK-153). */
         const val HOUSEKEEPING_MS = 60_000L
 
@@ -282,9 +285,14 @@ internal object MarketJobs {
             subscription(subscriptionJob(plugin)),
             mailOutbox(MailWiring.job(plugin)),
             housekeepingTask(housekeepingJob(plugin)),
-            deliveryAlerts(com.panomc.plugins.market.notification.deliveryAlertSweep(plugin))
+            deliveryAlerts(com.panomc.plugins.market.notification.deliveryAlertSweep(plugin)),
+            paymentSecrets(com.panomc.plugins.market.routes.panel.settings.payment.paymentMethodService(plugin))
         )
     }
+
+    /** Re-runs the start-up re-encryption of payment method secrets: idempotent, a row of a provider that is not registered (yet) is left alone. */
+    fun paymentSecrets(service: com.panomc.plugins.market.service.PaymentMethodService): MarketScheduler.Job =
+        MarketScheduler.Job("payment-secrets", MarketScheduler.PAYMENT_SECRETS_MS) { service.startup(); 0 }
 
     /** The panel notifications for deliveries that wait for a server and for undo rows that fail or wait (MK-172, 08 section 8.5). */
     fun deliveryAlerts(job: com.panomc.plugins.market.notification.DeliveryAlertSweep): MarketScheduler.Job = MarketScheduler.Job("delivery-alerts", MarketScheduler.DELIVERY_ALERT_MS) { job.runOnce() }

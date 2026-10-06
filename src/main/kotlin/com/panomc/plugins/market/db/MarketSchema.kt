@@ -97,7 +97,18 @@ object MarketSchema {
         }
 
         /** Idempotent `ALTER` statements with the table name filled in. */
-        fun alterSql(prefix: String): List<String> = alters.map { it.replace("{t}", "`${physicalName(prefix)}`") }
+        fun alterSql(prefix: String): List<String> = (alters + missingKeyStatements()).map { it.replace("{t}", "`${physicalName(prefix)}`") }
+
+        /**
+         * `CREATE [UNIQUE] INDEX IF NOT EXISTS` for every declared key of the table's first `CREATE` that no explicit alter
+         * covers: `CREATE TABLE IF NOT EXISTS` never repairs a key a degraded table lost, so `ensure` re-creates it (CP-3, L-04b).
+         * A unique key that duplicate rows forbid fails here and is reported by the verifier, like a key of [added].
+         */
+        private fun missingKeyStatements(): List<String> =
+            keys.filter { !it.primary && alters.none { alter -> alter.contains("INDEX IF NOT EXISTS `${it.name}` ") } }.map { key ->
+                val cols = key.columns.joinToString(", ") { "`$it`" }
+                "CREATE ${if (key.unique) "UNIQUE " else ""}INDEX IF NOT EXISTS `${key.name}` ON {t} ($cols)"
+            }
     }
 
     private class TableBuilder(private val name: String, private val comment: String) {
