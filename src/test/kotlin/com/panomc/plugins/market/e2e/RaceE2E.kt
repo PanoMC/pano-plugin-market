@@ -1538,8 +1538,8 @@ class RaceE2E : E2eTestBase() {
     /**
      * 17 section 9.4 R-01 "one set of deliveries / mail / webhook": per order no business key appears twice. The expected row count is exact: a
      * table that starts filling must fail here so the slice that fills it states its expected set (and the cardinality check below then bites on
-     * it). Delivery (MK-102): the standard VIP product has four GRANT-phase actions (`a1`, `a2`, `r1`, `r2` of `E2eCatalog.grantAndRevoke`: two
-     * permission and two credit actions), so the O2 transaction plans exactly four rows, however many copies of the webhook race for it. Mail (MK-142):
+     * it). Delivery (MK-102): the standard VIP product has two GRANT actions (`a1`, `a2` of `E2eCatalog.grantAndRevoke`: a permission and a credit
+     * action; the REVOKE rows are the inverse the planner derives later, CP-1), so the O2 transaction plans exactly two rows, however many copies of the webhook race for it. Mail (MK-142):
      * O2 queues exactly one `ORDER_CONFIRMATION` to the buyer, however many copies of the webhook race for it. Webhook: O2 emits `order.paid` once per
      * enabled endpoint; a caller that registered its [StoreSink] expects exactly one `market_webhook_delivery` row of that endpoint for the order (event
      * `order.paid`), a caller without one expects none.
