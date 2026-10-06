@@ -83,6 +83,8 @@ import com.panomc.plugins.market.service.OrderService
 import com.panomc.plugins.market.service.OutboundHttp
 import com.panomc.plugins.market.service.PayCaller
 import com.panomc.plugins.market.service.PaidWebhooks
+import com.panomc.plugins.market.service.PurchaseAnnouncements
+import com.panomc.plugins.market.routes.panel.server.mcSyncService
 import com.panomc.plugins.market.service.PaymentService
 import com.panomc.plugins.market.service.ProductPurchaseLimits
 import com.panomc.plugins.market.service.RedemptionService
@@ -377,7 +379,9 @@ private fun buildPaymentService(plugin: MarketPlugin): PaymentService {
         // MK-142: the bank transfer instructions and "order received" mails of an attempt's transitions
         mails = orderMails(plugin),
         // MK-172: an order that waits for review raises MARKET_ORDER_REVIEW (only with the host registry)
-        alerts = com.panomc.plugins.market.notification.marketAlerts(plugin)
+        alerts = com.panomc.plugins.market.notification.marketAlerts(plugin),
+        // WIRE-3 (MK-103 seam): a storefront order that was stamped paid is announced in game once its transaction committed (best effort)
+        announcer = PurchaseAnnouncements(orderDao, context.getBean(MarketOrderItemDao::class.java)) { order, items -> mcSyncService(plugin).announce(order, items) }
     )
 }
 

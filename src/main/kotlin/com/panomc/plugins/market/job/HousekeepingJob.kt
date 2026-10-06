@@ -18,6 +18,7 @@ import com.panomc.plugins.market.routes.api.order.creditService
 import com.panomc.plugins.market.routes.api.order.orderService
 import com.panomc.plugins.market.routes.api.order.paymentService
 import com.panomc.plugins.market.routes.api.order.subscriptionService
+import com.panomc.plugins.market.routes.panel.creatorcode.creatorService
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.plugins.market.service.CreditReconciler
 import com.panomc.plugins.market.service.PlayerErasureService
@@ -42,7 +43,7 @@ import java.nio.file.Path
  * | [Task.ERASURE] | 5 min | the deferred half of 11 section 16: orders of an erased buyer (`PII_ERASED` event), the `erasure-pending` markers run again, ended subscriptions lose their gateway data |
  * | [Task.GUEST_ADOPTION] | 5 min | `GuestAdoption.run()` (01 section 5.5) |
  *
- * Not here: the hourly release of due creator earnings (`CreatorService.releaseDue`), because every balance read releases lazily (MK-114).
+ * | [Task.EARNINGS] | 1 h | `CreatorService.releaseDue` (WIRE-3): `PENDING` creator earnings whose `availableAt` has passed become `AVAILABLE` even when nobody reads a balance (every balance read releases lazily as well, MK-114) |
  */
 class HousekeepingJob(
     private val clock: Clock,
@@ -52,14 +53,17 @@ class HousekeepingJob(
     /** The self-check of the ledger; the health endpoint reads its `last` result (07 section 16.2, `health.credits`). */
     val reconciler: CreditReconciler?,
     private val erasure: PlayerErasureService?,
-    private val adoption: GuestAdoption?
+    private val adoption: GuestAdoption?,
+    /** `CreatorService.releaseDue` (answers the number of earnings released); `null` = the lazy release of the balance reads is the only one. */
+    private val creatorEarnings: (suspend (SqlClient) -> Int)? = null
 ) {
     enum class Task(val everyMs: Long) {
         RECONCILE(6 * HOUR_MS),
         THROTTLE(HOUR_MS),
         RETENTION(24 * HOUR_MS),
         ERASURE(5 * MINUTE_MS),
-        GUEST_ADOPTION(5 * MINUTE_MS)
+        GUEST_ADOPTION(5 * MINUTE_MS),
+        EARNINGS(HOUR_MS)
     }
 
     private val nextDue = HashMap<Task, Long>()
@@ -105,6 +109,7 @@ class HousekeepingJob(
         Task.RETENTION -> retention()
         Task.ERASURE -> deferredErasure()
         Task.GUEST_ADOPTION -> adoption?.run() ?: 0
+        Task.EARNINGS -> creatorEarnings?.invoke(client()) ?: 0
     }
 
     // ===================================================================================== 11 section 17
@@ -303,7 +308,9 @@ private fun buildHousekeeping(plugin: MarketPlugin): HousekeepingJob {
     return HousekeepingJob(
         clock = SystemClock, prefix = { orderDao.prefix() }, client = client, throttle = abuseWiring(plugin).throttle,
         reconciler = CreditReconciler(SystemClock, orderDao.prefix(), client), erasure = playerErasureService(plugin),
-        adoption = GuestAdoption(db, { orderDao.prefix() }, client, PlatformAccountLookup(databaseManager))
+        adoption = GuestAdoption(db, { orderDao.prefix() }, client, PlatformAccountLookup(databaseManager)),
+        // WIRE-3 (MK-114 / MK-153 seam): the hourly release of due creator earnings
+        creatorEarnings = { sqlClient -> creatorService(plugin).releaseDue(sqlClient) }
     )
 }
 
