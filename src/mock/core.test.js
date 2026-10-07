@@ -76,7 +76,7 @@ describe('router', () => {
   test('kit helpers', () => {
     expect(countFor('empty')).toBe(0);
     expect(countFor('many')).toBeGreaterThan(countFor('few'));
-    expect(paginate([], {}).totalPage).toBe(1);
+    expect(paginate([], {}).totalPage).toBe(0);
   });
 });
 

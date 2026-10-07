@@ -137,8 +137,9 @@ export function paginate(items, query, defaultPageSize = 20) {
   const pageSize = Math.max(1, parseInt(query.pageSize) || defaultPageSize);
   const page = Math.max(1, parseInt(query.page) || 1);
   const count = items.length;
-  const totalPage = Math.max(1, Math.ceil(count / pageSize));
-  if (page > totalPage) return { error: 'PAGE_NOT_FOUND', count, totalPage };
+  // Paging.totalPages: 0 for an empty list, and only a page past a non-empty list is PAGE_NOT_FOUND.
+  const totalPage = Math.ceil(count / pageSize);
+  if (totalPage >= 1 && page > totalPage) return { error: 'PAGE_NOT_FOUND', count, totalPage };
   return { rows: items.slice((page - 1) * pageSize, page * pageSize), count, totalPage };
 }
 
@@ -147,4 +148,11 @@ export function listBody(key, countKey, items, query, defaultPageSize = 20) {
   const p = paginate(items, query, defaultPageSize);
   if (p.error) return { result: 'error', error: p.error };
   return { result: 'ok', [key]: p.rows, [countKey]: p.count, totalPage: p.totalPage };
+}
+
+/** 20 alphanumeric characters, the shape of a real order public id. */
+export function publicIdFor(seed, i) {
+  const r = rng(`${seed}:public:${i}`);
+  const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  return Array.from({ length: 20 }, () => chars[Math.floor(r() * chars.length)]).join('');
 }

@@ -147,19 +147,19 @@ describe('store', () => {
     expect(body.categories).toEqual([]);
     expect(body.products).toEqual([]);
     expect(body.productCount).toBe(0);
-    expect(body.totalPage).toBe(1);
+    expect(body.totalPage).toBe(0);
     expect(body.comparisons).toEqual([]);
     expect(get('/api/market/store/products', 'empty')).toEqual({
       result: 'ok',
       products: [],
       productCount: 0,
-      totalPage: 1,
+      totalPage: 0,
     });
     expect(get('/api/market/me/orders', 'empty')).toEqual({
       result: 'ok',
       orders: [],
       orderCount: 0,
-      totalPage: 1,
+      totalPage: 0,
     });
     expect(get('/api/market/me/entitlements', 'empty').entitlements).toEqual([]);
     expect(get('/api/market/me/credits', 'empty').entries).toEqual([]);
@@ -535,7 +535,7 @@ describe('determinism and pages', () => {
     expect(JSON.stringify(quoteOf({ items: [{ productId: 2, quantity: 2 }] }, 'few'))).toBe(
       JSON.stringify(quoteOf({ items: [{ productId: 2, quantity: 2 }] }, 'few')),
     );
-    expect(orders('few')[0].publicId).toBe('ord_' + orders('few')[0].publicId.slice(4));
+    expect(orders('few')[0].publicId).toMatch(/^[0-9A-Za-z]{20}$/);
     expect(
       orders('many')
         .slice(0, 6)
@@ -556,6 +556,52 @@ describe('determinism and pages', () => {
       if (order) expect(get(`/api/market/orders/${order[1]}`).result).toBe('ok');
       else if (product && product[1] !== 'checkout')
         expect(get(`/api/market/products/${product[1]}`).result).toBe('ok');
+    }
+  });
+});
+
+describe('unique keys of every keyed storefront list', () => {
+  const dups = (list, key) => {
+    const keys = list.map(key);
+    return keys.filter((k, i) => keys.indexOf(k) !== i);
+  };
+  const lists = [
+    ['/api/market/store', 'categories', (x) => x.id],
+    ['/api/market/store', 'products', (x) => x.id],
+    ['/api/market/store', 'featured', (x) => x.id],
+    ['/api/market/store', 'bestsellers', (x) => x.id],
+    ['/api/market/store', 'comparisons', (x) => x.id],
+    ['/api/market/store', 'comparisonProducts', (x) => x.id],
+    ['/api/market/store/products', 'products', (x) => x.id],
+    ['/api/market/me/orders', 'orders', (x) => x.publicId],
+    ['/api/market/me/entitlements', 'entitlements', (x) => x.id],
+    ['/api/market/me/subscriptions', 'subscriptions', (x) => x.id],
+  ];
+  for (const volume of ['empty', 'few', 'many']) {
+    for (const [path, key, id] of lists) {
+      test(`${path} ${key} (${volume})`, () => {
+        const body = router.answer('GET', path, volume);
+        expect(dups(body[key] ?? [], id)).toEqual([]);
+      });
+    }
+  }
+
+  test('comparison features have unique ids and every cell is keyed featureId-productId', () => {
+    for (const volume of ['few', 'many']) {
+      for (const c of router.answer('GET', '/api/market/store', volume).comparisons) {
+        expect(dups(c.features, (f) => f.id)).toEqual([]);
+        for (const f of c.features)
+          for (const pid of c.productIds) expect(c.cellValues[`${f.id}-${pid}`]).toBeDefined();
+      }
+    }
+  });
+});
+
+describe('order public ids', () => {
+  test('are 20 alphanumeric characters (ORDER_ID of the theme)', () => {
+    for (const volume of ['few', 'many']) {
+      for (const o of router.answer('GET', '/api/market/me/orders', volume).orders)
+        expect(o.publicId).toMatch(/^[0-9A-Za-z]{20}$/);
     }
   });
 });

@@ -13,7 +13,7 @@ import {
   paginate,
   pick,
   rng,
-  uuidFor,
+  publicIdFor,
 } from './../kit.js';
 
 const API = '/api/market';
@@ -41,6 +41,13 @@ const convert = (cents, currency) => Math.round(cents * (RATES[currency] || 1));
 // ------------------------------------------------------------------------------------------------ catalogue
 
 const VAT_BP = 2000; // 20 %, prices include VAT
+const COMPARISON_FEATURES = [
+  'Chat prefix',
+  '/fly in the lobby',
+  'Homes',
+  'Monthly crate keys',
+  'Priority queue',
+];
 const PAGE_SIZE = 12;
 const MAX_PAGE_SIZE = 60;
 const ICONS = [
@@ -541,24 +548,21 @@ function storeBody({ query, volume }) {
             id: 1,
             name: 'Compare the ranks',
             productIds: ranks.map((p) => p.id),
-            features: [
-              'Chat prefix',
-              '/fly in the lobby',
-              'Homes',
-              'Monthly crate keys',
-              'Priority queue',
-            ],
+            features: COMPARISON_FEATURES.map((name, id) => ({ id: id + 1, name })),
+            // keyed `${featureId}-${productId}` like the panel editor stores it
             cellValues: Object.fromEntries(
-              ranks.map((p, k) => [
-                String(p.id),
-                {
-                  'Chat prefix': 'yes',
-                  '/fly in the lobby': k > 0 ? 'yes' : 'no',
-                  Homes: String(3 * (k + 1)),
-                  'Monthly crate keys': k === 0 ? '-' : `${k * 2}`,
-                  'Priority queue': k === 2 ? 'yes' : 'no',
-                },
-              ]),
+              ranks.flatMap((p, k) =>
+                COMPARISON_FEATURES.map((name, f) => [
+                  `${f + 1}-${p.id}`,
+                  [
+                    'yes',
+                    k > 0 ? 'yes' : 'no',
+                    String(3 * (k + 1)),
+                    k === 0 ? '-' : `${k * 2}`,
+                    k === 2 ? 'yes' : 'no',
+                  ][f],
+                ]),
+              ),
             ),
           },
         ]
@@ -569,7 +573,7 @@ function storeBody({ query, volume }) {
     categories: categoryTree(cat),
     products: listed.slice(0, PAGE_SIZE).map((p) => card(p, currency)),
     productCount: listed.length,
-    totalPage: Math.max(1, Math.ceil(listed.length / PAGE_SIZE)),
+    totalPage: Math.ceil(listed.length / PAGE_SIZE),
     featured: listed
       .filter((p) => p.featured)
       .slice(0, 6)
@@ -1109,8 +1113,7 @@ const ORDER_STATUSES = [
 const ORDER_CURRENCIES = ['USD', 'USD', 'EUR', 'USD', 'TRY', 'USD', 'GBP'];
 
 /** Public id of the i-th order of the preview user (URL safe, 22 characters). */
-export const orderPublicId = (i) =>
-  `ord_${uuidFor('store:order', i).replace(/-/g, '').slice(0, 18)}`;
+export const orderPublicId = (i) => publicIdFor('store:order', i);
 
 const orderCache = new Map();
 

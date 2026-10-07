@@ -90,10 +90,12 @@ export function createRouter(routes) {
 
 /**
  * Hydration guard. A themed (SSR) page cannot read the cookie on the server (SvelteKit's universal
- * load event has no cookies), so the server renders real data. Until boot.js has mounted the preview
- * and re-run the loads, the browser must therefore answer like the server did: no fixtures.
+ * load event has no cookies), so the server renders real data. The very first client loads run before
+ * the plugin's register() is called, so the guard is closed from module evaluation in the browser (not
+ * from register): until boot.js has seen the page hydrated and re-run the loads, the browser answers
+ * like the server did, with no fixtures.
  */
-export const gate = { deferred: false };
+export const gate = { deferred: typeof document !== 'undefined' };
 
 export const SAVED_NOTHING = { result: 'ok', id: 1 };
 

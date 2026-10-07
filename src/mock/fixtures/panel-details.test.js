@@ -100,7 +100,7 @@ describe('paged lists', () => {
 
     test(`${path}: empty volume`, () => {
       const body = get(path, 'empty');
-      expect(body).toMatchObject({ result: 'ok', [key]: [], [countKey]: 0, totalPage: 1 });
+      expect(body).toMatchObject({ result: 'ok', [key]: [], [countKey]: 0, totalPage: 0 });
     });
   }
 });

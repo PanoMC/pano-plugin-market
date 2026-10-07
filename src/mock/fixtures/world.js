@@ -10,7 +10,7 @@ import {
   PRODUCT_NAMES,
   countFor,
   rows,
-  uuidFor,
+  publicIdFor,
 } from './../kit.js';
 
 const HOUR = 3600000;
@@ -350,7 +350,7 @@ export function orderRows(volume) {
 
       return {
         id,
-        publicId: uuidFor('order', id),
+        publicId: publicIdFor('order', id),
         source,
         userId: source === 'EXTERNAL' ? null : 1 + PLAYERS.indexOf(player),
         playerUsername: player,

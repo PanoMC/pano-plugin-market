@@ -733,5 +733,19 @@ export function createCartStore(overrides = {}) {
 
 export const cart = createCartStore();
 
+// Development preview (src/mock): the cart is a store, not page data, so it reloads on this event when the
+// fake-data mode is switched. Nothing ever dispatches it in production.
+let mockEventBound = false;
+function bindMockEvent() {
+  if (mockEventBound || !globalThis.addEventListener) return;
+  mockEventBound = true;
+  globalThis.addEventListener('pano-market-mock-changed', () => {
+    cart.init({ force: true }).then(() => cart.requestQuote());
+  });
+}
+
 // Initialise with the session (first bind in the browser, login, logout); lazy outside market pages.
-onSessionInit(() => cart.autoInit());
+onSessionInit(() => {
+  bindMockEvent();
+  return cart.autoInit();
+});

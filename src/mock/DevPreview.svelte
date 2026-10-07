@@ -156,6 +156,7 @@
     volume = next;
     document.cookie = cookieString(next);
     await invalidateAll();
+    window.dispatchEvent(new CustomEvent('pano-market-mock-changed'));
   }
 
   const toggle = () => apply(active ? null : DEFAULT_VOLUME);
