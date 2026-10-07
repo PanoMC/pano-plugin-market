@@ -32,27 +32,14 @@
       <CardHeader>
         <div slot="left">{$_('pages.create-product.variants.options')}</div>
         <div slot="right">
-          <div class="dropdown">
-            <button
-              type="button"
-              class="btn btn-sm btn-link"
-              data-bs-toggle="dropdown"
-              aria-expanded="false"
-              title={$_('common.actions')}
-              aria-label={$_('common.actions')}>
-              <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
-            </button>
-            <div class="dropdown-menu dropdown-menu-end animate__animated animate__fadeIn">
-              <button
-                type="button"
-                class="dropdown-item"
-                disabled={axes.length >= MAX_AXES}
-                onclick={addAxis}>
-                <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
-                {$_('pages.create-product.variants.add-axis')}
-              </button>
-            </div>
-          </div>
+          <button
+            type="button"
+            class="btn btn-sm btn-link"
+            disabled={axes.length >= MAX_AXES}
+            onclick={addAxis}>
+            <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
+            {$_('pages.create-product.variants.add-axis')}
+          </button>
         </div>
       </CardHeader>
       <div class="card-body vstack gap-3">
@@ -152,27 +139,14 @@
           })}
         </div>
         <div slot="right">
-          <div class="dropdown">
-            <button
-              type="button"
-              class="btn btn-sm btn-link"
-              data-bs-toggle="dropdown"
-              aria-expanded="false"
-              title={$_('common.actions')}
-              aria-label={$_('common.actions')}>
-              <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
-            </button>
-            <div class="dropdown-menu dropdown-menu-end animate__animated animate__fadeIn">
-              <button
-                type="button"
-                class="dropdown-item"
-                disabled={product.variants.length >= MAX_VARIANTS}
-                onclick={addVariant}>
-                <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
-                {$_('pages.create-product.variants.add-variant')}
-              </button>
-            </div>
-          </div>
+          <button
+            type="button"
+            class="btn btn-sm btn-link"
+            disabled={product.variants.length >= MAX_VARIANTS}
+            onclick={addVariant}>
+            <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
+            {$_('pages.create-product.variants.add-variant')}
+          </button>
         </div>
       </CardHeader>
 

@@ -199,23 +199,10 @@
           {$_('settings.billing.sequences.title', { values: { count: sequences.length } })}
         </div>
         <div slot="right">
-          <div class="dropdown">
-            <button
-              type="button"
-              class="btn btn-sm btn-link"
-              data-bs-toggle="dropdown"
-              aria-expanded="false"
-              title={$_('common.actions')}
-              aria-label={$_('common.actions')}>
-              <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
-            </button>
-            <div class="dropdown-menu dropdown-menu-end">
-              <a class="dropdown-item" href={previewUrl} target="_blank" rel="noopener">
-                <i class="fa-solid fa-file-pdf me-2" aria-hidden="true"></i>
-                {$_('settings.billing.preview-pdf')}
-              </a>
-            </div>
-          </div>
+          <a class="btn btn-sm btn-link" href={previewUrl} target="_blank" rel="noopener">
+            <i class="fa-solid fa-file-pdf me-2" aria-hidden="true"></i>
+            {$_('settings.billing.preview-pdf')}
+          </a>
         </div>
       </CardHeader>
 

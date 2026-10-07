@@ -13,22 +13,11 @@
       <div slot="left">
         {$_('settings.shipping-methods.count', { values: { count: methods.length } })}
       </div>
-      <div slot="right" class="dropdown">
-        <button
-          type="button"
-          class="btn btn-link"
-          data-bs-toggle="dropdown"
-          aria-expanded="false"
-          title={$_('common.actions')}
-          aria-label={$_('common.actions')}>
-          <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
-        </button>
-        <div class="dropdown-menu dropdown-menu-end">
-          <a class="dropdown-item" href="{base}/market/settings/shipping-method">
-            <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
-            {$_('settings.shipping-methods.create')}
-          </a>
-        </div>
+      <div slot="right">
+        <a class="btn btn-sm btn-link" href="{base}/market/settings/shipping-method">
+          <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
+          {$_('settings.shipping-methods.create')}
+        </a>
       </div>
     </CardHeader>
 

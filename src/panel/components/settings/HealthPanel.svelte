@@ -58,23 +58,10 @@
       <CardHeader>
         <div slot="left">{$_('settings.health.status.title')}</div>
         <div slot="right">
-          <div class="dropdown">
-            <button
-              type="button"
-              class="btn btn-sm btn-link"
-              data-bs-toggle="dropdown"
-              aria-expanded="false"
-              title={$_('common.actions')}
-              aria-label={$_('common.actions')}>
-              <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
-            </button>
-            <div class="dropdown-menu dropdown-menu-end">
-              <button type="button" class="dropdown-item" disabled={loading} onclick={recheck}>
-                <i class="fa-solid fa-rotate me-2" aria-hidden="true"></i>
-                {$_('settings.health.recheck')}
-              </button>
-            </div>
-          </div>
+          <button type="button" class="btn btn-sm btn-link" disabled={loading} onclick={recheck}>
+            <i class="fa-solid fa-rotate me-2" aria-hidden="true"></i>
+            {$_('settings.health.recheck')}
+          </button>
         </div>
       </CardHeader>
       <div class="table-responsive">

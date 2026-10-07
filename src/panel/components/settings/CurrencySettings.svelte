@@ -66,27 +66,14 @@
         <div class="mb-3">
           <div class="d-flex align-items-center justify-content-between mb-2">
             <span>{$_('settings.currencies.rates')}</span>
-            <div class="dropdown">
-              <button
-                type="button"
-                class="btn btn-sm btn-link"
-                data-bs-toggle="dropdown"
-                aria-expanded="false"
-                title={$_('common.actions')}
-                aria-label={$_('common.actions')}>
-                <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
-              </button>
-              <div class="dropdown-menu dropdown-menu-end">
-                <button
-                  type="button"
-                  class="dropdown-item"
-                  disabled={refreshing || draft.additionalCurrencies.length === 0}
-                  onclick={refreshRates}>
-                  <i class="fa-solid fa-rotate me-2" aria-hidden="true"></i>
-                  {$_('settings.currencies.refresh-rates')}
-                </button>
-              </div>
-            </div>
+            <button
+              type="button"
+              class="btn btn-sm btn-link"
+              disabled={refreshing || draft.additionalCurrencies.length === 0}
+              onclick={refreshRates}>
+              <i class="fa-solid fa-rotate me-2" aria-hidden="true"></i>
+              {$_('settings.currencies.refresh-rates')}
+            </button>
           </div>
 
           {#if rows.length === 0}

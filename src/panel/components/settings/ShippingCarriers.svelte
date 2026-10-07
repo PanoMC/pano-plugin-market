@@ -133,26 +133,14 @@
                 </button>
 
                 {#if isHttpUrl(carrier.descriptor?.docsUrl)}
-                  <div class="dropdown">
-                    <button
-                      type="button"
-                      class="btn btn-link btn-sm"
-                      data-bs-toggle="dropdown"
-                      title={$_('common.actions')}
-                      aria-label={$_('common.actions')}>
-                      <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
-                    </button>
-                    <div class="dropdown-menu dropdown-menu-end animate__animated animate__fadeIn">
-                      <a
-                        class="dropdown-item"
-                        href={carrier.descriptor.docsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer">
-                        <i class="fa-solid fa-book me-2" aria-hidden="true"></i>
-                        {$_('settings.shipping-carriers.docs')}
-                      </a>
-                    </div>
-                  </div>
+                  <a
+                    class="btn btn-sm btn-link"
+                    href={carrier.descriptor.docsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer">
+                    <i class="fa-solid fa-book me-2" aria-hidden="true"></i>
+                    {$_('settings.shipping-carriers.docs')}
+                  </a>
                 {/if}
               </div>
             </div>

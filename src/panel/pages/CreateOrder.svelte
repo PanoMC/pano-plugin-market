@@ -110,23 +110,10 @@
                 {$_('pages.create-order.items.title', { values: { count: lines.length } })}
               </div>
               <div slot="right">
-                <div class="dropdown">
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-link"
-                    data-bs-toggle="dropdown"
-                    aria-expanded="false"
-                    title={$_('common.actions')}
-                    aria-label={$_('common.actions')}>
-                    <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
-                  </button>
-                  <div class="dropdown-menu dropdown-menu-end animate__animated animate__fadeIn">
-                    <button type="button" class="dropdown-item" onclick={() => itemModal?.open()}>
-                      <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
-                      {$_('pages.create-order.items.add')}
-                    </button>
-                  </div>
-                </div>
+                <button type="button" class="btn btn-sm btn-link" onclick={() => itemModal?.open()}>
+                  <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
+                  {$_('pages.create-order.items.add')}
+                </button>
               </div>
             </CardHeader>
 

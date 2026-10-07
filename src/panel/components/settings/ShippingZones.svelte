@@ -19,26 +19,15 @@
       <div slot="left">
         {$_('settings.shipping-zones.count', { values: { count: zones.length } })}
       </div>
-      <div slot="right" class="dropdown">
+      <div slot="right">
         <button
           type="button"
-          class="btn btn-link"
-          data-bs-toggle="dropdown"
-          aria-expanded="false"
-          title={$_('common.actions')}
-          aria-label={$_('common.actions')}>
-          <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
+          class="btn btn-sm btn-link"
+          disabled={zones.length >= MAX_ZONES}
+          onclick={() => zoneModal?.open(null, zones)}>
+          <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
+          {$_('settings.shipping-zones.create')}
         </button>
-        <div class="dropdown-menu dropdown-menu-end">
-          <button
-            type="button"
-            class="dropdown-item"
-            disabled={zones.length >= MAX_ZONES}
-            onclick={() => zoneModal?.open(null, zones)}>
-            <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
-            {$_('settings.shipping-zones.create')}
-          </button>
-        </div>
       </div>
     </CardHeader>
 

@@ -1,22 +1,9 @@
 <MarketLayout area="orders" sections={sectionsFor('orders', user)} active="deliveries">
   {#snippet right()}
-    <div class="dropdown d-inline-block">
-      <button
-        type="button"
-        class="btn btn-link"
-        data-bs-toggle="dropdown"
-        data-bs-popper-config={POPPER_FIXED}
-        title={$_('common.actions')}
-        aria-label={$_('common.actions')}>
-        <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
-      </button>
-      <div class="dropdown-menu dropdown-menu-end animate__animated animate__fadeIn">
-        <button type="button" class="dropdown-item" onclick={() => filtersModal?.open()}>
-          <i class="fa-solid fa-filter me-2" aria-hidden="true"></i>
-          {$_('pages.deliveries.filters')}
-        </button>
-      </div>
-    </div>
+    <button type="button" class="btn btn-link" onclick={() => filtersModal?.open()}>
+      <i class="fa-solid fa-filter me-2" aria-hidden="true"></i>
+      {$_('pages.deliveries.filters')}
+    </button>
   {/snippet}
 
   {#if data.error}
@@ -227,9 +214,6 @@
 
 <script>
   import FilterSelect from '../components/FilterSelect.svelte';
-  // The page header's right column scrolls sideways, which clips a menu hanging below it; a fixed menu is not clipped.
-  const POPPER_FIXED = '{"strategy":"fixed"}';
-
   import ApiUtil from '@panomc/sdk/utils/api';
   import {
     CardHeader,

@@ -15,22 +15,11 @@
       <div slot="left">
         {$_('settings.webhooks.count', { values: { count: webhooks.length } })}
       </div>
-      <div slot="right" class="dropdown">
-        <button
-          type="button"
-          class="btn btn-link"
-          data-bs-toggle="dropdown"
-          aria-expanded="false"
-          title={$_('common.actions')}
-          aria-label={$_('common.actions')}>
-          <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
+      <div slot="right">
+        <button type="button" class="btn btn-sm btn-link" onclick={() => webhookModal?.open(null, context)}>
+          <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
+          {$_('settings.webhooks.create')}
         </button>
-        <div class="dropdown-menu dropdown-menu-end">
-          <button type="button" class="dropdown-item" onclick={() => webhookModal?.open(null, context)}>
-            <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
-            {$_('settings.webhooks.create')}
-          </button>
-        </div>
       </div>
     </CardHeader>
 

@@ -5,27 +5,14 @@
         {$_('pages.create-product.fields.title', { values: { count: product.fields.length } })}
       </div>
       <div slot="right">
-        <div class="dropdown">
-          <button
-            type="button"
-            class="btn btn-sm btn-link"
-            data-bs-toggle="dropdown"
-            aria-expanded="false"
-            title={$_('common.actions')}
-            aria-label={$_('common.actions')}>
-            <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
-          </button>
-          <div class="dropdown-menu dropdown-menu-end animate__animated animate__fadeIn">
-            <button
-              type="button"
-              class="dropdown-item"
-              disabled={product.fields.length >= MAX_FIELDS}
-              onclick={() => fieldModal?.open({ siblings: product.fields })}>
-              <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
-              {$_('pages.create-product.fields.add')}
-            </button>
-          </div>
-        </div>
+        <button
+          type="button"
+          class="btn btn-sm btn-link"
+          disabled={product.fields.length >= MAX_FIELDS}
+          onclick={() => fieldModal?.open({ siblings: product.fields })}>
+          <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
+          {$_('pages.create-product.fields.add')}
+        </button>
       </div>
     </CardHeader>
 

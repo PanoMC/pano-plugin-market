@@ -25,23 +25,10 @@
   <CardHeader>
     <div slot="left">{$_('settings.mail.title')}</div>
     <div slot="right">
-      <div class="dropdown">
-        <button
-          type="button"
-          class="btn btn-sm btn-link"
-          data-bs-toggle="dropdown"
-          aria-expanded="false"
-          title={$_('common.actions')}
-          aria-label={$_('common.actions')}>
-          <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
-        </button>
-        <div class="dropdown-menu dropdown-menu-end">
-          <button type="button" class="dropdown-item" onclick={() => testModal?.open()}>
-            <i class="fa-solid fa-paper-plane me-2" aria-hidden="true"></i>
-            {$_('settings.mail.send-test')}
-          </button>
-        </div>
-      </div>
+      <button type="button" class="btn btn-sm btn-link" onclick={() => testModal?.open()}>
+        <i class="fa-solid fa-paper-plane me-2" aria-hidden="true"></i>
+        {$_('settings.mail.send-test')}
+      </button>
     </div>
   </CardHeader>
 
