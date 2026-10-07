@@ -81,6 +81,8 @@ class FakePayGateway(
     /** Status the next charges answer with (`paid`, `pending`, `failed`). */
     @Volatile var chargeStatus: String = "paid"
 
+    /** Payment, refund and charge ids carry the per-run tag too: the instance keeps `uq_provider_txn` rows across runs, so `pay_1` of a second JVM would collide and silently lose the transaction id. */
+    private val idTag = if (eventPrefix.isEmpty()) "" else "${eventPrefix}_"
     private val paymentSeq = AtomicInteger(0)
     private val refundSeq = AtomicInteger(0)
     private val chargeSeq = AtomicInteger(0)
@@ -273,7 +275,7 @@ class FakePayGateway(
         val n = paymentSeq.incrementAndGet()
         val reference = body.getString("reference")
         val payment = Payment(
-            id = "pay_$n", session = "sess_$n", reference = reference, amount = BigDecimal(body.getString("amount")),
+            id = "pay_$idTag$n", session = "sess_$idTag$n", reference = reference, amount = BigDecimal(body.getString("amount")),
             currency = body.getString("currency"), notifyUrl = body.getString("notifyUrl"), returnSuccess = body.getString("returnSuccess"),
             returnCancel = body.getString("returnCancel"), body = body
         )
@@ -302,7 +304,7 @@ class FakePayGateway(
         val amount = BigDecimal(body.getString("amount"))
         val captured = (payment.paidAmount ?: BigDecimal.ZERO) - payment.refunded
         if (amount > captured) return@idempotent Reply.json("""{"message":"amount exceeds captured"}""", 422)
-        val id = "ref_${refundSeq.incrementAndGet()}"
+        val id = "ref_$idTag${refundSeq.incrementAndGet()}"
         val status = when (refundMode) {
             RefundMode.SUCCEEDED -> "succeeded"
             RefundMode.PENDING -> "pending"
@@ -321,7 +323,7 @@ class FakePayGateway(
     }
 
     private fun charge(r: Recorded): Reply = idempotent(r) {
-        val id = "chg_${chargeSeq.incrementAndGet()}"
+        val id = "chg_$idTag${chargeSeq.incrementAndGet()}"
         Reply.json(JsonObject().put("id", id).put("status", chargeStatus).encode(), 201)
     }
 
