@@ -149,14 +149,17 @@
 
   // Section `shipping-methods` of the settings page (13 §19.2). The settings page may pass the shared
   // `ctx`; without it the component reads GET /context itself.
-  let { ctx: ctxProp = null } = $props();
+  // extra / extraError: [GET /shipping/methods, GET /shipping/carriers] loaded with the page.
+  let { ctx: ctxProp = null, extra = null, extraError = null } = $props();
+
+  const carriersOf = (body) => (body && !body.error ? (body.carriers ?? body.providers ?? []) : []);
 
   let confirm = $state(null);
-  let methods = $state.raw([]);
-  let carriers = $state.raw([]);
+  let methods = $state.raw(Array.isArray(extra?.[0]?.methods) ? extra[0].methods : []);
+  let carriers = $state.raw(carriersOf(extra?.[1]));
   let loadedCtx = $state.raw(null);
-  let loading = $state(true);
-  let loadError = $state(null);
+  let loading = $state(!extra && !extraError);
+  let loadError = $state(extraError);
   let busy = $state(false);
 
   const ctx = $derived(ctxProp ?? loadedCtx);
@@ -198,7 +201,9 @@
     if (error) showErrorToast($_('common.error-generic'));
   }
 
-  onMount(load);
+  onMount(() => {
+    if (!extra && !extraError) load();
+  });
 
   async function move(method, delta) {
     const ids = movedIds(methods, method.id, delta);

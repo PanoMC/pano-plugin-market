@@ -5,6 +5,7 @@
 // allows more than the backend (store page size 60 vs 100, seller name 255 vs 120, seller address 1000
 // vs 500) the stricter value wins, so a value the form accepts is never refused by the server.
 import { parseInteger } from './format.js';
+import { deliveriesPath, parseEndpointId } from './webhooks.js';
 
 // ---------------------------------------------------------------------------------------------
 // Field table
@@ -845,14 +846,24 @@ export function resolveSection(value) {
 }
 
 /** Extra GET a section needs next to GET /settings (13 §17 table); null = none. */
-export function extraPathFor(section) {
+/**
+ * What the settings page loads together with GET /settings for a section, so the section opens filled
+ * instead of on a spinner: one path, a list of paths (the first is the section's own data, a failure of
+ * a later one is tolerated), or null. `searchParams` is the page URL's query.
+ */
+export function extraPathFor(section, searchParams = null) {
   if (section === 'currencies') return '/settings/currencies';
   if (section === 'legal') return '/settings/legal';
   // delivery (chargeback action editors) and minecraft (per-server table) need the server list;
   // mail reads the health report to tell "host too old" from "switched off"; health is the report.
   if (section === 'delivery' || section === 'minecraft') return '/servers';
   if (section === 'mail' || section === 'health') return '/health';
-  // the provider cards come with the page, so the section does not open on a spinner
   if (section === 'payments') return '/payment-providers';
+  if (section === 'shipping-carriers') return '/shipping/carriers';
+  if (section === 'shipping-zones') return '/shipping/zones';
+  if (section === 'shipping-methods') return ['/shipping/methods', '/shipping/carriers'];
+  if (section === 'webhooks') return '/webhooks';
+  if (section === 'webhook-deliveries')
+    return deliveriesPath({ endpointId: parseEndpointId(searchParams?.get('endpointId')) });
   return null;
 }

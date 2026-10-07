@@ -151,10 +151,13 @@
   let confirm = $state(null);
   let webhookModal = $state(null);
   let secretModal = $state(null);
-  let webhooks = $state.raw([]);
-  let context = $state.raw({ defaults: {}, eventNames: [] });
-  let loading = $state(true);
-  let loadError = $state(null);
+  // extra / extraError: GET /webhooks loaded with the page (utils/settings.js extraPathFor).
+  let { extra = null, extraError = null } = $props();
+
+  let webhooks = $state.raw(extra?.webhooks ?? []);
+  let context = $state.raw({ defaults: extra?.defaults ?? {}, eventNames: extra?.eventNames ?? [] });
+  let loading = $state(!extra && !extraError);
+  let loadError = $state(extraError);
   let busy = $state(false);
 
   const dateText = (epoch) => (epoch ? new Date(Number(epoch)).toLocaleString(currentLocale()) : '—');
@@ -182,7 +185,9 @@
     if (error) showErrorToast($_('common.error-generic'));
   }
 
-  onMount(load);
+  onMount(() => {
+    if (!extra && !extraError) load();
+  });
 
   async function sendTest(hook) {
     if (busy) return;

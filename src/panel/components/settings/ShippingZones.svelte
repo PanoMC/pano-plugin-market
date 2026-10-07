@@ -163,9 +163,12 @@
   // Section `shipping-zones` of the settings page (13 §19.1). Loads GET /shipping/zones itself.
   let confirm = $state(null);
   let zoneModal = $state(null);
-  let zones = $state.raw([]);
-  let loading = $state(true);
-  let loadError = $state(null);
+  // extra / extraError: GET /shipping/zones loaded with the page (utils/settings.js extraPathFor).
+  let { extra = null, extraError = null } = $props();
+
+  let zones = $state.raw(Array.isArray(extra?.zones) ? extra.zones : []);
+  let loading = $state(!extra && !extraError);
+  let loadError = $state(extraError);
   let busy = $state(false);
 
   async function fetchZones() {
@@ -187,7 +190,9 @@
     if (error) showErrorToast($_('common.error-generic'));
   }
 
-  onMount(load);
+  onMount(() => {
+    if (!extra && !extraError) load();
+  });
 
   async function move(zone, delta) {
     const ids = movedIds(zones, zone.id, delta);

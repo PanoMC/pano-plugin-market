@@ -37,13 +37,16 @@
     pageTitle.set('plugins.pano-plugin-market.pages.settings.title');
 
     const section = resolveSection(event.url.searchParams.get('section'));
-    const extraPath = extraPathFor(section);
+    const extraPath = extraPathFor(section, event.url.searchParams);
+    const extraPaths = extraPath ? [extraPath].flat() : [];
 
     const [settings, ctx, extra] = await Promise.all([
       ApiUtil.get({ path: marketPath('/settings'), request: event }),
       loadContext(event),
-      extraPath ? ApiUtil.get({ path: marketPath(extraPath), request: event }) : null,
+      Promise.all(extraPaths.map((path) => ApiUtil.get({ path: marketPath(path), request: event }))),
     ]);
+    // one path: its answer; several: the list of answers (the first one decides success)
+    const first = extra[0] ?? null;
 
     // Do NOT fall back to an empty settings object on failure: the sections would silently render
     // defaults that, if saved, overwrite the real config. Surface an explicit error state instead.
@@ -51,15 +54,15 @@
       return { data: { section, ctx, error: settings?.error || 'NETWORK_ERROR' } };
     }
 
-    const extraOk = extra && typeof extra === 'object' && !extra.error;
+    const extraOk = first && typeof first === 'object' && !first.error;
 
     return {
       data: {
         section,
         ctx,
         settings,
-        extra: extraOk ? extra : null,
-        extraError: extraPath && !extraOk ? extra?.error || 'NETWORK_ERROR' : null,
+        extra: extraOk ? (Array.isArray(extraPath) ? extra : first) : null,
+        extraError: extraPath && !extraOk ? first?.error || 'NETWORK_ERROR' : null,
       },
     };
   }

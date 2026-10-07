@@ -175,12 +175,18 @@
   // Section `shipping-carriers` of the settings page (13 §19.3): the twin of the payment method grid
   // for GET /shipping/carriers, without a rules tab and without reordering. The settings page may pass
   // the shared `ctx`; without it the component reads GET /context itself.
-  let { ctx: ctxProp = null } = $props();
+  function carriersOf(body) {
+    const list = body?.carriers ?? body?.providers;
+    return Array.isArray(list) ? list : [];
+  }
 
-  let carriers = $state.raw([]);
+  // extra / extraError: GET /shipping/carriers loaded with the page (utils/settings.js extraPathFor).
+  let { ctx: ctxProp = null, extra = null, extraError = null } = $props();
+
+  let carriers = $state.raw(carriersOf(extra));
   let loadedCtx = $state.raw(null);
-  let loading = $state(true);
-  let loadError = $state(null);
+  let loading = $state(!extra && !extraError);
+  let loadError = $state(extraError);
   let busy = $state(false);
   // optimistic switch positions: carrier id -> boolean, dropped when the request settles
   let pending = $state({});
@@ -208,8 +214,7 @@
   async function fetchCarriers() {
     const result = await call(ApiUtil.get({ path: marketPath('/shipping/carriers') }));
     if (!result.ok) return { error: result.error };
-    const list = result.body.carriers ?? result.body.providers;
-    return { carriers: Array.isArray(list) ? list : [] };
+    return { carriers: carriersOf(result.body) };
   }
 
   async function load() {
@@ -232,7 +237,7 @@
   }
 
   onMount(() => {
-    load();
+    if (!extra && !extraError) load();
   });
 
   async function toggleEnabled(carrier, event) {

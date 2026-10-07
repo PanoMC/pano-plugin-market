@@ -146,13 +146,16 @@
   // Section `webhook-deliveries` (13 §18.3). `?endpointId=` limits the log to one endpoint.
   let confirm = $state(null);
   let detailModal = $state(null);
-  let deliveries = $state.raw([]);
-  let count = $state(0);
-  let totalPage = $state(1);
+  // extra / extraError: the first page (no status filter) loaded with the page (extraPathFor).
+  let { extra = null, extraError = null } = $props();
+
+  let deliveries = $state.raw(extra?.deliveries ?? []);
+  let count = $state(extra?.count ?? extra?.deliveries?.length ?? 0);
+  let totalPage = $state(extra?.totalPage ?? 1);
   let page = $state(1);
   let status = $state(null);
-  let loading = $state(true);
-  let loadError = $state(null);
+  let loading = $state(!extra && !extraError);
+  let loadError = $state(extraError);
 
   const endpointId = $derived(parseEndpointId($pageStore?.url?.searchParams?.get('endpointId')));
   const currentTab = $derived(deliveryTab(status));
@@ -184,7 +187,9 @@
     totalPage = result.body.totalPage ?? 1;
   }
 
-  onMount(load);
+  onMount(() => {
+    if (!extra && !extraError) load();
+  });
 
   function setStatus(value) {
     status = value;

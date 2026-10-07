@@ -982,8 +982,16 @@ describe('settings page', () => {
       mail: '/health',
       health: '/health',
       payments: '/payment-providers',
+      'shipping-carriers': '/shipping/carriers',
+      'shipping-zones': '/shipping/zones',
+      'shipping-methods': ['/shipping/methods', '/shipping/carriers'],
+      webhooks: '/webhooks',
+      'webhook-deliveries': '/webhook-deliveries',
     };
-    for (const [key, path] of Object.entries(extra)) expect(extraPathFor(key)).toBe(path);
+    for (const [key, path] of Object.entries(extra)) expect(extraPathFor(key)).toEqual(path);
+    expect(extraPathFor('webhook-deliveries', new URLSearchParams('endpointId=7'))).toBe(
+      '/webhooks/7/deliveries',
+    );
     for (const key of PAGE_SECTIONS.filter((k) => !(k in extra)))
       expect(extraPathFor(key)).toBeNull();
   });
