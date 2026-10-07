@@ -402,8 +402,10 @@ tasks {
         archiveFileName.set("$pluginId-$version.jar")
 
         // Minecraft-side component (19 section 2.2): classes, descriptors and resources at the jar root.
-        from(mc.output)
-        from(mcVelocity.output)
+        // The kapt run of the mc source sets writes an empty META-INF/extensions.idx next to the one of main; two entries of that
+        // name make Paper's plugin remapper refuse the jar ("Duplicate entries detected"), so only main's one is kept.
+        from(mc.output) { exclude("META-INF/extensions.idx") }
+        from(mcVelocity.output) { exclude("META-INF/extensions.idx") }
 
         dependencies {
             exclude(dependency("io.vertx:vertx-core"))
