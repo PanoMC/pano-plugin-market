@@ -1,4 +1,4 @@
-<MarketLayout area="orders" sections={sectionsFor('orders', user)} active="orders">
+<MarketLayout area="orders">
   {#snippet left()}
     <div class="d-flex align-items-center flex-wrap gap-2">
       <a class="btn btn-link px-0" href="{base}/market/orders">
@@ -229,7 +229,6 @@
   import ResendMailModal from '../components/modals/ResendMailModal.svelte';
   import ReviewOrderModal from '../components/modals/ReviewOrderModal.svelte';
   import MarketLayout from '../layouts/MarketLayout.svelte';
-  import { sectionsFor } from '../navigation.js';
   import { toastError } from '../utils/toast.js';
 
   let { data } = $props();

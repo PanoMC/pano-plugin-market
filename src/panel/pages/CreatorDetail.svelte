@@ -71,7 +71,6 @@
   import PlayerCell from '../components/PlayerCell.svelte';
   import StatusBadge from '../components/StatusBadge.svelte';
   import PayoutModal from '../components/modals/PayoutModal.svelte';
-  import { sectionsFor } from '../navigation.js';
   import { call } from '../utils/api.js';
   import { canCancelPayout, canPayOut } from '../utils/discounts.js';
   import { currentLocale, fmt } from '../utils/locale.js';
@@ -166,7 +165,7 @@
   }
 </script>
 
-<MarketLayout area="discounts" sections={sectionsFor('discounts', user)} active="payouts">
+<MarketLayout area="discounts">
   {#snippet left()}
     <div class="d-flex align-items-center gap-3 flex-wrap">
       <a class="btn btn-link px-0" href="{base}/market/discounts?section=payouts">

@@ -1,4 +1,4 @@
-<MarketLayout area="customers" sections={sectionsFor('customers', user)} active="credits">
+<MarketLayout area="customers">
   {#snippet left()}
     <div class="d-flex align-items-center gap-3 flex-wrap">
       <a class="btn btn-link px-0" href="{base}/market/credits">
@@ -158,7 +158,6 @@
   import LoadError from '../components/LoadError.svelte';
   import PlayerCell from '../components/PlayerCell.svelte';
   import CreditAdjustModal from '../components/modals/CreditAdjustModal.svelte';
-  import { sectionsFor } from '../navigation.js';
   import { call } from '../utils/api.js';
   import { creditBadgeClass, signedAmount } from '../utils/credits.js';
   import { fmt, currentLocale } from '../utils/locale.js';

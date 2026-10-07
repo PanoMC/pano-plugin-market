@@ -1,4 +1,4 @@
-<MarketLayout area="catalog" sections={sectionsFor('catalog', navUser)} active="products">
+<MarketLayout area="catalog">
   {#snippet left()}
     <a href="{base}/market/products" class="btn btn-link text-decoration-none p-0">
       <i class="fas fa-arrow-left" aria-hidden="true"></i>
@@ -443,10 +443,9 @@
 <script>
   import { tick, untrack } from 'svelte';
   import { DragAndDropZone } from '@panomc/sdk/components/panel';
-  import { base, goto, page } from '@panomc/sdk/svelte';
+  import { base, goto } from '@panomc/sdk/svelte';
   import { _, showErrorToast, showSuccessToast } from '../../i18n';
   import MarketLayout from '../layouts/MarketLayout.svelte';
-  import { sectionsFor } from '../navigation.js';
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import IconPicker from '../components/IconPicker.svelte';
   import LoadError from '../components/LoadError.svelte';
@@ -481,7 +480,6 @@
   } from '../components/product/model.js';
   import { call, errorKey } from '../utils/api.js';
 
-  const navUser = $derived($page.data?.user);
 
   let { data } = $props();
 

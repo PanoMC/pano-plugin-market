@@ -1,4 +1,4 @@
-<MarketLayout area="orders" sections={sectionsFor('orders', user)} active="orders">
+<MarketLayout area="orders">
   {#snippet left()}
     <a class="btn btn-link px-0" href="{base}/market/orders">
       <i class="fa-solid fa-arrow-left me-1" aria-hidden="true"></i>
@@ -387,14 +387,13 @@
 
 <script>
   import { CardHeader, NoContent } from '@panomc/sdk/components/panel';
-  import { base, goto, page } from '@panomc/sdk/svelte';
+  import { base, goto } from '@panomc/sdk/svelte';
   import { onMount, untrack } from 'svelte';
   import { _, showErrorToast, showSuccessToast } from '../../i18n';
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import LoadError from '../components/LoadError.svelte';
   import MoneyInput from '../components/MoneyInput.svelte';
   import AddOrderItemModal from '../components/modals/AddOrderItemModal.svelte';
-  import { sectionsFor } from '../navigation.js';
   import { call, errorKey, errorParams, newIdempotency, resetIdempotency } from '../utils/api.js';
   import { fmt } from '../utils/locale.js';
   import {
@@ -421,7 +420,6 @@
   let { data } = $props();
 
   const DASH = '—';
-  const user = $derived($page.data?.user);
   const ctx = $derived(data.ctx ?? null);
   const products = $derived(data.products ?? []);
   const servers = $derived(data.servers ?? []);

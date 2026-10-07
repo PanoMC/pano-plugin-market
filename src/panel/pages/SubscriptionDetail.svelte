@@ -1,4 +1,4 @@
-<MarketLayout area="orders" sections={sectionsFor('orders', user)} active="subscriptions">
+<MarketLayout area="orders">
   {#snippet left()}
     <div class="d-flex align-items-center gap-3 flex-wrap">
       <a class="btn btn-link px-0" href="{base}/market/subscriptions">
@@ -246,7 +246,6 @@
   import StatusBadge from '../components/StatusBadge.svelte';
   import CancelSubscriptionModal from '../components/modals/CancelSubscriptionModal.svelte';
   import { confirmRetry } from '../components/subscriptions/retry.js';
-  import { sectionsFor } from '../navigation.js';
   import { call } from '../utils/api.js';
   import { formatDuration } from '../utils/format.js';
   import { currentLocale, fmt } from '../utils/locale.js';

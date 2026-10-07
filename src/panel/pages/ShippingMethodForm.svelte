@@ -1,4 +1,4 @@
-<MarketLayout area="settings" sections={sectionsFor('settings', user)} active="shipping-methods">
+<MarketLayout area="settings">
   {#snippet left()}
     <a class="btn btn-link px-0" href="{base}/market/settings?section=shipping-methods">
       <i class="fa-solid fa-arrow-left me-1" aria-hidden="true"></i>
@@ -618,7 +618,7 @@
 
 <script>
   import { untrack } from 'svelte';
-  import { base, goto, page } from '@panomc/sdk/svelte';
+  import { base, goto } from '@panomc/sdk/svelte';
   import { CardHeader } from '@panomc/sdk/components/panel';
   import { tooltip } from '@panomc/sdk/utils/tooltip';
   import { _ as rawI18n } from '@panomc/sdk/utils/language';
@@ -626,7 +626,6 @@
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import LoadError from '../components/LoadError.svelte';
   import MoneyInput from '../components/MoneyInput.svelte';
-  import { sectionsFor } from '../navigation.js';
   import { call } from '../utils/api.js';
   import { currentLocale, fmt } from '../utils/locale.js';
   import { providerName } from '../utils/payment-methods.js';
@@ -665,7 +664,6 @@
   // `{tracking}` is passed as a value: written in a message it would read as an ICU argument.
   const TRACKING_TOKEN = '{tracking}';
 
-  const user = $derived($page.data?.user);
   const zones = $derived(data.zones ?? []);
   const carriers = $derived(data.carriers ?? []);
   const ctx = $derived(data.ctx ?? null);
