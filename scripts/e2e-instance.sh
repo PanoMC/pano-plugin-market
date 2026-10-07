@@ -282,7 +282,7 @@ launch_pano() {
     export PANO_HTTP_PORT=$HTTP_PORT
     # shellcheck disable=SC2086
     exec setsid "$JAVA_BIN" ${MARKET_E2E_JAVA_OPTS:--XX:MaxRAMPercentage=40} \
-      -Dpano.market.fakeProvider=true -Dpf4j.pluginsDir=plugins -jar "$PANO_JAR" -nogui \
+      -Dpano.market.fakeProvider=true -Dpano.market.jobScale=${MARKET_E2E_JOB_SCALE:-5} -Dpf4j.pluginsDir=plugins -jar "$PANO_JAR" -nogui \
       </dev/null >pano.log 2>&1
   ) &
   pid=$!

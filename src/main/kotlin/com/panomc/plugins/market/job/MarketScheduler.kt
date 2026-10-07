@@ -257,7 +257,14 @@ class MarketScheduler(
  *   `HousekeepingJob` is MK-153's, both registered below).
  */
 internal object MarketJobs {
-    fun scheduler(plugin: MarketPlugin): MarketScheduler = MarketScheduler(SystemClock, jobs(plugin), enabled = { MarketRuntime.isReady })
+    /** Test-only: `-Dpano.market.jobScale=N` divides every cadence and the tick by N (the end-to-end instance; production never sets it). */
+    val scale: Long = System.getProperty("pano.market.jobScale")?.toLongOrNull()?.coerceIn(1L, 100L) ?: 1L
+
+    fun scheduler(plugin: MarketPlugin): MarketScheduler = MarketScheduler(
+        SystemClock,
+        jobs(plugin).map { if (scale == 1L) it else MarketScheduler.Job(it.name, maxOf(1L, it.everyMs / scale), it.run) },
+        enabled = { MarketRuntime.isReady }
+    )
 
     fun jobs(plugin: MarketPlugin): List<MarketScheduler.Job> {
         val context = plugin.beans

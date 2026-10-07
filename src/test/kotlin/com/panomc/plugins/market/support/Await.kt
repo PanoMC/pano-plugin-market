@@ -11,6 +11,9 @@ class AwaitTimeout(val description: String, val lastValue: Any?) :
  * once, also when `timeoutMs` is 0.
  */
 object Await {
+    /** Polls never wait longer than this between two looks, whatever the caller asked for. */
+    private const val MAX_STEP_MS = 100L
+
     fun until(timeoutMs: Long = 10_000, stepMs: Long = 50, description: String = "condition", condition: () -> Boolean) {
         untilValue<Boolean>(timeoutMs, stepMs, description) { condition().takeIf { it } }
     }
@@ -28,7 +31,7 @@ object Await {
             }
             if (v != null) return v
             if (System.nanoTime() >= deadline) throw AwaitTimeout(description, last)
-            Thread.sleep(stepMs)
+            Thread.sleep(minOf(stepMs, MAX_STEP_MS))
         }
     }
 
@@ -44,7 +47,7 @@ object Await {
             }
             if (ok) return
             if (System.nanoTime() >= deadline) throw AwaitTimeout(description, last)
-            delay(stepMs)
+            delay(minOf(stepMs, MAX_STEP_MS))
         }
     }
 }

@@ -141,7 +141,7 @@ class MarketPlugin : PanoPlugin() {
     private fun startJobScheduler() {
         val running = jobScheduler ?: MarketJobs.scheduler(this).also { jobScheduler = it }
 
-        running.start(vertx)
+        running.start(vertx, MarketScheduler.TICK_MS / MarketJobs.scale)
     }
 
     /**
