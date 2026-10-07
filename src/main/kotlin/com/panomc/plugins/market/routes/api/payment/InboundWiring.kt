@@ -223,6 +223,7 @@ private fun buildDispatcher(plugin: MarketPlugin): InboundDispatcher {
         // SubscriptionUpdated is applied by the subscription service, every other non-attempt event goes to the sink a slice installed (read on every event)
         PaymentEventApplier(
             attempts,
+            SystemClock,
             PaymentEventRouter(
                 { com.panomc.plugins.market.routes.panel.refund.refundService(plugin) },
                 { com.panomc.plugins.market.routes.panel.dispute.disputeService(plugin) },
