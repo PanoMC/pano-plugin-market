@@ -25,31 +25,35 @@
         </div>
         <div slot="right" class="d-flex align-items-center gap-3">
           <CardFilters>
-            <CardFiltersItem
-              button
-              active={filters.status === ''}
-              onclick={() => go({ status: null })}>
-              {$_('common.all')}
-            </CardFiltersItem>
-            {#each STATUS_FILTERS as status (status)}
-              <CardFiltersItem
-                button
-                active={filters.status === status}
-                onclick={() => go({ status })}>
-                {$_(`pages.create-product.statuses.${status}`)}
-              </CardFiltersItem>
-            {/each}
-          </CardFilters>
-          <div class="vr d-none d-md-block"></div>
-          <CardFilters>
-            {#each KIND_FILTERS as kind (kind)}
-              <CardFiltersItem
-                button
-                active={filters.kind === kind}
-                onclick={() => go({ kind: filters.kind === kind ? null : kind })}>
-                {$_(`enums.product-kind.${kind}`)}
-              </CardFiltersItem>
-            {/each}
+            <FilterSelect
+              label={$_('common.status')}
+              current={filters.status === '' ? 'ALL' : filters.status}
+              options={[
+                { key: 'ALL', value: null, label: $_('common.all') },
+                ...STATUS_FILTERS.map((status) => ({
+                  key: status,
+                  value: status,
+                  label: $_(`pages.create-product.statuses.${status}`),
+                })),
+              ]}
+              onSelect={(option) => go({ status: option.value })} />
+            <FilterSelect
+              class="ms-2"
+              label={$_('pages.create-product.kind')}
+              current={filters.kind === '' ? 'ALL' : filters.kind}
+              options={[
+                {
+                  key: 'ALL',
+                  value: null,
+                  label: `${$_('pages.create-product.kind')}: ${$_('common.all')}`,
+                },
+                ...KIND_FILTERS.map((kind) => ({
+                  key: kind,
+                  value: kind,
+                  label: $_(`enums.product-kind.${kind}`),
+                })),
+              ]}
+              onSelect={(option) => go({ kind: option.value })} />
             {#if hasExtraFilters(filters)}
               <CardFiltersItem button onclick={() => go({ kind: null, categoryId: null })}>
                 {$_('common.clear-filters')}
@@ -242,6 +246,7 @@
 </script>
 
 <script>
+  import FilterSelect from '../components/FilterSelect.svelte';
   import {
     CardHeader,
     CardFilters,

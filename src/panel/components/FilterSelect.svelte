@@ -1,6 +1,6 @@
 <!-- A filter with more than three choices: a row of tabs does not fit the card header, so it is one select. -->
 <select
-  class="form-select form-select-sm w-auto"
+  class="form-select form-select-sm w-auto {extraClass}"
   aria-label={label}
   value={current ?? ''}
   onchange={(event) => {
@@ -17,6 +17,6 @@
 
 <script>
   // options: [{ key, label, ... }]; current: key of the chosen option (null = none of them);
-  // onSelect: receives the chosen option object.
-  let { options, current = null, label, onSelect } = $props();
+  // onSelect: receives the chosen option object; class: extra classes (spacing next to a second filter).
+  let { options, current = null, label, onSelect, class: extraClass = '' } = $props();
 </script>
