@@ -45,14 +45,11 @@
             onchange={(value) => go({ search: value })} />
         </div>
         <CardFilters slot="right">
-          {#each STATUS_TABS as tab (tab.key)}
-            <CardFiltersItem
-              button
-              active={currentTab === tab.key}
-              onclick={() => go({ status: tab.value })}>
-              {$_(`pages.orders.tab.${tab.key}`)}
-            </CardFiltersItem>
-          {/each}
+          <FilterSelect
+            label={$_('common.status')}
+            current={currentTab}
+            options={STATUS_TABS.map((tab) => ({ ...tab, label: $_(`pages.orders.tab.${tab.key}`) }))}
+            onSelect={(tab) => go({ status: tab.value })} />
           {#if modalFilterCount > 0}
             <CardFiltersItem button onclick={clearModalFilters}>
               {$_('common.clear-filters')}
@@ -103,6 +100,7 @@
 </script>
 
 <script>
+  import FilterSelect from '../components/FilterSelect.svelte';
   // The page header's right column scrolls sideways, which clips a menu hanging below it; a fixed menu is not clipped.
   const POPPER_FIXED = '{"strategy":"fixed"}';
 

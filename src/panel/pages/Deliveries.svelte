@@ -36,14 +36,11 @@
             onchange={(value) => go({ search: value })} />
         </div>
         <CardFilters slot="right">
-          {#each STATUS_TABS as tab (tab.key)}
-            <CardFiltersItem
-              button
-              active={currentTab === tab.key}
-              onclick={() => go({ status: tab.value })}>
-              {$_(`pages.deliveries.tab.${tab.key}`)}
-            </CardFiltersItem>
-          {/each}
+          <FilterSelect
+            label={$_('common.status')}
+            current={currentTab}
+            options={STATUS_TABS.map((tab) => ({ ...tab, label: $_(`pages.deliveries.tab.${tab.key}`) }))}
+            onSelect={(tab) => go({ status: tab.value })} />
           <select
             class="form-select form-select-sm ms-2 w-auto"
             aria-label={$_('pages.deliveries.phase')}
@@ -229,6 +226,7 @@
 </script>
 
 <script>
+  import FilterSelect from '../components/FilterSelect.svelte';
   // The page header's right column scrolls sideways, which clips a menu hanging below it; a fixed menu is not clipped.
   const POPPER_FIXED = '{"strategy":"fixed"}';
 

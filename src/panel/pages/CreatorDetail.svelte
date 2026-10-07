@@ -62,7 +62,8 @@
 </script>
 
 <script>
-  import { CardFilters, CardFiltersItem, CardHeader, NoContent, Pagination } from '@panomc/sdk/components/panel';
+  import FilterSelect from '../components/FilterSelect.svelte';
+  import { CardFilters, CardHeader, NoContent, Pagination } from '@panomc/sdk/components/panel';
   import { base, goto, page } from '@panomc/sdk/svelte';
   import { _, showSuccessToast } from '../../i18n';
   import MarketLayout from '../layouts/MarketLayout.svelte';
@@ -205,11 +206,11 @@
           {$_('pages.creator-detail.earning-count', { values: { count: view.earningCount ?? 0 } })}
         </div>
         <CardFilters slot="right">
-          {#each FILTERS as filter (filter.value)}
-            <CardFiltersItem href={filterHref(filter.value)} active={state === filter.value}>
-              {$_(filter.label)}
-            </CardFiltersItem>
-          {/each}
+          <FilterSelect
+            label={$_('common.status')}
+            current={state ?? 'ALL'}
+            options={FILTERS.map((filter) => ({ key: filter.value ?? 'ALL', value: filter.value, label: $_(filter.label) }))}
+            onSelect={(filter) => goto(base + filterHref(filter.value))} />
         </CardFilters>
       </CardHeader>
 

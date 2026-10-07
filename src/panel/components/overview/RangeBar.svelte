@@ -1,16 +1,14 @@
 <CardFilters>
-  {#each RANGES as item (item)}
-    <CardFiltersItem button active={range === item} onclick={() => onSelect(item)}>
-      {$_(`pages.overview.range.${item}`)}
-    </CardFiltersItem>
-  {/each}
-  <CardFiltersItem button active={range === 'custom'} onclick={onCustom}>
-    {$_('pages.overview.range.custom')}
-  </CardFiltersItem>
+  <FilterSelect
+    label={$_('pages.overview.range.custom')}
+    current={range}
+    options={[...RANGES, 'custom'].map((item) => ({ key: item, label: $_(`pages.overview.range.${item}`) }))}
+    onSelect={(item) => (item.key === 'custom' ? onCustom() : onSelect(item.key))} />
 </CardFilters>
 
 <script>
-  import { CardFilters, CardFiltersItem } from '@panomc/sdk/components/panel';
+  import { CardFilters } from '@panomc/sdk/components/panel';
+  import FilterSelect from '../FilterSelect.svelte';
   import { _ } from '../../../i18n';
   import { RANGES } from './range.js';
 

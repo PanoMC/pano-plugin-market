@@ -26,11 +26,11 @@
             onchange={(value) => go({ search: value })} />
         </div>
         <CardFilters slot="right">
-          {#each TYPE_TABS as tab (tab.key)}
-            <CardFiltersItem button active={currentTab === tab.key} onclick={() => go({ type: tab.value })}>
-              {$_(`pages.blocks.tab.${tab.key}`)}
-            </CardFiltersItem>
-          {/each}
+          <FilterSelect
+            label={$_('pages.blocks.tab.all')}
+            current={currentTab}
+            options={TYPE_TABS.map((tab) => ({ ...tab, label: $_(`pages.blocks.tab.${tab.key}`) }))}
+            onSelect={(tab) => go({ type: tab.value })} />
           <select
             class="form-select form-select-sm ms-2 w-auto"
             aria-label={$_('pages.blocks.source')}
@@ -164,11 +164,11 @@
 </script>
 
 <script>
+  import FilterSelect from '../components/FilterSelect.svelte';
   import ApiUtil from '@panomc/sdk/utils/api';
   import {
     CardHeader,
     CardFilters,
-    CardFiltersItem,
     NoContent,
     Pagination,
     SearchInput,

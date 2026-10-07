@@ -17,20 +17,11 @@
             onchange={(value) => go({ search: value })} />
         </div>
         <CardFilters slot="right">
-          {#each STATUS_TABS as tab (tab.key)}
-            {#if tab.href}
-              <CardFiltersItem href={base + tab.href}>
-                {$_(`pages.shipments.tab.${tab.key}`)}
-              </CardFiltersItem>
-            {:else}
-              <CardFiltersItem
-                button
-                active={currentTab === tab.key}
-                onclick={() => go({ status: tab.value })}>
-                {$_(`pages.shipments.tab.${tab.key}`)}
-              </CardFiltersItem>
-            {/if}
-          {/each}
+          <FilterSelect
+            label={$_('common.status')}
+            current={currentTab}
+            options={STATUS_TABS.map((tab) => ({ ...tab, label: $_(`pages.shipments.tab.${tab.key}`) }))}
+            onSelect={(tab) => (tab.href ? goto(base + tab.href) : go({ status: tab.value }))} />
         </CardFilters>
       </CardHeader>
 
@@ -186,16 +177,16 @@
 </script>
 
 <script>
+  import FilterSelect from '../components/FilterSelect.svelte';
   import ApiUtil from '@panomc/sdk/utils/api';
   import {
     CardHeader,
     CardFilters,
-    CardFiltersItem,
     NoContent,
     Pagination,
     SearchInput,
   } from '@panomc/sdk/components/panel';
-  import { base, navigating, page, invalidateAll } from '@panomc/sdk/svelte';
+  import { base, goto, navigating, page, invalidateAll } from '@panomc/sdk/svelte';
   import { _, showErrorToast, showSuccessToast } from '../../i18n';
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import ConfirmModal from '../components/ConfirmModal.svelte';

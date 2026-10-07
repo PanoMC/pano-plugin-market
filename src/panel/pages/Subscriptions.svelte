@@ -17,11 +17,11 @@
             onchange={(value) => go({ search: value })} />
         </div>
         <CardFilters slot="right">
-          {#each STATUS_TABS as tab (tab.key)}
-            <CardFiltersItem button active={currentTab === tab.key} onclick={() => go({ status: tab.value })}>
-              {$_(`pages.subscriptions.tab.${tab.key}`)}
-            </CardFiltersItem>
-          {/each}
+          <FilterSelect
+            label={$_('common.status')}
+            current={currentTab}
+            options={STATUS_TABS.map((tab) => ({ ...tab, label: $_(`pages.subscriptions.tab.${tab.key}`) }))}
+            onSelect={(tab) => go({ status: tab.value })} />
         </CardFilters>
       </CardHeader>
 
@@ -154,10 +154,10 @@
 </script>
 
 <script>
+  import FilterSelect from '../components/FilterSelect.svelte';
   import {
     CardHeader,
     CardFilters,
-    CardFiltersItem,
     NoContent,
     Pagination,
     SearchInput,

@@ -8,14 +8,11 @@
           {$_('pages.payment-events.count', { values: { count: eventCount } })}
         </div>
         <CardFilters slot="right">
-          {#each STATUS_TABS as tab (tab.key)}
-            <CardFiltersItem
-              button
-              active={currentTab === tab.key}
-              onclick={() => go({ status: tab.value })}>
-              {$_(`pages.payment-events.tab.${tab.key}`)}
-            </CardFiltersItem>
-          {/each}
+          <FilterSelect
+            label={$_('common.status')}
+            current={currentTab}
+            options={STATUS_TABS.map((tab) => ({ ...tab, label: $_(`pages.payment-events.tab.${tab.key}`) }))}
+            onSelect={(tab) => go({ status: tab.value })} />
         </CardFilters>
       </CardHeader>
 
@@ -138,11 +135,11 @@
 </script>
 
 <script>
+  import FilterSelect from '../components/FilterSelect.svelte';
   import ApiUtil from '@panomc/sdk/utils/api';
   import {
     CardHeader,
     CardFilters,
-    CardFiltersItem,
     NoContent,
     Pagination,
   } from '@panomc/sdk/components/panel';

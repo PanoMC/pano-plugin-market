@@ -13,11 +13,11 @@
       {$_('settings.webhook-deliveries.count', { values: { count } })}
     </div>
     <CardFilters slot="right">
-      {#each DELIVERY_TABS as tab (tab.key)}
-        <CardFiltersItem button active={currentTab === tab.key} onclick={() => setStatus(tab.value)}>
-          {$_(`settings.webhook-deliveries.tab.${tab.key}`)}
-        </CardFiltersItem>
-      {/each}
+      <FilterSelect
+        label={$_('common.status')}
+        current={currentTab}
+        options={DELIVERY_TABS.map((tab) => ({ ...tab, label: $_(`settings.webhook-deliveries.tab.${tab.key}`) }))}
+        onSelect={(tab) => setStatus(tab.value)} />
     </CardFilters>
   </CardHeader>
 
@@ -116,11 +116,11 @@
 </div>
 
 <script>
+  import FilterSelect from '../FilterSelect.svelte';
   import { onMount } from 'svelte';
   import ApiUtil from '@panomc/sdk/utils/api';
   import {
     CardFilters,
-    CardFiltersItem,
     CardHeader,
     NoContent,
     Pagination,
