@@ -852,5 +852,7 @@ export function extraPathFor(section) {
   // mail reads the health report to tell "host too old" from "switched off"; health is the report.
   if (section === 'delivery' || section === 'minecraft') return '/servers';
   if (section === 'mail' || section === 'health') return '/health';
+  // the provider cards come with the page, so the section does not open on a spinner
+  if (section === 'payments') return '/payment-providers';
   return null;
 }

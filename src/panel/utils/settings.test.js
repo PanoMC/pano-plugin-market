@@ -981,6 +981,7 @@ describe('settings page', () => {
       minecraft: '/servers',
       mail: '/health',
       health: '/health',
+      payments: '/payment-providers',
     };
     for (const [key, path] of Object.entries(extra)) expect(extraPathFor(key)).toBe(path);
     for (const key of PAGE_SECTIONS.filter((k) => !(k in extra)))

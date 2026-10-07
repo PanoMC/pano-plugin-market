@@ -85,8 +85,7 @@
                       style="max-width: 70%; max-height: 70%; object-fit: contain;"
                       onerror={() => (logoFailed[provider.id] = true)} />
                   {:else}
-                    <i class={provider.descriptor?.icon || 'fa-solid fa-credit-card'} aria-hidden="true"
-                    ></i>
+                    <i class={iconClass(provider.descriptor?.icon)} aria-hidden="true"></i>
                   {/if}
                 </div>
                 <div class="flex-grow-1 min-w-0">
@@ -243,12 +242,13 @@
 
   // The list is driven by the provider registry (GET /payment-providers), not by a catalogue. The
   // settings page may pass the shared `ctx`; without it the component reads GET /context itself.
-  let { ctx: ctxProp = null } = $props();
+  // extra / extraError: GET /payment-providers loaded with the page (utils/settings.js extraPathFor).
+  let { ctx: ctxProp = null, extra = null, extraError = null } = $props();
 
-  let providers = $state.raw([]);
+  let providers = $state.raw(Array.isArray(extra?.providers) ? extra.providers : []);
   let loadedCtx = $state.raw(null);
-  let loading = $state(true);
-  let loadError = $state(null);
+  let loading = $state(!extra && !extraError);
+  let loadError = $state(extraError);
   let busy = $state(false);
   // optimistic switch positions: provider id -> boolean, dropped when the request settles
   let pending = $state({});
@@ -291,6 +291,10 @@
 
   const findProvider = (id) => providers.find((p) => p.id === id) ?? null;
 
+  // Built-in providers name a bare icon ("coins"), plugin providers a full class ("fa-solid fa-credit-card").
+  const iconClass = (icon) =>
+    !icon ? 'fa-solid fa-credit-card' : /\bfa-/.test(icon) ? icon : `fa-solid fa-${icon}`;
+
   async function fetchProviders() {
     const result = await call(ApiUtil.get({ path: marketPath('/payment-providers') }));
     if (!result.ok) return { error: result.error };
@@ -317,7 +321,8 @@
   }
 
   onMount(() => {
-    load();
+    // only when the page did not bring the list (the section used outside the settings page)
+    if (!extra && !extraError) load();
   });
 
   async function toggleEnabled(provider, event) {
