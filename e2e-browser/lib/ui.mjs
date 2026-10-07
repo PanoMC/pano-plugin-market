@@ -30,10 +30,32 @@ export async function open(page, url, ready) {
 }
 
 export async function noHorizontalScroll(page, label) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - window.innerWidth,
+  const { overflow, culprits } = await page.evaluate(() => {
+    const overflow = document.documentElement.scrollWidth - window.innerWidth;
+    const culprits = [];
+
+    if (overflow > 1)
+      for (const el of document.querySelectorAll('body *')) {
+        const r = el.getBoundingClientRect();
+
+        if (r.width > 0 && r.right > window.innerWidth + 1 && !el.closest('.offcanvas:not(.show)'))
+          culprits.push(
+            `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}.${String(
+              el.className?.baseVal ?? el.className,
+            )
+              .trim()
+              .split(/\s+/)
+              .slice(0, 3)
+              .join('.')} right=${Math.round(r.right)}`,
+          );
+      }
+
+    return { overflow, culprits: culprits.slice(0, 6) };
+  });
+  assert(
+    overflow <= 1,
+    `${label}: the page scrolls horizontally by ${overflow}px (${culprits.join(' | ')})`,
   );
-  assert(overflow <= 1, `${label}: the page scrolls horizontally by ${overflow}px`);
 }
 
 export async function bodyBackground(page) {

@@ -12,7 +12,7 @@
       <span class="small text-body-secondary">{suffix}</span>
     {/if}
     {#if settings.creditsEnabled && product.creditPrice != null}
-      <span class="badge text-bg-info">
+      <span class="badge text-bg-info text-wrap text-start">
         <i class="fa-solid fa-coins me-1" aria-hidden="true"></i>{formatCredits(
           product.creditPrice,
           settings.creditName || $_('theme.store.credits'),
