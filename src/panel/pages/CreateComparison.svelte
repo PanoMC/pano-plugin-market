@@ -38,8 +38,11 @@
 
 <script>
   import MarketLayout from '../layouts/MarketLayout.svelte';
+  import { sectionsFor } from '../navigation.js';
   import { base, goto, page } from '@panomc/sdk/svelte';
   import { _, showSuccessToast, showErrorToast } from '../../i18n';
+
+  const navUser = $derived($page.data?.user);
 
   let { data } = $props();
 
@@ -161,7 +164,7 @@
   }
 </script>
 
-<MarketLayout>
+<MarketLayout area="catalog" sections={sectionsFor('catalog', navUser)} active="comparisons">
   {#snippet left()}
     <div class="d-flex align-items-center gap-4">
       <a href="{base}/market/comparisons" class="btn btn-link text-decoration-none p-0">

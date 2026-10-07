@@ -58,12 +58,15 @@
 
 <script>
   import MarketLayout from '../layouts/MarketLayout.svelte';
+  import { sectionsFor } from '../navigation.js';
   import { CardHeader, CardFilters, CardFiltersItem, Pagination, SearchInput, NoContent } from '@panomc/sdk/components/panel';
   import { base, page, goto } from '@panomc/sdk/svelte';
   import { _, showSuccessToast, showErrorToast } from '../../i18n';
 
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import { currentLocale } from '../utils/locale.js';
+
+  const navUser = $derived($page.data?.user);
 
   let { data } = $props();
   let confirmModal = $state(null);
@@ -209,7 +212,7 @@
   }
 </script>
 
-<MarketLayout>
+<MarketLayout area="catalog" sections={sectionsFor('catalog', navUser)} active="comparisons">
   {#snippet right()}
     <a href="{base}/market/comparisons/create-comparison" class="btn btn-secondary d-flex align-items-center gap-2">
       <i class="fa-solid fa-plus"></i>
