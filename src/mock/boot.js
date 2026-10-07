@@ -3,15 +3,18 @@
 // imported dynamically from register.js and the first thing it checks is the mode.
 import { get } from 'svelte/store';
 import { mount } from 'svelte';
+import { invalidateAll } from '@panomc/sdk/svelte';
 import { real } from './seam.js';
 import { developmentMode } from './dev.js';
+import { gate, readVolume } from './core.js';
 
 let mounted = false;
 
 /** Host page data first (no request); /api/siteInfo only when the page data does not carry it. */
 async function isDevelopment(pano) {
   try {
-    const known = get(pano.page)?.data?.siteInfo?.developmentMode;
+    const known = (get(pano.page)?.data?.siteInfo ?? get(pano.page)?.data?.session?.siteInfo)
+      ?.developmentMode;
     if (typeof known === 'boolean') return known;
   } catch {
     // fall through to the probe
@@ -25,4 +28,10 @@ export async function startDevPreview(pano) {
   mounted = true;
   const { default: DevPreview } = await import('./DevPreview.svelte');
   mount(DevPreview, { target: document.body });
+  if (gate.deferred) {
+    // let the hydration of the server-rendered page finish before the data is swapped
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    gate.deferred = false;
+    if (readVolume()) await invalidateAll();
+  }
 }

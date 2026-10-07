@@ -17,6 +17,11 @@
     box-shadow: 0 2px 10px rgb(0 0 0 / 35%);
     justify-content: center;
   }
+  .market-mock-fab-open {
+    right: min(340px, calc(100vw - 60px));
+    z-index: 2147483002;
+    border-radius: 22px;
+  }
   .market-mock-fab-on {
     background: #d63384;
   }
@@ -46,6 +51,7 @@
   type="button"
   class="market-mock-fab"
   class:market-mock-fab-on={active}
+  class:market-mock-fab-open={open}
   title={$_('mock.fab-title')}
   aria-label={$_('mock.fab-title')}
   aria-expanded={open}

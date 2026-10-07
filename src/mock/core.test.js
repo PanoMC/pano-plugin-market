@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { COOKIE, createRouter, createSeam, parseCookie, readVolume, cookieString } from './core.js';
+import {
+  COOKIE,
+  gate,
+  createRouter,
+  createSeam,
+  parseCookie,
+  readVolume,
+  cookieString,
+} from './core.js';
 import { developmentMode, resetDevCache } from './dev.js';
 import { countFor, listBody, paginate, rng, rows, uuidFor } from './kit.js';
 
@@ -140,6 +148,16 @@ describe('seam gate', () => {
       readVolumeFn: () => 'few',
     });
     expect((await seam.get({ path: '/api/x/items' })).real).toBe(true);
+  });
+});
+
+describe('hydration guard', () => {
+  test('deferred = pass-through, released = fixtures', async () => {
+    const { seam } = makeSeam({ cookie: 'few' });
+    gate.deferred = true;
+    expect((await seam.get({ path: '/api/x/items' })).real).toBe(true);
+    gate.deferred = false;
+    expect((await seam.get({ path: '/api/x/items' })).items).toBeDefined();
   });
 });
 

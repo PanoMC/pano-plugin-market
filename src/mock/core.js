@@ -88,6 +88,13 @@ export function createRouter(routes) {
   };
 }
 
+/**
+ * Hydration guard. A themed (SSR) page cannot read the cookie on the server (SvelteKit's universal
+ * load event has no cookies), so the server renders real data. Until boot.js has mounted the preview
+ * and re-run the loads, the browser must therefore answer like the server did: no fixtures.
+ */
+export const gate = { deferred: false };
+
 export const SAVED_NOTHING = { result: 'ok', id: 1 };
 
 /**
@@ -107,7 +114,7 @@ export function createSeam({ real, getDevMode, loadRouter, notify, readVolumeFn 
     } catch {
       return null;
     }
-    if (!volume) return null;
+    if (!volume || gate.deferred) return null;
     try {
       if ((await getDevMode(event)) !== true) return null;
     } catch {
