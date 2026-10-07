@@ -13,6 +13,16 @@ let mounted = false;
 const CACHE_KEY = 'pano_market_dev_mode';
 const CACHE_TTL = 60000;
 
+function isLocalAddress(host = location.hostname) {
+  return (
+    host === 'localhost' ||
+    host === '[::1]' ||
+    /^127\./.test(host) ||
+    /^(10|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(host) ||
+    /\.(localhost|local|test)$/.test(host)
+  );
+}
+
 function cached(now = Date.now()) {
   try {
     const [at, flag] = String(sessionStorage.getItem(CACHE_KEY) || '').split(':');
@@ -33,7 +43,8 @@ function remember(flag, now = Date.now()) {
 
 /**
  * Host page data first (no request; only readable inside a component context, so it usually is not),
- * then a per-tab cache of the last answer (60 s), and only then one GET /api/siteInfo.
+ * then, on a local address or with the preview cookie set, a per-tab cache of the last answer (60 s)
+ * and only then one GET /api/siteInfo.
  */
 async function isDevelopment(pano) {
   try {
@@ -43,6 +54,9 @@ async function isDevelopment(pano) {
   } catch {
     // fall through
   }
+  // No request for ordinary visitors of a live site: the probe below only runs on a local address
+  // (where development happens) or when the preview cookie is already set.
+  if (!isLocalAddress() && !readVolume()) return false;
   const hit = cached();
   if (hit !== null) return hit;
   const flag = await developmentMode(real);
