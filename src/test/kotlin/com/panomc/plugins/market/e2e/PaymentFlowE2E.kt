@@ -400,6 +400,9 @@ class PaymentFlowE2E : E2eTestBase() {
         val vip = catalog.fresh("VIP")
         val buyer = buyer()
 
+        // the provider's own request deadline (15 s by default) must fire well before the platform's 30 s start deadline: a platform timeout
+        // leaves the attempt CREATED (06 section 9.2 step 5), a provider error closes it FAILED (step 4) and both answer 502, so the race is removed here
+        setProviderSettings(JsonObject().put("timeoutMs", 3_000))
         gateway.hang(FakePayGateway.Op.CREATE)
 
         val publicId: String
@@ -415,12 +418,13 @@ class PaymentFlowE2E : E2eTestBase() {
             publicId = failed.obj().getJsonObject("order").getString("publicId")
         } finally {
             gateway.release(FakePayGateway.Op.CREATE)
+            setProviderSettings(JsonObject().put("timeoutMs", 15_000))
         }
 
         val reference = referenceOf(publicId)
 
         assertEquals("PENDING", orderStatus(publicId))
-        assertEquals("FAILED", attemptStatus(reference))
+        assertEquals("FAILED", attemptStatus(reference), "failureCode ${paymentRow(reference).getValue("failureCode")}")
         assertNotNull(paymentRow(reference).getValue("failureCode"))
 
         // late success of the abandoned attempt (00 section 7.2): FAILED -> SUCCEEDED and the order, still PENDING, completes
