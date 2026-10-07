@@ -1160,7 +1160,7 @@ class RefundService(
 
         val c = config()
         val conversions = Conversions(
-            order.baseCurrency.ifBlank { c.currency.name }, order.currency, order.fxRate, maxOf(1L, MoneyUtil.toMinor(c.creditValue)), c.removeCents, order.displayCurrency, order.displayRate
+            order.baseCurrency.ifBlank { c.currency }, order.currency, order.fxRate, maxOf(1L, MoneyUtil.toMinor(c.creditValue)), c.removeCents, order.displayCurrency, order.displayRate
         )
 
         for (item in items) {

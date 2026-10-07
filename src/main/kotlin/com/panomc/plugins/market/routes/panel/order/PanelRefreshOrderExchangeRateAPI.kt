@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.order
 
+import com.panomc.plugins.market.core.money.Currencies
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.api.config.PluginConfigManager
 import com.panomc.platform.auth.AuthProvider
@@ -16,7 +17,6 @@ import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
 import com.panomc.plugins.market.service.ExchangeRateService
-import com.panomc.plugins.market.util.CurrencyType
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
 import io.vertx.ext.web.validation.builder.Parameters.param
@@ -62,9 +62,8 @@ class PanelRefreshOrderExchangeRateAPI(
         val order = marketOrderDao.getById(id, sqlClient) ?: throw NotFound()
 
         val config = configManager.config
-        // order.currency is a free-form VARCHAR, not enum-constrained at write time; a legacy or
-        // removed code would make valueOf() throw an uncaught 500. Look it up safely instead.
-        val from = CurrencyType.entries.firstOrNull { it.name == order.currency } ?: throw BadRequest()
+        // order.currency is a free-form VARCHAR; a legacy or removed code is refused instead of a 500.
+        val from = order.currency.takeIf { Currencies.isSupported(it) } ?: throw BadRequest()
 
         val rate = exchangeRateService.fetchRateForDate(from, config.statsCurrency, order.createdAt)
             ?: exchangeRateService.fetchRate(from, config.statsCurrency)

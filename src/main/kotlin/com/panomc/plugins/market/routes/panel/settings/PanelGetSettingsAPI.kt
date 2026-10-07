@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.settings
 
+import com.panomc.plugins.market.core.money.Currencies
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.api.config.PluginConfigManager
 import com.panomc.platform.db.DatabaseManager
@@ -46,8 +47,8 @@ class PanelGetSettingsAPI(
 
         val response = JsonObject.mapFrom(config)
             .put("paymentMethods", paymentMethods)
-            .put("currencySymbol", config.currency.symbol)
-            .put("statsCurrencySymbol", config.statsCurrency.symbol)
+            .put("currencySymbol", Currencies.symbol(config.currency))
+            .put("statsCurrencySymbol", Currencies.symbol(config.statsCurrency))
             .put("mailEnabled", MarketRuntime.capabilities.mail)
             .put("invoiceSequences", invoiceWiring(plugin).endpoints.sequences(plugin.applicationContext.getBean(DatabaseManager::class.java).getSqlClient()))
 

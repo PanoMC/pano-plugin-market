@@ -56,7 +56,7 @@ class EntitlementService(
         val c = config()
         val zone = PeriodCalculator.zoneOf(c.storeTimeZone)
         val conversions = Conversions(
-            order.baseCurrency.ifBlank { c.currency.name }, order.currency, order.fxRate, maxOf(1L, MoneyUtil.toMinor(c.creditValue)), c.removeCents,
+            order.baseCurrency.ifBlank { c.currency }, order.currency, order.fxRate, maxOf(1L, MoneyUtil.toMinor(c.creditValue)), c.removeCents,
             order.displayCurrency, order.displayRate
         )
         val owner = ownerOf(order)

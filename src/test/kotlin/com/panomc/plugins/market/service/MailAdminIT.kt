@@ -39,7 +39,6 @@ import com.panomc.plugins.market.support.FakeMailGateway
 import com.panomc.plugins.market.support.Fixtures
 import com.panomc.plugins.market.support.TestUser
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonObject
 import io.vertx.sqlclient.SqlClient
@@ -90,7 +89,7 @@ class MailAdminIT : MarketDaoITBase() {
     }
 
     private fun config(purchaseMails: Boolean = true, disabled: List<String> = emptyList(), reminderDays: Int = 3) = MarketConfig(
-        currency = CurrencyType.EUR, statsCurrency = CurrencyType.EUR, storeTimeZone = "UTC", storeName = "Blocky Store", sendEmailAfterPurchase = purchaseMails,
+        currency = "EUR", statsCurrency = "EUR", storeTimeZone = "UTC", storeName = "Blocky Store", sendEmailAfterPurchase = purchaseMails,
         mailDisabledKinds = disabled, subscriptionReminderDays = reminderDays
     )
 

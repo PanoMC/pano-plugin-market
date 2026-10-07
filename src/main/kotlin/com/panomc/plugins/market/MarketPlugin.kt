@@ -260,7 +260,7 @@ class MarketPlugin : PanoPlugin() {
                         .put("exchangeRateUpdatedAt", System.currentTimeMillis())
                     configManager.saveConfig(merged)
 
-                    logger.info("Auto-refreshed exchange rate {} -> {}: {}", config.currency.name, config.statsCurrency.name, rate)
+                    logger.info("Auto-refreshed exchange rate {} -> {}: {}", config.currency, config.statsCurrency, rate)
                 } catch (e: Exception) {
                     logger.warn("Auto exchange-rate refresh failed", e)
                 } finally {

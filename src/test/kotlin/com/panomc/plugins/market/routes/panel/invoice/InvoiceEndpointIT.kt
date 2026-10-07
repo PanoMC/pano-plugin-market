@@ -32,7 +32,6 @@ import com.panomc.plugins.market.service.InvoiceService
 import com.panomc.plugins.market.service.InvoiceSite
 import com.panomc.plugins.market.support.Fixtures
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.async
@@ -78,7 +77,7 @@ class InvoiceEndpointIT : MarketDaoITBase() {
     override val poolSize: Int = 24
 
     private fun baseConfig(enabled: Boolean = true, locale: String = "") = MarketConfig(
-        currency = CurrencyType.EUR, storeTimeZone = "UTC", invoiceEnabled = enabled, invoiceLocale = locale, invoiceSellerName = "Acme Ltd",
+        currency = "EUR", storeTimeZone = "UTC", invoiceEnabled = enabled, invoiceLocale = locale, invoiceSellerName = "Acme Ltd",
         invoiceSellerAddress = "1 Main St", invoiceSellerTaxOffice = "Kadikoy", invoiceSellerTaxNumber = "123456", invoiceFooter = "Thank you"
     )
 
@@ -510,7 +509,7 @@ class InvoiceEndpointIT : MarketDaoITBase() {
 
         assertTrue(cn.contains("CN-0000-000000") && cn.contains("Кредит-нота"), cn)
 
-        config = MarketConfig(currency = CurrencyType.EUR, storeTimeZone = "UTC", invoiceLocale = "tr")
+        config = MarketConfig(currency = "EUR", storeTimeZone = "UTC", invoiceLocale = "tr")
 
         assertTrue(Loader.loadPDF(endpoints.preview(null, InvoiceType.INVOICE)).use { PDFTextStripper().getText(it) }.contains("Fatura"), "invoiceLocale is the default")
         val fallback = Loader.loadPDF(endpoints.preview(null, InvoiceType.INVOICE)).use { PDFTextStripper().getText(it) }

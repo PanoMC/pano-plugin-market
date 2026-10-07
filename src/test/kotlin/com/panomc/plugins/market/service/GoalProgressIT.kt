@@ -13,7 +13,6 @@ import com.panomc.plugins.market.db.tx.OrderLockScope
 import com.panomc.plugins.market.support.MarketTestDb
 import com.panomc.plugins.market.support.Race
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
@@ -211,7 +210,7 @@ class GoalProgressIT : MarketDaoITBase() {
 
     @Test
     fun `a monthly goal rolls on the first of the month in the store zone`(): Unit = runBlocking {
-        w.configure { com.panomc.plugins.market.config.MarketConfig(currency = CurrencyType.EUR, storeTimeZone = "Europe/Istanbul") }
+        w.configure { com.panomc.plugins.market.config.MarketConfig(currency = "EUR", storeTimeZone = "Europe/Istanbul") }
 
         val id = goal(period = GoalPeriod.MONTHLY, periodStart = at(2026, 9, 1, 0), progress = 5)
 

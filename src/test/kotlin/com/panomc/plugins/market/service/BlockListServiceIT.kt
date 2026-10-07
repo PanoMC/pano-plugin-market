@@ -546,7 +546,7 @@ class BlockListServiceIT : MarketDaoITBase() {
 
     private fun chargebackConfig() = w.configure {
         MarketConfig(
-            currency = com.panomc.plugins.market.util.CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", autoBlockOnChargeback = true
+            currency = "EUR", vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", autoBlockOnChargeback = true
         )
     }
 

@@ -14,7 +14,6 @@ import com.panomc.plugins.market.db.model.MarketOrderItem
 import com.panomc.plugins.market.db.model.OrderEventType
 import com.panomc.plugins.market.db.model.OrderItemKind
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.MarketStatus
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.json.JsonArray
@@ -52,7 +51,7 @@ class WidgetServiceIT : MarketDaoITBase() {
         buyers: Boolean = true, buyersCount: Int = 10, amount: Boolean = false, supporters: Boolean = true, period: TopSupportersPeriod = TopSupportersPeriod.ALL_TIME,
         supportersCount: Int = 5, goal: Boolean = true, stats: Boolean = false, sidebars: List<String> = listOf("home")
     ) = MarketConfig(
-        currency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", moduleRecentBuyers = buyers,
+        currency = "EUR", vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", moduleRecentBuyers = buyers,
         moduleRecentBuyersCount = buyersCount, moduleRecentBuyersShowAmount = amount, moduleTopSupporters = supporters, moduleTopSupportersPeriod = period,
         moduleTopSupportersCount = supportersCount, moduleGoal = goal, moduleStats = stats, moduleSidebars = sidebars
     )

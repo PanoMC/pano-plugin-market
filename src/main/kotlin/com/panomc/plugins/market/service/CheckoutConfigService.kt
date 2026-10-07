@@ -55,13 +55,13 @@ class CheckoutConfigService(
                     .put("min", c.creditTopUpMin)
                     .put("max", c.creditTopUpMax)
                     .put("creditValue", c.creditValue)
-                    .put("currency", c.currency.name)
+                    .put("currency", c.currency)
             )
     }
 
     /** The store currency first, then the additional ones, upper-case and without duplicates. */
     private fun currencies(c: MarketConfig): List<String> =
-        (listOf(c.currency.name) + c.additionalCurrencies.map { it.trim().uppercase(Locale.ROOT) })
+        (listOf(c.currency) + c.additionalCurrencies.map { it.trim().uppercase(Locale.ROOT) })
             .filter { it.isNotEmpty() }
             .distinct()
 

@@ -120,7 +120,7 @@ class TestWiring(
     companion object {
         /** The store of 17 section 5.6: base currency EUR, VAT 20 % shown in the price, credit value 1.0, time zone UTC. */
         fun defaultConfig(): MarketConfig = MarketConfig(
-            currency = com.panomc.plugins.market.util.CurrencyType.EUR,
+            currency = "EUR",
             vatPercent = 20.0,
             showVatInPrice = true,
             creditValue = 1.0,

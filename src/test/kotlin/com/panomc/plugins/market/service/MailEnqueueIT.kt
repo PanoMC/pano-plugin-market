@@ -40,7 +40,6 @@ import com.panomc.plugins.market.support.FakeMailGateway
 import com.panomc.plugins.market.support.MarketTestDb
 import com.panomc.plugins.market.support.TestUser
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
@@ -81,7 +80,7 @@ class MailEnqueueIT : MarketDaoITBase() {
     }
 
     private fun config(sendEmailAfterPurchase: Boolean = true, disabled: List<String> = emptyList(), deliveredDelayMinutes: Int = 10) = MarketConfig(
-        currency = CurrencyType.EUR, statsCurrency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC",
+        currency = "EUR", statsCurrency = "EUR", vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC",
         storeName = "Blocky Store", sendEmailAfterPurchase = sendEmailAfterPurchase, mailDisabledKinds = disabled, mailOrderDeliveredDelayMinutes = deliveredDelayMinutes,
         allowGuestCheckout = true, bankTransferExpiryHours = 72, orderExpiryMinutes = 60
     )
@@ -917,7 +916,7 @@ class MailEnqueueIT : MarketDaoITBase() {
         // the switch off: the same rows, no attachment and no promise in the footer
         for (row in rows(paid.order.id)) outbox.enqueue(pool, row.kind, row.refType, row.refId, "again", row.orderId, row.userId, row.recipient, row.locale)
 
-        w.configure { MarketConfig(currency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", mailAttachInvoice = false) }
+        w.configure { MarketConfig(currency = "EUR", vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", mailAttachInvoice = false) }
 
         val quiet = FakeMailGateway()
 

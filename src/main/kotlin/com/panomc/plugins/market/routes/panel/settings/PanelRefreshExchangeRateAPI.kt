@@ -77,8 +77,8 @@ class PanelRefreshExchangeRateAPI(
             mapOf(
                 "exchangeRate" to rate,
                 "exchangeRateUpdatedAt" to updatedAt,
-                "currency" to config.currency.name,
-                "statsCurrency" to config.statsCurrency.name
+                "currency" to config.currency,
+                "statsCurrency" to config.statsCurrency
             )
         )
     }

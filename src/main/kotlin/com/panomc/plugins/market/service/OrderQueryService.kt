@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.core.money.Currencies
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.abuse.PiiMask
@@ -330,8 +331,8 @@ class OrderQueryService(
     private fun orderJson(order: MarketOrder, legalVersion: Int?, pii: Boolean): JsonObject {
         val cfg = config()
         val effectiveRate = order.exchangeRate ?: when (order.currency) {
-            cfg.statsCurrency.name -> 1.0
-            cfg.currency.name -> cfg.exchangeRate
+            cfg.statsCurrency -> 1.0
+            cfg.currency -> cfg.exchangeRate
             else -> 1.0
         }
         val statsValue = Math.round(order.totalPrice / 100.0 * effectiveRate * 100.0) / 100.0
@@ -360,7 +361,7 @@ class OrderQueryService(
             .put("legalTextId", order.legalTextId).put("legalTextVersion", legalVersion).put("legalAcceptedAt", order.legalAcceptedAt)
             .put("subscriptionId", order.subscriptionId).put("invoiceId", order.invoiceId).put("note", order.note).put("createdBy", order.createdBy)
             .put("createdAt", order.createdAt).put("updatedAt", order.updatedAt)
-            .put("exchangeRate", order.exchangeRate).put("statsValue", statsValue).put("statsCurrency", cfg.statsCurrency.name).put("statsCurrencySymbol", cfg.statsCurrency.symbol)
+            .put("exchangeRate", order.exchangeRate).put("statsValue", statsValue).put("statsCurrency", cfg.statsCurrency).put("statsCurrencySymbol", Currencies.symbol(cfg.statsCurrency))
 
         for ((key, value) in FieldGating.orderPii(order, pii)) json.put(key, value)
 

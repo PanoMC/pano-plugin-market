@@ -60,7 +60,7 @@ class EntitlementExpiryJobIT : MarketDaoITBase() {
 
     private fun job(batch: Int = EntitlementExpiryJob.BATCH, reminderDays: Int = 3, mail: Boolean = true) = EntitlementExpiryJob(
         clock = w.clock, db = w.db, locks = d.locks, service = d.entitlementService, delivery = d.service, entitlements = w.entitlements,
-        config = { MarketConfig(currency = com.panomc.plugins.market.util.CurrencyType.EUR, storeTimeZone = "UTC", subscriptionReminderDays = reminderDays) },
+        config = { MarketConfig(currency = "EUR", storeTimeZone = "UTC", subscriptionReminderDays = reminderDays) },
         mail = if (mail) MailOutboxService({ w.config }, w.clock, w.mailOutbox, w.orderEvents) else null, users = directory, batch = batch
     )
 

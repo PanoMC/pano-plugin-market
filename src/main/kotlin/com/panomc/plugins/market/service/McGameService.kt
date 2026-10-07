@@ -320,7 +320,7 @@ class McGameService(
 
         return ConfigView(
             settings = viewOf(values), values = values, texts = rendered, storeUrl = storeUrl()?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() },
-            creditName = creditName(c), currency = c.currency.name, serverId = serverId
+            creditName = creditName(c), currency = c.currency, serverId = serverId
         )
     }
 

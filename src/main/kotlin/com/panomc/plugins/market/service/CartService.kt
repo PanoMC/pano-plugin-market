@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.core.money.Currencies
 import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.core.cart.CartLimits
@@ -311,7 +312,7 @@ class CartService(
         val code = raw.trim().uppercase(Locale.ROOT)
         val current = config()
 
-        return code.takeIf { it == current.currency.name || it in current.additionalCurrencies.map { c -> c.trim().uppercase(Locale.ROOT) } }
+        return code.takeIf { it == current.currency || it in current.additionalCurrencies.map { c -> c.trim().uppercase(Locale.ROOT) } }
     }
 
     private fun code(value: String?): String? {

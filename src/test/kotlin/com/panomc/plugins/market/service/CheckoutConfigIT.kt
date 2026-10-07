@@ -7,7 +7,6 @@ import com.panomc.plugins.market.db.MarketDaoITBase
 import com.panomc.plugins.market.db.model.MarketShippingRate
 import com.panomc.plugins.market.support.Fixtures
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
@@ -72,7 +71,7 @@ class CheckoutConfigIT : MarketDaoITBase() {
     @Test
     fun `credits mixed payment and top up limits`(): Unit = runBlocking {
         config = MarketConfig(
-            currency = CurrencyType.EUR, creditsEnabled = true, creditName = "Gems", allowMixedCreditPayment = true,
+            currency = "EUR", creditsEnabled = true, creditName = "Gems", allowMixedCreditPayment = true,
             creditTopUpEnabled = true, creditTopUpFreeAmount = true, creditTopUpMin = 5.0, creditTopUpMax = 250.0, creditValue = 0.1
         )
         val body = get()
@@ -146,11 +145,11 @@ class CheckoutConfigIT : MarketDaoITBase() {
 
     @Test
     fun `currencies are the store currency first then the additional ones without duplicates`(): Unit = runBlocking {
-        config = MarketConfig(currency = CurrencyType.TRY, additionalCurrencies = listOf("usd", " EUR ", "TRY", "USD", ""))
+        config = MarketConfig(currency = "TRY", additionalCurrencies = listOf("usd", " EUR ", "TRY", "USD", ""))
 
         assertEquals(listOf("TRY", "USD", "EUR"), strings(get().getJsonArray("currencies")))
 
-        config = MarketConfig(currency = CurrencyType.USD)
+        config = MarketConfig(currency = "USD")
         assertEquals(listOf("USD"), strings(get().getJsonArray("currencies")))
     }
 

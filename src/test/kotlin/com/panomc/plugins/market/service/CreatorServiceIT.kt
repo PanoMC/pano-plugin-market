@@ -108,7 +108,7 @@ class CreatorServiceIT : MarketDaoITBase() {
 
     private fun config(holdDays: Int = 14, creditValue: Double = 1.0, credits: Boolean = true) = w.configure {
         MarketConfig(
-            currency = com.panomc.plugins.market.util.CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = creditValue, storeTimeZone = "UTC",
+            currency = "EUR", vatPercent = 20.0, showVatInPrice = true, creditValue = creditValue, storeTimeZone = "UTC",
             creatorEarningHoldDays = holdDays, creditsEnabled = credits
         )
     }

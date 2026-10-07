@@ -56,7 +56,6 @@ import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.service.platform.DirectoryUser
 import com.panomc.plugins.market.service.platform.UserDirectory
 import com.panomc.plugins.market.util.CsvWriter
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.OrderStatus
 import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonArray
@@ -109,7 +108,7 @@ class OrderQueryIT : MarketDaoITBase() {
 
     private val service = OrderQueryService(
         orders, items, payments, refunds, disputes, deliveries, shipments, events, invoices, mails, subscriptions, entitlements, legalTexts, directory,
-        { MarketConfig(currency = CurrencyType.EUR, statsCurrency = CurrencyType.EUR) }, clock, { mapOf(2L to "Survival") }
+        { MarketConfig(currency = "EUR", statsCurrency = "EUR") }, clock, { mapOf(2L to "Survival") }
     )
 
     private val viewOnly = OrderViewer.NOBODY

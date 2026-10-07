@@ -46,7 +46,7 @@ class Wire3EarningsIT : MarketDaoITBase() {
         r = RefundWorld(w, vertx)
         w.configure {
             MarketConfig(
-                currency = com.panomc.plugins.market.util.CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC",
+                currency = "EUR", vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC",
                 creatorEarningHoldDays = 14, creditsEnabled = true
             )
         }

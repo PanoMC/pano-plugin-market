@@ -15,7 +15,6 @@ import com.panomc.plugins.market.db.model.MarketProductPrice
 import com.panomc.plugins.market.db.model.ProductKind
 import com.panomc.plugins.market.support.Fixtures
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.DiscountUnit
 import com.panomc.plugins.market.util.MarketStatus
 import io.vertx.core.json.JsonArray
@@ -684,7 +683,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
     @Test
     fun `the settings block follows the configuration`(): Unit = runBlocking {
         config = MarketConfig(
-            storeName = "Shop", currency = CurrencyType.EUR, showVatInPrice = false, allowGuestCheckout = false, allowGiftPurchase = false, testMode = true,
+            storeName = "Shop", currency = "EUR", showVatInPrice = false, allowGuestCheckout = false, allowGiftPurchase = false, testMode = true,
             creditsEnabled = true, onlyAcceptCredits = true, creditTopUpEnabled = true, moduleStats = true, moduleGoal = false, storePageSize = 12
         )
         val settings = store().getJsonObject("settings")
@@ -706,7 +705,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
     @Test
     fun `marketPricingConfig maps the settings to x100 amounts and basis points`() {
         val c = MarketConfig(
-            currency = CurrencyType.USD, vatPercent = 18.5, minimumOrderAmount = 12.34, creditValue = 0.25, cashbackPercent = 2.5,
+            currency = "USD", vatPercent = 18.5, minimumOrderAmount = 12.34, creditValue = 0.25, cashbackPercent = 2.5,
             additionalCurrencies = listOf(" try ", "EUR", "eur"), removeCents = true
         )
         val p = marketPricingConfig(c, mapOf("EUR" to BigDecimal("0.9")))

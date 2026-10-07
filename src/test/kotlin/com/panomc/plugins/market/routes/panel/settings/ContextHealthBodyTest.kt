@@ -85,8 +85,15 @@ class ContextHealthBodyTest {
     fun `currencies list code, symbol and exponent`() {
         val currencies = marketCurrencies()
 
-        assertEquals(listOf("TRY", "USD", "EUR", "GBP"), currencies.map { it["code"] })
-        assertTrue(currencies.all { it["exponent"] == 2 && !(it["symbol"] as String).isBlank() })
+        val codes = currencies.map { it["code"] as String }
+
+        assertEquals(com.panomc.plugins.market.core.money.Currencies.all().size, currencies.size)
+        assertEquals(listOf("TRY", "USD", "EUR", "GBP"), codes.take(4))
+        assertEquals(codes.drop(4).sorted(), codes.drop(4))
+        assertEquals(0, currencies.first { it["code"] == "JPY" }["exponent"])
+        assertEquals(2, currencies.first { it["code"] == "USD" }["exponent"])
+        assertEquals("₺", currencies.first { it["code"] == "TRY" }["symbol"])
+        assertTrue(currencies.all { !(it["symbol"] as String).isBlank() })
     }
 
     @Test

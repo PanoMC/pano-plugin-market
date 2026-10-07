@@ -40,7 +40,7 @@ class GoalServiceIT : MarketDaoITBase() {
 
         assertEquals(123450L, created.target)
         assertEquals(GoalMetric.REVENUE, created.metric)
-        assertEquals(w.config.currency.name, created.currency)
+        assertEquals(w.config.currency, created.currency)
         assertEquals(0L, created.progress)
         assertEquals(GoalPeriod.ONE_TIME, created.period)
         assertNull(created.periodStart)

@@ -3,7 +3,6 @@ package com.panomc.plugins.market.config
 import com.panomc.platform.api.config.ConfigComment
 import com.panomc.platform.api.config.ConfigSection
 import com.panomc.platform.api.config.PluginConfig
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.ExchangeRateMode
 
 class MarketConfig(
@@ -20,10 +19,10 @@ class MarketConfig(
     val additionalCurrencies: List<String> = emptyList(),
     @ConfigComment("Products without a price in the buyer's currency. One of: CONVERT, HIDE")
     val multiCurrencyFallback: MultiCurrencyFallback = MultiCurrencyFallback.CONVERT,
-    @ConfigComment("Store currency. One of: TRY, USD, EUR, GBP")
-    val currency: CurrencyType = CurrencyType.TRY,
-    @ConfigComment("Currency the stats/reports are displayed in. One of: TRY, USD, EUR, GBP")
-    val statsCurrency: CurrencyType = CurrencyType.TRY,
+    @ConfigComment("Store currency. ISO 4217 code supported by the store engine (e.g. TRY, USD, EUR, GBP, JPY).")
+    val currency: String = "TRY",
+    @ConfigComment("Currency the stats/reports are displayed in. ISO 4217 code supported by the store engine (e.g. TRY, USD, EUR, GBP, JPY).")
+    val statsCurrency: String = "TRY",
     @ConfigComment("How the sales -> stats exchange rate is maintained. One of: AUTO, MANUAL")
     val exchangeRateMode: ExchangeRateMode = ExchangeRateMode.AUTO,
     @ConfigComment("Current view rate: stats-currency units per 1 sales-currency unit.")

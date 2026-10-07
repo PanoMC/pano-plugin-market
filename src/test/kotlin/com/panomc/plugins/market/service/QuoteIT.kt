@@ -44,7 +44,6 @@ import com.panomc.plugins.market.support.Fixtures
 import com.panomc.plugins.market.support.StaticProviderLookup
 import com.panomc.plugins.market.support.TestUser
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.DiscountUnit
 import com.panomc.plugins.market.util.MarketStatus
 import io.vertx.core.Vertx
@@ -195,7 +194,7 @@ class QuoteIT : MarketDaoITBase() {
         removeCents: Boolean = false,
         combine: Boolean = true
     ) = MarketConfig(
-        currency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC",
+        currency = "EUR", vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC",
         allowGuestCheckout = guest, allowGiftPurchase = gifts, minimumOrderAmount = minimum, creditsEnabled = credits,
         allowMixedCreditPayment = mixed, onlyAcceptCredits = onlyCredits, testMode = testMode, currencyMode = currencyMode,
         additionalCurrencies = additional, multiCurrencyFallback = fallback, billingInfoMode = billing, subscriptionManualFallback = manualFallback,

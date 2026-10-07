@@ -1318,7 +1318,7 @@ class CheckoutService(
             // a credit gift (07 section 10): re-judged under the row lock, like the settings of a product gift
             if (!c.creditsEnabled) throw InvalidGiftCode(CREDITS_DISABLED)
 
-            val uses = listOf(CodeUse(RedemptionKind.GIFT, gift.id, gift.code, 0, c.currency.name))
+            val uses = listOf(CodeUse(RedemptionKind.GIFT, gift.id, gift.code, 0, c.currency))
             val reservation = reserveGift(conn, deps, emptyList(), uses, customer)
 
             return markGiftSource(conn, deps.orders.create(conn, creditGiftDraft(gift, caller, payer, locale, c, reservation, uses, customer)))
@@ -1364,7 +1364,7 @@ class CheckoutService(
     ): OrderDraft {
         val now = clock.now()
         val credits = checkNotNull(gift.creditAmount)
-        val currency = c.currency.name
+        val currency = c.currency
         val timings = TimingConfig(c.orderExpiryMinutes, c.bankTransferExpiryHours)
         val label = lookup.payment(MethodInput.FREE)?.provider?.descriptor?.displayName?.resolve(locale) ?: MethodInput.FREE
         val name = gift.name.ifBlank { "${topUpAmount(credits)} ${c.creditName.ifBlank { "credits" }}" }

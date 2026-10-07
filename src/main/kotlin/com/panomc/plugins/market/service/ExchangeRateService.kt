@@ -10,7 +10,6 @@ import com.panomc.plugins.market.db.model.MarketCurrencyRate
 import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.error.ExchangeRateFetchFailed
 import com.panomc.plugins.market.error.InvalidSettings
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.NetworkFailureUtil
 import io.vertx.ext.web.client.WebClient
 import io.vertx.kotlin.coroutines.coAwait
@@ -46,24 +45,25 @@ class ExchangeRateService(private val plugin: MarketPlugin) {
      * Current rate: how many [to] units equal 1 [from] unit. Same currency yields 1.0.
      * Uses the free keyless open.er-api.com endpoint. Returns null on any failure.
      */
-    suspend fun fetchRate(from: CurrencyType, to: CurrencyType): Double? {
+    suspend fun fetchRate(from: String, to: String): Double? {
+        if (!Currencies.isSupported(from) || !Currencies.isSupported(to)) return null
         if (from == to) return 1.0
 
         return try {
-            val response = webClient.getAbs(CURRENT_URL + from.name)
+            val response = webClient.getAbs(CURRENT_URL + from)
                 .putHeader("Accept", "application/json")
                 .send()
                 .coAwait()
 
             if (response.statusCode() != 200) {
-                logger.warn("Exchange rate fetch for {} -> {} failed: HTTP {}", from.name, to.name, response.statusCode())
+                logger.warn("Exchange rate fetch for {} -> {} failed: HTTP {}", from, to, response.statusCode())
                 return null
             }
 
             val rates = response.bodyAsJsonObject()?.getJsonObject("rates")
-            rates?.getDouble(to.name)
+            rates?.getDouble(to)
         } catch (e: Exception) {
-            logFailure("Exchange rate fetch for ${from.name} -> ${to.name} failed", e)
+            logFailure("Exchange rate fetch for ${from} -> ${to} failed", e)
             null
         }
     }
@@ -106,7 +106,8 @@ class ExchangeRateService(private val plugin: MarketPlugin) {
      * that date. Same currency yields 1.0. Returns null when unavailable so the caller can fall back
      * to the current rate.
      */
-    suspend fun fetchRateForDate(from: CurrencyType, to: CurrencyType, epochMillis: Long): Double? {
+    suspend fun fetchRateForDate(from: String, to: String, epochMillis: Long): Double? {
+        if (!Currencies.isSupported(from) || !Currencies.isSupported(to)) return null
         if (from == to) return 1.0
 
         return try {
@@ -114,21 +115,21 @@ class ExchangeRateService(private val plugin: MarketPlugin) {
                 .format(DateTimeFormatter.ISO_LOCAL_DATE)
 
             val response = webClient.getAbs(HISTORICAL_URL + date)
-                .addQueryParam("base", from.name)
-                .addQueryParam("symbols", to.name)
+                .addQueryParam("base", from)
+                .addQueryParam("symbols", to)
                 .putHeader("Accept", "application/json")
                 .send()
                 .coAwait()
 
             if (response.statusCode() != 200) {
-                logger.warn("Historical rate fetch for {} -> {} ({}) failed: HTTP {}", from.name, to.name, date, response.statusCode())
+                logger.warn("Historical rate fetch for {} -> {} ({}) failed: HTTP {}", from, to, date, response.statusCode())
                 return null
             }
 
             val rates = response.bodyAsJsonObject()?.getJsonObject("rates")
-            rates?.getDouble(to.name)
+            rates?.getDouble(to)
         } catch (e: Exception) {
-            logFailure("Historical rate fetch for ${from.name} -> ${to.name} failed", e)
+            logFailure("Historical rate fetch for ${from} -> ${to} failed", e)
             null
         }
     }
@@ -200,7 +201,7 @@ class CurrencyRateService(
 
     class View(val currencyMode: String, val baseCurrency: String, val rates: List<RateView>)
 
-    private fun base(): String = config().currency.name
+    private fun base(): String = config().currency
 
     /** The offered currencies of the settings, normalised: supported, not the base, no duplicates. */
     private fun configured(): List<String> =

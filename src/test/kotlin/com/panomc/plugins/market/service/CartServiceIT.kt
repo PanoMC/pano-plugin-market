@@ -15,7 +15,6 @@ import com.panomc.plugins.market.error.MarketBusyException
 import com.panomc.plugins.market.support.Fixtures
 import com.panomc.plugins.market.support.Race
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -34,7 +33,7 @@ import org.junit.jupiter.api.Test
 class CartServiceIT : MarketDaoITBase() {
     private val w by lazy { TestWiring(pool) }
     @Volatile
-    private var config = MarketConfig(currency = CurrencyType.TRY, additionalCurrencies = listOf("USD"))
+    private var config = MarketConfig(currency = "TRY", additionalCurrencies = listOf("USD"))
     private val service by lazy { CartService(w.db, w.clock, { config }, w.addresses, w.carts, w.cartItems, w.products, w.variants, w.fields) }
     private var userSeq = 1000L
 
@@ -110,7 +109,7 @@ class CartServiceIT : MarketDaoITBase() {
         val original = config
 
         try {
-            config = MarketConfig(currency = CurrencyType.EUR, additionalCurrencies = emptyList())
+            config = MarketConfig(currency = "EUR", additionalCurrencies = emptyList())
             assertEquals("EUR", service.replace(other, CartService.Replacement(currency = CartService.Field("eur"))).cart.currency)
             assertThrows(BadRequest::class.java) { runBlocking { service.replace(other, CartService.Replacement(currency = CartService.Field("USD"))) } }
         } finally {

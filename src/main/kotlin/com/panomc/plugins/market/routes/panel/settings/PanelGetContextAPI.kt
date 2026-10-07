@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.settings
 
+import com.panomc.plugins.market.core.money.Currencies
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.api.config.PluginConfigManager
 import com.panomc.platform.config.ConfigManager
@@ -15,7 +16,6 @@ import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.runtime.MarketRuntime
 import com.panomc.plugins.market.runtime.beans
-import com.panomc.plugins.market.util.CurrencyType
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
 import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
@@ -51,9 +51,14 @@ data class MarketContextInput(
     val runtimeState: String
 )
 
+/** The common picks, offered first. */
+private val PREFERRED_CURRENCIES = listOf("TRY", "USD", "EUR", "GBP")
+
 /** The ISO currencies the panel can pick (code, symbol, minor-unit exponent). */
 fun marketCurrencies(): List<Map<String, Any?>> =
-    CurrencyType.entries.map { mapOf("code" to it.name, "symbol" to it.symbol, "exponent" to 2) }
+    (PREFERRED_CURRENCIES.filter { Currencies.isSupported(it) } +
+        Currencies.all().filter { it !in PREFERRED_CURRENCIES }.sorted())
+        .map { mapOf("code" to it, "symbol" to Currencies.symbol(it), "exponent" to Currencies.exponent(it)) }
 
 /** The `GET /context` body without `result`. `productMetaSchemas` is only present for [includeProductMeta] (CAT holders). */
 fun marketContextBody(input: MarketContextInput, includeProductMeta: Boolean): Map<String, Any?> {
@@ -136,10 +141,10 @@ class PanelGetContextAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
  * product form never offered the per-currency price grid (found by the panel browser scenario 71).
  */
 internal fun marketContextInput(config: MarketConfig, storeUrl: String, mailEnabled: Boolean, shippingEnabled: Boolean, runtimeState: String) = MarketContextInput(
-    currency = config.currency.name,
-    currencySymbol = config.currency.symbol,
-    statsCurrency = config.statsCurrency.name,
-    statsCurrencySymbol = config.statsCurrency.symbol,
+    currency = config.currency,
+    currencySymbol = Currencies.symbol(config.currency),
+    statsCurrency = config.statsCurrency,
+    statsCurrencySymbol = Currencies.symbol(config.statsCurrency),
     currencyMode = config.currencyMode.name,
     additionalCurrencies = config.additionalCurrencies,
     creditsEnabled = config.creditsEnabled,

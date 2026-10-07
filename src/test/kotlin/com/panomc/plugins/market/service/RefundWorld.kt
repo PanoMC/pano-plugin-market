@@ -106,7 +106,7 @@ internal class RefundWorld(val w: TestWiring, val vertx: Vertx, invoices: Invoic
 
     /** The test store of [TestWiring.defaultConfig] with the switches these tests flip (a [com.panomc.plugins.market.config.MarketConfig] cannot be copied). */
     fun config(revokeOnRefund: Boolean = true, seller: Boolean = false) = com.panomc.plugins.market.config.MarketConfig(
-        currency = com.panomc.plugins.market.util.CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", revokeOnRefund = revokeOnRefund,
+        currency = "EUR", vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", revokeOnRefund = revokeOnRefund,
         invoiceSellerName = if (seller) "Acme Ltd" else "", invoiceSellerAddress = if (seller) "1 Main St" else "", invoiceSellerTaxOffice = if (seller) "Kadikoy" else "",
         invoiceSellerTaxNumber = if (seller) "123456" else ""
     )

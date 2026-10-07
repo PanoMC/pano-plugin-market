@@ -12,7 +12,6 @@ import com.panomc.plugins.market.db.model.RefundStatus
 import com.panomc.plugins.market.db.model.SubscriptionMode
 import com.panomc.plugins.market.db.model.SubscriptionStatus
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -43,7 +42,7 @@ class StatsIT : MarketDaoITBase() {
 
     private var seq = 0
 
-    private fun config(zone: String = "UTC", stats: CurrencyType = CurrencyType.EUR, sales: CurrencyType = CurrencyType.EUR, rate: Double = 1.0) =
+    private fun config(zone: String = "UTC", stats: String = "EUR", sales: String = "EUR", rate: Double = 1.0) =
         MarketConfig(currency = sales, statsCurrency = stats, exchangeRate = rate, storeTimeZone = zone, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0)
 
     @BeforeEach
@@ -221,7 +220,7 @@ class StatsIT : MarketDaoITBase() {
     @Test
     fun `revenue is converted per order with the frozen rate, else the stats or the sales currency rule`(): Unit = runBlocking {
         // stats currency TRY, sales currency EUR with a view rate of 40 TRY per EUR
-        w.configure { config(stats = CurrencyType.TRY, sales = CurrencyType.EUR, rate = 40.0) }
+        w.configure { config(stats = "TRY", sales = "EUR", rate = 40.0) }
 
         order(at(2026, 10, 7, 9), 10000, currency = "EUR", rate = 35.0)  // frozen: 100 EUR x 35 = 3500.00 TRY
         order(at(2026, 10, 7, 9), 10000, currency = "EUR")               // no frozen rate: the sales currency uses the view rate 40 = 4000.00

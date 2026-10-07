@@ -51,7 +51,6 @@ import com.panomc.plugins.market.support.SeqIds
 import com.panomc.plugins.market.support.StaticProviderLookup
 import com.panomc.plugins.market.support.TestUser
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.DiscountUnit
 import com.panomc.plugins.market.util.MarketStatus
 import com.panomc.plugins.market.util.OrderStatus
@@ -2222,7 +2221,7 @@ internal class CheckoutHarness(val w: TestWiring, private val vertx: Vertx) {
         val subscriptionGraceDays: Int = 3
     ) {
         fun toConfig() = MarketConfig(
-            currency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = showVatInPrice, creditValue = 1.0, storeTimeZone = "UTC", allowGuestCheckout = allowGuestCheckout,
+            currency = "EUR", vatPercent = 20.0, showVatInPrice = showVatInPrice, creditValue = 1.0, storeTimeZone = "UTC", allowGuestCheckout = allowGuestCheckout,
             allowGiftPurchase = allowGiftPurchase, minimumOrderAmount = minimumOrderAmount, creditsEnabled = creditsEnabled, allowMixedCreditPayment = allowMixedCreditPayment,
             onlyAcceptCredits = onlyAcceptCredits, testMode = testMode, billingInfoMode = billingInfoMode, legalTextRequired = legalTextRequired,
             creditTopUpEnabled = creditTopUpEnabled, creditTopUpFreeAmount = creditTopUpFreeAmount, creditTopUpMin = creditTopUpMin, creditTopUpMax = creditTopUpMax,

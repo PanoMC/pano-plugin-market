@@ -91,7 +91,7 @@ class PlayerSummaryService(
             .put("orders", row.getLong("cnt"))
             .put("spent", Math.round(row.getDouble("spent")) / 100.0)
             .put("refunded", Math.round(row.getDouble("refunded")) / 100.0)
-            .put("currency", cfg.currency.name)
+            .put("currency", cfg.currency)
     }
 
     private suspend fun orders(keys: List<String>, client: SqlClient): JsonArray {

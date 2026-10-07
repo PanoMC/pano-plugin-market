@@ -16,7 +16,6 @@ import com.panomc.plugins.market.support.FakeMcLink
 import com.panomc.plugins.market.support.SeqIds
 import com.panomc.plugins.market.support.StaticProviderLookup
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.Vertx
 import kotlinx.coroutines.runBlocking
@@ -69,7 +68,7 @@ class Wire3IT : MarketDaoITBase() {
         locks = Locks(w.orders, w.orderItems, w.redemptions, w.creditAccounts)
         w.configure {
             MarketConfig(
-                currency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", mcBroadcast = true,
+                currency = "EUR", vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", mcBroadcast = true,
                 mcBroadcastTemplate = "&a{player} &7bought &f{product} x{quantity} &8@ {store}", storeName = "Shop"
             )
         }

@@ -172,7 +172,7 @@ internal class DeliveryWorld(
     init {
         w.configure {
             com.panomc.plugins.market.config.MarketConfig(
-                currency = com.panomc.plugins.market.util.CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC",
+                currency = "EUR", vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC",
                 deliveryMaxAttempts = maxAttempts
             )
         }

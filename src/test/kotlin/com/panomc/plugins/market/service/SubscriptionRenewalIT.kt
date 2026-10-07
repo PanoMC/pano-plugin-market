@@ -39,7 +39,6 @@ import com.panomc.plugins.market.spi.payment.StoredPaymentMethod
 import com.panomc.plugins.market.support.FakePaymentProvider
 import com.panomc.plugins.market.support.TestUser
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
@@ -101,7 +100,7 @@ internal class RenewalWorld(val sw: SubscriptionWorld, val w: TestWiring, val ve
         val c = sw.h.config
 
         return MarketConfig(
-            currency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = c.showVatInPrice, creditValue = 1.0, storeTimeZone = "UTC", allowGuestCheckout = c.allowGuestCheckout,
+            currency = "EUR", vatPercent = 20.0, showVatInPrice = c.showVatInPrice, creditValue = 1.0, storeTimeZone = "UTC", allowGuestCheckout = c.allowGuestCheckout,
             allowGiftPurchase = c.allowGiftPurchase, minimumOrderAmount = c.minimumOrderAmount, creditsEnabled = c.creditsEnabled, allowMixedCreditPayment = c.allowMixedCreditPayment,
             onlyAcceptCredits = c.onlyAcceptCredits, testMode = c.testMode || storeTestMode, billingInfoMode = c.billingInfoMode, legalTextRequired = c.legalTextRequired,
             creditTopUpEnabled = c.creditTopUpEnabled, creditTopUpFreeAmount = c.creditTopUpFreeAmount, creditTopUpMin = c.creditTopUpMin, creditTopUpMax = c.creditTopUpMax,

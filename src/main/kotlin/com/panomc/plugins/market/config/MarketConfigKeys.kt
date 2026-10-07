@@ -1,6 +1,6 @@
 package com.panomc.plugins.market.config
 
-import com.panomc.plugins.market.util.CurrencyType
+import com.panomc.plugins.market.core.money.Currencies
 import com.panomc.plugins.market.util.ExchangeRateMode
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -76,6 +76,9 @@ object MarketConfigKeys {
     fun isIsoCurrency(code: String): Boolean =
         code.length == 3 && code == code.uppercase() && runCatching { Currency.getInstance(code) }.isSuccess
 
+    /** Store / stats currency: a code of the engine's currency table. */
+    fun checkCurrencyCode(code: String): String? = if (Currencies.isSupported(code)) null else INVALID_VALUE
+
     fun isTimeZone(id: String): Boolean = runCatching { ZoneId.of(id) }.isSuccess
 
     @Suppress("UNCHECKED_CAST")
@@ -100,8 +103,8 @@ object MarketConfigKeys {
             }
         },
         enm("multiCurrencyFallback", MultiCurrencyFallback.CONVERT, values<MultiCurrencyFallback>()),
-        enm("currency", CurrencyType.TRY, values<CurrencyType>()),
-        enm("statsCurrency", CurrencyType.TRY, values<CurrencyType>()),
+        str("currency", "TRY", 3, extra = ::checkCurrencyCode),
+        str("statsCurrency", "TRY", 3, extra = ::checkCurrencyCode),
         enm("exchangeRateMode", ExchangeRateMode.AUTO, values<ExchangeRateMode>()),
         dbl("exchangeRate", 1.0, 0.000001, 1_000_000_000.0),
         ConfigKey("exchangeRateUpdatedAt", ConfigKind.INT, 0L, ConfigScope.SYSTEM) { v -> if ((v as Number).toLong() >= 0) null else OUT_OF_RANGE },

@@ -145,7 +145,7 @@ class InvoiceEndpoints(
             .put("websiteName", website.name)
             .put("websiteUrl", website.url)
         val snapshot = InvoiceSample.snapshot(
-            type == InvoiceType.CREDIT_NOTE, chosen, cfg.currency.name, cfg.storeTimeZone, seller, cfg.invoiceFooter, clock.now()
+            type == InvoiceType.CREDIT_NOTE, chosen, cfg.currency, cfg.storeTimeZone, seller, cfg.invoiceFooter, clock.now()
         )
 
         return rendering { documents.render(snapshot, chosen) }

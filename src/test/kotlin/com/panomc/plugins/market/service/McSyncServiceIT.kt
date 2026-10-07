@@ -20,7 +20,6 @@ import com.panomc.plugins.market.support.FakeMcComponent
 import com.panomc.plugins.market.support.FakeMcLink
 import com.panomc.plugins.market.support.Race
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -59,7 +58,7 @@ class McSyncServiceIT : MarketDaoITBase() {
         d = DeliveryWorld(w)
         w.configure {
             MarketConfig(
-                currency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", deliveryMaxAttempts = 5,
+                currency = "EUR", vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", deliveryMaxAttempts = 5,
                 deliveryOnlineWaitDays = 7, mcBroadcast = true, mcBroadcastTemplate = "&a{player} &7bought &f{product} x{quantity} &8@ {store}", storeName = "Shop"
             )
         }
@@ -1290,7 +1289,7 @@ class McSyncServiceIT : MarketDaoITBase() {
         w.serverStates.updateSettings(7, """{"mcBroadcast":false}""", w.clock.now(), pool)
         assertEquals(0, sync.announce(order, placed.items))
 
-        w.configure { MarketConfig(currency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", mcBroadcast = false) }
+        w.configure { MarketConfig(currency = "EUR", vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC", mcBroadcast = false) }
         assertEquals(0, sync.announce(order, placed.items))
 
         w.serverStates.updateSettings(7, """{"mcBroadcast":true}""", w.clock.now(), pool)

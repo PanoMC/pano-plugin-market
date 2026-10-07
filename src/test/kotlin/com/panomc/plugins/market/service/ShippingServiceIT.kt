@@ -264,7 +264,7 @@ class ShippingServiceIT : MarketDaoITBase() {
     private fun id(shipment: JsonObject) = shipment.getLong("id")
 
     private fun cfg(mail: Boolean = true, test: Boolean = false) = com.panomc.plugins.market.config.MarketConfig(
-        currency = com.panomc.plugins.market.util.CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC",
+        currency = "EUR", vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC",
         sendEmailAfterPurchase = mail, testMode = test
     )
 

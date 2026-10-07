@@ -90,7 +90,7 @@ class ProductListQuery(
 /** `MarketConfig` as the pricing code wants it (money x100, basis points). `rates` = the positive `market_currency_rate` rows. */
 fun marketPricingConfig(c: MarketConfig, rates: Map<String, BigDecimal>): PricingConfig =
     PricingConfig(
-        baseCurrency = c.currency.name,
+        baseCurrency = c.currency,
         currencyMode = c.currencyMode,
         additionalCurrencies = c.additionalCurrencies.map { it.trim().uppercase(Locale.ROOT) }.filter { it.isNotEmpty() }.distinct(),
         multiCurrencyFallback = c.multiCurrencyFallback,
@@ -662,7 +662,7 @@ class StoreQueryService(
     }
 
     private fun settings(c: MarketConfig, catalog: Catalog): JsonObject {
-        val base = c.currency.name
+        val base = c.currency
         val offered = OrderCurrencies.resolve(catalog.pricing, catalog.requestedCurrency)
         val others = if (c.currencyMode == com.panomc.plugins.market.config.CurrencyMode.SINGLE) emptyList()
         else catalog.pricing.additionalCurrencies.filter { Currencies.isSupported(it) && it != base && (catalog.pricing.rates[it]?.signum() ?: 0) > 0 }
@@ -672,7 +672,7 @@ class StoreQueryService(
             .put("storeName", c.storeName)
             .put("storeDescription", c.storeDescription)
             .put("currency", base)
-            .put("currencySymbol", c.currency.symbol)
+            .put("currencySymbol", Currencies.symbol(c.currency))
             .put("creditsEnabled", c.creditsEnabled)
             .put("creditName", c.creditName)
             .put("removeCents", c.removeCents)
@@ -681,7 +681,7 @@ class StoreQueryService(
             .put("showComparisons", c.showComparisons)
             .put("currencyMode", c.currencyMode.name)
             .put("currencies", JsonArray(codes))
-            .put("currencySymbols", JsonObject(codes.associateWith { if (it == base) c.currency.symbol else Currencies.symbol(it) }))
+            .put("currencySymbols", JsonObject(codes.associateWith { if (it == base) Currencies.symbol(c.currency) else Currencies.symbol(it) }))
             .put("displayCurrency", offered.displayCurrency)
             .put("pricesIncludeVat", c.showVatInPrice)
             .put("allowGuestCheckout", c.allowGuestCheckout)

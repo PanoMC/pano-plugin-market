@@ -188,7 +188,7 @@ class CreatorService(
 
         val c = config()
         val conversions = Conversions(
-            order.baseCurrency.ifBlank { c.currency.name }, order.currency, order.fxRate, maxOf(1L, MoneyUtil.toMinor(c.creditValue)), c.removeCents, order.displayCurrency, order.displayRate
+            order.baseCurrency.ifBlank { c.currency }, order.currency, order.fxRate, maxOf(1L, MoneyUtil.toMinor(c.creditValue)), c.removeCents, order.displayCurrency, order.displayRate
         )
         val base = baseAmount(order, items, conversions)
         val amount = Rounding.pctQ(base, code.commissionPercent.coerceIn(0L, 10_000L), conversions.bq)
@@ -306,7 +306,7 @@ class CreatorService(
             val now = clock.now()
             val id = payouts.add(
                 MarketCreatorPayout(
-                    creatorCodeId = codeId, creatorUserId = code.creatorUserId, amount = input.amount, currency = c.currency.name, method = method,
+                    creatorCodeId = codeId, creatorUserId = code.creatorUserId, amount = input.amount, currency = c.currency, method = method,
                     state = CreatorPayoutState.PENDING, actions = if (method == CreatorPayoutMethod.ACTION) input.actions else null, note = input.note?.trim()?.takeIf { it.isNotEmpty() },
                     paidBy = actorUserId, idempotencyKey = idempotencyKey, idempotencyHash = hash, createdAt = now, updatedAt = now
                 ),
@@ -333,7 +333,7 @@ class CreatorService(
                 CreatorPayoutMethod.MANUAL -> payouts.transition(id, CreatorPayoutState.PENDING, CreatorPayoutState.PAID, actorUserId, now, null, now, conn)
 
                 CreatorPayoutMethod.ACTION -> {
-                    deliveries.insertPlanned(conn, deliveries.planPayoutActions(conn, id, code.creator, input.amount, c.currency.name, input.actions))
+                    deliveries.insertPlanned(conn, deliveries.planPayoutActions(conn, id, code.creator, input.amount, c.currency, input.actions))
 
                     // rows that were born FAILED (no target server, invalid player) settle the payout at once
                     settle(conn, id)
@@ -500,7 +500,7 @@ class CreatorService(
                     }
                 )
             )
-            .put("currency", config().currency.name)
+            .put("currency", config().currency)
     }
 
     /** `GET /creator-codes/:id/earnings`: [state] filters, paged newest first; 404 for an unknown code, [CreatorPageOutOfRange] beyond the last page. */
@@ -620,7 +620,7 @@ class CreatorService(
             .put(
                 "totals",
                 JsonObject().put("earned", money(earned)).put("reversed", money(reversed)).put("pending", money(pending)).put("paidOut", money(paidOut))
-                    .put("available", money(payable - paidOut)).put("currency", config().currency.name)
+                    .put("available", money(payable - paidOut)).put("currency", config().currency)
             )
             .put(
                 "earnings",

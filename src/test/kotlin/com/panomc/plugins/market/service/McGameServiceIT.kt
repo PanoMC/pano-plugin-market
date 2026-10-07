@@ -168,7 +168,7 @@ class McGameServiceIT : MarketDaoITBase() {
         val m = mc
 
         return MarketConfig(
-            currency = com.panomc.plugins.market.util.CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = base.showVatInPrice, creditValue = 1.0, storeTimeZone = "UTC",
+            currency = "EUR", vatPercent = 20.0, showVatInPrice = base.showVatInPrice, creditValue = 1.0, storeTimeZone = "UTC",
             storeEnabled = m.storeEnabled, allowGuestCheckout = base.allowGuestCheckout, creditsEnabled = base.creditsEnabled, creditTopUpEnabled = base.creditTopUpEnabled, creditName = m.creditName, storeName = "Shop",
             mcAdminCommands = m.adminCommands, mcBroadcast = m.broadcast, mcBroadcastTemplate = m.template, mcDisabledAdminCommands = m.disabledAdmin,
             mcVaultMode = m.vaultMode, mcVaultRate = m.vaultRate, mcVaultDirection = m.vaultDirection, mcJoinNotifications = m.joinNotifications

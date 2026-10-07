@@ -9,7 +9,6 @@ import com.panomc.plugins.market.error.ExchangeRateFetchFailed
 import com.panomc.plugins.market.error.InvalidSettings
 import com.panomc.plugins.market.support.Fixtures
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -29,7 +28,7 @@ class CurrencyRateIT : MarketDaoITBase() {
     private val fx by lazy { Fixtures(w) }
 
     @Volatile
-    private var config = MarketConfig(currency = CurrencyType.TRY, currencyMode = CurrencyMode.DISPLAY, additionalCurrencies = listOf("USD", "EUR"))
+    private var config = MarketConfig(currency = "TRY", currencyMode = CurrencyMode.DISPLAY, additionalCurrencies = listOf("USD", "EUR"))
 
     /** What the provider answers; `null` = unreachable. */
     @Volatile
@@ -44,7 +43,7 @@ class CurrencyRateIT : MarketDaoITBase() {
 
     override suspend fun resetState() {
         super.resetState()
-        config = MarketConfig(currency = CurrencyType.TRY, currencyMode = CurrencyMode.DISPLAY, additionalCurrencies = listOf("USD", "EUR"))
+        config = MarketConfig(currency = "TRY", currencyMode = CurrencyMode.DISPLAY, additionalCurrencies = listOf("USD", "EUR"))
         provider = mapOf("USD" to BigDecimal("0.0250000000"), "EUR" to BigDecimal("0.0230"), "GBP" to BigDecimal("0.02"))
         asked = mutableListOf()
     }

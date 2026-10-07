@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.core.money.Currencies
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.invoice.InvoiceNumbering
 import com.panomc.plugins.market.core.time.Clock
@@ -131,7 +132,7 @@ class StatsService(
         val zone = StatsBuckets.zone(cfg.storeTimeZone)
         val now = clock.now()
         val today = StatsBuckets.today(zone, now)
-        val conversion = Conversion(cfg.statsCurrency.name, cfg.currency.name, cfg.exchangeRate)
+        val conversion = Conversion(cfg.statsCurrency, cfg.currency, cfg.exchangeRate)
 
         // one daily series serves the weekly and the monthly window, the previous ones and both sparklines
         val dayBuckets = StatsBuckets.days(zone, today, 60)
@@ -172,8 +173,8 @@ class StatsService(
                     .put("paymentMethods", chart(methods.map { it.first }, methods.map { it.second }))
                     .put("currencies", chart(currencies.map { it.first }, currencies.map { round2(it.second) }))
             )
-            .put("statsCurrency", cfg.statsCurrency.name)
-            .put("statsCurrencySymbol", cfg.statsCurrency.symbol)
+            .put("statsCurrency", cfg.statsCurrency)
+            .put("statsCurrencySymbol", Currencies.symbol(cfg.statsCurrency))
     }
 
     // ============================================================================================ revenue per bucket
@@ -213,7 +214,7 @@ class StatsService(
     suspend fun seriesFor(buckets: StatsBuckets.Buckets, client: SqlClient): Series {
         val cfg = config()
 
-        return series(buckets, Conversion(cfg.statsCurrency.name, cfg.currency.name, cfg.exchangeRate), client)
+        return series(buckets, Conversion(cfg.statsCurrency, cfg.currency, cfg.exchangeRate), client)
     }
 
     private fun window(series: Series, fromIndex: Int, toIndex: Int): Pair<Long, Double> =
@@ -297,7 +298,7 @@ class StatsService(
     suspend fun topProductsFor(from: Long?, to: Long?, limit: Int, client: SqlClient): List<Pair<String, Double>> {
         val cfg = config()
 
-        return topProducts(from, to, limit, Conversion(cfg.statsCurrency.name, cfg.currency.name, cfg.exchangeRate), client)
+        return topProducts(from, to, limit, Conversion(cfg.statsCurrency, cfg.currency, cfg.exchangeRate), client)
     }
 
     private suspend fun paymentMethods(from: Long?, to: Long?, client: SqlClient): List<Pair<String, Long>> {

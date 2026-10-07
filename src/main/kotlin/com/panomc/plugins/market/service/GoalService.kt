@@ -40,7 +40,7 @@ class GoalService(
     suspend fun create(data: JsonObject): MarketGoal = db.tx { conn ->
         val now = clock.now()
         val errors = linkedMapOf<String, String>()
-        val parsed = GoalRules.parse(data, null, config().currency.name, errors)
+        val parsed = GoalRules.parse(data, null, config().currency, errors)
 
         if (parsed.name.isBlank()) errors["name"] = "REQUIRED"
         if (!data.containsKey("metric")) errors["metric"] = "REQUIRED"
@@ -69,7 +69,7 @@ class GoalService(
         val now = clock.now()
         val base = goals.getById(id, conn) ?: throw NotFound()
         val errors = linkedMapOf<String, String>()
-        val parsed = GoalRules.parse(data, base, config().currency.name, errors)
+        val parsed = GoalRules.parse(data, base, config().currency, errors)
 
         if (data.containsKey("name") && parsed.name.isBlank()) errors["name"] = "REQUIRED"
 

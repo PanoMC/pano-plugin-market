@@ -120,7 +120,7 @@ class DisputeServiceIT : MarketDaoITBase() {
         revokeCreditOrders: Boolean = true
     ) = w.configure {
         MarketConfig(
-            currency = com.panomc.plugins.market.util.CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC",
+            currency = "EUR", vatPercent = 20.0, showVatInPrice = true, creditValue = 1.0, storeTimeZone = "UTC",
             revokeOnChargeback = revokeOnChargeback, autoBlockOnChargeback = autoBlock, revokeCreditOrdersOnTopUpChargeback = revokeCreditOrders, chargebackActions = chargebackActions
         )
     }

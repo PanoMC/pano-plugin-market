@@ -26,7 +26,7 @@ internal object MailSamples {
     private const val DAY = 86_400_000L
 
     fun input(kind: MailKind, locale: String, config: MarketConfig, now: Long): MailInput {
-        val currency = config.currency.name
+        val currency = config.currency
         val order = MarketOrder(
             id = 1001, playerUsername = "Steve", totalPrice = 10_000, currency = currency, paymentLabel = "Credit card", status = OrderStatus.COMPLETED, createdAt = now,
             publicId = "SAMPLEORDER0000000000", email = "buyer@example.com", locale = locale, subtotal = 10_000, gatewayAmount = 10_000, paidAt = now, testMode = true,

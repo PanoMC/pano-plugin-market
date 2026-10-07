@@ -137,4 +137,22 @@ class SettingsRequestTest {
     fun `an empty body changes nothing`() {
         assertEquals(current(), SettingsRequest.apply(JsonObject(), current()))
     }
+
+    @Test
+    fun `store and stats currency accept a supported code and refuse others`() {
+        val ok = SettingsRequest.apply(JsonObject().put("currency", "JPY").put("statsCurrency", "USD"), current())
+
+        assertEquals("JPY", ok.getString("currency"))
+        assertEquals("USD", ok.getString("statsCurrency"))
+
+        for (bad in listOf("KWD", "XXX", "try", "")) {
+            val error = assertThrows(InvalidSettings::class.java) {
+                SettingsRequest.apply(JsonObject().put("currency", bad).put("statsCurrency", bad), current())
+            }
+            val errors = fieldErrors(error)
+
+            assertEquals(MarketConfigKeys.INVALID_VALUE, errors.getString("currency"), bad)
+            assertEquals(MarketConfigKeys.INVALID_VALUE, errors.getString("statsCurrency"), bad)
+        }
+    }
 }

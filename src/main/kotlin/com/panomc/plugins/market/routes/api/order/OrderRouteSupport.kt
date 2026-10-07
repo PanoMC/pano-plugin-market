@@ -337,7 +337,7 @@ private fun buildOrderService(plugin: MarketPlugin): OrderService {
             )
         )),
         rates = { sqlClient -> rates.getAll(sqlClient).filter { it.rate.signum() > 0 }.associate { it.currency to it.rate } },
-        statsCurrency = { currentConfig(plugin).statsCurrency.name },
+        statsCurrency = { currentConfig(plugin).statsCurrency },
         // MK-079: the re-reserve of an accepted late payment checks `limitPerPlayer`; a rejected review and a duplicate payment request their refund
         limits = ProductPurchaseLimits(orderDao, context.getBean(MarketProductDao::class.java), context.getBean(MarketEntitlementDao::class.java), clock),
         refunds = context.getBean(MarketRefundDao::class.java),

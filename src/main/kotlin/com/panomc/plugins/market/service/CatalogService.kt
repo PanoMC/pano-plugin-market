@@ -120,7 +120,7 @@ class CatalogService(
         // update is always laid over the latest committed row and never over a stale read.
         val base = if (id == null) null else products.getByIdForUpdate(id, conn)?.takeIf { it.deletedAt == null } ?: throw NotFound()
 
-        val baseCurrency = config().currency.name
+        val baseCurrency = config().currency
         val errors = linkedMapOf<String, String>()
 
         // slug: a request that names one (or asks to regenerate it) wins; otherwise a stored slug stays.

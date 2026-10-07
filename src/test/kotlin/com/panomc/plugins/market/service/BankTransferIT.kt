@@ -21,7 +21,6 @@ import com.panomc.plugins.market.routes.api.order.requireBuyerNotice
 import com.panomc.plugins.market.spi.testkit.TestContexts
 import com.panomc.plugins.market.support.Race
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
@@ -74,7 +73,7 @@ internal class BankRig(val w: TestWiring, private val vertx: Vertx) {
         private set
 
     fun config(bankHours: Int = 72, guests: Boolean = true, orderExpiryMinutes: Int = 60, showVat: Boolean = true) = MarketConfig(
-        currency = CurrencyType.EUR, statsCurrency = CurrencyType.EUR, vatPercent = 20.0, showVatInPrice = showVat, creditValue = 1.0, storeTimeZone = "UTC",
+        currency = "EUR", statsCurrency = "EUR", vatPercent = 20.0, showVatInPrice = showVat, creditValue = 1.0, storeTimeZone = "UTC",
         allowGuestCheckout = guests, bankTransferExpiryHours = bankHours, orderExpiryMinutes = orderExpiryMinutes
     )
 

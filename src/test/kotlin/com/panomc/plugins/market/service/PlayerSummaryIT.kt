@@ -106,7 +106,7 @@ class PlayerSummaryIT : MarketDaoITBase() {
         assertEquals(3L, totals.getLong("orders"))
         assertEquals(30.0 + 20.0 + 20.0, totals.getDouble("spent"), 0.0001)
         assertEquals(5.0, totals.getDouble("refunded"), 0.0001)
-        assertEquals(w.config.currency.name, totals.getString("currency"))
+        assertEquals(w.config.currency, totals.getString("currency"))
     }
 
     @Test

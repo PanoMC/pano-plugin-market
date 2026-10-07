@@ -22,7 +22,6 @@ import com.panomc.plugins.market.support.FakeClock
 import com.panomc.plugins.market.support.Fixtures
 import com.panomc.plugins.market.support.Race
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.CurrencyType
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.coAwait
@@ -69,7 +68,7 @@ class InvoiceServiceIT : MarketDaoITBase() {
         creditNoteSeries: String = "CN",
         zone: String = "UTC"
     ) = MarketConfig(
-        currency = CurrencyType.EUR, storeTimeZone = zone, invoiceEnabled = enabled, invoiceCreditOrders = creditOrders, invoiceLocale = locale,
+        currency = "EUR", storeTimeZone = zone, invoiceEnabled = enabled, invoiceCreditOrders = creditOrders, invoiceLocale = locale,
         invoiceSeries = series, invoiceCreditNoteSeries = creditNoteSeries, invoiceSellerName = "Acme Ltd", invoiceSellerAddress = "1 Main St",
         invoiceSellerTaxOffice = "Kadikoy", invoiceSellerTaxNumber = "123456", invoiceFooter = "Thank you"
     )
