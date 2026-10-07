@@ -1,5 +1,6 @@
 {#if visible.length}
-  <div class="nav flex-column nav-pills sticky-md-top">
+  <!-- z-1: the sticky default (1020) would sit above open dropdown menus (1000) -->
+  <div class="nav flex-column nav-pills sticky-md-top z-1">
     {#each visible as item (item.key)}
       <a
         class="nav-link"

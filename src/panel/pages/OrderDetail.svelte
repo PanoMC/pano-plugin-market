@@ -22,6 +22,7 @@
           type="button"
           class="btn btn-link"
           data-bs-toggle="dropdown"
+        data-bs-popper-config={POPPER_FIXED}
           aria-expanded="false"
           title={$_('common.actions')}
           aria-label={$_('common.actions')}>
@@ -170,6 +171,9 @@
 </script>
 
 <script>
+  // The page header's right column scrolls sideways, which clips a menu hanging below it; a fixed menu is not clipped.
+  const POPPER_FIXED = '{"strategy":"fixed"}';
+
   import { base, page } from '@panomc/sdk/svelte';
   import { showToast } from '@panomc/sdk/toasts';
   import { _, showSuccessToast } from '../../i18n';

@@ -10,6 +10,7 @@
         type="button"
         class="btn btn-link"
         data-bs-toggle="dropdown"
+        data-bs-popper-config={POPPER_FIXED}
         title={$_('common.actions')}
         aria-label={$_('common.actions')}>
         <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
@@ -102,6 +103,9 @@
 </script>
 
 <script>
+  // The page header's right column scrolls sideways, which clips a menu hanging below it; a fixed menu is not clipped.
+  const POPPER_FIXED = '{"strategy":"fixed"}';
+
   import {
     CardHeader,
     CardFilters,
