@@ -4,6 +4,9 @@ import { guardedLoad } from './utils/guard.js';
 import { PLUGIN_ID } from './utils/plugin.js';
 import { setPano } from './utils/runtime.js';
 
+// Development-only preview mode (fake data); the module checks the platform mode itself.
+import { startDevPreview } from '../mock/start.js';
+
 const ALL_KEYS = Object.keys(NODE);
 
 // 13 §2.3. `nodes` = keys of which any one opens the page (the umbrella node always does).
@@ -65,6 +68,7 @@ function register(pano, anyOf, { path, importer, keys, ...extra }) {
 
 export function registerPanel(pano) {
   setPano(pano);
+  startDevPreview(pano);
   const anyOf = pano.features?.has?.('permission-any-of') === true;
 
   for (const [path, importer, keys] of PAGES) register(pano, anyOf, { path, importer, keys });

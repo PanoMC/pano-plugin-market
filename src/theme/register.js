@@ -6,6 +6,9 @@ import { registerSidebarWidgets } from './components/widgets/widgetsLoader.js';
 // side effect: the checkout draft clears itself on logout from any page (14 §10.2)
 import './stores/checkoutDraft.js';
 
+// Development-only preview mode (fake data); the module checks the platform mode itself.
+import { startDevPreview } from '../mock/start.js';
+
 // Registers the storefront. Items 1-6 of 14 §5 always run; items 7-11 are each wrapped so a theme
 // that lacks a namespace only loses that item (a console.warn), never the whole plugin.
 
@@ -19,6 +22,7 @@ function optional(name, fn) {
 
 export function registerTheme(pano) {
   setPano(pano);
+  startDevPreview(pano);
 
   // 1. Theme public pages
   pano.ui.page.register({

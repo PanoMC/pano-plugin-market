@@ -352,5 +352,24 @@
     "MARKET_ORDER_REVIEW": "#{orderId} numaralı sipariş incelemenizi bekliyor.",
     "MARKET_ORDER_ALERT": "{code, select, BANK_TRANSFER_NOTIFIED {#{orderId} numaralı sipariş: alıcı havaleyi yaptığını bildirdi. Hesabınızı kontrol edip ödemeyi onaylayın.} other {#{orderId} numaralı sipariş ilgi bekliyor ({code}).}}",
     "MARKET_DELIVERY_WAITING": "{kind, select, UNDO_FAILED {#{orderId} numaralı siparişin geri alınması {serverName} sunucusunda başarısız oldu. Alıcı hem parayı hem ürünü elinde tutuyor olabilir.} UNDO_WAITING {#{orderId} numaralı siparişin geri alınması hâlâ {serverName} sunucusunu bekliyor.} other {{count} teslimat {serverName} sunucusunu bekliyor. Oraya Pano Market eklentisini kurun veya güncelleyin.}}"
+  },
+  "mock": {
+    "saved-nothing": "Önizleme modu: hiçbir şey kaydedilmedi.",
+    "fab-title": "Önizleme verisi",
+    "badge": "ÖNİZLEME VERİSİ",
+    "title": "Önizleme verisi (geliştirme)",
+    "intro": "Market sayfaları için sahte veri. Veritabanına hiçbir şey yazılmaz; değişikliklere yalnızca başarı yanıtı verilir.",
+    "enable": "Önizleme modu",
+    "enabled-hint": "Açık: sayfalar sahte veri gösterir",
+    "volume": "Veri miktarı",
+    "volume-empty": "Boş",
+    "volume-few": "Az",
+    "volume-many": "Çok",
+    "pages": "Kullanılabilir sayfalar",
+    "panel": "Panel",
+    "storefront": "Mağaza",
+    "reset": "Sıfırla",
+    "close": "Kapat",
+    "note": "Sahte verisi olmayan sayfalar gerçek sunucuyu kullanır."
   }
 }

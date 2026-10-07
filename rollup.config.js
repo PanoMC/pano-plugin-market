@@ -179,6 +179,24 @@ function missingPageStubPlugin() {
   };
 }
 
+// --- Development preview seam ---------------------------------------------------------
+// Every import of the host ApiUtil from this plugin's own files is redirected to src/mock/seam.js, the
+// one place where the development-only preview mode (fake data, see src/mock/) can answer a request.
+// The seam itself imports the real module (importer === seamFile is left alone).
+const seamFile = path.resolve('src/mock/seam.js');
+const API_ID = '@panomc/sdk/utils/api';
+const isSeamImport = (id, importer) =>
+  id === API_ID && importer && path.resolve(importer) !== seamFile;
+function apiSeamPlugin() {
+  return {
+    name: 'pano-market-api-seam',
+    resolveId(source, importer) {
+      if (isSeamImport(source, importer)) return seamFile;
+      return null;
+    },
+  };
+}
+
 const baseConfig = {
   input: 'pano:entry',
   output: {
@@ -190,6 +208,7 @@ const baseConfig = {
   },
   plugins: [
     entryFacadePlugin(),
+    apiSeamPlugin(),
     sideStubPlugin(),
     missingPageStubPlugin(),
     del({
@@ -246,8 +265,9 @@ export default [
     // provides these specifiers. A prefix match would leave third-party packages like
     // 'svelte-select' as unresolvable bare imports in the browser; such dependencies
     // must be bundled into the plugin.
-    external: (id) => {
+    external: (id, importer) => {
       if (bundleSdk) return false;
+      if (isSeamImport(id, importer)) return false;
       return (
         id === 'svelte' ||
         id.startsWith('svelte/') ||
