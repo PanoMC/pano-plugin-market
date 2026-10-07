@@ -1055,6 +1055,12 @@ class ApiContractE2E : E2eTestBase() {
         awaitOrder(refundPaid, "COMPLETED")
 
         val refundOrderId = orderRow(refundPaid).getLong("id")
+
+        // the fake gateway's webhook carries no payment id, so the id the refund needs lands with the start result; wait for it (a fast job cadence can complete the order first)
+        Await.until(30_000, 100, "the paid attempt of order $refundOrderId has its gateway transaction id") {
+            db.string("SELECT `gatewayTransactionId` FROM `pano_market_payment` WHERE `orderId` = ? ORDER BY `id` DESC LIMIT 1", refundOrderId) != null
+        }
+
         val refundDetails = stepLog("REFUNDED_MARKET_ORDER", "refund") {
             admin.post("$p/orders/$refundOrderId/refunds", JsonObject().put("amount", 4.00), key())
         }.second
