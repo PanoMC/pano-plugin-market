@@ -22,7 +22,7 @@ if (!process.env.PANO_SDK_DIR) {
       : {};
     if (!exportsMap['./views']) {
       console.error(
-        '[pano] ERROR: the installed @panomc/sdk has no "./views" export; set PANO_SDK_DIR to a theme-core packages/sdk checkout.'
+        '[pano] ERROR: the installed @panomc/sdk has no "./views" export; set PANO_SDK_DIR to a theme-core packages/sdk checkout.',
       );
       process.exit(1);
     }
