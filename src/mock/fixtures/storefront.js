@@ -8,6 +8,7 @@ import {
   PLAYERS,
   PRODUCT_NAMES,
   countFor,
+  failure,
   int,
   matches,
   paginate,
@@ -16,9 +17,7 @@ import {
   publicIdFor,
 } from './../kit.js';
 
-const API = '/api/market';
-const ok = (body) => ({ result: 'ok', ...body });
-const fail = (error, extra = {}) => ({ result: 'error', error, ...extra });
+const API = '/plugins/pano-plugin-market';
 const dec = (cents) => cents / 100;
 const HOUR = 3600000;
 
@@ -568,12 +567,16 @@ function storeBody({ query, volume }) {
         ]
       : [];
 
-  return ok({
+  return {
     settings: settings(currency),
     categories: categoryTree(cat),
-    products: listed.slice(0, PAGE_SIZE).map((p) => card(p, currency)),
-    productCount: listed.length,
-    totalPage: Math.ceil(listed.length / PAGE_SIZE),
+    items: listed.slice(0, PAGE_SIZE).map((p) => card(p, currency)),
+    page: {
+      number: 1,
+      size: PAGE_SIZE,
+      totalItems: listed.length,
+      totalPages: Math.ceil(listed.length / PAGE_SIZE),
+    },
     featured: listed
       .filter((p) => p.featured)
       .slice(0, 6)
@@ -584,7 +587,7 @@ function storeBody({ query, volume }) {
       .map((p) => card(p, currency)),
     comparisons,
     comparisonProducts: ranks.length >= 2 ? ranks.map((p) => card(p, currency)) : [],
-  });
+  };
 }
 
 function productsBody({ query, volume }) {
@@ -594,13 +597,13 @@ function productsBody({ query, volume }) {
 
   if (query.category !== undefined && query.category !== '') {
     const id = Number(query.category);
-    if (!Number.isInteger(id) || id < 1) return fail('BAD_REQUEST');
-    if (!cat.categories.some((c) => c.id === id)) return fail('NOT_FOUND');
+    if (!Number.isInteger(id) || id < 1) return failure('BAD_REQUEST');
+    if (!cat.categories.some((c) => c.id === id)) return failure('NOT_FOUND');
     ids = subtree(cat.categories, id);
   }
 
   const sort = query.sort ? SORTS[query.sort] : SORTS.priority;
-  if (!sort) return fail('BAD_REQUEST');
+  if (!sort) return failure('BAD_REQUEST');
 
   const featured = query.featured === 'true' ? true : query.featured === 'false' ? false : null;
   const listed = cat.products
@@ -612,23 +615,19 @@ function productsBody({ query, volume }) {
         matches(query.search, p.name, p.shortDescription),
     )
     .sort(sort);
-  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(query.pageSize) || PAGE_SIZE));
-  const page = paginate(listed, { ...query, pageSize }, PAGE_SIZE);
+  // the core page rule: a pageSize above the store's limit is refused, never clamped
+  const page = paginate(listed, query, PAGE_SIZE, MAX_PAGE_SIZE);
 
-  if (page.error) return fail(page.error);
+  if (page.failure) return page.failure;
 
-  return ok({
-    products: page.rows.map((p) => card(p, currency)),
-    productCount: page.count,
-    totalPage: page.totalPage,
-  });
+  return { items: page.rows.map((p) => card(p, currency)), page: page.page };
 }
 
 function productBody({ params, query, volume }) {
   const cat = catalog(volume);
   const p = cat.bySlug.get(params.slug);
 
-  return p ? ok({ product: detail(p, cat, currencyOf(query.currency)) }) : fail('NOT_FOUND');
+  return p ? { product: detail(p, cat, currencyOf(query.currency)) } : failure('NOT_FOUND');
 }
 
 // ------------------------------------------------------------------------------------------------ widgets
@@ -706,7 +705,7 @@ function widgetsBody({ query, volume }) {
 
   body.sidebars = ['home', 'profile'];
 
-  return ok(body);
+  return body;
 }
 
 // ------------------------------------------------------------------------------------------------ quote / checkout
@@ -993,7 +992,7 @@ export function quoteOf(body, volume) {
 }
 
 function cartBody({ query, volume }) {
-  return ok({
+  return {
     cart: {
       items: storedCart(volume),
       couponCode: null,
@@ -1005,7 +1004,7 @@ function cartBody({ query, volume }) {
       currency: currencyOf(query.currency),
     },
     quote: quoteOf({ currency: query.currency }, volume),
-  });
+  };
 }
 
 const ADDRESS_FIELDS = {
@@ -1034,7 +1033,7 @@ const ADDRESS_FIELDS = {
 };
 
 function checkoutConfigBody() {
-  return ok({
+  return {
     guestCheckout: true,
     giftPurchase: true,
     billingInfoMode: 'OPTIONAL',
@@ -1062,7 +1061,7 @@ function checkoutConfigBody() {
       creditValue: 1,
       currency: BASE_CURRENCY,
     },
-  });
+  };
 }
 
 function addressesBody({ volume }) {
@@ -1086,12 +1085,12 @@ function addressesBody({ volume }) {
     identityNumber: null,
   });
 
-  return ok({
-    addresses:
+  return {
+    items:
       volume === 'empty'
         ? []
         : [one(1, 'Home', true, 'US', 'Seattle'), one(2, 'Parents', false, 'TR', 'Istanbul')],
-  });
+  };
 }
 
 // ------------------------------------------------------------------------------------------------ orders
@@ -1297,23 +1296,23 @@ const findOrder = (volume, publicId) =>
 function orderBody({ params, volume }) {
   const o = findOrder(volume, params.publicId);
 
-  return o ? ok({ order: orderView(o) }) : fail('NOT_FOUND');
+  return o ? { order: orderView(o) } : failure('NOT_FOUND');
 }
 
 function orderStatusBody({ params, volume }) {
   const o = findOrder(volume, params.publicId);
 
-  if (!o) return fail('NOT_FOUND');
+  if (!o) return failure('NOT_FOUND');
 
   const view = orderView(o);
 
-  return ok({
+  return {
     status: o.status,
     paymentStatus: view.payment.status,
     fulfillmentStatus: o.fulfillment,
     shippingStatus: 'NOT_REQUIRED',
     updatedAt: o.paidAt ?? o.createdAt,
-  });
+  };
 }
 
 function myOrdersBody({ query, volume }) {
@@ -1328,9 +1327,9 @@ function myOrdersBody({ query, volume }) {
   const list = orders(volume).filter((o) => !wanted || wanted.has(o.status));
   const page = paginate(list, query, 10);
 
-  if (page.error) return fail(page.error);
+  if (page.failure) return page.failure;
 
-  return ok({ orders: page.rows.map(orderRow), orderCount: page.count, totalPage: page.totalPage });
+  return { items: page.rows.map(orderRow), page: page.page };
 }
 
 function entitlementsBody({ query, volume }) {
@@ -1365,11 +1364,11 @@ function entitlementsBody({ query, volume }) {
 
   const active = query.active === 'true';
 
-  return ok({
-    entitlements: list.filter(
+  return {
+    items: list.filter(
       (e) => !active || (e.status === 'ACTIVE' && (e.expiresAt === null || e.expiresAt > NOW)),
     ),
-  });
+  };
 }
 
 // ------------------------------------------------------------------------------------------------ credits
@@ -1424,15 +1423,14 @@ function creditsBody({ query, volume }) {
   const entries = ledger(volume);
   const page = paginate(entries, query, 20);
 
-  if (page.error) return fail(page.error);
+  if (page.failure) return page.failure;
 
-  return ok({
+  return {
+    items: page.rows,
+    page: page.page,
     balance: entries.length ? dec(CREDIT_BALANCE) : 0,
     creditName: 'Coins',
-    entries: page.rows,
-    entryCount: page.count,
-    totalPage: page.totalPage,
-  });
+  };
 }
 
 // ------------------------------------------------------------------------------------------------ subscriptions
@@ -1498,7 +1496,7 @@ export function subscriptions(volume) {
 function summaryBody({ volume }) {
   const list = subscriptions(volume);
 
-  return ok({
+  return {
     creditsEnabled: true,
     creditBalance: volume === 'empty' ? 0 : dec(CREDIT_BALANCE),
     creditName: 'Coins',
@@ -1507,7 +1505,7 @@ function summaryBody({ volume }) {
       .length,
     subscriptionCount: list.length,
     isCreator: volume !== 'empty',
-  });
+  };
 }
 
 // ------------------------------------------------------------------------------------------------ creator
@@ -1515,7 +1513,7 @@ function summaryBody({ volume }) {
 const EARNING_STATES = ['PENDING', 'AVAILABLE', 'PAID', 'AVAILABLE', 'REVERSED', 'PAID'];
 
 function creatorBody({ query, volume }) {
-  if (volume === 'empty') return fail('NOT_FOUND');
+  if (volume === 'empty') return failure('NOT_FOUND');
 
   const n = countFor(volume, 6, 44);
   const earnings = Array.from({ length: n }, (_, i) => {
@@ -1537,9 +1535,11 @@ function creatorBody({ query, volume }) {
   const paidOut = sum(['PAID']);
   const page = paginate(earnings, query, 20);
 
-  if (page.error) return fail(page.error);
+  if (page.failure) return page.failure;
 
-  return ok({
+  return {
+    items: page.rows,
+    page: page.page,
     codes: [
       {
         code: 'ENDERQUEEN',
@@ -1566,9 +1566,6 @@ function creatorBody({ query, volume }) {
       available: dec(sum(['AVAILABLE'])),
       currency: BASE_CURRENCY,
     },
-    earnings: page.rows,
-    earningCount: page.count,
-    totalPage: page.totalPage,
     payouts: [
       {
         amount: dec(paidOut),
@@ -1579,7 +1576,7 @@ function creatorBody({ query, volume }) {
       },
       { amount: 12.5, method: 'MANUAL', state: 'PENDING', paidAt: null, createdAt: NOW - 2 * DAY },
     ],
-  });
+  };
 }
 
 // ------------------------------------------------------------------------------------------------ routes / pages
@@ -1594,7 +1591,7 @@ export const routes = [
     method: 'POST',
     path: `${API}/checkout/quote`,
     safe: true,
-    handler: ({ body, volume }) => ok({ quote: quoteOf(body, volume) }),
+    handler: ({ body, volume }) => ({ quote: quoteOf(body, volume) }),
   },
   { method: 'GET', path: `${API}/me/cart`, handler: cartBody },
   { method: 'GET', path: `${API}/me/addresses`, handler: addressesBody },
@@ -1605,7 +1602,7 @@ export const routes = [
   {
     method: 'GET',
     path: `${API}/me/subscriptions`,
-    handler: ({ volume }) => ok({ subscriptions: subscriptions(volume) }),
+    handler: ({ volume }) => ({ items: subscriptions(volume) }),
   },
   { method: 'GET', path: `${API}/me/creator`, handler: creatorBody },
   { method: 'GET', path: `${API}/orders/:publicId/status`, handler: orderStatusBody },

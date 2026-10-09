@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.net.URLEncoder
+import com.panomc.plugins.market.util.MarketPaths
 
 /** 11 section 8.4: secret values, Luhn digit runs, sensitive keys, headers. */
 class RedactorTest {
@@ -198,8 +199,8 @@ class RedactorTest {
 
     @Test
     fun `path tokens keep six characters and sensitive query values go`() {
-        assertEquals("/api/market/payments/stripe/notify/3f9a1c…", Redactor.NONE.redactUrl("/api/market/payments/stripe/notify/3f9a1c7e5b2d4f6a8c0e1b3d5f7a9c2e"))
-        assertEquals("/api/market/payments/stripe/webhook", Redactor.NONE.redactUrl("/api/market/payments/stripe/webhook"))
+        assertEquals("${MarketPaths.SITE_ROOT}/payments/stripe/notify/3f9a1c…", Redactor.NONE.redactUrl("${MarketPaths.SITE_ROOT}/payments/stripe/notify/3f9a1c7e5b2d4f6a8c0e1b3d5f7a9c2e"))
+        assertEquals("${MarketPaths.SITE_ROOT}/payments/stripe/webhook", Redactor.NONE.redactUrl("${MarketPaths.SITE_ROOT}/payments/stripe/webhook"))
         assertEquals("/pay?token=[REDACTED]&x=1", Redactor.NONE.redactUrl("/pay?token=abcdef&x=1"))
         assertEquals("/pay?Signature=[REDACTED]&ref=ABC", Redactor.NONE.redactUrl("/pay?Signature=zzz&ref=ABC"))
         assertEquals("/a/[REDACTED]/b?x=1", redactor.redactUrl("/a/whsec_a/b+c=d/b?x=1"))

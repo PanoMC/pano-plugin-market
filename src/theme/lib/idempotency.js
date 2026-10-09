@@ -1,4 +1,4 @@
-// Idempotency-Key handling for POST /api/market/checkout (14 §10.7 step 3). Pure: no SDK, no browser globals at top level.
+// Idempotency-Key handling for POST /checkout of the market (14 §10.7 step 3). Pure: no SDK, no browser globals at top level.
 
 /** JSON with object keys sorted at every depth (undefined members dropped, like JSON.stringify). */
 export function canonicalJson(value) {

@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.platform.model.PageRequest
 import com.panomc.platform.error.NoPermission
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.core.delivery.DeliveryError
@@ -21,7 +22,6 @@ import com.panomc.plugins.market.support.Race
 import com.panomc.plugins.market.support.TestUser
 import com.panomc.plugins.market.support.TestWiring
 import com.panomc.plugins.market.util.OrderStatus
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -894,7 +894,7 @@ class DeliveryAdminIT : MarketDaoITBase() {
         d.pay(placed)
         d.runInline()
 
-        val all = admin.list(DeliveryAdminService.Filter(), Paging.Window(1, 10))
+        val all = admin.list(DeliveryAdminService.Filter(), PageRequest(1, 10))
 
         assertEquals(2, all.total)
         assertEquals(2, all.rows.size)
@@ -913,17 +913,17 @@ class DeliveryAdminIT : MarketDaoITBase() {
         assertEquals("server7", command.getString("serverName"))
         assertEquals(7L, command.getLong("serverId"))
 
-        assertEquals(1, admin.list(DeliveryAdminService.Filter(status = DeliveryStatus.PENDING), Paging.Window(1, 10)).total)
-        assertEquals(1, admin.list(DeliveryAdminService.Filter(actionType = DeliveryActionType.CREDIT), Paging.Window(1, 10)).total)
-        assertEquals(2, admin.list(DeliveryAdminService.Filter(phase = DeliveryPhase.GRANT), Paging.Window(1, 10)).total)
-        assertEquals(0, admin.list(DeliveryAdminService.Filter(phase = DeliveryPhase.REVOKE), Paging.Window(1, 10)).total)
-        assertEquals(1, admin.list(DeliveryAdminService.Filter(serverId = 7), Paging.Window(1, 10)).total)
-        assertEquals(2, admin.list(DeliveryAdminService.Filter(search = "stev"), Paging.Window(1, 10)).total)
-        assertEquals(2, admin.list(DeliveryAdminService.Filter(search = placed.order.id.toString()), Paging.Window(1, 10)).total)
-        assertEquals(1, admin.list(DeliveryAdminService.Filter(search = "${placed.items[0].id}:c1:"), Paging.Window(1, 10)).total)
-        assertEquals(0, admin.list(DeliveryAdminService.Filter(search = "%"), Paging.Window(1, 10)).total)
+        assertEquals(1, admin.list(DeliveryAdminService.Filter(status = DeliveryStatus.PENDING), PageRequest(1, 10)).total)
+        assertEquals(1, admin.list(DeliveryAdminService.Filter(actionType = DeliveryActionType.CREDIT), PageRequest(1, 10)).total)
+        assertEquals(2, admin.list(DeliveryAdminService.Filter(phase = DeliveryPhase.GRANT), PageRequest(1, 10)).total)
+        assertEquals(0, admin.list(DeliveryAdminService.Filter(phase = DeliveryPhase.REVOKE), PageRequest(1, 10)).total)
+        assertEquals(1, admin.list(DeliveryAdminService.Filter(serverId = 7), PageRequest(1, 10)).total)
+        assertEquals(2, admin.list(DeliveryAdminService.Filter(search = "stev"), PageRequest(1, 10)).total)
+        assertEquals(2, admin.list(DeliveryAdminService.Filter(search = placed.order.id.toString()), PageRequest(1, 10)).total)
+        assertEquals(1, admin.list(DeliveryAdminService.Filter(search = "${placed.items[0].id}:c1:"), PageRequest(1, 10)).total)
+        assertEquals(0, admin.list(DeliveryAdminService.Filter(search = "%"), PageRequest(1, 10)).total)
 
-        val page = admin.list(DeliveryAdminService.Filter(), Paging.Window(2, 1))
+        val page = admin.list(DeliveryAdminService.Filter(), PageRequest(2, 1))
 
         assertEquals(2, page.total)
         assertEquals(1, page.rows.size)

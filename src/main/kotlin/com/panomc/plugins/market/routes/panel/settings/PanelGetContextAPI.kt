@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.routes.panel.settings
 
+import com.panomc.plugins.market.util.StoreLinks
+import com.panomc.plugins.market.util.MarketLinks
 import com.panomc.plugins.market.core.money.Currencies
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.api.config.PluginConfigManager
@@ -18,7 +20,7 @@ import com.panomc.plugins.market.runtime.MarketRuntime
 import com.panomc.plugins.market.runtime.beans
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 
 /**
@@ -93,9 +95,8 @@ fun marketContextBody(input: MarketContextInput, includeProductMeta: Boolean): M
     return body
 }
 
-/** `<website-url>/store`, or an empty string while the platform has no public URL. */
-fun marketStoreUrl(websiteUrl: String): String =
-    websiteUrl.trim().trimEnd('/').let { if (it.isEmpty()) "" else "$it/store" }
+/** The address of the store page (`market.store` of the front-end URL map), or an empty string while the platform has no public URL or the page has no address. */
+fun marketStoreUrl(websiteUrl: String, links: StoreLinks = StoreLinks.ofBase(websiteUrl)): String = links.store().orEmpty()
 
 /**
  * `GET /api/panel/market/context` (04 section 8): any market node. Answers while the market is not READY and reports
@@ -103,7 +104,7 @@ fun marketStoreUrl(websiteUrl: String): String =
  */
 @Endpoint
 class PanelGetContextAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/context", RouteType.GET))
+    override val paths = listOf(Path("/context", RouteType.GET))
 
     override val nodes: Set<MarketNode> = emptySet()
 
@@ -118,7 +119,7 @@ class PanelGetContextAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
             .getOrDefault("")
 
         val input = marketContextInput(
-            config, storeUrl = marketStoreUrl(websiteUrl), mailEnabled = MarketRuntime.capabilities.mail, shippingEnabled = shippingEnabled(), runtimeState = MarketRuntime.state.name
+            config, storeUrl = marketStoreUrl(websiteUrl, if (websiteUrl.isBlank()) StoreLinks.NONE else MarketLinks.platform), mailEnabled = MarketRuntime.capabilities.mail, shippingEnabled = shippingEnabled(), runtimeState = MarketRuntime.state.name
         )
 
         return Successful(marketContextBody(input, includeProductMeta = has(context, MarketNode.CATALOG)))

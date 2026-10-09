@@ -42,6 +42,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * The reservation of an order on a real MariaDB (MK-073, 06 section 7 and 13): stock by conditional statements, the
@@ -130,8 +131,8 @@ class ReservationServiceIT : MarketDaoITBase() {
         val failure = runCatching { h.placeTx(lines.map { ReservationHarness.Line(it) }) }.exceptionOrNull()
 
         assertTrue(failure is OutOfStock, "expected OUT_OF_STOCK, got $failure")
-        assertEquals("OUT_OF_STOCK", body(failure!!).getString("error"))
-        assertEquals(listOf("l1", "l2", "l3"), body(failure).getJsonArray("lines").list)
+        assertEquals("OUT_OF_STOCK", body(failure!!).getJsonObject("error").getString("code"))
+        assertEquals(listOf("l1", "l2", "l3"), ErrorBodies.details(failure).getJsonArray("lines").list)
         assertEquals(5, stockOf("market_product", product.id), "nothing was deducted")
         assertEquals(10, stockOf("market_product", other.id), "the subject that fitted is rolled back with the rest")
         assertEquals(0, count("market_order"))
@@ -154,7 +155,7 @@ class ReservationServiceIT : MarketDaoITBase() {
         }.exceptionOrNull()
 
         assertTrue(failure is OutOfStock)
-        assertEquals(setOf("a", "b"), body(failure!!).getJsonArray("lines").list.toSet())
+        assertEquals(setOf("a", "b"), ErrorBodies.details(failure!!).getJsonArray("lines").list.toSet())
         assertEquals(5, stockOf("market_product", fine.id))
         assertEquals(1, stockOf("market_product", short.id))
     }
@@ -177,7 +178,7 @@ class ReservationServiceIT : MarketDaoITBase() {
         }.exceptionOrNull()
 
         assertTrue(failure is OutOfStock)
-        assertEquals(listOf("ghost"), body(failure!!).getJsonArray("lines").list)
+        assertEquals(listOf("ghost"), ErrorBodies.details(failure!!).getJsonArray("lines").list)
     }
 
     @Test
@@ -210,7 +211,7 @@ class ReservationServiceIT : MarketDaoITBase() {
             )
         }.exceptionOrNull()
         assertTrue(failure is OutOfStock)
-        assertEquals(listOf("M"), body(failure!!).getJsonArray("lines").list)
+        assertEquals(listOf("M"), ErrorBodies.details(failure!!).getJsonArray("lines").list)
         assertEquals(8, stockOf("market_product", bundle.id))
         assertEquals(1, stockOf("market_product", scarce.id))
     }
@@ -266,7 +267,7 @@ class ReservationServiceIT : MarketDaoITBase() {
         val failure = runCatching { h.placeTx(listOf(ReservationHarness.Line(h.demand(product, 1))), listOf(couponUse(coupon))) }.exceptionOrNull()
 
         assertTrue(failure is InvalidCoupon, "expected INVALID_COUPON, got $failure")
-        assertEquals("CODE_LIMIT_REACHED", body(failure!!).getString("reason"))
+        assertEquals("CODE_LIMIT_REACHED", ErrorBodies.details(failure!!).getString("reason"))
         assertEquals(2, usedCount("market_coupon", coupon.id))
         assertEquals(5, stockOf("market_product", product.id), "the stock taken before the code failed is rolled back")
         assertEquals(2, count("market_order"))
@@ -304,7 +305,7 @@ class ReservationServiceIT : MarketDaoITBase() {
     private suspend fun assertCodeLimit(block: suspend () -> Unit) {
         val failure = runCatching { block() }.exceptionOrNull()
         assertTrue(failure is InvalidCoupon, "expected INVALID_COUPON, got $failure")
-        assertEquals("CODE_LIMIT_REACHED", body(failure!!).getString("reason"))
+        assertEquals("CODE_LIMIT_REACHED", ErrorBodies.details(failure!!).getString("reason"))
     }
 
     @Test
@@ -338,11 +339,11 @@ class ReservationServiceIT : MarketDaoITBase() {
 
         val creatorFailure = runCatching { h.placeTx(emptyList(), uses.take(1)) }.exceptionOrNull()
         assertTrue(creatorFailure is InvalidCreatorCode)
-        assertEquals("CODE_LIMIT_REACHED", body(creatorFailure!!).getString("reason"))
+        assertEquals("CODE_LIMIT_REACHED", ErrorBodies.details(creatorFailure!!).getString("reason"))
 
         val giftFailure = runCatching { h.placeTx(emptyList(), uses.subList(1, 2)) }.exceptionOrNull()
         assertTrue(giftFailure is InvalidGiftCode)
-        assertEquals("CODE_LIMIT_REACHED", body(giftFailure!!).getString("reason"))
+        assertEquals("CODE_LIMIT_REACHED", ErrorBodies.details(giftFailure!!).getString("reason"))
 
         val discountFailure = runCatching { h.placeTx(emptyList(), uses.subList(2, 3)) }.exceptionOrNull()
         assertTrue(discountFailure is DiscountUnavailable)
@@ -388,11 +389,11 @@ class ReservationServiceIT : MarketDaoITBase() {
 
         val deleted = runCatching { h.placeTx(emptyList(), listOf(couponUse(coupon))) }.exceptionOrNull()
         assertTrue(deleted is InvalidCoupon)
-        assertEquals("CODE_NOT_FOUND", body(deleted!!).getString("reason"))
+        assertEquals("CODE_NOT_FOUND", ErrorBodies.details(deleted!!).getString("reason"))
 
         val missing = runCatching { h.placeTx(emptyList(), listOf(CodeUse(RedemptionKind.CREATOR_CODE, 424_242, "NOPE", 1, "EUR"))) }.exceptionOrNull()
         assertTrue(missing is InvalidCreatorCode)
-        assertEquals("CODE_NOT_FOUND", body(missing!!).getString("reason"))
+        assertEquals("CODE_NOT_FOUND", ErrorBodies.details(missing!!).getString("reason"))
 
         val goneGift = runCatching { h.placeTx(emptyList(), listOf(CodeUse(RedemptionKind.GIFT, 424_242, "NOPE", 0, "EUR"))) }.exceptionOrNull()
         assertTrue(goneGift is InvalidGiftCode)
@@ -684,7 +685,7 @@ class ReservationServiceIT : MarketDaoITBase() {
 
         val failure = runCatching { h.reReserve(placed.orderId) }.exceptionOrNull()
         assertTrue(failure is InvalidCoupon)
-        assertEquals("CODE_NOT_FOUND", body(failure!!).getString("reason"))
+        assertEquals("CODE_NOT_FOUND", ErrorBodies.details(failure!!).getString("reason"))
         assertEquals(ReservationState.RELEASED, reservationState(placed.orderId))
         assertEquals(0, usedCount("market_discount", discount.id), "the failed accept counted nothing")
 

@@ -7,7 +7,6 @@ import com.panomc.plugins.market.error.StoreBusy
 import com.panomc.plugins.market.error.StoreDisabled
 import com.panomc.plugins.market.error.StoreUnavailable
 import com.panomc.plugins.market.runtime.MarketRuntime
-import io.vertx.core.http.HttpMethod
 import io.vertx.ext.web.RoutingContext
 
 /**
@@ -33,17 +32,6 @@ object MarketGate {
     fun requireStoreEnabled(enabled: Boolean = storeEnabled()) {
         if (!enabled) throw StoreDisabled()
     }
-
-    /** GET, HEAD and OPTIONS never change state and need no CSRF proof (11 section 8.7). */
-    fun isSafeMethod(method: HttpMethod): Boolean =
-        method == HttpMethod.GET || method == HttpMethod.HEAD || method == HttpMethod.OPTIONS
-
-    /**
-     * Whether a request must be refused for a missing CSRF proof: a mutating call, authenticated (the session cookie is
-     * the ambient credential), and `isCsrfSafe` false. Guests carry no ambient credential and pass.
-     */
-    fun csrfViolation(method: HttpMethod, isLoggedIn: Boolean, csrfSafe: Boolean): Boolean =
-        !isSafeMethod(method) && isLoggedIn && !csrfSafe
 
     /** The error a route failure becomes: the exceptions of this package map to their catalogue errors. */
     fun translate(failure: Throwable, context: RoutingContext): Throwable = when (failure) {

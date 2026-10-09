@@ -40,6 +40,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * `FakeMcServer` (19 section 13, 17 section 8.3): a Minecraft server that is not a Minecraft server. It walks the same road as the real
@@ -111,11 +112,11 @@ class FakeMcServer(
      */
     fun register(): Long {
         val keys = KeyPairGenerator.getInstance("RSA").also { it.initialize(2048) }.generateKeyPair()
-        val platformCode = session.admin.get("/api/panel/basicData", log = false).ok().obj().getValue("platformServerMatchKey").toString()
+        val platformCode = session.admin.get("/api/v1/panel/basicData", log = false).ok().obj().getValue("platformServerMatchKey").toString()
         val name = "e2e-mc-$label-" + System.nanoTime().toString(36).takeLast(8)
 
         val answer = E2eClient(session.env.url, "mc-$label").post(
-            "/api/server/connect",
+            "/api/v1/server/connect",
             JsonObject().put("platformCode", platformCode).put("serverName", name).put("host", "127.0.0.1").put("port", 25565).put("playerCount", 0)
                 .put("maxPlayerCount", 20).put("serverType", "PAPER").put("serverVersion", "1.21").put("startTime", System.currentTimeMillis())
                 .put("publicKey", Base64.getEncoder().encodeToString(keys.public.encoded))
@@ -130,7 +131,7 @@ class FakeMcServer(
         serverId = session.db.long("SELECT `id` FROM `pano_server` WHERE `name` = ? ORDER BY `id` DESC LIMIT 1", name)
             ?: throw AssertionError("the connect request created no server row")
 
-        session.admin.post("/api/panel/servers/$serverId/accept", JsonObject()).ok()
+        session.admin.post("/api/v1/panel/servers/$serverId/accept", JsonObject()).ok()
 
         return serverId
     }
@@ -139,7 +140,7 @@ class FakeMcServer(
     fun connect() {
         check(socket == null) { "already connected" }
         closedByUs = false
-        val uri = URI.create(session.env.url.replaceFirst("http", "ws") + "/api/server/connection")
+        val uri = URI.create(session.env.url.replaceFirst("http", "ws") + "/api/v1/server/connection")
         val opened = HttpClient.newHttpClient().newWebSocketBuilder().header("Authorization", "Bearer $token").buildAsync(uri, listener)
 
         socket = opened.get(15, TimeUnit.SECONDS)
@@ -340,7 +341,7 @@ class FakeMcServer(
     // ---- reading what Pano knows about this server -------------------------------------------------------------------------
 
     /** The `GET /api/panel/market/servers` element of this server (04 section 8). */
-    fun view(): JsonObject = session.admin.get("/api/panel/market/servers", log = false).ok().obj().getJsonArray("servers").map { it as JsonObject }
+    fun view(): JsonObject = session.admin.get("${MarketPaths.PANEL_ROOT}/servers", log = false).ok().obj().getJsonArray("items").map { it as JsonObject }
         .firstOrNull { it.getLong("id") == serverId } ?: throw AssertionError("server $serverId is not listed")
 
     /** The version Pano wants (`requiredVersion` of the list). */
@@ -360,7 +361,7 @@ class FakeMcServer(
         runCatching { scope.cancel() }
 
         if (serverId != 0L) {
-            val answer = session.admin.post("/api/panel/servers/$serverId/delete", JsonObject().put("currentPassword", session.env.adminPassword()))
+            val answer = session.admin.post("/api/v1/panel/servers/$serverId/delete", JsonObject().put("currentPassword", session.env.adminPassword()))
 
             check(answer.status in 200..299) { "removing the fake server answered ${answer.status} ${answer.error}" }
             serverId = 0

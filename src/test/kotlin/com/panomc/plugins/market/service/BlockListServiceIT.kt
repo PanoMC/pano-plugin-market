@@ -42,6 +42,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CopyOnWriteArrayList
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * The block list on a real MariaDB (MK-151; 11 sections 9 and 10, 06 section 6.8, tests 19.8 of 11 and F-18 / V-08 of 17): the lookup behind quote and
@@ -126,7 +127,10 @@ class BlockListServiceIT : MarketDaoITBase() {
 
         assertEquals("BUYER_BLOCKED", e.getErrorCode())
         assertEquals(403, e.getStatusCode())
-        assertEquals(setOf("result", "error"), JsonObject(e.encode()).fieldNames(), "no block id, type or reason in the answer")
+        val body = JsonObject(e.encode())
+
+        assertEquals(setOf("error"), body.fieldNames(), "no block id, type or reason in the answer")
+        assertEquals(setOf("code"), body.getJsonObject("error").fieldNames(), "no block id, type or reason in the answer")
     }
 
     private suspend fun orderOf(result: CheckoutResult): MarketOrder = ph.order(result.order.getString("publicId"))
@@ -638,7 +642,7 @@ class BlockListServiceIT : MarketDaoITBase() {
 
         assertEquals("INVALID_BLOCK", e.getErrorCode())
         assertEquals(400, e.getStatusCode())
-        assertEquals(reason, JsonObject(e.encode()).getString("reason"))
+        assertEquals(reason, ErrorBodies.details(e).getString("reason"))
     }
 
     @Test

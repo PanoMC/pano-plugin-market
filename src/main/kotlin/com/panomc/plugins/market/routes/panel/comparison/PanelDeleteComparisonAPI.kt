@@ -13,8 +13,8 @@ import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Parameters.param
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Parameters.param
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
@@ -23,7 +23,7 @@ class PanelDeleteComparisonAPI(
     private val plugin: MarketPlugin,
     private val marketComparisonDao: MarketComparisonDao
 ) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/comparisons/:id", RouteType.DELETE))
+    override val paths = listOf(Path("/comparisons/:id", RouteType.DELETE))
 
     override val nodes = setOf(MarketNode.CATALOG)
 

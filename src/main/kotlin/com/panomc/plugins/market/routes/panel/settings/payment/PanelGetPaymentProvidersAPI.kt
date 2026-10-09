@@ -11,7 +11,7 @@ import com.panomc.plugins.market.routes.base.MarketPanelApi
 import io.vertx.core.json.JsonArray
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 
 /**
@@ -23,7 +23,7 @@ import io.vertx.json.schema.SchemaRepository
 class PanelGetPaymentProvidersAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
     override val nodes: Set<MarketNode> = setOf(MarketNode.SETTINGS)
 
-    override val paths = listOf(Path("/api/panel/market/payment-providers", RouteType.GET))
+    override val paths = listOf(Path("/payment-providers", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository).build()
@@ -33,6 +33,6 @@ class PanelGetPaymentProvidersAPI(private val plugin: MarketPlugin) : MarketPane
 
         context.response().putHeader("Cache-Control", "no-store")
 
-        return Successful(mapOf("providers" to JsonArray(providers)))
+        return Successful(mapOf("items" to JsonArray(providers)))
     }
 }

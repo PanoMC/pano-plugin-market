@@ -142,15 +142,6 @@ POST	/shipping/carriers/:id/toggle	P:SET	LIVE
 POST	/shipping/carriers/:id/reveal	P:SET	LIVE		
 POST	/shipping/carriers/:id/actions/:actionId	P:SET	LIVE		
 GET	/shipping/carriers/:id/services	P:SET	LIVE		
-GET	/webhooks	P:SET	LIVE		
-POST	/webhooks	P:SET	LIVE		
-PUT	/webhooks/:id	P:SET	LIVE		
-DELETE	/webhooks/:id	P:SET	LIVE		
-POST	/webhooks/:id/test	P:SET	LIVE		
-GET	/webhooks/:id/deliveries	P:SET	LIVE		
-GET	/webhook-deliveries	P:SET	LIVE		
-GET	/webhook-deliveries/:id	P:SET	LIVE		
-POST	/webhook-deliveries/:id/redeliver	P:SET	LIVE		
 POST	/settings/mail/test	P:SET	LIVE		
 GET	/settings/invoice/preview	P:SET	LIVE		
 PUT	/settings/invoice-sequence	P:SET	LIVE		

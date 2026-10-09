@@ -1,5 +1,6 @@
 // Result mapping of the /store load (14 §8.1). Pure: the page module does the requests and feeds the
 // normalised ApiResults (`{ ok: true, ... }` | `{ ok: false, code }`) in here.
+import { readList } from './api-result.js';
 import { categoryIds, isDefaultFilter } from './storeFilter.js';
 import { storeMeta, storePageTitle } from './storeMeta.js';
 
@@ -18,15 +19,20 @@ export function validateFilter(filter, categories) {
   return filter;
 }
 
-/** Grid of a failed / absent list: the first page the store response carried. */
-function firstPage(store) {
+/** Grid of a product list answer (`{ items, page }` of `/store` or `/store/products`). */
+export function gridOf(res) {
+  const list = readList(res);
+
   return {
     state: 'READY',
-    products: store.products || [],
-    productCount: store.productCount ?? (store.products || []).length,
-    totalPage: store.totalPage ?? 1,
+    products: list.items,
+    productCount: list.totalItems,
+    totalPages: list.totalPages,
   };
 }
+
+/** Grid of a failed / absent list: the first page the store response carried. */
+const firstPage = gridOf;
 
 /** The `data` + `pageTitle` (+ `meta`) of a load, or `{ redirect: 'page' }` for a PAGE_NOT_FOUND list. */
 export function resolveStoreLoad({ store, list, widgets, filter, origin, withMeta = false }) {
@@ -46,12 +52,7 @@ export function resolveStoreLoad({ store, list, widgets, filter, origin, withMet
   if (list == null) {
     grid = firstPage(store);
   } else if (list.ok) {
-    grid = {
-      state: 'READY',
-      products: list.products || [],
-      productCount: list.productCount ?? (list.products || []).length,
-      totalPage: list.totalPage ?? 1,
-    };
+    grid = gridOf(list);
   } else if (list.code === 'PAGE_NOT_FOUND') {
     return { redirect: 'page' };
   } else {
@@ -60,7 +61,7 @@ export function resolveStoreLoad({ store, list, widgets, filter, origin, withMet
       code: list.code || 'NETWORK',
       products: [],
       productCount: 0,
-      totalPage: 1,
+      totalPages: 1,
     };
   }
 
@@ -70,7 +71,7 @@ export function resolveStoreLoad({ store, list, widgets, filter, origin, withMet
       settings,
       categories,
       grid,
-      totalCount: store.productCount ?? (store.products || []).length,
+      totalCount: firstPage(store).productCount,
       firstPage: firstPage(store),
       featured: store.featured || [],
       bestsellers: store.bestsellers || [],

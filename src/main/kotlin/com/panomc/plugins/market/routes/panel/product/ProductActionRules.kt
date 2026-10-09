@@ -9,7 +9,7 @@ import com.panomc.plugins.market.core.abuse.ActionGuard
 import com.panomc.plugins.market.core.delivery.ActionParser
 import com.panomc.plugins.market.core.delivery.ProductAction
 import com.panomc.plugins.market.core.delivery.WebhookSigning
-import com.panomc.plugins.market.core.webhook.TargetPolicy
+import com.panomc.platform.webhook.guard.TargetPolicy
 import com.panomc.plugins.market.db.model.BillingMode
 import com.panomc.plugins.market.db.model.DeliveryActionType
 import com.panomc.plugins.market.error.InvalidProduct

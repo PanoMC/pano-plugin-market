@@ -263,12 +263,12 @@
   import { untrack } from 'svelte';
   import { CardHeader, NoContent } from '@panomc/sdk/components/panel';
   import { Languages } from '@panomc/sdk/utils/language';
-  import { base } from '@panomc/sdk/svelte';
   import { _ } from '../../../i18n';
   import InvoiceSequenceModal from '../modals/InvoiceSequenceModal.svelte';
   import SettingRow from './SettingRow.svelte';
   import SwitchRow from './SwitchRow.svelte';
   import { fetchSettings, reportFailure, saveSection } from './save.js';
+  import { PANEL_URL } from '../../utils/api.js';
   import {
     BILLING_INFO_MODES,
     SECTION_KEYS,
@@ -299,7 +299,7 @@
     Array.isArray(settings.invoiceSequences) ? settings.invoiceSequences : [],
   );
   const previewUrl = $derived(
-    `${base}/api/panel/market/settings/invoice/preview${
+    `${PANEL_URL}/settings/invoice/preview${
       settings.invoiceLocale ? `?locale=${encodeURIComponent(settings.invoiceLocale)}` : ''
     }`,
   );

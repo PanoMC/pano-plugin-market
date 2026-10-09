@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.routes.panel.settings.payment
 
+import com.panomc.plugins.market.util.StoreLinks
+import com.panomc.plugins.market.util.MarketLinks
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.config.ConfigManager
 import com.panomc.platform.db.DatabaseManager
@@ -38,6 +40,7 @@ import io.vertx.core.Vertx
 import io.vertx.ext.web.client.WebClient
 import io.vertx.sqlclient.Pool
 import java.net.URI
+import com.panomc.plugins.market.util.MarketPaths
 
 /** The built-in providers (02 section 12): one instance each for the lifetime of the plugin. */
 internal val BUILT_IN_PAYMENT_PROVIDERS: List<PaymentProvider> by lazy { listOf(FreeProvider(), CreditsProvider(), BankTransferProvider()) }
@@ -58,20 +61,20 @@ internal fun siteInfoOf(websiteUrl: String, websiteName: String, defaultLocale: 
  * The context of the settings hooks (`validateSettings`, `onSettingsSaved`, `runAction`): a provider can read its settings,
  * call its gateway and use its state store. There is no payment attempt in play here, so the lookups answer "none".
  */
-private class SettingsPaymentContext(private val base: ProviderContext) : PaymentContext, ProviderContext by base {
+private class SettingsPaymentContext(private val base: ProviderContext, private val links: StoreLinks = MarketLinks.platform) : PaymentContext, ProviderContext by base {
     override val urls: PaymentUrls = object : PaymentUrls {
         override fun webhook(channel: String): String =
-            "${base.site.baseUrl}/api/market/payments/${base.providerId}/webhook" + if (channel == MarketSpi.DEFAULT_CHANNEL) "" else "/$channel"
+            "${base.site.baseUrl}${MarketPaths.site("/payments/${base.providerId}/webhook")}" + if (channel == MarketSpi.DEFAULT_CHANNEL) "" else "/$channel"
 
-        override fun checkoutPage(): String = "${base.site.baseUrl}/store/checkout"
+        override fun checkoutPage(): String = links.checkoutPage(base.site.baseUrl)
 
         override fun forAttempt(attempt: PaymentAttemptView): AttemptUrls {
-            val root = "${base.site.baseUrl}/api/market/payments/${base.providerId}"
+            val root = "${base.site.baseUrl}${MarketPaths.site("/payments/${base.providerId}")}"
 
             return AttemptUrls(
                 success = "$root/return/${attempt.token}/success", cancel = "$root/return/${attempt.token}/cancel",
                 pending = "$root/return/${attempt.token}/pending", result = "$root/return/${attempt.token}/result",
-                notify = "$root/notify/${attempt.token}", orderPage = "${base.site.baseUrl}/store/order/${attempt.orderPublicId}"
+                notify = "$root/notify/${attempt.token}", orderPage = links.orderPage(attempt.orderPublicId, base.site.baseUrl)
             )
         }
     }

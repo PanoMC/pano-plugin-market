@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.util.StoreLinks
+import com.panomc.platform.model.PageRequest
 import com.panomc.plugins.market.core.money.Conversions
 import com.panomc.plugins.market.core.money.Currencies
 import com.panomc.plugins.market.core.money.Rounding
@@ -126,7 +128,6 @@ import com.panomc.plugins.market.spi.shipping.TrackRequest
 import com.panomc.plugins.market.spi.shipping.TrackingEvent
 import com.panomc.plugins.market.spi.shipping.TrackingUpdate
 import com.panomc.plugins.market.util.OrderStatus
-import com.panomc.plugins.market.util.Paging
 import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.sqlclient.SqlConnection
 import io.vertx.sqlclient.Tuple
@@ -149,6 +150,7 @@ import java.math.BigDecimal
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * Shipping at checkout (10 sections 3 to 6; MK-132): the address, the zone, the offered methods with their prices (rule
@@ -2081,10 +2083,11 @@ class ShippingService(
     }
 
     private fun orderUrl(order: MarketOrder): String {
-        val base = fx().siteUrl().trimEnd('/')
         val publicId = order.publicId ?: return ""
+        val links = fx().links ?: StoreLinks.ofBase(fx().siteUrl())
+        val token = order.accessToken?.takeIf { order.userId == null }
 
-        return "$base/store/order/$publicId" + if (order.userId == null && order.accessToken != null) "?token=${order.accessToken}" else ""
+        return links.order(publicId, if (token != null) mapOf("token" to token) else emptyMap()).orEmpty()
     }
 
     private fun dateOf(millis: Long, locale: String?): String {
@@ -2371,7 +2374,7 @@ class ShippingService(
     class ShipmentPage(val shipments: List<JsonObject>, val count: Long)
 
     /** `GET /shipments` (10 section 9.9): newest first. `search` matches tracking number, merchant / carrier reference, order id, `publicId` and player name. */
-    suspend fun listShipments(filter: ShipmentFilter, window: Paging.Window, sqlClient: SqlClient): ShipmentPage {
+    suspend fun listShipments(filter: ShipmentFilter, window: PageRequest, sqlClient: SqlClient): ShipmentPage {
         val where = ArrayList<String>()
         val values = ArrayList<Any?>()
 
@@ -2404,7 +2407,7 @@ class ShippingService(
         val from = "FROM ${table("market_shipment")} s JOIN ${table("market_order")} o ON o.`id` = s.`orderId` $clause"
         val count = sqlClient.preparedQuery("SELECT COUNT(*) AS c $from").execute(Tuple.from(values)).coAwait().first().getLong("c")
         val ids = sqlClient.preparedQuery("SELECT s.`id` AS id $from ORDER BY s.`createdAt` DESC, s.`id` DESC LIMIT ? OFFSET ?")
-            .execute(Tuple.from(values + window.pageSize.toLong() + window.offset)).coAwait().map { it.getLong("id") }
+            .execute(Tuple.from(values + window.size.toLong() + window.offset)).coAwait().map { it.getLong("id") }
 
         return ShipmentPage(ids.mapNotNull { id -> fx().shipments.getById(id, sqlClient)?.let { shipmentJson(it, false, sqlClient, false) } }, count)
     }
@@ -2432,7 +2435,7 @@ class ShippingService(
     ) : ShippingContext by base {
         override val urls: ShippingUrls = object : ShippingUrls {
             override fun webhook(channel: String): String =
-                "${base.site.baseUrl}/api/market/shipping/$providerId/webhook/${token ?: "{installToken}"}" +
+                "${base.site.baseUrl}${MarketPaths.site("/shipping/$providerId/webhook/")}${token ?: "{installToken}"}" +
                     if (channel == com.panomc.plugins.market.spi.MarketSpi.DEFAULT_CHANNEL) "" else "/$channel"
         }
     }
@@ -2634,6 +2637,8 @@ class FulfilmentDeps(
     val labelsDir: Path,
     /** The public URL of the site, for the order link of the shipment mails. */
     val siteUrl: () -> String = { "" },
+    /** The pages of the front-end (the URL map); `null` = the default paths under [siteUrl]. */
+    val links: StoreLinks? = null,
     val createTimeoutMs: Long = 30_000,
     val cancelTimeoutMs: Long = 30_000,
     val trackTimeoutMs: Long = 15_000,

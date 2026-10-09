@@ -3,7 +3,7 @@
 // STORE_UNAVAILABLE. Pure of the SDK and the DOM: `call` and the timers are injected, unit-tested.
 import { quoteDelay } from './checkoutModel.js';
 
-export const QUOTE_PATH = '/api/market/checkout/quote';
+export const QUOTE_PATH = '/checkout/quote';
 export const MAX_RETRY_SECONDS = 30;
 
 const DISABLED_CODES = ['STORE_DISABLED', 'STORE_UNAVAILABLE'];

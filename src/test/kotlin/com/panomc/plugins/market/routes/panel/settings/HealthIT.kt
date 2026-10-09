@@ -60,7 +60,7 @@ class HealthIT : MarketDaoITBase() {
 
     private suspend fun mail(status: String) = Fixtures.insertRaw(pool, "market_mail_outbox", mapOf("status" to status, "kind" to "ORDER_RECEIVED", "refType" to "ORDER", "refId" to System.nanoTime()))
 
-    private suspend fun webhook(status: String) = Fixtures.insertRaw(pool, "market_webhook_delivery", mapOf("status" to status, "eventId" to "e-$status-${System.nanoTime()}"))
+    private suspend fun webhook(status: String) = Fixtures.insertRaw(pool, "webhook_delivery", mapOf("source" to "market", "status" to status, "eventId" to "e-$status-${System.nanoTime()}"))
 
     private suspend fun event(status: String, createdAt: Long = clock.now()) =
         Fixtures.insertRaw(pool, "market_payment_event", mapOf("providerId" to "fake", "direction" to "IN", "eventKey" to "ev-$status-${System.nanoTime()}", "status" to status, "createdAt" to createdAt))
@@ -112,7 +112,7 @@ class HealthIT : MarketDaoITBase() {
 
         sql("UPDATE `${prefix}market_delivery` SET `status` = 'CONFIRMED'")
         sql("UPDATE `${prefix}market_mail_outbox` SET `status` = 'SENT'")
-        sql("UPDATE `${prefix}market_webhook_delivery` SET `status` = 'SUCCEEDED'")
+        sql("UPDATE `${prefix}webhook_delivery` SET `status` = 'SUCCEEDED'")
         sql("UPDATE `${prefix}market_payment_event` SET `status` = 'PROCESSED'")
 
         val drained = reader().read(null).queues

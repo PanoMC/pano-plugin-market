@@ -47,33 +47,42 @@ describe('isSafeExternalUrl', () => {
 
 describe('isAttemptPageUrl', () => {
   test('accepts the attempt page, absolute or root-relative', () => {
-    expect(isAttemptPageUrl('/api/market/payments/attempts/tok123/page', ctx)).toBe(true);
     expect(
-      isAttemptPageUrl('https://shop.example.com/api/market/payments/attempts/tok123/page', ctx),
+      isAttemptPageUrl('/api/plugins/pano-plugin-market/payments/attempts/tok123/page', ctx),
+    ).toBe(true);
+    expect(
+      isAttemptPageUrl(
+        'https://shop.example.com/api/plugins/pano-plugin-market/payments/attempts/tok123/page',
+        ctx,
+      ),
     ).toBe(true);
   });
 
   test('honours a site base path', () => {
     const based = { origin: 'https://shop.example.com', base: '/site' };
 
-    expect(isAttemptPageUrl('/site/api/market/payments/attempts/t/page', based)).toBe(true);
-    expect(isAttemptPageUrl('/api/market/payments/attempts/t/page', based)).toBe(false);
+    expect(
+      isAttemptPageUrl('/site/api/plugins/pano-plugin-market/payments/attempts/t/page', based),
+    ).toBe(true);
+    expect(
+      isAttemptPageUrl('/api/plugins/pano-plugin-market/payments/attempts/t/page', based),
+    ).toBe(false);
   });
 
   test.each([
-    'https://evil.example.com/api/market/payments/attempts/tok/page',
-    '//evil.example.com/api/market/payments/attempts/tok/page',
-    '/\\evil.example.com/api/market/payments/attempts/tok/page',
-    'http://shop.example.com/api/market/payments/attempts/tok/page',
-    'https://shop.example.com:8443/api/market/payments/attempts/tok/page',
-    'https://user:pw@shop.example.com/api/market/payments/attempts/tok/page',
-    '/api/market/payments/attempts/',
-    '/api/market/payments/attempts',
-    '/api/market/payments/other/tok/page',
-    '/api/market/payments/attempts/../../orders/x',
-    '/api/market/payments/attempts/%2e%2e/%2e%2e/orders',
+    'https://evil.example.com/api/plugins/pano-plugin-market/payments/attempts/tok/page',
+    '//evil.example.com/api/plugins/pano-plugin-market/payments/attempts/tok/page',
+    '/\\evil.example.com/api/plugins/pano-plugin-market/payments/attempts/tok/page',
+    'http://shop.example.com/api/plugins/pano-plugin-market/payments/attempts/tok/page',
+    'https://shop.example.com:8443/api/plugins/pano-plugin-market/payments/attempts/tok/page',
+    'https://user:pw@shop.example.com/api/plugins/pano-plugin-market/payments/attempts/tok/page',
+    '/api/plugins/pano-plugin-market/payments/attempts/',
+    '/api/plugins/pano-plugin-market/payments/attempts',
+    '/api/plugins/pano-plugin-market/payments/other/tok/page',
+    '/api/plugins/pano-plugin-market/payments/attempts/../../orders/x',
+    '/api/plugins/pano-plugin-market/payments/attempts/%2e%2e/%2e%2e/orders',
     'javascript:alert(1)',
-    '/api/market/payments/attempts/tok\npage',
+    '/api/plugins/pano-plugin-market/payments/attempts/tok\npage',
     '',
     null,
     42,
@@ -82,7 +91,9 @@ describe('isAttemptPageUrl', () => {
   });
 
   test('rejects everything when the origin is unknown', () => {
-    expect(isAttemptPageUrl('/api/market/payments/attempts/t/page', {})).toBe(false);
+    expect(
+      isAttemptPageUrl('/api/plugins/pano-plugin-market/payments/attempts/t/page', {}),
+    ).toBe(false);
   });
 });
 
@@ -120,8 +131,15 @@ describe('afterCheckout', () => {
 
   test.each(['FORM_POST', 'HTML'])('%s on the attempt page is followed', (kind) => {
     expect(
-      afterCheckout({ kind, url: '/api/market/payments/attempts/tok/page' }, order, ctx),
-    ).toEqual({ type: 'ASSIGN', url: '/api/market/payments/attempts/tok/page' });
+      afterCheckout(
+        { kind, url: '/api/plugins/pano-plugin-market/payments/attempts/tok/page' },
+        order,
+        ctx,
+      ),
+    ).toEqual({
+      type: 'ASSIGN',
+      url: '/api/plugins/pano-plugin-market/payments/attempts/tok/page',
+    });
   });
 
   test.each(['FORM_POST', 'HTML'])(
@@ -129,7 +147,10 @@ describe('afterCheckout', () => {
     (kind) => {
       expect(
         afterCheckout(
-          { kind, url: 'https://evil.test/api/market/payments/attempts/tok/page' },
+          {
+            kind,
+            url: 'https://evil.test/api/plugins/pano-plugin-market/payments/attempts/tok/page',
+          },
           order,
           ctx,
         ),

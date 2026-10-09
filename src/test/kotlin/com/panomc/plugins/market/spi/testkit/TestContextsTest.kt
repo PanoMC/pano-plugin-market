@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.assertThrows
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.util.MarketPaths
 
 /** Self-test of `spi.testkit.TestContexts`, `SampleData`, the in-memory state store and the recording log. */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -140,12 +141,12 @@ class TestContextsTest {
     @Test
     fun `payment context urls follow the platform routes and the attempt lock serialises work per attempt`() = runBlocking {
         val ctx = TestContexts.payment("stripe", vertx = vertx)
-        assertEquals("https://shop.example/api/market/payments/stripe/webhook", ctx.urls.webhook())
-        assertEquals("https://shop.example/api/market/payments/stripe/webhook/refunds", ctx.urls.webhook("refunds"))
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/payments/stripe/webhook", ctx.urls.webhook())
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/payments/stripe/webhook/refunds", ctx.urls.webhook("refunds"))
         assertEquals("https://shop.example/store/checkout", ctx.urls.checkoutPage())
         val urls = ctx.urls.forAttempt(SampleData.attemptView())
-        assertEquals("https://shop.example/api/market/payments/stripe/return/tok/success", urls.success)
-        assertEquals("https://shop.example/api/market/payments/stripe/notify/tok/hook", urls.notify("hook"))
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/payments/stripe/return/tok/success", urls.success)
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/payments/stripe/notify/tok/hook", urls.notify("hook"))
         assertEquals("https://shop.example/store/order/ABCDEFGHJKMNPQRSTVWX", urls.orderPage)
 
         val inside = AtomicInteger(0)
@@ -169,8 +170,8 @@ class TestContextsTest {
     @Test
     fun `shipping context urls and clock`() = runBlocking {
         val ctx = TestContexts.shipping("geliver", vertx = vertx, testMode = true)
-        assertEquals("https://shop.example/api/market/shipping/geliver/webhook/test-install-token", ctx.urls.webhook())
-        assertEquals("https://shop.example/api/market/shipping/geliver/webhook/test-install-token/events", ctx.urls.webhook("events"))
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/shipping/geliver/webhook/test-install-token", ctx.urls.webhook())
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/shipping/geliver/webhook/test-install-token/events", ctx.urls.webhook("events"))
         assertTrue(ctx.testMode)
         assertEquals(TestContexts.START_MS, ctx.now())
         ctx.advance(5)

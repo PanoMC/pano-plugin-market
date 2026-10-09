@@ -29,7 +29,6 @@ import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.service.MailOutboxService
 import com.panomc.plugins.market.routes.api.order.orderService
 import com.panomc.plugins.market.routes.api.order.paymentService
-import com.panomc.plugins.market.routes.api.order.webhookService
 import com.panomc.plugins.market.routes.api.payment.inboundEventRetryJob
 import com.panomc.plugins.market.runtime.MarketRuntime
 import io.vertx.core.Vertx
@@ -212,7 +211,6 @@ class MarketScheduler(
         /** Cadences of the jobs (00 section 8.5, 06 section 12, 12 section 4.3, 08 section 15.5). */
         const val ORDER_EXPIRY_MS = 30_000L
         const val PAYMENT_RECONCILE_MS = 15_000L
-        const val WEBHOOK_MS = TICK_MS
         const val MAIL_OUTBOX_MS = 15_000L
 
         /** `InboundEventRetryJob` (02 section 7.3 step 7: every 60 s). */
@@ -278,12 +276,10 @@ internal object MarketJobs {
 
         val expiry = OrderExpiryJob(SystemClock, db, locks, orderDao, paymentDao, orderService(plugin), payments, sqlClient)
         val reconcile = PaymentReconcileJob(SystemClock, payments, orderDao, paymentDao, sqlClient)
-        val webhooks = WebhookJob(webhookService(plugin))
 
         return listOf(
             MarketScheduler.Job("order-expiry", MarketScheduler.ORDER_EXPIRY_MS) { expiry.runOnce() },
             MarketScheduler.Job("payment-reconcile", MarketScheduler.PAYMENT_RECONCILE_MS) { reconcile.runOnce() },
-            MarketScheduler.Job("webhook", MarketScheduler.WEBHOOK_MS) { webhooks.tick() },
             inboundRetry(inboundEventRetryJob(plugin)),
             delivery(DeliveryJob(deliveryService(plugin), SystemClock, servers = mcSyncService(plugin))),
             entitlementExpiry(entitlementExpiryJob(plugin)),

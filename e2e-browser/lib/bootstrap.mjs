@@ -2,7 +2,7 @@
 // admin session, buyers get a session on registration, market settings, the fake providers pointed at the runner's gateway, and
 // a catalogue of this run's own products (named with a run tag, so repeated runs never collide).
 import crypto from 'node:crypto';
-import { Api, must } from './api.mjs';
+import { Api, must, PANEL_MARKET_API } from './api.mjs';
 
 export const BUYER_PASSWORD = 'E2e-Browser-Passw0rd!';
 
@@ -25,12 +25,12 @@ export async function adminSession(env) {
 }
 
 async function snapshot(admin) {
-  return must(await admin.get('/api/panel/permission/snapshot'), 'permission snapshot').json;
+  return must(await admin.get('/api/v1/panel/permission/snapshot'), 'permission snapshot').json;
 }
 
 async function saveSnapshot(admin, snap, groups, nodes) {
   must(
-    await admin.post('/api/panel/permission/snapshot', {
+    await admin.post('/api/v1/panel/permission/snapshot', {
       groups,
       tracks: snap.tracks ?? [],
       nodes,
@@ -55,11 +55,11 @@ export async function bootstrap(env, gateway) {
   const admin = await adminSession(env);
 
   must(
-    await admin.multipart('PUT', '/api/panel/settings', { requireEmailVerification: 'false' }),
+    await admin.multipart('PUT', '/api/v1/panel/settings', { requireEmailVerification: 'false' }),
     'settings',
   );
   must(
-    await admin.multipart('PUT', '/api/panel/settings', {
+    await admin.multipart('PUT', '/api/v1/panel/settings', {
       email: JSON.stringify({
         enabled: false,
         hostname: '',
@@ -75,7 +75,7 @@ export async function bootstrap(env, gateway) {
   );
 
   must(
-    await admin.post('/api/panel/market/settings', {
+    await admin.post(`${PANEL_MARKET_API}/settings`, {
       testMode: true,
       currency: 'EUR',
       statsCurrency: 'EUR',
@@ -87,7 +87,6 @@ export async function bootstrap(env, gateway) {
       checkoutRateLimitPerMinute: 100000,
       quoteRateLimitPerMinute: 100000,
       couponLockThreshold: 1000,
-      allowPrivateWebhookTargets: true,
       invoiceEnabled: true,
       sendEmailAfterPurchase: true,
       storeTimeZone: 'UTC',
@@ -97,33 +96,33 @@ export async function bootstrap(env, gateway) {
     'market settings',
   );
 
-  const credits = await admin.post('/api/panel/market/settings/credits', {
+  const credits = await admin.post(`${PANEL_MARKET_API}/settings/credits`, {
     creditsEnabled: true,
     creditValue: 1.0,
     allowMixedCreditPayment: true,
   });
   if (credits.status === 400)
     must(
-      await admin.post('/api/panel/market/settings/credits', { creditsEnabled: true }),
+      await admin.post(`${PANEL_MARKET_API}/settings/credits`, { creditsEnabled: true }),
       'credit settings',
     );
   else must(credits, 'credit settings');
 
   for (const id of ['fake', 'fake-eur']) {
     must(
-      await admin.post(`/api/panel/market/payment-methods/${id}`, {
+      await admin.post(`${PANEL_MARKET_API}/payment-methods/${id}`, {
         settings: { gatewayUrl: gateway.baseUrl, secret: gateway.secret },
       }),
       `configure ${id}`,
     );
     must(
-      await admin.post(`/api/panel/market/payment-methods/${id}/toggle`, { enabled: true }),
+      await admin.post(`${PANEL_MARKET_API}/payment-methods/${id}/toggle`, { enabled: true }),
       `enable ${id}`,
     );
   }
 
   // the panel's "What's new" modal covers every panel page of an admin who has not dismissed it; the dismissal is stored on the account
-  await admin.post('/api/panel/dismissWhatsNew', { version: '1' });
+  await admin.post('/api/v1/panel/dismissWhatsNew', { version: '1' });
 
   return admin;
 }
@@ -133,7 +132,7 @@ export async function newBuyer(env, admin, label = 'buyer') {
   const n = run.next();
   const username = `b${label.slice(0, 3)}${run.tag}${n}`.slice(0, 16);
   const api = new Api(env.url, username);
-  const res = await api.post('/api/auth/register', {
+  const res = await api.post('/api/v1/auth/register', {
     username,
     email: `${username}@example.com`,
     password: BUYER_PASSWORD,
@@ -146,7 +145,7 @@ export async function newBuyer(env, admin, label = 'buyer') {
   api.username = username;
 
   const player = must(
-    await admin.get(`/api/panel/players/${encodeURIComponent(username)}`),
+    await admin.get(`/api/v1/panel/players/${encodeURIComponent(username)}`),
     'find user',
   );
   api.userId = player.json?.player?.id ?? null;
@@ -157,7 +156,7 @@ export async function newBuyer(env, admin, label = 'buyer') {
 export async function grantCredits(admin, userId, amount) {
   must(
     await admin.post(
-      `/api/panel/market/credits/accounts/${userId}/grant`,
+      `${PANEL_MARKET_API}/credits/accounts/${userId}/grant`,
       { amount, note: 'e2e browser' },
       { 'Idempotency-Key': crypto.randomUUID() },
     ),
@@ -169,7 +168,7 @@ const unique = () => `${run.tag}${run.next()}`;
 
 export async function category(admin, name) {
   const res = must(
-    await admin.multipart('POST', '/api/panel/market/categories', {
+    await admin.multipart('POST', `${PANEL_MARKET_API}/categories`, {
       name: `${name} ${run.tag}`,
       status: 'ACTIVE',
     }),
@@ -184,7 +183,7 @@ export async function product(admin, name, fields = {}) {
   const slug = `e2eb-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${unique()}`;
   const form = { name: `${name} ${run.tag}`, slug, price: '10.00', status: 'ACTIVE', ...fields };
   const res = must(
-    await admin.multipart('POST', '/api/panel/market/products', form),
+    await admin.multipart('POST', `${PANEL_MARKET_API}/products`, form),
     `product ${name}`,
   );
 
@@ -200,7 +199,7 @@ export const actions = {
 export async function coupon(admin, discountPercent) {
   const code = `B${run.tag}${run.next()}`.toUpperCase();
   const res = must(
-    await admin.post('/api/panel/market/coupons', {
+    await admin.post(`${PANEL_MARKET_API}/coupons`, {
       name: `Browser ${code}`,
       code,
       discount: discountPercent,

@@ -36,6 +36,7 @@ import org.junit.jupiter.api.Test
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * The object graph of the bank transfer and manual order tests (17 section 5.3): the real [CheckoutService] (with its checkout wiring), [OrderService],
@@ -210,7 +211,7 @@ class BankTransferIT : MarketDaoITBase() {
         assertEquals(code, e.getErrorCode(), "error code, body ${e.encode()}")
         assertEquals(status, e.getStatusCode())
 
-        return JsonObject(e.encode())
+        return ErrorBodies.details(e)
     }
 
     /** O6 as the expiry job applies it: the clock passes `expiresAt`, the machine decides under the `RELEASE` locks. */

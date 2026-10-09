@@ -17,8 +17,8 @@ import com.panomc.plugins.market.runtime.beans
 import com.panomc.plugins.market.service.StatsService
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
@@ -50,7 +50,7 @@ fun parseStatsRange(from: String?, to: String?): StatsRange {
  */
 @Endpoint
 class PanelGetMarketStatsAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/stats", RouteType.GET))
+    override val paths = listOf(Path("/stats", RouteType.GET))
 
     override val nodes = setOf(MarketNode.STATS)
 

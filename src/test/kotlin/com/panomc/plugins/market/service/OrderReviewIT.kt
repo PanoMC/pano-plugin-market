@@ -52,6 +52,7 @@ import org.junit.jupiter.api.Test
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * A [CreditSettlement] with the ledger posting of [CreditSettlement.rehold] that `CreditService` (MK-091) will write: capture, release and
@@ -215,10 +216,10 @@ class OrderReviewIT : MarketDaoITBase() {
 
         val body = JsonObject(e.encode())
 
-        assertEquals(code, body.getString("error"), "error code of the wire body ${e.encode()}")
+        assertEquals(code, body.getJsonObject("error").getString("code"), "error code of the wire body ${e.encode()}")
         assertEquals(status, e.getStatusCode())
 
-        return body
+        return ErrorBodies.details(e)
     }
 
     /** O6 as the expiry job applies it: the clock passes `expiresAt`, the machine decides under the `RELEASE` locks. */

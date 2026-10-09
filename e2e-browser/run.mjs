@@ -88,7 +88,9 @@ try {
       const shots = await captureFailure(scenario.id).catch(() => []);
       console.log(
         `FAIL ${scenario.id} ${scenario.title} (${((Date.now() - started) / 1000).toFixed(1)}s)\n  ${String(
-          error?.stack || error,
+          error?.message
+            ? `${error.name}: ${error.message}\n${error.stack}`
+            : error?.stack || error,
         )
           .split('\n')
           .slice(0, 12)

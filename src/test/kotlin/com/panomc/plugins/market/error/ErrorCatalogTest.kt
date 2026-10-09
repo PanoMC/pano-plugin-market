@@ -100,8 +100,12 @@ class ErrorCatalogTest {
         Triple(parts[1], parts[0].toInt(), if (parts.size > 2) parts[2].split(",").toSet() else emptySet())
     }
 
-    private fun extrasOf(error: Error): Set<String> =
-        JsonObject(error.encode()).fieldNames().filter { it != "result" && it != "error" }.toSet()
+    /** What a client reads beyond the code: `error.message` and the keys of `error.details` (the envelope of 04 section 3). */
+    private fun extrasOf(error: Error): Set<String> {
+        val envelope = JsonObject(error.encode()).getJsonObject("error")
+
+        return (envelope.fieldNames() - setOf("code", "fields", "details")) + (envelope.getJsonObject("details")?.fieldNames() ?: emptySet())
+    }
 
     @Test
     fun `the specification table has the documented size`() {
@@ -125,14 +129,17 @@ class ErrorCatalogTest {
     }
 
     @Test
-    fun `an error body carries result error and the extras`() {
+    fun `an error body is the envelope with the code and the extras as details`() {
         val body = JsonObject(InvalidRefundAmount(10.5, 7.0).encode())
 
-        assertEquals("error", body.getString("result"))
-        assertEquals("INVALID_REFUND_AMOUNT", body.getString("error"))
-        assertEquals(10.5, body.getDouble("max"))
-        assertEquals(7.0, body.getDouble("maxGateway"))
-        assertTrue(!body.containsKey("maxCredit"), "an omitted optional extra is absent, not null")
+        assertEquals(setOf("error"), body.fieldNames(), "no result key")
+        assertEquals("INVALID_REFUND_AMOUNT", body.getJsonObject("error").getString("code"))
+
+        val details = body.getJsonObject("error").getJsonObject("details")
+
+        assertEquals(10.5, details.getDouble("max"))
+        assertEquals(7.0, details.getDouble("maxGateway"))
+        assertTrue(!details.containsKey("maxCredit"), "an omitted optional extra is absent, not null")
     }
 
     @Test

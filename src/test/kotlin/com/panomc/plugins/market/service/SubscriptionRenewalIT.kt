@@ -52,6 +52,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.util.StoreLinks
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
@@ -128,7 +129,7 @@ internal class RenewalWorld(val sw: SubscriptionWorld, val w: TestWiring, val ve
 
                 sw.webhookRows.service.emit(conn, event, key, orderId, data, testMode)
             },
-            ids = w.ids, blocks = blocks, orderService = { orderService }
+            ids = w.ids, blocks = blocks, orderService = { orderService }, links = StoreLinks.ofBase("https://shop.example")
         )
 
         val redemptions = RedemptionService(w.clock, sw.locks, w.redemptions)
@@ -937,7 +938,7 @@ internal class SubscriptionRenewalIT : RenewalITBase() {
         val reminder = sql("SELECT `refKey`, `params` FROM `pano_market_mail_outbox` WHERE `kind` = 'SUBSCRIPTION_REMINDER'").single()
 
         assertEquals("1", reminder.getString("refKey"))
-        assertEquals("/store/order/${renewalOrder.publicId}", JsonObject(reminder.getString("params")).getString("payUrl"))
+        assertEquals("https://shop.example/store/order/${renewalOrder.publicId}", JsonObject(reminder.getString("params")).getString("payUrl"))
         assertNotNull(subscription(a.sub.id).reminderSentAt)
 
         // the buyer pays it before the period ends through another method: the next period simply follows

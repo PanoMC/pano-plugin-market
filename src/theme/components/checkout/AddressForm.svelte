@@ -1,7 +1,7 @@
-<div class="row g-2">
+<div class="market-address-form row g-2">
   {#each shown as field (field)}
     <div class={COLUMNS[field]}>
-      <label class="form-label" for={fieldId(kind, field)}>
+      <label class="market-address-form__label form-label" for={fieldId(kind, field)}>
         {$_(`theme.checkout.address.${field}`)}
         {#if required.has(field)}
           <span class="text-danger" aria-hidden="true">*</span>
@@ -11,7 +11,7 @@
       {#if field === 'country'}
         <select
           id={fieldId(kind, field)}
-          class={['form-select', errors[field] && 'is-invalid']}
+          class={['market-address-form__select', 'form-select', errors[field] && 'is-invalid']}
           autocomplete="{kind} country"
           aria-required={required.has(field) ? 'true' : undefined}
           aria-invalid={errors[field] ? 'true' : undefined}
@@ -27,7 +27,7 @@
       {:else}
         <input
           id={fieldId(kind, field)}
-          class={['form-control', errors[field] && 'is-invalid']}
+          class={['market-address-form__input', 'form-control', errors[field] && 'is-invalid']}
           type={field === 'phone' ? 'tel' : 'text'}
           maxlength={field === 'postalCode' ? POSTAL_CODE_MAX : ADDRESS_TEXT_MAX}
           autocomplete="{kind} {AUTOCOMPLETE[field]}"
@@ -55,11 +55,14 @@
 
 <script>
   import { currentLanguage } from '@panomc/sdk/utils/language';
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { ADDRESS_FIELDS, fieldErrorKey, fieldId } from '../../lib/checkoutModel.js';
   import { countryOptions } from '../../lib/countries.js';
   import { ADDRESS_TEXT_MAX, POSTAL_CODE_MAX } from '../../lib/validation.js';
-  import { countryName } from '../../utils/format.js';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { countryName } = market.require('format').actions;
 
   const COLUMNS = {
     firstName: 'col-md-6',

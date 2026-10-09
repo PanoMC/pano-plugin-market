@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.server
 
+import com.panomc.plugins.market.util.MarketLinks
 import com.panomc.platform.Main.Companion.applicationContext
 import com.panomc.platform.PluginManager
 import com.panomc.platform.auth.AuthProvider
@@ -71,6 +72,7 @@ private fun buildMcGameService(plugin: MarketPlugin): McGameService {
         activity = { log -> databaseManager().panelActivityLogDao.add(log, pool()) }, pluginId = plugin.pluginId,
         marketVersion = { marketVersion(plugin) },
         storeUrl = { runCatching { plugin.applicationContext.getBean(ConfigManager::class.java).config.websiteUrl }.getOrNull() },
+        productUrlTemplate = { MarketLinks.platform.productTemplate() }, registerUrl = { MarketLinks.platform.register() },
         orderLocale = { username -> manualOrderLocale(plugin, username) },
         // the market locale files hold no in-game text group yet: an empty map keeps the component on its own bundled texts (identical for the same version)
         texts = { locale -> bundles[locale].orEmpty().filterKeys { it.startsWith(INGAME_TEXT_PREFIX) }.mapKeys { it.key.removePrefix(INGAME_TEXT_PREFIX) } },

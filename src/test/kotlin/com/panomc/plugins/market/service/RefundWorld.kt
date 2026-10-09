@@ -35,6 +35,7 @@ import io.vertx.core.json.JsonObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.support.ErrorBodies
 
 /** One child of a bundle line: the actions its snapshot carries and its units per bundle (08 section 5.2). */
 internal class RefundChild(val actions: List<ProductAction>, val perBundle: Int = 1)
@@ -268,6 +269,6 @@ internal class RefundWorld(val w: TestWiring, val vertx: Vertx, invoices: Invoic
         assertEquals(code, e.getErrorCode(), "error code, body ${e.encode()}")
         assertEquals(status, e.getStatusCode())
 
-        return JsonObject(e.encode())
+        return ErrorBodies.details(e)
     }
 }

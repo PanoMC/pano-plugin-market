@@ -14,7 +14,7 @@ import io.vertx.json.schema.SchemaRepository
 /** `GET /api/panel/market/gifts` (`P:DISC`): the live gifts with their counters; query `page`, `pageSize`, `search`, `status`. */
 @Endpoint
 class PanelGetGiftsAPI(plugin: MarketPlugin) : PromotionAdminRoute(plugin, Promotion.GIFT) {
-    override val paths = listOf(Path("/api/panel/market/gifts", RouteType.GET))
+    override val paths = listOf(Path("/gifts", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = listValidation(schemaRepository)
 

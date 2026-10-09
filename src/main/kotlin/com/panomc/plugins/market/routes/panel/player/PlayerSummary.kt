@@ -26,7 +26,7 @@ import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.sqlclient.SqlClient
@@ -216,7 +216,7 @@ internal fun playerSummaryService(plugin: MarketPlugin): PlayerSummaryService {
  */
 @Endpoint
 class PanelGetPlayerSummaryAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/players/:username/summary", RouteType.GET))
+    override val paths = listOf(Path("/players/:username/summary", RouteType.GET))
 
     override val nodes = setOf(MarketNode.ORDERS_VIEW, MarketNode.PAYMENTS)
 

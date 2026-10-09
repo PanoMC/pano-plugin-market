@@ -29,7 +29,7 @@ class ResourceIsolationE2E : E2eTestBase() {
 
     /** `GET /api/panel/plugins/:id/logo`: the route answers 302 to the canonical `?hash=` url first, this follows it by hand (the client never follows redirects). */
     private fun logo(pluginId: String): E2eResponse {
-        val path = "/api/panel/plugins/$pluginId/logo"
+        val path = "/api/v1/panel/addons/$pluginId/logo"
         val first = admin.get(path)
 
         if (first.status == 200) return first
@@ -43,7 +43,7 @@ class ResourceIsolationE2E : E2eTestBase() {
         return admin.get(location).also { assertEquals(200, it.status, "the hashed logo url answers") }
     }
 
-    private fun plugins(): List<JsonObject> = admin.get("/api/panel/plugins").ok().obj().getJsonArray("data").map { it as JsonObject }
+    private fun plugins(): List<JsonObject> = admin.get("/api/v1/panel/addons").ok().obj().getJsonArray("items").map { it as JsonObject }
 
     @Test
     fun `V-18 the fake provider plugin serves its own config and logo, inherits no locales and serves no second UI bundle`() {
@@ -68,18 +68,18 @@ class ResourceIsolationE2E : E2eTestBase() {
         assertEquals("image/png", fakeLogo.header("Content-Type"))
 
         // the plugin UI bundle: a Kotlin-only provider registers none and serves none under its own id (market's own bundle is not served a second time)
-        val fakeUi = visitor("ri-ui").get("/api/plugins/$fakeId/resources/plugin-ui.zip")
+        val fakeUi = visitor("ri-ui").get("/api/v1/plugins/$fakeId/_/ui.zip")
 
         assertEquals(404, fakeUi.status, "no UI bundle under the fake provider's id")
 
-        val marketUi = visitor("ri-ui-market").get("/api/plugins/$marketId/resources/plugin-ui.zip")
+        val marketUi = visitor("ri-ui-market").get("/api/v1/plugins/$marketId/_/ui.zip")
 
         assertTrue(marketUi.status == 200 || marketUi.status == 404, "market's own bundle route answers ${marketUi.status}")
 
         if (marketUi.status == 200) assertTrue(marketUi.body.isNotEmpty(), "market's bundle is not empty")
 
         // the locales: market's strings are served under market's id, nothing is served under the fake provider's id (it has no locales and inherits none)
-        val translations = admin.get("/api/locales/en-US/translations/types/PANEL").ok().obj().getJsonObject("data")
+        val translations = admin.get("/api/v1/locales/en-US/translations/types/PANEL").ok().obj().getJsonObject("data")
         val byPlugin = translations.getJsonObject("plugins") ?: JsonObject()
 
         assertNotNull(byPlugin.getJsonObject(marketId), "market's translations are served: ${byPlugin.fieldNames()}")

@@ -211,8 +211,8 @@
 <ConfirmModal bind:this={confirmModal} />
 
 <script module>
-  import ApiUtil from '@panomc/sdk/utils/api';
-  import { marketPath } from '../utils/api.js';
+  import { api } from '@panomc/sdk/plugin-api';
+  import { failureOf } from '../utils/api.js';
   import { guard } from '../utils/guard.js';
   import { PLUGIN_ID } from '../utils/plugin.js';
 
@@ -225,12 +225,12 @@
     if (allowed.denied) return { data: { id, error: 'NO_PERMISSION' } };
     allowed.pageTitle?.set?.(`plugins.${PLUGIN_ID}.pages.subscription-detail.title`);
 
-    const body = await ApiUtil.get({
-      path: marketPath(`/subscriptions/${encodeURIComponent(id)}`),
+    const body = await api.panel.get({
+      path: `/subscriptions/${encodeURIComponent(id)}`,
       request: event,
     });
-    if (!body || typeof body !== 'object' || body.error)
-      return { data: { id, error: (body && typeof body === 'object' && body.error) || 'NETWORK_ERROR' } };
+    const failure = failureOf(body);
+    if (failure) return { data: { id, error: failure } };
     return { data: { ...body, id } };
   }
 </script>
@@ -294,7 +294,7 @@
     if (refreshing) return;
     refreshing = true;
     const result = await call(
-      ApiUtil.get({ path: marketPath(`/subscriptions/${encodeURIComponent(data.id)}`) }),
+      api.panel.get({ path: `/subscriptions/${encodeURIComponent(data.id)}` }),
     );
     refreshing = false;
     if (!result.ok) {

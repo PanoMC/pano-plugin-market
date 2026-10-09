@@ -1,4 +1,4 @@
-import ApiUtil from '@panomc/sdk/utils/api';
+import { api } from '@panomc/sdk/plugin-api';
 import { loadContextWith } from './list-core.js';
 
 /**
@@ -7,5 +7,5 @@ import { loadContextWith } from './list-core.js';
  * context-dependent controls.
  */
 export function loadContext(event) {
-  return loadContextWith({ get: (options) => ApiUtil.get(options) }, event);
+  return loadContextWith({ get: (options) => api.panel.get(options) }, event);
 }

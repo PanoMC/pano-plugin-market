@@ -15,8 +15,8 @@ import com.panomc.plugins.market.service.OrderExportColumns
 import com.panomc.plugins.market.util.CsvWriter
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 import io.vertx.kotlin.coroutines.coAwait
@@ -34,7 +34,7 @@ class PanelExportOrdersAPI(private val plugin: MarketPlugin) : MarketPanelApi() 
     // order = 0 so /orders/export is registered before the /orders/:id path parameter route.
     override val order = 0
 
-    override val paths = listOf(Path("/api/panel/market/orders/export", RouteType.GET))
+    override val paths = listOf(Path("/orders/export", RouteType.GET))
 
     override val nodes = setOf(MarketNode.ORDERS_VIEW)
 

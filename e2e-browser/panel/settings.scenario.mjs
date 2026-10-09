@@ -1,7 +1,7 @@
 // Scenario 71 of 13 section 25.4: store settings in the panel (a legal text is published as version N+1 and the previous one loses "Active",
 // "require acceptance" without a text is blocked, the currency mode MULTI puts the per-currency grid into the product form).
 import fs from 'node:fs';
-import { must } from '../lib/api.mjs';
+import { must, PANEL_MARKET_API, listOf } from '../lib/api.mjs';
 import { assert, assertEqual } from '../lib/ui.mjs';
 import { signedIn, openMarket, waitFor, modalsClosed, settingsPatch } from './lib/panel.mjs';
 
@@ -10,7 +10,7 @@ const enUS = JSON.parse(
 );
 
 const textsOf = async (admin) =>
-  must(await admin.get('/api/panel/market/settings/legal'), 'legal texts').json.texts ?? [];
+  listOf(must(await admin.get(`${PANEL_MARKET_API}/settings/legal`), 'legal texts').json, 'texts');
 
 export const scenarios = [
   {
@@ -115,9 +115,9 @@ export const scenarios = [
         await waitFor(
           'legalTextRequired to be stored',
           async () =>
-            must(await admin.get('/api/panel/market/settings'), 'settings').json.settings
+            must(await admin.get(`${PANEL_MARKET_API}/settings`), 'settings').json.settings
               ?.legalTextRequired === true ||
-            must(await admin.get('/api/panel/market/settings'), 'settings').json
+            must(await admin.get(`${PANEL_MARKET_API}/settings`), 'settings').json
               .legalTextRequired === true,
         );
 
@@ -166,7 +166,7 @@ export const scenarios = [
       } finally {
         await restore();
         if (restoreCurrencies)
-          await admin.post('/api/panel/market/settings', { currencyMode: 'SINGLE' });
+          await admin.post(`${PANEL_MARKET_API}/settings`, { currencyMode: 'SINGLE' });
       }
 
       pc.expectNoErrors('PANEL-71');

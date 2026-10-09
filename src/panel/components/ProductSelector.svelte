@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _ } from '../../i18n';
 
   let {
@@ -30,8 +30,8 @@
   async function loadProducts() {
     loading = true;
     try {
-      const res = await ApiUtil.get({ path: '/api/panel/market/products/simple' });
-      fetchedProducts = res?.products || [];
+      const res = await api.panel.get({ path: '/products/simple' });
+      fetchedProducts = res?.items || [];
     } catch (e) {
       console.error('[Market] Failed to load products', e);
       fetchedProducts = [];

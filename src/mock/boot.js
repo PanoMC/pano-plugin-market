@@ -4,9 +4,10 @@
 import { get } from 'svelte/store';
 import { mount, tick } from 'svelte';
 import { invalidateAll } from '@panomc/sdk/svelte';
-import { real } from './seam.js';
+import { real, notify } from './seam.js';
 import { developmentMode } from './dev.js';
-import { gate, readVolume } from './core.js';
+import { gate, readVolume, SAVED_NOTHING } from './core.js';
+import { PREVIEW_HOOK } from '../theme/lib/api.js';
 
 let mounted = false;
 
@@ -44,7 +45,7 @@ function remember(flag, now = Date.now()) {
 /**
  * Host page data first (no request; only readable inside a component context, so it usually is not),
  * then, on a local address or with the preview cookie set, a per-tab cache of the last answer (60 s)
- * and only then one GET /api/siteInfo.
+ * and only then one GET /site-info (relative to the API root).
  */
 async function isDevelopment(pano) {
   try {
@@ -70,6 +71,7 @@ export async function startDevPreview(pano) {
   await hydrated();
   if ((await isDevelopment(pano)) !== true) return;
   mounted = true;
+  installThemeHook();
   const { default: DevPreview } = await import('./DevPreview.svelte');
   mount(DevPreview, { target: document.body });
   if (gate.deferred) {
@@ -95,4 +97,21 @@ async function hydrated() {
   await frame();
   await frame();
   await tick();
+}
+
+/**
+ * Theme requests go through `host.request` (the controllers), never through the seam, so the theme's API module asks this hook
+ * first (see PREVIEW_HOOK in theme/lib/api.js). Same rules as the seam: the cookie decides, a read is answered from the
+ * fixtures, a write saves nothing and says so. Installed only here, i.e. only in a browser in development mode.
+ */
+function installThemeHook() {
+  globalThis[PREVIEW_HOOK] = async (method, path, body) => {
+    if (gate.deferred) return undefined;
+    const volume = readVolume();
+    if (!volume) return undefined;
+    const router = await import('./router.js').then((m) => m.router);
+    if (method === 'GET' || router.isSafe(method, path)) return router.answer(method, path, volume, body);
+    notify();
+    return router.answer(method, path, volume, body) ?? SAVED_NOTHING;
+  };
 }

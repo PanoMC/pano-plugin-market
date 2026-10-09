@@ -21,8 +21,8 @@ import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.handler.BodyHandler
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 
 /**
@@ -32,7 +32,7 @@ import io.vertx.json.schema.SchemaRepository
  */
 @Endpoint
 class PanelUpdateCategoryAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/categories/:id", RouteType.PUT))
+    override val paths = listOf(Path("/categories/:id", RouteType.PUT))
 
     override val nodes = setOf(MarketNode.CATALOG)
 

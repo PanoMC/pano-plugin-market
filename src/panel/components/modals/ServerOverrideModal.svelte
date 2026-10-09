@@ -172,9 +172,9 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _, showSuccessToast } from '../../../i18n';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import {
     ADMIN_COMMANDS,
     VAULT_DIRECTIONS,
@@ -246,8 +246,8 @@
     let result;
     try {
       result = await call(
-        ApiUtil.put({
-          path: marketPath(`/servers/${encodeURIComponent(server.id)}/settings`),
+        api.panel.put({
+          path: `/servers/${encodeURIComponent(server.id)}/settings`,
           body: overrideRequest(form, defaults),
         }),
       );

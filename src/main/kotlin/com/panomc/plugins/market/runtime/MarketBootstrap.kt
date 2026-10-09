@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 3. `MarketSchema.ensure` (all idempotent DDL) and 4. the data fixups;
  * 5. `SchemaVerifier.verify`: a failure makes the run `DEGRADED`, steps 6 to 8 still run;
  * 6. [secrets] (`secret.key`, re-encryption of plaintext secrets), 7. [seeds] (system accounts, carrier, zone);
+ * 7b. [webhooks] (the store's events are declared to core and the old webhook endpoints move to core's, doc 06 section 4.4);
  * 8. [armScheduler], then `READY` unless `DEGRADED`.
  *
  * No step ever throws out of [run]: each one is wrapped, logged and, when it is unexpected, recorded for `/health`.
@@ -28,6 +29,7 @@ class MarketBootstrap(
     private val initDatabase: suspend () -> Unit,
     private val secrets: suspend () -> Unit = {},
     private val seeds: suspend () -> Unit = {},
+    private val webhooks: suspend () -> Unit = {},
     private val armScheduler: suspend () -> Unit = {},
     private val tables: List<MarketSchema.Table> = MarketSchema.tables,
     private val fixups: () -> List<MarketSchema.Fixup> = { MarketSchema.fixups() },
@@ -102,6 +104,7 @@ class MarketBootstrap(
 
         step("secrets", errors, secrets)
         step("seeds", errors, seeds)
+        step("webhooks", errors, webhooks)
         step("scheduler", errors, armScheduler)
 
         finished = true

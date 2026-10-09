@@ -124,8 +124,8 @@ internal class PlayerErasureIT : RenewalITBase() {
         val unshippedShipment = raw("market_shipment", "orderId" to unshipped.id, "providerId" to "manual", "status" to "CREATED", "merchantReference" to "M-2-$name", "toAddress" to address, "fromAddress" to "{}")
 
         // webhook deliveries: a finished one is blanked, a pending one is still sent
-        raw("market_webhook_delivery", "eventId" to java.util.UUID.randomUUID().toString(), "event" to "order.paid", "orderId" to shipped.id, "url" to "https://hooks.invalid/x", "format" to "JSON", "signing" to "NONE", "body" to "{\"email\":\"erin@example.com\"}", "status" to "SUCCEEDED")
-        raw("market_webhook_delivery", "eventId" to java.util.UUID.randomUUID().toString(), "event" to "order.paid", "orderId" to shipped.id, "url" to "https://hooks.invalid/x", "format" to "JSON", "signing" to "NONE", "body" to "{\"email\":\"erin@example.com\"}", "status" to "PENDING")
+        raw("webhook_delivery", "eventId" to java.util.UUID.randomUUID().toString(), "source" to "market", "event" to "market.order.paid", "subjectRef" to "order:${shipped.id}", "url" to "https://hooks.invalid/x", "format" to "JSON", "signing" to "NONE", "body" to "{\"email\":\"erin@example.com\"}", "status" to "SUCCEEDED")
+        raw("webhook_delivery", "eventId" to java.util.UUID.randomUUID().toString(), "source" to "market", "event" to "market.order.paid", "subjectRef" to "order:${shipped.id}", "url" to "https://hooks.invalid/x", "format" to "JSON", "signing" to "NONE", "body" to "{\"email\":\"erin@example.com\"}", "status" to "PENDING")
 
         // credits, cart, addresses
         fx.credit(user, 5_000)
@@ -277,8 +277,8 @@ internal class PlayerErasureIT : RenewalITBase() {
         assertEquals(address, one("market_shipment", s.unshippedShipment, "toAddress"))
 
         // 14: finished webhook deliveries are blanked, a pending one is still sent
-        assertEquals("{}", sql("SELECT `body` FROM `pano_market_webhook_delivery` WHERE `status` = 'SUCCEEDED' AND `orderId` = ?", s.shipped.id).single().getString("body"))
-        assertTrue(sql("SELECT `body` FROM `pano_market_webhook_delivery` WHERE `status` = 'PENDING' AND `orderId` = ?", s.shipped.id).single().getString("body").contains("erin@example.com"))
+        assertEquals("{}", sql("SELECT `body` FROM `pano_webhook_delivery` WHERE `status` = 'SUCCEEDED' AND `subjectRef` = ?", "order:${s.shipped.id}").single().getString("body"))
+        assertTrue(sql("SELECT `body` FROM `pano_webhook_delivery` WHERE `status` = 'PENDING' AND `subjectRef` = ?", "order:${s.shipped.id}").single().getString("body").contains("erin@example.com"))
 
         // 15: creator
         assertEquals(0L, count("market_creator_code", "`creatorUserId` = ?", s.user.id))
@@ -347,7 +347,7 @@ internal class PlayerErasureIT : RenewalITBase() {
         val out = StringBuilder()
 
         for (table in listOf(
-            "market_order", "market_order_item", "market_payment", "market_payment_event", "market_shipment", "market_webhook_delivery", "market_mail_outbox", "market_redemption",
+            "market_order", "market_order_item", "market_payment", "market_payment_event", "market_shipment", "webhook_delivery", "market_mail_outbox", "market_redemption",
             "market_entitlement", "market_subscription", "market_credit_account", "market_credit_tx", "market_credit_entry", "market_order_event", "market_block", "market_provider_state",
             "market_throttle", "market_cart", "market_address", "market_creator_code"
         )) {
@@ -444,6 +444,38 @@ internal class PlayerErasureIT : RenewalITBase() {
         } finally {
             directory.toFile().deleteRecursively()
         }
+    }
+
+    @Test
+    fun `19_11 case 4c the housekeeping job blanks the settled webhook bodies of an erased order in core's log, by order and by action delivery, and nothing else`(): Unit = runBlocking {
+        val s = seed()
+        val service = service(null)
+        val job = HousekeepingJob(w.clock, { "pano_" }, { w.pool }, null, null, service, null)
+
+        service.erase(s.user.id)
+
+        val action = raw("market_delivery", "orderId" to s.shipped.id, "idempotencyKey" to "k-erasure-${System.nanoTime()}", "status" to "CONFIRMED")
+        val body = "{\"email\":\"erin@example.com\"}"
+
+        suspend fun hook(status: String, source: String = "market", subjectRef: String? = null, ownerRef: String? = null) = raw(
+            "webhook_delivery",
+            "eventId" to java.util.UUID.randomUUID().toString(), "source" to source, "event" to "$source.order.paid", "subjectRef" to subjectRef, "ownerRef" to ownerRef,
+            "url" to "https://hooks.invalid/x", "format" to "JSON", "signing" to "NONE", "body" to body, "status" to status
+        )
+
+        val byOrder = hook("SUCCEEDED", subjectRef = "order:${s.shipped.id}")
+        val byAction = hook("DEAD", ownerRef = "delivery:$action")
+        val pending = hook("PENDING", subjectRef = "order:${s.shipped.id}")
+        val otherSource = hook("SUCCEEDED", source = "shop", subjectRef = "order:${s.shipped.id}")
+        val otherOrder = hook("SUCCEEDED", subjectRef = "order:987654321")
+        val otherAction = hook("SUCCEEDED", ownerRef = "delivery:987654321")
+
+        job.run(HousekeepingJob.Task.ERASURE)
+
+        assertEquals("{}", one("webhook_delivery", byOrder, "body"))
+        assertEquals("{}", one("webhook_delivery", byAction, "body"))
+
+        for (id in listOf(pending, otherSource, otherOrder, otherAction)) assertEquals(body, one("webhook_delivery", id, "body"), "row $id keeps its body")
     }
 
     @Test

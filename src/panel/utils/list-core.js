@@ -1,24 +1,24 @@
 // SDK-free core of list.js / context.js: the host calls are injected, so the logic is unit tested.
-import { marketPath } from './api.js';
+import { failureOf } from './api.js';
 import { guard } from './guard.js';
+import { emptyList } from './page.js';
 import { PLUGIN_ID } from './plugin.js';
 
 /** GET /context; null on any failure. `get` = ({ path, request }) => Promise<body>. */
 export async function loadContextWith({ get }, event) {
-  const body = await get({ path: marketPath('/context'), request: event });
-  if (!body || typeof body !== 'object' || body.error) return null;
+  const body = await get({ path: '/context', request: event });
+  if (failureOf(body)) return null;
   return body;
 }
 
 /**
  * Core of loadList. `deps` = { get, buildQueryParams }.
- * See list.js for the options.
+ * See list.js for the options. The answer keeps the core shape: `data.items`, `data.page` (an object, read it with pageOf()).
  */
-export async function loadListWith(deps, event, { path, params = [], nodes, emptyKey, title }) {
+export async function loadListWith(deps, event, { path, params = [], nodes, title }) {
   const { get, buildQueryParams } = deps;
-  const empty = (error, filters = {}) => ({
-    data: { [emptyKey]: [], count: 0, totalPage: 1, page: 1, error, ctx: null, filters },
-  });
+  // A failed load is a list with no rows and the error code (04 section 4: `{ items, page }`); the page reads it with pageOf().
+  const empty = (error, filters = {}) => ({ data: emptyList(error, { ctx: null, filters }) });
 
   const allowed = await guard(event, nodes);
   if (allowed.denied) return empty('NO_PERMISSION');
@@ -30,26 +30,22 @@ export async function loadListWith(deps, event, { path, params = [], nodes, empt
 
   const fetchPage = (page) =>
     get({
-      path: marketPath(path) + buildQueryParams({ ...filters, page: page === 1 ? null : page }),
+      path: path + buildQueryParams({ ...filters, page: page === 1 ? null : page }),
       request: event,
     });
 
   let [body, ctx] = await Promise.all([fetchPage(requested), loadContextWith(deps, event)]);
-  let page = requested;
 
   // A stale ?page= (bookmark, back button) points past the last page: refetch page 1 once.
-  if (body?.error === 'PAGE_NOT_FOUND' && requested > 1) {
-    page = 1;
+  if (failureOf(body) === 'PAGE_NOT_FOUND' && requested > 1) {
     body = await fetchPage(1);
   }
 
-  if (!body || typeof body !== 'object' || body.error) {
-    const failed = empty(
-      (body && typeof body === 'object' && body.error) || 'NETWORK_ERROR',
-      filters,
-    );
+  const failure = failureOf(body);
+  if (failure) {
+    const failed = empty(failure, filters);
     failed.data.ctx = ctx;
     return failed;
   }
-  return { data: { ...body, page, ctx, filters } };
+  return { data: { ...body, ctx, filters } };
 }

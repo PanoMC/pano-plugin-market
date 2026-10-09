@@ -55,7 +55,7 @@ export const productCanonical = (origin, slug) => `${origin}${productPath(slug)}
 
 export function productImageUrl(origin, product) {
   return product?.imageFileName
-    ? `${origin}/api/market/products/image/${encodeURIComponent(product.imageFileName)}`
+    ? `${origin}/api/plugins/pano-plugin-market/products/image/${encodeURIComponent(product.imageFileName)}`
     : null;
 }
 

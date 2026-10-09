@@ -1,5 +1,15 @@
 package com.panomc.plugins.market.routes.user.address
 
+import io.vertx.json.schema.common.dsl.Schemas.intSchema
+import com.panomc.plugins.market.error.StoreUnavailable
+import com.panomc.plugins.market.error.StoreDisabled
+import com.panomc.platform.error.NotLoggedIn
+import com.panomc.platform.error.NotFound
+import com.panomc.plugins.market.routes.base.MarketSchemas
+import com.panomc.platform.error.InvalidFields
+import com.panomc.platform.schema.EndpointDoc
+import com.panomc.platform.schema.CoreSchemas
+import com.panomc.platform.error.BadRequest
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
@@ -20,9 +30,9 @@ import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters.param
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.Parameters.param
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
@@ -48,10 +58,17 @@ private fun idAndBodyValidation(schemaRepository: SchemaRepository): ValidationH
         .predicate(RequestPredicate.BODY_REQUIRED)
         .build()
 
-/** `GET /api/market/me/addresses` (`USER`): `{addresses: Address & {id, label, isDefault}[]}`, the default one first. */
+/** `GET /api/market/me/addresses` (`USER`): `{items: Address & {id, label, isDefault}[]}`, the default one first. */
 @Endpoint
 class GetAddressesAPI(private val plugin: MarketPlugin) : MarketUserApi() {
-    override val paths = listOf(Path("/api/market/me/addresses", RouteType.GET))
+    override val paths = listOf(Path("/me/addresses", RouteType.GET))
+
+    override val doc = EndpointDoc(
+        summary = "The saved shipping addresses of the buyer.",
+        tag = "me",
+        response = CoreSchemas.list(objectSchema()),
+        errors = listOf(NotLoggedIn::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     private val book by lazy { addressBookService(plugin) }
 
@@ -64,7 +81,14 @@ class GetAddressesAPI(private val plugin: MarketPlugin) : MarketUserApi() {
 /** `POST /api/market/me/addresses` (`USER`): an `Address` plus `label?`, `isDefault?`; `{id}`. 400 `SHIPPING_ADDRESS_REQUIRED {fields}` for an address that is not complete; at most 10 per user. */
 @Endpoint
 class CreateAddressAPI(private val plugin: MarketPlugin) : MarketUserApi() {
-    override val paths = listOf(Path("/api/market/me/addresses", RouteType.POST))
+    override val paths = listOf(Path("/me/addresses", RouteType.POST))
+
+    override val doc = EndpointDoc(
+        summary = "Saves a shipping address and answers its id.",
+        tag = "me",
+        response = objectSchema().requiredProperty("id", intSchema()),
+        errors = listOf(BadRequest::class, InvalidFields::class, NotLoggedIn::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     private val book by lazy { addressBookService(plugin) }
 
@@ -80,7 +104,14 @@ class CreateAddressAPI(private val plugin: MarketPlugin) : MarketUserApi() {
 /** `PUT /api/market/me/addresses/:id` (`USER`): replaces the address; `{}`; 404 for the address of another user. */
 @Endpoint
 class UpdateAddressAPI(private val plugin: MarketPlugin) : MarketUserApi() {
-    override val paths = listOf(Path("/api/market/me/addresses/:id", RouteType.PUT))
+    override val paths = listOf(Path("/me/addresses/:id", RouteType.PUT))
+
+    override val doc = EndpointDoc(
+        summary = "Changes a saved shipping address.",
+        tag = "me",
+        response = MarketSchemas.empty(),
+        errors = listOf(BadRequest::class, InvalidFields::class, NotFound::class, NotLoggedIn::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     private val book by lazy { addressBookService(plugin) }
 
@@ -99,7 +130,14 @@ class UpdateAddressAPI(private val plugin: MarketPlugin) : MarketUserApi() {
 /** `DELETE /api/market/me/addresses/:id` (`USER`): `{}`; 404 for the address of another user. */
 @Endpoint
 class DeleteAddressAPI(private val plugin: MarketPlugin) : MarketUserApi() {
-    override val paths = listOf(Path("/api/market/me/addresses/:id", RouteType.DELETE))
+    override val paths = listOf(Path("/me/addresses/:id", RouteType.DELETE))
+
+    override val doc = EndpointDoc(
+        summary = "Deletes a saved shipping address.",
+        tag = "me",
+        response = MarketSchemas.empty(),
+        errors = listOf(NotFound::class, NotLoggedIn::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     private val book by lazy { addressBookService(plugin) }
 

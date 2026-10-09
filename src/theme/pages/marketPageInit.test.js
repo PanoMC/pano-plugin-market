@@ -7,10 +7,10 @@ import fs from 'node:fs';
 // lines still sat unmerged in the browser. The market pages that carry the cart badge therefore start the cart themselves on mount.
 describe('market pages start the cart on mount', () => {
   for (const page of ['StorePage.svelte', 'ProductPage.svelte']) {
-    test(`${page} calls cart.autoInit() inside onMount`, () => {
+    test(`${page} calls cartActions().autoInit() inside onMount`, () => {
       const source = fs.readFileSync(new URL(`./${page}`, import.meta.url), 'utf8');
       const mount = source.indexOf('onMount(() => {');
-      const call = source.indexOf('cart.autoInit();', mount);
+      const call = source.indexOf('cartActions().autoInit();', mount);
 
       expect(mount).toBeGreaterThan(-1);
       expect(call).toBeGreaterThan(mount);

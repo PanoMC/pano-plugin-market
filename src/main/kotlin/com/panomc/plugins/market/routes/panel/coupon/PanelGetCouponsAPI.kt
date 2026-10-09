@@ -14,7 +14,7 @@ import io.vertx.json.schema.SchemaRepository
 /** `GET /api/panel/market/coupons` (`P:DISC`): the live coupons with their counters; query `page`, `pageSize`, `search`, `status`. */
 @Endpoint
 class PanelGetCouponsAPI(plugin: MarketPlugin) : PromotionAdminRoute(plugin, Promotion.COUPON) {
-    override val paths = listOf(Path("/api/panel/market/coupons", RouteType.GET))
+    override val paths = listOf(Path("/coupons", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = listValidation(schemaRepository)
 

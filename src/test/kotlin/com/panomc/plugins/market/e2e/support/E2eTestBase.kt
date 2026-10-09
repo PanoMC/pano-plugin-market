@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.TestInstance
 import java.math.BigDecimal
 import java.util.UUID
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * Base of every tier-T4 class (17 section 8): the once-per-JVM [E2eSession] (guards, admin session, settings, fake providers, standard
@@ -64,7 +65,7 @@ abstract class E2eTestBase {
         client: E2eClient, body: JsonObject, method: String? = "fake", key: String = idempotencyKey(), headers: Map<String, String> = emptyMap()
     ): E2eResponse {
         if (method != null && !body.containsKey("paymentMethodId")) body.put("paymentMethodId", method)
-        return client.post("/api/market/checkout", body, mapOf("Idempotency-Key" to key) + headers)
+        return client.post("${MarketPaths.SITE_ROOT}/checkout", body, mapOf("Idempotency-Key" to key) + headers)
     }
 
     protected fun publicIdOf(checkout: E2eResponse): String = checkout.obj().getJsonObject("order").getString("publicId")
@@ -102,7 +103,7 @@ abstract class E2eTestBase {
 
     /** `GET /api/market/orders/:publicId`: the answer is `{order: OrderView}`; this returns the view. */
     protected fun order(client: E2eClient, publicId: String, orderToken: String? = null): JsonObject =
-        client.get("/api/market/orders/$publicId", orderToken?.let { mapOf("X-Order-Token" to it) } ?: emptyMap()).ok().obj().getJsonObject("order")
+        client.get("${MarketPaths.SITE_ROOT}/orders/$publicId", orderToken?.let { mapOf("X-Order-Token" to it) } ?: emptyMap()).ok().obj().getJsonObject("order")
 
     protected fun productStock(productId: Long): Long? = db.long("SELECT `stock` FROM `pano_market_product` WHERE `id` = ?", productId)
 

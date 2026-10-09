@@ -172,9 +172,9 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _, showErrorToast, showSuccessToast } from '../../../i18n';
-  import { call, errorKey, marketPath } from '../../utils/api.js';
+  import { call, errorKey } from '../../utils/api.js';
   import { toEpoch, toLocalInput } from '../../utils/format.js';
   import {
     METRICS,
@@ -229,8 +229,8 @@
     const body = goalBody(current);
     const result = await call(
       goalId === null
-        ? ApiUtil.post({ path: marketPath('/goals'), body })
-        : ApiUtil.put({ path: marketPath(`/goals/${goalId}`), body }),
+        ? api.panel.post({ path: '/goals', body })
+        : api.panel.put({ path: `/goals/${goalId}`, body }),
     );
     saving = false;
 

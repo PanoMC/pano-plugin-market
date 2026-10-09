@@ -2,7 +2,10 @@ package com.panomc.plugins.market.routes.api.order
 
 import com.panomc.plugins.market.core.abuse.AbuseLimits
 import com.panomc.plugins.market.runtime.beans
+import com.panomc.platform.api.webhook.DirectWebhook
+import com.panomc.platform.api.webhook.webhookPublisher
 import com.panomc.platform.auth.AuthProvider
+import com.panomc.platform.db.dao.WebhookDeliveryDao
 import com.panomc.platform.auth.PermissionManager
 import com.panomc.platform.server.ServerManager
 import com.panomc.platform.config.ConfigManager
@@ -14,7 +17,6 @@ import com.panomc.plugins.market.core.abuse.IpRange
 import com.panomc.plugins.market.core.time.SecureIds
 import com.panomc.plugins.market.core.time.SystemClock
 import com.panomc.plugins.market.core.webhook.StoreInfo
-import com.panomc.plugins.market.core.webhook.TargetPolicy
 import com.panomc.plugins.market.db.dao.MarketCreditAccountDao
 import com.panomc.plugins.market.db.dao.MarketCreditEntryDao
 import com.panomc.plugins.market.db.dao.MarketCreditTxDao
@@ -37,8 +39,6 @@ import com.panomc.plugins.market.db.dao.MarketShipmentEventDao
 import com.panomc.plugins.market.db.dao.MarketShipmentItemDao
 import com.panomc.plugins.market.db.dao.MarketSubscriptionDao
 import com.panomc.plugins.market.db.dao.MarketSubscriptionRenewalDao
-import com.panomc.plugins.market.db.dao.MarketWebhookDeliveryDao
-import com.panomc.plugins.market.db.dao.MarketWebhookEndpointDao
 import com.panomc.plugins.market.db.tx.Locks
 import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.error.TooManyRequests
@@ -61,8 +61,8 @@ import com.panomc.plugins.market.service.CreditHoldGuard
 import com.panomc.plugins.market.service.CreditService
 import com.panomc.plugins.market.service.DeliveryEffects
 import com.panomc.plugins.market.service.GoalEffects
+import com.panomc.plugins.market.service.ActionWebhookQueue
 import com.panomc.plugins.market.service.DeliveryService
-import com.panomc.plugins.market.service.DeliveryWebhookReporter
 import com.panomc.plugins.market.service.EntitlementService
 import com.panomc.plugins.market.service.PermissionGrantService
 import com.panomc.plugins.market.service.DuplicateRefundPolicy
@@ -81,10 +81,8 @@ import com.panomc.plugins.market.service.SubscriptionService
 import com.panomc.plugins.market.service.SubscriptionWebhooks
 import com.panomc.plugins.market.routes.panel.shipping.shippingService
 import com.panomc.plugins.market.routes.panel.webhook.discordLabelSource
-import com.panomc.plugins.market.routes.panel.webhook.discordWebhookRenderer
 import com.panomc.plugins.market.routes.api.payment.attemptLocks
 import com.panomc.plugins.market.service.OrderService
-import com.panomc.plugins.market.service.OutboundHttp
 import com.panomc.plugins.market.service.PayCaller
 import com.panomc.plugins.market.service.PaidWebhooks
 import com.panomc.plugins.market.service.PurchaseAnnouncements
@@ -93,8 +91,8 @@ import com.panomc.plugins.market.service.PaymentService
 import com.panomc.plugins.market.service.ProductPurchaseLimits
 import com.panomc.plugins.market.service.RedemptionService
 import com.panomc.plugins.market.service.ReservationService
-import com.panomc.plugins.market.service.WebhookSender
 import com.panomc.plugins.market.service.WebhookService
+import com.panomc.plugins.market.util.MarketLinks
 import com.panomc.plugins.market.service.platform.PlatformPermissionWriter
 import com.panomc.plugins.market.service.platform.PlatformPlayerAccounts
 import com.panomc.plugins.market.service.platform.PlatformServerRoster
@@ -130,8 +128,8 @@ private var cachedEntitlements: Pair<MarketPlugin, EntitlementService>? = null
 private var cachedSubscriptions: Pair<MarketPlugin, SubscriptionService>? = null
 
 /**
- * The store webhook writer on the plugin's beans (MK-105): [OrderService] uses its `emitOrderPaid` at O2 / O4. The sender is built as the job
- * will need it, so the same instance can be handed to `WebhookJob`.
+ * The store webhook writer on the plugin's beans (MK-105): [OrderService] uses its `emitOrderPaid` at O2 / O4. It composes the payloads and hands them to
+ * core's `WebhookPublisher` (doc 06 section 4.3), which stores, sends and retries; nothing of the queue lives in the plugin any more.
  */
 internal fun webhookService(plugin: MarketPlugin): WebhookService {
     cachedWebhooks?.takeIf { it.first === plugin }?.let { return it.second }
@@ -143,24 +141,27 @@ internal fun webhookService(plugin: MarketPlugin): WebhookService {
 
 private fun buildWebhookService(plugin: MarketPlugin): WebhookService {
     val context = plugin.beans
-    val databaseManager = { context.getBean(DatabaseManager::class.java) }
     val wiring = paymentWiring(plugin)
-    val version = plugin.applicationContext.getBean(com.panomc.platform.PluginManager::class.java).getPlugin(plugin.pluginId).descriptor.version
-    val sender = WebhookSender(
-        OutboundHttp.create(context.getBean(Vertx::class.java), version), wiring.cipher, SystemClock, version,
-        { TargetPolicy.effectiveAllowPrivate(currentConfig(plugin).allowPrivateWebhookTargets, HostedEnvConfig.current.isHosted) }
-    )
 
     return WebhookService(
-        db = MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock), clock = SystemClock, ids = SecureIds(),
-        endpoints = context.getBean(MarketWebhookEndpointDao::class.java), deliveries = context.getBean(MarketWebhookDeliveryDao::class.java),
-        orders = context.getBean(MarketOrderDao::class.java), orderItems = context.getBean(MarketOrderItemDao::class.java), sender = sender,
-        store = { wiring.site().let { StoreInfo(it.name, it.baseUrl) } },
-        // MK-102: the outcome of the outbox row of a product WEBHOOK action goes back to its delivery row (D12 / D21)
-        reporter = DeliveryWebhookReporter(deliveryService(plugin)),
-        // MK-106: format = DISCORD bodies (08 section 16)
-        renderer = discordWebhookRenderer(plugin)
+        publisher = { plugin.webhookPublisher() }, plugin = plugin,
+        orders = context.getBean(MarketOrderDao::class.java), orderItems = context.getBean(MarketOrderItemDao::class.java),
+        store = { wiring.site().let { StoreInfo(it.name, it.baseUrl, MarketLinks.platform) } }
     )
+}
+
+/**
+ * The `WEBHOOK` action executor's queue: core's `enqueueDirect` on the executor's connection; an `eventId` queued before answers `null` there, so the existing
+ * row is looked up by that id.
+ */
+internal fun actionWebhookQueue(plugin: MarketPlugin): ActionWebhookQueue {
+    val context = plugin.beans
+
+    return ActionWebhookQueue { conn, direct: DirectWebhook ->
+        plugin.webhookPublisher().enqueueDirect(plugin, direct, conn)
+            ?: context.getBean(WebhookDeliveryDao::class.java).getByEventId(direct.eventId, conn)?.id
+            ?: throw IllegalStateException("the webhook row of ${direct.ownerRef} vanished")
+    }
 }
 
 /** The entitlements created at O2 / O4 (MK-102; 08 section 10); one per plugin instance. */
@@ -203,8 +204,9 @@ private fun buildDeliveryService(plugin: MarketPlugin): DeliveryService {
         permissions = PermissionGrantService(
             PlatformPermissionWriter(databaseManager, { context.getBean(PermissionManager::class.java) }, { context.getBean(ServerManager::class.java) }), SystemClock
         ),
-        // MK-106: the WEBHOOK executor writes its outbox row here; the DISCORD bodies of action webhooks use the store's default locale
-        webhookDeliveries = context.getBean(MarketWebhookDeliveryDao::class.java), discordLabels = discordLabelSource(plugin),
+        // MK-106 / MK-15: the WEBHOOK executor queues a direct delivery on core's system (its secret was sealed with the provider cipher); the DISCORD bodies of
+        // action webhooks use the store's default locale
+        webhookQueue = actionWebhookQueue(plugin), webhookSecret = { paymentWiring(plugin).cipher.decrypt(it) }, discordLabels = discordLabelSource(plugin),
         // MK-142: ORDER_DELIVERED when the fulfillment becomes FULFILLED
         fulfilledMails = orderMails(plugin),
         // MK-114: an ACTION creator payout follows its rows (the creator service is looked up when the first row changes, it needs this service itself)
@@ -262,7 +264,8 @@ private fun buildSubscriptionService(plugin: MarketPlugin): SubscriptionService 
         // MK-122: the renewal orders and attempts (random ids) and the cancel of the unpaid renewal order of an ended subscription (the order service is looked up late)
         ids = SecureIds(), orderService = { orderService(plugin) },
         // MK-151: a blocked owner is not charged again (09 section 8.3, 11 section 9.3); no hit counter under the renewal's row locks
-        blocks = blockListService(plugin).asBuyerBlocks(recordHit = false)
+        blocks = blockListService(plugin).asBuyerBlocks(recordHit = false),
+        links = MarketLinks.platform
     )
 }
 
@@ -374,7 +377,7 @@ private fun buildPaymentService(plugin: MarketPlugin): PaymentService {
         orderEvents = context.getBean(MarketOrderEventDao::class.java), payments = context.getBean(MarketPaymentDao::class.java),
         methods = context.getBean(MarketPaymentMethodDao::class.java), creditAccounts = context.getBean(MarketCreditAccountDao::class.java),
         currencyRates = context.getBean(MarketCurrencyRateDao::class.java), lookup = providerLookup(plugin), cipher = wiring.cipher, contexts = attemptContexts(plugin),
-        orderService = orderService(plugin), site = wiring.site, readClient = { databaseManager().getSqlClient() },
+        orderService = orderService(plugin), site = wiring.site, links = MarketLinks.platform, readClient = { databaseManager().getSqlClient() },
         products = context.getBean(MarketProductDao::class.java), entitlements = context.getBean(MarketEntitlementDao::class.java),
         // MK-091 (07 section 5 C3): an order whose credit part is not backed by its hold in the ledger is never completed by a payment
         // MK-121 (09 section 8.5): a payment for a renewal of a closed subscription goes to review (LATE)

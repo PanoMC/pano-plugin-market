@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.e2e
 
+import com.panomc.platform.route.ApiPaths
 import com.panomc.plugins.market.e2e.support.E2eBuyer
 import com.panomc.plugins.market.e2e.support.E2eClient
 import com.panomc.plugins.market.e2e.support.E2eResponse
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * Checkout and payment, happy paths (17 section 9.2): P-01 to P-11 and P-12 to P-21 (tier upgrade, legal acceptance, VAT and billing info on the
@@ -41,7 +43,7 @@ class CheckoutE2E : E2eTestBase() {
         val refused = checkout(visitor("guest"), guestBody(vip.id, guestName()))
         assertEquals(400, refused.status)
         assertEquals("PAYMENT_METHOD_UNAVAILABLE", refused.error)
-        assertEquals("TEST_MODE", refused.json!!.getString("reason"))
+        assertEquals("TEST_MODE", refused.details.getString("reason"))
 
         // the rest of the scenario with the one method a guest may use, the free provider: the order of a guest, its token and its two views
         val guest = visitor("guest")
@@ -92,7 +94,7 @@ class CheckoutE2E : E2eTestBase() {
         val refused = checkout(plain.client, cart(line(vip.id)))
         assertEquals(400, refused.status)
         assertEquals("PAYMENT_METHOD_UNAVAILABLE", refused.error)
-        assertEquals("TEST_MODE", refused.json!!.getString("reason"))
+        assertEquals("TEST_MODE", refused.details.getString("reason"))
         assertEquals(0L, db.count("market_order", "`userId` = ?", plain.userId), "the refused checkout created no order")
 
         // a buyer of the paying group buys the same product: the refusal was the missing node, nothing else
@@ -162,7 +164,7 @@ class CheckoutE2E : E2eTestBase() {
 
     private fun totals(view: JsonObject): JsonObject = view.getJsonObject("totals")
 
-    private fun quote(client: E2eClient, body: JsonObject): JsonObject = client.post("/api/market/checkout/quote", body).ok().obj().getJsonObject("quote")
+    private fun quote(client: E2eClient, body: JsonObject): JsonObject = client.post("${MarketPaths.SITE_ROOT}/checkout/quote", body).ok().obj().getJsonObject("quote")
 
     private fun option(quote: JsonObject, methodId: String): JsonObject =
         quote.getJsonArray("paymentMethods").map { it as JsonObject }.firstOrNull { it.getString("id") == methodId }
@@ -179,7 +181,7 @@ class CheckoutE2E : E2eTestBase() {
 
     /** Cancels an order the scenario leaves unpaid, so no `PENDING` order with a live gateway attempt outlives the run. */
     private fun cancel(client: E2eClient, publicId: String) {
-        val answer = client.post("/api/market/orders/$publicId/cancel")
+        val answer = client.post("${MarketPaths.SITE_ROOT}/orders/$publicId/cancel")
         assertTrue(answer.status == 200 || answer.status == 409, "cancel of $publicId answered ${answer.status} ${answer.error}")
     }
 
@@ -188,7 +190,7 @@ class CheckoutE2E : E2eTestBase() {
 
     private fun tierCategory(mode: String): Long {
         val name = "E2E tiers ${slug("cat")}"
-        val answer = admin.multipart("POST", "/api/panel/market/categories", mapOf("name" to name, "tiered" to "true", "upgradeMode" to mode, "status" to "ACTIVE")).ok()
+        val answer = admin.multipart("POST", "${MarketPaths.PANEL_ROOT}/categories", mapOf("name" to name, "tiered" to "true", "upgradeMode" to mode, "status" to "ACTIVE")).ok()
         return answer.obj().getLong("id")
     }
 
@@ -265,7 +267,7 @@ class CheckoutE2E : E2eTestBase() {
         val buyer = buyer()
         val title = "Terms ${slug("legal")}"
 
-        val v1 = admin.post("/api/panel/market/settings/legal", JsonObject().put("locale", "en-US").put("title", title).put("content", "<p>The terms, first version.</p>")).ok().obj()
+        val v1 = admin.post("${MarketPaths.PANEL_ROOT}/settings/legal", JsonObject().put("locale", "en-US").put("title", title).put("content", "<p>The terms, first version.</p>")).ok().obj()
         val firstId = v1.getLong("id")
 
         session.withSettings(JsonObject().put("legalTextRequired", true)) {
@@ -278,7 +280,7 @@ class CheckoutE2E : E2eTestBase() {
             val refused = checkout(buyer.client, cart(line(vip.id)))
             assertEquals(400, refused.status)
             assertEquals("LEGAL_ACCEPTANCE_REQUIRED", refused.error)
-            assertEquals(firstId, refused.obj().getLong("legalTextId"), "the answer names the text to accept")
+            assertEquals(firstId, refused.details.getLong("legalTextId"), "the answer names the text to accept")
             val wrong = checkout(buyer.client, cart(line(vip.id)).put("acceptLegal", true).put("legalTextId", firstId + 100_000))
             assertEquals(400, wrong.status)
             assertEquals("LEGAL_ACCEPTANCE_REQUIRED", wrong.error)
@@ -295,7 +297,7 @@ class CheckoutE2E : E2eTestBase() {
             assertTrue(row.getLong("legalAcceptedAt") > 0)
 
             // a new version becomes the active one; the stored order keeps what its buyer accepted
-            val secondId = admin.post("/api/panel/market/settings/legal", JsonObject().put("locale", "en-US").put("title", title).put("content", "<p>The terms, second version.</p>")).ok().obj().getLong("id")
+            val secondId = admin.post("${MarketPaths.PANEL_ROOT}/settings/legal", JsonObject().put("locale", "en-US").put("title", title).put("content", "<p>The terms, second version.</p>")).ok().obj().getLong("id")
             assertNotEquals(firstId, secondId)
             assertEquals(firstId, orderRow(publicId).getLong("legalTextId"), "a new legal version does not change the stored id")
             assertEquals(secondId, quote(buyer.client, cart(line(vip.id))).getJsonObject("legal").getLong("id"), "new checkouts see the new version")
@@ -328,7 +330,7 @@ class CheckoutE2E : E2eTestBase() {
             val refused = checkout(buyer.client, body())
             assertEquals(400, refused.status)
             assertEquals("BUYER_INFO_REQUIRED", refused.error)
-            val fields = errorCodes(refused.obj().getJsonArray("fields"))
+            val fields = errorCodes(refused.details.getJsonArray("fields"))
             assertTrue(fields.contains("billingInfo.firstName") && fields.contains("billingInfo.country") && fields.contains("billingInfo.line1"), "fields: $fields")
 
             val billing = JsonObject().put("type", "INDIVIDUAL").put("firstName", "Ada").put("lastName", "Lovelace").put("country", "DE")
@@ -362,7 +364,7 @@ class CheckoutE2E : E2eTestBase() {
             assertEquals("DE", snapshot.getJsonObject("buyer").getString("country"))
 
             // the buyer can download it
-            val pdf = buyer.client.get("/api/market/orders/$publicId/invoice")
+            val pdf = buyer.client.get("${MarketPaths.SITE_ROOT}/orders/$publicId/invoice")
             assertEquals(200, pdf.status)
             assertEquals("%PDF", String(pdf.body, 0, 4, Charsets.US_ASCII))
             assertTrue(pdf.header("Content-Disposition").orEmpty().startsWith("attachment"))
@@ -376,7 +378,7 @@ class CheckoutE2E : E2eTestBase() {
         val vip = catalog.fresh("VIP")
         val buyer = buyer()
 
-        admin.post("/api/panel/market/payment-methods/fake", JsonObject().put("config", JsonObject().put("feeMode", "BUYER").put("feePercent", 2.5).put("feeFixed", 0.30))).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/fake", JsonObject().put("config", JsonObject().put("feeMode", "BUYER").put("feePercent", 2.5).put("feeFixed", 0.30))).ok()
         try {
             // 2.5 % of 10.00 = 0.25, plus 0.30
             val quoted = quote(buyer.client, cart(line(vip.id)).put("paymentMethodId", "fake"))
@@ -397,7 +399,7 @@ class CheckoutE2E : E2eTestBase() {
             assertEquals(1055L, db.sql("SELECT `amount` FROM `pano_market_payment` WHERE `reference` = ?", referenceOf(publicId)).single().getLong("amount"), "the attempt asks for goods plus fee")
 
             // another method on /pay: only the fee (and the credit part) is re-priced, the goods are not
-            val eur = buyer.client.post("/api/market/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake-eur")).ok()
+            val eur = buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake-eur")).ok()
             assertNotNull(eur.obj().getJsonObject("payment"))
             val switched = orderRow(publicId)
             assertEquals(0L, switched.getLong("paymentFee"), "fake-eur charges no fee")
@@ -406,7 +408,7 @@ class CheckoutE2E : E2eTestBase() {
             assertEquals("fake-eur", switched.getString("paymentMethodId"))
 
             // and back: the fee returns and the order is paid for goods plus fee
-            buyer.client.post("/api/market/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake")).ok()
+            buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake")).ok()
             val back = orderRow(publicId)
             assertEquals(55L, back.getLong("paymentFee"))
             assertEquals(1055L, back.getLong("totalPrice"))
@@ -416,7 +418,7 @@ class CheckoutE2E : E2eTestBase() {
             awaitOrder(publicId, "COMPLETED")
             assertEquals(1055L, orderRow(publicId).getLong("paidAmount"), "the buyer paid goods plus fee")
         } finally {
-            admin.post("/api/panel/market/payment-methods/fake", JsonObject().put("config", JsonObject().put("feeMode", "NONE").put("feePercent", 0).put("feeFixed", 0))).ok()
+            admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/fake", JsonObject().put("config", JsonObject().put("feeMode", "NONE").put("feePercent", 0).put("feeFixed", 0))).ok()
         }
     }
 
@@ -454,14 +456,14 @@ class CheckoutE2E : E2eTestBase() {
         val refused = checkout(buyer.client, cart(line(big.id)), method = "fake-eur")
         assertEquals(400, refused.status)
         assertEquals("PAYMENT_METHOD_UNAVAILABLE", refused.error)
-        assertEquals("AMOUNT_ABOVE_MAXIMUM", refused.json!!.getString("reason"))
+        assertEquals("AMOUNT_ABOVE_MAXIMUM", refused.details.getString("reason"))
         assertEquals(before, db.count("market_order", "`userId` = ?", buyer.userId))
 
         val guestBody = cart(line(small.id)).put("guest", JsonObject().put("username", "Guest_${System.nanoTime().toString(36).takeLast(8)}").put("email", "guest@example.com"))
         val guestRefused = checkout(visitor("guest"), guestBody, method = "fake-eur")
         assertEquals(400, guestRefused.status)
         assertEquals("PAYMENT_METHOD_UNAVAILABLE", guestRefused.error)
-        assertEquals("GUESTS_NOT_SUPPORTED", guestRefused.json!!.getString("reason"))
+        assertEquals("GUESTS_NOT_SUPPORTED", guestRefused.details.getString("reason"))
 
         // the same buyer pays the same cart with the method that fits: the refusal was the amount
         val ok = checkout(buyer.client, cart(line(big.id)), method = "fake").ok()
@@ -485,7 +487,7 @@ class CheckoutE2E : E2eTestBase() {
             val refused = checkout(buyer.client, cart(line(three.id)))
             assertEquals(400, refused.status)
             assertEquals("MINIMUM_ORDER_AMOUNT_NOT_REACHED", refused.error)
-            assertEquals(5.0, refused.obj().getDouble("minimum"), 0.0001)
+            assertEquals(5.0, refused.details.getDouble("minimum"), 0.0001)
             assertEquals(before, db.count("market_order", "`userId` = ?", buyer.userId), "no order was created")
 
             // a cart at or above the minimum goes through
@@ -504,8 +506,8 @@ class CheckoutE2E : E2eTestBase() {
         val buyer = buyer()
         val accounts = JsonArray().add(JsonObject().put("bank", "E2E Bank").put("holder", "E2E Store").put("iban", "DE89370400440532013000").put("currency", "EUR"))
 
-        admin.post("/api/panel/market/payment-methods/bank-transfer", JsonObject().put("settings", JsonObject().put("accounts", accounts.encode()).put("instructions", "Transfer the exact amount."))).ok()
-        admin.post("/api/panel/market/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", true)).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/bank-transfer", JsonObject().put("settings", JsonObject().put("accounts", accounts.encode()).put("instructions", "Transfer the exact amount."))).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", true)).ok()
         try {
             assertEquals(true, option(quote(buyer.client, cart(line(vip.id))), "bank-transfer").getBoolean("available"))
 
@@ -520,12 +522,12 @@ class CheckoutE2E : E2eTestBase() {
             assertEquals("PENDING", attemptStatus(reference))
             assertEquals("PENDING", orderStatus(publicId))
 
-            buyer.client.post("/api/market/orders/$publicId/bank-transfer/notify", JsonObject().put("senderName", "Ada").put("note", "paid today")).ok()
+            buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$publicId/bank-transfer/notify", JsonObject().put("senderName", "Ada").put("note", "paid today")).ok()
             assertEquals("PROCESSING", attemptStatus(reference), "the buyer's notice moves the attempt to PROCESSING")
             assertEquals("PENDING", orderStatus(publicId), "the order waits for the admin")
 
             val orderId = orderRow(publicId).getLong("id")
-            admin.post("/api/panel/market/orders/$orderId/bank-transfer", JsonObject().put("decision", "APPROVE")).ok()
+            admin.post("${MarketPaths.PANEL_ROOT}/orders/$orderId/bank-transfer", JsonObject().put("decision", "APPROVE")).ok()
             awaitOrder(publicId, "COMPLETED")
             assertEquals("SUCCEEDED", attemptStatus(reference))
             assertNotNull(orderRow(publicId).getValue("paidAt"))
@@ -534,8 +536,8 @@ class CheckoutE2E : E2eTestBase() {
             // reject: the attempt fails, the order stays open
             val second = publicIdOf(checkout(buyer.client, cart(line(vip.id)), method = "bank-transfer").ok())
             val secondReference = referenceOf(second)
-            buyer.client.post("/api/market/orders/$second/bank-transfer/notify", JsonObject()).ok()
-            admin.post("/api/panel/market/orders/${orderRow(second).getLong("id")}/bank-transfer", JsonObject().put("decision", "REJECT").put("note", "no money received")).ok()
+            buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$second/bank-transfer/notify", JsonObject()).ok()
+            admin.post("${MarketPaths.PANEL_ROOT}/orders/${orderRow(second).getLong("id")}/bank-transfer", JsonObject().put("decision", "REJECT").put("note", "no money received")).ok()
             assertEquals("FAILED", attemptStatus(secondReference))
             assertEquals("PENDING", orderStatus(second), "a rejected transfer leaves the order PENDING until it expires")
             assertEquals("HELD", orderRow(second).getString("reservationState"))
@@ -543,7 +545,7 @@ class CheckoutE2E : E2eTestBase() {
             cancel(buyer.client, second)
             assertEquals("CANCELLED", orderStatus(second))
         } finally {
-            admin.post("/api/panel/market/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", false)).ok()
+            admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", false)).ok()
         }
     }
 
@@ -557,7 +559,7 @@ class CheckoutE2E : E2eTestBase() {
             .put("paymentLabel", "Cash").put("note", "e2e manual order")
         val key = idempotencyKey()
 
-        val created = admin.post("/api/panel/market/orders", body, mapOf("Idempotency-Key" to key)).ok().obj()
+        val created = admin.post("${MarketPaths.PANEL_ROOT}/orders", body, mapOf("Idempotency-Key" to key)).ok().obj()
         val publicId = created.getString("publicId")
         val id = created.getLong("id")
         val row = orderRow(publicId)
@@ -575,13 +577,13 @@ class CheckoutE2E : E2eTestBase() {
         assertEquals(1L, entitlements(target.userId, vip.id).size.toLong(), "the buyer owns the product")
 
         // a replay with the same key and body is the same order, nothing is created twice
-        val replay = admin.post("/api/panel/market/orders", body, mapOf("Idempotency-Key" to key)).ok().obj()
+        val replay = admin.post("${MarketPaths.PANEL_ROOT}/orders", body, mapOf("Idempotency-Key" to key)).ok().obj()
         assertEquals(id, replay.getLong("id"))
         assertEquals(publicId, replay.getString("publicId"))
         assertEquals(1L, db.count("market_order", "`userId` = ? AND `source` = 'PANEL'", target.userId), "one order for the replayed request")
 
         // no key: refused, nothing created
-        val refused = admin.post("/api/panel/market/orders", body)
+        val refused = admin.post("${MarketPaths.PANEL_ROOT}/orders", body)
         assertEquals(400, refused.status)
         assertEquals(1L, db.count("market_order", "`userId` = ? AND `source` = 'PANEL'", target.userId))
 
@@ -600,24 +602,24 @@ class CheckoutE2E : E2eTestBase() {
         val buyer = buyer()
 
         // packs are only sold while credit top-up is on (the instance bootstrap leaves it off): on for this scenario, off again afterwards
-        admin.post("/api/panel/market/settings/credits", JsonObject().put("creditTopUpEnabled", true)).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/settings/credits", JsonObject().put("creditTopUpEnabled", true)).ok()
         try {
             creditPackScenario(pack, buyer)
         } finally {
-            admin.post("/api/panel/market/settings/credits", JsonObject().put("creditTopUpEnabled", false)).ok()
+            admin.post("${MarketPaths.PANEL_ROOT}/settings/credits", JsonObject().put("creditTopUpEnabled", false)).ok()
         }
     }
 
     private fun creditPackScenario(pack: Long, buyer: E2eBuyer) {
-        val before = buyer.client.get("/api/market/me/credits").ok().obj().getDouble("balance")
+        val before = buyer.client.get("${MarketPaths.SITE_ROOT}/me/credits").ok().obj().getDouble("balance")
         assertEquals(0.0, before, 0.0001)
 
         val publicId = buy(buyer.client, cart(line(pack)))
 
-        Await.until(30_000, 250, "the pack's credits arrive") { buyer.client.get("/api/market/me/credits", log = false).ok().obj().getDouble("balance") >= 500.0 }
-        val credits = buyer.client.get("/api/market/me/credits").ok().obj()
+        Await.until(30_000, 250, "the pack's credits arrive") { buyer.client.get("${MarketPaths.SITE_ROOT}/me/credits", log = false).ok().obj().getDouble("balance") >= 500.0 }
+        val credits = buyer.client.get("${MarketPaths.SITE_ROOT}/me/credits").ok().obj()
         assertEquals(500.0, credits.getDouble("balance"), 0.0001, "balance +500.00")
-        val topUp = credits.getJsonArray("entries").map { it as JsonObject }.single { it.getString("type") == "TOPUP" }
+        val topUp = credits.getJsonArray("items").map { it as JsonObject }.single { it.getString("type") == "TOPUP" }
         assertEquals(500.0, topUp.getDouble("amount"), 0.0001)
         assertEquals(publicId, topUp.getString("orderPublicId"))
         assertEquals(1L, db.count("market_credit_tx", "`type` = 'TOPUP' AND `orderId` = ?", orderRow(publicId).getLong("id")), "exactly one TOPUP ledger row")
@@ -633,9 +635,9 @@ class CheckoutE2E : E2eTestBase() {
         val mixed = checkout(buyer.client, cart(line(pack)).put("useCredits", 1.0))
         assertEquals(400, mixed.status, "useCredits=1.00 next to a gateway method: ${mixed.error}")
         assertEquals("PAYMENT_METHOD_UNAVAILABLE", mixed.error, "a pack next to credits is refused by the credit tender check (A7, 05 test 55)")
-        assertEquals("MIXED_CREDIT_NOT_SUPPORTED", mixed.json!!.getString("reason"))
+        assertEquals("MIXED_CREDIT_NOT_SUPPORTED", mixed.details.getString("reason"))
         assertEquals(ordersBefore, db.count("market_order", "`userId` = ?", buyer.userId), "no refused checkout created an order")
-        assertEquals(500.0, buyer.client.get("/api/market/me/credits").ok().obj().getDouble("balance"), 0.0001, "nothing was spent")
+        assertEquals(500.0, buyer.client.get("${MarketPaths.SITE_ROOT}/me/credits").ok().obj().getDouble("balance"), 0.0001, "nothing was spent")
     }
 
     /**
@@ -645,7 +647,7 @@ class CheckoutE2E : E2eTestBase() {
     private fun assertCreditTenderRefused(refused: E2eResponse, how: String) {
         assertEquals(400, refused.status, "$how: ${refused.error}")
         assertEquals("INVALID_CART", refused.error, how)
-        val lineErrors = refused.json!!.getJsonObject("lineErrors")
+        val lineErrors = refused.details.getJsonObject("lineErrors")
         assertTrue(lineErrors != null && !lineErrors.isEmpty, "$how: the refusal names the pack's line: ${refused.json}")
         assertTrue(lineErrors.fieldNames().all { key -> lineErrors.getJsonArray(key).list.contains("NOT_PAYABLE_WITH_CREDITS") }, "$how: line error NOT_PAYABLE_WITH_CREDITS: $lineErrors")
     }
@@ -653,7 +655,7 @@ class CheckoutE2E : E2eTestBase() {
     // --- P-21 ------------------------------------------------------------------------------------------------------------
 
     private fun setStartKind(kind: String) {
-        admin.post("/api/panel/market/payment-methods/fake", JsonObject().put("settings", JsonObject().put("startKind", kind))).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/fake", JsonObject().put("settings", JsonObject().put("startKind", kind))).ok()
     }
 
     @Test
@@ -676,7 +678,7 @@ class CheckoutE2E : E2eTestBase() {
         }
 
         fun page(url: String): E2eResponse {
-            assertTrue(url.startsWith("/api/market/payments/attempts/") && url.endsWith("/page"), "market serves the page itself: $url")
+            assertTrue(url.startsWith("${MarketPaths.SITE_ROOT}/payments/attempts/") && url.endsWith("/page"), "market serves the page itself: $url")
             return visitor("browser").get(url)
         }
 
@@ -704,7 +706,7 @@ class CheckoutE2E : E2eTestBase() {
             assertTrue(htmlPage.text.contains("Fake gateway payment"))
 
             // an unknown token is a 404
-            assertEquals(404, visitor("browser").get("/api/market/payments/attempts/${"0".repeat(32)}/page").status)
+            assertEquals(404, visitor("browser").get("${MarketPaths.SITE_ROOT}/payments/attempts/${"0".repeat(32)}/page").status)
 
             // IFRAME, INSTRUCTIONS, EMBEDDED are rendered by the order page from OrderView.payment.start
             val (iframeOrder, iframe) = start("IFRAME")
@@ -749,11 +751,11 @@ class CheckoutE2E : E2eTestBase() {
     private fun holdsNode(userId: Long, node: String): Boolean =
         db.count("permission_node", "`holderType` = 'USER' AND `holderId` = ? AND `node` = ? AND `active` = 1", userId, node) > 0
 
-    private fun credits(client: E2eClient): Double = client.get("/api/market/me/credits").ok().obj().getDouble("balance")
+    private fun credits(client: E2eClient): Double = client.get("${MarketPaths.SITE_ROOT}/me/credits").ok().obj().getDouble("balance")
 
     private fun grantCredits(userId: Long, amount: Number) {
         admin.post(
-            "/api/panel/market/credits/accounts/$userId/grant", JsonObject().put("amount", amount).put("note", "e2e checkout seed"), mapOf("Idempotency-Key" to idempotencyKey())
+            "${MarketPaths.PANEL_ROOT}/credits/accounts/$userId/grant", JsonObject().put("amount", amount).put("note", "e2e checkout seed"), mapOf("Idempotency-Key" to idempotencyKey())
         ).ok()
     }
 
@@ -792,11 +794,18 @@ class CheckoutE2E : E2eTestBase() {
 
     private fun events(hook: String): List<JsonObject> = gateway.hooks(hook).map { JsonObject(it.bodyText()) }
 
-    private fun storeWebhook(hook: String, secret: String, vararg events: String): Long = admin.post(
-        "/api/panel/market/webhooks",
-        JsonObject().put("name", "E2E $hook").put("url", "${gateway.baseUrl}/hooks/$hook").put("events", JsonArray(events.toList())).put("format", "JSON")
-            .put("signing", "HMAC_SHA256").put("secret", secret)
-    ).ok().obj().getLong("id")
+    /** A core webhook endpoint for the store events; core generates the signing secret (never typed in) and shows it once, in the answer of the create call. */
+    private class StoreWebhook(val id: Long, val secret: String)
+
+    private fun storeWebhook(hook: String, vararg events: String): StoreWebhook {
+        val saved = admin.post(
+            "${ApiPaths.PANEL_ROOT}/webhooks",
+            JsonObject().put("name", "E2E $hook").put("url", "${gateway.baseUrl}/hooks/$hook").put("events", JsonArray(events.map { if (it == "*" || it.startsWith("market.")) it else "market.$it" })).put("format", "JSON")
+                .put("signing", "HMAC_SHA256")
+        ).ok().obj()
+
+        return StoreWebhook(saved.getLong("id"), saved.getString("secret") ?: throw AssertionError("the create answer carries the generated secret: ${saved.fieldNames()}"))
+    }
 
     // --- P-01 ------------------------------------------------------------------------------------------------------------
 
@@ -804,7 +813,6 @@ class CheckoutE2E : E2eTestBase() {
     fun `P-01 full path browse cart checkout webhook delivery refund`() {
         val storeHook = hookName("p01s")
         val actionHook = hookName("p01a")
-        val storeSecret = "whsec_e2e_p01s_" + System.nanoTime().toString(36)
         val actionSecret = "whsec_e2e_p01a_" + System.nanoTime().toString(36)
         val node = rawNode("p01")
         val vip = catalog.fresh(
@@ -816,16 +824,18 @@ class CheckoutE2E : E2eTestBase() {
                     action("a3", "WEBHOOK", JsonObject().put("url", "${gateway.baseUrl}/hooks/$actionHook").put("format", "JSON").put("signing", "HMAC_SHA256").put("secret", actionSecret))
                 ).encode()
         )
-        val endpointId = storeWebhook(storeHook, storeSecret, "order.paid", "order.refunded")
+        val storeEndpoint = storeWebhook(storeHook, "order.paid", "order.refunded")
+        val endpointId = storeEndpoint.id
+        val storeSecret = storeEndpoint.secret
 
         try {
             val alice = buyer()
             val http = alice.client
 
             // browse: the product page, then the server cart, then the quote of that cart
-            val detail = visitor("anon").get("/api/market/products/${vip.slug}").ok().obj().getJsonObject("product")
+            val detail = visitor("anon").get("${MarketPaths.SITE_ROOT}/products/${vip.slug}").ok().obj().getJsonObject("product")
             assertEquals(vip.slug, detail.getString("slug"))
-            http.post("/api/market/me/cart/items", line(vip.id)).ok()
+            http.post("${MarketPaths.SITE_ROOT}/me/cart/items", line(vip.id)).ok()
             val quoted = quote(http, JsonObject())
             assertEquals(1000L, cents(quoted, "total"), "VIP costs 10.00")
             assertTrue(quoted.getBoolean("canCheckout"))
@@ -871,7 +881,7 @@ class CheckoutE2E : E2eTestBase() {
             Await.until(30_000, 250, "the invoice is issued") { orderRow(publicId).getValue("invoiceId") != null }
             val invoice = db.sql("SELECT * FROM `pano_market_invoice` WHERE `orderId` = ? AND `type` = 'INVOICE'", orderId).single()
             assertEquals(1000L, invoice.getLong("total"))
-            val pdf = http.get("/api/market/orders/$publicId/invoice")
+            val pdf = http.get("${MarketPaths.SITE_ROOT}/orders/$publicId/invoice")
             assertEquals(200, pdf.status)
             assertEquals("%PDF", String(pdf.body, 0, 4, Charsets.US_ASCII))
             assertTrue(pdf.header("Content-Disposition").orEmpty().startsWith("attachment"))
@@ -882,15 +892,15 @@ class CheckoutE2E : E2eTestBase() {
             assertEquals("${alice.username}@example.com", mailsOf(orderId, "ORDER_CONFIRMATION").single().getString("recipient"))
 
             // the store webhook order.paid with a valid signature
-            Await.until(60_000, 500, "order.paid reached the sink") { events(storeHook).any { it.getString("event") == "order.paid" } }
-            val paid = gateway.hooks(storeHook).single { JsonObject(it.bodyText()).getString("event") == "order.paid" }
+            Await.until(60_000, 500, "order.paid reached the sink") { events(storeHook).any { it.getString("event") == "market.order.paid" } }
+            val paid = gateway.hooks(storeHook).single { JsonObject(it.bodyText()).getString("event") == "market.order.paid" }
             verifySignature(paid, storeSecret)
             assertEquals(publicId, JsonObject(paid.bodyText()).getJsonObject("data").getJsonObject("order").getString("publicId"))
 
             // the panel refunds the whole order: once at the gateway, with the refund's idempotency key
             val refundCalls = gateway.requests(FakePayGateway.Op.REFUND).size
             val refundKey = idempotencyKey()
-            val refunded = admin.post("/api/panel/market/orders/$orderId/refunds", JsonObject().put("amount", 10.00).put("revoke", true), mapOf("Idempotency-Key" to refundKey)).ok()
+            val refunded = admin.post("${MarketPaths.PANEL_ROOT}/orders/$orderId/refunds", JsonObject().put("amount", 10.00).put("revoke", true), mapOf("Idempotency-Key" to refundKey)).ok()
             assertEquals("SUCCEEDED", refunded.obj().getJsonObject("refund").getString("status"))
             assertEquals(refundCalls + 1, gateway.requests(FakePayGateway.Op.REFUND).size, "the gateway was asked once")
             assertEquals(refundKey, db.sql("SELECT `idempotencyKey` FROM `pano_market_refund` WHERE `orderId` = ?", orderId).single().getString("idempotencyKey"))
@@ -912,14 +922,14 @@ class CheckoutE2E : E2eTestBase() {
 
             // credit note, order.refunded webhook, ORDER_REFUNDED mail
             Await.until(30_000, 250, "the credit note is issued") { db.count("market_invoice", "`orderId` = ? AND `type` = 'CREDIT_NOTE'", orderId) == 1L }
-            Await.until(60_000, 500, "order.refunded reached the sink") { events(storeHook).any { it.getString("event") == "order.refunded" } }
-            val refundedHook = gateway.hooks(storeHook).single { JsonObject(it.bodyText()).getString("event") == "order.refunded" }
+            Await.until(60_000, 500, "order.refunded reached the sink") { events(storeHook).any { it.getString("event") == "market.order.refunded" } }
+            val refundedHook = gateway.hooks(storeHook).single { JsonObject(it.bodyText()).getString("event") == "market.order.refunded" }
             verifySignature(refundedHook, storeSecret)
             Await.until(30_000, 250, "the refund mail is queued") { mailsOf(orderId, "ORDER_REFUNDED").isNotEmpty() }
             assertEquals(1, mailsOf(orderId, "ORDER_REFUNDED").size)
             assertMailsTerminal(orderId)
         } finally {
-            admin.delete("/api/panel/market/webhooks/$endpointId")
+            admin.delete("${ApiPaths.PANEL_ROOT}/webhooks/$endpointId")
         }
     }
 
@@ -945,7 +955,7 @@ class CheckoutE2E : E2eTestBase() {
         assertEquals("Enjoy!", row.getString("giftMessage"))
 
         // an unpaid gift is invisible to the recipient
-        assertTrue(bob.client.get("/api/market/me/orders").ok().obj().getJsonArray("orders").none { (it as JsonObject).getString("publicId") == publicId })
+        assertTrue(bob.client.get("${MarketPaths.SITE_ROOT}/me/orders").ok().obj().getJsonArray("items").none { (it as JsonObject).getString("publicId") == publicId })
 
         payViaFake(publicId)
         awaitOrder(publicId, "COMPLETED")
@@ -965,18 +975,18 @@ class CheckoutE2E : E2eTestBase() {
         assertMailsTerminal(orderId)
 
         // bob's order list shows it as received, alice's as her own
-        val bobs = bob.client.get("/api/market/me/orders").ok().obj().getJsonArray("orders").map { it as JsonObject }.single { it.getString("publicId") == publicId }
+        val bobs = bob.client.get("${MarketPaths.SITE_ROOT}/me/orders").ok().obj().getJsonArray("items").map { it as JsonObject }.single { it.getString("publicId") == publicId }
         assertEquals(true, bobs.getBoolean("received"))
         assertEquals(true, bobs.getBoolean("isGift"))
-        val alices = alice.client.get("/api/market/me/orders").ok().obj().getJsonArray("orders").map { it as JsonObject }.single { it.getString("publicId") == publicId }
+        val alices = alice.client.get("${MarketPaths.SITE_ROOT}/me/orders").ok().obj().getJsonArray("items").map { it as JsonObject }.single { it.getString("publicId") == publicId }
         assertEquals(false, alices.getBoolean("received"))
 
         // the limit (one per player) is counted on the recipient: another gift of the product to bob is refused, a purchase for alice is not
         val second = checkout(alice.client, cart(line(gift.id)).put("recipientUsername", bob.username))
         assertEquals(409, second.status, "a second one-per-player gift to bob: ${second.error} ${second.json}")
         assertEquals("PURCHASE_LIMIT_REACHED", second.error)
-        assertEquals(gift.id, second.obj().getLong("productId"))
-        assertEquals(1, second.obj().getInteger("limit"))
+        assertEquals(gift.id, second.details.getLong("productId"))
+        assertEquals(1, second.details.getInteger("limit"))
         val forAlice = checkout(alice.client, cart(line(gift.id))).ok()
         cancel(alice.client, publicIdOf(forAlice))
     }
@@ -1042,7 +1052,7 @@ class CheckoutE2E : E2eTestBase() {
 
     /** `GET /api/panel/market/stats`: the three summary blocks (`count`, `revenue`, ...). */
     private fun stats(): StatsSummary {
-        val summary = admin.get("/api/panel/market/stats").ok().obj().getJsonObject("summary")
+        val summary = admin.get("${MarketPaths.PANEL_ROOT}/stats").ok().obj().getJsonObject("summary")
 
         return StatsSummary(summary.getJsonObject("total"), summary.getJsonObject("weekly"), summary.getJsonObject("monthly"))
     }
@@ -1050,17 +1060,17 @@ class CheckoutE2E : E2eTestBase() {
     // --- P-08 ------------------------------------------------------------------------------------------------------------
 
     private fun <T> withShipping(block: (Long) -> T): T {
-        val others = admin.get("/api/panel/market/shipping/zones").ok().obj().getJsonArray("zones").map { it as JsonObject }.filter { it.getString("status") == "ACTIVE" }.map { it.getLong("id") }
+        val others = admin.get("${MarketPaths.PANEL_ROOT}/shipping/zones").ok().obj().getJsonArray("items").map { it as JsonObject }.filter { it.getString("status") == "ACTIVE" }.map { it.getLong("id") }
 
-        others.forEach { admin.put("/api/panel/market/shipping/zones/$it", JsonObject().put("status", "INACTIVE")).ok() }
+        others.forEach { admin.put("${MarketPaths.PANEL_ROOT}/shipping/zones/$it", JsonObject().put("status", "INACTIVE")).ok() }
         try {
             val zoneId = admin.post(
-                "/api/panel/market/shipping/zones", JsonObject().put("name", "E2E P-08 zone ${unique.incrementAndGet()}").put("countries", JsonArray().add("DE")).put("status", "ACTIVE")
+                "${MarketPaths.PANEL_ROOT}/shipping/zones", JsonObject().put("name", "E2E P-08 zone ${unique.incrementAndGet()}").put("countries", JsonArray().add("DE")).put("status", "ACTIVE")
             ).ok().obj().getLong("id")
 
             try {
                 val methodId = admin.post(
-                    "/api/panel/market/shipping/methods",
+                    "${MarketPaths.PANEL_ROOT}/shipping/methods",
                     JsonObject().put("name", "E2E P-08 method ${unique.get()}").put("providerId", "manual").put("rateSource", "RULES").put("status", "ACTIVE")
                         .put("rates", JsonArray().add(JsonObject().put("zoneId", zoneId).put("basis", "WEIGHT").put("rangeFrom", 0).put("rangeTo", 1999).put("price", 4.9)))
                 ).ok().obj().getLong("id")
@@ -1068,13 +1078,13 @@ class CheckoutE2E : E2eTestBase() {
                 try {
                     return block(methodId)
                 } finally {
-                    admin.delete("/api/panel/market/shipping/methods/$methodId")
+                    admin.delete("${MarketPaths.PANEL_ROOT}/shipping/methods/$methodId")
                 }
             } finally {
-                admin.delete("/api/panel/market/shipping/zones/$zoneId")
+                admin.delete("${MarketPaths.PANEL_ROOT}/shipping/zones/$zoneId")
             }
         } finally {
-            others.forEach { admin.put("/api/panel/market/shipping/zones/$it", JsonObject().put("status", "ACTIVE")) }
+            others.forEach { admin.put("${MarketPaths.PANEL_ROOT}/shipping/zones/$it", JsonObject().put("status", "ACTIVE")) }
         }
     }
 
@@ -1130,10 +1140,10 @@ class CheckoutE2E : E2eTestBase() {
         val accounts = JsonArray().add(JsonObject().put("bank", "E2E Bank").put("holder", "E2E Store").put("iban", "DE89370400440532013000").put("currency", "EUR"))
 
         admin.post(
-            "/api/panel/market/payment-methods/bank-transfer",
+            "${MarketPaths.PANEL_ROOT}/payment-methods/bank-transfer",
             JsonObject().put("settings", JsonObject().put("accounts", accounts.encode()).put("instructions", "Transfer the exact amount."))
         ).ok()
-        admin.post("/api/panel/market/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", true)).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", true)).ok()
     }
 
     @Test
@@ -1143,7 +1153,7 @@ class CheckoutE2E : E2eTestBase() {
         val (couponId, coupon) = catalog.freshCoupon(10)
         val code = "STR" + System.currentTimeMillis().toString(36).uppercase() + unique.incrementAndGet()
         val codeId = admin.post(
-            "/api/panel/market/creator-codes",
+            "${MarketPaths.PANEL_ROOT}/creator-codes",
             JsonObject().put("creator", streamer.username).put("code", code).put("discount", 5).put("unit", "PERCENT").put("commissionPercent", 10)
         ).ok().obj().getLong("id")
 
@@ -1166,8 +1176,8 @@ class CheckoutE2E : E2eTestBase() {
                         val used = db.long("SELECT `usedCount` FROM `pano_market_coupon` WHERE `id` = ?", couponId)!!
                         val publicId = publicIdOf(checkout(buyer.client, body(), method = "bank-transfer").ok())
 
-                        buyer.client.post("/api/market/orders/$publicId/bank-transfer/notify", JsonObject().put("senderName", "Ada").put("note", "paid")).ok()
-                        admin.post("/api/panel/market/orders/${orderRow(publicId).getLong("id")}/bank-transfer", JsonObject().put("decision", "APPROVE")).ok()
+                        buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$publicId/bank-transfer/notify", JsonObject().put("senderName", "Ada").put("note", "paid")).ok()
+                        admin.post("${MarketPaths.PANEL_ROOT}/orders/${orderRow(publicId).getLong("id")}/bank-transfer", JsonObject().put("decision", "APPROVE")).ok()
                         awaitOrder(publicId, "COMPLETED")
 
                         val row = orderRow(publicId)
@@ -1195,13 +1205,13 @@ class CheckoutE2E : E2eTestBase() {
                 val earned = db.long("SELECT COALESCE(SUM(`amount`), 0) FROM `pano_market_creator_earning` WHERE `creatorCodeId` = ?", codeId)!!
                 assertEquals(earned, db.long("SELECT `earnings` FROM `pano_market_creator_code` WHERE `id` = ?", codeId), "earnings is updated with every earning")
 
-                val mine = streamer.client.get("/api/market/me/creator").ok().obj()
-                assertEquals(2, mine.getJsonArray("earnings").size(), "the creator's page lists both earnings")
+                val mine = streamer.client.get("${MarketPaths.SITE_ROOT}/me/creator").ok().obj()
+                assertEquals(2, mine.getJsonArray("items").size(), "the creator's page lists both earnings")
                 assertEquals(earned / 100.0, mine.getJsonObject("totals").getDouble("earned"), 0.0001)
-                assertTrue(mine.getJsonArray("earnings").map { it as JsonObject }.all { it.getString("state") == "AVAILABLE" })
+                assertTrue(mine.getJsonArray("items").map { it as JsonObject }.all { it.getString("state") == "AVAILABLE" })
             }
         } finally {
-            admin.post("/api/panel/market/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", false))
+            admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", false))
         }
     }
 
@@ -1218,7 +1228,7 @@ class CheckoutE2E : E2eTestBase() {
         val missing = checkout(buyer.client, cart(line(crate.id)))
         assertEquals(400, missing.status)
         assertEquals("INVALID_CART", missing.error)
-        val lineErrors = missing.obj().getJsonObject("lineErrors")
+        val lineErrors = missing.details.getJsonObject("lineErrors")
         assertTrue(lineErrors.fieldNames().all { key -> lineErrors.getJsonArray(key).list.contains("VARIANT_REQUIRED") } && !lineErrors.isEmpty, "VARIANT_REQUIRED: $lineErrors")
         assertEquals(orders, db.count("market_order", "`userId` = ?", buyer.userId))
 

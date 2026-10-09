@@ -36,6 +36,8 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.SiteLinksFixture
+import com.panomc.plugins.market.util.MarketTargets
 import java.io.File
 
 /**
@@ -571,6 +573,72 @@ class MailTemplateTest {
         assertEquals(3, subjects.toSet().size)
         assertEquals("Test e-mail from Blocky Store", builder().test("en-US").subject)
         assertTrue(builder().test("en-US").items.isEmpty())
+    }
+
+    // ----- the front-end URL map (doc 05 section 10.2) -----------------------------------------------------------------
+
+    /** A site whose theme renamed the order route and whose front-end serves no store page, as the mail builder gets it from the platform. */
+    private fun movedSite(): SiteLinksFixture = SiteLinksFixture(site = "https://play.example.com", website = "https://api.example.com")
+
+    @Test
+    fun `an order mail follows a renamed market order, for a logged-in buyer and a guest`(): Unit = runBlocking {
+        val moved = movedSite().renameOrder()
+
+        site = MailSite("Blocky Network", "https://api.example.com", moved.links)
+
+        val confirmation = builder().build(scenarios("en-US").first { it.name == "order-confirmation" }.input)
+
+        assertEquals("https://play.example.com/shop/purchase/K7M2Q9X4B8D6T3W5Z1RV", confirmation.buttonUrl)
+
+        val shipped = builder().build(scenarios("en-US").first { it.name == "shipment-shipped" }.input)
+
+        assertEquals(
+            "https://play.example.com/shop/purchase/K7M2Q9X4B8D6T3W5Z1RV?token=0f1e2d3c4b5a69788796a5b4c3d2e1f001122334", shipped.secondaryUrl,
+            "the token of a guest order is added to the renamed page"
+        )
+    }
+
+    @Test
+    fun `a mail whose page the front-end does not serve falls back to the page of Pano or leaves the button out`(): Unit = runBlocking {
+        val moved = movedSite().disable("/store/order/[id]", "/store", "/store/[slug]", "/profile")
+
+        site = MailSite("Blocky Network", "https://api.example.com", moved.links)
+
+        // the order page has a fallback page of Pano on the website address
+        val confirmation = builder().build(scenarios("en-US").first { it.name == "order-confirmation" }.input)
+
+        assertEquals("https://api.example.com/_pano/market.order?id=K7M2Q9X4B8D6T3W5Z1RV", confirmation.buttonUrl)
+
+        // no store page: the gift mail has no button, as a mail without a site address has none
+        val gift = builder().build(scenarios("en-US").first { it.name == "gift-received" }.input)
+
+        assertNull(gift.buttonUrl)
+        assertNull(gift.buttonLabel)
+
+        // no product page: the renew button is left out
+        val reminder = builder().build(scenarios("en-US").first { it.name == "expiry-reminder" }.input)
+
+        assertNull(reminder.buttonUrl)
+    }
+
+    @Test
+    fun `the product, store and profile buttons follow the URL map`(): Unit = runBlocking {
+        val moved = movedSite()
+        moved.inputs.overrides = mapOf(MarketTargets.PRODUCT to "/shop/item/{slug}", MarketTargets.STORE to "/shop", "user.profile" to "/me")
+        site = MailSite("Blocky Network", "https://api.example.com", moved.links)
+
+        assertEquals("https://play.example.com/shop/item/gold-rank", builder().build(scenarios("en-US").first { it.name == "expiry-reminder" }.input).buttonUrl)
+        assertEquals("https://play.example.com/shop", builder().build(scenarios("en-US").first { it.name == "gift-received" }.input).buttonUrl)
+    }
+
+    @Test
+    fun `a pay link that older mail rows kept as a path is still made absolute`(): Unit = runBlocking {
+        site = MailSite("Blocky Network", "https://shop.example")
+
+        val reminder = scenarios("en-US").first { it.name == "subscription-reminder-manual" }.input
+        val content = builder().build(reminder)
+
+        assertEquals("https://shop.example/store/order/PAYLINK0000000000000", content.buttonUrl)
     }
 
     @Test

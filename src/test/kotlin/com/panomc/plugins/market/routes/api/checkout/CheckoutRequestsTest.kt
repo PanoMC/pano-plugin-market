@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.ErrorBodies
 
 /** `POST /api/market/checkout`: the `Idempotency-Key` header, the body (PT-1: no other keys), the consent total, and the shape of the route (MK-075). */
 class CheckoutRequestsTest {
@@ -29,7 +30,7 @@ class CheckoutRequestsTest {
     /** 11 PT-2: a quantity violation is 400 `INVALID_CART` whose `lineErrors` name the line by its position in `items`. */
     private fun badQuantity(json: String, index: Int) {
         val e = assertThrows(InvalidCart::class.java) { parse(json) }
-        val extras = JsonObject(e.encode())
+        val extras = ErrorBodies.details(e)
 
         assertEquals("INVALID_CART", e.getErrorCode())
         assertEquals(400, e.getStatusCode())

@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.SiteLinksFixture
 import java.math.BigDecimal
 
 /** JSON bodies of 08 section 15.4. */
@@ -29,19 +30,6 @@ class EventPayloadsTest {
         id = 9, orderId = 42, productId = 3, productName = "VIP", quantity = 2, unitPrice = 450, lineTotal = 900, kind = OrderItemKind.PRODUCT,
         variantName = "Gold", sku = "VIP-G", fieldValues = """{"7":"red"}""", targetServerId = 2, snapshot = """{"slug":"vip","name":"VIP"}"""
     )
-
-    @Test
-    fun `the envelope carries the fields of 15_4`() {
-        val e = EventPayloads.envelope("evt-1", "order.paid", 1_760_000_001_000L, true, store, JsonObject().put("k", 1))
-        assertEquals("evt-1", e.getString("id"))
-        assertEquals("order.paid", e.getString("event"))
-        assertEquals(1_760_000_001_000L, e.getLong("createdAt"))
-        assertEquals(1, e.getInteger("apiVersion"))
-        assertTrue(e.getBoolean("testMode"))
-        assertEquals("Test Craft", e.getJsonObject("store").getString("name"))
-        assertEquals("https://shop.example.com/", e.getJsonObject("store").getString("url"))
-        assertEquals(1, e.getJsonObject("data").getInteger("k"))
-    }
 
     @Test
     fun `order paid has order, buyer, recipient and items with decimal money`() {
@@ -135,11 +123,20 @@ class EventPayloadsTest {
     }
 
     @Test
-    fun `test ping data and the store url join`() {
-        val d = EventPayloads.testPing(7)
-        assertEquals("ping", d.getString("message"))
-        assertEquals(7, d.getLong("endpointId"))
+    fun `the store url joins`() {
         assertNull(EventPayloads.orderUrl(store, null))
         assertEquals("https://shop.example.com/store/order/X", EventPayloads.orderUrl(StoreInfo("a", "https://shop.example.com"), "X"))
+    }
+
+    @Test
+    fun `the order url follows a renamed market order`() {
+        val moved = SiteLinksFixture(site = "https://shop.example.com").renameOrder()
+        val renamed = StoreInfo("Test Craft", "https://shop.example.com", moved.links)
+
+        assertEquals("https://shop.example.com/shop/purchase/X", EventPayloads.orderUrl(renamed, "X"))
+
+        val data = EventPayloads.orderPaid(order, listOf(item), renamed, buyerUuid = "uuid-b", recipientUuid = "uuid-r", serverNames = emptyMap())
+
+        assertEquals("https://shop.example.com/shop/purchase/ABCDEFGHJKMNPQRSTVWX", data.getJsonObject("order").getString("url"))
     }
 }

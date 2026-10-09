@@ -1,5 +1,3 @@
-<ConfirmModal bind:this={confirm} />
-
 <div class="card">
   <div class="card-body">
     <SettingRow
@@ -74,13 +72,6 @@
         <span class="input-group-text">{$_('settings.security.minutes')}</span>
       </div>
     </SettingRow>
-
-    <SwitchRow
-      id="setting-allowPrivateWebhookTargets"
-      label={$_('settings.security.allow-private-webhook-targets')}
-      hint={$_('settings.security.allow-private-webhook-targets-hint')}
-      error={message('allowPrivateWebhookTargets')}
-      bind:checked={draft.allowPrivateWebhookTargets} />
   </div>
 
   <div class="card-footer d-flex justify-content-start">
@@ -96,9 +87,7 @@
 <script>
   import { untrack } from 'svelte';
   import { _ } from '../../../i18n';
-  import ConfirmModal from '../ConfirmModal.svelte';
   import SettingRow from './SettingRow.svelte';
-  import SwitchRow from './SwitchRow.svelte';
   import { fetchSettings, reportFailure, saveSection } from './save.js';
   import {
     SECTION_KEYS,
@@ -107,14 +96,13 @@
     isDirtyBody,
     seedValues,
   } from '../../utils/settings.js';
-  import { needsPrivateTargetConfirm, validateSecurity } from '../../utils/settings-extra.js';
+  import { validateSecurity } from '../../utils/settings-extra.js';
 
   let { settings: initial = {} } = $props();
 
   const KEYS = SECTION_KEYS.security;
   const start = untrack(() => initial ?? {});
 
-  let confirm = $state(null);
   let settings = $state.raw(start);
   let draft = $state(seedValues(start, KEYS));
   let submitted = $state(false);
@@ -155,8 +143,6 @@
     }
   }
 
-  // Allowing private webhook targets opens the server's internal network to webhook calls (SSRF),
-  // so turning it on is a danger confirmation (13 §17 security).
   async function onSave() {
     if (saving || !isDirty) return;
     submitted = true;
@@ -164,17 +150,6 @@
       reportFailure({ status: 'invalid', errors: clientErrors }, KEYS);
       return;
     }
-    if (!needsPrivateTargetConfirm(settings, draft)) {
-      await persist();
-      return;
-    }
-    confirm?.open({
-      icon: 'fa-solid fa-triangle-exclamation',
-      title: $_('settings.security.confirm-private.title'),
-      description: $_('settings.security.confirm-private.description'),
-      confirmLabel: $_('settings.security.confirm-private.cta'),
-      variant: 'danger',
-      onConfirm: persist,
-    });
+    await persist();
   }
 </script>

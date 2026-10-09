@@ -5,7 +5,7 @@
 {/if}
 
 <script module>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { loadContext } from '../utils/context.js';
   import { loadPlayerSummary } from '../components/player/summary.js';
 
@@ -14,7 +14,7 @@
    * @type {import("@sveltejs/kit").PageLoad}
    */
   export function load(event) {
-    return loadPlayerSummary({ get: (o) => ApiUtil.get(o), loadContext }, event, {
+    return loadPlayerSummary({ get: (o) => api.panel.get(o), loadContext }, event, {
       title: 'nav-market',
     });
   }

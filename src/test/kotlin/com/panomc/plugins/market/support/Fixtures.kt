@@ -1,6 +1,9 @@
 package com.panomc.plugins.market.support
 
 import com.google.gson.JsonObject
+import com.panomc.platform.db.model.WebhookEndpoint
+import com.panomc.platform.db.model.WebhookFormat
+import com.panomc.platform.db.model.WebhookSigning
 import com.panomc.plugins.market.db.model.*
 import com.panomc.plugins.market.util.CouponScope
 import com.panomc.plugins.market.util.DiscountScope
@@ -175,9 +178,19 @@ class Fixtures(private val w: TestWiring) {
         return w.shippingMethods.getById(id, pool)!!
     }
 
-    suspend fun webhookEndpoint(url: String = "https://hooks.invalid/market", signing: WebhookSigning = WebhookSigning.NONE, secret: String? = null, events: String = "[\"*\"]"): MarketWebhookEndpoint {
+    /**
+     * An enabled endpoint of core's webhook system. [secret] and [headers] are the **stored** (already encrypted) texts; [events] is the JSON list in the market's own
+     * spelling (`["order.paid"]`), stored with the source core adds (`["market.order.paid"]`); `["*"]` and a name that already has a source stay as they are.
+     */
+    suspend fun webhookEndpoint(
+        url: String = "https://hooks.invalid/market", signing: WebhookSigning = WebhookSigning.NONE, secret: String? = null, events: String = "[\"*\"]",
+        maxAttempts: Int = 8, format: WebhookFormat = WebhookFormat.JSON, headers: String? = null, enabled: Boolean = true, name: String = "Endpoint ${next()}"
+    ): WebhookEndpoint {
         val id = w.webhookEndpoints.add(
-            MarketWebhookEndpoint(name = "Endpoint ${next()}", url = url, signing = signing, secret = secret, events = events, createdAt = w.clock.now(), updatedAt = w.clock.now()),
+            WebhookEndpoint(
+                name = name, url = url, events = WebhookTestSupport.subscribe(events), format = format, signing = signing, secret = secret, headers = headers, enabled = enabled, maxAttempts = maxAttempts,
+                createdAt = w.clock.now(), updatedAt = w.clock.now()
+            ),
             pool
         )
         return w.webhookEndpoints.getById(id, pool)!!

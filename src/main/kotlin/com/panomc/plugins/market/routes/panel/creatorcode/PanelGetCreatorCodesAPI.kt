@@ -14,7 +14,7 @@ import io.vertx.json.schema.SchemaRepository
 /** `GET /api/panel/market/creator-codes` (`P:DISC`): the live creator codes with their counters; query `page`, `pageSize`, `search`, `status`. */
 @Endpoint
 class PanelGetCreatorCodesAPI(plugin: MarketPlugin) : PromotionAdminRoute(plugin, Promotion.CREATOR_CODE) {
-    override val paths = listOf(Path("/api/panel/market/creator-codes", RouteType.GET))
+    override val paths = listOf(Path("/creator-codes", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = listValidation(schemaRepository)
 

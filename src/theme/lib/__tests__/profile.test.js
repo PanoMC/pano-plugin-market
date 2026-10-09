@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { get, writable } from 'svelte/store';
+import { writable } from 'svelte/store';
 import './sdkMocks.js';
+import { createEnv } from './controllerEnv.js';
 import { ERROR_KEYS } from '../errorMap.js';
 import {
   CREDITS_TITLE_KEY,
@@ -45,9 +46,7 @@ import {
   visibleLinks,
 } from '../profileModel.js';
 
-const host = await import('../../utils/host.js');
-const session = await import('../../stores/session.js');
-const profileNav = await import('../../stores/profileNav.js');
+const { hostHas } = await import('../profileNav.js');
 const { registerTheme } = await import('../../register.js?profile');
 
 const root = path.resolve(import.meta.dir, '../../../..');
@@ -212,11 +211,10 @@ describe('list query', () => {
 describe('purchases load', () => {
   const orders = {
     ok: true,
-    orders: [{ publicId: 'a' }],
-    orderCount: 21,
-    totalPage: 2,
+    items: [{ publicId: 'a' }],
+    page: { number: 1, size: 20, totalItems: 21, totalPages: 2 },
   };
-  const ents = { ok: true, entitlements: [{ id: 1 }] };
+  const ents = { ok: true, items: [{ id: 1 }] };
 
   test('ready: orders, entitlements, title, noindex only with page-meta, sidebar only with page-sidebar-id', () => {
     const r = resolvePurchasesLoad({
@@ -227,7 +225,12 @@ describe('purchases load', () => {
       features: { sidebar: true, meta: true },
     });
     expect(r.data.state).toBe('READY');
-    expect(r.data.orders).toMatchObject({ state: 'READY', orderCount: 21, totalPage: 2 });
+    expect(r.data.orders).toMatchObject({
+      state: 'READY',
+      orders: [{ publicId: 'a' }],
+      orderCount: 21,
+      totalPages: 2,
+    });
     expect(r.data.entitlements).toEqual([{ id: 1 }]);
     expect(r.pageTitle).toEqual({ title: PURCHASES_TITLE_KEY });
     expect(r.sidebar).toBe('profile');
@@ -267,16 +270,23 @@ describe('purchases load', () => {
     expect(resolvePurchasesLoad({ orders, entitlements: ents }).data.summary).toBeNull();
   });
 
-  test('readOrders: totalPage is at least 1, counts are numbers', () => {
-    expect(readOrders({ ok: true, orders: [] })).toEqual({
+  test('readOrders: totalPages is at least 1, counts are numbers', () => {
+    expect(readOrders({ ok: true, items: [] })).toEqual({
       state: 'READY',
       orders: [],
       orderCount: 0,
-      totalPage: 1,
+      totalPages: 1,
     });
-    expect(readOrders({ ok: true, orders: 'no', orderCount: 'x', totalPage: 0 }).orders).toEqual(
-      [],
+    expect(readOrders({ ok: true, items: 'no', page: { totalItems: 'x', totalPages: 0 } })).toEqual(
+      { state: 'READY', orders: [], orderCount: 0, totalPages: 1 },
     );
+    expect(
+      readOrders({ ok: true, items: [{ publicId: 'b' }], page: { totalItems: 4, totalPages: 1 } }),
+    ).toMatchObject({ orders: [{ publicId: 'b' }], orderCount: 4 });
+    expect(readOrders({ ok: true, orders: [{ publicId: 'b' }], orderCount: 4 })).toMatchObject({
+      orders: [],
+      orderCount: 0,
+    });
     expect(readOrders(undefined)).toMatchObject({ state: 'ERROR', code: 'NETWORK' });
   });
 });
@@ -477,9 +487,8 @@ describe('credits load', () => {
     ok: true,
     balance: 12.5,
     creditName: 'Coins',
-    entries: [{ id: 1 }],
-    entryCount: 1,
-    totalPage: 1,
+    items: [{ id: 1 }],
+    page: { number: 1, size: 10, totalItems: 1, totalPages: 1 },
   };
   const config = {
     ok: true,
@@ -538,7 +547,7 @@ describe('credits load', () => {
       topUp: null,
       packs: [],
     });
-    expect(r.data.ledger).toEqual({ entries: [{ id: 1 }], entryCount: 1, totalPage: 1 });
+    expect(r.data.ledger).toEqual({ entries: [{ id: 1 }], entryCount: 1, totalPages: 1 });
     expect(r.pageTitle).toEqual({ title: CREDITS_TITLE_KEY });
     expect(r.sidebar).toBe('profile');
     expect(r.meta).toEqual({ robots: 'noindex,nofollow' });
@@ -548,7 +557,7 @@ describe('credits load', () => {
     const r = resolveCreditsLoad({
       credits,
       config,
-      packs: { ok: true, products: [{ id: 1 }, { id: 2 }] },
+      packs: { ok: true, items: [{ id: 1 }, { id: 2 }], page: { totalItems: 2, totalPages: 1 } },
       settings: { creditsEnabled: true, creditTopUpEnabled: true },
     });
     expect(r.data.topUp).toEqual({
@@ -565,7 +574,7 @@ describe('credits load', () => {
     const r = resolveCreditsLoad({
       credits,
       config: { ok: false, code: 'NETWORK' },
-      packs: { ok: true, products: [{ id: 1 }] },
+      packs: { ok: true, items: [{ id: 1 }], page: { totalItems: 1, totalPages: 1 } },
       settings: { creditsEnabled: true, creditTopUpEnabled: true },
     });
     expect(r.data.topUp).toBeNull();
@@ -747,33 +756,39 @@ function fakeHost(features = []) {
 }
 
 describe('registerTheme: profile items', () => {
-  beforeEach(() => {
-    profileNav.resetProfileNav();
-    session.resetSession();
-  });
+  // every test runs on a scripted host and a registry that mirrors pano.controllers (controllerEnv.js)
+  let env;
+  const start = (features = [], options = {}) => {
+    env = createEnv({ features, ...options });
+    const pano = env.attach(fakeHost(features));
+    registerTheme(pano);
+    return pano;
+  };
+  // the eager market/profile controller (state.summary, setLoader / refresh / reset)
+  const profile = () => env.use('profile');
   afterEach(() => {
-    profileNav.resetProfileNav();
-    session.resetSession();
-    delete globalThis.window;
+    env?.dispose();
+    env = undefined;
   });
 
-  test('profile pages use the ProfileLayout system layout', () => {
-    const pano = fakeHost(['profile-nav']);
-    registerTheme(pano);
-    const profile = pano.calls.pages.filter((p) => p.path.startsWith('/profile/'));
-    expect(profile.map((p) => p.path)).toEqual([
-      '/profile/purchases',
-      '/profile/credits',
-      '/profile/subscriptions',
-      '/profile/creator',
-    ]);
-    expect(profile.every((p) => p.systemLayout === 'ProfileLayout')).toBe(true);
-    expect(profile.every((p) => typeof p.component.load === 'function')).toBe(true);
+  test('profile pages use the ProfileLayout system layout (view metadata of the page files)', () => {
+    const pano = start(['profile-nav']);
+    expect(pano.calls.pages).toEqual([]);
+
+    for (const [file, route] of [
+      ['PurchasesPage', '/profile/purchases'],
+      ['CreditsPage', '/profile/credits'],
+      ['SubscriptionsPage', '/profile/subscriptions'],
+      ['CreatorPage', '/profile/creator'],
+    ]) {
+      expect(read(`src/theme/pages/profile/${file}.svelte`)).toContain(
+        `export const view = { path: '${route}', systemLayout: 'ProfileLayout' };`,
+      );
+    }
   });
 
   test('with has(profile-nav): four link items, only purchases visible; no profile-content block', () => {
-    const pano = fakeHost(['profile-nav']);
-    registerTheme(pano);
+    const pano = start(['profile-nav']);
     const items = pano.slots['profile-nav'];
     expect(items.map((i) => i.id)).toEqual([
       'market-purchases',
@@ -789,18 +804,20 @@ describe('registerTheme: profile items', () => {
   });
 
   test('without has(profile-nav): MarketProfileBlock in profile-content (priority 50), no nav items', () => {
-    const pano = fakeHost([]);
-    registerTheme(pano);
+    const pano = start([]);
     expect(pano.slots['profile-nav']).toBeUndefined();
     expect(pano.slots['profile-content']).toHaveLength(1);
-    expect(pano.slots['profile-content'][0]).toMatchObject({ id: 'market', priority: 50 });
-    expect(typeof pano.slots['profile-content'][0].component.load).toBe('function');
+    expect(pano.slots['profile-content'][0]).toMatchObject({
+      id: 'market',
+      priority: 50,
+      view: 'market:MarketProfileBlock',
+    });
+    expect(pano.slots['profile-content'][0].component).toBeUndefined();
   });
 
   test('the account dropdown always gets the purchases entry', () => {
     for (const features of [[], ['profile-nav']]) {
-      const pano = fakeHost(features);
-      registerTheme(pano);
+      const pano = start(features);
       expect(pano.slots['navbar-profile-dropdown']).toHaveLength(1);
       expect(pano.slots['navbar-profile-dropdown'][0]).toMatchObject({
         id: 'market-purchases',
@@ -813,28 +830,25 @@ describe('registerTheme: profile items', () => {
     const warn = console.warn;
     const seen = [];
     console.warn = (...a) => seen.push(a);
-    const pano = fakeHost(['profile-nav']);
+    env = createEnv({ features: ['profile-nav'] });
+    const pano = env.attach(fakeHost(['profile-nav']));
     delete pano.ui.profile;
     delete pano.ui.nav.profileDropdown;
     registerTheme(pano);
     console.warn = warn;
-    expect(pano.calls.pages.map((p) => p.path)).toContain('/store');
     expect(seen.filter((a) => /profile-(nav|dropdown)/.test(String(a[0])))).toHaveLength(2);
-    expect(pano.slots['navbar-right']).toHaveLength(1);
+    expect(pano.slots['navbar-right']).toBeUndefined();
   });
 
   test('summary after the session is known: credits / subscriptions / creator are revealed with the balance badge', async () => {
-    globalThis.window = {};
-    const pano = fakeHost(['profile-nav']);
-    registerTheme(pano);
+    const pano = start(['profile-nav']);
     let requests = 0;
-    profileNav.setSummaryLoader(async () => {
+    profile().actions.setLoader(async () => {
       requests++;
       return summary();
     });
 
-    const store = writable({ user: { id: 1, username: 'Steve' } });
-    session.bindSession(store);
+    env.setSession({ user: { id: 1, username: 'Steve' } });
     await Bun.sleep(0);
 
     expect(requests).toBe(1);
@@ -842,45 +856,41 @@ describe('registerTheme: profile items', () => {
     expect(items).toHaveLength(4);
     expect(items.every((i) => !i.hidden)).toBe(true);
     expect(items.find((i) => i.id === 'market-credits').props.badge).toBe('12.5');
-    expect(get(profileNav.profileSummary)).toMatchObject({ isCreator: true });
+    expect(profile().get().summary).toMatchObject({ isCreator: true });
 
     // the same user again: no second request
-    session.bindSession(store);
-    await profileNav.refreshSummary();
+    env.setSession({ user: { id: 1, username: 'Steve' } });
+    await profile().actions.refresh();
     expect(requests).toBe(1);
   });
 
   test('a failed summary leaves only the purchases link and may be retried', async () => {
-    globalThis.window = {};
-    const pano = fakeHost(['profile-nav']);
-    registerTheme(pano);
+    const pano = start(['profile-nav']);
     let requests = 0;
-    profileNav.setSummaryLoader(async () => {
+    profile().actions.setLoader(async () => {
       requests++;
       return { ok: false, code: 'NETWORK' };
     });
 
-    session.bindSession(writable({ user: { id: 1, username: 'Steve' } }));
+    env.setSession({ user: { id: 1, username: 'Steve' } });
     await Bun.sleep(0);
 
     expect(pano.slots['profile-nav'].map((i) => !!i.hidden)).toEqual([false, true, true, true]);
-    expect(get(profileNav.profileSummary)).toBeNull();
+    expect(profile().get().summary).toBeNull();
 
-    await profileNav.refreshSummary();
+    await profile().actions.refresh();
     expect(requests).toBe(2);
   });
 
   test('a guest never asks for the summary', async () => {
-    globalThis.window = {};
-    const pano = fakeHost(['profile-nav']);
-    registerTheme(pano);
+    const pano = start(['profile-nav']);
     let requests = 0;
-    profileNav.setSummaryLoader(async () => {
+    profile().actions.setLoader(async () => {
       requests++;
       return summary();
     });
 
-    session.bindSession(writable({}));
+    env.setSession({});
     await Bun.sleep(0);
 
     expect(requests).toBe(0);
@@ -888,66 +898,59 @@ describe('registerTheme: profile items', () => {
   });
 
   test('logout puts the nav back to purchases only and drops the badge', async () => {
-    globalThis.window = {};
-    const pano = fakeHost(['profile-nav']);
-    registerTheme(pano);
-    profileNav.setSummaryLoader(async () => summary());
+    const pano = start(['profile-nav']);
+    profile().actions.setLoader(async () => summary());
 
-    const store = writable({ user: { id: 1, username: 'Steve' } });
-    session.bindSession(store);
+    env.setSession({ user: { id: 1, username: 'Steve' } });
     await Bun.sleep(0);
     expect(pano.slots['profile-nav'].every((i) => !i.hidden)).toBe(true);
 
-    store.set({});
+    env.logout();
     await Bun.sleep(0);
 
     expect(pano.slots['profile-nav'].map((i) => !!i.hidden)).toEqual([false, true, true, true]);
     expect(
       pano.slots['profile-nav'].find((i) => i.id === 'market-credits').props.badge,
     ).toBeUndefined();
-    expect(get(profileNav.profileSummary)).toBeNull();
+    expect(profile().get().summary).toBeNull();
   });
 
   test('an answer for a user who has logged out meanwhile is dropped', async () => {
-    globalThis.window = {};
-    const pano = fakeHost(['profile-nav']);
-    registerTheme(pano);
+    const pano = start(['profile-nav']);
     let release;
-    profileNav.setSummaryLoader(
+    profile().actions.setLoader(
       () =>
         new Promise((resolve) => {
           release = () => resolve(summary());
         }),
     );
 
-    const store = writable({ user: { id: 1, username: 'Steve' } });
-    session.bindSession(store);
+    env.setSession({ user: { id: 1, username: 'Steve' } });
     await Bun.sleep(0);
-    store.set({});
+    env.logout();
     release();
     await Bun.sleep(0);
 
     expect(pano.slots['profile-nav'].map((i) => !!i.hidden)).toEqual([false, true, true, true]);
-    expect(get(profileNav.profileSummary)).toBeNull();
+    expect(profile().get().summary).toBeNull();
   });
 
   test('the server side never requests anything', async () => {
-    const pano = fakeHost(['profile-nav']);
-    registerTheme(pano);
+    start(['profile-nav'], { browser: false });
     let requests = 0;
-    profileNav.setSummaryLoader(async () => {
+    profile().actions.setLoader(async () => {
       requests++;
       return summary();
     });
-    await profileNav.refreshSummary();
+    await profile().actions.refresh();
     expect(requests).toBe(0);
   });
 
-  test('host.has gates profile-nav (a host without features has none)', () => {
-    host.setPano({});
-    expect(host.has('profile-nav')).toBe(false);
-    host.setPano(fakeHost(['profile-nav']));
-    expect(host.has('profile-nav')).toBe(true);
+  test('hostHas gates profile-nav (a host without features has none)', () => {
+    expect(hostHas({}, 'profile-nav')).toBe(false);
+    expect(hostHas({ features: {} }, 'profile-nav')).toBe(false);
+    expect(hostHas(fakeHost(['profile-nav']), 'profile-nav')).toBe(true);
+    expect(hostHas(fakeHost([]), 'profile-nav')).toBe(false);
   });
 });
 
@@ -989,10 +992,11 @@ describe('source rules of the profile files (14 §2)', () => {
       '@panomc/sdk/svelte',
       '@panomc/sdk/components/theme',
       '@panomc/sdk/utils/component',
+      '@panomc/sdk/controllers',
     ];
     for (const file of [
       ...FILES,
-      'src/theme/stores/profileNav.js',
+      'src/theme/lib/profileNav.js',
       'src/theme/lib/profileModel.js',
     ]) {
       for (const m of read(file).matchAll(/from\s+['"](@panomc\/sdk[^'"]*)['"]/g))
@@ -1016,17 +1020,17 @@ describe('source rules of the profile files (14 §2)', () => {
 
   test('purchases: right endpoints and the gift endpoint', () => {
     const page = read('src/theme/pages/profile/PurchasesPage.svelte');
-    expect(page).toContain("'/api/market/me/orders'");
-    expect(page).toContain("'/api/market/me/entitlements'");
+    expect(page).toContain("'/me/orders'");
+    expect(page).toContain("'/me/entitlements'");
     expect(read('src/theme/components/profile/GiftRedeemForm.svelte')).toContain(
-      "'/api/market/me/gifts/redeem'",
+      "'/me/gifts/redeem'",
     );
   });
 
   test('credits: ledger, config for the limits and credit packs', () => {
     const page = read('src/theme/pages/profile/CreditsPage.svelte');
-    expect(page).toContain("'/api/market/me/credits'");
-    expect(page).toContain("'/api/market/checkout/config'");
+    expect(page).toContain("'/me/credits'");
+    expect(page).toContain("'/checkout/config'");
     expect(page).toContain("kind: 'CREDIT_PACK'");
     expect(page).toContain('pageSize: 60');
     expect(page).toContain('throw error(404)');
@@ -1068,7 +1072,7 @@ describe('source rules of the profile files (14 §2)', () => {
     const block = read('src/theme/components/profile/MarketProfileBlock.svelte');
     expect(block).toContain("import { onMount } from 'svelte'");
     expect(block).toContain('if (data?.summary) return;');
-    expect(block).toContain("call('GET', '/api/market/me/summary')");
+    expect(block).toContain("call('GET', '/me/summary')");
     expect(block).toContain('data?.summary ?? fetched');
   });
 });

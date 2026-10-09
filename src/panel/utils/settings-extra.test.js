@@ -25,7 +25,6 @@ import {
   isServiceMailKind,
   mailAlert,
   mailKindEnabled,
-  needsPrivateTargetConfirm,
   normalizeCredits,
   parseChargebackActions,
   priceMismatchCount,
@@ -91,7 +90,6 @@ const SPEC_KEYS = {
     'quoteRateLimitPerMinute',
     'couponLockThreshold',
     'couponLockMinutes',
-    'allowPrivateWebhookTargets',
   ],
   mail: [
     'sendEmailAfterPurchase',
@@ -551,34 +549,6 @@ describe('security', () => {
     expect(validateSecurity({ ...values, couponLockThreshold: '' }).couponLockThreshold).toBe(
       'REQUIRED',
     );
-  });
-
-  test('only turning the private-target switch ON needs the danger confirmation', () => {
-    expect(
-      needsPrivateTargetConfirm(
-        { allowPrivateWebhookTargets: false },
-        { allowPrivateWebhookTargets: true },
-      ),
-    ).toBe(true);
-    expect(needsPrivateTargetConfirm({}, { allowPrivateWebhookTargets: true })).toBe(true);
-    expect(
-      needsPrivateTargetConfirm(
-        { allowPrivateWebhookTargets: true },
-        { allowPrivateWebhookTargets: true },
-      ),
-    ).toBe(false);
-    expect(
-      needsPrivateTargetConfirm(
-        { allowPrivateWebhookTargets: true },
-        { allowPrivateWebhookTargets: false },
-      ),
-    ).toBe(false);
-    expect(
-      needsPrivateTargetConfirm(
-        { allowPrivateWebhookTargets: false },
-        { allowPrivateWebhookTargets: false },
-      ),
-    ).toBe(false);
   });
 });
 

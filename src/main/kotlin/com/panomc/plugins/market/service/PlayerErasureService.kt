@@ -327,10 +327,18 @@ class PlayerErasureService(
         }
     }
 
+    /**
+     * The bodies of the settled store webhook rows of the orders in [scope], in core's `webhook_delivery` (the rows of source `market`): an event row names its order in
+     * `subjectRef` (`order:<id>`), the direct row of a product `WEBHOOK` action names its delivery in `ownerRef` (`delivery:<id>`).
+     */
     private suspend fun webhookDeliveries(c: SqlClient, scope: Scope) {
         exec(
-            c, "UPDATE ${t("market_webhook_delivery")} SET `body` = '{}' WHERE `orderId` IN (${scope.orderIds(t("market_order"))}) AND `status` IN ('SUCCEEDED', 'DEAD') AND `body` <> '{}'",
-            scope.args
+            c,
+            "UPDATE ${t("webhook_delivery")} SET `body` = '{}' WHERE `source` = 'market' AND `status` IN ('SUCCEEDED', 'DEAD') AND `body` <> '{}' AND (" +
+                "(`subjectRef` LIKE 'order:%' AND CAST(SUBSTRING(`subjectRef`, 7) AS UNSIGNED) IN (${scope.orderIds(t("market_order"))})) OR " +
+                "(`ownerRef` LIKE 'delivery:%' AND CAST(SUBSTRING(`ownerRef`, 10) AS UNSIGNED) IN " +
+                "(SELECT `id` FROM ${t("market_delivery")} WHERE `orderId` IN (${scope.orderIds(t("market_order"))}))))",
+            scope.args + scope.args
         )
     }
 

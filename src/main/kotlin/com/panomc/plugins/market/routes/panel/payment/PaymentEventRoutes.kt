@@ -1,8 +1,9 @@
 package com.panomc.plugins.market.routes.panel.payment
 
+import com.panomc.platform.model.PageRequest
+import com.panomc.platform.model.Paging
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
-import com.panomc.platform.error.PageNotFound
 import com.panomc.platform.model.Path
 import com.panomc.platform.model.Result
 import com.panomc.platform.model.RouteType
@@ -20,14 +21,13 @@ import com.panomc.plugins.market.routes.api.payment.inboundDispatcher
 import com.panomc.plugins.market.routes.api.payment.providerRedactorFor
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
-import com.panomc.plugins.market.routes.base.parsePagingRequest
+import com.panomc.plugins.market.routes.base.parsePageRequest
 import com.panomc.plugins.market.routes.panel.order.logOrderDecision
 import com.panomc.plugins.market.runtime.beans
-import com.panomc.plugins.market.util.Paging
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
@@ -56,13 +56,11 @@ internal fun paymentEventAdmin(plugin: MarketPlugin): PaymentEventAdmin {
     return synchronized(PaymentEventWiringHolder) { cachedAdmin?.takeIf { it.first === plugin }?.second ?: built.also { cachedAdmin = plugin to it } }
 }
 
-private fun number(raw: String?, name: String): Long? = raw?.trim()?.takeIf { it.isNotEmpty() }?.let { it.toLongOrNull() ?: throw RequestValueException(name, "MUST_BE_A_NUMBER") }
-
 /**
  * The query of `GET /payment-events` (04 section 7): `status?` (csv of `DEFERRED`, `FAILED`, `REJECTED`; default all three), `providerId?`, `page?`,
  * `pageSize?`. A value outside the contract is a 400, never ignored.
  */
-class PaymentEventQuery(val statuses: Set<PaymentEventStatus>, val providerId: String?, val window: Paging.Window)
+class PaymentEventQuery(val statuses: Set<PaymentEventStatus>, val providerId: String?, val window: PageRequest)
 
 fun parsePaymentEventQuery(status: String?, providerId: String?, page: String?, pageSize: String?): PaymentEventQuery {
     val statuses = status?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.map { name ->
@@ -70,63 +68,57 @@ fun parsePaymentEventQuery(status: String?, providerId: String?, page: String?, 
     }?.toSet().orEmpty()
     val provider = providerId?.trim()?.takeIf { it.isNotEmpty() }?.also { if (it.length > 64) throw RequestValueException("providerId", "TOO_LONG") }
 
-    return PaymentEventQuery(statuses, provider, parsePagingRequest(number(page, "page"), number(pageSize, "pageSize")))
+    return PaymentEventQuery(statuses, provider, parsePageRequest(page, pageSize))
 }
 
 private fun pagedQuery(schemaRepository: SchemaRepository, vararg names: String): ValidationHandler {
-    var builder = ValidationHandlerBuilder.create(schemaRepository)
+    var builder = Paging.params(ValidationHandlerBuilder.create(schemaRepository))
 
     for (name in names) builder = builder.queryParameter(optionalParam(name, stringSchema()))
 
     return builder.build()
 }
 
-private fun pageBody(key: String, countKey: String, page: PaymentEventPage, window: Paging.Window): Map<String, Any> {
-    if (Paging.isBeyondLast(window.page, page.totalPage)) throw PageNotFound()
-
-    return mapOf(key to page.rows, countKey to page.count, "totalPage" to page.totalPage)
-}
-
 /**
- * `GET /api/panel/market/payments/:paymentId/events` (`P:OV`, 04 section 7): the traffic of one attempt, oldest first; `events[]`, `eventCount`, `totalPage`.
+ * `GET /api/panel/market/payments/:paymentId/events` (`P:OV`, 04 section 7): the traffic of one attempt, oldest first; `items[]` (the events) and `page`.
  * `body` / `headers` / `url` only with `SET` (11 section 14.5).
  */
 @Endpoint
 class PanelGetPaymentEventsAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/payments/:paymentId/events", RouteType.GET))
+    override val paths = listOf(Path("/payments/:paymentId/events", RouteType.GET))
 
     override val nodes = setOf(MarketNode.ORDERS_VIEW)
 
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 
-    override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = pagedQuery(schemaRepository, "page", "pageSize")
+    override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = pagedQuery(schemaRepository)
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
         val id = parseId(context.pathParam("paymentId"), "paymentId")
-        val window = parsePagingRequest(number(context.request().getParam("page"), "page"), number(context.request().getParam("pageSize"), "pageSize"))
+        val window = Paging.request(context)
         val page = paymentEventAdmin(plugin).forPayment(id, window, FieldGating.rawTier(context), databaseManager.getSqlClient())
 
-        return Successful(pageBody("events", "eventCount", page, window))
+        return Successful(Paging.response(page.rows, page.count, window))
     }
 }
 
-/** `GET /api/panel/market/payment-events` (`P:OV`, 04 section 7): inbound traffic that did not go through, newest first; `events[]`, `eventCount`, `totalPage`. */
+/** `GET /api/panel/market/payment-events` (`P:OV`, 04 section 7): inbound traffic that did not go through, newest first; `items[]` (the events) and `page`. */
 @Endpoint
 class PanelGetPaymentEventListAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/payment-events", RouteType.GET))
+    override val paths = listOf(Path("/payment-events", RouteType.GET))
 
     override val nodes = setOf(MarketNode.ORDERS_VIEW)
 
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 
-    override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = pagedQuery(schemaRepository, "status", "providerId", "page", "pageSize")
+    override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = pagedQuery(schemaRepository, "status", "providerId")
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
         val request = context.request()
         val query = parsePaymentEventQuery(request.getParam("status"), request.getParam("providerId"), request.getParam("page"), request.getParam("pageSize"))
         val page = paymentEventAdmin(plugin).list(query.statuses, query.providerId, query.window, FieldGating.rawTier(context), databaseManager.getSqlClient())
 
-        return Successful(pageBody("events", "eventCount", page, query.window))
+        return Successful(Paging.response(page.rows, page.count, query.window))
     }
 }
 
@@ -136,7 +128,7 @@ class PanelGetPaymentEventListAPI(private val plugin: MarketPlugin) : MarketPane
  */
 @Endpoint
 class PanelReplayPaymentEventAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/payment-events/:eventId/replay", RouteType.POST))
+    override val paths = listOf(Path("/payment-events/:eventId/replay", RouteType.POST))
 
     override val nodes = setOf(MarketNode.PAYMENTS)
 
@@ -155,7 +147,7 @@ class PanelReplayPaymentEventAPI(private val plugin: MarketPlugin) : MarketPanel
 /** `POST /api/panel/market/payments/:paymentId/query` (`P:OM`, 04 section 7): runs `queryPayment` now; `{status}`; 400 `STATUS_QUERY_NOT_SUPPORTED`. */
 @Endpoint
 class PanelQueryPaymentAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/payments/:paymentId/query", RouteType.POST))
+    override val paths = listOf(Path("/payments/:paymentId/query", RouteType.POST))
 
     override val nodes = setOf(MarketNode.ORDERS_MANAGE)
 

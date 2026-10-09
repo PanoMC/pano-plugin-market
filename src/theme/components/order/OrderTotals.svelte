@@ -1,5 +1,5 @@
 {#if rows.length}
-  <dl class="row mb-0 gy-1" aria-live="polite">
+  <dl class="market-order-totals row mb-0 gy-1" aria-live="polite">
     {#each rows as row (row.id)}
       <dt class={['col-7', 'fw-normal', row.strong && 'fw-bold']}>
         {$_(row.labelKey)}
@@ -17,9 +17,12 @@
 {/if}
 
 <script>
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { totalsRows } from '../../lib/orderState.js';
-  import { formatCredits, formatMoney } from '../../utils/format.js';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { formatCredits, formatMoney } = market.require('format').actions;
 
   const MINUS = '−';
 

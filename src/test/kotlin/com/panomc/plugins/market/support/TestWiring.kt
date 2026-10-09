@@ -1,5 +1,9 @@
 package com.panomc.plugins.market.support
 
+import com.panomc.platform.db.dao.WebhookDeliveryDao
+import com.panomc.platform.db.dao.WebhookEndpointDao
+import com.panomc.platform.db.implementation.WebhookDeliveryDaoImpl
+import com.panomc.platform.db.implementation.WebhookEndpointDaoImpl
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.db.impl.*
 import com.panomc.plugins.market.db.tx.MarketDb
@@ -36,7 +40,7 @@ class TestWiring(
     val db: MarketDb = MarketDb({ pool }, clock)
     val users = TestUsers()
 
-    // --- DAOs (all 53 tables) ---
+    // --- DAOs (all 51 tables) ---
     val categories = MarketCategoryDaoImpl()
     val comparisons = MarketComparisonDaoImpl()
     val products = MarketProductDaoImpl()
@@ -75,8 +79,13 @@ class TestWiring(
     val creditEntries = MarketCreditEntryDaoImpl()
     val deliveries = MarketDeliveryDaoImpl()
     val serverStates = MarketServerStateDaoImpl()
-    val webhookEndpoints = MarketWebhookEndpointDaoImpl()
-    val webhookDeliveries = MarketWebhookDeliveryDaoImpl()
+    /** Core's webhook tables on the test database (prefix `pano_`), created by [MarketDbTestBase]. */
+    val webhookEndpoints: WebhookEndpointDao = object : WebhookEndpointDaoImpl() {
+        override fun prefix() = MarketTestDb.TABLE_PREFIX
+    }
+    val webhookDeliveries: WebhookDeliveryDao = object : WebhookDeliveryDaoImpl() {
+        override fun prefix() = MarketTestDb.TABLE_PREFIX
+    }
     val mailOutbox = MarketMailOutboxDaoImpl()
     val subscriptions = MarketSubscriptionDaoImpl()
     val subscriptionRenewals = MarketSubscriptionRenewalDaoImpl()

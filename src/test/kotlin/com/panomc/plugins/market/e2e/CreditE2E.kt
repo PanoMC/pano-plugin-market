@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * The credit ledger over HTTP (17 section 9.5): CR-01 (manual grant and revoke, the admin and the buyer view of the ledger) and CR-02 (cashback and
@@ -25,11 +26,11 @@ class CreditE2E : E2eTestBase() {
     private val sequence = AtomicInteger()
 
     private fun move(path: String, userId: Long, amount: Number, note: String, key: String = idempotencyKey()): E2eResponse =
-        admin.post("/api/panel/market/credits/accounts/$userId/$path", JsonObject().put("amount", amount).put("note", note), mapOf("Idempotency-Key" to key))
+        admin.post("${MarketPaths.PANEL_ROOT}/credits/accounts/$userId/$path", JsonObject().put("amount", amount).put("note", note), mapOf("Idempotency-Key" to key))
 
-    private fun myCredits(client: E2eClient): JsonObject = client.get("/api/market/me/credits").ok().obj()
+    private fun myCredits(client: E2eClient): JsonObject = client.get("${MarketPaths.SITE_ROOT}/me/credits").ok().obj()
 
-    private fun entries(view: JsonObject, type: String): List<JsonObject> = view.getJsonArray("entries").map { it as JsonObject }.filter { it.getString("type") == type }
+    private fun entries(view: JsonObject, type: String): List<JsonObject> = view.getJsonArray("items").map { it as JsonObject }.filter { it.getString("type") == type }
 
     private fun product(price: String): Long {
         val n = sequence.incrementAndGet()
@@ -69,19 +70,19 @@ class CreditE2E : E2eTestBase() {
         assertEquals(listOf(0L, 3000L), tx.map { it.getLong("shortfall") })
 
         // the admin view: both rows with the acting admin
-        val account = admin.get("/api/panel/market/credits/accounts/${buyer.userId}").ok().obj()
+        val account = admin.get("${MarketPaths.PANEL_ROOT}/credits/accounts/${buyer.userId}").ok().obj()
 
         assertEquals(0.0, account.getDouble("balance"), 0.0001)
-        assertEquals(2, account.getInteger("entryCount"))
+        assertEquals(2, account.getJsonObject("page").getInteger("totalItems"))
 
-        val adminEntries = account.getJsonArray("entries").map { it as JsonObject }
+        val adminEntries = account.getJsonArray("items").map { it as JsonObject }
 
         assertEquals(setOf("GRANT", "REVOKE"), adminEntries.map { it.getString("type") }.toSet())
         assertTrue(adminEntries.all { it.getString("actorUsername") == session.env.adminUser }, "every row names the admin: ${adminEntries.map { it.getString("actorUsername") }}")
         assertEquals(30.0, adminEntries.first { it.getString("type") == "REVOKE" }.getDouble("shortfall"), 0.0001)
         assertEquals(setOf("welcome gift", "chargeback of a top-up"), adminEntries.map { it.getString("note") }.toSet())
 
-        val listed = admin.get("/api/panel/market/credits/accounts?search=${buyer.username}").ok().obj().getJsonArray("accounts").map { it as JsonObject }
+        val listed = admin.get("${MarketPaths.PANEL_ROOT}/credits/accounts?search=${buyer.username}").ok().obj().getJsonArray("items").map { it as JsonObject }
 
         assertEquals(listOf(buyer.userId), listed.map { it.getLong("userId") })
 
@@ -112,14 +113,14 @@ class CreditE2E : E2eTestBase() {
 
     /** Sets credit settings for [block] and puts the previous values back (credit keys live behind their own route). */
     private fun <T> withCredit(changes: JsonObject, block: () -> T): T {
-        val before = admin.get("/api/panel/market/settings").ok().obj()
+        val before = admin.get("${MarketPaths.PANEL_ROOT}/settings").ok().obj()
         val restore = JsonObject().also { r -> changes.fieldNames().forEach { k -> before.getValue(k)?.let { v -> r.put(k, v) } } }
 
-        admin.post("/api/panel/market/settings/credits", changes).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/settings/credits", changes).ok()
         try {
             return block()
         } finally {
-            admin.post("/api/panel/market/settings/credits", restore)
+            admin.post("${MarketPaths.PANEL_ROOT}/settings/credits", restore)
         }
     }
 
@@ -147,16 +148,16 @@ class CreditE2E : E2eTestBase() {
             val productId = product("10.00")
 
             admin.post(
-                "/api/panel/market/payment-methods/bank-transfer",
+                "${MarketPaths.PANEL_ROOT}/payment-methods/bank-transfer",
                 JsonObject().put("settings", JsonObject().put("accounts", accounts.encode()).put("instructions", "Transfer the exact amount."))
             ).ok()
-            admin.post("/api/panel/market/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", true)).ok()
+            admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", true)).ok()
             try {
                 val publicId = session.withSettings(JsonObject().put("testMode", false)) {
                     val id = publicIdOf(checkout(buyer.client, cart(line(productId)), method = "bank-transfer").ok())
 
-                    buyer.client.post("/api/market/orders/$id/bank-transfer/notify", JsonObject().put("senderName", "Ada").put("note", "paid today")).ok()
-                    admin.post("/api/panel/market/orders/${orderRow(id).getLong("id")}/bank-transfer", JsonObject().put("decision", "APPROVE")).ok()
+                    buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$id/bank-transfer/notify", JsonObject().put("senderName", "Ada").put("note", "paid today")).ok()
+                    admin.post("${MarketPaths.PANEL_ROOT}/orders/${orderRow(id).getLong("id")}/bank-transfer", JsonObject().put("decision", "APPROVE")).ok()
                     awaitOrder(id, "COMPLETED")
 
                     id
@@ -177,7 +178,7 @@ class CreditE2E : E2eTestBase() {
 
                 // a full refund (bank transfers are refunded by hand): CASHBACK_REVERSAL takes the cashback back
                 val refund = admin.post(
-                    "/api/panel/market/orders/$orderId/refunds", JsonObject().put("amount", 10.00).put("manual", true).put("reason", "returned to the sender"),
+                    "${MarketPaths.PANEL_ROOT}/orders/$orderId/refunds", JsonObject().put("amount", 10.00).put("manual", true).put("reason", "returned to the sender"),
                     mapOf("Idempotency-Key" to idempotencyKey())
                 ).ok().obj().getJsonObject("refund")
 
@@ -193,11 +194,11 @@ class CreditE2E : E2eTestBase() {
                 assertEquals(0.0, myCredits(buyer.client).getDouble("balance"), 0.0001)
                 assertEquals(0L, db.long("SELECT `balance` FROM `pano_market_credit_account` WHERE `userId` = ?", buyer.userId))
             } finally {
-                admin.post("/api/panel/market/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", false))
+                admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", false))
             }
         }
 
-        assertEquals(true, admin.get("/api/panel/market/settings").ok().obj().getBoolean("testMode"), "the store is back in test mode")
-        assertEquals(0.0, admin.get("/api/panel/market/settings").ok().obj().getDouble("cashbackPercent"), 0.0001, "and the cashback is off again")
+        assertEquals(true, admin.get("${MarketPaths.PANEL_ROOT}/settings").ok().obj().getBoolean("testMode"), "the store is back in test mode")
+        assertEquals(0.0, admin.get("${MarketPaths.PANEL_ROOT}/settings").ok().obj().getDouble("cashbackPercent"), 0.0001, "and the cashback is off again")
     }
 }

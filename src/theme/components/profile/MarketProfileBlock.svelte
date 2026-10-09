@@ -1,22 +1,23 @@
-<div class="card">
-  <div class="card-header fw-semibold">
+<div class="market-market-profile-block card">
+  <div class="market-market-profile-block__header card-header fw-semibold">
     <i class="fa-solid fa-store me-2" aria-hidden="true"></i>{$_('theme.profile.block.title')}
   </div>
-  <div class="list-group list-group-flush">
+  <div class="market-market-profile-block__list list-group list-group-flush">
     {#each links as link (link.id)}
       <a
-        class="list-group-item list-group-item-action d-flex align-items-center"
+        class="market-market-profile-block__item list-group-item list-group-item-action d-flex align-items-center"
         href="{base}{link.href}">
-        <i class="{link.icon} fa-fw me-2" aria-hidden="true"></i>
+        <i class="{iconClass(link.icon)} fa-fw me-2" aria-hidden="true"></i>
         <span>{$_(link.key)}</span>
         {#if link.badge}
-          <span class="badge text-bg-primary ms-auto">{link.badge}</span>
+          <span class="market-market-profile-block__badge badge text-bg-primary ms-auto"
+            >{link.badge}</span>
         {/if}
       </a>
     {/each}
   </div>
   {#if summary?.creditsEnabled}
-    <div class="card-footer small text-body-secondary">
+    <div class="market-market-profile-block__footer card-footer small text-body-secondary">
       {$_('theme.profile.block.balance')}
       <strong class="text-body">{balanceText}</strong>
     </div>
@@ -24,12 +25,15 @@
 </div>
 
 <script module>
+  // injected from register.js (only on a theme without profile-nav), so no inject key here
+  export const view = {};
+
+  import { plugin } from '@panomc/sdk/controllers';
   import { readSummary } from '../../lib/profileModel.js';
-  import { call } from '../../utils/api.js';
 
   /** Slot load (the engine merges the result into `data`): the summary decides which links show. */
   export async function load(event) {
-    const res = await call('GET', '/api/market/me/summary', { event });
+    const res = await plugin('market').require('api', { event }).actions.call('GET', '/me/summary');
 
     return { summary: readSummary(res) };
   }
@@ -38,9 +42,13 @@
 <script>
   import { onMount } from 'svelte';
   import { base } from '@panomc/sdk/svelte';
-  import { _ } from '../../../i18n.js';
   import { visibleLinks } from '../../lib/profileModel.js';
-  import { formatCredits } from '../../utils/format.js';
+  import { iconClass } from '../../lib/classes.js';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { call } = market.require('api').actions;
+  const { formatCredits } = market.require('format').actions;
 
   /** Slot component of `profile-content` for themes without the profile-nav slot (14 §12.1). */
   let { data = {} } = $props();
@@ -52,7 +60,7 @@
   onMount(async () => {
     if (data?.summary) return;
 
-    fetched = readSummary(await call('GET', '/api/market/me/summary'));
+    fetched = readSummary(await call('GET', '/me/summary'));
   });
 
   const summary = $derived(data?.summary ?? fetched);

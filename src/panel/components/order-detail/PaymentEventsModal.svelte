@@ -129,6 +129,7 @@
   import { _ } from '../../../i18n';
   import LoadError from '../LoadError.svelte';
   import StatusBadge from '../StatusBadge.svelte';
+  import { pageOf } from '../../utils/page.js';
   import { asText } from './model.js';
   import { paymentEventsPath } from './requests.js';
   import { fetchPath, showModal } from './send.js';
@@ -157,9 +158,10 @@
       error = result.error;
       return;
     }
-    events = Array.isArray(result.body.events) ? result.body.events : [];
+    const loaded = pageOf(result.body);
+    events = loaded.items;
     currentPage = page;
-    totalPage = Number(result.body.totalPage) || 1;
+    totalPage = loaded.totalPages;
   }
 
   /** payment: a row of detail.payments. */

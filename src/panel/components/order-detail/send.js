@@ -1,6 +1,6 @@
-// Host-bound glue of the order detail page: sends the requests of requests.js through ApiUtil.
+// Host-bound glue of the order detail page: sends the requests of requests.js through api.panel.
 // Not unit tested (it needs the host); the flow around it is (mutation.js).
-import ApiUtil from '@panomc/sdk/utils/api';
+import { api } from '@panomc/sdk/plugin-api';
 import { call } from '../../utils/api.js';
 import { toastError } from '../../utils/toast.js';
 import { isStaleError } from './actions.js';
@@ -9,12 +9,12 @@ import { hideThen } from './hide-then.js';
 /** `{ method, path, body }` of requests.js -> normalised `call()` result. */
 export function send(request) {
   const method = request.method.toLowerCase();
-  return call(ApiUtil[method]({ path: request.path, body: request.body }));
+  return call(api.panel[method]({ path: request.path, body: request.body }));
 }
 
 /** GET of a full path (query string included). */
 export function fetchPath(path) {
-  return call(ApiUtil.get({ path }));
+  return call(api.panel.get({ path }));
 }
 
 /**

@@ -4,11 +4,11 @@
   {@const hint = field.helpText ? `${id}-help` : undefined}
   {@const feedback = error ? `${id}-error` : undefined}
   {@const described = [hint, feedback].filter(Boolean).join(' ') || undefined}
-  <div class="mb-3">
+  <div class="market-custom-fields mb-3">
     {#if field.type === 'CHECKBOX'}
       <div class="form-check">
         <input
-          class={['form-check-input', error && 'is-invalid']}
+          class={['market-custom-fields__check', 'form-check-input', error && 'is-invalid']}
           type="checkbox"
           {id}
           checked={values[field.fieldKey] === true}
@@ -26,13 +26,13 @@
         {/if}
       </div>
     {:else}
-      <label class="form-label" for={id}>
+      <label class="market-custom-fields__label form-label" for={id}>
         {field.label}{#if field.required}<span class="text-danger" aria-hidden="true"> *</span>{/if}
       </label>
       {#if field.type === 'SELECT'}
         <select
           {id}
-          class={['form-select', error && 'is-invalid']}
+          class={['market-custom-fields__select', 'form-select', error && 'is-invalid']}
           value={values[field.fieldKey] ?? ''}
           aria-invalid={error ? 'true' : undefined}
           aria-describedby={described}
@@ -51,7 +51,7 @@
           step="1"
           min={field.minValue ?? undefined}
           max={field.maxValue ?? undefined}
-          class={['form-control', error && 'is-invalid']}
+          class={['market-custom-fields__input', 'form-control', error && 'is-invalid']}
           placeholder={field.placeholder || undefined}
           value={values[field.fieldKey] ?? ''}
           aria-invalid={error ? 'true' : undefined}
@@ -64,7 +64,7 @@
           type={field.type === 'EMAIL' ? 'email' : 'text'}
           inputmode={field.type === 'DISCORD_ID' ? 'numeric' : undefined}
           maxlength={field.type === 'TEXT' ? (field.maxLength ?? 128) : undefined}
-          class={['form-control', error && 'is-invalid']}
+          class={['market-custom-fields__input-2', 'form-control', error && 'is-invalid']}
           placeholder={field.placeholder || undefined}
           autocomplete="off"
           value={values[field.fieldKey] ?? ''}
@@ -84,8 +84,11 @@
 {/each}
 
 <script>
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { fieldId } from './productModel.js';
+
+  const market = plugin('market');
+  const _ = market._;
 
   /** One control per field of ProductDetail.fields[]; values / errors are keyed by fieldKey. */
   let { fields = [], values = {}, errors = {}, onchange = () => {}, onblur = () => {} } = $props();

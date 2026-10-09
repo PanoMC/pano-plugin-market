@@ -1,6 +1,7 @@
 package com.panomc.plugins.market.routes.base
 
 import com.panomc.plugins.market.error.RequestValueException
+import com.panomc.plugins.market.support.assertOutOfRange
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -60,12 +61,12 @@ class RetrofitRequestParsingTest {
 
     @Test
     fun `a page size above 100 is refused, not clamped, and 100 passes`() {
-        assertEquals(100, parsePagingRequest(1, 100).pageSize)
-        assertEquals(10, parsePagingRequest(null, null).pageSize)
+        assertEquals(100, parsePageRequest("1", "100").size)
+        assertEquals(10, parsePageRequest(null, null).size)
 
-        refused("pageSize", "MUST_BE_BETWEEN_1_AND_100") { parsePagingRequest(1, 500) }
-        refused("pageSize", "MUST_BE_BETWEEN_1_AND_100") { parsePagingRequest(1, 0) }
-        refused("page", "MUST_BE_POSITIVE") { parsePagingRequest(0, 10) }
+        assertOutOfRange("pageSize") { parsePageRequest("1", "500") }
+        assertOutOfRange("pageSize") { parsePageRequest("1", "0") }
+        assertOutOfRange("page") { parsePageRequest("0", "10") }
     }
 
     @Test

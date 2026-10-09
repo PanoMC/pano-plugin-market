@@ -1,21 +1,21 @@
 // Host-bound glue of the settings sections: the POST /settings call, the toasts and the focus move.
 // The decisions (validation, partial body, status) live in utils/settings.js and are unit tested.
-import ApiUtil from '@panomc/sdk/utils/api';
+import { api } from '@panomc/sdk/plugin-api';
 import { get } from 'svelte/store';
 import { _, showErrorToast, showSuccessToast } from '../../../i18n';
-import { call, marketPath } from '../../utils/api.js';
+import { call } from '../../utils/api.js';
 import { focusFirstInvalid, submitSettings } from '../../utils/settings.js';
 import { toastError } from '../../utils/toast.js';
 
-export const postSettings = (body) => call(ApiUtil.post({ path: marketPath('/settings'), body }));
+export const postSettings = (body) => call(api.panel.post({ path: '/settings', body }));
 
 /** POST /settings/credits: the credit keys are written by their own endpoint (13 §17 credits). */
 export const postCreditSettings = (body) =>
-  call(ApiUtil.post({ path: marketPath('/settings/credits'), body }));
+  call(api.panel.post({ path: '/settings/credits', body }));
 
 /** GET /settings; null on any failure. */
 export async function fetchSettings() {
-  const result = await call(ApiUtil.get({ path: marketPath('/settings') }));
+  const result = await call(api.panel.get({ path: '/settings' }));
   return result.ok ? result.body : null;
 }
 

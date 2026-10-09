@@ -1,6 +1,6 @@
 // Scenarios 66 and 67 of 13 section 25.4: creator payouts (field rejection, CREATOR_HAS_NO_ACCOUNT, report CSV) and the block list (CIDR, duplicate, removal).
 import fs from 'node:fs';
-import { must } from '../lib/api.mjs';
+import { must, MARKET_API, PANEL_MARKET_API, listOf } from '../lib/api.mjs';
 import { run } from '../lib/bootstrap.mjs';
 import { assert, assertEqual } from '../lib/ui.mjs';
 import { enableBankTransfer, checkout } from './lib/orders.mjs';
@@ -25,7 +25,7 @@ async function creatorWithEarning({ admin, buyer }, product) {
   const creator = { username: `ncr${run.tag}${run.next()}`.slice(0, 16) };
   const code = `C${Date.now().toString(36).toUpperCase()}${run.next()}`;
   const id = must(
-    await admin.post('/api/panel/market/creator-codes', {
+    await admin.post(`${PANEL_MARKET_API}/creator-codes`, {
       creator: creator.username,
       code,
       discount: 0,
@@ -44,22 +44,25 @@ async function creatorWithEarning({ admin, buyer }, product) {
       paymentMethodId: 'bank-transfer',
       creatorCode: code,
     });
-    const detail = must(await admin.get(`/api/panel/market/orders/${placed.number}`), 'order').json;
+    const detail = must(
+      await admin.get(`${PANEL_MARKET_API}/orders/${placed.number}`),
+      'order',
+    ).json;
     must(
-      await admin.post(`/api/panel/market/orders/${detail.order.id}/bank-transfer`, {
+      await admin.post(`${PANEL_MARKET_API}/orders/${detail.order.id}/bank-transfer`, {
         decision: 'APPROVE',
       }),
       'approve the bank transfer',
     );
     await waitFor('the order to be completed', async () => {
-      const view = (await customer.get(`/api/market/orders/${placed.publicId}`)).json?.order;
+      const view = (await customer.get(`${MARKET_API}/orders/${placed.publicId}`)).json?.order;
       return view?.status === 'COMPLETED';
     });
   } finally {
     await restore();
   }
 
-  const report = must(await admin.get('/api/panel/market/creator-codes/report'), 'report').json;
+  const report = must(await admin.get(`${PANEL_MARKET_API}/creator-codes/report`), 'report').json;
   const row = report.creators.find((c) => c.id === id);
   assert(
     row && Number(row.available) > 0,
@@ -120,10 +123,11 @@ export const scenarios = [
         'PANEL-66: the field message for an amount above available',
       );
       assertEqual(sent.length, 0, 'PANEL-66: a payout above available sends no request');
-      const before = must(
-        await admin.get(`/api/panel/market/creator-codes/${made.id}/payouts`),
+      const before = listOf(
+        must(await admin.get(`${PANEL_MARKET_API}/creator-codes/${made.id}/payouts`), 'payouts')
+          .json,
         'payouts',
-      ).json.payouts.length;
+      ).length;
 
       // --- CREDIT to a creator without a credit account: the radio is marked with CREATOR_HAS_NO_ACCOUNT, the toast names it too
       await amount.fill(String(made.available));
@@ -139,10 +143,11 @@ export const scenarios = [
       );
       await waitFor('the refusal to be logged', async () => pc.errors.length > mark);
       provoked(pc, mark, /status of 4\d\d/, 'PANEL-66 CREATOR_HAS_NO_ACCOUNT');
-      const after = must(
-        await admin.get(`/api/panel/market/creator-codes/${made.id}/payouts`),
+      const after = listOf(
+        must(await admin.get(`${PANEL_MARKET_API}/creator-codes/${made.id}/payouts`), 'payouts')
+          .json,
         'payouts',
-      ).json.payouts.length;
+      ).length;
       assertEqual(after, before, 'PANEL-66: the refused CREDIT payout wrote nothing');
 
       // --- the same amount as MANUAL goes through: available drops to 0 and the Pay Out button goes away
@@ -192,8 +197,11 @@ export const scenarios = [
       await refreshSettled(page);
       assertEqual(sent.length, 1, 'PANEL-66: a repeated submit during the fade-out posts nothing');
       assertEqual(
-        must(await admin.get(`/api/panel/market/creator-codes/${made.id}/payouts`), 'payouts').json
-          .payouts.length,
+        listOf(
+          must(await admin.get(`${PANEL_MARKET_API}/creator-codes/${made.id}/payouts`), 'payouts')
+            .json,
+          'payouts',
+        ).length,
         before + 1,
         'PANEL-66: the MANUAL payout was recorded once',
       );
@@ -248,7 +256,10 @@ export const scenarios = [
       const octet = 1 + (parseInt(run.tag, 36) % 250);
       const cidr = `198.51.${octet}.0/24`;
       const blocksOf = async () =>
-        must(await admin.get('/api/panel/market/blocks?search=198.51'), 'blocks').json.blocks ?? [];
+        listOf(
+          must(await admin.get(`${PANEL_MARKET_API}/blocks?search=198.51`), 'blocks').json,
+          'blocks',
+        );
 
       try {
         await openMarket(page, env, '/market/blocks', (p) =>
@@ -336,7 +347,7 @@ export const scenarios = [
         await modalsClosed(page);
       } finally {
         for (const b of await blocksOf())
-          if (b.value === cidr) await admin.delete(`/api/panel/market/blocks/${b.id}`);
+          if (b.value === cidr) await admin.delete(`${PANEL_MARKET_API}/blocks/${b.id}`);
       }
 
       pc.expectNoErrors('PANEL-67');

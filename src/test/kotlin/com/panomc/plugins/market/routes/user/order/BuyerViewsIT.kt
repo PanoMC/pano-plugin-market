@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.user.order
 
+import com.panomc.platform.model.PageRequest
 import com.panomc.platform.error.PageNotFound
 import com.panomc.plugins.market.db.MarketDaoITBase
 import com.panomc.plugins.market.db.model.EntitlementStatus
@@ -11,7 +12,6 @@ import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.support.TestUser
 import com.panomc.plugins.market.support.TestWiring
 import com.panomc.plugins.market.util.OrderStatus
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -35,7 +35,7 @@ class BuyerViewsIT : MarketDaoITBase() {
     private lateinit var bob: TestUser
     private lateinit var carol: TestUser
     private var seq = 0
-    private val first = Paging.Window(1, 50)
+    private val first = PageRequest(1, 50)
 
     @BeforeEach
     fun fresh() {
@@ -65,18 +65,18 @@ class BuyerViewsIT : MarketDaoITBase() {
         return id
     }
 
-    private suspend fun list(user: TestUser, statuses: Set<OrderStatus> = emptySet(), window: Paging.Window = first): JsonObject = views.orders(user.id, window, statuses, pool)
+    private suspend fun list(user: TestUser, statuses: Set<OrderStatus> = emptySet(), window: PageRequest = first): JsonObject = views.orders(user.id, window, statuses, pool)
 
-    private fun JsonObject.publicIds() = getJsonArray("orders").map { (it as JsonObject).getString("publicId") }
+    private fun JsonObject.publicIds() = getJsonArray("items").map { (it as JsonObject).getString("publicId") }
 
     @Test
     fun `a gift received is listed for the recipient with received true and for the buyer without`() = runBlocking {
         val gift = order(alice, recipient = bob, items = listOf("VIP rank"))
 
         val forBob = list(bob)
-        val row = forBob.getJsonArray("orders").getJsonObject(0)
+        val row = forBob.getJsonArray("items").getJsonObject(0)
 
-        assertEquals(1, forBob.getInteger("orderCount"))
+        assertEquals(1, forBob.getJsonObject("page").getInteger("totalItems"))
         assertEquals(gift, row.getLong("number"))
         assertTrue(row.getBoolean("received"))
         assertTrue(row.getBoolean("isGift"))
@@ -86,7 +86,7 @@ class BuyerViewsIT : MarketDaoITBase() {
         assertEquals("EUR", row.getString("currency"))
         assertEquals("COMPLETED", row.getString("status"))
 
-        val forAlice = list(alice).getJsonArray("orders").getJsonObject(0)
+        val forAlice = list(alice).getJsonArray("items").getJsonObject(0)
 
         assertFalse(forAlice.getBoolean("received"))
         assertTrue(forAlice.getBoolean("isGift"))
@@ -96,12 +96,12 @@ class BuyerViewsIT : MarketDaoITBase() {
     fun `a gift that was never paid is not shown to its recipient`() = runBlocking {
         for (status in listOf(OrderStatus.PENDING, OrderStatus.FAILED, OrderStatus.CANCELLED, OrderStatus.EXPIRED)) order(alice, status, recipient = bob)
 
-        assertEquals(0, list(bob).getInteger("orderCount"))
-        assertEquals(4, list(alice).getInteger("orderCount"))
+        assertEquals(0, list(bob).getJsonObject("page").getInteger("totalItems"))
+        assertEquals(4, list(alice).getJsonObject("page").getInteger("totalItems"))
 
         for (status in listOf(OrderStatus.REVIEW, OrderStatus.COMPLETED, OrderStatus.PARTIALLY_REFUNDED, OrderStatus.REFUNDED, OrderStatus.CHARGEBACK)) order(alice, status, recipient = bob)
 
-        assertEquals(5, list(bob).getInteger("orderCount"))
+        assertEquals(5, list(bob).getJsonObject("page").getInteger("totalItems"))
     }
 
     @Test
@@ -112,9 +112,9 @@ class BuyerViewsIT : MarketDaoITBase() {
 
         val forAlice = list(alice)
 
-        assertEquals(1, forAlice.getInteger("orderCount"))
-        assertEquals(mine, forAlice.getJsonArray("orders").getJsonObject(0).getLong("number"))
-        assertEquals(0, list(TestUser(9999, "nobody", 0)).getInteger("orderCount"))
+        assertEquals(1, forAlice.getJsonObject("page").getInteger("totalItems"))
+        assertEquals(mine, forAlice.getJsonArray("items").getJsonObject(0).getLong("number"))
+        assertEquals(0, list(TestUser(9999, "nobody", 0)).getJsonObject("page").getInteger("totalItems"))
     }
 
     @Test
@@ -123,8 +123,8 @@ class BuyerViewsIT : MarketDaoITBase() {
 
         val body = list(alice)
 
-        assertEquals(1, body.getInteger("orderCount"))
-        assertFalse(body.getJsonArray("orders").getJsonObject(0).getBoolean("received"))
+        assertEquals(1, body.getJsonObject("page").getInteger("totalItems"))
+        assertFalse(body.getJsonArray("items").getJsonObject(0).getBoolean("received"))
     }
 
     @Test
@@ -133,24 +133,24 @@ class BuyerViewsIT : MarketDaoITBase() {
         val b = order(alice, OrderStatus.PENDING, at = 2_000)
         val c = order(alice, OrderStatus.REFUNDED, at = 3_000)
 
-        assertEquals(listOf(c, b, a), list(alice).getJsonArray("orders").map { (it as JsonObject).getLong("number") })
-        assertEquals(setOf(a, c), list(alice, setOf(OrderStatus.COMPLETED, OrderStatus.REFUNDED)).getJsonArray("orders").map { (it as JsonObject).getLong("number") }.toSet())
+        assertEquals(listOf(c, b, a), list(alice).getJsonArray("items").map { (it as JsonObject).getLong("number") })
+        assertEquals(setOf(a, c), list(alice, setOf(OrderStatus.COMPLETED, OrderStatus.REFUNDED)).getJsonArray("items").map { (it as JsonObject).getLong("number") }.toSet())
 
-        val page2 = list(alice, window = Paging.Window(2, 2))
+        val page2 = list(alice, window = PageRequest(2, 2))
 
-        assertEquals(3, page2.getInteger("orderCount"))
-        assertEquals(2, page2.getInteger("totalPage"))
-        assertEquals(listOf(a), page2.getJsonArray("orders").map { (it as JsonObject).getLong("number") })
+        assertEquals(3, page2.getJsonObject("page").getInteger("totalItems"))
+        assertEquals(2, page2.getJsonObject("page").getInteger("totalPages"))
+        assertEquals(listOf(a), page2.getJsonArray("items").map { (it as JsonObject).getLong("number") })
 
-        assertThrows(PageNotFound::class.java) { runBlocking { list(alice, window = Paging.Window(3, 2)) } }
+        assertThrows(PageNotFound::class.java) { runBlocking { list(alice, window = PageRequest(3, 2)) } }
     }
 
     @Test
     fun `an empty list is page one and an unknown status is a request error`() = runBlocking {
         val empty = list(alice)
 
-        assertEquals(0, empty.getInteger("orderCount"))
-        assertEquals(0, empty.getInteger("totalPage"))
+        assertEquals(0, empty.getJsonObject("page").getInteger("totalItems"))
+        assertEquals(0, empty.getJsonObject("page").getInteger("totalPages"))
         assertEquals(emptySet<OrderStatus>(), views.parseStatuses(null))
         assertEquals(setOf(OrderStatus.REVIEW, OrderStatus.COMPLETED), views.parseStatuses(" review, COMPLETED ,"))
         assertThrows(RequestValueException::class.java) { views.parseStatuses("COMPLETED,SHIPPED") }
@@ -175,8 +175,8 @@ class BuyerViewsIT : MarketDaoITBase() {
         val forBob = entitlement(bob, order = gift)
         val forAlice = entitlement(alice, order = own, itemName = "Kit")
 
-        val bobs = views.entitlements(bob.id, false, 10_000, pool).getJsonArray("entitlements")
-        val alices = views.entitlements(alice.id, false, 10_000, pool).getJsonArray("entitlements")
+        val bobs = views.entitlements(bob.id, false, 10_000, pool).getJsonArray("items")
+        val alices = views.entitlements(alice.id, false, 10_000, pool).getJsonArray("items")
 
         assertEquals(listOf(forBob), bobs.map { (it as JsonObject).getLong("id") })
         assertEquals(listOf(forAlice), alices.map { (it as JsonObject).getLong("id") })
@@ -191,7 +191,7 @@ class BuyerViewsIT : MarketDaoITBase() {
         assertEquals(null, row.getValue("expiresAt"))
         assertEquals(null, row.getValue("subscriptionId"))
         assertTrue(row.getString("orderPublicId").startsWith("PUB"))
-        assertEquals(0, views.entitlements(carol.id, false, 10_000, pool).getJsonArray("entitlements").size())
+        assertEquals(0, views.entitlements(carol.id, false, 10_000, pool).getJsonArray("items").size())
     }
 
     @Test
@@ -204,9 +204,9 @@ class BuyerViewsIT : MarketDaoITBase() {
         entitlement(alice, EntitlementStatus.REVOKED, null, o)
         entitlement(alice, EntitlementStatus.UPGRADED, null, o)
 
-        assertEquals(6, views.entitlements(alice.id, false, 10_000, pool).getJsonArray("entitlements").size())
+        assertEquals(6, views.entitlements(alice.id, false, 10_000, pool).getJsonArray("items").size())
 
-        val active = views.entitlements(alice.id, true, 10_000, pool).getJsonArray("entitlements").map { (it as JsonObject).getLong("id") }
+        val active = views.entitlements(alice.id, true, 10_000, pool).getJsonArray("items").map { (it as JsonObject).getLong("id") }
 
         assertEquals(setOf(permanent, future), active.toSet())
     }

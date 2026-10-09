@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * `CodeGuard` on a real MariaDB (MK-152; 11 section 12.2, 19.9 cases 2 to 10; the twin of A-02): the lock on coupon and creator codes in the quote and in
@@ -93,7 +94,7 @@ class CodeGuardIT : MarketDaoITBase() {
         error("expected an error")
     }
 
-    private fun retryAfter(e: Error): Int = JsonObject(e.encode()).getInteger("retryAfter")
+    private fun retryAfter(e: Error): Int = ErrorBodies.details(e).getInteger("retryAfter")
 
     private fun locked(q: Quote) = q.coupon != null && q.coupon!!.reason == "CODE_ATTEMPTS_LOCKED"
 

@@ -62,9 +62,9 @@ import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
@@ -202,7 +202,7 @@ private fun answer(outcome: RefundOutcome): Result {
 /** `GET /api/panel/market/orders/:id/refund-preview` (`P:PAY`, 04 section 7, 07 section 7.3): what a refund would write, without writing. */
 @Endpoint
 class PanelRefundPreviewAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/orders/:id/refund-preview", RouteType.GET))
+    override val paths = listOf(Path("/orders/:id/refund-preview", RouteType.GET))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.PAYMENTS)
 
@@ -229,7 +229,7 @@ class PanelRefundPreviewAPI(private val plugin: MarketPlugin) : MarketPanelApi()
  */
 @Endpoint
 class PanelCreateRefundAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/orders/:id/refunds", RouteType.POST))
+    override val paths = listOf(Path("/orders/:id/refunds", RouteType.POST))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.PAYMENTS)
 
@@ -266,7 +266,7 @@ private suspend fun <T> found(block: suspend () -> T): T = try {
 /** `POST /api/panel/market/refunds/:refundId/retry` (`P:PAY`, 21 section 3.3): the same key and amounts again; `refund`; 409 `INVALID_STATE`. */
 @Endpoint
 class PanelRetryRefundAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/refunds/:refundId/retry", RouteType.POST))
+    override val paths = listOf(Path("/refunds/:refundId/retry", RouteType.POST))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.PAYMENTS)
 
@@ -284,7 +284,7 @@ class PanelRetryRefundAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
 /** `POST /api/panel/market/refunds/:refundId/cancel` (`P:PAY`, 21 section 3.3): a refund nothing is running for; `refund`; 409 `INVALID_STATE`. */
 @Endpoint
 class PanelCancelRefundAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/refunds/:refundId/cancel", RouteType.POST))
+    override val paths = listOf(Path("/refunds/:refundId/cancel", RouteType.POST))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.PAYMENTS)
 

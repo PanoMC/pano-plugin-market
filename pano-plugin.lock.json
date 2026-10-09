@@ -1,0 +1,1979 @@
+{
+  "controllers": {
+    "market/api": {
+      "actions": [
+        "call",
+        "apiGet",
+        "post",
+        "put",
+        "del"
+      ],
+      "state": [],
+      "version": 1
+    },
+    "market/cart": {
+      "actions": [
+        "init",
+        "autoInit",
+        "add",
+        "update",
+        "setQuantity",
+        "remove",
+        "clear",
+        "putCart",
+        "setCurrency",
+        "afterCheckout",
+        "requestQuote",
+        "watchQuotes",
+        "retry",
+        "clampToQuote",
+        "confirmReplace",
+        "cancelReplace",
+        "reset"
+      ],
+      "state": [
+        "mode",
+        "status",
+        "lines",
+        "quote",
+        "quoteStale",
+        "count",
+        "error",
+        "codes",
+        "reduced",
+        "replaceRequest"
+      ],
+      "version": 1
+    },
+    "market/checkout": {
+      "actions": [],
+      "state": [],
+      "version": 1
+    },
+    "market/checkoutDraft": {
+      "actions": [
+        "get",
+        "restore",
+        "patch",
+        "set",
+        "flush",
+        "clear",
+        "detach",
+        "sessionChanged"
+      ],
+      "state": [
+        "guest",
+        "isGift",
+        "recipientUsername",
+        "giftMessage",
+        "couponCode",
+        "creatorCode",
+        "shippingAddressId",
+        "shippingAddress",
+        "shippingMethodId",
+        "saveAddress",
+        "billingOpen",
+        "billingSameAsShipping",
+        "billingInfo",
+        "paymentMethodId",
+        "payWithCredits",
+        "useCredits",
+        "idempotencyKey",
+        "bodyHash"
+      ],
+      "version": 1
+    },
+    "market/clock": {
+      "actions": [],
+      "state": [
+        "now"
+      ],
+      "version": 1
+    },
+    "market/currency": {
+      "actions": [
+        "init",
+        "setPreferred",
+        "effective",
+        "adoptUrl",
+        "needsRefetch",
+        "isMulti"
+      ],
+      "state": [
+        "preferred"
+      ],
+      "version": 1
+    },
+    "market/format": {
+      "actions": [
+        "formatPrice",
+        "formatMoney",
+        "formatCredits",
+        "formatDate",
+        "formatDateTime",
+        "formatPeriod",
+        "countryName"
+      ],
+      "state": [],
+      "version": 1
+    },
+    "market/host": {
+      "actions": [
+        "has",
+        "loginUrl",
+        "registerUrl"
+      ],
+      "state": [],
+      "version": 1
+    },
+    "market/order": {
+      "actions": [],
+      "state": [],
+      "version": 1
+    },
+    "market/product": {
+      "actions": [],
+      "state": [],
+      "version": 1
+    },
+    "market/profile": {
+      "actions": [
+        "refresh",
+        "reset",
+        "setLoader"
+      ],
+      "state": [
+        "summary"
+      ],
+      "version": 1
+    },
+    "market/session": {
+      "actions": [
+        "sync",
+        "onChange"
+      ],
+      "state": [
+        "user",
+        "isLoggedIn",
+        "csrfToken"
+      ],
+      "version": 1
+    },
+    "market/settings": {
+      "actions": [
+        "set",
+        "ensure"
+      ],
+      "state": [
+        "settings"
+      ],
+      "version": 1
+    },
+    "market/store": {
+      "actions": [],
+      "state": [],
+      "version": 1
+    },
+    "market/widgets": {
+      "actions": [],
+      "state": [],
+      "version": 1
+    }
+  },
+  "format": 1,
+  "views": {
+    "market:AddToCart": {
+      "classes": [
+        "market-add-to-cart",
+        "market-add-to-cart__action",
+        "market-add-to-cart__add-to-cart",
+        "market-add-to-cart__buy-now",
+        "market-add-to-cart__sold-out",
+        "market-add-to-cart__subscribe"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "buy": {
+          "required": true
+        },
+        "missing": {
+          "required": false
+        },
+        "onadd": {
+          "required": false
+        },
+        "onbuy": {
+          "required": false
+        },
+        "onsubscribe": {
+          "required": false
+        },
+        "pending": {
+          "required": false
+        },
+        "slug": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:AddressForm": {
+      "classes": [
+        "market-address-form",
+        "market-address-form__input",
+        "market-address-form__label",
+        "market-address-form__select"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "countries": {
+          "required": false
+        },
+        "errors": {
+          "required": false
+        },
+        "fields": {
+          "required": false
+        },
+        "kind": {
+          "required": false
+        },
+        "onblur": {
+          "required": false
+        },
+        "onchange": {
+          "required": false
+        },
+        "required": {
+          "required": false
+        },
+        "showCompany": {
+          "required": false
+        },
+        "value": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:BillingSection": {
+      "classes": [
+        "market-billing-section",
+        "market-billing-section__body",
+        "market-billing-section__check",
+        "market-billing-section__check-2",
+        "market-billing-section__check-3",
+        "market-billing-section__identity-number",
+        "market-billing-section__input",
+        "market-billing-section__input-2",
+        "market-billing-section__input-3",
+        "market-billing-section__input-4",
+        "market-billing-section__label",
+        "market-billing-section__tax-number",
+        "market-billing-section__tax-office",
+        "market-billing-section__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "errors": {
+          "required": false
+        },
+        "info": {
+          "required": false
+        },
+        "onblur": {
+          "required": false
+        },
+        "onchange": {
+          "required": false
+        },
+        "onopen": {
+          "required": false
+        },
+        "onsame": {
+          "required": false
+        },
+        "req": {
+          "required": true
+        },
+        "sameAsShipping": {
+          "required": false
+        },
+        "shippingRequired": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:BundleList": {
+      "classes": [
+        "market-bundle-list",
+        "market-bundle-list__image",
+        "market-bundle-list__item",
+        "market-bundle-list__list",
+        "market-bundle-list__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "items": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:BuyerSection": {
+      "classes": [
+        "market-buyer-section",
+        "market-buyer-section__body",
+        "market-buyer-section__email",
+        "market-buyer-section__input",
+        "market-buyer-section__input-2",
+        "market-buyer-section__label",
+        "market-buyer-section__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "errors": {
+          "required": false
+        },
+        "guest": {
+          "required": false
+        },
+        "loginHref": {
+          "required": false
+        },
+        "onblur": {
+          "required": false
+        },
+        "onchange": {
+          "required": false
+        },
+        "user": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:CartLineRow": {
+      "classes": [
+        "market-cart-line-row",
+        "market-cart-line-row__action",
+        "market-cart-line-row__action-2",
+        "market-cart-line-row__badge",
+        "market-cart-line-row__decrease",
+        "market-cart-line-row__image",
+        "market-cart-line-row__increase",
+        "market-cart-line-row__item"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "creditName": {
+          "required": false
+        },
+        "creditsEnabled": {
+          "required": false
+        },
+        "money": {
+          "required": true
+        },
+        "onnavigate": {
+          "required": false
+        },
+        "row": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:CartOffcanvas": {
+      "classes": [
+        "market-cart-offcanvas",
+        "market-cart-offcanvas__action",
+        "market-cart-offcanvas__action-2",
+        "market-cart-offcanvas__body",
+        "market-cart-offcanvas__checkout",
+        "market-cart-offcanvas__clear",
+        "market-cart-offcanvas__header",
+        "market-cart-offcanvas__list",
+        "market-cart-offcanvas__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {},
+      "slots": []
+    },
+    "market:CategoryNode": {
+      "classes": [
+        "market-category-node",
+        "market-category-node__badge",
+        "market-category-node__item"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "active": {
+          "required": false
+        },
+        "onselect": {
+          "required": true
+        },
+        "row": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:CategoryTree": {
+      "classes": [
+        "market-category-tree",
+        "market-category-tree__action",
+        "market-category-tree__list"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "categories": {
+          "required": false
+        },
+        "onselect": {
+          "required": true
+        },
+        "selected": {
+          "required": false
+        },
+        "totalCount": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:CheckoutPage": {
+      "classes": [
+        "market-checkout-page",
+        "market-checkout-page__action",
+        "market-checkout-page__action-2",
+        "market-checkout-page__alert",
+        "market-checkout-page__check",
+        "market-checkout-page__edit-cart",
+        "market-checkout-page__redirecting",
+        "market-checkout-page__reload",
+        "market-checkout-page__too-many-requests"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "data": {
+          "required": true
+        }
+      },
+      "slots": [
+        "market:checkout:payment",
+        "market:checkout:shipping"
+      ]
+    },
+    "market:CodeInput": {
+      "classes": [
+        "market-code-input",
+        "market-code-input__action",
+        "market-code-input__badge",
+        "market-code-input__code-apply",
+        "market-code-input__input",
+        "market-code-input__label"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "applied": {
+          "required": false
+        },
+        "busy": {
+          "required": false
+        },
+        "disabled": {
+          "required": false
+        },
+        "id": {
+          "required": true
+        },
+        "info": {
+          "required": false
+        },
+        "label": {
+          "required": true
+        },
+        "onapply": {
+          "required": false
+        },
+        "onremove": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:ComparisonTable": {
+      "classes": [
+        "market-comparison-table",
+        "market-comparison-table__header",
+        "market-comparison-table__table"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "comparison": {
+          "required": true
+        },
+        "productMap": {
+          "required": false
+        },
+        "settings": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:ConfirmModal": {
+      "classes": [
+        "market-confirm-modal",
+        "market-confirm-modal__action",
+        "market-confirm-modal__body",
+        "market-confirm-modal__footer",
+        "market-confirm-modal__header",
+        "market-confirm-modal__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "cancelLabel": {
+          "required": false
+        },
+        "confirmLabel": {
+          "required": false
+        },
+        "id": {
+          "required": true
+        },
+        "message": {
+          "required": false
+        },
+        "oncancel": {
+          "required": false
+        },
+        "onconfirm": {
+          "required": false
+        },
+        "title": {
+          "required": true
+        },
+        "variant": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:CopyButton": {
+      "classes": [
+        "market-copy-button",
+        "market-copy-button__action"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "label": {
+          "required": false
+        },
+        "text": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:CreatorPage": {
+      "classes": [
+        "market-creator-page",
+        "market-creator-page__badge",
+        "market-creator-page__badge-2",
+        "market-creator-page__badge-3",
+        "market-creator-page__body",
+        "market-creator-page__codes-title",
+        "market-creator-page__earnings-title",
+        "market-creator-page__item",
+        "market-creator-page__list",
+        "market-creator-page__payouts-title",
+        "market-creator-page__table",
+        "market-creator-page__table-2",
+        "market-creator-page__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "data": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:CreditsPage": {
+      "classes": [
+        "market-credits-page",
+        "market-credits-page__body",
+        "market-credits-page__ledger-title",
+        "market-credits-page__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "data": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:CreditsSection": {
+      "classes": [
+        "market-credits-section",
+        "market-credits-section__action",
+        "market-credits-section__alert",
+        "market-credits-section__badge",
+        "market-credits-section__body",
+        "market-credits-section__check",
+        "market-credits-section__check-2",
+        "market-credits-section__input",
+        "market-credits-section__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "alertKey": {
+          "required": false
+        },
+        "alertMax": {
+          "required": false
+        },
+        "config": {
+          "required": false
+        },
+        "credits": {
+          "required": true
+        },
+        "currency": {
+          "required": false
+        },
+        "disabled": {
+          "required": false
+        },
+        "method": {
+          "required": false
+        },
+        "onchange": {
+          "required": false
+        },
+        "payWithCredits": {
+          "required": false
+        },
+        "removeCents": {
+          "required": false
+        },
+        "useCredits": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:CurrencySelect": {
+      "classes": [
+        "market-currency-select",
+        "market-currency-select__select"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "currencies": {
+          "required": false
+        },
+        "id": {
+          "required": false
+        },
+        "onchange": {
+          "required": true
+        },
+        "selected": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:CustomFields": {
+      "classes": [
+        "market-custom-fields",
+        "market-custom-fields__check",
+        "market-custom-fields__input",
+        "market-custom-fields__input-2",
+        "market-custom-fields__label",
+        "market-custom-fields__select"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "errors": {
+          "required": false
+        },
+        "fields": {
+          "required": false
+        },
+        "onblur": {
+          "required": false
+        },
+        "onchange": {
+          "required": false
+        },
+        "values": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:ErrorAlert": {
+      "classes": [
+        "market-error-alert",
+        "market-error-alert__action",
+        "market-error-alert__alert"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "message": {
+          "required": false
+        },
+        "onretry": {
+          "required": false
+        },
+        "retryLabel": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:GenericPaymentForm": {
+      "classes": [
+        "market-generic-payment-form",
+        "market-generic-payment-form__action",
+        "market-generic-payment-form__alert",
+        "market-generic-payment-form__alert-2",
+        "market-generic-payment-form__check",
+        "market-generic-payment-form__input",
+        "market-generic-payment-form__input-2",
+        "market-generic-payment-form__label",
+        "market-generic-payment-form__label-2",
+        "market-generic-payment-form__select"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "continuePayment": {
+          "required": true
+        },
+        "fields": {
+          "required": false
+        },
+        "seconds": {
+          "required": false
+        },
+        "waiting": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:GiftRedeemForm": {
+      "classes": [
+        "market-gift-redeem-form",
+        "market-gift-redeem-form__action",
+        "market-gift-redeem-form__alert",
+        "market-gift-redeem-form__input",
+        "market-gift-redeem-form__label",
+        "market-gift-redeem-form__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {},
+      "slots": []
+    },
+    "market:GiftSection": {
+      "classes": [
+        "market-gift-section",
+        "market-gift-section__body",
+        "market-gift-section__check",
+        "market-gift-section__gift-message",
+        "market-gift-section__input",
+        "market-gift-section__input-2",
+        "market-gift-section__label",
+        "market-gift-section__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "errors": {
+          "required": false
+        },
+        "isGift": {
+          "required": false
+        },
+        "lineNames": {
+          "required": false
+        },
+        "message": {
+          "required": false
+        },
+        "onblur": {
+          "required": false
+        },
+        "onchange": {
+          "required": false
+        },
+        "recipient": {
+          "required": false
+        },
+        "recipientUnknown": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:GoalWidget": {
+      "classes": [
+        "market-goal-widget",
+        "market-goal-widget__body",
+        "market-goal-widget__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "data": {
+          "required": false
+        },
+        "sidebarId": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:LedgerTable": {
+      "classes": [
+        "market-ledger-table",
+        "market-ledger-table__table"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "creditName": {
+          "required": false
+        },
+        "entries": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:LegalCheckbox": {
+      "classes": [
+        "market-legal-checkbox",
+        "market-legal-checkbox__action",
+        "market-legal-checkbox__check"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "checked": {
+          "required": false
+        },
+        "disabled": {
+          "required": false
+        },
+        "invalid": {
+          "required": false
+        },
+        "legal": {
+          "required": true
+        },
+        "onchange": {
+          "required": false
+        },
+        "updated": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:LegalModal": {
+      "classes": [
+        "market-legal-modal",
+        "market-legal-modal__action",
+        "market-legal-modal__body",
+        "market-legal-modal__footer",
+        "market-legal-modal__header",
+        "market-legal-modal__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "content": {
+          "required": false
+        },
+        "id": {
+          "required": false
+        },
+        "title": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:LoadingBlock": {
+      "classes": [
+        "market-loading-block"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "rows": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:LoginRequiredCard": {
+      "classes": [
+        "market-login-required-card",
+        "market-login-required-card__action",
+        "market-login-required-card__body",
+        "market-login-required-card__register"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "loginHref": {
+          "required": false
+        },
+        "registerHref": {
+          "required": false
+        },
+        "showReturnHint": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:MarketProfileBlock": {
+      "classes": [
+        "market-market-profile-block",
+        "market-market-profile-block__badge",
+        "market-market-profile-block__footer",
+        "market-market-profile-block__header",
+        "market-market-profile-block__item",
+        "market-market-profile-block__list"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "data": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:NavCart": {
+      "classes": [
+        "market-nav-cart",
+        "market-nav-cart__badge",
+        "market-nav-cart__link"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {},
+      "slots": []
+    },
+    "market:OrderActions": {
+      "classes": [
+        "market-order-actions",
+        "market-order-actions__action",
+        "market-order-actions__cancel",
+        "market-order-actions__invoice"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "id": {
+          "required": true
+        },
+        "onrefetch": {
+          "required": false
+        },
+        "order": {
+          "required": true
+        },
+        "token": {
+          "required": false
+        },
+        "view": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:OrderItems": {
+      "classes": [
+        "market-order-items",
+        "market-order-items__badge",
+        "market-order-items__image",
+        "market-order-items__item",
+        "market-order-items__list"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "currency": {
+          "required": false
+        },
+        "items": {
+          "required": false
+        },
+        "removeCents": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:OrderPage": {
+      "classes": [
+        "market-order-page",
+        "market-order-page__action",
+        "market-order-page__shipments",
+        "market-order-page__title",
+        "market-order-page__title-2"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "data": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:OrderStatusBadge": {
+      "classes": [
+        "market-order-status-badge",
+        "market-order-status-badge__badge"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "status": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:OrderStatusBlock": {
+      "classes": [
+        "market-order-status-block",
+        "market-order-status-block__action",
+        "market-order-status-block__alert",
+        "market-order-status-block__badge",
+        "market-order-status-block__buyer-action",
+        "market-order-status-block__limited",
+        "market-order-status-block__refund-pending",
+        "market-order-status-block__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "extras": {
+          "required": true
+        },
+        "left": {
+          "required": false
+        },
+        "loginHref": {
+          "required": false
+        },
+        "order": {
+          "required": true
+        },
+        "view": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:OrderSummary": {
+      "classes": [
+        "market-order-summary",
+        "market-order-summary__action",
+        "market-order-summary__alert",
+        "market-order-summary__body",
+        "market-order-summary__image",
+        "market-order-summary__item",
+        "market-order-summary__list",
+        "market-order-summary__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "couponCode": {
+          "required": false
+        },
+        "couponState": {
+          "required": false
+        },
+        "creatorCode": {
+          "required": false
+        },
+        "creatorState": {
+          "required": false
+        },
+        "disabled": {
+          "required": false
+        },
+        "hideCodes": {
+          "required": false
+        },
+        "oncode": {
+          "required": false
+        },
+        "quote": {
+          "required": false
+        },
+        "quoting": {
+          "required": false
+        },
+        "removeCents": {
+          "required": false
+        },
+        "topup": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:OrderTotals": {
+      "classes": [
+        "market-order-totals"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "order": {
+          "required": true
+        },
+        "pricesIncludeVat": {
+          "required": false
+        },
+        "removeCents": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:Pager": {
+      "classes": [
+        "market-pager",
+        "market-pager__pager"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "onpage": {
+          "required": true
+        },
+        "page": {
+          "required": false
+        },
+        "totalPages": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:PaymentEmbedded": {
+      "classes": [
+        "market-payment-embedded",
+        "market-payment-embedded__alert"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "continuePayment": {
+          "required": true
+        },
+        "onuierror": {
+          "required": false
+        },
+        "order": {
+          "required": true
+        },
+        "payment": {
+          "required": true
+        },
+        "refresh": {
+          "required": false
+        },
+        "seconds": {
+          "required": false
+        },
+        "start": {
+          "required": true
+        },
+        "waiting": {
+          "required": false
+        }
+      },
+      "slots": [
+        "market:order:payment"
+      ]
+    },
+    "market:PaymentIframe": {
+      "classes": [
+        "market-payment-iframe",
+        "market-payment-iframe__alert"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "iframe": {
+          "required": true
+        },
+        "onerror": {
+          "required": false
+        },
+        "title": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:PaymentInstructions": {
+      "classes": [
+        "market-payment-instructions",
+        "market-payment-instructions__action",
+        "market-payment-instructions__alert",
+        "market-payment-instructions__body",
+        "market-payment-instructions__input",
+        "market-payment-instructions__input-2",
+        "market-payment-instructions__label",
+        "market-payment-instructions__title",
+        "market-payment-instructions__transfer-note"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "id": {
+          "required": true
+        },
+        "instructions": {
+          "required": true
+        },
+        "onrefetch": {
+          "required": false
+        },
+        "order": {
+          "required": true
+        },
+        "readonly": {
+          "required": false
+        },
+        "token": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:PaymentMethodPicker": {
+      "classes": [
+        "market-payment-method-picker",
+        "market-payment-method-picker__alert",
+        "market-payment-method-picker__badge",
+        "market-payment-method-picker__body",
+        "market-payment-method-picker__check",
+        "market-payment-method-picker__external-pricing",
+        "market-payment-method-picker__image",
+        "market-payment-method-picker__item",
+        "market-payment-method-picker__list",
+        "market-payment-method-picker__no-payment-method",
+        "market-payment-method-picker__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "alertDetail": {
+          "required": false
+        },
+        "alertKey": {
+          "required": false
+        },
+        "currency": {
+          "required": false
+        },
+        "disabled": {
+          "required": false
+        },
+        "onselect": {
+          "required": false
+        },
+        "payWithCredits": {
+          "required": false
+        },
+        "quote": {
+          "required": false
+        },
+        "removeCents": {
+          "required": false
+        },
+        "selectedId": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:PaymentPanel": {
+      "classes": [
+        "market-payment-panel",
+        "market-payment-panel__action",
+        "market-payment-panel__alert",
+        "market-payment-panel__alert-2",
+        "market-payment-panel__body",
+        "market-payment-panel__payment-other",
+        "market-payment-panel__payment-pay",
+        "market-payment-panel__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "id": {
+          "required": true
+        },
+        "onrefetch": {
+          "required": false
+        },
+        "order": {
+          "required": true
+        },
+        "removeCents": {
+          "required": false
+        },
+        "token": {
+          "required": false
+        },
+        "view": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:PriceTag": {
+      "classes": [
+        "market-price-tag",
+        "market-price-tag__badge"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "product": {
+          "required": true
+        },
+        "settings": {
+          "required": false
+        },
+        "showVat": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:ProductCard": {
+      "classes": [
+        "market-product-card",
+        "market-product-card__action",
+        "market-product-card__add-to-cart",
+        "market-product-card__badge",
+        "market-product-card__body",
+        "market-product-card__choose-options",
+        "market-product-card__image",
+        "market-product-card__sold-out",
+        "market-product-card__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "product": {
+          "required": true
+        },
+        "settings": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:ProductPage": {
+      "classes": [
+        "market-product-page",
+        "market-product-page__alert",
+        "market-product-page__badge",
+        "market-product-page__body",
+        "market-product-page__image",
+        "market-product-page__owned",
+        "market-product-page__sold-out",
+        "market-product-page__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "data": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:ProfilePills": {
+      "classes": [
+        "market-profile-pills",
+        "market-profile-pills__badge",
+        "market-profile-pills__link"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "current": {
+          "required": false
+        },
+        "summary": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:PurchasesPage": {
+      "classes": [
+        "market-purchases-page",
+        "market-purchases-page__body",
+        "market-purchases-page__item",
+        "market-purchases-page__label",
+        "market-purchases-page__list",
+        "market-purchases-page__orders-title",
+        "market-purchases-page__select",
+        "market-purchases-page__table",
+        "market-purchases-page__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "data": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:QuantityInput": {
+      "classes": [
+        "market-quantity-input",
+        "market-quantity-input__action",
+        "market-quantity-input__input",
+        "market-quantity-input__label",
+        "market-quantity-input__quantity-increase"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "max": {
+          "required": false
+        },
+        "onchange": {
+          "required": false
+        },
+        "value": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:RecentBuyersWidget": {
+      "classes": [
+        "market-recent-buyers-widget",
+        "market-recent-buyers-widget__badge",
+        "market-recent-buyers-widget__header",
+        "market-recent-buyers-widget__item",
+        "market-recent-buyers-widget__list"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "data": {
+          "required": false
+        },
+        "sidebarId": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:ReplaceCartModal": {
+      "classes": [
+        "market-replace-cart-modal",
+        "market-replace-cart-modal__action",
+        "market-replace-cart-modal__body",
+        "market-replace-cart-modal__footer",
+        "market-replace-cart-modal__header",
+        "market-replace-cart-modal__replace-confirm",
+        "market-replace-cart-modal__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {},
+      "slots": []
+    },
+    "market:RequiredProducts": {
+      "classes": [
+        "market-required-products",
+        "market-required-products__item",
+        "market-required-products__list",
+        "market-required-products__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "products": {
+          "required": false
+        },
+        "requireOnlyOne": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:SaleBadge": {
+      "classes": [
+        "market-sale-badge",
+        "market-sale-badge__badge"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "product": {
+          "required": true
+        },
+        "settings": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:SaleCountdown": {
+      "classes": [
+        "market-sale-countdown"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "product": {
+          "required": true
+        },
+        "settings": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:ServerSelect": {
+      "classes": [
+        "market-server-select",
+        "market-server-select__label",
+        "market-server-select__select"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "choices": {
+          "required": false
+        },
+        "error": {
+          "required": false
+        },
+        "onchange": {
+          "required": false
+        },
+        "value": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:ShipmentList": {
+      "classes": [
+        "market-shipment-list",
+        "market-shipment-list__badge",
+        "market-shipment-list__billing-info",
+        "market-shipment-list__body",
+        "market-shipment-list__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "billingInfo": {
+          "required": false
+        },
+        "email": {
+          "required": false
+        },
+        "owner": {
+          "required": false
+        },
+        "shipments": {
+          "required": false
+        },
+        "shippingAddress": {
+          "required": false
+        },
+        "showShipments": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:ShippingSection": {
+      "classes": [
+        "market-shipping-section",
+        "market-shipping-section__address-new",
+        "market-shipping-section__alert",
+        "market-shipping-section__badge",
+        "market-shipping-section__badge-2",
+        "market-shipping-section__body",
+        "market-shipping-section__check",
+        "market-shipping-section__check-2",
+        "market-shipping-section__check-3",
+        "market-shipping-section__check-4",
+        "market-shipping-section__item",
+        "market-shipping-section__item-2",
+        "market-shipping-section__label",
+        "market-shipping-section__list",
+        "market-shipping-section__shipping-free",
+        "market-shipping-section__shipping-method",
+        "market-shipping-section__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "address": {
+          "required": false
+        },
+        "addressReady": {
+          "required": false
+        },
+        "addresses": {
+          "required": false
+        },
+        "countryCodes": {
+          "required": false
+        },
+        "errors": {
+          "required": false
+        },
+        "loggedIn": {
+          "required": false
+        },
+        "onblur": {
+          "required": false
+        },
+        "onchange": {
+          "required": false
+        },
+        "quote": {
+          "required": false
+        },
+        "quoting": {
+          "required": false
+        },
+        "removeCents": {
+          "required": false
+        },
+        "required": {
+          "required": false
+        },
+        "saveAddress": {
+          "required": false
+        },
+        "selectedMethodId": {
+          "required": false
+        },
+        "shippingAddressId": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:StatsWidget": {
+      "classes": [
+        "market-stats-widget",
+        "market-stats-widget__body",
+        "market-stats-widget__header"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "data": {
+          "required": false
+        },
+        "sidebarId": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:StockNote": {
+      "classes": [
+        "market-stock-note"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "product": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:StoreModules": {
+      "classes": [
+        "market-store-modules"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "settings": {
+          "required": false
+        },
+        "widgets": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:StorePage": {
+      "classes": [
+        "market-store-page",
+        "market-store-page__action",
+        "market-store-page__all-products",
+        "market-store-page__bestsellers",
+        "market-store-page__comparisons",
+        "market-store-page__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "data": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:StoreStateCard": {
+      "classes": [
+        "market-store-state-card",
+        "market-store-state-card__action",
+        "market-store-state-card__body"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "icon": {
+          "required": false
+        },
+        "onretry": {
+          "required": false
+        },
+        "text": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:StoreToolbar": {
+      "classes": [
+        "market-store-toolbar",
+        "market-store-toolbar__input",
+        "market-store-toolbar__select"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "currency": {
+          "required": false
+        },
+        "oncurrency": {
+          "required": true
+        },
+        "onsearch": {
+          "required": true
+        },
+        "onsort": {
+          "required": true
+        },
+        "search": {
+          "required": false
+        },
+        "settings": {
+          "required": false
+        },
+        "sort": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:SubscriptionCard": {
+      "classes": [
+        "market-subscription-card",
+        "market-subscription-card__action",
+        "market-subscription-card__alert",
+        "market-subscription-card__badge",
+        "market-subscription-card__body",
+        "market-subscription-card__cancel",
+        "market-subscription-card__ends-on",
+        "market-subscription-card__keep",
+        "market-subscription-card__manage",
+        "market-subscription-card__title",
+        "market-subscription-card__update-method"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "onreload": {
+          "required": false
+        },
+        "onreplace": {
+          "required": false
+        },
+        "subscription": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:SubscriptionsPage": {
+      "classes": [
+        "market-subscriptions-page",
+        "market-subscriptions-page__title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "data": {
+          "required": true
+        }
+      },
+      "slots": []
+    },
+    "market:TestModeBanner": {
+      "classes": [
+        "market-test-mode-banner",
+        "market-test-mode-banner__alert"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "settings": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:TopSupportersWidget": {
+      "classes": [
+        "market-top-supporters-widget",
+        "market-top-supporters-widget__header",
+        "market-top-supporters-widget__item",
+        "market-top-supporters-widget__list"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "currency": {
+          "required": false
+        },
+        "data": {
+          "required": false
+        },
+        "sidebarId": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:TopUpCard": {
+      "classes": [
+        "market-top-up-card",
+        "market-top-up-card__action",
+        "market-top-up-card__body",
+        "market-top-up-card__input",
+        "market-top-up-card__label",
+        "market-top-up-card__packs-title",
+        "market-top-up-card__title",
+        "market-top-up-card__topup-free-title"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "creditName": {
+          "required": false
+        },
+        "packs": {
+          "required": false
+        },
+        "settings": {
+          "required": false
+        },
+        "topUp": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
+    "market:VariantPicker": {
+      "classes": [
+        "market-variant-picker",
+        "market-variant-picker__action",
+        "market-variant-picker__label",
+        "market-variant-picker__select",
+        "market-variant-picker__variant-label"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "error": {
+          "required": false
+        },
+        "onselect": {
+          "required": false
+        },
+        "onvariant": {
+          "required": false
+        },
+        "product": {
+          "required": true
+        },
+        "selection": {
+          "required": false
+        },
+        "variantId": {
+          "required": false
+        }
+      },
+      "slots": []
+    }
+  }
+}

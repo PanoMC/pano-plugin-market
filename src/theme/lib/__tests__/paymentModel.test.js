@@ -94,8 +94,8 @@ describe('values that end up in markup', () => {
       url: 'https://cdn.example.com/l.png',
       relative: false,
     });
-    expect(logoSource('/api/market/payment-providers/stripe/logo')).toEqual({
-      url: '/api/market/payment-providers/stripe/logo',
+    expect(logoSource('/api/plugins/pano-plugin-market/payment-providers/stripe/logo')).toEqual({
+      url: '/api/plugins/pano-plugin-market/payment-providers/stripe/logo',
       relative: true,
     });
 

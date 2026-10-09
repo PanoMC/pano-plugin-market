@@ -6,18 +6,20 @@
     text={$_('theme.product.load-error')}
     onretry={() => location.reload()} />
 {:else}
-  <div class="row g-4">
+  <div class="market-product-page row g-4">
     <div class="col-md-5">
       <div class="ratio ratio-1x1 bg-body-tertiary rounded overflow-hidden">
         {#if view.imageFileName}
           <img
-            src="{base}/api/market/products/image/{encodeURIComponent(view.imageFileName)}"
+            src="{base}/api/plugins/pano-plugin-market/products/image/{encodeURIComponent(
+              view.imageFileName,
+            )}"
             alt={product.name}
-            class="object-fit-contain" />
+            class="market-product-page__image object-fit-contain" />
         {:else}
           <div class="d-flex align-items-center justify-content-center">
             <i
-              class={['fa-solid', product.icon || 'fa-box', 'fa-5x', 'text-body-secondary']}
+              class={['fa-solid', iconClass(product.icon, 'fa-box'), 'fa-5x', 'text-body-secondary']}
               aria-hidden="true"></i>
           </div>
         {/if}
@@ -27,7 +29,7 @@
     <div class="col-md-7 vstack gap-3">
       <div class="vstack gap-2">
         {#if data.titleOptions}
-          <h1 class="h3 mb-0">{product.name}</h1>
+          <h1 class="market-product-page__title h3 mb-0">{product.name}</h1>
         {/if}
         <div class="d-flex flex-wrap align-items-center gap-2">
           {#if product.categoryName && product.categoryId != null}
@@ -37,7 +39,7 @@
               >{product.categoryName}</a>
           {/if}
           {#if product.featured}
-            <span class="badge text-bg-warning">
+            <span class="market-product-page__badge badge text-bg-warning">
               <i class="fa-solid fa-star me-1" aria-hidden="true"></i>{$_(
                 'theme.store.featured-badge',
               )}
@@ -45,10 +47,11 @@
           {/if}
           <SaleBadge product={view} {settings} />
           {#if view.inStock === false}
-            <span class="badge text-bg-secondary">{$_('theme.store.sold-out')}</span>
+            <span class="market-product-page__sold-out badge text-bg-secondary"
+              >{$_('theme.store.sold-out')}</span>
           {/if}
           {#if product.owned === true}
-            <span class="badge text-bg-success">
+            <span class="market-product-page__owned badge text-bg-success">
               <i class="fa-solid fa-check me-1" aria-hidden="true"></i>{$_('theme.store.owned')}
             </span>
           {/if}
@@ -62,7 +65,7 @@
       </div>
 
       {#if product.upgrade}
-        <div class="alert alert-info mb-0" role="status">
+        <div class="market-product-page__alert alert alert-info mb-0" role="status">
           {$_('theme.product.upgrade', {
             values: {
               fromName: product.upgrade.fromName,
@@ -140,7 +143,7 @@
     </div>
   </div>
 
-  <div class="vstack gap-4 mt-4">
+  <div class="market-product-page vstack gap-4 mt-4">
     {#if product.kind === 'BUNDLE'}
       <BundleList items={product.bundleItems || []} />
     {/if}
@@ -151,7 +154,7 @@
 
     {#if product.description}
       <div class="card">
-        <div class="card-body">
+        <div class="market-product-page__body card-body">
           <!-- server-sanitised HTML (the only {@html} of the product page, 14 §2 rule 7) -->
           {@html product.description}
         </div>
@@ -161,48 +164,40 @@
 {/if}
 
 <script module>
+  // page metadata (doc 01 section 2): the build registers this view as a page, no register.js entry. The data of the page
+  // comes from the `market/product` controller (`controller` below, doc 02 section 4); this function only turns its
+  // `notFound` into a 404 and hands the settings it fetched to `market/settings`.
+  export const view = { path: '/store/[slug]', controller: 'product' };
+
+  import { plugin } from '@panomc/sdk/controllers';
   import { error } from '@panomc/sdk/svelte';
-  import { resolveProductLoad, resolveSlug } from '../components/product/productModel.js';
-  import { parseCurrency } from '../lib/storeFilter.js';
-  import { ensureSettings, setSettings } from '../stores/storeSettings.js';
-  import { call } from '../utils/api.js';
-  import { has } from '../utils/host.js';
 
   export async function load(event) {
-    const slug = resolveSlug(event.params?.slug, has('decoded-route-params'));
-    const currency = parseCurrency(event.url.searchParams);
-
-    const [res, settings] = await Promise.all([
-      call('GET', `/api/market/products/${encodeURIComponent(slug)}`, {
-        event,
-        query: { currency },
-      }),
-      ensureSettings(event),
-    ]);
-
-    const result = resolveProductLoad({
-      res,
-      settings,
-      slug,
-      origin: event.url.origin,
-      variantParam: event.url.searchParams.get('variant'),
-      features: { meta: has('page-meta'), titleOptions: has('page-title-options') },
+    const market = plugin('market');
+    const result = await market.load('product', {
+      // a server load is made for its request; the browser has one host for the whole page
+      event: typeof window === 'undefined' ? event : undefined,
+      params: { ...event.params, url: event.url },
     });
+
+    if (!result) throw error(503, 'market/product is not available');
 
     if (result.notFound) throw error(404);
 
-    if (result.data.state === 'READY' && result.data.settingsLoaded)
-      setSettings(result.data.settings);
+    if (
+      result.data.state === 'READY' &&
+      result.data.settingsLoaded &&
+      typeof window !== 'undefined'
+    )
+      market.use('settings')?.actions.set(result.data.settings);
 
     return result;
   }
 </script>
 
 <script>
-  import { getContext, onMount, tick, untrack } from 'svelte';
-  import { get } from 'svelte/store';
+  import { onMount, tick, untrack } from 'svelte';
   import { base, goto } from '@panomc/sdk/svelte';
-  import { _ } from '../../i18n.js';
   import AddToCart from '../components/product/AddToCart.svelte';
   import BundleList from '../components/product/BundleList.svelte';
   import CustomFields from '../components/product/CustomFields.svelte';
@@ -226,22 +221,21 @@
   import SaleCountdown from '../components/store/SaleCountdown.svelte';
   import StockNote from '../components/store/StockNote.svelte';
   import StoreStateCard from '../components/store/StoreStateCard.svelte';
+  import { parseCurrency } from '../lib/storeFilter.js';
   import { validateField, initialFieldValues } from '../lib/validation.js';
   import { effectiveProduct, initialSelection } from '../lib/variants.js';
-  import { cart } from '../stores/cart.js';
-  import {
-    adoptUrlCurrency,
-    effectiveCurrency,
-    initCurrency,
-    needsCurrencyRefetch,
-    preferred,
-  } from '../stores/currency.js';
-  import { bindSession, hostSession } from '../stores/session.js';
-  import { formatMoney } from '../utils/format.js';
+  import { iconClass } from '../lib/classes.js';
+
+  const market = plugin('market');
+  const _ = market._;
+  const currencies = market.require('currency');
+  const settingsStore = market.require('settings');
+  const { call } = market.require('api').actions;
+  const { formatMoney } = market.require('format').actions;
+  // resolved where it is used, so a server render never builds a cart
+  const cartActions = () => market.require('cart').actions;
 
   let { data } = $props();
-
-  bindSession(hostSession(getContext));
 
   // The page is re-mounted whenever load() runs again (14 F2), so the loaded data only seeds the state.
   const init = untrack(() => data);
@@ -342,7 +336,7 @@
 
     try {
       const line = buildLine(product, { variant, fieldValues, serverId, quantity: qty });
-      const ok = await cart.add(line, view);
+      const ok = await cartActions().add(line, view);
 
       if (ok && thenCheckout) await goto('/store/checkout');
     } finally {
@@ -352,7 +346,7 @@
 
   // SSR rendered the default currency; one visible price update to the remembered one (14 §4.5)
   async function refetch(currency) {
-    const res = await call('GET', `/api/market/products/${encodeURIComponent(data.slug)}`, {
+    const res = await call('GET', `/products/${encodeURIComponent(data.slug)}`, {
       query: { currency },
     });
 
@@ -364,17 +358,17 @@
 
     // 14 §7.3: the cart initialises at once on a market page. The session hook only runs at the first bind and on a login, so a visitor who
     // signs in on another page and then goes to the store would otherwise keep a stale badge and an unmerged browser cart (TH-13).
-    cart.autoInit();
+    cartActions().autoInit();
 
-    if (data.settingsLoaded) setSettings(settings);
-    initCurrency();
+    if (data.settingsLoaded) settingsStore.actions.set(settings);
+    currencies.actions.init();
 
     const fromUrl = parseCurrency(new URLSearchParams(window.location.search));
-    adoptUrlCurrency(settings, fromUrl);
+    currencies.actions.adoptUrl(settings, fromUrl);
 
-    const urlCurrency = effectiveCurrency(settings, fromUrl, null);
-    if (!urlCurrency && needsCurrencyRefetch(settings, get(preferred)))
-      refetch(effectiveCurrency(settings, null, get(preferred)));
+    const urlCurrency = currencies.actions.effective(settings, fromUrl, null);
+    if (!urlCurrency && currencies.actions.needsRefetch(settings, currencies.state.preferred))
+      refetch(currencies.actions.effective(settings, null, currencies.state.preferred));
 
     return () => {
       unmounted = true;

@@ -270,7 +270,7 @@
 {/if}
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { CardHeader, Date as DateComponent, NoContent } from '@panomc/sdk/components/panel';
   import { base, page } from '@panomc/sdk/svelte';
   import { _ } from '../../../i18n';
@@ -322,7 +322,7 @@
   }
 
   async function refresh() {
-    const result = await call(ApiUtil.get({ path: summaryPath(username) }));
+    const result = await call(api.panel.get({ path: summaryPath(username) }));
     if (!result.ok) {
       refreshError = result.error;
       return;

@@ -4,7 +4,13 @@ import { join } from 'node:path';
 import en from '../../../locales/panel/en-US.json';
 import ru from '../../../locales/panel/ru.json';
 import tr from '../../../locales/panel/tr.json';
-import { ADMIN_COMMANDS, MAIL_KINDS, SECTION_KEYS, SIDEBARS } from '../../utils/settings.js';
+import {
+  ADMIN_COMMANDS,
+  MAIL_KINDS,
+  PLATFORM_WEBHOOKS_PATH,
+  SECTION_KEYS,
+  SIDEBARS,
+} from '../../utils/settings.js';
 import { QUEUE_CARDS } from '../../utils/health.js';
 import { MARKET_STATES, MC_FEATURES } from '../../utils/minecraft-settings.js';
 
@@ -84,7 +90,7 @@ describe('what the sections must show', () => {
 
   test('credits are saved through POST /settings/credits', () => {
     expect(source(SECTIONS.credits)).toContain('post: postCreditSettings');
-    expect(source('save.js')).toContain("marketPath('/settings/credits')");
+    expect(source('save.js')).toContain("path: '/settings/credits'");
   });
 
   test('the credit value row reads "1 <name> = [ ] <currency>" and carries the revaluation hint', () => {
@@ -143,7 +149,7 @@ describe('what the sections must show', () => {
 
   test('the override modal saves through PUT /servers/:id/settings with the three-state request', () => {
     const text = modal('ServerOverrideModal.svelte');
-    expect(text).toContain('ApiUtil.put');
+    expect(text).toContain('api.panel.put');
     expect(text).toContain('/settings`');
     expect(text).toContain('overrideRequest(form, defaults)');
   });
@@ -154,13 +160,21 @@ describe('what the sections must show', () => {
     expect(text).toContain('alert-danger');
     expect(text).toContain('alert-warning');
     expect(text).toContain('MailTestModal');
-    expect(modal('MailTestModal.svelte')).toContain("marketPath('/settings/mail/test')");
+    expect(modal('MailTestModal.svelte')).toContain("path: '/settings/mail/test'");
   });
 
-  test('turning on private webhook targets asks through a danger ConfirmModal', () => {
+  test('the security section no longer owns the private webhook targets switch (it is the platform setting webhooks.allow-private-targets)', () => {
     const text = source(SECTIONS.security);
-    expect(text).toContain('needsPrivateTargetConfirm(settings, draft)');
-    expect(text).toContain("variant: 'danger'");
+    expect(text).not.toContain('allowPrivateWebhookTargets');
+    expect(text).not.toContain('needsPrivateTargetConfirm');
+  });
+
+  test('the webhooks section is one row that opens the platform page filtered to the market', () => {
+    const text = source('WebhooksLink.svelte');
+    expect(text).toContain('PLATFORM_WEBHOOKS_PATH');
+    expect(text).toContain('href=');
+    expect(text).not.toContain('api.panel');
+    expect(PLATFORM_WEBHOOKS_PATH).toBe('/settings/webhooks?source=market');
   });
 
   test('the delivery section edits the chargeback actions with the action editors', () => {
@@ -174,8 +188,8 @@ describe('what the sections must show', () => {
 
   test('the health panel is read-only and re-reads the report', () => {
     const text = source('HealthPanel.svelte');
-    expect(text).not.toContain('ApiUtil.post');
-    expect(text).not.toContain('ApiUtil.put');
+    expect(text).not.toContain('api.panel.post');
+    expect(text).not.toContain('api.panel.put');
     expect(text).toContain('RECHECK_CREDITS_PATH');
     expect(text).toContain('StatusBadge kind="provider"');
   });
@@ -190,6 +204,7 @@ describe('what the sections must show', () => {
       ['mail', 'MailSettings'],
       ['minecraft', 'MinecraftSettings'],
       ['health', 'HealthPanel'],
+      ['webhooks', 'WebhooksLink'],
     ])
       expect(registry).toContain(`${key}: ${component},`);
   });

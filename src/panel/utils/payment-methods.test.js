@@ -75,12 +75,12 @@ describe('list order and filters', () => {
     expect(providerName(p, 'tr-TR')).toBe('Why');
   });
   test('logo route is the public provider logo path', () => {
-    expect(logoPath('/panel', 'stripe')).toBe('/panel/api/market/payment-providers/stripe/logo');
-    expect(logoPath('', 'a b')).toBe('/api/market/payment-providers/a%20b/logo');
+    expect(logoPath('/panel', 'stripe')).toBe('/api/plugins/pano-plugin-market/payment-providers/stripe/logo');
+    expect(logoPath('', 'a b')).toBe('/api/plugins/pano-plugin-market/payment-providers/a%20b/logo');
     expect(logoPath('', 'x')).not.toContain('favicon');
   });
   test('the provider card asks for the logo at the site root, not below the /panel base', async () => {
-    // The browser smoke (E2E-13) saw five 404s: /panel/api/... is the panel UI's own API prefix, the market route lives at /api/market/...
+    // The browser smoke (E2E-13) saw five 404s: /panel/api/... is the panel UI's own API prefix, the market route lives at /api/plugins/pano-plugin-market/...
     const source = await Bun.file(new URL('../components/settings/PaymentMethods.svelte', import.meta.url)).text();
     expect(source).toContain("logoPath('', provider.id)");
     expect(source).not.toContain('logoPath(base,');

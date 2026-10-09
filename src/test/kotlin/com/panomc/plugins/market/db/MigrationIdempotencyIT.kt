@@ -58,7 +58,7 @@ class MigrationIdempotencyIT : MarketMigrationTestBase() {
         runChain()
         val schema = SchemaSnapshot.take(pool)
         val dump = data()
-        assertEquals(53, schema.tables.size)
+        assertEquals(51, schema.tables.size)
         runChain()
         assertEquals(schema, SchemaSnapshot.take(pool))
         assertEquals(dump, data())

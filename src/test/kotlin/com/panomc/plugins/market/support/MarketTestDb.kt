@@ -217,6 +217,19 @@ object MarketTestDb {
         }
     }
 
+    /** Empties the named tables that are not pristine (rows or a used auto-increment); a table that does not exist is skipped. */
+    suspend fun resetTables(pool: Pool, names: List<String>) {
+        val conn = pool.connection.coAwait()
+        try {
+            val existing = names.filter { name ->
+                conn.preparedQuery("SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?").execute(Tuple.of(name)).coAwait().iterator().hasNext()
+            }
+            dirtyTables(conn, existing).forEach { conn.query("TRUNCATE TABLE `$it`").execute().coAwait() }
+        } finally {
+            runCatching { conn.close().coAwait() }
+        }
+    }
+
     /** Drops every table and view of the current database (the empty start of a migration test). */
     suspend fun dropAllTables(pool: Pool) {
         val conn = pool.connection.coAwait()

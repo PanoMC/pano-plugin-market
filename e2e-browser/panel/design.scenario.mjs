@@ -1,7 +1,7 @@
 // Scenarios 73 to 75 of 13 section 25.4: design conformance of every list page (73), no orphaned modal backdrop after a modal-driven mutation (74), and no
 // missing translation key on any page in tr, en-US and ru (75).
 import fs from 'node:fs';
-import { must } from '../lib/api.mjs';
+import { must, MARKET_API, PANEL_MARKET_API, listOf } from '../lib/api.mjs';
 import { run, grantCredits, product } from '../lib/bootstrap.mjs';
 import { assert, assertEqual } from '../lib/ui.mjs';
 import {
@@ -60,16 +60,19 @@ async function ensureFixtures(ctx) {
   const shipping = await zoneAndMethod(admin, `d73-${tag}`);
   const parcel = await physicalProduct(admin, `Parcel 73 ${tag}`);
   // the instance's catch-all zone shadows nothing for DE: the first active zone that matches wins, so the order is quoted with this zone's method
-  const zones = must(await admin.get('/api/panel/market/shipping/zones'), 'zones').json.zones ?? [];
+  const zones = listOf(
+    must(await admin.get(`${PANEL_MARKET_API}/shipping/zones`), 'zones').json,
+    'zones',
+  );
   const off = zones
     .filter((z) => z.status === 'ACTIVE' && z.id !== shipping.zoneId)
     .map((z) => z.id);
   for (const id of off)
-    await admin.put(`/api/panel/market/shipping/zones/${id}`, { status: 'INACTIVE' });
+    await admin.put(`${PANEL_MARKET_API}/shipping/zones/${id}`, { status: 'INACTIVE' });
   try {
     const order = await paidShippableOrder(ctx, parcel, 2, shipping.methodId, 'd73p');
     must(
-      await admin.post(`/api/panel/market/orders/${order.id}/shipments`, {
+      await admin.post(`${PANEL_MARKET_API}/orders/${order.id}/shipments`, {
         providerId: 'manual',
         items: [{ orderItemId: order.detail.items[0].id, quantity: 1 }],
         parcels: [{ weightGrams: 500 }],
@@ -79,11 +82,11 @@ async function ensureFixtures(ctx) {
     );
   } finally {
     for (const id of off)
-      await admin.put(`/api/panel/market/shipping/zones/${id}`, { status: 'ACTIVE' });
+      await admin.put(`${PANEL_MARKET_API}/shipping/zones/${id}`, { status: 'ACTIVE' });
   }
 
   must(
-    await admin.post('/api/panel/market/comparisons', {
+    await admin.post(`${PANEL_MARKET_API}/comparisons`, {
       name: `Comparison ${tag}`,
       status: 'ACTIVE',
       selectedProducts: [cat.vip.id],
@@ -91,7 +94,7 @@ async function ensureFixtures(ctx) {
     'comparison',
   );
   must(
-    await admin.post('/api/panel/market/goals', {
+    await admin.post(`${PANEL_MARKET_API}/goals`, {
       name: `Goal ${tag}`,
       description: '',
       metric: 'REVENUE',
@@ -107,7 +110,7 @@ async function ensureFixtures(ctx) {
   );
   // an ALL-products discount would change every price of the scenarios that run after this one (the theme scenarios): the row is made inactive at once
   const discount = must(
-    await admin.post('/api/panel/market/discounts', {
+    await admin.post(`${PANEL_MARKET_API}/discounts`, {
       name: `Discount ${tag}`,
       value: 10,
       unit: 'PERCENT',
@@ -116,11 +119,11 @@ async function ensureFixtures(ctx) {
     'discount',
   ).json;
   must(
-    await admin.put(`/api/panel/market/discounts/${discount.id}`, { status: 'INACTIVE' }),
+    await admin.put(`${PANEL_MARKET_API}/discounts/${discount.id}`, { status: 'INACTIVE' }),
     'switch the discount off',
   );
   must(
-    await admin.post('/api/panel/market/coupons', {
+    await admin.post(`${PANEL_MARKET_API}/coupons`, {
       name: `Coupon ${tag}`,
       code: `D73C${tag}`.toUpperCase(),
       discount: 5,
@@ -129,7 +132,7 @@ async function ensureFixtures(ctx) {
     'coupon',
   );
   must(
-    await admin.post('/api/panel/market/creator-codes', {
+    await admin.post(`${PANEL_MARKET_API}/creator-codes`, {
       creator: `d73${tag}`.slice(0, 16),
       code: `D73R${tag}`.toUpperCase(),
       discount: 5,
@@ -139,7 +142,7 @@ async function ensureFixtures(ctx) {
     'creator code',
   );
   must(
-    await admin.post('/api/panel/market/gifts', {
+    await admin.post(`${PANEL_MARKET_API}/gifts`, {
       name: `Gift ${tag}`,
       code: `D73G${tag}`.toUpperCase(),
       type: 'PRODUCT',
@@ -149,7 +152,7 @@ async function ensureFixtures(ctx) {
   );
   await grantCredits(admin, gift.userId, 3);
   must(
-    await admin.post('/api/panel/market/blocks', {
+    await admin.post(`${PANEL_MARKET_API}/blocks`, {
       type: 'EMAIL',
       value: `d73-${tag}@example.com`,
       reason: 'e2e',
@@ -157,20 +160,8 @@ async function ensureFixtures(ctx) {
     'block',
   );
 
-  const hook = must(
-    await admin.post('/api/panel/market/webhooks', {
-      name: `Hook ${tag}`,
-      url: `${gateway.baseUrl}/hooks/d73`,
-      events: ['order.paid'],
-      format: 'JSON',
-      signing: 'NONE',
-    }),
-    'webhook',
-  ).json;
-  await admin.post(`/api/panel/market/webhooks/${hook.id}/test`, {});
-  await admin.put(`/api/panel/market/webhooks/${hook.id}`, { enabled: false }); // no further deliveries to the gateway (it answers 404) // a delivery row (the gateway answers 404, a failed delivery is still a row)
   // a payment event: the stored request of an inbound call that was refused (a webhook with a wrong signature is REJECTED)
-  const refused = await fetch(`${ctx.env.url}/api/market/payments/fake/webhook`, {
+  const refused = await fetch(`${ctx.env.url}${MARKET_API}/payments/fake/webhook`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Fake-Signature': 't=1,v1=bad' },
     body: JSON.stringify({
@@ -181,7 +172,7 @@ async function ensureFixtures(ctx) {
   });
   assert(refused.status === 400, `the refused webhook was answered ${refused.status}`);
   must(
-    await admin.post('/api/panel/market/settings/legal', {
+    await admin.post(`${PANEL_MARKET_API}/settings/legal`, {
       locale: 'en-US',
       title: `Terms 73 ${tag}`,
       content: '<p>Terms</p>',
@@ -214,8 +205,6 @@ const LIST_PAGES = [
   { path: '/market/gifts', rows: true },
   { path: '/market/credits', rows: true },
   { path: '/market/blocks', rows: true },
-  { path: '/market/settings?section=webhooks', rows: true },
-  { path: '/market/settings?section=webhook-deliveries', rows: true },
   { path: '/market/settings?section=shipping-zones', rows: true },
   { path: '/market/settings?section=shipping-methods', rows: true },
   { path: '/market/settings?section=shipping-carriers', rows: false },
@@ -369,7 +358,7 @@ export const scenarios = [
         `PANEL-73: only ${withSearch} pages with a search input were inspected`,
       );
 
-      // --- confirmation modals: no header (a blocks row, a webhooks row, a subscription retry is covered by PANEL-70)
+      // --- confirmation modals: no header (a blocks row, a subscription retry is covered by PANEL-70)
       await openMarket(page, env, '/market/blocks', settle);
       const row = page.locator('table tbody tr').first();
       await row.locator('button[data-bs-toggle="dropdown"]').click();
@@ -379,17 +368,6 @@ export const scenarios = [
       if ((await confirm.first().locator('.modal-header').count()) !== 0)
         failures.push('/market/blocks: the confirmation modal has a .modal-header');
       await confirm.first().getByRole('button', { name: 'Cancel' }).click();
-      await modalsClosed(page);
-
-      await openMarket(page, env, '/market/settings?section=webhooks', settle);
-      const hook = page.locator('table tbody tr').first();
-      await hook.locator('button[data-bs-toggle="dropdown"]').click();
-      await hook.getByRole('button', { name: 'Delete' }).click();
-      const confirmHook = page.locator('.modal.show');
-      await confirmHook.first().waitFor({ timeout: 15000 });
-      if ((await confirmHook.first().locator('.modal-header').count()) !== 0)
-        failures.push('webhooks: the confirmation modal has a .modal-header');
-      await confirmHook.first().getByRole('button', { name: 'Cancel' }).click();
       await modalsClosed(page);
 
       // --- form modals: one footer button, a header title
@@ -413,7 +391,6 @@ export const scenarios = [
         ['coupons', cta('/market/discounts?section=coupons', /Create Coupon Code/)],
         ['creator codes', cta('/market/discounts?section=creators', /Create Creator Code/)],
         ['gifts', cta('/market/gifts', /Create Gift/)],
-        ['webhooks', cta('/market/settings?section=webhooks', 'Create Webhook', true)],
         ['shipping zones', cta('/market/settings?section=shipping-zones', 'Create Zone', true)],
       ])
         forms.push(await formModalFooter(page, label, trigger));
@@ -439,7 +416,7 @@ export const scenarios = [
   {
     id: 'PANEL-74',
     title:
-      'remount safety: after a modal-driven mutation (block, credit grant, category, webhook) no modal backdrop is left behind and the page raises no error',
+      'remount safety: after a modal-driven mutation (block, credit grant, category) no modal backdrop is left behind and the page raises no error',
     async run(ctx) {
       const { env, admin } = ctx;
       const { pc, page } = await signedIn(ctx.browser, admin);
@@ -523,32 +500,6 @@ export const scenarios = [
       await modalsClosed(page);
       await noOrphans('category created');
 
-      // --- webhooks: create (secret modal follows) and delete (confirmation)
-      await open('/market/settings?section=webhooks', settle);
-      await page.getByRole('button', { name: 'Actions' }).first().click();
-      await page.getByRole('button', { name: 'Create Webhook' }).click();
-      const hook = page.locator('.modal.show');
-      await hook.locator('#webhookNameInput').fill(`Hook 74 ${tag}`);
-      await hook.locator('#webhookUrlInput').fill(`${ctx.gateway.baseUrl}/hooks/d74`);
-      await hook.getByRole('button', { name: 'Create', exact: true }).click();
-      await page
-        .getByText(enUS.modals.webhook['toast-created'])
-        .first()
-        .waitFor({ timeout: 15000 });
-      await modalsClosed(page);
-      await noOrphans('webhook created');
-      const hookRow = page.locator('table tbody tr').filter({ hasText: `Hook 74 ${tag}` });
-      await hookRow.waitFor({ timeout: 30000 });
-      await hookRow.locator('button[data-bs-toggle="dropdown"]').click();
-      await hookRow.getByRole('button', { name: 'Delete' }).click();
-      await page.locator('.modal.show').getByRole('button', { name: 'Delete' }).click();
-      await page
-        .getByText(enUS.settings.webhooks['toast-deleted'])
-        .first()
-        .waitFor({ timeout: 15000 });
-      await modalsClosed(page);
-      await noOrphans('webhook deleted');
-
       pc.expectNoErrors('PANEL-74');
       await pc.close();
     },
@@ -565,13 +516,12 @@ export const scenarios = [
       const base = dev ?? `${env.url}/panel`;
 
       // routes that need a record: taken from the API
-      const order = must(await admin.get('/api/panel/market/orders'), 'orders').json.orders?.[0];
-      const subscription = must(await admin.get('/api/panel/market/subscriptions'), 'subscriptions')
-        .json.subscriptions?.[0];
-      const creator = must(await admin.get('/api/panel/market/creator-codes/report'), 'creators')
-        .json.creators?.[0];
-      const credit = must(await admin.get('/api/panel/market/credits/accounts'), 'credits').json
-        .accounts?.[0];
+      const firstOf = async (path, what, legacyKey) =>
+        listOf(must(await admin.get(`${PANEL_MARKET_API}${path}`), what).json, legacyKey)[0];
+      const order = await firstOf('/orders', 'orders', 'orders');
+      const subscription = await firstOf('/subscriptions', 'subscriptions', 'subscriptions');
+      const creator = await firstOf('/creator-codes/report', 'creators', 'creators');
+      const credit = await firstOf('/credits/accounts', 'credits', 'accounts');
       assert(
         order && subscription && creator && credit,
         'PANEL-75: the fixtures made an order, a subscription, a creator code and a credit account',
@@ -658,7 +608,7 @@ export const scenarios = [
       // The panel language is the platform's language setting (not the browser's): it is changed through the settings API for each round and put back.
       const setLocale = async (locale) =>
         must(
-          await admin.multipart('PUT', '/api/panel/settings', { locale }),
+          await admin.multipart('PUT', '/api/v1/panel/settings', { locale }),
           `set the panel language to ${locale}`,
         );
 

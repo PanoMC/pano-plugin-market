@@ -21,6 +21,7 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * Payment failure, retry, review and the trust rules of the inbound routes (17 section 9.3): F-01 to F-18. Time travel is by row rewind only
@@ -110,7 +111,7 @@ class PaymentFlowE2E : E2eTestBase() {
         assertEquals("PENDING", orderStatus(publicId))
         assertEquals(true, order(buyer.client, publicId).getBoolean("canRetryPayment"))
 
-        val retry = buyer.client.post("/api/market/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake")).ok()
+        val retry = buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake")).ok()
 
         assertNotNull(retry.obj().getJsonObject("payment"), "the retry answers a PaymentStart")
 
@@ -143,7 +144,7 @@ class PaymentFlowE2E : E2eTestBase() {
         refund?.let { body.put("refund", it) }
         force?.let { body.put("force", it) }
 
-        return admin.post("/api/panel/market/orders/${orderId(publicId)}/review", body)
+        return admin.post("${MarketPaths.PANEL_ROOT}/orders/${orderId(publicId)}/review", body)
     }
 
     /** The `STATUS_CHANGED` rows of the order that moved it to `COMPLETED` (O2 ran once when this is 1). */
@@ -174,7 +175,7 @@ class PaymentFlowE2E : E2eTestBase() {
 
     private fun grantCredits(buyer: E2eBuyer, amount: Int) {
         admin.post(
-            "/api/panel/market/credits/accounts/${buyer.userId}/grant", JsonObject().put("amount", amount).put("note", "e2e payment flow"),
+            "${MarketPaths.PANEL_ROOT}/credits/accounts/${buyer.userId}/grant", JsonObject().put("amount", amount).put("note", "e2e payment flow"),
             mapOf("Idempotency-Key" to idempotencyKey())
         ).ok()
     }
@@ -185,7 +186,7 @@ class PaymentFlowE2E : E2eTestBase() {
 
     /** The `data.status` the fake plugin's provider answers in `GET /payment-providers` for [id]. */
     private fun providerState(id: String): String? =
-        admin.get("/api/panel/market/payment-providers", log = false).ok().obj().getJsonArray("providers").map { it as JsonObject }.firstOrNull { it.getString("id") == id }
+        admin.get("${MarketPaths.PANEL_ROOT}/payment-providers", log = false).ok().obj().getJsonArray("items").map { it as JsonObject }.firstOrNull { it.getString("id") == id }
             ?.getString("state")
 
     private fun eventRow(eventId: String) =
@@ -198,7 +199,7 @@ class PaymentFlowE2E : E2eTestBase() {
     /** Posts one signed event to `/api/market/payments/<providerId>/webhook` (the route of that provider, not the fake gateway's configured target). */
     private fun webhookTo(providerId: String, type: String, data: JsonObject, eventId: String = gateway.nextEventId()): HttpResponse<String> {
         val body = gateway.eventBody(type, data, eventId)
-        val request = HttpRequest.newBuilder(URI.create("$baseUrl/api/market/payments/$providerId/webhook")).header("Content-Type", "application/json")
+        val request = HttpRequest.newBuilder(URI.create("$baseUrl${MarketPaths.SITE_ROOT}/payments/$providerId/webhook")).header("Content-Type", "application/json")
             .header("X-Fake-Signature", gateway.signatureHeader(body, FakePayGateway.Signature.VALID)!!).POST(HttpRequest.BodyPublishers.ofByteArray(body)).build()
 
         return HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString())
@@ -209,14 +210,14 @@ class PaymentFlowE2E : E2eTestBase() {
 
     private fun setProviderSettings(extra: JsonObject) {
         admin.post(
-            "/api/panel/market/payment-methods/fake",
+            "${MarketPaths.PANEL_ROOT}/payment-methods/fake",
             JsonObject().put("settings", JsonObject().put("gatewayUrl", gateway.baseUrl).put("secret", gateway.secret).also { s -> extra.fieldNames().forEach { s.put(it, extra.getValue(it)) } })
         ).ok()
     }
 
     /** `capabilities.buyerMayPayMore` of the `fake` provider as the panel lists it. */
     private fun buyerMayPayMore(): Boolean? =
-        admin.get("/api/panel/market/payment-providers", log = false).ok().obj().getJsonArray("providers").map { it as JsonObject }.first { it.getString("id") == "fake" }
+        admin.get("${MarketPaths.PANEL_ROOT}/payment-providers", log = false).ok().obj().getJsonArray("items").map { it as JsonObject }.first { it.getString("id") == "fake" }
             .getJsonObject("capabilities")?.getBoolean("buyerMayPayMore")
 
     /** True when the REFUND request body asks the gateway to give back [amount] of payment [gatewayPaymentId]. */
@@ -366,7 +367,7 @@ class PaymentFlowE2E : E2eTestBase() {
 
         assertEquals(502, failed.status, "the provider failed: ${failed.error}")
         assertEquals("PAYMENT_PROVIDER_ERROR", failed.error)
-        val view = failed.obj().getJsonObject("order") ?: throw AssertionError("the error answer carries no order")
+        val view = failed.details.getJsonObject("order") ?: throw AssertionError("the error answer carries no order")
         val publicId = view.getString("publicId")
 
         assertEquals("PENDING", orderStatus(publicId))
@@ -379,7 +380,7 @@ class PaymentFlowE2E : E2eTestBase() {
         assertEquals(true, order(buyer.client, publicId).getBoolean("canRetryPayment"))
 
         // the buyer pays with the other method (a new attempt through /pay) and completes the order
-        val retry = buyer.client.post("/api/market/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake-eur")).ok().obj()
+        val retry = buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake-eur")).ok().obj()
 
         assertNotNull(retry.getJsonObject("payment"))
         val second = referenceOf(publicId)
@@ -415,7 +416,7 @@ class PaymentFlowE2E : E2eTestBase() {
             assertTrue(took < 35_000, "the answer took ${took} ms")
             assertEquals(502, failed.status, "answer ${failed.status} ${failed.error}")
             assertEquals("PAYMENT_PROVIDER_ERROR", failed.error)
-            publicId = failed.obj().getJsonObject("order").getString("publicId")
+            publicId = failed.details.getJsonObject("order").getString("publicId")
         } finally {
             gateway.release(FakePayGateway.Op.CREATE)
             setProviderSettings(JsonObject().put("timeoutMs", 15_000))
@@ -525,7 +526,7 @@ class PaymentFlowE2E : E2eTestBase() {
         val publicId = publicIdOf(checkout(buyer.client, cart(line(last.id))).ok())
 
         assertEquals(0L, stockOf(last.id))
-        buyer.client.post("/api/market/orders/$publicId/cancel").ok()
+        buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$publicId/cancel").ok()
 
         assertEquals("CANCELLED", orderStatus(publicId))
         assertEquals("RELEASED", orderRow(publicId).getString("reservationState"))
@@ -537,7 +538,7 @@ class PaymentFlowE2E : E2eTestBase() {
 
         payViaFake(paid)
         awaitOrder(paid, "COMPLETED")
-        val completed = buyer.client.post("/api/market/orders/$paid/cancel")
+        val completed = buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$paid/cancel")
 
         assertEquals(409, completed.status)
         assertEquals("ORDER_NOT_CANCELLABLE", completed.error)
@@ -550,7 +551,7 @@ class PaymentFlowE2E : E2eTestBase() {
         assertEquals(listOf(200), gateway.sendWebhook("payment.pending", JsonObject().put("reference", reference).put("reason", "AWAITING_CONFIRMATIONS")).map { it.statusCode() })
         Await.until(30_000, 250, "attempt PROCESSING") { attemptStatus(reference) == "PROCESSING" }
 
-        val refused = buyer.client.post("/api/market/orders/$processing/cancel")
+        val refused = buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$processing/cancel")
 
         assertEquals(409, refused.status, "answer ${refused.status} ${refused.error}")
         assertEquals("PENDING", orderStatus(processing))
@@ -567,7 +568,7 @@ class PaymentFlowE2E : E2eTestBase() {
     fun `F-14 duplicate payment on a paid order is refunded automatically`() {
         val (buyer, publicId, first) = pending()
 
-        buyer.client.post("/api/market/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake")).ok()
+        buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake")).ok()
         val second = referenceOf(publicId)
 
         assertNotEquals(first, second)
@@ -611,7 +612,7 @@ class PaymentFlowE2E : E2eTestBase() {
         session.withSettings(JsonObject().put("autoRefundDuplicatePayments", false)) {
             val (buyer, publicId, first) = pending()
 
-            buyer.client.post("/api/market/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake")).ok()
+            buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake")).ok()
             val second = referenceOf(publicId)
 
             gateway.pay(first)
@@ -636,7 +637,7 @@ class PaymentFlowE2E : E2eTestBase() {
         val amount = gateway.payments[reference]!!.amount.toPlainString()
         val eventId = gateway.nextEventId()
 
-        admin.put("/api/panel/plugins/pano-plugin-market-fake", JsonObject().put("status", false)).ok()
+        admin.put("/api/v1/panel/addons/pano-plugin-market-fake", JsonObject().put("status", false)).ok()
 
         try {
             Await.until(60_000, 250, "provider fake is not ACTIVE") { providerState("fake") != "ACTIVE" }
@@ -646,7 +647,7 @@ class PaymentFlowE2E : E2eTestBase() {
             assertEquals(listOf(503), answers.map { it.statusCode() }, "the webhook of a stopped provider is answered 503")
             assertEquals("UNAVAILABLE", providerState("fake"), "the method state is UNAVAILABLE")
         } finally {
-            admin.put("/api/panel/plugins/pano-plugin-market-fake", JsonObject().put("status", true)).ok()
+            admin.put("/api/v1/panel/addons/pano-plugin-market-fake", JsonObject().put("status", true)).ok()
             Await.until(90_000, 500, "provider fake is ACTIVE again") { providerState("fake") == "ACTIVE" && providerState("fake-eur") == "ACTIVE" }
         }
 
@@ -655,7 +656,7 @@ class PaymentFlowE2E : E2eTestBase() {
         assertEquals("DEFERRED", row.getString("status"))
         assertEquals("PENDING", orderStatus(publicId))
 
-        val replayed = admin.post("/api/panel/market/payment-events/${row.getLong("id")}/replay", JsonObject()).ok().obj()
+        val replayed = admin.post("${MarketPaths.PANEL_ROOT}/payment-events/${row.getLong("id")}/replay", JsonObject()).ok().obj()
 
         assertEquals("PROCESSED", replayed.getString("status"))
         awaitOrder(publicId, "COMPLETED")
@@ -698,7 +699,7 @@ class PaymentFlowE2E : E2eTestBase() {
 
         val signature = gateway.signatureHeader(body, FakePayGateway.Signature.VALID)!!
         val answer = HttpClient.newHttpClient().send(
-            HttpRequest.newBuilder(URI.create("$baseUrl/api/market/payments/fake/webhook")).header("Content-Type", "application/json").header("X-Fake-Signature", signature)
+            HttpRequest.newBuilder(URI.create("$baseUrl${MarketPaths.SITE_ROOT}/payments/fake/webhook")).header("Content-Type", "application/json").header("X-Fake-Signature", signature)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body)).build(),
             HttpResponse.BodyHandlers.ofString()
         )
@@ -715,7 +716,7 @@ class PaymentFlowE2E : E2eTestBase() {
         // the same bytes with one byte changed fail verification (the signature is not satisfied by a re-encoded body)
         val changed = body.copyOf().also { it[it.size - 2] = 'x'.code.toByte() }
         val tampered = HttpClient.newHttpClient().send(
-            HttpRequest.newBuilder(URI.create("$baseUrl/api/market/payments/fake/webhook")).header("Content-Type", "application/json").header("X-Fake-Signature", signature)
+            HttpRequest.newBuilder(URI.create("$baseUrl${MarketPaths.SITE_ROOT}/payments/fake/webhook")).header("Content-Type", "application/json").header("X-Fake-Signature", signature)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(changed)).build(),
             HttpResponse.BodyHandlers.ofString()
         )
@@ -745,13 +746,13 @@ class PaymentFlowE2E : E2eTestBase() {
 
             expiresAt?.let { body.put("expiresAt", it) }
 
-            return admin.post("/api/panel/market/blocks", body).ok().obj().getLong("id").also { created += it }
+            return admin.post("${MarketPaths.PANEL_ROOT}/blocks", body).ok().obj().getLong("id").also { created += it }
         }
 
         var ipEnforcementUnproven = false
 
         fun assertBlocked(what: String, headers: Map<String, String> = emptyMap()) {
-            val quote = buyer.client.post("/api/market/checkout/quote", cart(line(vip.id)), headers).ok().obj().getJsonObject("quote")
+            val quote = buyer.client.post("${MarketPaths.SITE_ROOT}/checkout/quote", cart(line(vip.id)), headers).ok().obj().getJsonObject("quote")
             val messages = quote.getJsonArray("messages")?.map { (it as JsonObject).getString("code") } ?: emptyList()
 
             assertTrue("BUYER_BLOCKED" in messages, "$what: the quote says BUYER_BLOCKED, messages=$messages")
@@ -765,7 +766,7 @@ class PaymentFlowE2E : E2eTestBase() {
         }
 
         fun assertNotBlocked(what: String, headers: Map<String, String> = emptyMap()) {
-            val quote = buyer.client.post("/api/market/checkout/quote", cart(line(vip.id)), headers).ok().obj().getJsonObject("quote")
+            val quote = buyer.client.post("${MarketPaths.SITE_ROOT}/checkout/quote", cart(line(vip.id)), headers).ok().obj().getJsonObject("quote")
             val messages = quote.getJsonArray("messages")?.map { (it as JsonObject).getString("code") } ?: emptyList()
 
             assertFalse("BUYER_BLOCKED" in messages, "$what: the quote has no BUYER_BLOCKED, messages=$messages")
@@ -776,7 +777,7 @@ class PaymentFlowE2E : E2eTestBase() {
             val player = block("PLAYER", buyer.username)
 
             assertBlocked("PLAYER")
-            admin.delete("/api/panel/market/blocks/$player").ok()
+            admin.delete("${MarketPaths.PANEL_ROOT}/blocks/$player").ok()
             created.remove(player)
             assertNotBlocked("PLAYER removed")
 
@@ -784,7 +785,7 @@ class PaymentFlowE2E : E2eTestBase() {
             val email = block("EMAIL", "${buyer.username}@example.com")
 
             assertBlocked("EMAIL")
-            admin.delete("/api/panel/market/blocks/$email").ok()
+            admin.delete("${MarketPaths.PANEL_ROOT}/blocks/$email").ok()
             created.remove(email)
             assertNotBlocked("EMAIL removed")
 
@@ -803,8 +804,8 @@ class PaymentFlowE2E : E2eTestBase() {
                 ipEnforcementUnproven = true
             }
 
-            assertTrue(admin.get("/api/panel/market/blocks?search=$blockedIp").ok().obj().toString().contains(blockedIp), "the IP block is stored and listed")
-            admin.delete("/api/panel/market/blocks/$ip").ok()
+            assertTrue(admin.get("${MarketPaths.PANEL_ROOT}/blocks?search=$blockedIp").ok().obj().toString().contains(blockedIp), "the IP block is stored and listed")
+            admin.delete("${MarketPaths.PANEL_ROOT}/blocks/$ip").ok()
             created.remove(ip)
 
             if (loopbackIsTrustedProxy()) assertNotBlocked("IP removed", mapOf("X-Forwarded-For" to blockedIp))
@@ -822,7 +823,7 @@ class PaymentFlowE2E : E2eTestBase() {
             payViaFake(publicIdOf(ok))
             awaitOrder(publicIdOf(ok), "COMPLETED")
         } finally {
-            created.forEach { runCatching { admin.delete("/api/panel/market/blocks/$it") } }
+            created.forEach { runCatching { admin.delete("${MarketPaths.PANEL_ROOT}/blocks/$it") } }
             db.sql("DELETE FROM `pano_market_block` WHERE `reason` = 'e2e F-18'")
         }
 

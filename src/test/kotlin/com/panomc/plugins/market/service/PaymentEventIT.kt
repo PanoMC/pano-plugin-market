@@ -74,6 +74,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.util.MarketPaths
 
 /** The attempt side with a failure that can be switched on: an infrastructure failure inside step 6. */
 private class FlakyAttempts(private val delegate: InboundAttempts) : InboundAttempts by delegate {
@@ -204,7 +205,7 @@ class PaymentEventIT : MarketDaoITBase() {
         outcome: ReturnOutcome = ReturnOutcome.SUCCESS, query: String? = null, method: String = "POST", provider: String = "fake", token: String? = attempt?.token
     ) = InboundCall(
         kind, provider, "default", if (kind == InboundKind.WEBHOOK) null else token!!, if (kind == InboundKind.RETURN) outcome else null, null, method,
-        "/api/market/payments/$provider/" + when (kind) {
+        "${MarketPaths.SITE_ROOT}/payments/$provider/" + when (kind) {
             InboundKind.WEBHOOK -> "webhook"
             InboundKind.NOTIFY -> "notify/$token"
             InboundKind.RETURN -> "return/$token/${outcome.name.lowercase()}"
@@ -241,7 +242,7 @@ class PaymentEventIT : MarketDaoITBase() {
             orderIs(order, OrderStatus.COMPLETED)
             assertEquals(1, completionsOf(order.id), "round $round: one set of side effects")
             assertEquals(1, timeline(order.id, OrderEventType.PAYMENT_SUCCEEDED), "round $round: one PAYMENT_SUCCEEDED row")
-            assertEquals(1, sql("SELECT `id` FROM `pano_market_webhook_delivery` WHERE `orderId` = ?", order.id).size, "round $round: one order.paid")
+            assertEquals(1, sql("SELECT `id` FROM `pano_webhook_delivery` WHERE `subjectRef` = ?", "order:${order.id}").size, "round $round: one order.paid")
 
             val copies = events().filter { it.body?.contains(key) == true }
             val holder = copies.single { it.eventKey == "e:$key" }
@@ -1207,7 +1208,7 @@ class PaymentEventIT : MarketDaoITBase() {
         val pages = AttemptPageService(attempts, ph.cipher, w.ids)
 
         fake.onStart = {
-            StartPaymentResult.Html("<html><body><script>fetch('/api/market/me/summary', {credentials: 'include'})</script></body></html>").also { r ->
+            StartPaymentResult.Html("<html><body><script>fetch('${MarketPaths.SITE_ROOT}/me/summary', {credentials: 'include'})</script></body></html>").also { r ->
                 r.inlineScript = true
                 r.scriptOrigins = listOf("https://js.gateway.example")
                 r.frameOrigins = listOf("https://3ds.gateway.example")
@@ -1218,7 +1219,7 @@ class PaymentEventIT : MarketDaoITBase() {
         val start = ph.attempts(order.id).single()
 
         assertEquals("HTML", start.startKind)
-        assertTrue(JsonObject(ph.payments.served(start, pool)!!.encode()).getString("url").endsWith("/api/market/payments/attempts/${attempt.token}/page"))
+        assertTrue(JsonObject(ph.payments.served(start, pool)!!.encode()).getString("url").endsWith("${MarketPaths.SITE_ROOT}/payments/attempts/${attempt.token}/page"))
 
         val page = pages.page(attempt.token) as AttemptPageResult.Page
         val csp = page.headers.getValue("Content-Security-Policy")

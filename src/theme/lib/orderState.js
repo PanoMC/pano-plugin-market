@@ -1,6 +1,7 @@
 // Pure model of the order page (14 §11.2, §11.3): load resolution, the view state, the status block,
 // the extra lines, the totals rows and the item / shipment badges. No SDK, no DOM, no clock access
 // (callers pass `now`). The theme never computes a total: every amount shown is a server number.
+import { siteUrl } from './paths.js';
 import { isSafeExternalUrl } from './paymentStart.js';
 
 /** `publicId` as the order page accepts it (14 §11.2). */
@@ -540,9 +541,14 @@ export function safeTrackingUrl(value) {
   return isSafeExternalUrl(value) ? value : null;
 }
 
-/** `/api/market/orders/<id>/invoice` for the plain download link of a session owner without a token. */
+/** `/orders/<id>/invoice`, the market-relative path of the invoice request (blob download with a token). */
 export function invoicePath(id) {
-  return `/api/market/orders/${id}/invoice`;
+  return `/orders/${id}/invoice`;
+}
+
+/** `/api/plugins/pano-plugin-market/orders/<id>/invoice` for the plain download link of a session owner without a token. */
+export function invoiceUrl(id) {
+  return siteUrl(invoicePath(id));
 }
 
 /** True when the buyer needs the blob download (a token is known: the plain link cannot carry the header). */

@@ -59,7 +59,11 @@ data class MarketConfigEventResponse(
     val storeUrl: String? = null,
     val creditName: String? = null,
     val currency: String? = null,
-    val serverId: Long? = null
+    val serverId: Long? = null,
+    /** `market.product` of the front-end URL map with `{slug}` left in (doc 05 section 10.2); a component that knows it uses it instead of `storeUrl/store/<slug>`. */
+    val productUrlTemplate: String? = null,
+    /** `auth.register` of the front-end URL map; a component that knows it uses it instead of `storeUrl/register`. */
+    val registerUrl: String? = null
 ) : com.panomc.platform.server.ServerEventResponse()
 
 class MarketConfigEvent(

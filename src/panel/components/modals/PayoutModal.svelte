@@ -141,11 +141,11 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { page } from '@panomc/sdk/svelte';
   import { _, showSuccessToast } from '../../../i18n';
   import { actionLocked, addableActionTypes, newAction } from '../../utils/actions.js';
-  import { call, marketPath, newIdempotency, resetIdempotency } from '../../utils/api.js';
+  import { call, newIdempotency, resetIdempotency } from '../../utils/api.js';
   import {
     PAYOUT_ACTION_TYPES,
     PAYOUT_METHODS,
@@ -213,8 +213,8 @@
 
   async function loadServers() {
     if (servers !== null) return;
-    const result = await call(ApiUtil.get({ path: marketPath('/servers') }));
-    servers = result.ok ? (result.body.servers ?? []) : null;
+    const result = await call(api.panel.get({ path: '/servers' }));
+    servers = result.ok ? (result.body.items ?? []) : null;
   }
 
   $effect(() => {
@@ -270,8 +270,8 @@
     let result;
     try {
       result = await call(
-        ApiUtil.post({
-          path: marketPath(request.path),
+        api.panel.post({
+          path: request.path,
           body: request.body,
           headers: request.headers,
         }),

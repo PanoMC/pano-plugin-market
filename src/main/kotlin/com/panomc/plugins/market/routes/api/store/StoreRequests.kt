@@ -2,7 +2,7 @@ package com.panomc.plugins.market.routes.api.store
 
 import com.panomc.plugins.market.db.model.ProductKind
 import com.panomc.plugins.market.error.RequestValueException
-import com.panomc.plugins.market.routes.base.parsePagingRequest
+import com.panomc.plugins.market.routes.base.parsePageRequest
 import com.panomc.plugins.market.service.MAX_STORE_PAGE_SIZE
 import com.panomc.plugins.market.service.ProductListQuery
 import com.panomc.plugins.market.service.ProductSort
@@ -53,10 +53,11 @@ fun parseProductListQuery(
     }
     val sortValue = sort?.trim()?.takeIf { it.isNotEmpty() }?.let { ProductSort.of(it) ?: throw RequestValueException("sort", "UNKNOWN_VALUE") }
         ?: ProductSort.PRIORITY
-    val window = parsePagingRequest(number(page, "page"), number(pageSize, "pageSize"), defaultPageSize.coerceIn(1, MAX_STORE_PAGE_SIZE), MAX_STORE_PAGE_SIZE)
+    // the core page rule (04 section 4): a page below 1 or a pageSize outside 1..60 is INVALID_FIELDS / OUT_OF_RANGE
+    val window = parsePageRequest(page, pageSize, defaultPageSize.coerceIn(1, MAX_STORE_PAGE_SIZE), MAX_STORE_PAGE_SIZE)
 
     return ProductListQuery(
         category = categoryId, search = text, featured = featuredFlag, kind = kindValue, sort = sortValue,
-        currency = parseCurrencyParam(currency), page = window.page, pageSize = window.pageSize
+        currency = parseCurrencyParam(currency), page = window.number, pageSize = window.size
     )
 }

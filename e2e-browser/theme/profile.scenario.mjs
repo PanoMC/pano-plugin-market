@@ -1,7 +1,7 @@
 // Theme browser scenarios 43 to 46 of 14 section 20.3 (the profile pages: purchases, credits, subscriptions, creator), vanilla theme.
 // Ids TH-43 .. TH-46 are the numbers of the spec. Data is made through the storefront and panel APIs like the owner and the buyers would;
 // every scenario fails on a console error or a page error that it did not provoke on purpose.
-import { must } from '../lib/api.mjs';
+import { must, MARKET_API, PANEL_MARKET_API, listOf } from '../lib/api.mjs';
 import { actions, grantCredits, product as panelProduct, run } from '../lib/bootstrap.mjs';
 import { assert, assertEqual, hydrated, open } from '../lib/ui.mjs';
 import {
@@ -67,13 +67,13 @@ export const scenarios = [
         paymentMethodId: 'fake',
       });
 
-      must(await account.post(`/api/market/orders/${dropped.publicId}/cancel`, {}), 'cancel');
+      must(await account.post(`${MARKET_API}/orders/${dropped.publicId}/cancel`, {}), 'cancel');
 
       const refunded = await paidOrder(account, [{ productId: vip.id, quantity: 1 }]);
 
       must(
         await admin.post(
-          `/api/panel/market/orders/${await orderRowId(admin, refunded.publicId)}/refunds`,
+          `${PANEL_MARKET_API}/orders/${await orderRowId(admin, refunded.publicId)}/refunds`,
           { amount: 10, reason: 'E2E refund' },
           idem(),
         ),
@@ -176,7 +176,7 @@ export const scenarios = [
 
       const code = giftCode('G43');
       const created = must(
-        await admin.post('/api/panel/market/gifts', {
+        await admin.post(`${PANEL_MARKET_API}/gifts`, {
           name: `Gift ${code}`,
           code,
           type: 'CREDIT',
@@ -245,7 +245,7 @@ export const scenarios = [
           const fresh = giftCode('G43L');
 
           must(
-            await admin.post('/api/panel/market/gifts', {
+            await admin.post(`${PANEL_MARKET_API}/gifts`, {
               name: `Gift ${fresh}`,
               code: fresh,
               type: 'CREDIT',
@@ -270,7 +270,7 @@ export const scenarios = [
             'and so is the button',
           );
           assertEqual(
-            (await locked.get('/api/market/me/orders?page=1')).json.orderCount,
+            (await locked.get(`${MARKET_API}/me/orders?page=1`)).json.items?.length,
             0,
             'the valid code was not redeemed while locked',
           );
@@ -301,7 +301,7 @@ export const scenarios = [
       // the buyer spends the 10 on the vip rank (creditPrice 10): a minus row
       must(
         await account.post(
-          '/api/market/checkout',
+          `${MARKET_API}/checkout`,
           { items: [{ productId: vip.id, quantity: 1 }], payWithCredits: true },
           idem(),
         ),
@@ -469,7 +469,7 @@ export const scenarios = [
       await paidOrder(account, [{ productId: sub.id, quantity: 1 }]);
 
       const mine = async () =>
-        (await account.get('/api/market/me/subscriptions')).json.subscriptions ?? [];
+        listOf((await account.get(`${MARKET_API}/me/subscriptions`)).json, 'subscriptions');
 
       await waitUntil(
         async () => (await mine()).some((s) => s.status === 'ACTIVE'),
@@ -579,7 +579,11 @@ export const scenarios = [
         404,
         'a buyer who owns no creator code gets a 404',
       );
-      assertEqual((await plain.get('/api/market/me/creator')).status, 404, 'the API says the same');
+      assertEqual(
+        (await plain.get(`${MARKET_API}/me/creator`)).status,
+        404,
+        'the API says the same',
+      );
       await plainCtx.close();
 
       const creator = await payBuyer(buyer, admin, 'k46');
@@ -588,7 +592,7 @@ export const scenarios = [
       await withLiveStore(admin, async () => {
         await withBankTransfer(admin, async () => {
           must(
-            await admin.post('/api/panel/market/creator-codes', {
+            await admin.post(`${PANEL_MARKET_API}/creator-codes`, {
               creator: creator.username,
               creatorUserId: creator.userId,
               code,
@@ -610,7 +614,7 @@ export const scenarios = [
 
           must(
             await admin.post(
-              `/api/panel/market/orders/${await orderRowId(admin, placed.publicId)}/bank-transfer`,
+              `${PANEL_MARKET_API}/orders/${await orderRowId(admin, placed.publicId)}/bank-transfer`,
               { decision: 'APPROVE' },
             ),
             'approve the transfer',
@@ -622,11 +626,11 @@ export const scenarios = [
             'the creator order',
           );
 
-          const api = (await creator.get('/api/market/me/creator')).json;
+          const api = (await creator.get(`${MARKET_API}/me/creator`)).json;
 
           assert(
-            api.earnings?.length === 1,
-            `the creator has one earning (${JSON.stringify(api.earnings)})`,
+            api.items?.length === 1,
+            `the creator has one earning (${JSON.stringify(api.items)})`,
           );
 
           const ctx = await signedIn(browser, creator);
@@ -683,17 +687,17 @@ export const scenarios = [
 
           assertEqual(
             (await earning.locator('td').nth(0).innerText()).trim(),
-            `#${api.earnings[0].orderNumber}`,
+            `#${api.items[0].orderNumber}`,
             'the earning names its order',
           );
           assertEqual(
             (await earning.locator('td').nth(1).innerText()).trim(),
-            euro(api.earnings[0].amount),
+            euro(api.items[0].amount),
             'and the commission',
           );
           assertEqual(
             (await earning.locator('td').nth(2).innerText()).trim(),
-            text(`theme.profile.creator.state.${api.earnings[0].state}`),
+            text(`theme.profile.creator.state.${api.items[0].state}`),
             'and its state',
           );
           assert(

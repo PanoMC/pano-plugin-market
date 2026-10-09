@@ -34,7 +34,7 @@ import {
   statusRequest,
 } from './requests.js';
 
-const API = '/api/panel/market';
+const API = '';
 
 describe('statusRequest (13 §6.2)', () => {
   test('mark paid / cancel / failed go to PUT status', () => {
@@ -350,7 +350,11 @@ describe('plain requests', () => {
   });
 
   test('label links', () => {
-    expect(shipmentLabelPath('/p', 3, false)).toBe('/p/api/panel/market/shipments/3/label');
-    expect(shipmentLabelPath('', 3, true)).toBe('/api/panel/market/shipments/3/label?generic=true');
+    expect(shipmentLabelPath('/p', 3, false)).toBe(
+      '/api/plugins/pano-plugin-market/panel/shipments/3/label',
+    );
+    expect(shipmentLabelPath('', 3, true)).toBe(
+      '/api/plugins/pano-plugin-market/panel/shipments/3/label?generic=true',
+    );
   });
 });

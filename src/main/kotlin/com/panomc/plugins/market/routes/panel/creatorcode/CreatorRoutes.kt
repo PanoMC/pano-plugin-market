@@ -3,14 +3,14 @@ package com.panomc.plugins.market.routes.panel.creatorcode
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.error.NoPermission
-import com.panomc.platform.error.PageNotFound
 import com.panomc.platform.model.Path
+import com.panomc.platform.model.Paging
 import com.panomc.platform.model.Result
 import com.panomc.platform.model.RouteType
 import com.panomc.platform.model.Successful
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.time.SystemClock
-import com.panomc.plugins.market.core.webhook.TargetPolicy
+import com.panomc.platform.webhook.guard.TargetPolicy
 import com.panomc.plugins.market.db.MarketTables
 import com.panomc.plugins.market.db.dao.MarketCreatorEarningDao
 import com.panomc.plugins.market.db.dao.MarketCreatorPayoutDao
@@ -25,14 +25,12 @@ import com.panomc.plugins.market.routes.api.order.deliveryService
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
 import com.panomc.plugins.market.routes.base.parseIdempotencyKey
-import com.panomc.plugins.market.routes.base.parsePagingRequest
 import com.panomc.plugins.market.routes.panel.order.actingUserId
 import com.panomc.plugins.market.routes.panel.order.logOrderDecision
 import com.panomc.plugins.market.routes.panel.product.RoutingCaller
 import com.panomc.plugins.market.routes.panel.refund.parseMoney
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.runtime.beans
-import com.panomc.plugins.market.service.CreatorPageOutOfRange
 import com.panomc.plugins.market.service.CreatorPayoutInput
 import com.panomc.plugins.market.service.CreatorService
 import com.panomc.plugins.market.service.platform.PlatformServerRoster
@@ -41,9 +39,9 @@ import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
@@ -82,19 +80,13 @@ abstract class CreatorRoute(protected val plugin: MarketPlugin, readOnly: Boolea
 
     internal val service: CreatorService get() = creatorService(plugin)
 
-    protected suspend fun <T> paged(block: suspend () -> T): T = try {
-        block()
-    } catch (e: CreatorPageOutOfRange) {
-        throw PageNotFound()
-    }
-
     protected fun longParam(context: RoutingContext, name: String): Long? =
         context.request().getParam(name)?.trim()?.takeIf { it.isNotEmpty() }?.let { it.toLongOrNull() ?: throw RequestValueException(name, "MUST_BE_AN_INTEGER") }
 
     protected fun pagingValidation(schemaRepository: SchemaRepository, vararg extra: String): ValidationHandler {
-        var builder = ValidationHandlerBuilder.create(schemaRepository)
+        var builder = Paging.params(ValidationHandlerBuilder.create(schemaRepository))
 
-        for (name in listOf("page", "pageSize") + extra) builder = builder.queryParameter(optionalParam(name, stringSchema()))
+        for (name in extra) builder = builder.queryParameter(optionalParam(name, stringSchema()))
 
         return builder.build()
     }
@@ -103,7 +95,7 @@ abstract class CreatorRoute(protected val plugin: MarketPlugin, readOnly: Boolea
 /** `GET /api/panel/market/creator-codes/report` (`P:DISC` or `P:PAY`): q `from?`, `to?` (epoch ms); `creators[{id, creator, code, uses, revenue, earned, pending, reversed, paidOut, available}]`, `currency`. */
 @Endpoint
 class PanelGetCreatorReportAPI(plugin: MarketPlugin) : CreatorRoute(plugin, readOnly = true) {
-    override val paths = listOf(Path("/api/panel/market/creator-codes/report", RouteType.GET))
+    override val paths = listOf(Path("/creator-codes/report", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository)
@@ -114,10 +106,10 @@ class PanelGetCreatorReportAPI(plugin: MarketPlugin) : CreatorRoute(plugin, read
     override suspend fun handleAuthorized(context: RoutingContext): Result = Successful(service.report(longParam(context, "from"), longParam(context, "to")).map)
 }
 
-/** `GET /api/panel/market/creator-codes/:id/earnings` (`P:DISC` or `P:PAY`): q `page?`, `pageSize?`, `state?`; `earnings[]`, `earningCount`, `totalPage`; 404 for an unknown code. */
+/** `GET /api/panel/market/creator-codes/:id/earnings` (`P:DISC` or `P:PAY`): q `page?`, `pageSize?`, `state?`; `items[]` (the earnings), `page`; 404 for an unknown code. */
 @Endpoint
 class PanelGetCreatorEarningsAPI(plugin: MarketPlugin) : CreatorRoute(plugin, readOnly = true) {
-    override val paths = listOf(Path("/api/panel/market/creator-codes/:id/earnings", RouteType.GET))
+    override val paths = listOf(Path("/creator-codes/:id/earnings", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = pagingValidation(schemaRepository, "state")
 
@@ -126,16 +118,16 @@ class PanelGetCreatorEarningsAPI(plugin: MarketPlugin) : CreatorRoute(plugin, re
         val state = context.request().getParam("state")?.trim()?.takeIf { it.isNotEmpty() }?.let { raw ->
             CreatorEarningState.values().firstOrNull { it.name == raw } ?: throw RequestValueException("state", "INVALID")
         }
-        val window = parsePagingRequest(longParam(context, "page"), longParam(context, "pageSize"))
+        val window = Paging.request(context)
 
-        return Successful(paged { service.earningsOf(id, state, window) }.map)
+        return Successful(service.earningsOf(id, state, window).map)
     }
 }
 
 /** `GET /api/panel/market/creator-codes/:id/payouts` (`P:DISC` or `P:PAY`): `payouts[{id, amount, currency, method, state, note, paidBy, paidAt}]`; 404 for an unknown code. */
 @Endpoint
 class PanelGetCreatorPayoutsAPI(plugin: MarketPlugin) : CreatorRoute(plugin, readOnly = true) {
-    override val paths = listOf(Path("/api/panel/market/creator-codes/:id/payouts", RouteType.GET))
+    override val paths = listOf(Path("/creator-codes/:id/payouts", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = ValidationHandlerBuilder.create(schemaRepository).build()
 
@@ -149,7 +141,7 @@ class PanelGetCreatorPayoutsAPI(plugin: MarketPlugin) : CreatorRoute(plugin, rea
  */
 @Endpoint
 class PanelCreateCreatorPayoutAPI(plugin: MarketPlugin) : CreatorRoute(plugin, readOnly = false) {
-    override val paths = listOf(Path("/api/panel/market/creator-codes/:id/payouts", RouteType.POST))
+    override val paths = listOf(Path("/creator-codes/:id/payouts", RouteType.POST))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository)
@@ -212,7 +204,7 @@ class PanelCreateCreatorPayoutAPI(plugin: MarketPlugin) : CreatorRoute(plugin, r
 /** `POST /api/panel/market/creator-payouts/:id/cancel` (`P:PAY`, 21 section 7.4): a `PENDING` (rows not settled) or `FAILED` payout; `{}`; 404; 409 `INVALID_STATE`. */
 @Endpoint
 class PanelCancelCreatorPayoutAPI(plugin: MarketPlugin) : CreatorRoute(plugin, readOnly = false) {
-    override val paths = listOf(Path("/api/panel/market/creator-payouts/:id/cancel", RouteType.POST))
+    override val paths = listOf(Path("/creator-payouts/:id/cancel", RouteType.POST))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = ValidationHandlerBuilder.create(schemaRepository).build()
 

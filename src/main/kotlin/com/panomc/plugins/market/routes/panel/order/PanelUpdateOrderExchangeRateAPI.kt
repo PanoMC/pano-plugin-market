@@ -15,9 +15,9 @@ import com.panomc.plugins.market.routes.base.parseId
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters.param
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.Parameters.param
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.numberSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
@@ -28,7 +28,7 @@ class PanelUpdateOrderExchangeRateAPI(
     private val plugin: MarketPlugin,
     private val marketOrderDao: MarketOrderDao
 ) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/orders/:id/exchange-rate", RouteType.PUT))
+    override val paths = listOf(Path("/orders/:id/exchange-rate", RouteType.PUT))
 
     override val nodes = setOf(MarketNode.PAYMENTS)
 

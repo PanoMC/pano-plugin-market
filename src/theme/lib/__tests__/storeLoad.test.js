@@ -8,9 +8,8 @@ const store = {
   ok: true,
   settings: { storeName: 'Shop', storeDescription: 'Desc' },
   categories: [{ id: 1, name: 'A', children: [{ id: 2, name: 'B' }] }],
-  products: [card(1), card(2)],
-  productCount: 25,
-  totalPage: 3,
+  items: [card(1), card(2)],
+  page: { number: 1, size: 10, totalItems: 25, totalPages: 3 },
   featured: [card(1)],
   bestsellers: [card(2)],
   comparisons: [{ id: 9 }],
@@ -67,11 +66,11 @@ describe('ready state', () => {
     expect(res.data.state).toBe('READY');
     expect(res.data.grid).toEqual({
       state: 'READY',
-      products: store.products,
+      products: store.items,
       productCount: 25,
-      totalPage: 3,
+      totalPages: 3,
     });
-    expect(res.data.firstPage.products).toEqual(store.products);
+    expect(res.data.firstPage.products).toEqual(store.items);
     expect(res.data.totalCount).toBe(25);
     expect(res.data.featured).toEqual(store.featured);
     expect(res.data.comparisonProducts).toEqual(store.comparisonProducts);
@@ -80,7 +79,11 @@ describe('ready state', () => {
   });
 
   test('a successful list replaces the grid, the first page stays', () => {
-    const list = { ok: true, products: [card(7)], productCount: 1, totalPage: 1 };
+    const list = {
+      ok: true,
+      items: [card(7)],
+      page: { number: 1, size: 10, totalItems: 1, totalPages: 1 },
+    };
     const res = resolveStoreLoad({
       store,
       list,
@@ -89,7 +92,7 @@ describe('ready state', () => {
     });
     expect(res.data.grid.products).toEqual([card(7)]);
     expect(res.data.grid.productCount).toBe(1);
-    expect(res.data.firstPage.products).toEqual(store.products);
+    expect(res.data.firstPage.products).toEqual(store.items);
     expect(res.data.filter.search).toBe('ab');
   });
 

@@ -1,7 +1,8 @@
 package com.panomc.plugins.market.service
 
 import com.panomc.platform.error.NotFound
-import com.panomc.platform.error.PageNotFound
+import com.panomc.platform.model.PageRequest
+import com.panomc.platform.model.Paging
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.pricing.CatalogContext
 import com.panomc.plugins.market.core.pricing.CatalogDiscount
@@ -38,10 +39,10 @@ import com.panomc.plugins.market.db.model.MarketEntitlement
 import com.panomc.plugins.market.db.model.MarketProduct
 import com.panomc.plugins.market.db.model.MarketProductVariant
 import com.panomc.plugins.market.db.model.ProductKind
+import com.panomc.plugins.market.routes.base.pageJson
 import com.panomc.plugins.market.util.HtmlSanitizer
 import com.panomc.plugins.market.util.MarketStatus
 import com.panomc.plugins.market.util.MoneyUtil
-import com.panomc.plugins.market.util.Paging
 import com.panomc.plugins.market.util.ProductDurationType
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -62,6 +63,15 @@ class StoreViewer(val userId: Long?) {
         val GUEST = StoreViewer(null)
     }
 }
+
+/** A product the sitemap announces: its address key and the last change in epoch milliseconds. */
+class SitemapProduct(val slug: String, val updatedAt: Long)
+
+/** A category the sitemap announces. */
+class SitemapCategory(val id: Long, val updatedAt: Long)
+
+/** What [StoreQueryService.sitemapPages] answers. */
+class SitemapPages(val products: List<SitemapProduct>, val categories: List<SitemapCategory>)
 
 /** `ProductDetail.serverChoices[]` of one server a buyer may pick. */
 class ServerChoice(val id: Long, val name: String, val type: String)
@@ -193,19 +203,22 @@ class StoreQueryService(
 
         val counts = cards.mapNotNull { it.product.categoryId }.groupingBy { it }.eachCount()
 
-        return JsonObject()
-            .put("settings", settings(c, catalog))
-            .put("categories", JsonArray(tree(catalog.categories, counts)))
-            .put("products", JsonArray(firstPage.map { catalog.cardJson(it) }))
-            .put("productCount", listed.size.toLong())
-            .put("totalPage", Paging.totalPages(listed.size.toLong(), size))
-            .put("featured", featured)
-            .put("bestsellers", bestsellers)
-            .put("comparisons", comparisonsJson)
-            .put("comparisonProducts", comparisonProducts)
+        return pageJson(
+            items = firstPage.map { catalog.cardJson(it) },
+            totalItems = listed.size.toLong(),
+            page = PageRequest(1, size),
+            extra = mapOf(
+                "settings" to settings(c, catalog),
+                "categories" to JsonArray(tree(catalog.categories, counts)),
+                "featured" to featured,
+                "bestsellers" to bestsellers,
+                "comparisons" to comparisonsJson,
+                "comparisonProducts" to comparisonProducts
+            )
+        )
     }
 
-    /** `GET /api/market/store/products`: [PageNotFound] beyond the last page, [NotFound] for a category that is not visible. */
+    /** `GET /api/market/store/products`: PAGE_NOT_FOUND beyond the last page, [NotFound] for a category that is not visible. */
     suspend fun products(query: ProductListQuery, viewer: StoreViewer, sqlClient: SqlClient): JsonObject {
         val catalog = load(query.currency, viewer, sqlClient)
         val subtree = query.category?.let {
@@ -223,16 +236,12 @@ class StoreQueryService(
                     p.shortDescription.orEmpty().lowercase(Locale.ROOT).contains(needle))
         }
         val listed = sort(matching.mapNotNull { catalog.card(it) }, query.sort)
-        val totalPage = Paging.totalPages(listed.size.toLong(), query.pageSize)
+        val page = PageRequest(query.page, query.pageSize)
 
-        if (Paging.isBeyondLast(query.page, totalPage)) throw PageNotFound()
+        // the core page check runs before the cards of the page are cut out (a page beyond the last is PAGE_NOT_FOUND)
+        Paging.requireInRange(page, listed.size.toLong())
 
-        val from = ((query.page - 1).toLong() * query.pageSize).toInt()
-
-        return JsonObject()
-            .put("products", JsonArray(listed.drop(from).take(query.pageSize).map { catalog.cardJson(it) }))
-            .put("productCount", listed.size.toLong())
-            .put("totalPage", totalPage)
+        return pageJson(listed.drop(page.offset.toInt()).take(page.size).map { catalog.cardJson(it) }, listed.size.toLong(), page)
     }
 
     /**
@@ -246,6 +255,21 @@ class StoreQueryService(
         val card = catalog.card(product) ?: throw NotFound()
 
         return catalog.detailJson(card, sqlClient)
+    }
+
+    /**
+     * The public pages of the store for `GET /sitemap` (04 section 8): the products a guest can open (the same set the listing
+     * shows, so a product that cannot be priced is not announced) and the ACTIVE categories whose whole chain is ACTIVE.
+     */
+    suspend fun sitemapPages(sqlClient: SqlClient): SitemapPages {
+        val catalog = load(null, StoreViewer.GUEST, sqlClient)
+
+        return SitemapPages(
+            products = catalog.listed.filter { catalog.card(it) != null }
+                .sortedBy { it.id }
+                .map { SitemapProduct(it.slug, it.updatedAt) },
+            categories = catalog.categories.sortedBy { it.id }.map { SitemapCategory(it.id, it.updatedAt) }
+        )
     }
 
     // ------------------------------------------------------------------------------------------------------- loading

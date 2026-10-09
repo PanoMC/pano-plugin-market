@@ -1,7 +1,7 @@
 package com.panomc.plugins.market.job
 
 import com.panomc.plugins.market.config.MarketConfig
-import com.panomc.plugins.market.core.time.Backoff
+import com.panomc.platform.webhook.Backoff
 import com.panomc.plugins.market.db.MarketDaoITBase
 import com.panomc.plugins.market.db.model.MailKind
 import com.panomc.plugins.market.db.model.MailRefType

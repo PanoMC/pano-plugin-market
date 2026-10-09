@@ -10,9 +10,10 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import com.panomc.plugins.market.util.MarketPaths
 
 class StartPaymentResultTest {
-    private val page = "https://shop.example/api/market/payments/attempts/tok/page"
+    private val page = "https://shop.example${MarketPaths.SITE_ROOT}/payments/attempts/tok/page"
 
     private fun succeeded() = PaymentEvent.Succeeded(PaymentTarget.Attempt(5), PaymentTestData.eur(1000))
 

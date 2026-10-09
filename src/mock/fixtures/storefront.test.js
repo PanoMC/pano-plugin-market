@@ -5,7 +5,7 @@ import { COUPON, catalog, orders, pages, quoteOf, routes, subscriptions } from '
 const router = createRouter(routes);
 const get = (path, volume = 'few') => router.answer('GET', path, volume);
 const quote = (body, volume = 'few') =>
-  router.answer('POST', '/api/market/checkout/quote', volume, body).quote;
+  router.answer('POST', '/plugins/pano-plugin-market/checkout/quote', volume, body).quote;
 const cents = (n) => Math.round(n * 100);
 
 const CARD_KEYS = [
@@ -38,26 +38,30 @@ const CARD_KEYS = [
 
 describe('store', () => {
   test('GET /store carries settings, the category tree and the first page', () => {
-    const body = get('/api/market/store');
+    const body = get('/plugins/pano-plugin-market/store');
 
-    expect(body.result).toBe('ok');
+    expect(body).not.toHaveProperty('result');
+    expect(body).not.toHaveProperty('error');
     expect(body.settings.currency).toBe('USD');
     expect(body.settings.pageSize).toBe(12);
     expect(body.settings.modules.saleBadges).toBe(true);
     expect(body.categories.length).toBe(4);
     expect(body.categories[0].children.length).toBe(2);
     expect(body.categories[0].productsCount).toBeGreaterThan(0);
-    expect(body.products.length).toBe(9);
-    expect(body.productCount).toBe(9);
-    expect(body.totalPage).toBe(1);
-    expect(Object.keys(body.products[0])).toEqual(CARD_KEYS);
+    // the first page of the list, in the core page shape (items and page, extras beside them)
+    expect(body.items.length).toBe(9);
+    expect(body.page).toEqual({ number: 1, size: 12, totalItems: 9, totalPages: 1 });
+    expect(body).not.toHaveProperty('products');
+    expect(body).not.toHaveProperty('productCount');
+    expect(body).not.toHaveProperty('totalPage');
+    expect(Object.keys(body.items[0])).toEqual(CARD_KEYS);
     expect(body.featured.length).toBeGreaterThan(0);
     expect(body.bestsellers.length).toBeGreaterThan(0);
     expect(body.comparisons[0].productIds).toEqual(body.comparisonProducts.map((p) => p.id));
   });
 
   test('the catalogue has sale, out of stock, subscription, bundle and variant products', () => {
-    const { products } = get('/api/market/store/products?pageSize=60');
+    const { items: products } = get('/plugins/pano-plugin-market/store/products?pageSize=60');
 
     expect(products.some((p) => p.sale && p.sale.percent > 0 && p.compareAtPrice > p.price)).toBe(
       true,
@@ -73,109 +77,128 @@ describe('store', () => {
   });
 
   test('pagination and PAGE_NOT_FOUND', () => {
-    const first = get('/api/market/store/products', 'many');
-    const second = get('/api/market/store/products?page=2', 'many');
+    const first = get('/plugins/pano-plugin-market/store/products', 'many');
+    const second = get('/plugins/pano-plugin-market/store/products?page=2', 'many');
 
-    expect(first.products.length).toBe(12);
-    expect(first.productCount).toBe(64);
-    expect(first.totalPage).toBe(6);
-    expect(second.products[0].id).not.toBe(first.products[0].id);
-    expect(get('/api/market/store/products?page=6', 'many').products.length).toBe(4);
-    expect(get('/api/market/store/products?page=7', 'many')).toEqual({
-      result: 'error',
-      error: 'PAGE_NOT_FOUND',
+    expect(first.items.length).toBe(12);
+    expect(first.page).toEqual({ number: 1, size: 12, totalItems: 64, totalPages: 6 });
+    expect(second.page.number).toBe(2);
+    expect(second.items[0].id).not.toBe(first.items[0].id);
+    expect(get('/plugins/pano-plugin-market/store/products?page=6', 'many').items.length).toBe(4);
+    expect(get('/plugins/pano-plugin-market/store/products?page=7', 'many')).toEqual({
+      error: { code: 'PAGE_NOT_FOUND' },
     });
-    expect(get('/api/market/store/products?pageSize=500', 'many').products.length).toBe(60);
+    // the core page rule: the store allows 60 per page, more is refused, never clamped
+    expect(get('/plugins/pano-plugin-market/store/products?pageSize=60', 'many').items.length).toBe(
+      60,
+    );
+    expect(get('/plugins/pano-plugin-market/store/products?pageSize=500', 'many')).toEqual({
+      error: { code: 'INVALID_FIELDS', fields: { pageSize: 'OUT_OF_RANGE' } },
+    });
     expect(new Set(catalog('many').products.map((p) => p.slug)).size).toBe(64);
   });
 
   test('category (with its sub categories), search, sort, featured and kind filters', () => {
-    const ranks = get('/api/market/store/products?category=1');
-    expect(ranks.productCount).toBeGreaterThan(0);
-    expect(ranks.products.every((p) => [1, 101, 102].includes(p.categoryId))).toBe(true);
+    const ranks = get('/plugins/pano-plugin-market/store/products?category=1');
+    expect(ranks.page.totalItems).toBeGreaterThan(0);
+    expect(ranks.items.every((p) => [1, 101, 102].includes(p.categoryId))).toBe(true);
     expect(
-      get('/api/market/store/products?category=101').products.every((p) => p.categoryId === 101),
+      get('/plugins/pano-plugin-market/store/products?category=101').items.every(
+        (p) => p.categoryId === 101,
+      ),
     ).toBe(true);
-    expect(get('/api/market/store/products?category=999')).toEqual({
-      result: 'error',
-      error: 'NOT_FOUND',
+    expect(get('/plugins/pano-plugin-market/store/products?category=999')).toEqual({
+      error: { code: 'NOT_FOUND' },
     });
 
-    const search = get('/api/market/store/products?search=RANK');
-    expect(search.productCount).toBe(3);
-    expect(search.products.every((p) => /rank/i.test(p.name))).toBe(true);
-    expect(get('/api/market/store/products?search=zzzz').products).toEqual([]);
+    const search = get('/plugins/pano-plugin-market/store/products?search=RANK');
+    expect(search.page.totalItems).toBe(3);
+    expect(search.items.every((p) => /rank/i.test(p.name))).toBe(true);
+    expect(get('/plugins/pano-plugin-market/store/products?search=zzzz').items).toEqual([]);
 
-    const asc = get('/api/market/store/products?sort=price-asc&pageSize=60', 'many').products.map(
-      (p) => p.id,
-    );
-    const desc = get('/api/market/store/products?sort=price-desc&pageSize=60', 'many').products.map(
-      (p) => p.id,
-    );
+    const asc = get(
+      '/plugins/pano-plugin-market/store/products?sort=price-asc&pageSize=60',
+      'many',
+    ).items.map((p) => p.id);
+    const desc = get(
+      '/plugins/pano-plugin-market/store/products?sort=price-desc&pageSize=60',
+      'many',
+    ).items.map((p) => p.id);
     const price = (id) => catalog('many').byId.get(id).price;
     for (let i = 1; i < asc.length; i++)
       expect(price(asc[i])).toBeGreaterThanOrEqual(price(asc[i - 1]));
     for (let i = 1; i < desc.length; i++)
       expect(price(desc[i])).toBeLessThanOrEqual(price(desc[i - 1]));
 
-    const newest = get('/api/market/store/products?sort=newest').products.map((p) => p.id);
-    expect(newest[0]).toBe(1);
-    expect(get('/api/market/store/products?sort=nope').error).toBe('BAD_REQUEST');
-
-    expect(get('/api/market/store/products?featured=true').products.every((p) => p.featured)).toBe(
-      true,
+    const newest = get('/plugins/pano-plugin-market/store/products?sort=newest').items.map(
+      (p) => p.id,
     );
+    expect(newest[0]).toBe(1);
+    expect(get('/plugins/pano-plugin-market/store/products?sort=nope').error.code).toBe(
+      'BAD_REQUEST',
+    );
+
     expect(
-      get('/api/market/store/products?kind=BUNDLE').products.every((p) => p.kind === 'BUNDLE'),
+      get('/plugins/pano-plugin-market/store/products?featured=true').items.every(
+        (p) => p.featured,
+      ),
+    ).toBe(true);
+    expect(
+      get('/plugins/pano-plugin-market/store/products?kind=BUNDLE').items.every(
+        (p) => p.kind === 'BUNDLE',
+      ),
     ).toBe(true);
   });
 
   test('?currency= converts the prices of an offered currency', () => {
-    const usd = get('/api/market/store/products').products[0];
-    const tr = get('/api/market/store/products?currency=try').products[0];
+    const usd = get('/plugins/pano-plugin-market/store/products').items[0];
+    const tr = get('/plugins/pano-plugin-market/store/products?currency=try').items[0];
 
     expect(tr.currency).toBe('TRY');
     expect(tr.price).toBeGreaterThan(usd.price);
-    expect(get('/api/market/store/products?currency=JPY').products[0].currency).toBe('USD');
-    expect(get('/api/market/store?currency=EUR').settings.displayCurrency).toBe('EUR');
+    expect(get('/plugins/pano-plugin-market/store/products?currency=JPY').items[0].currency).toBe(
+      'USD',
+    );
+    expect(get('/plugins/pano-plugin-market/store?currency=EUR').settings.displayCurrency).toBe(
+      'EUR',
+    );
   });
 
   test('empty volume', () => {
-    const body = get('/api/market/store', 'empty');
+    const body = get('/plugins/pano-plugin-market/store', 'empty');
 
-    expect(body.result).toBe('ok');
+    expect(body).not.toHaveProperty('error');
     expect(body.categories).toEqual([]);
-    expect(body.products).toEqual([]);
-    expect(body.productCount).toBe(0);
-    expect(body.totalPage).toBe(0);
+    expect(body.items).toEqual([]);
+    expect(body.page).toEqual({ number: 1, size: 12, totalItems: 0, totalPages: 0 });
     expect(body.comparisons).toEqual([]);
-    expect(get('/api/market/store/products', 'empty')).toEqual({
-      result: 'ok',
-      products: [],
-      productCount: 0,
-      totalPage: 0,
+    expect(get('/plugins/pano-plugin-market/store/products', 'empty')).toEqual({
+      items: [],
+      page: { number: 1, size: 12, totalItems: 0, totalPages: 0 },
     });
-    expect(get('/api/market/me/orders', 'empty')).toEqual({
-      result: 'ok',
-      orders: [],
-      orderCount: 0,
-      totalPage: 0,
+    expect(get('/plugins/pano-plugin-market/me/orders', 'empty')).toEqual({
+      items: [],
+      page: { number: 1, size: 10, totalItems: 0, totalPages: 0 },
     });
-    expect(get('/api/market/me/entitlements', 'empty').entitlements).toEqual([]);
-    expect(get('/api/market/me/credits', 'empty').entries).toEqual([]);
-    expect(get('/api/market/me/credits', 'empty').balance).toBe(0);
-    expect(get('/api/market/me/subscriptions', 'empty').subscriptions).toEqual([]);
-    expect(get('/api/market/me/creator', 'empty')).toEqual({ result: 'error', error: 'NOT_FOUND' });
-    expect(get('/api/market/me/cart', 'empty').quote.canCheckout).toBe(false);
-    expect(get('/api/market/widgets', 'empty').recentBuyers).toEqual([]);
+    expect(get('/plugins/pano-plugin-market/me/entitlements', 'empty').items).toEqual([]);
+    expect(get('/plugins/pano-plugin-market/me/credits', 'empty').items).toEqual([]);
+    expect(get('/plugins/pano-plugin-market/me/credits', 'empty').balance).toBe(0);
+    expect(get('/plugins/pano-plugin-market/me/subscriptions', 'empty').items).toEqual([]);
+    expect(get('/plugins/pano-plugin-market/me/creator', 'empty')).toEqual({
+      error: { code: 'NOT_FOUND' },
+    });
+    expect(get('/plugins/pano-plugin-market/me/cart', 'empty').quote.canCheckout).toBe(false);
+    expect(get('/plugins/pano-plugin-market/widgets', 'empty').recentBuyers).toEqual([]);
   });
 });
 
 describe('product', () => {
   test('detail by slug', () => {
-    const { result, product } = get('/api/market/products/vip-rank');
+    const body = get('/plugins/pano-plugin-market/products/vip-rank');
+    const { product } = body;
 
-    expect(result).toBe('ok');
+    expect(body).not.toHaveProperty('error');
+    expect(body).not.toHaveProperty('result');
     expect(product.slug).toBe('vip-rank');
     expect(product.billingMode).toBe('SUBSCRIPTION');
     expect(product.description).toContain('<p>');
@@ -197,18 +220,18 @@ describe('product', () => {
   });
 
   test('variants, bundle, fields, out of stock, requirement', () => {
-    const keys = get('/api/market/products/legendary-crate-key-x5').product;
+    const keys = get('/plugins/pano-plugin-market/products/legendary-crate-key-x5').product;
     expect(keys.variantOptions[0].values.length).toBe(3);
     expect(keys.variants.length).toBe(3);
     expect(keys.variants[1].optionValues).toEqual({ amount: '5' });
     expect(keys.price).toBe(Math.min(...keys.variants.map((v) => v.price)));
 
-    const wings = get('/api/market/products/cosmetic-wings', 'many').product;
+    const wings = get('/plugins/pano-plugin-market/products/cosmetic-wings', 'many').product;
     expect(wings.variantOptions.length).toBe(2);
     expect(wings.variants.length).toBe(6);
     expect(wings.variants.some((v) => !v.inStock)).toBe(true);
 
-    const kit = get('/api/market/products/starter-kit').product;
+    const kit = get('/plugins/pano-plugin-market/products/starter-kit').product;
     expect(kit.kind).toBe('BUNDLE');
     expect(kit.bundleItems.length).toBe(3);
     expect(kit.bundleItems[0]).toEqual({
@@ -220,19 +243,24 @@ describe('product', () => {
     });
 
     const fly = get(
-      '/api/market/products/fly-pass-permanent-all-survival-worlds-and-the-creative-plot-server',
+      '/plugins/pano-plugin-market/products/fly-pass-permanent-all-survival-worlds-and-the-creative-plot-server',
     ).product;
     expect(fly.fields.map((f) => f.type)).toEqual(['USERNAME', 'SELECT']);
     expect(fly.serverChoices.length).toBe(2);
 
-    expect(get('/api/market/products/mythic-crate-key').product.purchasable).toEqual({
+    expect(
+      get('/plugins/pano-plugin-market/products/mythic-crate-key').product.purchasable,
+    ).toEqual({
       ok: false,
       reason: 'OUT_OF_STOCK',
     });
-    expect(get('/api/market/products/mvp-rank-lifetime').product.requiredProducts[0].slug).toBe(
-      'vip-rank',
-    );
-    expect(get('/api/market/products/nope')).toEqual({ result: 'error', error: 'NOT_FOUND' });
+    expect(
+      get('/plugins/pano-plugin-market/products/mvp-rank-lifetime').product.requiredProducts[0]
+        .slug,
+    ).toBe('vip-rank');
+    expect(get('/plugins/pano-plugin-market/products/nope')).toEqual({
+      error: { code: 'NOT_FOUND' },
+    });
   });
 });
 
@@ -324,11 +352,11 @@ describe('quote', () => {
       ).available,
     ).toBe(false);
     expect(quote({}).lines.length).toBe(3); // the stored cart
-    expect(router.isSafe('POST', '/api/market/checkout/quote')).toBe(true);
+    expect(router.isSafe('POST', '/plugins/pano-plugin-market/checkout/quote')).toBe(true);
   });
 
   test('cart and checkout config', () => {
-    const cart = get('/api/market/me/cart');
+    const cart = get('/plugins/pano-plugin-market/me/cart');
     expect(cart.cart.items.length).toBe(3);
     expect(cart.quote.lines.length).toBe(3);
     expect(Object.keys(cart.cart.items[0])).toEqual([
@@ -340,12 +368,13 @@ describe('quote', () => {
       'targetServerId',
     ]);
 
-    const config = get('/api/market/checkout/config');
-    expect(config.result).toBe('ok');
+    const config = get('/plugins/pano-plugin-market/checkout/config');
+    expect(config).not.toHaveProperty('error');
+    expect(config).not.toHaveProperty('result');
     expect(config.legal.content).toContain('<p>');
     expect(config.creditTopUp.enabled).toBe(true);
     expect(config.currencies).toEqual(['USD', 'EUR', 'TRY']);
-    expect(get('/api/market/me/addresses').addresses[0].isDefault).toBe(true);
+    expect(get('/plugins/pano-plugin-market/me/addresses').items[0].isDefault).toBe(true);
   });
 });
 
@@ -353,9 +382,11 @@ describe('orders', () => {
   test('order page by public id, status poll', () => {
     const list = orders('few');
     const paid = list.find((o) => o.status === 'COMPLETED');
-    const { result, order } = get(`/api/market/orders/${paid.publicId}?token=abc`);
+    const answer = get(`/plugins/pano-plugin-market/orders/${paid.publicId}?token=abc`);
+    const { order } = answer;
 
-    expect(result).toBe('ok');
+    expect(answer).not.toHaveProperty('error');
+    expect(answer).not.toHaveProperty('result');
     expect(order.publicId).toBe(paid.publicId);
     expect(order.publicId).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
     expect(order.limited).toBe(false);
@@ -372,15 +403,14 @@ describe('orders', () => {
     expect(order.canRetryPayment).toBe(false);
 
     const pending = get(
-      `/api/market/orders/${list.find((o) => o.status === 'PENDING').publicId}`,
+      `/plugins/pano-plugin-market/orders/${list.find((o) => o.status === 'PENDING').publicId}`,
     ).order;
     expect(pending.canCancel).toBe(true);
     expect(pending.canRetryPayment).toBe(true);
     expect(pending.paymentMethods.length).toBeGreaterThan(0);
     expect(pending.expiresAt).toBeGreaterThan(pending.createdAt);
 
-    expect(get(`/api/market/orders/${paid.publicId}/status`)).toEqual({
-      result: 'ok',
+    expect(get(`/plugins/pano-plugin-market/orders/${paid.publicId}/status`)).toEqual({
       status: 'COMPLETED',
       paymentStatus: 'SUCCEEDED',
       fulfillmentStatus: paid.fulfillment,
@@ -388,14 +418,16 @@ describe('orders', () => {
       updatedAt: paid.paidAt,
     });
     // the drawer's order link opens in every volume
-    expect(get(`/api/market/orders/${paid.publicId}`, 'empty').result).toBe('ok');
-    expect(get('/api/market/orders/nope')).toEqual({ result: 'error', error: 'NOT_FOUND' });
+    expect(get(`/plugins/pano-plugin-market/orders/${paid.publicId}`, 'empty').order).toBeDefined();
+    expect(get('/plugins/pano-plugin-market/orders/nope')).toEqual({
+      error: { code: 'NOT_FOUND' },
+    });
   });
 
   test('purchases: orders (status filter, pages, mixed currencies) and entitlements', () => {
-    const body = get('/api/market/me/orders');
-    expect(body.orderCount).toBe(6);
-    expect(Object.keys(body.orders[0])).toEqual([
+    const body = get('/plugins/pano-plugin-market/me/orders');
+    expect(body.page).toEqual({ number: 1, size: 10, totalItems: 6, totalPages: 1 });
+    expect(Object.keys(body.items[0])).toEqual([
       'publicId',
       'number',
       'status',
@@ -410,21 +442,25 @@ describe('orders', () => {
       'recipientUsername',
       'received',
     ]);
-    expect(body.orders[0].createdAt).toBeGreaterThan(body.orders[1].createdAt);
-    expect(new Set(body.orders.map((o) => o.currency)).size).toBeGreaterThan(1);
+    expect(body.items[0].createdAt).toBeGreaterThan(body.items[1].createdAt);
+    expect(new Set(body.items.map((o) => o.currency)).size).toBeGreaterThan(1);
 
-    const many = get('/api/market/me/orders?page=5', 'many');
-    expect(many.orderCount).toBe(47);
-    expect(many.totalPage).toBe(5);
-    expect(many.orders.length).toBe(7);
-    expect(get('/api/market/me/orders?page=6', 'many').error).toBe('PAGE_NOT_FOUND');
+    const many = get('/plugins/pano-plugin-market/me/orders?page=5', 'many');
+    expect(many.page).toEqual({ number: 5, size: 10, totalItems: 47, totalPages: 5 });
+    expect(many.items.length).toBe(7);
+    expect(get('/plugins/pano-plugin-market/me/orders?page=6', 'many')).toEqual({
+      error: { code: 'PAGE_NOT_FOUND' },
+    });
 
-    const filtered = get('/api/market/me/orders?status=PENDING,CANCELLED&pageSize=50', 'many');
-    expect(filtered.orders.length).toBeGreaterThan(0);
-    expect(filtered.orders.every((o) => ['PENDING', 'CANCELLED'].includes(o.status))).toBe(true);
+    const filtered = get(
+      '/plugins/pano-plugin-market/me/orders?status=PENDING,CANCELLED&pageSize=50',
+      'many',
+    );
+    expect(filtered.items.length).toBeGreaterThan(0);
+    expect(filtered.items.every((o) => ['PENDING', 'CANCELLED'].includes(o.status))).toBe(true);
 
-    const all = get('/api/market/me/entitlements').entitlements;
-    const active = get('/api/market/me/entitlements?active=true').entitlements;
+    const all = get('/plugins/pano-plugin-market/me/entitlements').items;
+    const active = get('/plugins/pano-plugin-market/me/entitlements?active=true').items;
     expect(Object.keys(all[0])).toEqual([
       'id',
       'productId',
@@ -443,22 +479,24 @@ describe('orders', () => {
 
 describe('profile', () => {
   test('credits ledger', () => {
-    const body = get('/api/market/me/credits');
+    const body = get('/plugins/pano-plugin-market/me/credits');
     expect(body.balance).toBe(1234.5);
     expect(body.creditName).toBe('Coins');
-    expect(body.entryCount).toBe(8);
-    expect(body.entries[0].balanceAfter).toBe(body.balance);
-    expect(cents(body.entries[1].balanceAfter)).toBe(
-      cents(body.entries[0].balanceAfter) - cents(body.entries[0].amount),
+    expect(body.page.totalItems).toBe(8);
+    expect(body.items[0].balanceAfter).toBe(body.balance);
+    expect(cents(body.items[1].balanceAfter)).toBe(
+      cents(body.items[0].balanceAfter) - cents(body.items[0].amount),
     );
-    expect(body.entries.some((e) => e.amount < 0)).toBe(true);
-    expect(body.entries.some((e) => e.orderPublicId)).toBe(true);
-    expect(get('/api/market/me/credits?page=3', 'many').entries.length).toBe(17);
-    expect(get('/api/market/me/credits?page=4', 'many').error).toBe('PAGE_NOT_FOUND');
+    expect(body.items.some((e) => e.amount < 0)).toBe(true);
+    expect(body.items.some((e) => e.orderPublicId)).toBe(true);
+    expect(get('/plugins/pano-plugin-market/me/credits?page=3', 'many').items.length).toBe(17);
+    expect(get('/plugins/pano-plugin-market/me/credits?page=4', 'many')).toEqual({
+      error: { code: 'PAGE_NOT_FOUND' },
+    });
   });
 
   test('subscriptions, summary, creator', () => {
-    const { subscriptions: list } = get('/api/market/me/subscriptions');
+    const { items: list } = get('/plugins/pano-plugin-market/me/subscriptions');
     expect(list.length).toBe(4);
     expect(Object.keys(list[0])).toEqual([
       'id',
@@ -487,9 +525,8 @@ describe('profile', () => {
     );
     expect(subscriptions('many').length).toBe(14);
 
-    const summary = get('/api/market/me/summary');
+    const summary = get('/plugins/pano-plugin-market/me/summary');
     expect(summary).toEqual({
-      result: 'ok',
       creditsEnabled: true,
       creditBalance: 1234.5,
       creditName: 'Coins',
@@ -499,22 +536,22 @@ describe('profile', () => {
       isCreator: true,
     });
 
-    const creator = get('/api/market/me/creator');
+    const creator = get('/plugins/pano-plugin-market/me/creator');
     expect(creator.codes.length).toBe(2);
-    expect(creator.earningCount).toBe(6);
+    expect(creator.page.totalItems).toBe(6);
+    expect(creator.items.length).toBe(6);
     expect(creator.totals.currency).toBe('USD');
     expect(creator.payouts.length).toBe(2);
   });
 
   test('widgets', () => {
-    const body = get('/api/market/widgets');
+    const body = get('/plugins/pano-plugin-market/widgets');
     expect(body.recentBuyers.length).toBe(5);
     expect(body.topSupporters[0].rank).toBe(1);
     expect(body.goals.length).toBe(2);
     expect(body.stats.productsTotal).toBe(9);
     expect(body.sidebars).toEqual(['home', 'profile']);
-    expect(Object.keys(get('/api/market/widgets?include=stats'))).toEqual([
-      'result',
+    expect(Object.keys(get('/plugins/pano-plugin-market/widgets?include=stats'))).toEqual([
       'stats',
       'sidebars',
     ]);
@@ -529,7 +566,8 @@ describe('determinism and pages', () => {
         const b = JSON.stringify(route.handler({ query: {}, params: {}, volume }));
 
         expect(a).toBe(b);
-        expect(JSON.parse(a).result).toBeDefined();
+        // no `result` key on any answer: a success has no `error` key, a failure is the envelope
+        expect(JSON.parse(a)).not.toHaveProperty('result');
       }
 
     expect(JSON.stringify(quoteOf({ items: [{ productId: 2, quantity: 2 }] }, 'few'))).toBe(
@@ -553,9 +591,9 @@ describe('determinism and pages', () => {
       const order = /^\/store\/order\/(.+)$/.exec(page.href);
       const product = /^\/store\/([^/?]+)$/.exec(page.href);
 
-      if (order) expect(get(`/api/market/orders/${order[1]}`).result).toBe('ok');
+      if (order) expect(get(`/plugins/pano-plugin-market/orders/${order[1]}`).order).toBeDefined();
       else if (product && product[1] !== 'checkout')
-        expect(get(`/api/market/products/${product[1]}`).result).toBe('ok');
+        expect(get(`/plugins/pano-plugin-market/products/${product[1]}`).product).toBeDefined();
     }
   });
 });
@@ -566,16 +604,16 @@ describe('unique keys of every keyed storefront list', () => {
     return keys.filter((k, i) => keys.indexOf(k) !== i);
   };
   const lists = [
-    ['/api/market/store', 'categories', (x) => x.id],
-    ['/api/market/store', 'products', (x) => x.id],
-    ['/api/market/store', 'featured', (x) => x.id],
-    ['/api/market/store', 'bestsellers', (x) => x.id],
-    ['/api/market/store', 'comparisons', (x) => x.id],
-    ['/api/market/store', 'comparisonProducts', (x) => x.id],
-    ['/api/market/store/products', 'products', (x) => x.id],
-    ['/api/market/me/orders', 'orders', (x) => x.publicId],
-    ['/api/market/me/entitlements', 'entitlements', (x) => x.id],
-    ['/api/market/me/subscriptions', 'subscriptions', (x) => x.id],
+    ['/plugins/pano-plugin-market/store', 'categories', (x) => x.id],
+    ['/plugins/pano-plugin-market/store', 'items', (x) => x.id],
+    ['/plugins/pano-plugin-market/store', 'featured', (x) => x.id],
+    ['/plugins/pano-plugin-market/store', 'bestsellers', (x) => x.id],
+    ['/plugins/pano-plugin-market/store', 'comparisons', (x) => x.id],
+    ['/plugins/pano-plugin-market/store', 'comparisonProducts', (x) => x.id],
+    ['/plugins/pano-plugin-market/store/products', 'items', (x) => x.id],
+    ['/plugins/pano-plugin-market/me/orders', 'items', (x) => x.publicId],
+    ['/plugins/pano-plugin-market/me/entitlements', 'entitlements', (x) => x.id],
+    ['/plugins/pano-plugin-market/me/subscriptions', 'subscriptions', (x) => x.id],
   ];
   for (const volume of ['empty', 'few', 'many']) {
     for (const [path, key, id] of lists) {
@@ -588,7 +626,8 @@ describe('unique keys of every keyed storefront list', () => {
 
   test('comparison features have unique ids and every cell is keyed featureId-productId', () => {
     for (const volume of ['few', 'many']) {
-      for (const c of router.answer('GET', '/api/market/store', volume).comparisons) {
+      for (const c of router.answer('GET', '/plugins/pano-plugin-market/store', volume)
+        .comparisons) {
         expect(dups(c.features, (f) => f.id)).toEqual([]);
         for (const f of c.features)
           for (const pid of c.productIds) expect(c.cellValues[`${f.id}-${pid}`]).toBeDefined();
@@ -600,7 +639,7 @@ describe('unique keys of every keyed storefront list', () => {
 describe('order public ids', () => {
   test('are 20 alphanumeric characters (ORDER_ID of the theme)', () => {
     for (const volume of ['few', 'many']) {
-      for (const o of router.answer('GET', '/api/market/me/orders', volume).orders)
+      for (const o of router.answer('GET', '/plugins/pano-plugin-market/me/orders', volume).items)
         expect(o.publicId).toMatch(/^[0-9A-Za-z]{20}$/);
     }
   });

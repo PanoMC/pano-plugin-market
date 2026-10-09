@@ -1,10 +1,10 @@
 package com.panomc.plugins.market.routes.panel.shipment
 
+import com.panomc.platform.model.Paging
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.db.model.PluginActivityLog
-import com.panomc.platform.error.PageNotFound
 import com.panomc.platform.model.Path
 import com.panomc.platform.model.Result
 import com.panomc.platform.model.RouteType
@@ -15,18 +15,16 @@ import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
-import com.panomc.plugins.market.routes.base.parsePagingRequest
 import com.panomc.plugins.market.routes.panel.shipping.shippingService
 import com.panomc.plugins.market.service.ShippingService
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
@@ -72,7 +70,7 @@ abstract class ShipmentRoute(protected val plugin: MarketPlugin, override val no
 /** `GET /api/panel/market/orders/:id/shipping` (`P:OM` or `P:PAY`, 11 section 14.3: the view holds the address): lines, suggested parcels, providers, the frozen quote. */
 @Endpoint
 class PanelGetOrderShippingAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_MANAGE, MarketNode.PAYMENTS)) {
-    override val paths = listOf(Path("/api/panel/market/orders/:id/shipping", RouteType.GET))
+    override val paths = listOf(Path("/orders/:id/shipping", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = noBody(schemaRepository)
 
@@ -86,7 +84,7 @@ class PanelGetOrderShippingAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, set
 /** `POST /orders/:id/shipping/rates` (`P:OM`): live carrier rates for the units that are still to ship. */
 @Endpoint
 class PanelOrderShippingRatesAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_MANAGE)) {
-    override val paths = listOf(Path("/api/panel/market/orders/:id/shipping/rates", RouteType.POST))
+    override val paths = listOf(Path("/orders/:id/shipping/rates", RouteType.POST))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = jsonBody(schemaRepository)
 
@@ -96,7 +94,7 @@ class PanelOrderShippingRatesAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, s
 /** `POST /orders/:id/shipments` (`P:OM`): a manual entry or a carrier shipment; answers the `shipment`. */
 @Endpoint
 class PanelCreateShipmentAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_MANAGE)) {
-    override val paths = listOf(Path("/api/panel/market/orders/:id/shipments", RouteType.POST))
+    override val paths = listOf(Path("/orders/:id/shipments", RouteType.POST))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = jsonBody(schemaRepository)
 
@@ -113,7 +111,7 @@ class PanelCreateShipmentAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf
 /** `PUT /orders/:id/shipping-address` (`P:OM`): the admin corrects the frozen address while no live shipment exists. */
 @Endpoint
 class PanelUpdateOrderShippingAddressAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_MANAGE)) {
-    override val paths = listOf(Path("/api/panel/market/orders/:id/shipping-address", RouteType.PUT))
+    override val paths = listOf(Path("/orders/:id/shipping-address", RouteType.PUT))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = jsonBody(schemaRepository)
 
@@ -130,12 +128,10 @@ class PanelUpdateOrderShippingAddressAPI(plugin: MarketPlugin) : ShipmentRoute(p
 /** `GET /shipments` (`P:OV`): q `status` (csv), `providerId`, `stale`, `search`, `page`, `pageSize`. */
 @Endpoint
 class PanelGetShipmentsAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_VIEW)) {
-    override val paths = listOf(Path("/api/panel/market/shipments", RouteType.GET))
+    override val paths = listOf(Path("/shipments", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
-        ValidationHandlerBuilder.create(schemaRepository)
-            .queryParameter(optionalParam("page", stringSchema()))
-            .queryParameter(optionalParam("pageSize", stringSchema()))
+        Paging.params(ValidationHandlerBuilder.create(schemaRepository))
             .queryParameter(optionalParam("status", stringSchema()))
             .queryParameter(optionalParam("providerId", stringSchema()))
             .queryParameter(optionalParam("stale", stringSchema()))
@@ -144,10 +140,7 @@ class PanelGetShipmentsAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(M
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
         val parameters = getParameters(context)
-        val window = parsePagingRequest(
-            parameters.queryParameter("page")?.string?.let { parseId(it, "page") },
-            parameters.queryParameter("pageSize")?.string?.let { parseId(it, "pageSize") }
-        )
+        val window = Paging.request(context)
         val statuses = parameters.queryParameter("status")?.string?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.map { name ->
             ShipmentStatus.entries.firstOrNull { it.name == name } ?: throw RequestValueException("status", "INVALID")
         } ?: emptyList()
@@ -163,18 +156,14 @@ class PanelGetShipmentsAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(M
             ShippingService.ShipmentFilter(statuses, parameters.queryParameter("providerId")?.string?.takeIf { it.isNotBlank() }, stale, parameters.queryParameter("search")?.string),
             window, sql()
         )
-        val totalPage = Paging.totalPages(page.count, window.pageSize)
-
-        if (Paging.isBeyondLast(window.page, totalPage)) throw PageNotFound()
-
-        return Successful(mapOf("shipments" to JsonArray(page.shipments), "shipmentCount" to page.count, "totalPage" to totalPage))
+        return Successful(Paging.response(page.shipments, page.count, window))
     }
 }
 
 /** `GET /shipments/:id` (`P:OV`): the shipment with its items and events; the addresses only with `OM` or `PAY`. */
 @Endpoint
 class PanelGetShipmentAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_VIEW)) {
-    override val paths = listOf(Path("/api/panel/market/shipments/:id", RouteType.GET))
+    override val paths = listOf(Path("/shipments/:id", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = noBody(schemaRepository)
 
@@ -192,7 +181,7 @@ class PanelGetShipmentAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(Ma
 /** `PUT /shipments/:id` (`P:OM`): tracking fields, a manual status, note, `releaseItems`. */
 @Endpoint
 class PanelUpdateShipmentAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_MANAGE)) {
-    override val paths = listOf(Path("/api/panel/market/shipments/:id", RouteType.PUT))
+    override val paths = listOf(Path("/shipments/:id", RouteType.PUT))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = jsonBody(schemaRepository)
 
@@ -209,7 +198,7 @@ class PanelUpdateShipmentAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf
 /** `POST /shipments/:id/retry` (`P:OM`): a failed carrier creation is sent again with the same merchant reference. */
 @Endpoint
 class PanelRetryShipmentAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_MANAGE)) {
-    override val paths = listOf(Path("/api/panel/market/shipments/:id/retry", RouteType.POST))
+    override val paths = listOf(Path("/shipments/:id/retry", RouteType.POST))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = optionalBody(schemaRepository)
 
@@ -226,7 +215,7 @@ class PanelRetryShipmentAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(
 /** `POST /shipments/:id/cancel` (`P:OM`, body `force?`). */
 @Endpoint
 class PanelCancelShipmentAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_MANAGE)) {
-    override val paths = listOf(Path("/api/panel/market/shipments/:id/cancel", RouteType.POST))
+    override val paths = listOf(Path("/shipments/:id/cancel", RouteType.POST))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = optionalBody(schemaRepository)
 
@@ -248,7 +237,7 @@ class PanelCancelShipmentAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf
 /** `POST /shipments/:id/track` (`P:OM`): asks the carrier now. */
 @Endpoint
 class PanelTrackShipmentAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_MANAGE)) {
-    override val paths = listOf(Path("/api/panel/market/shipments/:id/track", RouteType.POST))
+    override val paths = listOf(Path("/shipments/:id/track", RouteType.POST))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = optionalBody(schemaRepository)
 

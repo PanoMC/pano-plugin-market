@@ -1,7 +1,9 @@
-<div class="card">
-  <div class="card-body vstack gap-3">
+<div class="market-credits-section card">
+  <div class="market-credits-section__body card-body vstack gap-3">
     <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2">
-      <h2 class="h5 mb-0">{$_('theme.checkout.credits', { values: { name: credits.name } })}</h2>
+      <h2 class="market-credits-section__title h5 mb-0">
+        {$_('theme.checkout.credits', { values: { name: credits.name } })}
+      </h2>
       <div>
         <span class="text-body-secondary">{$_('theme.checkout.credits-balance')}</span>
         <span class="fw-semibold">{formatCredits(credits.balance, credits.name)}</span>
@@ -10,7 +12,7 @@
     </div>
 
     {#if alertKey}
-      <div class="alert alert-warning mb-0" role="alert">
+      <div class="market-credits-section__alert alert alert-warning mb-0" role="alert">
         {$_(alertKey)}
         {#if alertMax !== null}
           <span class="d-block small">
@@ -26,7 +28,7 @@
       <div class="form-check">
         <input
           id={payId}
-          class="form-check-input"
+          class="market-credits-section__check form-check-input"
           type="radio"
           name={PAY_GROUP}
           value="credits"
@@ -36,7 +38,7 @@
           onchange={() => onchange(selectCreditsPatch())} />
         <label class="form-check-label" for={payId}>
           {$_('theme.checkout.credits-pay', { values: { name: credits.name } })}
-          <span class="badge text-bg-info ms-1">
+          <span class="market-credits-section__badge badge text-bg-info ms-1">
             {formatCredits(credits.creditTotal, credits.name)}
           </span>
         </label>
@@ -53,7 +55,7 @@
         <div class="form-check">
           <input
             id={useId}
-            class="form-check-input"
+            class="market-credits-section__check-2 form-check-input"
             type="checkbox"
             checked={active}
             {disabled}
@@ -70,7 +72,7 @@
           <div class="input-group">
             <input
               id={amountId}
-              class="form-control"
+              class="market-credits-section__input form-control"
               type="number"
               inputmode="decimal"
               min="0"
@@ -83,7 +85,7 @@
             <span class="input-group-text">{credits.name}</span>
             <button
               type="button"
-              class="btn btn-outline-secondary"
+              class="market-credits-section__action btn btn-outline-secondary"
               {disabled}
               onclick={() => onchange({ useCredits: 'MAX' })}>
               {$_('theme.checkout.credits-use-max')}
@@ -107,7 +109,7 @@
 
 <script>
   import { base } from '@panomc/sdk/svelte';
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import {
     creditsRadio,
     mixedActive,
@@ -116,7 +118,10 @@
     PAY_GROUP,
     selectCreditsPatch,
   } from '../../lib/paymentModel.js';
-  import { formatCredits, formatMoney } from '../../utils/format.js';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { formatCredits, formatMoney } = market.require('format').actions;
 
   /**
    * `credits` = quote.credits; `config` = checkout config (mixedCredit); `payWithCredits` / `useCredits` = the

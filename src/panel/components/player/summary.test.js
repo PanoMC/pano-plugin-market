@@ -140,7 +140,7 @@ describe('loadPlayerSummary', () => {
     expect(
       (
         await loadPlayerSummary(
-          mk(async () => ({ error: 'NO_PERMISSION' })),
+          mk(async () => ({ error: { code: 'NO_PERMISSION' } })),
           eventFor(admin),
         )
       ).data.error,

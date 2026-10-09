@@ -1,14 +1,33 @@
-import svelte from 'rollup-plugin-svelte';
-import resolve from '@rollup/plugin-node-resolve';
-import del from 'rollup-plugin-delete';
-import terser from '@rollup/plugin-terser';
 import fs from 'node:fs';
 import path from 'node:path';
+import { panoPlugin } from '@panomc/plugin-kit/rollup';
 
-const dev = process.env.DEV === 'true';
-const production = !dev;
+// The build is the kit preset (@panomc/plugin-kit): server and client bundles, the entry facade, the svelte
+// version guard against the SDK pin, PANO_SDK_DIR, DEV and BUNDLE_SDK all live there. This file only keeps what is
+// specific to Market: the lane-scoped check builds, the missing-page stub and the development preview seam. The views obey the
+// import rules V1 and V5 of the kit (no PANO_VIEW_IMPORTS migration mode): a violation fails the build.
 
-const bundleSdk = process.env.BUNDLE_SDK === 'true';
+// --- SDK source -----------------------------------------------------------------------
+// The published @panomc/sdk pinned in package.json lags behind the views the theme UI imports (@panomc/sdk/views,
+// NoContent, ...). Inside the umbrella workspace the build therefore takes the sibling theme-core copy when
+// PANO_SDK_DIR is not set; outside it, the build stops with one clear line instead of a rollup export error.
+if (!process.env.PANO_SDK_DIR) {
+  const workspaceSdk = path.resolve('../../../theme-core/packages/sdk');
+  if (fs.existsSync(path.join(workspaceSdk, 'package.json'))) {
+    process.env.PANO_SDK_DIR = workspaceSdk;
+  } else {
+    const installed = path.resolve('node_modules/@panomc/sdk/package.json');
+    const exportsMap = fs.existsSync(installed)
+      ? JSON.parse(fs.readFileSync(installed, 'utf8')).exports || {}
+      : {};
+    if (!exportsMap['./views']) {
+      console.error(
+        '[pano] ERROR: the installed @panomc/sdk has no "./views" export; set PANO_SDK_DIR to a theme-core packages/sdk checkout.'
+      );
+      process.exit(1);
+    }
+  }
+}
 
 // --- Lane-scoped check builds (D-WB2) ----------------------------------------------
 // MARKET_UI_SIDE=panel|theme compiles one side only into build/ui-check/<side>/ (the other
@@ -23,111 +42,6 @@ const outRoot = side ? `build/ui-check/${side}` : 'src/main/resources/plugin-ui'
 const otherSideRegister = side
   ? path.resolve(`src/${side === 'panel' ? 'theme' : 'panel'}/register.js`)
   : null;
-
-// --- Svelte version guard ---------------------------------------------------
-// The svelte COMPILER this plugin builds with must match the runtime the Pano
-// host (theme/panel) serves in the browser — compiled output and runtime are only
-// guaranteed compatible at the exact same version (svelte's internal API may
-// change even in patch releases). @panomc/sdk pins the correct version as a
-// regular dependency, so the plugin must NOT declare svelte itself: an override
-// can drift from the host runtime and break the plugin at hydration.
-function checkSvelteVersion() {
-  const read = (p) => JSON.parse(fs.readFileSync(p, 'utf8'));
-
-  let sdkPin = null;
-  try {
-    sdkPin =
-      read(path.resolve('node_modules/@panomc/sdk/package.json')).dependencies?.svelte ?? null;
-  } catch {
-    // sdk not installed — rollup will fail on its own with a clearer error.
-  }
-
-  let installed = null;
-  try {
-    installed = read(path.resolve('node_modules/svelte/package.json')).version;
-  } catch {
-    // svelte missing entirely — rollup-plugin-svelte will fail on its own.
-  }
-
-  let ownDecl = null;
-  try {
-    const own = read(path.resolve('package.json'));
-    ownDecl =
-      own.dependencies?.svelte ??
-      own.devDependencies?.svelte ??
-      own.peerDependencies?.svelte ??
-      null;
-  } catch {
-    // no readable package.json — nothing to validate.
-  }
-
-  if (ownDecl) {
-    console.warn(
-      `[pano] WARNING: package.json declares svelte ${ownDecl}, but the svelte version ` +
-        `comes from @panomc/sdk. A local override can drift from the Pano host runtime ` +
-        `and break the plugin at hydration — remove the svelte entry and re-install.`,
-    );
-  }
-
-  // The sdk pins an exact version; only enforce when it is one (not a range).
-  if (sdkPin && /^\d/.test(sdkPin) && installed && installed !== sdkPin) {
-    console.error(
-      `[pano] ERROR: installed svelte is ${installed} but @panomc/sdk requires exactly ` +
-        `${sdkPin}. Compiled plugin output is only compatible with the Pano host runtime ` +
-        `at the same version. Remove any svelte override from package.json and re-install.`,
-    );
-    process.exit(1);
-  }
-
-  if (!sdkPin && installed) {
-    console.warn(
-      `[pano] WARNING: the installed @panomc/sdk does not pin a svelte version; building ` +
-        `with svelte ${installed}. Make sure it matches the Pano host runtime version.`,
-    );
-  }
-}
-checkSvelteVersion();
-
-function manifestPlugin() {
-  return {
-    name: 'manifest',
-    writeBundle(options, bundle) {
-      const dir = options.dir;
-      const manifestPath = path.join(dir, 'manifest.json');
-      const files = Object.keys(bundle);
-      fs.writeFileSync(manifestPath, JSON.stringify(files, null, 2));
-    },
-  };
-}
-
-// --- Entry facade -------------------------------------------------------------
-// The host imports the entry with a cache-busting query (client.mjs?v=<uiHash>)
-// while lazy chunks import it query-less ('./client.mjs'). The browser keys its
-// module map by FULL URL, so any module state living in the entry file would be
-// evaluated twice and lazy chunks would read unassigned exports (e.g. `pano`
-// undefined → "can't access property ui"). To prevent that, the build goes
-// through a virtual facade entry and src/main.js is forced into a shared chunk:
-// the emitted client.mjs/server.mjs is a pure re-export facade with no state of
-// its own, and all module state lives at a single query-less chunk URL.
-const realEntry = path.resolve('src/main.js');
-const virtualEntryId = '\0pano-entry-facade';
-
-function entryFacadePlugin() {
-  return {
-    name: 'pano-entry-facade',
-    resolveId(id) {
-      if (id === 'pano:entry') return virtualEntryId;
-    },
-    load(id) {
-      if (id === virtualEntryId) {
-        return (
-          `export * from ${JSON.stringify(realEntry)};\n` +
-          `export { default } from ${JSON.stringify(realEntry)};\n`
-        );
-      }
-    },
-  };
-}
 
 function sideStubPlugin() {
   const stubId = '\0pano-other-side-stub';
@@ -182,9 +96,13 @@ function missingPageStubPlugin() {
 // --- Development preview seam ---------------------------------------------------------
 // Every import of the host ApiUtil from this plugin's own files is redirected to src/mock/seam.js, the
 // one place where the development-only preview mode (fake data, see src/mock/) can answer a request.
-// The seam itself imports the real module (importer === seamFile is left alone).
+// The seam itself imports the real module (importer === seamFile is left alone). In the client build the
+// host ApiUtil is a host specifier (external); `bundle` takes the seam import out of that rule.
 const seamFile = path.resolve('src/mock/seam.js');
 const API_ID = '@panomc/sdk/utils/api';
+// `@panomc/sdk/plugin-api` (the plugin-scoped client of the panel) is a virtual module of the kit that imports
+// `createPluginApi` from the host ApiUtil; the seam exports `createPluginApi` too (prefixing the paths and calling the seam),
+// so that import is redirected like every other one and preview mode answers the plugin-scoped client as well.
 const isSeamImport = (id, importer) =>
   id === API_ID && importer && path.resolve(importer) !== seamFile;
 function apiSeamPlugin() {
@@ -197,99 +115,10 @@ function apiSeamPlugin() {
   };
 }
 
-const baseConfig = {
-  input: 'pano:entry',
-  output: {
-    format: 'es',
-    chunkFileNames: '[name]-[hash].js', // Chunk file naming
-    manualChunks(id) {
-      if (id === realEntry) return 'main';
-    },
-  },
-  plugins: [
-    entryFacadePlugin(),
-    apiSeamPlugin(),
-    sideStubPlugin(),
-    missingPageStubPlugin(),
-    del({
-      targets: [`${outRoot}/*`], // Always clean the output folder of this build
-      runOnce: true, // Run only once
-    }),
-    production && terser(),
-    manifestPlugin(),
-  ],
-  preserveEntrySignatures: 'strict',
-};
+const builds = await panoPlugin({
+  outDir: outRoot,
+  plugins: [apiSeamPlugin(), sideStubPlugin(), missingPageStubPlugin()],
+  bundle: isSeamImport,
+});
 
-export default [
-  // Server configuration
-  {
-    ...baseConfig,
-    output: {
-      ...baseConfig.output,
-      dir: `${outRoot}/server`, // Server directory
-      entryFileNames: 'server.mjs', // Server entry file
-    },
-    plugins: [
-      ...baseConfig.plugins,
-      resolve({
-        dedupe: ['svelte'],
-      }),
-      svelte({
-        compilerOptions: {
-          generate: 'server',
-          css: 'external',
-        },
-        emitCss: false,
-      }),
-    ],
-  },
-  // Client configuration
-  {
-    ...baseConfig,
-    output: {
-      ...baseConfig.output,
-      dir: `${outRoot}/client`, // Client directory
-      entryFileNames: 'client.mjs', // Client entry file
-    },
-    // Bare 'svelte'/'svelte/*', 'svelte-i18n' and '@panomc/sdk*' specifiers stay
-    // EXTERNAL in both dev and production: the host (theme/panel) injects an import
-    // map that resolves them to stable /runtime shim modules, and each shim re-exports
-    // the HOST bundle's own live module instance. Host pages and plugins therefore
-    // share a single Svelte runtime and a single SDK instance (same effect scheduler,
-    // same stores/contexts). Bundling a private SDK copy into the plugin would split
-    // store/context state from the host's instance, so the SDK must never be bundled
-    // in normal builds. BUNDLE_SDK=true is an escape hatch that bundles everything
-    // (self-contained build, no host import map required).
-    // NOTE: the match is exact/subpath, NOT a prefix — the host import map only
-    // provides these specifiers. A prefix match would leave third-party packages like
-    // 'svelte-select' as unresolvable bare imports in the browser; such dependencies
-    // must be bundled into the plugin.
-    external: (id, importer) => {
-      if (bundleSdk) return false;
-      if (isSeamImport(id, importer)) return false;
-      return (
-        id === 'svelte' ||
-        id.startsWith('svelte/') ||
-        id === 'svelte-i18n' ||
-        id === '@panomc/sdk' ||
-        id.startsWith('@panomc/sdk/')
-      );
-    },
-    plugins: [
-      ...baseConfig.plugins,
-      resolve({
-        browser: true,
-        dedupe: ['svelte', '@panomc/sdk'],
-      }),
-      svelte({
-        compilerOptions: {
-          generate: 'client',
-          css: 'external',
-          dev,
-        },
-        emitCss: false,
-      }),
-    ],
-  },
-];
+export default builds;

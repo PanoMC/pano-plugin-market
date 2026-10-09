@@ -74,6 +74,7 @@ import org.junit.jupiter.api.assertThrows
 import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import java.math.BigDecimal
 import java.util.concurrent.TimeUnit
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * T1 test of the fake payment provider plugin (17 section 6) against the `FakePayGateway` simulator: the full
@@ -1107,8 +1108,8 @@ class FakeGatewayProviderTest {
     fun `the simulator delivers webhooks to a target, several copies at once`() {
         val sink = FakeGateway.start(vertx)
         try {
-            sink.on("POST", "/api/market/payments/fake/webhook") { Reply.text("OK") }
-            val sender = FakePayGateway(vertx = vertx, webhookTarget = { sink.baseUrl + "/api/market/payments/fake/webhook" })
+            sink.on("POST", "${MarketPaths.SITE_ROOT}/payments/fake/webhook") { Reply.text("OK") }
+            val sender = FakePayGateway(vertx = vertx, webhookTarget = { sink.baseUrl + "${MarketPaths.SITE_ROOT}/payments/fake/webhook" })
             try {
                 val sequential = sender.sendWebhook("payment.pending", data("reference" to "R1"), id = "evt_a", copies = 2)
                 assertEquals(listOf(200, 200), sequential.map { it.statusCode() })

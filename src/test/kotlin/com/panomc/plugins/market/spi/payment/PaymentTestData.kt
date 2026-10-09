@@ -1,6 +1,7 @@
 package com.panomc.plugins.market.spi.payment
 
 import com.panomc.plugins.market.spi.common.Money
+import com.panomc.plugins.market.util.MarketPaths
 
 /** Fixtures shared by the spi.payment tests. */
 internal object PaymentTestData {
@@ -32,11 +33,11 @@ internal object PaymentTestData {
     )
 
     fun urls() = AttemptUrls(
-        success = "https://shop.example/api/market/payments/fake/return/tok/success",
-        cancel = "https://shop.example/api/market/payments/fake/return/tok/cancel",
-        pending = "https://shop.example/api/market/payments/fake/return/tok/pending",
-        result = "https://shop.example/api/market/payments/fake/return/tok/result",
-        notify = "https://shop.example/api/market/payments/fake/notify/tok",
+        success = "https://shop.example${MarketPaths.SITE_ROOT}/payments/fake/return/tok/success",
+        cancel = "https://shop.example${MarketPaths.SITE_ROOT}/payments/fake/return/tok/cancel",
+        pending = "https://shop.example${MarketPaths.SITE_ROOT}/payments/fake/return/tok/pending",
+        result = "https://shop.example${MarketPaths.SITE_ROOT}/payments/fake/return/tok/result",
+        notify = "https://shop.example${MarketPaths.SITE_ROOT}/payments/fake/notify/tok",
         orderPage = "https://shop.example/store/order/ABCDEFGHJKMNPQRSTVWX"
     )
 

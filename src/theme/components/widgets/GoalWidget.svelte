@@ -1,9 +1,9 @@
 {#if render}
-  <div class="vstack gap-3">
+  <div class="market-goal-widget vstack gap-3">
     {#each goals as goal (goal.id)}
       <div class="card">
-        <div class="card-body">
-          <h2 class="h6 card-title mb-1">
+        <div class="market-goal-widget__body card-body">
+          <h2 class="market-goal-widget__title h6 card-title mb-1">
             <i class="fa-solid fa-bullseye me-2 text-body-secondary" aria-hidden="true"></i
             >{goal.name}
           </h2>
@@ -50,18 +50,39 @@
   </div>
 {/if}
 
+<script module>
+  import { plugin } from '@panomc/sdk/controllers';
+
+  // sidebar injection (doc 01 section 2): the build registers this view in the home and profile sidebars
+  export const view = {
+    sidebar: ['home', 'profile'],
+    id: 'market-goals',
+    priority: 70,
+    widget: true,
+  };
+
+  /** The one `market/widgets` load of the four widgets (the controller shares the request); the payload is the `data` prop. */
+  export const load = (event) =>
+    plugin('market')
+      .load('widgets', { event })
+      .then((data) => ({ data: data ?? {} }));
+</script>
+
 <script>
-  import { _ } from '../../../i18n.js';
-  import { formatDate, formatMoney } from '../../utils/format.js';
-  import { now } from '../../stores/clock.js';
-  import { goalView, shouldRender } from './widgetsModel.js';
+  import { goalView, shouldRender, unwrapWidgets, withSidebar } from './widgetsModel.js';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { formatDate, formatMoney } = market.require('format').actions;
+  const clock = market.require('clock');
 
   /** data: the widgets payload (`goals`, ...), plus `sidebars` / `sidebarId` when it sits in a host sidebar. */
-  let { data = {} } = $props();
+  let { data = {}, sidebarId = '' } = $props();
 
-  const render = $derived(shouldRender(data, 'goals'));
+  const payload = $derived(unwrapWidgets(data));
+  const render = $derived(shouldRender(withSidebar(payload, sidebarId), 'goals'));
   // time-dependent text only once the clock runs, so the server render and the first client render match
-  const goals = $derived((data?.goals ?? []).map((goal) => goalView(goal, $now)));
+  const goals = $derived((payload.goals ?? []).map((goal) => goalView(goal, clock.state.now ?? 0)));
 
   const formatNumber = (value) => String(value);
 </script>

@@ -1,5 +1,5 @@
-<section class="vstack gap-3" aria-labelledby="market-topup-title">
-  <h2 class="h5 mb-0" id="market-topup-title">
+<section class="market-top-up-card vstack gap-3" aria-labelledby="market-topup-title">
+  <h2 class="market-top-up-card__title h5 mb-0" id="market-topup-title">
     <i class="fa-solid fa-circle-plus me-2" aria-hidden="true"></i>{$_(
       'theme.profile.credits.topup-title',
     )}
@@ -7,7 +7,9 @@
 
   {#if packs.length}
     <div class="vstack gap-2">
-      <h3 class="h6 mb-0">{$_('theme.profile.credits.packs-title')}</h3>
+      <h3 class="market-top-up-card__packs-title h6 mb-0">
+        {$_('theme.profile.credits.packs-title')}
+      </h3>
       <div class="row g-3">
         {#each packs as product (product.id)}
           <div class="col-6 col-md-4">
@@ -20,17 +22,17 @@
 
   {#if topUp?.freeAmount}
     <form class="card" novalidate onsubmit={submit} aria-labelledby="market-topup-free-title">
-      <div class="card-body vstack gap-2">
-        <h3 class="h6 mb-0" id="market-topup-free-title">
+      <div class="market-top-up-card__body card-body vstack gap-2">
+        <h3 class="market-top-up-card__topup-free-title h6 mb-0" id="market-topup-free-title">
           {$_('theme.profile.credits.topup-free-title')}
         </h3>
-        <label class="form-label mb-0" for="market-topup-amount">
+        <label class="market-top-up-card__label form-label mb-0" for="market-topup-amount">
           {$_('theme.profile.credits.topup-amount-label', { values: { creditName } })}
         </label>
         <div class="input-group">
           <input
             id="market-topup-amount"
-            class={['form-control', { 'is-invalid': !!errorKey }]}
+            class={['market-top-up-card__input', 'form-control', { 'is-invalid': !!errorKey }]}
             type="number"
             inputmode="decimal"
             min={topUp.min}
@@ -42,7 +44,7 @@
             bind:value={text}
             bind:this={input}
             oninput={() => (touched = true)} />
-          <button type="submit" class="btn btn-primary">
+          <button type="submit" class="market-top-up-card__action btn btn-primary">
             {$_('theme.profile.credits.topup-submit')}
           </button>
           {#if errorKey}
@@ -64,16 +66,19 @@
 </section>
 
 <script>
+  import { plugin } from '@panomc/sdk/controllers';
   import { goto } from '@panomc/sdk/svelte';
-  import { _ } from '../../../i18n.js';
   import {
     topUpCostCents,
     topUpErrorKey,
     topUpHref,
     validateTopUp,
   } from '../../lib/profileModel.js';
-  import { formatCredits, formatPrice } from '../../utils/format.js';
   import ProductCard from '../store/ProductCard.svelte';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { formatCredits, formatPrice } = market.require('format').actions;
 
   /**
    * Credit top-up (14 §12.3): credit packs as product cards and, with `topUp.freeAmount`, a free-amount form whose

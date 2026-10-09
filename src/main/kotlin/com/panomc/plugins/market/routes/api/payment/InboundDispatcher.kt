@@ -1,7 +1,8 @@
 package com.panomc.plugins.market.routes.api.payment
 
+import com.panomc.plugins.market.util.StoreLinks
 import com.panomc.plugins.market.core.abuse.Redactor
-import com.panomc.plugins.market.core.time.Backoff
+import com.panomc.platform.webhook.Backoff
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.core.time.Ids
 import com.panomc.plugins.market.db.model.MarketPayment
@@ -60,13 +61,20 @@ class InboundDispatcher(
     private val locks: AttemptLocks,
     private val clock: Clock,
     private val ids: Ids,
-    /** `{base}` of the order page address, without the trailing slash. */
+    /** The site address, without the trailing slash: where a return lands when its page has no address (a disabled route). */
     private val baseUrl: () -> String,
     private val runtime: () -> MarketRuntime.State = { MarketRuntime.state },
     private val providerTimeoutMs: Long = PROVIDER_TIMEOUT_MS,
     private val backoff: Backoff = RETRY_BACKOFF,
-    private val random: Random = Random.Default
+    private val random: Random = Random.Default,
+    /** The pages a return goes back to (the front-end URL map, doc 05 section 10.2); `null` = the default paths under [baseUrl]. */
+    private val linksOrNull: StoreLinks? = null
 ) {
+    private val links: StoreLinks get() = linksOrNull ?: StoreLinks.ofBase(baseUrl())
+
+    /** The store page, else the site itself. */
+    private fun storeUrl(): String = links.store() ?: baseUrl().trimEnd('/').ifEmpty { "/" }
+
     /** The state of one processing run of one row. */
     private class Run(
         val id: Long,
@@ -444,7 +452,7 @@ class InboundDispatcher(
 
     /** Not started / stopped: the gateway retries, the browser goes to the store (the order cannot be looked up). */
     private fun notReady(call: InboundCall): HttpReply =
-        if (call.kind == InboundKind.RETURN) HttpReply.redirect("${baseUrl()}/store") else HttpReply.retryLater(503)
+        if (call.kind == InboundKind.RETURN) HttpReply.redirect(storeUrl()) else HttpReply.retryLater(503)
 
     private suspend fun deferredReply(call: InboundCall, attempt: MarketPayment?): HttpReply =
         if (call.kind == InboundKind.RETURN) orderPage(attempt, call.outcome) else HttpReply.retryLater(503)
@@ -473,7 +481,6 @@ class InboundDispatcher(
     }
 
     private suspend fun orderPage(attempt: MarketPayment?, outcome: ReturnOutcome?): HttpReply {
-        val base = baseUrl().trimEnd('/')
         val publicId = attempt?.let {
             try {
                 attempts.publicIdOf(it.orderId)
@@ -490,8 +497,8 @@ class InboundDispatcher(
             else -> null
         }
 
-        return if (publicId.isNullOrEmpty()) HttpReply.redirect("$base/store")
-        else HttpReply.redirect("$base/store/order/$publicId" + (hint?.let { "?return=$it" } ?: ""))
+        return if (publicId.isNullOrEmpty()) HttpReply.redirect(storeUrl())
+        else HttpReply.redirect(links.order(publicId, hint?.let { mapOf("return" to it) } ?: emptyMap()) ?: storeUrl())
     }
 
     /** The provider's reply, minus the headers that belong to the connection or would set state on the site's origin. */

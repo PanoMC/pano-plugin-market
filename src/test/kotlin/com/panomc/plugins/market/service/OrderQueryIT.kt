@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.platform.model.PageRequest
+import com.panomc.platform.model.Paging
 import com.panomc.platform.error.NoPermission
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.config.MarketConfig
@@ -57,7 +59,6 @@ import com.panomc.plugins.market.service.platform.DirectoryUser
 import com.panomc.plugins.market.service.platform.UserDirectory
 import com.panomc.plugins.market.util.CsvWriter
 import com.panomc.plugins.market.util.OrderStatus
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.sqlclient.SqlClient
@@ -115,7 +116,7 @@ class OrderQueryIT : MarketDaoITBase() {
     private val manage = OrderViewer.of(manage = true, pay = false)
     private val pay = OrderViewer.of(manage = false, pay = true)
     private val both = OrderViewer.of(manage = true, pay = true)
-    private val firstPage = Paging.Window(1, 50)
+    private val firstPage = PageRequest(1, 50)
     private var sequence = 0
 
     private suspend fun order(
@@ -153,7 +154,7 @@ class OrderQueryIT : MarketDaoITBase() {
             pool
         )
 
-    private suspend fun listIds(filter: OrderFilter = OrderFilter(), viewer: OrderViewer = both, window: Paging.Window = firstPage): List<Long> =
+    private suspend fun listIds(filter: OrderFilter = OrderFilter(), viewer: OrderViewer = both, window: PageRequest = firstPage): List<Long> =
         service.list(filter, window, viewer.pii, pool).rows.map { it.getLong("id") }
 
     private suspend fun export(filter: OrderFilter = OrderFilter(), columns: List<String> = OrderExportColumns.ALL, delimiter: CsvWriter.Delimiter = CsvWriter.Delimiter.COMMA, viewer: OrderViewer = both): Pair<String, OrderExportResult> {
@@ -295,9 +296,9 @@ class OrderQueryIT : MarketDaoITBase() {
     fun `paging counts every match and slices by page size`(): Unit = runBlocking {
         repeat(7) { order(player = "P$it", createdAt = 1_000L + it * 10) }
 
-        val first = service.list(OrderFilter(), Paging.Window(1, 3), true, pool)
-        val third = service.list(OrderFilter(), Paging.Window(3, 3), true, pool)
-        val beyond = service.list(OrderFilter(), Paging.Window(9, 3), true, pool)
+        val first = service.list(OrderFilter(), PageRequest(1, 3), true, pool)
+        val third = service.list(OrderFilter(), PageRequest(3, 3), true, pool)
+        val beyond = service.list(OrderFilter(), PageRequest(9, 3), true, pool)
 
         assertEquals(7L, first.count)
         assertEquals(3, first.rows.size)

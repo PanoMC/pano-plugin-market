@@ -1,5 +1,8 @@
 <script module>
-  import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
+  import { failureOf } from '../utils/api.js';
+  import { emptyList } from '../utils/page.js';
 
   /**
    * @type {import("@sveltejs/kit").PageLoad}
@@ -18,9 +21,9 @@
     const statusParam = searchParams.get('status');
 
     const fetchPage = (p) =>
-      ApiUtil.get({
+      api.panel.get({
         path:
-          '/api/panel/market/gifts' +
+          '/gifts' +
           buildQueryParams({
             page: p === 1 ? null : p,
             search,
@@ -29,29 +32,17 @@
         request: event,
       });
 
-    let effectivePage = pageNum;
     let body = await fetchPage(pageNum);
 
     // A stale ?page= (bookmark / back-button after deletes) points past the last
     // page; fall back to page 1 with the same filters instead of faking an empty store.
-    if (body?.error === 'PAGE_NOT_FOUND' && pageNum > 1) {
-      effectivePage = 1;
+    if (failureOf(body) === 'PAGE_NOT_FOUND' && pageNum > 1) {
       body = await fetchPage(1);
     }
 
-    if (!body || body.error) {
-      return {
-        data: {
-          gifts: [],
-          giftCount: 0,
-          totalPage: 1,
-          page: 1,
-          error: body?.error || 'NETWORK_ERROR',
-        },
-      };
-    }
+    const failure = failureOf(body);
+    if (failure) return { data: emptyList(failure) };
 
-    body.page = effectivePage;
     return { data: body };
   }
 </script>
@@ -65,18 +56,20 @@
   import CreateGiftModal from '../components/modals/CreateGiftModal.svelte';
   import RedemptionsModal from '../components/modals/RedemptionsModal.svelte';
   import { sectionsFor } from '../navigation.js';
-  import { call, errorKey, marketPath } from '../utils/api.js';
+  import { call, errorKey } from '../utils/api.js';
   import { giftRedemptionTarget, usedCell } from '../utils/category-gift.js';
   import { currentLocale } from '../utils/locale.js';
+  import { pageOf } from '../utils/page.js';
 
   let { data } = $props();
 
   // Data comes straight from load(); the panel host remounts this view
   // ({#key data}) whenever load() re-runs, so we render load()'s result directly.
-  let gifts = $derived(data.gifts || []);
-  let giftCount = $derived(data.giftCount ?? (data.gifts?.length ?? 0));
-  let totalPage = $derived(data.totalPage ?? 1);
-  let currentPage = $derived(data.page || 1);
+  const list = $derived(pageOf(data));
+  let gifts = $derived(list.items);
+  let giftCount = $derived(list.totalItems);
+  let totalPage = $derived(list.totalPages);
+  let currentPage = $derived(list.number);
   let loadError = $derived(data.error || null);
 
   // All list state (page / search / status) lives in the URL query params.
@@ -163,7 +156,7 @@
       confirmLabel: $_('common.delete'),
       variant: 'danger',
       onConfirm: async () => {
-        const result = await call(ApiUtil.delete({ path: marketPath(`/gifts/${gift.id}`) }));
+        const result = await call(api.panel.delete({ path: `/gifts/${gift.id}` }));
         if (!result.ok) {
           // A row that is already gone (404 NOT_FOUND) is toasted and the list refreshed.
           showErrorToast($_(errorKey(result.error)));

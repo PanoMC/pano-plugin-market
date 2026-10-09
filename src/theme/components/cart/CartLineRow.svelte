@@ -1,12 +1,12 @@
-<li class="list-group-item px-0">
+<li class="market-cart-line-row market-cart-line-row__item list-group-item px-0">
   <div class="row g-2 align-items-start">
     <div class="col-2">
       <div class="ratio ratio-1x1 bg-body-tertiary rounded overflow-hidden">
         {#if row.imageFileName}
           <img
-            src="{base}/api/market/products/image/{row.imageFileName}?thumbnail=true"
+            src="{base}/api/plugins/pano-plugin-market/products/image/{row.imageFileName}?thumbnail=true"
             alt=""
-            class="object-fit-cover rounded" />
+            class="market-cart-line-row__image object-fit-cover rounded" />
         {:else}
           <div class="d-flex align-items-center justify-content-center">
             <i class="fa-solid fa-box text-body-secondary" aria-hidden="true"></i>
@@ -40,9 +40,9 @@
         </div>
         <button
           type="button"
-          class="btn btn-sm btn-link text-danger p-0"
+          class="market-cart-line-row__action btn btn-sm btn-link text-danger p-0"
           aria-label={$_('theme.cart.remove-item', { values: { name: row.name } })}
-          onclick={() => cart.remove(row.key)}>
+          onclick={() => remove(row.key)}>
           <i class="fa-solid fa-trash" aria-hidden="true"></i>
         </button>
       </div>
@@ -53,7 +53,7 @@
         {/if}
         <span>{money(row.unitPrice)}</span>
         {#if showCredit(row, creditsEnabled)}
-          <span class="badge text-bg-info ms-1"
+          <span class="market-cart-line-row__badge badge text-bg-info ms-1"
             >{formatCredits(row.creditUnitPrice, creditName)}</span>
         {/if}
       </div>
@@ -66,19 +66,20 @@
           <div class="btn-group btn-group-sm" role="group" aria-label={$_('theme.cart.quantity')}>
             <button
               type="button"
-              class="btn btn-outline-secondary"
+              class="market-cart-line-row__decrease btn btn-outline-secondary"
               aria-label={$_('theme.cart.decrease')}
-              onclick={() => cart.setQuantity(row.key, row.quantity - 1)}>
+              onclick={() => setQuantity(row.key, row.quantity - 1)}>
               <i class="fa-solid fa-minus" aria-hidden="true"></i>
             </button>
-            <span class="btn btn-outline-secondary disabled" aria-live="polite"
-              >{row.quantity}</span>
+            <span
+              class="market-cart-line-row__action-2 btn btn-outline-secondary disabled"
+              aria-live="polite">{row.quantity}</span>
             <button
               type="button"
-              class="btn btn-outline-secondary"
+              class="market-cart-line-row__increase btn btn-outline-secondary"
               aria-label={$_('theme.cart.increase')}
               disabled={row.maxQuantity !== null && row.quantity >= row.maxQuantity}
-              onclick={() => cart.setQuantity(row.key, row.quantity + 1)}>
+              onclick={() => setQuantity(row.key, row.quantity + 1)}>
               <i class="fa-solid fa-plus" aria-hidden="true"></i>
             </button>
           </div>
@@ -95,10 +96,13 @@
 
 <script>
   import { base } from '@panomc/sdk/svelte';
-  import { _ } from '../../../i18n.js';
-  import { cart } from '../../stores/cart.js';
-  import { formatCredits } from '../../utils/format.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { errorKey, fieldPairs, isDiscounted, showCredit } from './cartView.js';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { formatCredits } = market.require('format').actions;
+  const { remove, setQuantity } = market.require('cart').actions;
 
   /**
    * row: a display row of cartView (quoteRows / metaRows); money: formats an amount in the cart currency;

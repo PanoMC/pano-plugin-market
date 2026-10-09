@@ -147,7 +147,6 @@
       path: '/subscriptions',
       params: SUBSCRIPTION_PARAMS,
       nodes: ['OV'],
-      emptyKey: 'subscriptions',
       title: 'pages.subscriptions.title',
     });
   }
@@ -174,6 +173,7 @@
   import { sectionsFor } from '../navigation.js';
   import { formatDuration } from '../utils/format.js';
   import { gotoList } from '../utils/list.js';
+  import { pageOf } from '../utils/page.js';
   import { currentLocale, fmt } from '../utils/locale.js';
   import {
     STATUS_TABS,
@@ -192,10 +192,11 @@
 
   const user = $derived($page.data?.user);
   const filters = $derived(normalizeFilters(data.filters));
-  const subscriptions = $derived(data.subscriptions ?? []);
-  const subscriptionCount = $derived(data.subscriptionCount ?? data.count ?? 0);
-  const totalPage = $derived(data.totalPage ?? 1);
-  const currentPage = $derived(data.page ?? 1);
+  const list = $derived(pageOf(data));
+  const subscriptions = $derived(list.items);
+  const subscriptionCount = $derived(list.totalItems);
+  const totalPage = $derived(list.totalPages);
+  const currentPage = $derived(list.number);
   const currentTab = $derived(activeTab(filters.status));
 
   const duration = (unit, count) => formatDuration(unit, count, $_);

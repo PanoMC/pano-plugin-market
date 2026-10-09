@@ -1,4 +1,15 @@
 // A small HTTP client of the instance with a cookie jar and the CSRF token (the shape of E2eClient in the Kotlin harness).
+// The two plugin prefixes of the v1 API contract (doc 04 section 1) live here and nowhere else: scenarios and helpers append the
+// relative path to them, and core paths are written in full (`/api/v1/auth/login`, `/api/v1/panel/...`).
+export const PLUGIN_ID = 'pano-plugin-market';
+export const MARKET_API = `/api/plugins/${PLUGIN_ID}`;
+export const PANEL_MARKET_API = `/api/plugins/${PLUGIN_ID}/panel`;
+
+/** A list of a response body: `items` (the contract) or the legacy key (the frozen bundle still answers some lists under it). */
+export function listOf(body, legacyKey) {
+  return body?.items ?? body?.[legacyKey] ?? [];
+}
+
 export class Api {
   constructor(baseUrl, label = 'anon') {
     this.baseUrl = baseUrl;
@@ -58,7 +69,14 @@ export class Api {
       /* not JSON */
     }
 
-    return { status: res.status, json, text, error: json?.error ?? null };
+    // a failure is `{ error: { code, message?, details?, fields? } }`; `error` of the answer is the code, `errorBody` the whole object
+    return {
+      status: res.status,
+      json,
+      text,
+      error: json?.error?.code ?? null,
+      errorBody: json?.error ?? null,
+    };
   }
 
   get(path, headers) {
@@ -85,7 +103,7 @@ export class Api {
   }
 
   async login(usernameOrEmail, password, panel = false) {
-    const res = await this.post('/api/auth/login', {
+    const res = await this.post('/api/v1/auth/login', {
       usernameOrEmail,
       password,
       ...(panel ? { panel: true } : {}),

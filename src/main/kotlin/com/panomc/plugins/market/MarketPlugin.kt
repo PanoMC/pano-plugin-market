@@ -3,6 +3,7 @@ package com.panomc.plugins.market
 import com.panomc.platform.api.PanoPlugin
 import com.panomc.platform.api.PluginDatabaseManager
 import com.panomc.platform.api.config.PluginConfigManager
+import com.panomc.platform.config.ConfigManager
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.server.ServerEvent
 import com.panomc.platform.server.ServerManager
@@ -18,6 +19,7 @@ import com.panomc.plugins.market.routes.panel.server.marketServerEvents
 import com.panomc.plugins.market.runtime.MarketBootstrap
 import com.panomc.plugins.market.runtime.MarketRuntime
 import com.panomc.plugins.market.service.ExchangeRateService
+import com.panomc.plugins.market.service.runWebhookImport
 import com.panomc.plugins.market.util.ExchangeRateMode
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.dispatcher
@@ -95,6 +97,7 @@ class MarketPlugin : PanoPlugin() {
         // timer is already live, so the first-ever start path is unaffected.
         if (isInitialized && setupManager.isSetupDone()) {
             bootstrap?.resume()
+            declareWebhookEvents()
 
             @Suppress("UNCHECKED_CAST")
             val configManager =
@@ -178,6 +181,18 @@ class MarketPlugin : PanoPlugin() {
         }
     }
 
+    /**
+     * Declares the store's events, their Discord renderer and the outcome listener of action webhooks to core's webhook system (doc 06 section 4.4). Core forgets all
+     * of it when the plugin stops, so this runs at every start; it never fails the start (without it core only auto-declares an event on its first publish).
+     */
+    private fun declareWebhookEvents() {
+        try {
+            com.panomc.plugins.market.routes.panel.webhook.registerStoreWebhooks(this)
+        } catch (e: Exception) {
+            logger.warn("The store's webhook events could not be declared to the platform, they are declared on their first publish", e)
+        }
+    }
+
     /** The counters of the scheduler jobs for `GET /health` (MK-172); empty while no scheduler is armed. */
     internal fun jobStats(): List<MarketScheduler.JobStats> = jobScheduler?.stats().orEmpty()
 
@@ -195,6 +210,9 @@ class MarketPlugin : PanoPlugin() {
 
         isInitialized = true
 
+        // one setting for the platform and the store: webhooks.allow-private-targets of the platform's config (doc 06 section 4.1)
+        MarketConfig.coreAllowPrivateTargets = { applicationContext.getBean(ConfigManager::class.java).config.effectiveWebhooks.allowPrivateTargets }
+
         val configManager = PluginConfigManager(this, MarketConfig::class.java)
         pluginBeanContext.beanFactory.registerSingleton(PluginConfigManager::class.java.name, configManager)
         com.panomc.plugins.market.routes.base.MarketGate.storeEnabled = { configManager.config.storeEnabled }
@@ -211,6 +229,10 @@ class MarketPlugin : PanoPlugin() {
             pool = { databaseManager.getSqlClient() as Pool },
             initDatabase = { pluginDatabaseManager.initialize(this) },
             secrets = { encryptLegacySecrets() },
+            webhooks = {
+                runWebhookImport(com.panomc.plugins.market.routes.panel.webhook.webhookImport(this))
+                declareWebhookEvents()
+            },
             armScheduler = {
                 seedShipping()
                 startExchangeRateScheduler(configManager, exchangeRateService)

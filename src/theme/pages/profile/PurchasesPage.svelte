@@ -1,15 +1,17 @@
-<div class="vstack gap-4">
+<div class="market-purchases-page vstack gap-4">
   {#if data.pills}
     <ProfilePills summary={data.summary} current="purchases" />
   {/if}
 
   {#if entitlements.length}
     <section aria-labelledby="market-active-title">
-      <h2 class="h5" id="market-active-title">{$_('theme.profile.purchases.active-title')}</h2>
-      <ul class="list-group">
+      <h2 class="market-purchases-page__title h5" id="market-active-title">
+        {$_('theme.profile.purchases.active-title')}
+      </h2>
+      <ul class="market-purchases-page__list list-group">
         {#each entitlements as entitlement, index (entitlement.id ?? index)}
           <li
-            class="list-group-item d-flex flex-wrap align-items-center justify-content-between gap-2">
+            class="market-purchases-page__item list-group-item d-flex flex-wrap align-items-center justify-content-between gap-2">
             <div>
               <span class="fw-semibold">{entitlement.name}</span>
               {#if entitlement.variant}
@@ -40,21 +42,25 @@
   {/if}
 
   <section class="card">
-    <div class="card-body">
+    <div class="market-purchases-page__body card-body">
       <GiftRedeemForm />
     </div>
   </section>
 
   <section aria-labelledby="market-orders-title">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-      <h2 class="h5 mb-0" id="market-orders-title">{$_('theme.profile.purchases.orders-title')}</h2>
+      <h2 class="market-purchases-page__orders-title h5 mb-0" id="market-orders-title">
+        {$_('theme.profile.purchases.orders-title')}
+      </h2>
       <div class="d-flex align-items-center gap-2">
-        <label class="form-label mb-0 small" for="market-orders-filter">
+        <label
+          class="market-purchases-page__label form-label mb-0 small"
+          for="market-orders-filter">
           {$_('theme.profile.purchases.filter-label')}
         </label>
         <select
           id="market-orders-filter"
-          class="form-select form-select-sm w-auto"
+          class="market-purchases-page__select form-select form-select-sm w-auto"
           value={filter.status}
           onchange={onStatus}>
           <option value="">{$_('theme.profile.purchases.filter-all')}</option>
@@ -73,7 +79,7 @@
           <LoadingBlock rows={5} />
         {:else if rows.length}
           <div class={['table-responsive', loading && 'opacity-50']}>
-            <table class="table align-middle">
+            <table class="market-purchases-page__table table align-middle">
               <caption class="visually-hidden"
                 >{$_('theme.profile.purchases.orders-title')}</caption>
               <thead>
@@ -128,7 +134,7 @@
         {/if}
 
         <div class="mt-3">
-          <Pager page={filter.page} totalPage={orders.totalPage} onpage={onPage} />
+          <Pager page={filter.page} totalPages={orders.totalPages} onpage={onPage} />
         </div>
       </div>
     {/if}
@@ -136,17 +142,25 @@
 </div>
 
 <script module>
+  // page metadata (doc 01 section 2): the build registers this view as a page, no register.js entry
+  export const view = { path: '/profile/purchases', systemLayout: 'ProfileLayout' };
+
   import { redirect } from '@panomc/sdk/svelte';
   import { ordersQuery, parseListQuery, resolvePurchasesLoad } from '../../lib/profileModel.js';
-  import { ensureSettings } from '../../stores/storeSettings.js';
-  import { call } from '../../utils/api.js';
-  import { has, loginUrl } from '../../utils/host.js';
+  import { plugin } from '@panomc/sdk/controllers';
 
-  const ORDERS_PATH = '/api/market/me/orders';
-  const ENTITLEMENTS_PATH = '/api/market/me/entitlements';
-  const SUMMARY_PATH = '/api/market/me/summary';
+  const ORDERS_PATH = '/me/orders';
+  const ENTITLEMENTS_PATH = '/me/entitlements';
+  const SUMMARY_PATH = '/me/summary';
 
   export async function load(event) {
+    const market = plugin('market');
+    // a server load is made for its request; the browser has one host for the whole page
+    const via = typeof window === 'undefined' ? { event } : undefined;
+    const { call } = market.require('api', via).actions;
+    const { has, loginUrl } = market.require('host', via).actions;
+    const ensureSettings = () => market.require('settings', via).actions.ensure(event);
+
     const returnTo = `${event.url.pathname}${event.url.search}`;
     const { session } = await event.parent();
 
@@ -159,7 +173,7 @@
     const [orders, entitlements, settings, summary] = await Promise.all([
       call('GET', ORDERS_PATH, { event, query: ordersQuery(filter) }),
       call('GET', ENTITLEMENTS_PATH, { event, query: { active: true } }),
-      ensureSettings(event),
+      ensureSettings(),
       pills ? call('GET', SUMMARY_PATH, { event }) : null,
     ]);
 
@@ -190,10 +204,9 @@
 </script>
 
 <script>
-  import { getContext, onMount, untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { base } from '@panomc/sdk/svelte';
   import { NoContent } from '@panomc/sdk/components/theme';
-  import { _ } from '../../../i18n.js';
   import ErrorAlert from '../../components/common/ErrorAlert.svelte';
   import LoadingBlock from '../../components/common/LoadingBlock.svelte';
   import GiftRedeemForm from '../../components/profile/GiftRedeemForm.svelte';
@@ -209,14 +222,15 @@
     readOrders,
   } from '../../lib/profileModel.js';
   import { createSequencer } from '../../lib/storeFilter.js';
-  import { now } from '../../stores/clock.js';
-  import { bindSession, hostSession } from '../../stores/session.js';
-  import { storeSettings } from '../../stores/storeSettings.js';
-  import { formatDate, formatDateTime, formatMoney } from '../../utils/format.js';
+
+  const market = plugin('market');
+  const _ = market._;
+  const { call } = market.require('api').actions;
+  const storeSettings = market.require('settings');
+  const clock = market.require('clock');
+  const { formatDate, formatDateTime, formatMoney } = market.require('format').actions;
 
   let { data } = $props();
-
-  bindSession(hostSession(getContext));
 
   // The page is re-mounted whenever load() runs again (14 F2), so the loaded data only seeds the state.
   const init = untrack(() => data);
@@ -227,10 +241,12 @@
 
   const seq = createSequencer();
 
-  const entitlements = $derived((init.entitlements ?? []).map((e) => entitlementView(e, $now)));
+  const entitlements = $derived(
+    (init.entitlements ?? []).map((e) => entitlementView(e, clock.state.now)),
+  );
   const rows = $derived((orders.orders ?? []).map(orderRow));
   const removeCents = $derived(
-    (init.settings?.removeCents ?? $storeSettings?.removeCents) === true,
+    (init.settings?.removeCents ?? storeSettings.state.settings?.removeCents) === true,
   );
 
   function writeUrl() {

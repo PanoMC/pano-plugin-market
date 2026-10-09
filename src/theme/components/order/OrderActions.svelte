@@ -1,11 +1,11 @@
 {#if canCancel || canInvoice}
-  <div class="vstack gap-2">
+  <div class="market-order-actions vstack gap-2">
     <div class="d-flex flex-wrap gap-2">
       {#if canInvoice}
         {#if useBlob}
           <button
             type="button"
-            class="btn btn-outline-secondary btn-sm"
+            class="market-order-actions__action btn btn-outline-secondary btn-sm"
             disabled={busy}
             onclick={downloadInvoice}>
             <i class="fa-solid fa-file-invoice me-1" aria-hidden="true"></i>{$_(
@@ -13,7 +13,10 @@
             )}
           </button>
         {:else}
-          <a class="btn btn-outline-secondary btn-sm" href="{base}{invoicePath(id)}" download>
+          <a
+            class="market-order-actions__invoice btn btn-outline-secondary btn-sm"
+            href="{base}{invoiceUrl(id)}"
+            download>
             <i class="fa-solid fa-file-invoice me-1" aria-hidden="true"></i>{$_(
               'theme.order.invoice',
             )}
@@ -24,7 +27,7 @@
       {#if canCancel}
         <button
           type="button"
-          class="btn btn-outline-danger btn-sm"
+          class="market-order-actions__cancel btn btn-outline-danger btn-sm"
           disabled={busy}
           onclick={() => confirmCancel?.show()}>
           {$_('theme.order.cancel')}
@@ -51,14 +54,16 @@
 
 <script>
   import { base } from '@panomc/sdk/svelte';
-  import { showToast } from '@panomc/sdk/toasts';
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { messageKey } from '../../lib/errorMap.js';
-  import { invoiceNeedsBlob, invoicePath } from '../../lib/orderState.js';
+  import { invoiceNeedsBlob, invoicePath, invoiceUrl } from '../../lib/orderState.js';
   import { tokenHeaders } from '../../stores/orderTokens.js';
-  import { call } from '../../utils/api.js';
   import ConfirmModal from '../common/ConfirmModal.svelte';
   import ErrorAlert from '../common/ErrorAlert.svelte';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { call } = market.require('api').actions;
 
   /**
    * Cancel and invoice of the owner view (14 §11.4). `id` = publicId, `token` = the access token in use (or
@@ -81,7 +86,7 @@
     busy = true;
     errorKey = '';
 
-    const res = await call('POST', `/api/market/orders/${id}/cancel`, {
+    const res = await call('POST', `/orders/${id}/cancel`, {
       headers: tokenHeaders(id, token),
     });
 
@@ -93,7 +98,7 @@
     }
 
     if (res.code === 'ORDER_NOT_CANCELLABLE') {
-      showToast(`plugins.pano-plugin-market.${messageKey('ORDER_NOT_CANCELLABLE')}`);
+      market.toast(messageKey('ORDER_NOT_CANCELLABLE'));
       await onrefetch();
       return;
     }

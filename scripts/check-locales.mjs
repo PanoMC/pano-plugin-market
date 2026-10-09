@@ -100,7 +100,7 @@ for (const file of srcAll) {
 }
 for (const [file, src] of sources) {
   if (!file.endsWith('.svelte')) continue;
-  for (const v of checkSvelteFile(rel(file, root), src, { allowlist, isTheme: false }))
+  for (const v of checkSvelteFile(rel(file, root), src, { allowlist }))
     if (v.rule === 'runes') report.add('54', v.file, v.line, v.message);
     else if (v.rule === 'html') report.add('55', v.file, v.line, v.message);
 }

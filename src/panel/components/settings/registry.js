@@ -16,8 +16,7 @@ import ShippingCarriers from './ShippingCarriers.svelte';
 import ShippingMethods from './ShippingMethods.svelte';
 import ShippingZones from './ShippingZones.svelte';
 import StoreModuleSettings from './StoreModuleSettings.svelte';
-import WebhookDeliveries from './WebhookDeliveries.svelte';
-import Webhooks from './Webhooks.svelte';
+import WebhooksLink from './WebhooksLink.svelte';
 
 export const SECTION_COMPONENTS = {
   general: GeneralSettings,
@@ -36,6 +35,5 @@ export const SECTION_COMPONENTS = {
   mail: MailSettings,
   minecraft: MinecraftSettings,
   health: HealthPanel,
-  webhooks: Webhooks,
-  'webhook-deliveries': WebhookDeliveries,
+  webhooks: WebhooksLink,
 };

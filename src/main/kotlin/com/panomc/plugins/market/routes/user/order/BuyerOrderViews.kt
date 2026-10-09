@@ -1,10 +1,11 @@
 package com.panomc.plugins.market.routes.user.order
 
-import com.panomc.platform.error.PageNotFound
+import com.panomc.platform.model.PageRequest
+import com.panomc.platform.model.Paging
 import com.panomc.plugins.market.error.RequestValueException
+import com.panomc.plugins.market.routes.base.pageJson
 import com.panomc.plugins.market.util.MoneyUtil
 import com.panomc.plugins.market.util.OrderStatus
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.coAwait
@@ -32,8 +33,8 @@ class BuyerOrderViews(private val prefix: () -> String) {
         }.toSet()
     }
 
-    /** `orders[{publicId, number, status, fulfillmentStatus, shippingStatus, total, currency, createdAt, paidAt, itemNames[], isGift, recipientUsername, received}]`, `orderCount`, `totalPage`. */
-    suspend fun orders(userId: Long, window: Paging.Window, statuses: Set<OrderStatus>, sqlClient: SqlClient): JsonObject {
+    /** `items[{publicId, number, status, fulfillmentStatus, shippingStatus, total, currency, createdAt, paidAt, itemNames[], isGift, recipientUsername, received}]` (the orders) and `page`. */
+    suspend fun orders(userId: Long, window: PageRequest, statuses: Set<OrderStatus>, sqlClient: SqlClient): JsonObject {
         val hidden = HIDDEN_FROM_RECIPIENT.joinToString(", ") { "'${it.name}'" }
         val own = "o.`userId` = ?"
         val received = "(o.`recipientUserId` = ? AND (o.`userId` IS NULL OR o.`userId` <> ?) AND o.`status` NOT IN ($hidden))"
@@ -42,21 +43,17 @@ class BuyerOrderViews(private val prefix: () -> String) {
         val args = Tuple.of(userId, userId, userId)
 
         val count = sqlClient.preparedQuery("SELECT COUNT(*) AS n FROM ${table("market_order")} o WHERE $where").execute(args).coAwait().first().getLong("n")
-        val totalPage = Paging.totalPages(count, window.pageSize)
 
-        if (Paging.isBeyondLast(window.page, totalPage)) throw PageNotFound()
+        Paging.requireInRange(window, count)
 
         val rows = sqlClient.preparedQuery(
             "SELECT o.`id`, o.`publicId`, o.`status`, o.`fulfillmentStatus`, o.`shippingStatus`, o.`totalPrice`, o.`currency`, o.`createdAt`, o.`paidAt`, o.`isGift`, " +
                 "o.`recipientUsername`, o.`userId`, o.`recipientUserId` FROM ${table("market_order")} o WHERE $where ORDER BY o.`createdAt` DESC, o.`id` DESC LIMIT ? OFFSET ?"
-        ).execute(Tuple.of(userId, userId, userId, window.pageSize, window.offset)).coAwait().toList()
+        ).execute(Tuple.of(userId, userId, userId, window.size, window.offset)).coAwait().toList()
 
         val names = itemNames(rows.map { it.getLong("id") }, sqlClient)
 
-        return JsonObject()
-            .put("orders", JsonArray(rows.map { order(it, userId, names[it.getLong("id")].orEmpty()) }))
-            .put("orderCount", count)
-            .put("totalPage", totalPage)
+        return pageJson(rows.map { order(it, userId, names[it.getLong("id")].orEmpty()) }, count, window)
     }
 
     private suspend fun itemNames(orderIds: List<Long>, sqlClient: SqlClient): Map<Long, List<String>> {
@@ -90,7 +87,7 @@ class BuyerOrderViews(private val prefix: () -> String) {
     }
 
     /**
-     * `GET /me/entitlements`: `entitlements[{id, productId, productName, variantName, status, startsAt, expiresAt, subscriptionId, orderPublicId}]`, newest first.
+     * `GET /me/entitlements`: `items[{id, productId, productName, variantName, status, startsAt, expiresAt, subscriptionId, orderPublicId}]`, newest first.
      * q `active=true`: only `ACTIVE` rows that have not ended at this moment ([now], a permanent row has no end); `active=false` or none: every row.
      * An entitlement belongs to its owner (`userId`), so a gift is listed for the recipient, never for the buyer.
      */
@@ -109,7 +106,7 @@ class BuyerOrderViews(private val prefix: () -> String) {
         ).execute(args).coAwait().toList()
 
         return JsonObject().put(
-            "entitlements",
+            "items",
             JsonArray(
                 rows.map {
                     JsonObject()

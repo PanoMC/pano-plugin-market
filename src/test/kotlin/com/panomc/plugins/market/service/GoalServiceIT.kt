@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.ErrorBodies
 
 /** `GoalService` on a real MariaDB (MK-051): goal CRUD, validation, progress / percent, and what resets progress. */
 class GoalServiceIT : MarketDaoITBase() {
@@ -29,7 +30,7 @@ class GoalServiceIT : MarketDaoITBase() {
     private suspend fun fieldErrors(block: suspend () -> Unit): Map<String, String> {
         val e = runCatching { block() }.exceptionOrNull()
         assertTrue(e is BadRequest, "expected BAD_REQUEST, got $e")
-        return JsonObject((e as BadRequest).encode(emptyMap())).getJsonObject("fieldErrors").map.mapValues { it.value as String }
+        return ErrorBodies.details((e as BadRequest)).getJsonObject("fieldErrors").map.mapValues { it.value as String }
     }
 
     @Test

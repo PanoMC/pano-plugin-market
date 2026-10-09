@@ -3,6 +3,7 @@ package com.panomc.plugins.market.routes.panel.block
 import com.panomc.plugins.market.db.model.BlockSource
 import com.panomc.plugins.market.db.model.BlockType
 import com.panomc.plugins.market.error.RequestValueException
+import com.panomc.plugins.market.support.assertOutOfRange
 import io.vertx.core.json.JsonObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -18,8 +19,8 @@ class BlockRequestsTest {
         assertNull(q.type)
         assertNull(q.source)
         assertNull(q.search)
-        assertEquals(1, q.window.page)
-        assertEquals(10, q.window.pageSize)
+        assertEquals(1, q.window.number)
+        assertEquals(10, q.window.size)
     }
 
     @Test
@@ -29,8 +30,8 @@ class BlockRequestsTest {
         assertEquals(BlockType.IP, q.type)
         assertEquals(BlockSource.CHARGEBACK, q.source)
         assertEquals("203.0", q.search)
-        assertEquals(3, q.window.page)
-        assertEquals(50, q.window.pageSize)
+        assertEquals(3, q.window.number)
+        assertEquals(50, q.window.size)
 
         val blank = parseBlockListQuery(" ", "", "  ", " ", "")
 
@@ -45,13 +46,17 @@ class BlockRequestsTest {
             { parseBlockListQuery("player", null, null, null, null) },
             { parseBlockListQuery("NOPE", null, null, null, null) },
             { parseBlockListQuery(null, "AUTO", null, null, null) },
-            { parseBlockListQuery(null, null, "x".repeat(256), null, null) },
-            { parseBlockListQuery(null, null, null, "abc", null) },
-            { parseBlockListQuery(null, null, null, "0", null) },
-            { parseBlockListQuery(null, null, null, null, "101") },
-            { parseBlockListQuery(null, null, null, null, "0") },
-            { parseBlockListQuery(null, null, null, null, "1.5") }
+            { parseBlockListQuery(null, null, "x".repeat(256), null, null) }
         )) assertThrows(RequestValueException::class.java) { bad() }
+    }
+
+    @Test
+    fun `a page or page size outside the core rule is OUT_OF_RANGE`() {
+        assertOutOfRange("page") { parseBlockListQuery(null, null, null, "abc", null) }
+        assertOutOfRange("page") { parseBlockListQuery(null, null, null, "0", null) }
+        assertOutOfRange("pageSize") { parseBlockListQuery(null, null, null, null, "101") }
+        assertOutOfRange("pageSize") { parseBlockListQuery(null, null, null, null, "0") }
+        assertOutOfRange("pageSize") { parseBlockListQuery(null, null, null, null, "1.5") }
     }
 
     @Test

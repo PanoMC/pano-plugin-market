@@ -47,6 +47,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import com.panomc.plugins.market.support.ErrorBodies
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * `ShippingAdminService` on a real MariaDB (MK-131): the seed, zone and method CRUD with the rate-set rules, sort
@@ -133,7 +135,7 @@ class ShippingAdminIT : MarketDaoITBase() {
 
     private fun obj(vararg pairs: Pair<String, Any?>) = JsonObject().also { j -> pairs.forEach { (k, v) -> j.put(k, v) } }
 
-    private fun fieldErrors(e: Error): JsonObject = JsonObject(e.encode(emptyMap())).getJsonObject("fieldErrors")
+    private fun fieldErrors(e: Error): JsonObject = ErrorBodies.details(e).getJsonObject("fieldErrors")
 
     private fun countries(vararg c: String) = JsonArray(c.toList())
 
@@ -557,7 +559,7 @@ class ShippingAdminIT : MarketDaoITBase() {
         val row = w.shippingCarriers.getByProviderId("ups", pool)!!
         assertTrue(Regex("^[0-9a-f]{40}$").matches(row.webhookToken))
         assertFalse(row.enabled)
-        assertEquals("https://shop.example/api/market/shipping/ups/webhook/${row.webhookToken}", service.listCarriers().first { it.getString("id") == "ups" }.getString("webhookUrl"))
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/shipping/ups/webhook/${row.webhookToken}", service.listCarriers().first { it.getString("id") == "ups" }.getString("webhookUrl"))
 
         val token = row.webhookToken
         service.saveCarrier("ups", obj("accountId" to "B", "apiKey" to "********"), null)
@@ -753,7 +755,7 @@ class ShippingAdminIT : MarketDaoITBase() {
 
         var asked = false
         val locked = assertThrows<TooManyRequests> { runBlocking { service.revealCarrier("ups", 7, { asked = true; true }, { failures++ }) } }
-        assertEquals(600, JsonObject(locked.encode(emptyMap())).getLong("retryAfter"))
+        assertEquals(600, ErrorBodies.details(locked).getLong("retryAfter"))
         assertFalse(asked, "the password is not asked while locked")
         assertEquals(5, failures)
 
@@ -791,7 +793,7 @@ class ShippingAdminIT : MarketDaoITBase() {
 
         val e = assertThrows<ShippingProviderError> { runBlocking { service.runCarrierAction("ups", "ping", JsonObject()) } }
 
-        assertEquals("AUTHENTICATION", JsonObject(e.encode(emptyMap())).getString("code"))
+        assertEquals("AUTHENTICATION", ErrorBodies.details(e).getString("code"))
         assertEquals("AUTHENTICATION", w.shippingCarriers.getByProviderId("ups", pool)!!.lastError)
     }
 
@@ -812,11 +814,11 @@ class ShippingAdminIT : MarketDaoITBase() {
         service.saveCarrier("ups", obj("accountId" to "A", "apiKey" to "key-0123456789"), null)
 
         val e = assertThrows<ShippingProviderError> { runBlocking { service.carrierServices("ups") } }
-        assertEquals("GATEWAY_UNREACHABLE", JsonObject(e.encode(emptyMap())).getString("code"))
+        assertEquals("GATEWAY_UNREACHABLE", ErrorBodies.details(e).getString("code"))
 
         c.services = { throw IllegalStateException("boom") }
         val internal = assertThrows<ShippingProviderError> { runBlocking { service.carrierServices("ups") } }
-        assertEquals("INTERNAL", JsonObject(internal.encode(emptyMap())).getString("code"))
+        assertEquals("INTERNAL", ErrorBodies.details(internal).getString("code"))
     }
 
     @Test

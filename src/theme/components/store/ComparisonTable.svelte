@@ -1,7 +1,7 @@
-<div class="card">
-  <div class="card-header fw-semibold">{comparison.name}</div>
+<div class="market-comparison-table card">
+  <div class="market-comparison-table__header card-header fw-semibold">{comparison.name}</div>
   <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
+    <table class="market-comparison-table__table table table-hover align-middle mb-0">
       <thead>
         <tr>
           <th scope="col" class="text-nowrap">{$_('theme.store.comparison-feature')}</th>
@@ -51,8 +51,11 @@
 </div>
 
 <script>
-  import { _ } from '../../../i18n.js';
-  import { formatMoney, formatPrice } from '../../utils/format.js';
+  import { plugin } from '@panomc/sdk/controllers';
+
+  const market = plugin('market');
+  const _ = market._;
+  const { formatMoney, formatPrice } = market.require('format').actions;
 
   let { comparison, productMap = {}, settings = {} } = $props();
 

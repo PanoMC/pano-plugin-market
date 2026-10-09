@@ -52,7 +52,6 @@ export const SECTIONS = [
     'shipping-zones',
     'shipping-carriers',
     'webhooks',
-    'webhook-deliveries',
     'modules',
     'security',
     'mail',

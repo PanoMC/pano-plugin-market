@@ -324,10 +324,10 @@ describe('addresses and invoices', () => {
 
   test('invoice url carries the type and the refund id', () => {
     expect(invoiceUrl('/panel', 7, { type: 'INVOICE' })).toBe(
-      '/panel/api/panel/market/orders/7/invoice?type=INVOICE',
+      '/api/plugins/pano-plugin-market/panel/orders/7/invoice?type=INVOICE',
     );
     expect(invoiceUrl('', 7, { type: 'CREDIT_NOTE', refundId: 3 })).toBe(
-      '/api/panel/market/orders/7/invoice?type=CREDIT_NOTE&refundId=3',
+      '/api/plugins/pano-plugin-market/panel/orders/7/invoice?type=CREDIT_NOTE&refundId=3',
     );
   });
 });

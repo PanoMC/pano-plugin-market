@@ -30,11 +30,11 @@ import com.panomc.plugins.market.core.webhook.DiscordLabelSource
 import com.panomc.plugins.market.core.webhook.DiscordLabels
 import com.panomc.plugins.market.core.webhook.DiscordRenderer
 import com.panomc.plugins.market.core.webhook.WebhookEvents
-import com.panomc.plugins.market.db.dao.MarketWebhookDeliveryDao
-import com.panomc.plugins.market.db.model.MarketWebhookDelivery
-import com.panomc.plugins.market.db.model.WebhookDeliveryStatus
-import com.panomc.plugins.market.db.model.WebhookFormat
-import com.panomc.plugins.market.db.model.WebhookSigning
+import com.panomc.platform.api.webhook.DirectWebhook
+import com.panomc.platform.api.webhook.WebhookOutcomeListener
+import com.panomc.platform.db.model.WebhookDeliveryStatus
+import com.panomc.platform.db.model.WebhookFormat
+import com.panomc.platform.db.model.WebhookSigning
 import com.panomc.plugins.market.core.subscription.PeriodCalculator
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.core.time.Ids
@@ -123,8 +123,10 @@ class DeliveryService(
     private val credits: CreditService,
     private val permissions: PermissionGrantService,
     private val random: Random = Random.Default,
-    /** The outbox of store webhooks: with it the inline `WEBHOOK` executor exists (08 section 7.3, MK-106); without it `WEBHOOK` rows are never claimed. */
-    private val webhookDeliveries: MarketWebhookDeliveryDao? = null,
+    /** The direct queue of core's webhook system: with it the inline `WEBHOOK` executor exists (08 section 7.3, doc 06 section 4.4); without it `WEBHOOK` rows are never claimed. */
+    private val webhookQueue: ActionWebhookQueue? = null,
+    /** Reads the secret a `WEBHOOK` action stored with market's cipher (core encrypts the row's secret itself); `null` = unreadable. */
+    private val webhookSecret: (stored: String) -> String? = { it },
     /** The localised texts of `format = DISCORD` action bodies (08 section 16.2); without it the stand-in body of the planner is used. */
     private val discordLabels: DiscordLabelSource? = null,
     /** `ORDER_DELIVERED` (MK-142, 12 section 4.1): told when the fulfillment of an order becomes `FULFILLED`, inside the transaction that did it. */
@@ -138,7 +140,7 @@ class DeliveryService(
 
     /** The action types this instance executes inline: `WEBHOOK` only when the outbox is wired. */
     private val inlineTypes: Set<DeliveryActionType> =
-        if (webhookDeliveries != null) INLINE_TYPES else INLINE_TYPES - DeliveryActionType.WEBHOOK
+        if (webhookQueue != null) INLINE_TYPES else INLINE_TYPES - DeliveryActionType.WEBHOOK
 
     private fun rules(): DeliveryRules = config().let { DeliveryRules(it.deliveryMaxAttempts, it.deliveryAckTimeoutSeconds) }
 
@@ -997,34 +999,56 @@ class DeliveryService(
     // ----- WEBHOOK (08 section 7.3) -----------------------------------------------------------------------------------
 
     /**
-     * One transaction: lock the order, insert the outbox row of the action (`endpointId = 0`, `deliveryId = <row id>`, `eventId = nameUUIDFromBytes("action:<id>")`,
-     * `INSERT IGNORE` on `uq_eventId`: a retried claim finds its row again), then the delivery becomes `SENT` with `result = {"webhookDeliveryId": n}` (D3).
-     * `WebhookJob` sends the row and reports `SUCCEEDED` (D12, `CONFIRMED`) or `DEAD` (D21) back through [reportWebhook]. `DISCORD` never signs (08 section 15.2).
+     * One transaction: lock the order, queue the action's direct delivery on core's system (`eventId = nameUUIDFromBytes("action:<id>")`, `ownerRef = delivery:<id>`;
+     * a retried claim finds its row again: core inserts nothing for a known `eventId`), then the delivery becomes `SENT` with `result = {"webhookDeliveryId": n}` (D3).
+     * Core's dispatcher sends the row and reports `SUCCEEDED` (D12, `CONFIRMED`) or `DEAD` (D21) back through [outcomeListener] and [reportWebhook]. `DISCORD` never signs
+     * (08 section 15.2). The row is always `JSON` in core's log: the body is sent as the planner rendered it.
      */
     private suspend fun runWebhook(conn: SqlConnection, claimed: MarketDelivery, token: String): DeliveryStatus? {
-        val outbox = webhookDeliveries ?: throw InlineFailure(DeliveryError.INVALID_PAYLOAD, "no webhook outbox is wired", retryable = false)
+        val queue = webhookQueue ?: throw InlineFailure(DeliveryError.INVALID_PAYLOAD, "no webhook queue is wired", retryable = false)
         val hook = runCatching { JsonObject(claimed.payload).getJsonObject("webhook") }.getOrNull()
             ?: throw InlineFailure(DeliveryError.INVALID_PAYLOAD, "a webhook delivery needs a webhook payload")
         val url = hook.getString("url")?.takeIf { it.isNotBlank() } ?: throw InlineFailure(DeliveryError.INVALID_PAYLOAD, "the webhook has no url")
         val format = runCatching { WebhookFormat.valueOf(hook.getString("format") ?: "JSON") }.getOrDefault(WebhookFormat.JSON)
         val signing = if (format == WebhookFormat.DISCORD) WebhookSigning.NONE else runCatching { WebhookSigning.valueOf(hook.getString("signing") ?: "NONE") }.getOrDefault(WebhookSigning.NONE)
+        val secret = if (signing == WebhookSigning.HMAC_SHA256) {
+            hook.getString("secret")?.let(webhookSecret)?.takeIf { it.isNotEmpty() }
+                ?: throw InlineFailure(DeliveryError.INVALID_PAYLOAD, "the webhook secret cannot be read", retryable = false)
+        } else {
+            null
+        }
 
         return withOrder(conn, claimed.orderId) {
             val row = owned(conn, claimed, token) ?: return@withOrder null
             val eventId = WebhookEvents.actionEventId(row.id)
-            val now = clock.now()
             val event = hook.getString("event") ?: "action.${row.phase.name.lowercase()}"
             val body = withEventId(hook.getString("body").orEmpty(), format, eventId)
-            val inserted = outbox.add(
-                MarketWebhookDelivery(
-                    endpointId = 0, deliveryId = row.id, eventId = eventId, event = event, orderId = row.orderId, url = url, format = format, signing = signing,
-                    secret = if (signing == WebhookSigning.HMAC_SHA256) hook.getString("secret") else null, body = body,
-                    status = WebhookDeliveryStatus.PENDING, attempts = 0, maxAttempts = WEBHOOK_ACTION_ATTEMPTS, nextAttemptAt = now, createdAt = now, updatedAt = now
-                ),
-                conn
-            ) ?: outbox.getByEventId(eventId, conn)?.id ?: throw IllegalStateException("the webhook row of delivery ${row.id} vanished")
+            val queued = queue.enqueue(
+                conn,
+                DirectWebhook(
+                    url = url, event = event, eventId = eventId, body = body, signing = signing, secret = secret,
+                    maxAttempts = WEBHOOK_ACTION_ATTEMPTS, ownerRef = WebhookEvents.ownerRefOf(row.id)
+                )
+            )
 
-            succeed(conn, row, token, JsonObject().put("webhookDeliveryId", inserted))
+            succeed(conn, row, token, JsonObject().put("webhookDeliveryId", queued))
+        }
+    }
+
+    /**
+     * Core calls this on the transaction that stores the end of a direct row of the market (`SUCCEEDED` or `DEAD`): the delivery named by the row's `ownerRef`
+     * follows it (D12 `CONFIRMED`, D21 `FAILED (WEBHOOK_DEAD)`; a later redelivery that succeeds confirms it again). A row of another kind is ignored.
+     */
+    val outcomeListener: WebhookOutcomeListener = WebhookOutcomeListener { sqlClient, delivery, decision ->
+        val deliveryId = WebhookEvents.deliveryIdOf(delivery.ownerRef)
+        val connection = sqlClient as? SqlConnection
+
+        if (deliveryId != null && connection != null) {
+            when (decision.status) {
+                WebhookDeliveryStatus.SUCCEEDED -> reportWebhook(connection, deliveryId, true)
+                WebhookDeliveryStatus.DEAD -> reportWebhook(connection, deliveryId, false)
+                else -> Unit
+            }
         }
     }
 
@@ -1158,8 +1182,8 @@ class DeliveryService(
     /**
      * D12 / D21 for the delivery [deliveryId] of a product `WEBHOOK` action: its outbox row ended `SUCCEEDED` ([succeeded], also after a redeliver of a
      * dead one: a positive result always wins) or `DEAD`. Runs on [conn], the connection of the outbox row's own status change, under the order lock.
-     * The executor that inserts the outbox row and sets the delivery `SENT` is MK-106's; this is the report back that [DeliveryWebhookReporter] hands to
-     * `WebhookService`.
+     * The executor that inserts the outbox row and sets the delivery `SENT` is MK-106's; this is the report back that [outcomeListener] hands to
+     * core's webhook service.
      */
     suspend fun reportWebhook(conn: SqlConnection, deliveryId: Long, succeeded: Boolean): Applied {
         val orderId = deliveries.getById(deliveryId, conn)?.orderId
@@ -1307,15 +1331,9 @@ class DeliveryEffects(
 }
 
 /**
- * The report back of an action webhook (08 section 15.5): `WebhookService` calls it when the outbox row of a product `WEBHOOK` action ends `SUCCEEDED`
- * or `DEAD`, and the delivery row follows (D12 `CONFIRMED`, D21 `FAILED (WEBHOOK_DEAD)`; a later redelivery that succeeds confirms it again).
+ * What the `WEBHOOK` executor needs from core's webhook system (doc 06 section 4.3 `enqueueDirect`): queue one direct delivery on the executor's connection
+ * and answer the id of its row, the new one or, for an `eventId` queued before, the existing one.
  */
-class DeliveryWebhookReporter(private val service: DeliveryService) : WebhookDeliveryReporter {
-    override suspend fun report(conn: SqlConnection, row: com.panomc.plugins.market.db.model.MarketWebhookDelivery, decision: com.panomc.plugins.market.core.webhook.Decision) {
-        when (decision.status) {
-            com.panomc.plugins.market.db.model.WebhookDeliveryStatus.SUCCEEDED -> service.reportWebhook(conn, row.deliveryId, true)
-            com.panomc.plugins.market.db.model.WebhookDeliveryStatus.DEAD -> service.reportWebhook(conn, row.deliveryId, false)
-            else -> Unit
-        }
-    }
+fun interface ActionWebhookQueue {
+    suspend fun enqueue(conn: SqlConnection, direct: DirectWebhook): Long
 }

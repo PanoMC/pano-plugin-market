@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.routes.panel.credit
 
+import com.panomc.platform.model.PageRequest
+import com.panomc.platform.model.Paging
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.db.dao.MarketCreditAccountDao
 import com.panomc.plugins.market.db.dao.MarketCreditTxDao
@@ -7,10 +9,10 @@ import com.panomc.plugins.market.db.model.CreditSystemKey
 import com.panomc.plugins.market.db.model.CreditTxType
 import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.error.IdempotencyConflict
+import com.panomc.plugins.market.routes.base.pageJson
 import com.panomc.plugins.market.service.CreditService
 import com.panomc.plugins.market.service.PostResult
 import com.panomc.plugins.market.util.MoneyUtil
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.coAwait
@@ -22,9 +24,6 @@ import io.vertx.sqlclient.Tuple
 class CreditMovement(val userId: Long, val username: String, val type: CreditTxType, val moved: Long, val shortfall: Long, val balance: Long, val replayed: Boolean) {
     fun toJson(): JsonObject = JsonObject().put("balance", MoneyUtil.toDecimal(balance)).put("shortfall", MoneyUtil.toDecimal(shortfall))
 }
-
-/** The page asked for lies beyond the last one (404 `PAGE_NOT_FOUND` in the route). */
-class CreditPageOutOfRange : RuntimeException()
 
 /**
  * What the panel credit routes do (07 sections 11.1 and 11.2; 04 section 7 `credits` routes), as a service so the rules run in a database test without the host:
@@ -72,7 +71,7 @@ class CreditAdminService(
     // ----- lists (07 section 11.2) ---------------------------------------------------------------------------------------
 
     /** `GET /credits/accounts`: users with an account row, `balance DESC, userId ASC`, the totals row of the system accounts. */
-    suspend fun accountList(search: String?, window: Paging.Window): JsonObject {
+    suspend fun accountList(search: String?, window: PageRequest): JsonObject {
         val c = client()
         val like = search?.trim()?.takeIf { it.isNotEmpty() }?.let { escapeLike(it.lowercase()) + "%" }
         val filter = if (like == null) "" else " AND LOWER(u.`username`) LIKE ? ESCAPE '\\\\'"
@@ -80,20 +79,18 @@ class CreditAdminService(
         val from = "FROM ${t("market_credit_account")} a JOIN ${t("user")} u ON u.`id` = a.`userId` WHERE a.`systemKey` IS NULL$filter"
 
         val count = one(c, "SELECT COUNT(*) $from", args).getLong(0)
-        val total = Paging.totalPages(count, window.pageSize)
 
-        if (Paging.isBeyondLast(window.page, total)) throw CreditPageOutOfRange()
+        Paging.requireInRange(window, count)
 
         val rows = many(
             c, "SELECT a.`userId`, u.`username`, a.`balance` $from ORDER BY a.`balance` DESC, a.`userId` ASC LIMIT ? OFFSET ?",
-            args + listOf(window.pageSize.toLong(), window.offset)
+            args + listOf(window.size.toLong(), window.offset)
         )
 
-        return JsonObject()
-            .put("accounts", JsonArray(rows.map { JsonObject().put("userId", it.getLong("userId")).put("username", it.getString("username")).put("balance", credits(it.getLong("balance"))) }))
-            .put("accountCount", count)
-            .put("totalPage", total)
-            .put("totals", totals(c))
+        return pageJson(
+            rows.map { JsonObject().put("userId", it.getLong("userId")).put("username", it.getString("username")).put("balance", credits(it.getLong("balance"))) },
+            count, window, mapOf("totals" to totals(c))
+        )
     }
 
     /** `issued = -ISSUANCE`, `spent`, `held`, `revoked`, `external`, `outstanding = sum of the user balances` (so `issued = outstanding + held + spent + revoked`). */
@@ -111,34 +108,29 @@ class CreditAdminService(
     }
 
     /** `GET /credits/accounts/:userId`: works without an account row (balance 0, no entries, nothing created); 404 only for an unknown user. */
-    suspend fun accountDetail(userId: Long, window: Paging.Window): JsonObject {
+    suspend fun accountDetail(userId: Long, window: PageRequest): JsonObject {
         val c = client()
 
         usernameOf(userId, c) ?: throw NotFound()
 
         val account = accounts.getByUserId(userId, c)
         val count = if (account == null) 0L else one(c, "SELECT COUNT(*) FROM ${t("market_credit_entry")} WHERE `accountId` = ?", listOf(account.id)).getLong(0)
-        val total = Paging.totalPages(count, window.pageSize)
 
-        if (Paging.isBeyondLast(window.page, total)) throw CreditPageOutOfRange()
+        Paging.requireInRange(window, count)
 
         val rows = if (account == null) emptyList() else many(
             c,
             "SELECT e.`id`, x.`type`, e.`amount`, e.`balanceAfter`, x.`shortfall`, x.`note`, x.`orderId`, x.`refundId`, x.`deliveryId`, au.`username` AS actorUsername, e.`createdAt` " +
                 "FROM ${t("market_credit_entry")} e JOIN ${t("market_credit_tx")} x ON x.`id` = e.`txId` LEFT JOIN ${t("user")} au ON au.`id` = x.`actorUserId` " +
                 "WHERE e.`accountId` = ? ORDER BY e.`id` DESC LIMIT ? OFFSET ?",
-            listOf(account.id, window.pageSize.toLong(), window.offset)
+            listOf(account.id, window.size.toLong(), window.offset)
         )
 
-        return JsonObject()
-            .put("balance", credits(account?.balance ?: 0L))
-            .put("entries", JsonArray(rows.map { entry(it) }))
-            .put("entryCount", count)
-            .put("totalPage", total)
+        return pageJson(rows.map { entry(it) }, count, window, mapOf("balance" to credits(account?.balance ?: 0L)))
     }
 
     /** `GET /credits/transactions`: the global ledger, zero-entry transactions included. */
-    suspend fun transactions(filter: CreditTxFilter, window: Paging.Window): JsonObject {
+    suspend fun transactions(filter: CreditTxFilter, window: PageRequest): JsonObject {
         val c = client()
         val where = ArrayList<String>()
         val args = ArrayList<Any?>()
@@ -155,27 +147,26 @@ class CreditAdminService(
 
         val clause = if (where.isEmpty()) "" else " WHERE " + where.joinToString(" AND ")
         val count = one(c, "SELECT COUNT(*) FROM ${t("market_credit_tx")} x$clause", args).getLong(0)
-        val total = Paging.totalPages(count, window.pageSize)
 
-        if (Paging.isBeyondLast(window.page, total)) throw CreditPageOutOfRange()
+        Paging.requireInRange(window, count)
 
         val rows = many(
             c,
             "SELECT x.`id`, x.`type`, x.`userId`, u.`username`, x.`amount`, x.`shortfall`, x.`orderId`, x.`refundId`, x.`deliveryId`, au.`username` AS actorUsername, x.`note`, x.`createdAt` " +
                 "FROM ${t("market_credit_tx")} x LEFT JOIN ${t("user")} u ON u.`id` = x.`userId` LEFT JOIN ${t("user")} au ON au.`id` = x.`actorUserId`$clause " +
                 "ORDER BY x.`id` DESC LIMIT ? OFFSET ?",
-            args + listOf(window.pageSize.toLong(), window.offset)
+            args + listOf(window.size.toLong(), window.offset)
         )
 
-        return JsonObject()
-            .put("transactions", JsonArray(rows.map { row ->
+        return pageJson(
+            rows.map { row ->
                 JsonObject().put("id", row.getLong("id")).put("type", row.getString("type")).put("userId", row.getLong("userId")).put("username", row.getString("username"))
                     .put("amount", credits(row.getLong("amount"))).put("shortfall", credits(row.getLong("shortfall"))).put("orderId", row.getLong("orderId"))
                     .put("refundId", row.getLong("refundId")).put("deliveryId", row.getLong("deliveryId")).put("actorUsername", row.getString("actorUsername"))
                     .put("note", row.getString("note")).put("createdAt", row.getLong("createdAt"))
-            }))
-            .put("transactionCount", count)
-            .put("totalPage", total)
+            },
+            count, window
+        )
     }
 
     // ----- helpers -------------------------------------------------------------------------------------------------------

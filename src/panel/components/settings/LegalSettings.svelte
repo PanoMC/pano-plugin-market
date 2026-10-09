@@ -160,7 +160,7 @@
 
 <script>
   import { untrack } from 'svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import {
     CardHeader,
     Date as DateComponent,
@@ -175,7 +175,7 @@
   import SettingRow from './SettingRow.svelte';
   import SwitchRow from './SwitchRow.svelte';
   import { fetchSettings, saveSection } from './save.js';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { toastError } from '../../utils/toast.js';
   import {
     SECTION_KEYS,
@@ -192,12 +192,12 @@
     validateLegalDraft,
   } from '../../utils/settings.js';
 
-  // settings = GET /settings, extra = GET /settings/legal ({ texts[] }), null when that request failed.
+  // settings = GET /settings, extra = GET /settings/legal ({ items[] }), null when that request failed.
   let { settings: initial = {}, extra: initialExtra = null, extraError = null } = $props();
 
   const KEYS = SECTION_KEYS.legal;
   const start = untrack(() => initial ?? {});
-  const startTexts = untrack(() => initialExtra?.texts ?? null);
+  const startTexts = untrack(() => initialExtra?.items ?? null);
 
   let confirm = $state(null);
   let versionModal = $state(null);
@@ -267,8 +267,8 @@
   });
 
   async function fetchTexts() {
-    const result = await call(ApiUtil.get({ path: marketPath('/settings/legal') }));
-    return result.ok ? { texts: result.body.texts ?? [] } : { error: result.error };
+    const result = await call(api.panel.get({ path: '/settings/legal' }));
+    return result.ok ? { texts: result.body.items ?? [] } : { error: result.error };
   }
 
   async function reload() {
@@ -319,8 +319,8 @@
     publishing = true;
     try {
       const result = await call(
-        ApiUtil.post({
-          path: marketPath('/settings/legal'),
+        api.panel.post({
+          path: '/settings/legal',
           body: buildLegalBody({ locale, ...editor }),
         }),
       );

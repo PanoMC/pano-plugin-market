@@ -8,6 +8,7 @@ import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * The once-per-JVM bootstrap of 17 section 8.2: the guards, the admin session, the market settings, the fake gateway with the providers `fake`
@@ -18,7 +19,7 @@ class E2eSession private constructor(val env: E2eEnv) {
     val admin = E2eClient(env.url, "admin")
     val db = E2eDb(env.database)
     val gateway: FakePayGateway = FakePayGateway(
-        port = env.gatewayPort, webhookTarget = { "${env.url}/api/market/payments/fake/webhook" }, eventPrefix = System.currentTimeMillis().toString(36)
+        port = env.gatewayPort, webhookTarget = { "${env.url}${MarketPaths.SITE_ROOT}/payments/fake/webhook" }, eventPrefix = System.currentTimeMillis().toString(36)
     )
     val catalog = E2eCatalog(admin, db)
 
@@ -38,14 +39,14 @@ class E2eSession private constructor(val env: E2eEnv) {
         check(login.status == 200 && admin.csrfToken != null) { "admin login failed: ${login.status} ${login.error}" }
 
         // 2. buyers get a session on registration
-        admin.multipart("PUT", "/api/panel/settings", mapOf("requireEmailVerification" to "false")).ok()
+        admin.multipart("PUT", "/api/v1/panel/settings", mapOf("requireEmailVerification" to "false")).ok()
 
         // 2a. mail (17 section 8.3 "the instance has a dummy SMTP host"): the install step points the platform at `smtp.invalid`, where every send fails and the
         // row would sit PENDING under its 60 s+ retry backoff, so `queues.mailsPending` could never drain. The platform's mail switch is turned off: the mail job
         // then ends each row SKIPPED (MAIL_DISABLED) at its first claim, a terminal state of the 8.3 contract {SENT, FAILED, SKIPPED}. The outbox rows (kind,
         // recipient, locale, one per key) are written exactly as before; only the SMTP call is gone.
         admin.multipart(
-            "PUT", "/api/panel/settings",
+            "PUT", "/api/v1/panel/settings",
             mapOf("email" to JsonObject().put("enabled", false).put("hostname", "").put("port", 587).put("ssl", false).put("starttls", "DISABLED").put("username", "").put("password", "").put("sender", "").encode())
         ).ok()
 
@@ -58,32 +59,32 @@ class E2eSession private constructor(val env: E2eEnv) {
 
         // 3. market settings (17 section 8.2 step 3)
         admin.post(
-            "/api/panel/market/settings",
+            "${MarketPaths.PANEL_ROOT}/settings",
             JsonObject()
                 .put("testMode", bootstrapTestMode).put("currency", "EUR").put("statsCurrency", "EUR").put("vatPercent", 20).put("showVatInPrice", true)
                 .put("allowGuestCheckout", true).put("allowGiftPurchase", true).put("orderExpiryMinutes", 60)
                 .put("checkoutRateLimitPerMinute", 100_000).put("quoteRateLimitPerMinute", 100_000).put("couponLockThreshold", 1000)
-                .put("allowPrivateWebhookTargets", true).put("invoiceEnabled", true).put("sendEmailAfterPurchase", true).put("storeTimeZone", "UTC")
+                .put("invoiceEnabled", true).put("sendEmailAfterPurchase", true).put("storeTimeZone", "UTC")
                 .put("storeEnabled", true).put("minimumOrderAmount", 0)
         ).ok()
         // 17 section 8.2 step 3 also sets creditValue and allowMixedCreditPayment; the credit settings route accepts them only after MK-093, so until then
         // the narrower body is sent (creditValue defaults to 1.0; mixed payment, which this slice's scenarios do not use, stays at its default)
-        val credits = admin.post("/api/panel/market/settings/credits", JsonObject().put("creditsEnabled", true).put("creditValue", 1.0).put("allowMixedCreditPayment", true))
-        if (credits.status == 400) admin.post("/api/panel/market/settings/credits", JsonObject().put("creditsEnabled", true)).ok() else credits.ok()
+        val credits = admin.post("${MarketPaths.PANEL_ROOT}/settings/credits", JsonObject().put("creditsEnabled", true).put("creditValue", 1.0).put("allowMixedCreditPayment", true))
+        if (credits.status == 400) admin.post("${MarketPaths.PANEL_ROOT}/settings/credits", JsonObject().put("creditsEnabled", true)).ok() else credits.ok()
 
         // 4. the fake providers, configured against the gateway of this JVM and enabled
         for (id in listOf("fake", "fake-eur")) {
-            admin.post("/api/panel/market/payment-methods/$id", JsonObject().put("settings", JsonObject().put("gatewayUrl", gateway.baseUrl).put("secret", gateway.secret))).ok()
-            admin.post("/api/panel/market/payment-methods/$id/toggle", JsonObject().put("enabled", true)).ok()
+            admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/$id", JsonObject().put("settings", JsonObject().put("gatewayUrl", gateway.baseUrl).put("secret", gateway.secret))).ok()
+            admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/$id/toggle", JsonObject().put("enabled", true)).ok()
         }
-        val providers = admin.get("/api/panel/market/payment-providers").ok().obj().getJsonArray("providers")
+        val providers = admin.get("${MarketPaths.PANEL_ROOT}/payment-providers").ok().obj().getJsonArray("items")
         for (id in listOf("fake", "fake-eur")) {
             val state = providers.map { it as JsonObject }.firstOrNull { it.getString("id") == id }?.getString("state")
             check(state == "ACTIVE") { "provider $id is $state, expected ACTIVE (a plugin with dependencies=pano-plugin-market must start next to the market)" }
         }
 
         // the guard of 17 section 15: the instance must report testMode=true after the bootstrap
-        E2eInstanceGuard.checkTestMode(E2eClient(env.url, "guard").get("/api/market/store").ok().obj())
+        E2eInstanceGuard.checkTestMode(E2eClient(env.url, "guard").get("${MarketPaths.SITE_ROOT}/store").ok().obj())
 
         // 5. the standard catalogue through the panel API
         catalog.seed()
@@ -94,7 +95,7 @@ class E2eSession private constructor(val env: E2eEnv) {
      * PAY node away from `default` again. The snapshot route replaces the whole permission grid, so the current snapshot is read and written back.
      */
     private fun prepareTestModePayerGroup(): Unit = synchronized(permissionLock) {
-        val snapshot = admin.get("/api/panel/permission/snapshot").ok().obj()
+        val snapshot = admin.get("/api/v1/panel/permission/snapshot").ok().obj()
         val groups = snapshot.getJsonArray("groups") ?: JsonArray()
         val nodes = (snapshot.getJsonArray("nodes") ?: JsonArray()).map { it as JsonObject }.toMutableList()
 
@@ -111,7 +112,7 @@ class E2eSession private constructor(val env: E2eEnv) {
 
     /** Puts [userId] into [PAYER_GROUP] (the group node `group.e2e-payer` of the user, read-modify-write of the whole snapshot under a lock). */
     private fun addToPayerGroup(userId: Long): Unit = synchronized(permissionLock) {
-        val snapshot = admin.get("/api/panel/permission/snapshot").ok().obj()
+        val snapshot = admin.get("/api/v1/panel/permission/snapshot").ok().obj()
         val nodes = (snapshot.getJsonArray("nodes") ?: JsonArray()).map { it as JsonObject }.toMutableList()
         val membership = "group.$PAYER_GROUP"
 
@@ -123,7 +124,7 @@ class E2eSession private constructor(val env: E2eEnv) {
 
     private fun saveSnapshot(snapshot: JsonObject, groups: JsonArray, nodes: List<JsonObject>) {
         admin.post(
-            "/api/panel/permission/snapshot",
+            "/api/v1/panel/permission/snapshot",
             JsonObject().put("groups", groups).put("tracks", snapshot.getJsonArray("tracks") ?: JsonArray()).put("nodes", JsonArray(nodes))
         ).ok()
     }
@@ -138,7 +139,7 @@ class E2eSession private constructor(val env: E2eEnv) {
         val username = "e2e${tag.take(4)}${runTag}_$n".take(16)
         val client = E2eClient(env.url, username)
         val body = JsonObject().put("username", username).put("email", "$username@example.com").put("password", PASSWORD).put("passwordRepeat", PASSWORD).put("agreement", true)
-        val answer = client.post("/api/auth/register", body)
+        val answer = client.post("/api/v1/auth/register", body)
         check(answer.status == 200) { "register $username failed: ${answer.status} ${answer.error}" }
         client.csrfToken = answer.json?.getString("csrfToken") ?: error("register answered without a session (requireEmailVerification still on?)")
         client.username = username
@@ -156,7 +157,7 @@ class E2eSession private constructor(val env: E2eEnv) {
         try {
             // the mail job ticks every 15 s and a refund mail renders its invoice PDF: 30 s was tighter than one slow tick on a shared machine (CP-3: RF-05 / RF-08 failed on `mailsPending:1`)
             Await.until(90_000, 250, "queues drained") {
-                val queues = admin.get("/api/panel/market/health", log = false).obj().getJsonObject("queues")
+                val queues = admin.get("${MarketPaths.PANEL_ROOT}/health", log = false).obj().getJsonObject("queues")
                 last = queues
                 listOf("deliveriesPending", "webhooksPending", "mailsPending", "deferredEvents").all { (queues?.getInteger(it) ?: 0) == 0 }
             }
@@ -172,13 +173,13 @@ class E2eSession private constructor(val env: E2eEnv) {
 
     /** Sets store settings for the duration of [block] and puts the previous values back (settings are global state of the one instance). */
     fun <T> withSettings(changes: JsonObject, block: () -> T): T {
-        val before = admin.get("/api/panel/market/settings").ok().obj().let { settings -> (settings.getJsonObject("settings") ?: settings) }
+        val before = admin.get("${MarketPaths.PANEL_ROOT}/settings").ok().obj().let { settings -> (settings.getJsonObject("settings") ?: settings) }
         val restore = JsonObject().also { r -> changes.fieldNames().forEach { k -> before.getValue(k)?.let { v -> r.put(k, v) } } }
-        admin.post("/api/panel/market/settings", changes).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/settings", changes).ok()
         try {
             return block()
         } finally {
-            admin.post("/api/panel/market/settings", restore)
+            admin.post("${MarketPaths.PANEL_ROOT}/settings", restore)
         }
     }
 

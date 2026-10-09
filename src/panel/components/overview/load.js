@@ -1,13 +1,14 @@
 // load() of Overview.svelte (13 §4). SDK-free: the host calls are injected so the gating and the
 // per-block failure rules are unit tested. `deps` = { get, buildQueryParams }.
-import { marketPath } from '../../utils/api.js';
+import { failureOf } from '../../utils/api.js';
 import { loadContextWith } from '../../utils/list-core.js';
 import { guard } from '../../utils/guard.js';
 import { can, NODE } from '../../utils/permissions.js';
+import { pageOf } from '../../utils/page.js';
 import { PLUGIN_ID } from '../../utils/plugin.js';
 import { parseRange } from './range.js';
 
-const ok = (body) => (body && typeof body === 'object' && !body.error ? body : null);
+const ok = (body) => (failureOf(body) === null ? body : null);
 
 export async function loadOverviewWith(deps, event, now = Date.now()) {
   const { get, buildQueryParams } = deps;
@@ -25,7 +26,7 @@ export async function loadOverviewWith(deps, event, now = Date.now()) {
   const { range, from, to } = parseRange(searchParams, now);
 
   const request = (path, params) =>
-    get({ path: marketPath(path) + (params ? buildQueryParams(params) : ''), request: event });
+    get({ path: path + (params ? buildQueryParams(params) : ''), request: event });
   const skip = Promise.resolve(undefined);
 
   const [ctx, statsBody, ordersBody, serversBody, healthBody, reviewBody] = await Promise.all([
@@ -50,13 +51,12 @@ export async function loadOverviewWith(deps, event, now = Date.now()) {
       canStats,
       canOrders,
       stats,
-      statsError: canStats && !stats ? (statsBody?.error ?? 'NETWORK_ERROR') : null,
-      orders: orders && Array.isArray(orders.orders) ? orders.orders : [],
-      ordersError:
-        canOrders && view !== 'chart' && !orders ? (ordersBody?.error ?? 'NETWORK_ERROR') : null,
-      servers: Array.isArray(ok(serversBody)?.servers) ? serversBody.servers : [],
+      statsError: canStats && !stats ? failureOf(statsBody) : null,
+      orders: orders ? pageOf(orders).items : [],
+      ordersError: canOrders && view !== 'chart' && !orders ? failureOf(ordersBody) : null,
+      servers: Array.isArray(ok(serversBody)?.items) ? serversBody.items : [],
       health: ok(healthBody),
-      reviewCount: Number(review?.orderCount ?? review?.count ?? 0) || 0,
+      reviewCount: review ? pageOf(review).totalItems : 0,
     },
   };
 }

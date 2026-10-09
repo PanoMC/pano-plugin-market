@@ -113,27 +113,24 @@ class HousekeepingJobIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `retention deletes delivered webhook rows after 30 days, dead ones after 90, and expired provider state keys`(): Unit = runBlocking {
+    fun `retention deletes expired provider state keys and leaves the webhook log to core`(): Unit = runBlocking {
         val now = w.clock.now()
 
-        fun hook(status: String, ageDays: Long) = mapOf(
-            "eventId" to java.util.UUID.randomUUID().toString(), "event" to "order.paid", "url" to "https://hooks.invalid/x", "format" to "JSON", "signing" to "NONE", "body" to "{}",
-            "status" to status, "updatedAt" to now - ageDays * day
+        // the delivery log is core's now (it purges finished rows after 30 days itself): the market's retention does not touch it
+        val old = Fixtures.insertRaw(
+            pool, "webhook_delivery",
+            mapOf(
+                "eventId" to java.util.UUID.randomUUID().toString(), "source" to "market", "event" to "market.order.paid", "url" to "https://hooks.invalid/x", "format" to "JSON",
+                "signing" to "NONE", "body" to "{}", "status" to "SUCCEEDED", "updatedAt" to now - 200 * day
+            )
         )
-
-        val oldDone = Fixtures.insertRaw(pool, "market_webhook_delivery", hook("SUCCEEDED", 31))
-        val youngDone = Fixtures.insertRaw(pool, "market_webhook_delivery", hook("SUCCEEDED", 29))
-        val oldDead = Fixtures.insertRaw(pool, "market_webhook_delivery", hook("DEAD", 91))
-        val youngDead = Fixtures.insertRaw(pool, "market_webhook_delivery", hook("DEAD", 89))
-        val oldPending = Fixtures.insertRaw(pool, "market_webhook_delivery", hook("PENDING", 200))
         val expiredKey = Fixtures.insertRaw(pool, "market_provider_state", mapOf("kind" to "CACHE", "providerId" to "fake", "stateKey" to "a", "value" to "v", "expiresAt" to now - 1))
         val liveKey = Fixtures.insertRaw(pool, "market_provider_state", mapOf("kind" to "CACHE", "providerId" to "fake", "stateKey" to "b", "value" to "v", "expiresAt" to now + day))
         val foreverKey = Fixtures.insertRaw(pool, "market_provider_state", mapOf("kind" to "CACHE", "providerId" to "fake", "stateKey" to "c", "value" to "v"))
 
         job().retention()
 
-        assertEquals(0L, count("market_webhook_delivery", "`id` IN (?, ?)", oldDone, oldDead))
-        assertEquals(3L, count("market_webhook_delivery", "`id` IN (?, ?, ?)", youngDone, youngDead, oldPending), "young rows and rows that still have to be sent stay")
+        assertEquals(1L, count("webhook_delivery", "`id` = ?", old), "the market no longer purges the webhook log")
         assertEquals(0L, count("market_provider_state", "`id` = ?", expiredKey))
         assertEquals(2L, count("market_provider_state", "`id` IN (?, ?)", liveKey, foreverKey))
     }

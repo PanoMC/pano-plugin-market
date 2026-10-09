@@ -12,7 +12,7 @@ import io.vertx.json.schema.SchemaRepository
 /** `DELETE /api/panel/market/discounts/:id` (`P:DISC`): soft delete when redemptions exist, else removed; a missing row is 404 `NOT_FOUND`. */
 @Endpoint
 class PanelDeleteDiscountAPI(plugin: MarketPlugin) : PromotionAdminRoute(plugin, Promotion.DISCOUNT) {
-    override val paths = listOf(Path("/api/panel/market/discounts/:id", RouteType.DELETE))
+    override val paths = listOf(Path("/discounts/:id", RouteType.DELETE))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = pagingValidation(schemaRepository)
 

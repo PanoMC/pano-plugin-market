@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.shipment
 
+import com.panomc.plugins.market.util.MarketLinks
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
@@ -43,6 +44,6 @@ internal fun fulfilmentDeps(plugin: MarketPlugin): FulfilmentDeps {
         shipmentEvents = context.getBean(MarketShipmentEventDao::class.java),
         mail = MailOutboxService({ currentConfig(plugin) }, SystemClock, context.getBean(MarketMailOutboxDao::class.java), orderEvents),
         webhooks = webhookService(plugin), ids = SecureIds(), config = { currentConfig(plugin) },
-        labelsDir = plugin.pluginDataFolder.toPath().resolve("labels"), siteUrl = { site().baseUrl }
+        labelsDir = plugin.pluginDataFolder.toPath().resolve("labels"), siteUrl = { site().baseUrl }, links = MarketLinks.platform
     )
 }

@@ -49,7 +49,8 @@ import {
 } from '../paymentPanel.js';
 
 const ctx = { origin: 'https://shop.example.com', base: '' };
-const ATTEMPT = 'https://shop.example.com/api/market/payments/attempts/TOKEN123/page';
+const ATTEMPT =
+  'https://shop.example.com/api/plugins/pano-plugin-market/payments/attempts/TOKEN123/page';
 
 const view = (over = {}) => ({
   limited: false,
@@ -286,10 +287,19 @@ describe('startMode (14 §11.4 rows)', () => {
   test('FORM_POST and HTML need the same-origin attempt page', () => {
     expect(startMode({ kind: 'FORM_POST', url: ATTEMPT }, ctx)).toBe('LINK');
     expect(
-      startMode({ kind: 'HTML', url: '/api/market/payments/attempts/TOKEN123/page' }, ctx),
+      startMode(
+        { kind: 'HTML', url: '/api/plugins/pano-plugin-market/payments/attempts/TOKEN123/page' },
+        ctx,
+      ),
     ).toBe('LINK');
     expect(
-      startMode({ kind: 'HTML', url: 'https://gw.test/api/market/payments/attempts/T/page' }, ctx),
+      startMode(
+        {
+          kind: 'HTML',
+          url: 'https://gw.test/api/plugins/pano-plugin-market/payments/attempts/T/page',
+        },
+        ctx,
+      ),
     ).toBe('NONE');
     expect(startMode({ kind: 'FORM_POST', url: ATTEMPT }, {})).toBe('NONE');
   });
@@ -1085,7 +1095,7 @@ describe('payment panel sources', () => {
   test('the iframe carries the attributes of 14 §11.4', () => {
     const source = read('PaymentIframe.svelte');
 
-    expect(source).toContain('class="w-100 border-0 rounded"');
+    expect(source).toContain('class="market-payment-iframe w-100 border-0 rounded"');
     expect(source).toContain('referrerpolicy="strict-origin-when-cross-origin"');
     expect(source).toMatch(/height=\{iframeHeight\(iframe\.heightPx\)\}/);
     expect(source).toMatch(/allow=\{iframeAllow\(iframe\.allow\)\}/);
@@ -1095,20 +1105,22 @@ describe('payment panel sources', () => {
     expect(read('PaymentInstructions.svelte')).toContain('/bank-transfer/notify');
     expect(read('PaymentPanel.svelte')).toContain('/payment/continue');
     expect(read('PaymentPanel.svelte')).toMatch(
-      /\/api\/market\/orders\/\$\{encodeURIComponent\(id\)\}\/pay`/,
+      /call\(.POST., `\/orders\/\$\{encodeURIComponent\(id\)\}\/pay`/,
     );
   });
 
-  test('the plugin component is rendered with the documented props and falls back to the generic form', () => {
+  test('the gateway view is injected through the slot with the documented props and falls back to the generic form', () => {
     const source = read('PaymentEmbedded.svelte');
 
+    // step B: the slot market:order:payment replaces the lookup in the host's view registry (no utils/host.js)
     expect(source).toMatch(
-      /<Plugin\s+\{order\}\s+\{payment\}\s+props=\{[^\n]*\}\s+locale=\{[^\n]*\}\s+\{continuePayment\}\s+\{refresh\}/s,
+      /<PluginSlot\s+id="market:order:payment"\s+props=\{\{\s+order,\s+payment,\s+props:[^\n]*\n\s+locale:[^\n]*\n\s+continuePayment,\s+refresh,\s+\}\}\s+filter=\{slotMatch\}/s,
     );
+    expect(source).not.toContain('utils/host.js');
     expect(source).toContain('setStatus(embeddedFallback(current))');
     expect(source).toContain('<GenericPaymentForm');
-    // browser only: the lookup lives in onMount
-    expect(source.indexOf('onMount(')).toBeGreaterThan(source.indexOf('resolveComponent'));
+    // browser only: the slot is opened from onMount, once the scripts are loaded
+    expect(source.indexOf("status = 'SLOT'")).toBeGreaterThan(source.indexOf('onMount('));
   });
 
   test('the panel reads the payment start from the order and offers "pay another way" with the shared pieces', () => {

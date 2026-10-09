@@ -97,7 +97,8 @@ export function createRouter(routes) {
  */
 export const gate = { deferred: typeof document !== 'undefined' };
 
-export const SAVED_NOTHING = { result: 'ok', id: 1 };
+/** The answer of a write while the preview is on: a success body (no `error` key) that saved nothing. */
+export const SAVED_NOTHING = { id: 1 };
 
 /**
  * createSeam({ real, getDevMode, loadRouter, notify })
@@ -161,4 +162,31 @@ function parseBody(body) {
     }
   }
   return body;
+}
+
+const PLUGIN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const METHODS = ['get', 'post', 'put', 'delete', 'customRequest'];
+
+/**
+ * The plugin-scoped client of the sdk (`createPluginApi`, doc 04 section 9) on top of `api` (the seam in the plugin's build):
+ * `{ get, post, put, delete, customRequest, panel: { same } }`, every call with its path (relative to the API root, `/api/v1/`) prefixed by
+ * `/plugins/<id>` (`panel`: `/plugins/<id>/panel`). Preview mode, which answers at the seam, so answers the client of
+ * `@panomc/sdk/plugin-api` too.
+ */
+export function scopedPluginApi(api, pluginId) {
+  if (typeof pluginId !== 'string' || !PLUGIN_ID_PATTERN.test(pluginId)) {
+    throw new Error(
+      `[pano] createPluginApi needs the full plugin id, got ${JSON.stringify(pluginId)}`,
+    );
+  }
+
+  const scoped = (prefix) =>
+    Object.fromEntries(
+      METHODS.map((method) => [
+        method,
+        async (options = {}) => api[method]({ ...options, path: `${prefix}${options.path ?? ''}` }),
+      ]),
+    );
+
+  return { ...scoped(`/plugins/${pluginId}`), panel: scoped(`/plugins/${pluginId}/panel`) };
 }

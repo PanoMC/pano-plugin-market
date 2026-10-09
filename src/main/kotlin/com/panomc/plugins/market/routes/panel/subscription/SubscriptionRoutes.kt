@@ -1,9 +1,9 @@
 package com.panomc.plugins.market.routes.panel.subscription
 
+import com.panomc.platform.model.Paging
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.error.NotFound
-import com.panomc.platform.error.PageNotFound
 import com.panomc.platform.model.Path
 import com.panomc.platform.model.Result
 import com.panomc.platform.model.RouteType
@@ -19,28 +19,20 @@ import com.panomc.plugins.market.permission.FieldGating
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
-import com.panomc.plugins.market.routes.base.parsePagingRequest
 import com.panomc.plugins.market.routes.base.parseText
 import com.panomc.plugins.market.routes.panel.order.logOrderDecision
 import com.panomc.plugins.market.routes.user.subscription.SubscriptionFilter
 import com.panomc.plugins.market.service.CancelOutcome
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.booleanSchema
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
-
-private fun number(raw: String?, name: String): Long? {
-    val value = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-
-    return value.toLongOrNull() ?: throw RequestValueException(name, "MUST_BE_AN_INTEGER")
-}
 
 /** `status` (csv) of the list: an unknown name is a 400, never an empty list. */
 internal fun parseStatuses(raw: String?): Set<SubscriptionStatus> =
@@ -48,39 +40,37 @@ internal fun parseStatuses(raw: String?): Set<SubscriptionStatus> =
         SubscriptionStatus.entries.firstOrNull { it.name == name } ?: throw RequestValueException("status", "UNKNOWN_STATUS")
     }?.toSet().orEmpty()
 
-/** `GET /api/panel/market/subscriptions` (`P:OV`, 09 section 13): q `status` (csv), `mode`, `providerId`, `search`, `page`, `pageSize`; `subscriptions`, `subscriptionCount`, `totalPage`. */
+/** `GET /api/panel/market/subscriptions` (`P:OV`, 09 section 13): q `status` (csv), `mode`, `providerId`, `search`, `page`, `pageSize`; the core page shape (`items`, `page`). */
 @Endpoint
 class PanelGetSubscriptionsAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/subscriptions", RouteType.GET))
+    override val paths = listOf(Path("/subscriptions", RouteType.GET))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.ORDERS_VIEW)
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler {
-        var builder = ValidationHandlerBuilder.create(schemaRepository)
+        var builder = Paging.params(ValidationHandlerBuilder.create(schemaRepository))
 
-        for (name in listOf("status", "mode", "providerId", "search", "page", "pageSize")) builder = builder.queryParameter(optionalParam(name, stringSchema()))
+        for (name in listOf("status", "mode", "providerId", "search")) builder = builder.queryParameter(optionalParam(name, stringSchema()))
 
         return builder.build()
     }
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
         val request = context.request()
-        val window: Paging.Window = parsePagingRequest(number(request.getParam("page"), "page"), number(request.getParam("pageSize"), "pageSize"))
+        val window = Paging.request(context)
         val mode = request.getParam("mode")?.trim()?.takeIf { it.isNotEmpty() }?.let { name -> SubscriptionMode.entries.firstOrNull { it.name == name } ?: throw RequestValueException("mode", "UNKNOWN_MODE") }
         val filter = SubscriptionFilter(parseStatuses(request.getParam("status")), mode, parseText(request.getParam("providerId"), "providerId", maxLength = 64), parseText(request.getParam("search"), "search"))
         val client = plugin.applicationContext.getBean(DatabaseManager::class.java).getSqlClient()
         val page = subscriptionViews(plugin).panelList(filter, window, client, searchEmail = FieldGating.piiTier(context))
 
-        if (Paging.isBeyondLast(window.page, page.totalPage)) throw PageNotFound()
-
-        return Successful(mapOf("subscriptions" to page.rows, "subscriptionCount" to page.count, "totalPage" to page.totalPage))
+        return Successful(Paging.response(page.rows, page.count, window))
     }
 }
 
 /** `GET /api/panel/market/subscriptions/:id` (`P:OV`, 09 section 13): `subscription`, `renewals[]`, `orders[]`, `allowed{cancel, retry}`; no `storedMethod`, no `providerData`. */
 @Endpoint
 class PanelGetSubscriptionAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/subscriptions/:id", RouteType.GET))
+    override val paths = listOf(Path("/subscriptions/:id", RouteType.GET))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.ORDERS_VIEW)
 
@@ -101,7 +91,7 @@ class PanelGetSubscriptionAPI(private val plugin: MarketPlugin) : MarketPanelApi
  */
 @Endpoint
 class PanelCancelSubscriptionAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/subscriptions/:id/cancel", RouteType.POST))
+    override val paths = listOf(Path("/subscriptions/:id/cancel", RouteType.POST))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.PAYMENTS)
 
@@ -135,7 +125,7 @@ class PanelCancelSubscriptionAPI(private val plugin: MarketPlugin) : MarketPanel
  */
 @Endpoint
 class PanelRetrySubscriptionAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/subscriptions/:id/retry", RouteType.POST))
+    override val paths = listOf(Path("/subscriptions/:id/retry", RouteType.POST))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.PAYMENTS)
 

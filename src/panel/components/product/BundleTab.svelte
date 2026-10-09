@@ -200,9 +200,8 @@
 
 <script>
   import { CardHeader, NoContent } from '@panomc/sdk/components/panel';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _ } from '../../../i18n';
-  import { marketPath } from '../../utils/api.js';
   import { moveItem } from '../../utils/variants.js';
   import ProductSelector from '../ProductSelector.svelte';
   import { MAX_BUNDLE_ROWS, addBundleRow, bundleCandidates, fieldErrorKey } from './model.js';
@@ -254,7 +253,7 @@
     (async () => {
       let res = null;
       try {
-        res = await ApiUtil.get({ path: marketPath(`/products/${child.id}`) });
+        res = await api.panel.get({ path: `/products/${child.id}` });
       } catch {
         res = null;
       }

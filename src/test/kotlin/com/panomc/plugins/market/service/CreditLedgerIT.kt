@@ -22,6 +22,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.random.Random
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * `CreditService.post` and the plain ledger operations on a real MariaDB (MK-091; 07 sections 3 and 19.7, D-L1 to D-L5, D-L11 to D-L13, D-X1): double-entry postings,
@@ -219,7 +220,7 @@ class CreditLedgerIT : MarketDaoITBase() {
         }
 
         assertEquals(400, failure.getStatusCode())
-        assertEquals(50.01, JsonObject(failure.encode()).getDouble("balance"), "the balance of the locked row, with the grant of the same transaction")
+        assertEquals(50.01, ErrorBodies.details(failure).getDouble("balance"), "the balance of the locked row, with the grant of the same transaction")
         assertEquals(txs, txCount(), "the posting before it was rolled back too")
         assertEquals(entries, entryCount())
         assertEquals(5_000, balance(alex))

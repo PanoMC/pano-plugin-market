@@ -26,6 +26,7 @@
     "format:prettier": "prettier --write . --config .prettierrc"
   },
   "devDependencies": {
+    "@panomc/plugin-kit": "file:../../../theme-core/packages/plugin-kit",
     "@panomc/sdk": "1.0.0-dev.57",
     "@rollup/plugin-node-resolve": "^16.0.0",
     "@rollup/plugin-terser": "^0.4.4",

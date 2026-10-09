@@ -93,7 +93,6 @@
       path: '/orders',
       params: ORDER_PARAMS,
       nodes: ['OV'],
-      emptyKey: 'orders',
       title: 'pages.orders.title',
     });
   }
@@ -129,6 +128,7 @@
   } from '../components/orders/filters.js';
   import { sectionsFor } from '../navigation.js';
   import { gotoList } from '../utils/list.js';
+  import { pageOf } from '../utils/page.js';
   import { can } from '../utils/permissions.js';
 
   let { data } = $props();
@@ -139,10 +139,11 @@
   const user = $derived($page.data?.user);
   const ctx = $derived(data.ctx ?? null);
   const filters = $derived(normalizeFilters(data.filters));
-  const orders = $derived(data.orders ?? []);
-  const orderCount = $derived(data.orderCount ?? data.count ?? 0);
-  const totalPage = $derived(data.totalPage ?? 1);
-  const currentPage = $derived(data.page ?? 1);
+  const list = $derived(pageOf(data));
+  const orders = $derived(list.items);
+  const orderCount = $derived(list.totalItems);
+  const totalPage = $derived(list.totalPages);
+  const currentPage = $derived(list.number);
   const currentTab = $derived(activeTab(filters.status));
   const modalFilterCount = $derived(
     activeModalFilters(filters, { shippingEnabled: ctx?.shippingEnabled === true }).length,

@@ -1,5 +1,8 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.platform.model.Paging
+import com.panomc.plugins.market.support.assertOutOfRange
+import com.panomc.platform.model.PageRequest
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.db.MarketDaoITBase
 import com.panomc.plugins.market.db.model.MarketOrder
@@ -37,7 +40,6 @@ import com.panomc.plugins.market.spi.testkit.TestContexts
 import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.support.TestWiring
 import com.panomc.plugins.market.util.OrderStatus
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
@@ -50,6 +52,8 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.ErrorBodies
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * The panel side of the raw provider traffic on a real MariaDB (MK-171; 04 section 7, 02 section 7.3, 11 IN-4 / IN-5 / 14.5): the list and the per-payment
@@ -111,11 +115,11 @@ class PaymentEventAdminIT : MarketDaoITBase() {
         attempt: MarketPayment? = null, body: String = "{}", headers: Map<String, List<String>> = mapOf("content-type" to listOf("application/json")), kind: InboundKind = InboundKind.WEBHOOK
     ) = InboundCall(
         kind, "fake", "default", if (kind == InboundKind.WEBHOOK) null else attempt!!.token, null, null, "POST",
-        "/api/market/payments/fake/" + if (kind == InboundKind.WEBHOOK) "webhook" else "notify/${attempt!!.token}", null, emptyMap(), headers, headers["content-type"]?.firstOrNull(),
+        "${MarketPaths.SITE_ROOT}/payments/fake/" + if (kind == InboundKind.WEBHOOK) "webhook" else "notify/${attempt!!.token}", null, emptyMap(), headers, headers["content-type"]?.firstOrNull(),
         body.toByteArray(), null, "203.0.113.9", w.clock.now()
     )
 
-    private val window = Paging.Window(1, 50)
+    private val window = PageRequest(1, 50)
 
     private suspend fun listed(raw: Boolean = false, statuses: Set<PaymentEventStatus> = emptySet(), provider: String? = null) = admin.list(statuses, provider, window, raw, pool)
 
@@ -143,7 +147,6 @@ class PaymentEventAdminIT : MarketDaoITBase() {
         val page = admin.forPayment(attempt.id, window, false, pool)
 
         assertEquals(1L, page.count)
-        assertEquals(1L, page.totalPage)
 
         val row = page.rows.single()
 
@@ -224,10 +227,10 @@ class PaymentEventAdminIT : MarketDaoITBase() {
 
         repeat(5) { dispatcher.handle(call(attempt = attempt, kind = InboundKind.NOTIFY, body = "{\"n\":$it}")) }
 
-        val pages = (1..3).map { admin.forPayment(attempt.id, Paging.Window(it, 2), false, pool) }
+        val pages = (1..3).map { admin.forPayment(attempt.id, PageRequest(it, 2), false, pool) }
 
         assertEquals(5L, pages[0].count)
-        assertEquals(3L, pages[0].totalPage)
+        assertEquals(3L, Paging.totalPages(pages[0].count, 2))
         assertEquals(listOf(2, 2, 1), pages.map { it.rows.size })
 
         val all = pages.flatMap { p -> p.rows.map { it.getLong("id") } }
@@ -255,7 +258,7 @@ class PaymentEventAdminIT : MarketDaoITBase() {
             MarketPaymentEvent(
                 providerId = "fake", channel = "NOTIFY", eventKey = "r:secret", paymentId = attempt.id, status = PaymentEventStatus.FAILED,
                 body = "{\"merchant\":\"$secret\",\"ok\":true}", headers = JsonObject().put("x-merchant", io.vertx.core.json.JsonArray().add("k=$secret")).put(":form", "key=$secret&amount=5").encode(),
-                url = "/api/market/payments/fake/notify/abcdefghij0123456789klmno?ref=$secret", error = "gateway said: $secret rejected",
+                url = "${MarketPaths.SITE_ROOT}/payments/fake/notify/abcdefghij0123456789klmno?ref=$secret", error = "gateway said: $secret rejected",
                 createdAt = w.clock.now(), updatedAt = w.clock.now()
             ),
             pool
@@ -278,7 +281,7 @@ class PaymentEventAdminIT : MarketDaoITBase() {
         val listedRow = withSecrets.list(emptySet(), null, window, true, pool).rows.single { it.getLong("id") == id }
 
         assertFalse(listedRow.encode().contains(secret), listedRow.encodePrettily())
-        assertEquals("/api/market/payments/fake/notify/abcdef\u2026?ref=[REDACTED]", listedRow.getString("url"), "path token shortened, secret removed")
+        assertEquals("${MarketPaths.SITE_ROOT}/payments/fake/notify/abcdef\u2026?ref=[REDACTED]", listedRow.getString("url"), "path token shortened, secret removed")
 
         // below the raw tier nothing of body / headers / url is there, and the error is redacted too
         val below = withSecrets.list(emptySet(), null, window, false, pool).rows.single { it.getLong("id") == id }
@@ -340,21 +343,23 @@ class PaymentEventAdminIT : MarketDaoITBase() {
 
         assertEquals(setOf(PaymentEventStatus.FAILED, PaymentEventStatus.DEFERRED), ok.statuses)
         assertEquals("fake", ok.providerId)
-        assertEquals(Paging.Window(2, 20), ok.window)
+        assertEquals(2 to 20, ok.window.number to ok.window.size)
         assertEquals(emptySet<PaymentEventStatus>(), parsePaymentEventQuery(null, null, null, null).statuses)
-        assertEquals(Paging.Window(1, 10), parsePaymentEventQuery(" ", " ", "", "").window)
+        val blank = parsePaymentEventQuery(" ", " ", "", "").window
+
+        assertEquals(1 to 10, blank.number to blank.size)
 
         for (bad in listOf("PROCESSED", "RECEIVED", "failed", "FAILED,PROCESSED", "x")) assertThrows(RequestValueException::class.java, { parsePaymentEventQuery(bad, null, null, null) }, bad)
 
-        assertThrows(RequestValueException::class.java) { parsePaymentEventQuery(null, null, "0", null) }
-        assertThrows(RequestValueException::class.java) { parsePaymentEventQuery(null, null, "1", "101") }
-        assertThrows(RequestValueException::class.java) { parsePaymentEventQuery(null, null, "abc", null) }
+        assertOutOfRange("page") { parsePaymentEventQuery(null, null, "0", null) }
+        assertOutOfRange("pageSize") { parsePaymentEventQuery(null, null, "1", "101") }
+        assertOutOfRange("page") { parsePaymentEventQuery(null, null, "abc", null) }
         assertThrows(RequestValueException::class.java) { parsePaymentEventQuery(null, "x".repeat(65), null, null) }
     }
 
     // ================================================================================================== replay
 
-    private fun state(e: Throwable): String = JsonObject(((e as InvalidState).encode(emptyMap()))).getString("state")
+    private fun state(e: Throwable): String = ErrorBodies.details(e).getString("state")
 
     @Test
     fun `a FAILED row is replayed through the pipeline and completes the order`(): Unit = runBlocking {

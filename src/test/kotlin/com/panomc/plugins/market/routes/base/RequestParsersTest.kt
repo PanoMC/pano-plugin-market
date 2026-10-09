@@ -17,21 +17,6 @@ class RequestParsersTest {
         if (reason != null) assertEquals(reason, e.reason)
     }
 
-    // ---- paging
-
-    @Test
-    fun `paging defaults and bounds`() {
-        val d = parsePagingRequest(null, null)
-        assertEquals(1, d.page)
-        assertEquals(10, d.pageSize)
-
-        assertEquals(100, parsePagingRequest(2, 100).pageSize)
-        refused("pageSize") { parsePagingRequest(1, 101) }
-        refused("page") { parsePagingRequest(0, 10) }
-        assertEquals(24, parsePagingRequest(null, null, defaultPageSize = 24, maxPageSize = 60).pageSize)
-        refused("pageSize") { parsePagingRequest(1, 61, defaultPageSize = 24, maxPageSize = 60) }
-    }
-
     // ---- idempotency key
 
     @Test

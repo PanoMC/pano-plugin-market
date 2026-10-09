@@ -19,14 +19,14 @@ import io.vertx.json.schema.SchemaRepository
 /** `GET /api/panel/market/shipping/methods` (`P:SET`): the live methods with their `rates[]`. */
 @Endpoint
 class PanelGetShippingMethodsAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin) {
-    override val paths = listOf(Path("/api/panel/market/shipping/methods", RouteType.GET))
+    override val paths = listOf(Path("/shipping/methods", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = noBodyValidation(schemaRepository)
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
         context.response().putHeader("Cache-Control", "no-store")
 
-        return Successful(mapOf("methods" to JsonArray(service.listMethods())))
+        return Successful(mapOf("items" to JsonArray(service.listMethods())))
     }
 }
 
@@ -37,9 +37,9 @@ class PanelGetShippingMethodsAPI(plugin: MarketPlugin) : ShippingAdminRoute(plug
 @Endpoint
 class PanelSaveShippingMethodAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin) {
     override val paths = listOf(
-        Path("/api/panel/market/shipping/methods/sort", RouteType.POST),
-        Path("/api/panel/market/shipping/methods", RouteType.POST),
-        Path("/api/panel/market/shipping/methods/:id", RouteType.PUT)
+        Path("/shipping/methods/sort", RouteType.POST),
+        Path("/shipping/methods", RouteType.POST),
+        Path("/shipping/methods/:id", RouteType.PUT)
     )
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = bodyValidation(schemaRepository)
@@ -73,7 +73,7 @@ class PanelSaveShippingMethodAPI(plugin: MarketPlugin) : ShippingAdminRoute(plug
 /** `DELETE /shipping/methods/:id`: soft delete, orders keep the method name. */
 @Endpoint
 class PanelDeleteShippingMethodAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin) {
-    override val paths = listOf(Path("/api/panel/market/shipping/methods/:id", RouteType.DELETE))
+    override val paths = listOf(Path("/shipping/methods/:id", RouteType.DELETE))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = noBodyValidation(schemaRepository)
 

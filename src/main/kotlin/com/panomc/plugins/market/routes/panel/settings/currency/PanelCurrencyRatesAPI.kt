@@ -23,8 +23,8 @@ import com.panomc.plugins.market.service.ExchangeRateService
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 import io.vertx.sqlclient.Pool
@@ -53,8 +53,8 @@ class PanelCurrencyRatesAPI(private val plugin: MarketPlugin) : MarketPanelApi()
     override val nodes: Set<MarketNode> = setOf(MarketNode.SETTINGS)
 
     override val paths = listOf(
-        Path("/api/panel/market/settings/currencies", RouteType.GET),
-        Path("/api/panel/market/settings/currencies", RouteType.PUT)
+        Path("/settings/currencies", RouteType.GET),
+        Path("/settings/currencies", RouteType.PUT)
     )
 
     private val service by lazy { currencyRateService(plugin) }
@@ -95,7 +95,7 @@ class PanelCurrencyRatesAPI(private val plugin: MarketPlugin) : MarketPanelApi()
 class PanelRefreshCurrencyRatesAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
     override val nodes: Set<MarketNode> = setOf(MarketNode.SETTINGS)
 
-    override val paths = listOf(Path("/api/panel/market/settings/currencies/refresh", RouteType.POST))
+    override val paths = listOf(Path("/settings/currencies/refresh", RouteType.POST))
 
     private val service by lazy { currencyRateService(plugin) }
 

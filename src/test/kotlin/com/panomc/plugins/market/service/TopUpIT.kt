@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.platform.model.PageRequest
 import com.panomc.platform.error.PageNotFound
 import com.panomc.platform.model.Error
 import com.panomc.plugins.market.config.MarketConfig
@@ -19,7 +20,6 @@ import com.panomc.plugins.market.routes.user.credit.BuyerCreditViews
 import com.panomc.plugins.market.support.TestUser
 import com.panomc.plugins.market.support.TestWiring
 import com.panomc.plugins.market.util.OrderStatus
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * Credit top-up on a real MariaDB (MK-092; 07 sections 8.1 to 8.4, 13, 14.1 and 11.3, 06 test 65, 17 V-15, 07 E-4 to E-6): a credit pack and the free amount are
@@ -102,10 +103,10 @@ class TopUpIT : MarketDaoITBase() {
         } ?: error("expected $code, nothing was thrown")
         val body = JsonObject(e.encode())
 
-        assertEquals(code, body.getString("error"), "error code of the wire body ${e.encode()}")
+        assertEquals(code, body.getJsonObject("error").getString("code"), "error code of the wire body ${e.encode()}")
         assertEquals(status, e.getStatusCode())
 
-        return body
+        return ErrorBodies.details(e)
     }
 
     private suspend fun fails(block: suspend () -> Any?): Throwable = try {
@@ -396,7 +397,7 @@ class TopUpIT : MarketDaoITBase() {
         val product = pack(slug = "listed-pack")
         val viewer = StoreViewer(userId = fx.user("Viewer").id)
 
-        fun slugs(json: JsonObject) = json.getJsonArray("products").map { (it as JsonObject).getString("slug") }.toSet()
+        fun slugs(json: JsonObject) = json.getJsonArray("items").map { (it as JsonObject).getString("slug") }.toSet()
 
         assertTrue(slugs(store.products(ProductListQuery(), viewer, pool)).containsAll(listOf(product.slug, standard.slug)))
         assertTrue(store.product(product.slug, null, viewer, pool).getJsonObject("purchasable").getBoolean("ok"))
@@ -408,7 +409,7 @@ class TopUpIT : MarketDaoITBase() {
 
             assertFalse(product.slug in listed)
             assertTrue(standard.slug in listed)
-            assertFalse(product.slug in store.store(null, viewer, pool).getJsonArray("products").map { (it as JsonObject).getString("slug") })
+            assertFalse(product.slug in store.store(null, viewer, pool).getJsonArray("items").map { (it as JsonObject).getString("slug") })
 
             val purchasable = store.product(product.slug, null, viewer, pool).getJsonObject("purchasable")
 
@@ -680,14 +681,14 @@ class TopUpIT : MarketDaoITBase() {
 
         sql("UPDATE `pano_market_credit_tx` SET `note` = 'internal' WHERE `type` = 'TOPUP'")
 
-        val view = views().credits(alex.id, Paging.Window(1, 10), pool)
+        val view = views().credits(alex.id, PageRequest(1, 10), pool)
 
         assertEquals(130.0, view.getDouble("balance"), 1e-9)
         assertEquals("Gems", view.getString("creditName"))
-        assertEquals(3L, view.getLong("entryCount"))
-        assertEquals(1L, view.getLong("totalPage"))
+        assertEquals(3L, view.getJsonObject("page").getLong("totalItems"))
+        assertEquals(1L, view.getJsonObject("page").getLong("totalPages"))
 
-        val entries = view.getJsonArray("entries").map { it as JsonObject }
+        val entries = view.getJsonArray("items").map { it as JsonObject }
 
         assertEquals(listOf("REVOKE", "GRANT", "TOPUP"), entries.map { it.getString("type") }, "newest first")
         assertEquals(listOf(-20.0, 50.0, 100.0), entries.map { it.getDouble("amount") }, "signed from the account's side")
@@ -697,24 +698,24 @@ class TopUpIT : MarketDaoITBase() {
         assertEquals(order.publicId, entries[2].getString("orderPublicId"))
 
         // paging: pages of two, a page beyond the last is 404
-        val page2 = views().credits(alex.id, Paging.Window(2, 2), pool)
+        val page2 = views().credits(alex.id, PageRequest(2, 2), pool)
 
-        assertEquals(3L, page2.getLong("entryCount"))
-        assertEquals(2L, page2.getLong("totalPage"))
-        assertEquals(listOf("TOPUP"), page2.getJsonArray("entries").map { (it as JsonObject).getString("type") })
-        assertThrows(PageNotFound::class.java) { runBlocking { views().credits(alex.id, Paging.Window(3, 2), pool) } }
+        assertEquals(3L, page2.getJsonObject("page").getLong("totalItems"))
+        assertEquals(2L, page2.getJsonObject("page").getLong("totalPages"))
+        assertEquals(listOf("TOPUP"), page2.getJsonArray("items").map { (it as JsonObject).getString("type") })
+        assertThrows(PageNotFound::class.java) { runBlocking { views().credits(alex.id, PageRequest(3, 2), pool) } }
 
         // another user's ledger is not mixed in, and an account that does not exist is an empty ledger (reading creates nothing)
         val bob = fx.user("Bob")
-        val bobView = views().credits(bob.id, Paging.Window(1, 10), pool)
+        val bobView = views().credits(bob.id, PageRequest(1, 10), pool)
 
-        assertEquals(0L, bobView.getLong("entryCount"))
-        assertTrue(bobView.getJsonArray("entries").isEmpty)
+        assertEquals(0L, bobView.getJsonObject("page").getLong("totalItems"))
+        assertTrue(bobView.getJsonArray("items").isEmpty)
 
-        val ghost = views().credits(987_654L, Paging.Window(1, 10), pool)
+        val ghost = views().credits(987_654L, PageRequest(1, 10), pool)
 
         assertEquals(0.0, ghost.getDouble("balance"))
-        assertEquals(0L, ghost.getLong("totalPage"))
+        assertEquals(0L, ghost.getJsonObject("page").getLong("totalPages"))
         assertEquals(0, sql("SELECT `id` FROM `pano_market_credit_account` WHERE `userId` = 987654").size)
     }
 
@@ -728,10 +729,10 @@ class TopUpIT : MarketDaoITBase() {
 
         h.config = h.config.copy(creditsEnabled = false)
 
-        val view = views().credits(alex.id, Paging.Window(1, 10), pool)
+        val view = views().credits(alex.id, PageRequest(1, 10), pool)
 
         assertEquals(100.0, view.getDouble("balance"))
-        assertEquals(1L, view.getLong("entryCount"))
+        assertEquals(1L, view.getJsonObject("page").getLong("totalItems"))
         assertEquals(false, views().summary(alex.id, pool).getBoolean("creditsEnabled"))
         assertEquals(100.0, views().summary(alex.id, pool).getDouble("creditBalance"))
     }

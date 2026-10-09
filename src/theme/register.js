@@ -1,16 +1,14 @@
-import { viewComponent } from '@panomc/sdk';
-import { pluginId } from '../i18n';
-import { has, setPano } from './utils/host.js';
-import { initProfileNav, registerDropdown } from './stores/profileNav.js';
-import { registerSidebarWidgets } from './components/widgets/widgetsLoader.js';
-// side effect: the checkout draft clears itself on logout from any page (14 §10.2)
-import './stores/checkoutDraft.js';
+import { hostHas, initProfileNav, registerDropdown } from './lib/profileNav.js';
 
 // Development-only preview mode (fake data); the module checks the platform mode itself.
 import { startDevPreview } from '../mock/start.js';
 
-// Registers the storefront. Items 1-6 of 14 §5 always run; items 7-11 are each wrapped so a theme
-// that lacks a namespace only loses that item (a console.warn), never the whole plugin.
+const pluginId = 'pano-plugin-market';
+
+// Registers what the view metadata cannot say. The pages, the navbar cart, the cart offcanvas and the sidebar widgets
+// come from `export const view` (the build calls pano.views.add before onLoad); what stays here depends on the host:
+// item 6 (nav link) always runs, items 9-10 are each wrapped so a theme that lacks a namespace only loses that item
+// (a console.warn), never the whole plugin.
 
 function optional(name, fn) {
   try {
@@ -21,57 +19,10 @@ function optional(name, fn) {
 }
 
 export function registerTheme(pano) {
-  setPano(pano);
   startDevPreview(pano);
 
-  // 1. Theme public pages
-  pano.ui.page.register({
-    path: '/store',
-    component: viewComponent(() => import('./pages/StorePage.svelte')),
-  });
-
-  // 3. Order page; three segments, so it never competes with the two-segment /store/[slug]
-  pano.ui.page.register({
-    path: '/store/order/[id]',
-    component: viewComponent(() => import('./pages/OrderPage.svelte')),
-  });
-
-  // 4. Product page; the pattern loses against the exact routes (/store/checkout)
-  pano.ui.page.register({
-    path: '/store/[slug]',
-    component: viewComponent(() => import('./pages/ProductPage.svelte')),
-  });
-
-  // 5. Checkout; registered as an exact path, it wins over the /store/[slug] pattern
-  pano.ui.page.register({
-    path: '/store/checkout',
-    component: viewComponent(() => import('./pages/CheckoutPage.svelte')),
-  });
-
-  // 5. Profile pages (the login guard comes from ProfileLayout; the loads add the return URL)
-  pano.ui.page.register({
-    path: '/profile/purchases',
-    component: viewComponent(() => import('./pages/profile/PurchasesPage.svelte')),
-    systemLayout: 'ProfileLayout',
-  });
-
-  pano.ui.page.register({
-    path: '/profile/credits',
-    component: viewComponent(() => import('./pages/profile/CreditsPage.svelte')),
-    systemLayout: 'ProfileLayout',
-  });
-
-  pano.ui.page.register({
-    path: '/profile/subscriptions',
-    component: viewComponent(() => import('./pages/profile/SubscriptionsPage.svelte')),
-    systemLayout: 'ProfileLayout',
-  });
-
-  pano.ui.page.register({
-    path: '/profile/creator',
-    component: viewComponent(() => import('./pages/profile/CreatorPage.svelte')),
-    systemLayout: 'ProfileLayout',
-  });
+  // 1-5. The store pages, the navbar cart (market:NavCart), the cart offcanvas (market:CartOffcanvas) and the
+  // four sidebar widgets are registered by the build from `export const view` in each view file (doc 01 section 2).
 
   // 6. Navigation link in the theme
   pano.ui.nav.site.editNavLinks((navigationItems) => {
@@ -82,34 +33,13 @@ export function registerTheme(pano) {
     return navigationItems;
   });
 
-  // 7. Cart button in the navbar (14 §7.3)
-  optional('nav-cart', () => {
-    pano.ui.nav.rightComponents.edit((components) => {
-      components.push({
-        id: 'market-cart',
-        priority: 50,
-        component: viewComponent(() => import('./components/cart/NavCart.svelte')),
-      });
-      return components;
-    });
-  });
-
-  // 8. Cart offcanvas outside the navbar DOM (14 §7.1)
-  optional('cart-offcanvas', () => {
-    pano.ui.hook.register({
-      name: 'theme:top',
-      component: viewComponent(() => import('./components/cart/CartOffcanvas.svelte')),
-      skipLoad: true,
-    });
-  });
-
   // 9. Purchases entry in the account dropdown (14 §5 row 9)
   optional('profile-dropdown', () => registerDropdown(pano));
 
   // 10. Profile navigation: four link items with profile-nav (hidden / badge follow me/summary), else the
   // profile block in the profile-content slot (14 §12.1)
   optional('profile-nav', () => {
-    if (has('profile-nav')) {
+    if (hostHas(pano, 'profile-nav')) {
       initProfileNav(pano);
       return;
     }
@@ -118,16 +48,11 @@ export function registerTheme(pano) {
       items.push({
         id: 'market',
         priority: 50,
-        component: viewComponent(() => import('./components/profile/MarketProfileBlock.svelte')),
+        view: 'market:MarketProfileBlock',
       });
 
       return items;
     });
-  });
-
-  // 11. Sidebar widgets in the home and profile sidebars, only with page-sidebar-id (14 §13.2)
-  optional('sidebar-widgets', () => {
-    registerSidebarWidgets(pano);
   });
 }
 

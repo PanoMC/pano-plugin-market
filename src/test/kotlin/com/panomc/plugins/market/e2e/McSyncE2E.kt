@@ -4,6 +4,7 @@ import com.panomc.plugins.market.e2e.support.E2eTestBase
 import io.vertx.core.json.JsonArray
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * The server side of the market on a real instance (MK-103, 08 section 8.5, 04 section 8): `GET /api/panel/market/servers` runs the production wiring of
@@ -19,11 +20,11 @@ class McSyncE2E : E2eTestBase() {
 
     @Test
     fun `an admin reads the server list and a user without a market node and a visitor do not`() {
-        val body = admin.get("/api/panel/market/servers").ok().obj()
+        val body = admin.get("${MarketPaths.PANEL_ROOT}/servers").ok().obj()
 
-        assertTrue(body.getValue("servers") is JsonArray, body.encode())
+        assertTrue(body.getValue("items") is JsonArray, body.encode())
 
-        for (server in body.getJsonArray("servers").map { it as io.vertx.core.json.JsonObject }) {
+        for (server in body.getJsonArray("items").map { it as io.vertx.core.json.JsonObject }) {
             assertTrue(
                 server.fieldNames().containsAll(
                     setOf("id", "name", "type", "connected", "proxy", "mcComponentVersion", "requiredVersion", "marketState", "waitingDeliveries", "queuedDeliveries", "downloadUrl", "platform", "integrations", "settings")
@@ -32,8 +33,8 @@ class McSyncE2E : E2eTestBase() {
             )
         }
 
-        val ordinary = buyer(canPay = false).client.get("/api/panel/market/servers")
-        val guest = visitor().get("/api/panel/market/servers")
+        val ordinary = buyer(canPay = false).client.get("${MarketPaths.PANEL_ROOT}/servers")
+        val guest = visitor().get("${MarketPaths.PANEL_ROOT}/servers")
 
         assertTrue(ordinary.status in setOf(401, 403), "an ordinary user got ${ordinary.status}")
         assertTrue(guest.status in setOf(401, 403), "a visitor got ${guest.status}")

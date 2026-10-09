@@ -18,6 +18,8 @@ export async function captureFailure(
     try {
       const file = `${dir}/${name.replace(/[^A-Za-z0-9_.-]+/g, '_')}-${n++}.png`;
       await page.screenshot({ path: file, fullPage: false, timeout: 10000 });
+      // the markup next to the image: a selector that no longer matches is told apart from a page that did not render
+      fs.writeFileSync(file.replace(/\.png$/, '.html'), await page.content());
       files.push(`${file} (${page.url()})`);
     } catch {
       /* the page is gone */
@@ -43,7 +45,37 @@ export async function launch() {
 }
 
 // Messages that are the browser's own noise or the dev server's, not the plugin's: nothing else is ignored.
-const IGNORED_CONSOLE = [/\[vite\]/i, /favicon/i, /Download the Svelte DevTools/i];
+// `<locale>.plugins.json` is the engine's optional plugin-text layer (a theme without plugin texts has none, the engine reads a 404 as empty).
+// MARKET_E2E_IGNORE_CONSOLE (a regular expression, empty by default) is for an advisory run that has to see past a known failure of
+// another repo; the gate never sets it.
+const IGNORED_CONSOLE = [
+  /\[vite\]/i,
+  /favicon/i,
+  /Download the Svelte DevTools/i,
+  // `GET /auth/csrf` answers 401 to a visitor without a cookie session on purpose (doc 05 section 4: "the client just logs in", the engine
+  // reads it as no token); Chromium still prints the failed load. Only that one URL and status.
+  /Failed to load resource: the server responded with a status of 401.*\[[^\]]*\/api\/v1\/auth\/csrf\]/,
+  /Failed to load resource.*\/theme-api\/languages\/[^/\]]+\.plugins\.json/,
+  ...(process.env.MARKET_E2E_IGNORE_CONSOLE
+    ? [new RegExp(process.env.MARKET_E2E_IGNORE_CONSOLE)]
+    : []),
+];
+
+/**
+ * Where the cookies plugin is installed (the bundle gate), its fixed banner covers the bottom of the page and intercepts clicks. A
+ * locator handler accepts it whenever it is visible before an action; without the plugin the locator never matches and nothing happens.
+ * Every page of every context gets it (`newContext`), so every scenario's page setup shares this one helper.
+ */
+export async function acceptCookieBanner(page) {
+  await page
+    .addLocatorHandler(
+      page.locator('.cookies-cookie-banner [class*="cookies-cookie-banner__action"]').first(),
+      async (button) => {
+        await button.click();
+      },
+    )
+    .catch(() => {});
+}
 
 /**
  * A context of one visitor: viewport, locale (sent as Accept-Language, which the theme reads), optional session cookies. Console errors
@@ -66,10 +98,13 @@ export async function newContext(
 
   context.on('page', (page) => {
     livePages.add(page);
+    acceptCookieBanner(page);
     page.on('close', () => livePages.delete(page));
     page.on('console', (message) => {
       if (message.type() !== 'error') return;
-      const text = message.text();
+      // "Failed to load resource: ... status of 404" names no URL; the message location does
+      const url = /^Failed to load resource/.test(message.text()) ? message.location()?.url : '';
+      const text = url ? `${message.text()} [${url}]` : message.text();
       if (IGNORED_CONSOLE.some((re) => re.test(text))) return;
       errors.push(`console.error on ${page.url()}: ${text}`.slice(0, 600));
     });

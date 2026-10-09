@@ -267,12 +267,12 @@
 
 <script>
   import { untrack } from 'svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { CardHeader, Date as DateComponent, NoContent } from '@panomc/sdk/components/panel';
   import { _ } from '../../../i18n';
   import LoadError from '../LoadError.svelte';
   import StatusBadge from '../StatusBadge.svelte';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { RECHECK_CREDITS_PATH, healthModel, isHealthReport } from '../../utils/health.js';
   import { stateClass } from '../../utils/minecraft-settings.js';
   import { toastError } from '../../utils/toast.js';
@@ -299,7 +299,7 @@
     if (loading) return;
     loading = true;
     try {
-      const result = await call(ApiUtil.get({ path: marketPath(path) }));
+      const result = await call(api.panel.get({ path }));
       if (!result.ok || !isHealthReport(result.body)) {
         toastError($_, result.ok ? { error: 'NETWORK_ERROR', body: {} } : result);
         return;

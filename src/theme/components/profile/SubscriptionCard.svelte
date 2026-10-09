@@ -1,27 +1,29 @@
-<article class="card" aria-labelledby="market-sub-{sub.id}-title">
-  <div class="card-body vstack gap-3">
+<article class="market-subscription-card card" aria-labelledby="market-sub-{sub.id}-title">
+  <div class="market-subscription-card__body card-body vstack gap-3">
     <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
       <div>
-        <h2 class="h5 mb-1" id="market-sub-{sub.id}-title">{sub.productName}</h2>
+        <h2 class="market-subscription-card__title h5 mb-1" id="market-sub-{sub.id}-title">
+          {sub.productName}
+        </h2>
         <div class="text-body-secondary">
           {formatMoney(sub.price, sub.currency)}
           {$_('theme.store.per-period', { values: { period } })}
         </div>
       </div>
-      <span class={['badge', sub.badge.className]}>
+      <span class={['market-subscription-card__badge', 'badge', badgeClass(sub.badge.className)]}>
         {sub.badge.key ? $_(sub.badge.key) : sub.badge.raw}
       </span>
     </div>
 
     {#if sub.pastDue}
-      <div class="alert alert-danger py-2 mb-0" role="alert">
+      <div class="market-subscription-card__alert alert alert-danger py-2 mb-0" role="alert">
         {$_('theme.profile.subscriptions.past-due')}
       </div>
     {/if}
 
     {#if sub.periodEnd}
       {#if sub.cancelAtPeriodEnd}
-        <div class="alert alert-warning py-2 mb-0">
+        <div class="market-subscription-card__ends-on alert alert-warning py-2 mb-0">
           <i class="fa-solid fa-hourglass-end me-1" aria-hidden="true"></i>{$_(
             'theme.profile.subscriptions.ends-on',
             { values: { date: endDate } },
@@ -45,7 +47,9 @@
     {#if sub.canCancel || sub.canKeep || sub.canManage || sub.renewalHref}
       <div class="d-flex flex-wrap gap-2">
         {#if sub.renewalHref}
-          <a class="btn btn-primary btn-sm" href="{base}{sub.renewalHref}">
+          <a
+            class="market-subscription-card__action btn btn-primary btn-sm"
+            href="{base}{sub.renewalHref}">
             <i class="fa-solid fa-receipt me-1" aria-hidden="true"></i>{$_(
               'theme.profile.subscriptions.renewal-order',
             )}
@@ -55,7 +59,7 @@
         {#if sub.canUpdateMethod}
           <button
             type="button"
-            class="btn btn-outline-primary btn-sm"
+            class="market-subscription-card__update-method btn btn-outline-primary btn-sm"
             disabled={busy}
             onclick={() => portal('UPDATE_PAYMENT_METHOD')}>
             {$_('theme.profile.subscriptions.update-method')}
@@ -65,7 +69,7 @@
         {#if sub.canManage}
           <button
             type="button"
-            class="btn btn-outline-secondary btn-sm"
+            class="market-subscription-card__manage btn btn-outline-secondary btn-sm"
             disabled={busy}
             onclick={() => portal('MANAGE')}>
             <i class="fa-solid fa-arrow-up-right-from-square me-1" aria-hidden="true"></i>{$_(
@@ -77,7 +81,7 @@
         {#if sub.canKeep}
           <button
             type="button"
-            class="btn btn-outline-primary btn-sm"
+            class="market-subscription-card__keep btn btn-outline-primary btn-sm"
             disabled={busy}
             onclick={resume}>
             {$_('theme.profile.subscriptions.keep')}
@@ -87,7 +91,7 @@
         {#if sub.canCancel}
           <button
             type="button"
-            class="btn btn-outline-danger btn-sm"
+            class="market-subscription-card__cancel btn btn-outline-danger btn-sm"
             disabled={busy}
             onclick={() => confirmCancel?.show()}>
             {$_('theme.profile.subscriptions.cancel')}
@@ -114,14 +118,17 @@
 {/if}
 
 <script>
+  import { plugin } from '@panomc/sdk/controllers';
   import { base } from '@panomc/sdk/svelte';
-  import { showToast } from '@panomc/sdk/toasts';
-  import { _ } from '../../../i18n.js';
   import { CANCEL_BODY, actionOutcome, actionPath } from '../../lib/subscriptionModel.js';
-  import { call } from '../../utils/api.js';
-  import { formatDate, formatMoney, formatPeriod } from '../../utils/format.js';
   import ConfirmModal from '../common/ConfirmModal.svelte';
   import ErrorAlert from '../common/ErrorAlert.svelte';
+  import { badgeClass } from '../../lib/classes.js';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { call } = market.require('api').actions;
+  const { formatDate, formatMoney, formatPeriod } = market.require('format').actions;
 
   /**
    * One row of me/subscriptions (14 §12.4). `subscription` = a subscriptionView() row; `onreplace(row)` gets the
@@ -137,7 +144,7 @@
   let busy = $state(false);
   let errorKey = $state('');
 
-  const notify = (key) => showToast(`plugins.pano-plugin-market.${key}`);
+  const notify = (key) => market.toast(key);
 
   /** Applies an action answer. */
   function apply(res) {

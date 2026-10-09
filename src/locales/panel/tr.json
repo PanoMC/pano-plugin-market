@@ -2600,6 +2600,8 @@
     },
     "webhooks": {
       "count": "{count} Webhook",
+      "managed-in-platform": "Webhook'lar artık platform ayarlarından yönetiliyor. Mağazanın gönderdiği her şey orada Market kaynağı altında listelenir.",
+      "open-platform": "Webhook'ları Aç",
       "create": "Webhook Oluştur",
       "send-test": "Test Gönder",
       "deliveries": "Gönderimler",

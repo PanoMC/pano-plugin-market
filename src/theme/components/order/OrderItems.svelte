@@ -1,17 +1,17 @@
-<ul class="list-group">
+<ul class="market-order-items market-order-items__list list-group">
   {#each items as item, index (item.id ?? index)}
-    <li class="list-group-item">
+    <li class="market-order-items__item list-group-item">
       <div class="d-flex gap-3 align-items-start">
         <div class="flex-shrink-0 bg-body-tertiary rounded overflow-hidden">
           {#if item.imageFileName}
             <img
-              src="{base}/api/market/products/image/{encodeURIComponent(
+              src="{base}/api/plugins/pano-plugin-market/products/image/{encodeURIComponent(
                 item.imageFileName,
               )}?thumbnail=true"
               width="48"
               height="48"
               alt=""
-              class="object-fit-cover d-block" />
+              class="market-order-items__image object-fit-cover d-block" />
           {:else}
             <span class="d-flex align-items-center justify-content-center ratio ratio-1x1">
               <i class="fa-solid fa-box text-body-secondary" aria-hidden="true"></i>
@@ -43,7 +43,13 @@
           {/if}
 
           {#if deliveryBadge(item.delivery)}
-            <span class={['badge', 'mt-1', deliveryBadge(item.delivery).cls]}>
+            <span
+              class={[
+                'market-order-items__badge',
+                'badge',
+                'mt-1',
+                badgeClass(deliveryBadge(item.delivery).cls),
+              ]}>
               {$_(deliveryBadge(item.delivery).labelKey)}
             </span>
           {/if}
@@ -61,9 +67,13 @@
 
 <script>
   import { base } from '@panomc/sdk/svelte';
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { deliveryBadge, fieldPairs } from '../../lib/orderState.js';
-  import { formatDateTime, formatMoney } from '../../utils/format.js';
+  import { badgeClass } from '../../lib/classes.js';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { formatDateTime, formatMoney } = market.require('format').actions;
 
   /** The items of an OrderView (14 §11.4). A limited view carries names, quantities and delivery only. */
   let { items = [], currency = '', removeCents = false } = $props();

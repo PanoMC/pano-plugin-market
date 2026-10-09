@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import com.panomc.plugins.market.spi.shipping.ShipmentStatus as Spi
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * The inbound shipping webhook (MK-134; 03 section 6, 10 section 10.1, 10 section 16 tests 65 and 66) on a real MariaDB: the install token (constant-time,
@@ -95,7 +96,7 @@ class ShippingWebhookIT : ShippingTrackingITBase() {
     private fun call(
         body: String, provider: String = carrier.id, token: String = TOKEN, channel: String = "default", headers: Map<String, List<String>> = mapOf("content-type" to listOf("application/json"))
     ) = InboundCall(
-        InboundKind.WEBHOOK, provider, channel, null, null, null, "POST", "/api/market/shipping/$provider/webhook/$token" + if (channel == "default") "" else "/$channel",
+        InboundKind.WEBHOOK, provider, channel, null, null, null, "POST", "${MarketPaths.SITE_ROOT}/shipping/$provider/webhook/$token" + if (channel == "default") "" else "/$channel",
         null, emptyMap(), headers, headers["content-type"]?.firstOrNull(), body.toByteArray(), null, "203.0.113.9", w.clock.now()
     )
 
@@ -178,7 +179,7 @@ class ShippingWebhookIT : ShippingTrackingITBase() {
         }
 
         assertEquals(200, post(body()).status)
-        assertEquals("https://shop.example/api/market/shipping/tracker/webhook/$TOKEN|https://shop.example/api/market/shipping/tracker/webhook/$TOKEN/events", seen!!.first)
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/shipping/tracker/webhook/$TOKEN|https://shop.example${MarketPaths.SITE_ROOT}/shipping/tracker/webhook/$TOKEN/events", seen!!.first)
         assertEquals(mine.id, seen!!.second)
         assertNull(seen!!.third, "another provider's shipment is not visible")
 
@@ -777,8 +778,8 @@ class ShippingWebhookIT : ShippingTrackingITBase() {
 
         val hooks = webhooks.rows()
 
-        assertEquals(1, hooks.count { it.event == "shipment.delivered" }, "delivered emitted once")
-        assertEquals(1, hooks.count { it.event == "shipment.shipped" }, "shipped emitted once")
+        assertEquals(1, hooks.count { it.event == "market.shipment.delivered" }, "delivered emitted once")
+        assertEquals(1, hooks.count { it.event == "market.shipment.shipped" }, "shipped emitted once")
     }
 
     @Test

@@ -942,11 +942,11 @@ class CreatorServiceIT : MarketDaoITBase() {
         assertEquals(0, none.getInteger("uses"), "the range bounds the earnings counted")
         assertEquals(4.0, none.getDouble("available"), "the balance is not a period figure")
 
-        val earnings = creators.earningsOf(streamer.code.id, null, com.panomc.plugins.market.util.Paging.Window(1, 10))
-        val first = earnings.getJsonArray("earnings").getJsonObject(0)
+        val earnings = creators.earningsOf(streamer.code.id, null, com.panomc.platform.model.PageRequest(1, 10))
+        val first = earnings.getJsonArray("items").getJsonObject(0)
 
-        assertEquals(2, earnings.getInteger("earningCount"))
-        assertEquals(1, earnings.getInteger("totalPage"))
+        assertEquals(2, earnings.getJsonObject("page").getInteger("totalItems"))
+        assertEquals(1, earnings.getJsonObject("page").getInteger("totalPages"))
         assertEquals(b.order.id, first.getLong("orderId"), "newest first")
         assertEquals(200.0, first.getDouble("baseAmount"))
         assertEquals(10.0, first.getDouble("commissionPercent"))
@@ -955,13 +955,13 @@ class CreatorServiceIT : MarketDaoITBase() {
         assertEquals("PENDING", first.getString("state"))
         assertNotNull(first.getLong("availableAt"))
         assertNotNull(first.getLong("createdAt"))
-        assertEquals(1, creators.earningsOf(streamer.code.id, CreatorEarningState.PENDING, com.panomc.plugins.market.util.Paging.Window(1, 10)).getInteger("earningCount"))
-        assertEquals(a.order.id, creators.earningsOf(streamer.code.id, null, com.panomc.plugins.market.util.Paging.Window(2, 1)).getJsonArray("earnings").getJsonObject(0).getLong("orderId"))
+        assertEquals(1, creators.earningsOf(streamer.code.id, CreatorEarningState.PENDING, com.panomc.platform.model.PageRequest(1, 10)).getJsonObject("page").getInteger("totalItems"))
+        assertEquals(a.order.id, creators.earningsOf(streamer.code.id, null, com.panomc.platform.model.PageRequest(2, 1)).getJsonArray("items").getJsonObject(0).getLong("orderId"))
 
-        val outOfRange = runCatching { creators.earningsOf(streamer.code.id, null, com.panomc.plugins.market.util.Paging.Window(3, 10)) }.exceptionOrNull()
+        val outOfRange = runCatching { creators.earningsOf(streamer.code.id, null, com.panomc.platform.model.PageRequest(3, 10)) }.exceptionOrNull()
 
-        assertTrue(outOfRange is CreatorPageOutOfRange)
-        expect("NOT_FOUND", 404) { creators.earningsOf(987_654, null, com.panomc.plugins.market.util.Paging.Window(1, 10)) }
+        assertTrue(outOfRange is com.panomc.platform.error.PageNotFound)
+        expect("NOT_FOUND", 404) { creators.earningsOf(987_654, null, com.panomc.platform.model.PageRequest(1, 10)) }
 
         val payouts = creators.payoutsOf(streamer.code.id).getJsonArray("payouts")
 
@@ -985,7 +985,7 @@ class CreatorServiceIT : MarketDaoITBase() {
 
         payout(streamer, 600)
 
-        val mine = creators.mine(streamer.user.id, com.panomc.plugins.market.util.Paging.Window(1, 10))
+        val mine = creators.mine(streamer.user.id, com.panomc.platform.model.PageRequest(1, 10))
         val code = mine.getJsonArray("codes").getJsonObject(0)
 
         assertEquals("STREAM", code.getString("code"))
@@ -1003,21 +1003,21 @@ class CreatorServiceIT : MarketDaoITBase() {
         assertEquals(4.0, totals.getDouble("available"))
         assertEquals("EUR", totals.getString("currency"))
 
-        val earnings = mine.getJsonArray("earnings")
+        val earnings = mine.getJsonArray("items")
 
-        assertEquals(2, mine.getInteger("earningCount"))
+        assertEquals(2, mine.getJsonObject("page").getInteger("totalItems"))
         assertEquals("#${later.order.id}", earnings.getJsonObject(0).getString("orderNumber"))
         assertEquals("#${paid.order.id}", earnings.getJsonObject(1).getString("orderNumber"))
         assertEquals(setOf("orderNumber", "amount", "state", "availableAt", "createdAt"), earnings.getJsonObject(0).fieldNames(), "no buyer data")
         assertEquals(1, mine.getJsonArray("payouts").size())
         assertEquals(setOf("amount", "method", "state", "paidAt", "createdAt"), mine.getJsonArray("payouts").getJsonObject(0).fieldNames())
 
-        expect("NOT_FOUND", 404) { creators.mine(w.fixtures.user("NoCode").id, com.panomc.plugins.market.util.Paging.Window(1, 10)) }
-        assertTrue(runCatching { creators.mine(streamer.user.id, com.panomc.plugins.market.util.Paging.Window(2, 10)) }.exceptionOrNull() is CreatorPageOutOfRange)
+        expect("NOT_FOUND", 404) { creators.mine(w.fixtures.user("NoCode").id, com.panomc.platform.model.PageRequest(1, 10)) }
+        assertTrue(runCatching { creators.mine(streamer.user.id, com.panomc.platform.model.PageRequest(2, 10)) }.exceptionOrNull() is com.panomc.platform.error.PageNotFound)
 
         // a soft-deleted code is not the creator's any more
         MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_creator_code` SET `deletedAt` = ? WHERE `id` = ?", w.clock.now(), streamer.code.id)
-        expect("NOT_FOUND", 404) { creators.mine(streamer.user.id, com.panomc.plugins.market.util.Paging.Window(1, 10)) }
+        expect("NOT_FOUND", 404) { creators.mine(streamer.user.id, com.panomc.platform.model.PageRequest(1, 10)) }
     }
 
     // ================================================================================== wiring

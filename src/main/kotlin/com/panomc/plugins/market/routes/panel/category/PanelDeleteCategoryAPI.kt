@@ -15,13 +15,13 @@ import com.panomc.plugins.market.routes.base.parseId
 import com.panomc.plugins.market.routes.panel.product.deleteFile
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 
 /** `DELETE /api/panel/market/categories/:id` (`P:CAT`): children move up, products are detached; `409 CATEGORY_IN_USE` for a tiered category with ACTIVE entitlements. */
 @Endpoint
 class PanelDeleteCategoryAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/categories/:id", RouteType.DELETE))
+    override val paths = listOf(Path("/categories/:id", RouteType.DELETE))
 
     override val nodes = setOf(MarketNode.CATALOG)
 

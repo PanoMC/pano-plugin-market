@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
+import com.panomc.plugins.market.support.ErrorBodies
 
 /** The body of `PUT /settings/currencies`, the rate arithmetic and the response shape (04 section 8). */
 class CurrencyRequestsTest {
@@ -18,7 +19,7 @@ class CurrencyRequestsTest {
     private fun errors(json: String?): Map<String, Any?> {
         val e = assertThrows(InvalidSettings::class.java) { parseCurrencyRatesBody(json?.let { JsonObject(it) }) }
 
-        return JsonObject(e.encode(emptyMap())).getJsonObject("fieldErrors").map
+        return ErrorBodies.details(e).getJsonObject("fieldErrors").map
     }
 
     @Test

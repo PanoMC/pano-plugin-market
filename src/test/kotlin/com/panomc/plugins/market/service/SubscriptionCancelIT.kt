@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.platform.model.Paging
+import com.panomc.platform.model.PageRequest
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.core.subscription.CancelActor
 import com.panomc.plugins.market.db.model.DeliveryPhase
@@ -40,7 +42,6 @@ import com.panomc.plugins.market.spi.payment.SubscriptionPortalResult
 import com.panomc.plugins.market.spi.payment.SubscriptionQueryResult
 import com.panomc.plugins.market.support.FakePaymentProvider
 import com.panomc.plugins.market.util.OrderStatus
-import com.panomc.plugins.market.util.Paging
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -1114,20 +1115,19 @@ internal class SubscriptionCancelIT : RenewalITBase() {
 
         val pending = buy(subProduct(), a.caller)
 
-        val all = views.panelList(SubscriptionFilter(), Paging.Window(1, 10), pool)
+        val all = views.panelList(SubscriptionFilter(), PageRequest(1, 10), pool)
 
         assertEquals(2, all.count, "PENDING rows only with status=PENDING")
-        assertEquals(1L, all.totalPage)
         assertEquals(setOf(a.sub.id, b.sub.id), all.rows.map { it.getLong("id") }.toSet())
 
-        assertEquals(listOf(b.sub.id), views.panelList(SubscriptionFilter(statuses = parseStatuses("CANCELLED,EXPIRED")), Paging.Window(1, 10), pool).rows.map { it.getLong("id") })
-        assertEquals(listOf(pending.subscriptionId!!), views.panelList(SubscriptionFilter(statuses = parseStatuses("PENDING")), Paging.Window(1, 10), pool).rows.map { it.getLong("id") })
-        assertEquals(listOf(a.sub.id), views.panelList(SubscriptionFilter(search = "ann"), Paging.Window(1, 10), pool).rows.map { it.getLong("id") })
-        assertEquals(2, views.panelList(SubscriptionFilter(mode = SubscriptionMode.MERCHANT, providerId = "fake"), Paging.Window(1, 10), pool).count)
-        assertEquals(0, views.panelList(SubscriptionFilter(mode = SubscriptionMode.GATEWAY), Paging.Window(1, 10), pool).count)
-        assertEquals(1, views.panelList(SubscriptionFilter(), Paging.Window(2, 1), pool).rows.size)
-        assertEquals(2L, views.panelList(SubscriptionFilter(), Paging.Window(1, 1), pool).totalPage)
-        assertEquals(0, views.panelList(SubscriptionFilter(search = "100%"), Paging.Window(1, 10), pool).count, "LIKE wildcards are escaped")
+        assertEquals(listOf(b.sub.id), views.panelList(SubscriptionFilter(statuses = parseStatuses("CANCELLED,EXPIRED")), PageRequest(1, 10), pool).rows.map { it.getLong("id") })
+        assertEquals(listOf(pending.subscriptionId!!), views.panelList(SubscriptionFilter(statuses = parseStatuses("PENDING")), PageRequest(1, 10), pool).rows.map { it.getLong("id") })
+        assertEquals(listOf(a.sub.id), views.panelList(SubscriptionFilter(search = "ann"), PageRequest(1, 10), pool).rows.map { it.getLong("id") })
+        assertEquals(2, views.panelList(SubscriptionFilter(mode = SubscriptionMode.MERCHANT, providerId = "fake"), PageRequest(1, 10), pool).count)
+        assertEquals(0, views.panelList(SubscriptionFilter(mode = SubscriptionMode.GATEWAY), PageRequest(1, 10), pool).count)
+        assertEquals(1, views.panelList(SubscriptionFilter(), PageRequest(2, 1), pool).rows.size)
+        assertEquals(2L, Paging.totalPages(views.panelList(SubscriptionFilter(), PageRequest(1, 1), pool).count, 1))
+        assertEquals(0, views.panelList(SubscriptionFilter(search = "100%"), PageRequest(1, 10), pool).count, "LIKE wildcards are escaped")
 
         val detail = views.panelDetail(a.sub.id, pool)!!
         val subscription = detail.getJsonObject("subscription")
@@ -1180,11 +1180,11 @@ internal class SubscriptionCancelIT : RenewalITBase() {
         assertTrue(wiring.contains("actions = actions"), "step E repeats a cancel that crashed")
         assertTrue(scheduler.contains("routes.panel.subscription.subscriptionJob(plugin)"), "the scheduler and the admin retry share one job")
 
-        for (path in listOf("/api/panel/market/subscriptions\"", "/api/panel/market/subscriptions/:id\"", "/api/panel/market/subscriptions/:id/cancel", "/api/panel/market/subscriptions/:id/retry")) {
+        for (path in listOf("/subscriptions\"", "/subscriptions/:id\"", "/subscriptions/:id/cancel", "/subscriptions/:id/retry")) {
             assertTrue(panel.contains(path), path)
         }
 
-        for (path in listOf("/api/market/me/subscriptions\"", "/me/subscriptions/:id/cancel", "/me/subscriptions/:id/resume", "/me/subscriptions/:id/portal")) {
+        for (path in listOf("/me/subscriptions\"", "/me/subscriptions/:id/cancel", "/me/subscriptions/:id/resume", "/me/subscriptions/:id/portal")) {
             assertTrue(user.contains(path), path)
         }
 

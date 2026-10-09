@@ -1,5 +1,8 @@
 <script module>
-  import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
+  import { errorCode, failureOf } from '../utils/api.js';
+  import { emptyList } from '../utils/page.js';
 
   /**
    * @type {import("@sveltejs/kit").PageLoad}
@@ -18,9 +21,9 @@
     const status = searchParams.get('status');
 
     const fetchPage = (p) =>
-      ApiUtil.get({
+      api.panel.get({
         path:
-          '/api/panel/market/comparisons' +
+          '/comparisons' +
           buildQueryParams({
             page: p === 1 ? null : p,
             search,
@@ -29,29 +32,17 @@
         request: event,
       });
 
-    let effectivePage = pageNum;
     let body = await fetchPage(pageNum);
 
     // A stale ?page= (bookmark / back-button after deletes) points past the last
     // page; fall back to page 1 with the same filters instead of faking an empty store.
-    if (body?.error === 'PAGE_NOT_FOUND' && pageNum > 1) {
-      effectivePage = 1;
+    if (failureOf(body) === 'PAGE_NOT_FOUND' && pageNum > 1) {
       body = await fetchPage(1);
     }
 
-    if (!body || body.error) {
-      return {
-        data: {
-          comparisons: [],
-          comparisonCount: 0,
-          totalPage: 1,
-          page: 1,
-          error: body?.error || 'NETWORK_ERROR',
-        },
-      };
-    }
+    const failure = failureOf(body);
+    if (failure) return { data: emptyList(failure) };
 
-    body.page = effectivePage;
     return { data: body };
   }
 </script>
@@ -65,6 +56,7 @@
 
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import { currentLocale } from '../utils/locale.js';
+  import { pageOf } from '../utils/page.js';
 
   const navUser = $derived($page.data?.user);
 
@@ -79,10 +71,11 @@
 
   // Data comes straight from load(); the panel host remounts this view
   // ({#key data}) whenever load() re-runs, so we render load()'s result directly.
-  let comparisons = $derived(data.comparisons || []);
-  let comparisonCount = $derived(data.comparisonCount || 0);
-  let totalPage = $derived(data.totalPage || 1);
-  let currentPage = $derived(data.page || 1);
+  const list = $derived(pageOf(data));
+  let comparisons = $derived(list.items);
+  let comparisonCount = $derived(list.totalItems);
+  let totalPage = $derived(list.totalPages);
+  let currentPage = $derived(list.number);
   let loadError = $derived(data.error || null);
 
   // All list state (page / search / status) lives in the URL query params.
@@ -147,7 +140,7 @@
     if (buttonsLoading) return;
     buttonsLoading = true;
     try {
-      const res = await ApiUtil.post({ path: `/api/panel/market/comparisons/${id}/clone` });
+      const res = await api.panel.post({ path: `/comparisons/${id}/clone` });
       if (res?.error) {
         showErrorToast($_('pages.comparisons.toast-clone-error'));
       } else {
@@ -178,11 +171,11 @@
     if (buttonsLoading) return;
     buttonsLoading = true;
     try {
-      const res = await ApiUtil.delete({ path: `/api/panel/market/comparisons/${comp.id}` });
+      const res = await api.panel.delete({ path: `/comparisons/${comp.id}` });
       if (res?.error) {
         showErrorToast($_('pages.comparisons.toast-delete-error'));
         // Stale row (already deleted elsewhere): refresh the list (13 section 23).
-        if (res.error === 'NOT_FOUND') await navigate();
+        if (errorCode(res) === 'NOT_FOUND') await navigate();
       } else {
         showSuccessToast($_('pages.comparisons.toast-delete-success'));
         // The deleted row may have been the last on this page; step back a page.

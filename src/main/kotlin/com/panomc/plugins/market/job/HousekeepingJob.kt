@@ -39,7 +39,7 @@ import java.nio.file.Path
  * |---|---|---|
  * | [Task.RECONCILE] | 6 h, first 60 s after the first tick | `CreditReconciler.run()` (the ledger self-check of 07 section 16.2) |
  * | [Task.THROTTLE] | 1 h | `ThrottleService.purge()` (11 section 12.1) |
- * | [Task.RETENTION] | 24 h | 11 section 17: network PII of orders and payments after [PII_NETWORK_RETENTION_DAYS], payment event bodies after [EVENT_BODY_DAYS], `REJECTED` events after [REJECTED_EVENT_DAYS], block rows [BLOCK_PURGE_DAYS] after their expiry; also the webhook deliveries (`SUCCEEDED` after [WEBHOOK_SUCCEEDED_DAYS], `DEAD` after [WEBHOOK_DEAD_DAYS], 08 section 15) and the expired provider state keys (01 section 13) |
+ * | [Task.RETENTION] | 24 h | 11 section 17: network PII of orders and payments after [PII_NETWORK_RETENTION_DAYS], payment event bodies after [EVENT_BODY_DAYS], `REJECTED` events after [REJECTED_EVENT_DAYS], block rows [BLOCK_PURGE_DAYS] after their expiry; also the expired provider state keys (01 section 13). The webhook delivery log is core's and purged there (30 days) |
  * | [Task.ERASURE] | 5 min | the deferred half of 11 section 16: orders of an erased buyer (`PII_ERASED` event), the `erasure-pending` markers run again, ended subscriptions lose their gateway data |
  * | [Task.GUEST_ADOPTION] | 5 min | `GuestAdoption.run()` (01 section 5.5) |
  *
@@ -145,8 +145,6 @@ class HousekeepingJob(
         )
         changed += batched("DELETE FROM ${t("market_payment_event")} WHERE `status` = 'REJECTED' AND `createdAt` < ?", now - REJECTED_EVENT_DAYS * DAY_MS)
         changed += batched("DELETE FROM ${t("market_block")} WHERE `expiresAt` IS NOT NULL AND `expiresAt` < ?", now - BLOCK_PURGE_DAYS * DAY_MS)
-        changed += batched("DELETE FROM ${t("market_webhook_delivery")} WHERE `status` = 'SUCCEEDED' AND `updatedAt` < ?", now - WEBHOOK_SUCCEEDED_DAYS * DAY_MS)
-        changed += batched("DELETE FROM ${t("market_webhook_delivery")} WHERE `status` = 'DEAD' AND `updatedAt` < ?", now - WEBHOOK_DEAD_DAYS * DAY_MS)
         changed += batched("DELETE FROM ${t("market_provider_state")} WHERE `expiresAt` IS NOT NULL AND `expiresAt` <= ?", now)
 
         return changed
@@ -191,9 +189,12 @@ class HousekeepingJob(
             if (shipments.size < BATCH) break
         }
 
+        // core's delivery log (rows of source `market`): an event row names its order in `subjectRef` (`order:<id>`), the direct row of a product action its delivery in `ownerRef`
         changed += batched(
-            "UPDATE ${t("market_webhook_delivery")} w SET w.`body` = '{}' WHERE w.`status` IN ('SUCCEEDED', 'DEAD') AND w.`body` <> '{}' AND w.`orderId` IS NOT NULL AND " +
-                "EXISTS (SELECT 1 FROM ${t("market_order_event")} e WHERE e.`orderId` = w.`orderId` AND e.`type` = 'PII_ERASED')"
+            "UPDATE ${t("webhook_delivery")} w SET w.`body` = '{}' WHERE w.`source` = 'market' AND w.`status` IN ('SUCCEEDED', 'DEAD') AND w.`body` <> '{}' AND (" +
+                "(w.`subjectRef` LIKE 'order:%' AND EXISTS (SELECT 1 FROM ${t("market_order_event")} e WHERE e.`orderId` = CAST(SUBSTRING(w.`subjectRef`, 7) AS UNSIGNED) AND e.`type` = 'PII_ERASED')) OR " +
+                "(w.`ownerRef` LIKE 'delivery:%' AND EXISTS (SELECT 1 FROM ${t("market_delivery")} d JOIN ${t("market_order_event")} e ON e.`orderId` = d.`orderId` " +
+                "WHERE d.`id` = CAST(SUBSTRING(w.`ownerRef`, 10) AS UNSIGNED) AND e.`type` = 'PII_ERASED')))"
         )
         changed += batched(
             "UPDATE ${t("market_payment_event")} p SET p.`body` = NULL, p.`headers` = NULL WHERE p.`status` NOT IN ('RECEIVED', 'DEFERRED', 'FAILED') AND (p.`body` IS NOT NULL OR p.`headers` IS NOT NULL) AND " +
@@ -233,9 +234,6 @@ class HousekeepingJob(
         /** `market_block` rows are deleted this many days after `expiresAt`. */
         const val BLOCK_PURGE_DAYS = 30L
 
-        /** Webhook deliveries that were delivered are kept this many days, those that died this many (the panel list of deliveries). */
-        const val WEBHOOK_SUCCEEDED_DAYS = 30L
-        const val WEBHOOK_DEAD_DAYS = 90L
 
         /** The credit self-check runs this long after the first tick (07 section 16.2: 60 s after the plugin start). */
         const val RECONCILE_DELAY_MS = 60_000L

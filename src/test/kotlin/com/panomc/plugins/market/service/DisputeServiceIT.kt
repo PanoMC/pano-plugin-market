@@ -165,7 +165,7 @@ class DisputeServiceIT : MarketDaoITBase() {
     }
 
     private suspend fun hooks(event: String) =
-        MarketTestDb.sql(pool, "SELECT `event`, `body` FROM `${MarketTestDb.TABLE_PREFIX}market_webhook_delivery` WHERE `event` = ? ORDER BY `id`", event)
+        MarketTestDb.sql(pool, "SELECT `event`, `body` FROM `${MarketTestDb.TABLE_PREFIX}webhook_delivery` WHERE `event` = ? ORDER BY `id`", event)
 
     private suspend fun sold(productId: Long): Int = w.products.getById(productId, pool)!!.soldCount
 
@@ -279,7 +279,7 @@ class DisputeServiceIT : MarketDaoITBase() {
         assertFalse(ban.requiresOnline, "a ban never waits for the player")
 
         // the webhook and the timeline
-        val hook = hooks("order.chargeback").single()
+        val hook = hooks("market.order.chargeback").single()
         val sent = JsonObject(hook.getString("body")).getJsonObject("data").getJsonObject("dispute")
 
         assertEquals(row.id, sent.getLong("id"))
@@ -294,7 +294,7 @@ class DisputeServiceIT : MarketDaoITBase() {
         dispute(paid, DisputeState.OPENED, "dp_1", amount = 4_000)
 
         assertEquals(1, disputeRows(paid.order.id).size)
-        assertEquals(1, hooks("order.chargeback").size)
+        assertEquals(1, hooks("market.order.chargeback").size)
         assertEquals(1, revokeRows(paid.order.id).size)
 
         // WON: the status is back, the blocks go, the webhook says so, nothing is granted again
@@ -310,7 +310,7 @@ class DisputeServiceIT : MarketDaoITBase() {
         assertNotNull(disputeRows(paid.order.id).single().resolvedAt)
         assertTrue(blocks().isEmpty())
         assertTrue(timeline(paid.order.id).any { it.type == OrderEventType.BLOCK_REMOVED })
-        assertEquals(1, hooks("order.chargeback.won").size)
+        assertEquals(1, hooks("market.order.chargeback.won").size)
         assertEquals(EntitlementStatus.REVOKED, w.entitlements.getByOrderItemId(itemId, pool).single().status, "nothing is re-granted automatically")
         assertEquals(grantRows, r.d.rows(paid.order.id).count { it.phase == DeliveryPhase.GRANT && it.sourceType == DeliverySourceType.ORDER_ITEM })
         assertEquals(1, sold(paid.products[0].id), "the units are sold again")
@@ -529,7 +529,7 @@ class DisputeServiceIT : MarketDaoITBase() {
         assertEquals(EntitlementStatus.ACTIVE, w.entitlements.getByOrderItemId(paid.items[0].id, pool).single().status)
         assertTrue(timeline(paid.order.id).any { it.type == OrderEventType.DISPUTE_INQUIRY })
         assertTrue(alerts.any { it.first == paid.order.id && it.second == "DISPUTE_INQUIRY" })
-        assertTrue(hooks("order.chargeback").isEmpty())
+        assertTrue(hooks("market.order.chargeback").isEmpty())
 
         // the inquiry becomes a dispute: the same row, one O11
         dispute(paid, DisputeState.OPENED, "dp_7")
@@ -539,7 +539,7 @@ class DisputeServiceIT : MarketDaoITBase() {
 
         assertEquals(OrderStatus.CHARGEBACK, order.status)
         assertEquals(1, disputeRows(paid.order.id).size)
-        assertEquals(1, hooks("order.chargeback").size)
+        assertEquals(1, hooks("market.order.chargeback").size)
         assertEquals(1, revokeRows(paid.order.id).size)
         assertEquals(2, blocks().size, "the recipient and the payer's account (the order has no e-mail)")
     }
@@ -562,8 +562,8 @@ class DisputeServiceIT : MarketDaoITBase() {
         assertEquals(1, disputeRows(paid.order.id).size)
         assertEquals(DisputeRecordStatus.WON, disputeRows(paid.order.id).single().status)
         assertEquals(OrderStatus.COMPLETED, r.order(paid.order.id).status)
-        assertEquals(1, hooks("order.chargeback").size)
-        assertEquals(1, hooks("order.chargeback.won").size)
+        assertEquals(1, hooks("market.order.chargeback").size)
+        assertEquals(1, hooks("market.order.chargeback.won").size)
         assertEquals(1, timeline(paid.order.id).count { it.type == OrderEventType.STATUS_CHANGED && it.toStatus == "CHARGEBACK" })
         assertEquals(1, timeline(paid.order.id).count { it.type == OrderEventType.STATUS_CHANGED && it.fromStatus == "CHARGEBACK" })
     }
@@ -668,7 +668,7 @@ class DisputeServiceIT : MarketDaoITBase() {
         dispute(paid, DisputeState.OPENED, "dp_b")
 
         assertEquals(2, disputeRows(paid.order.id).size)
-        assertEquals(1, hooks("order.chargeback").size)
+        assertEquals(1, hooks("market.order.chargeback").size)
         assertEquals(1, revokeRows(paid.order.id).size)
 
         // WON of the first while the second is still open: the order stays charged back
@@ -679,7 +679,7 @@ class DisputeServiceIT : MarketDaoITBase() {
         dispute(paid, DisputeState.WON, "dp_b")
 
         assertEquals(OrderStatus.COMPLETED, r.order(paid.order.id).status)
-        assertEquals(1, hooks("order.chargeback.won").size)
+        assertEquals(1, hooks("market.order.chargeback.won").size)
     }
 
     @Test
@@ -722,7 +722,7 @@ class DisputeServiceIT : MarketDaoITBase() {
             assertEquals(1, timeline(paid.order.id).count { it.type == OrderEventType.STATUS_CHANGED && it.toStatus == "CHARGEBACK" }, "round $round")
         }
 
-        assertEquals(Race.rounds, hooks("order.chargeback").size, "one webhook per chargeback")
+        assertEquals(Race.rounds, hooks("market.order.chargeback").size, "one webhook per chargeback")
     }
 
     // ===== V-10: upgrades ============================================================================================================

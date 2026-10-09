@@ -1,5 +1,6 @@
 <script module>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
+  import { failureOf } from '../utils/api.js';
 
   /**
    * @type {import("@sveltejs/kit").PageLoad}
@@ -15,19 +16,19 @@
 
     const id = searchParams.get('id');
 
-    const productsRes = await ApiUtil.get({
-      path: '/api/panel/market/products/simple',
+    const productsRes = await api.panel.get({
+      path: '/products/simple',
       request: event,
     });
-    const products = productsRes && !productsRes.error ? productsRes.products || [] : [];
+    const products = failureOf(productsRes) === null ? productsRes.items || [] : [];
 
     let comparison = null;
     if (id) {
-      const res = await ApiUtil.get({
-        path: `/api/panel/market/comparisons/${id}`,
+      const res = await api.panel.get({
+        path: `/comparisons/${id}`,
         request: event,
       });
-      if (res && !res.error) {
+      if (failureOf(res) === null) {
         comparison = res;
       }
     }
@@ -137,9 +138,9 @@
 
       let result;
       if (comparisonDbId) {
-        result = await ApiUtil.put({ path: `/api/panel/market/comparisons/${comparisonDbId}`, body });
+        result = await api.panel.put({ path: `/comparisons/${comparisonDbId}`, body });
       } else {
-        result = await ApiUtil.post({ path: '/api/panel/market/comparisons', body });
+        result = await api.panel.post({ path: '/comparisons', body });
       }
 
       if (result?.error) {

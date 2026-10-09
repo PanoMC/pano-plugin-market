@@ -13,7 +13,7 @@ import com.panomc.plugins.market.db.model.MailKind
 import com.panomc.plugins.market.db.model.OrderEventType
 import com.panomc.plugins.market.db.model.RefundOrigin
 import com.panomc.plugins.market.db.model.RefundStatus
-import com.panomc.plugins.market.db.model.WebhookDeliveryStatus
+import com.panomc.platform.db.model.WebhookDeliveryStatus
 import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.spi.common.ProviderErrorCode
 import com.panomc.plugins.market.spi.common.ProviderException
@@ -848,10 +848,10 @@ class RefundServiceIT : MarketDaoITBase() {
 
         val done = service.request(paid.order.id, RefundInput(amount = 400), r.key(), null)
 
-        val hooks = w.webhookDeliveries.let { MarketTestDb.sql(pool, "SELECT `event`, `status`, `body` FROM `${MarketTestDb.TABLE_PREFIX}market_webhook_delivery`") }
+        val hooks = w.webhookDeliveries.let { MarketTestDb.sql(pool, "SELECT `event`, `status`, `body` FROM `${MarketTestDb.TABLE_PREFIX}webhook_delivery`") }
 
         assertEquals(1, hooks.size)
-        assertEquals("order.refunded", hooks[0].getString("event"))
+        assertEquals("market.order.refunded", hooks[0].getString("event"))
         assertEquals(WebhookDeliveryStatus.PENDING.name, hooks[0].getString("status"))
 
         val body = JsonObject(hooks[0].getString("body")).getJsonObject("data").getJsonObject("refund")
@@ -869,7 +869,7 @@ class RefundServiceIT : MarketDaoITBase() {
         // the same notification replayed changes neither
         r.inbound(paid, RefundState.SUCCEEDED, amount = 400, refundKey = done.refund.idempotencyKey)
 
-        assertEquals(1, MarketTestDb.sql(pool, "SELECT `id` FROM `${MarketTestDb.TABLE_PREFIX}market_webhook_delivery`").size)
+        assertEquals(1, MarketTestDb.sql(pool, "SELECT `id` FROM `${MarketTestDb.TABLE_PREFIX}webhook_delivery`").size)
         assertEquals(1, MarketTestDb.sql(pool, "SELECT `id` FROM `${MarketTestDb.TABLE_PREFIX}market_mail_outbox`").size)
     }
 

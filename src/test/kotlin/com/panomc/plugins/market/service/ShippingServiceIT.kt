@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.platform.model.PageRequest
 import com.panomc.platform.error.NotFound
 import com.panomc.platform.model.Error
 import com.panomc.plugins.market.core.shipping.TrackingSource
@@ -50,7 +51,6 @@ import com.panomc.plugins.market.support.StaticProviderLookup
 import com.panomc.plugins.market.support.TestWiring
 import com.panomc.plugins.market.support.WebhookHarness
 import com.panomc.plugins.market.util.OrderStatus
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -75,6 +75,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * Fulfilment on a real MariaDB (MK-133; 10 sections 7.2, 9 and 16 tests 41 to 60): shipments with partial shipping, manual entries and
@@ -235,7 +236,7 @@ class ShippingServiceIT : MarketDaoITBase() {
         assertEquals(code, e.getErrorCode(), "error code, body ${e.encode()}")
         assertEquals(status, e.getStatusCode(), "status of $code")
 
-        return JsonObject(e.encode())
+        return ErrorBodies.details(e)
     }
 
     private suspend fun mails(kind: String? = null): List<JsonObject> =
@@ -509,7 +510,7 @@ class ShippingServiceIT : MarketDaoITBase() {
                 val e = r.exceptionOrNull() as Error
 
                 assertEquals("INVALID_SHIPMENT", e.getErrorCode())
-                assertEquals("EXCEEDS_SHIPPABLE", JsonObject(e.encode()).getJsonObject("fieldErrors").getString("items"))
+                assertEquals("EXCEEDS_SHIPPABLE", ErrorBodies.details(e).getJsonObject("fieldErrors").getString("items"))
             }
             assertEquals(1, itemNow(item).shippedQuantity)
             assertEquals(1, count("market_shipment", "`orderId` = ?", o.id))
@@ -584,7 +585,7 @@ class ShippingServiceIT : MarketDaoITBase() {
         val hooks = webhooks.rows()
 
         assertEquals(1, hooks.size)
-        assertEquals("shipment.shipped", hooks.single().event)
+        assertEquals("market.shipment.shipped", hooks.single().event)
         assertEquals(endpoint.id, hooks.single().endpointId)
         assertFalse(hooks.single().body.contains("Strasse"), "no address in the webhook")
         assertFalse(hooks.single().body.contains("steve@example.com"), "no e-mail in the webhook")
@@ -1101,7 +1102,7 @@ class ShippingServiceIT : MarketDaoITBase() {
         cancel!!.await()
     }
 
-    private fun reasonOf(failure: Throwable?): String? = (failure as Error).let { assertEquals("SHIPMENT_NOT_CANCELLABLE", it.getErrorCode()); JsonObject(it.encode()).getString("reason") }
+    private fun reasonOf(failure: Throwable?): String? = (failure as Error).let { assertEquals("SHIPMENT_NOT_CANCELLABLE", it.getErrorCode()); ErrorBodies.details(it).getString("reason") }
 
     @Test
     fun `cancel that read a failed row which a retry claims before the order lock is IN_PROGRESS and changes nothing`(): Unit = runBlocking {
@@ -1528,7 +1529,7 @@ class ShippingServiceIT : MarketDaoITBase() {
         assertEquals(ShippingStatus.DELIVERED, orderNow(o.id).shippingStatus)
         assertNull(delivered.nextPollAt)
         assertEquals(1, mails("SHIPMENT_DELIVERED").size)
-        assertEquals(1, webhooks.rows().filter { it.event == "shipment.delivered" }.size)
+        assertEquals(1, webhooks.rows().filter { it.event == "market.shipment.delivered" }.size)
         assertEquals(endpoint.id, webhooks.rows().single().endpointId)
 
         // a replay changes nothing: no second mail, no second webhook, no second event
@@ -1752,24 +1753,24 @@ class ShippingServiceIT : MarketDaoITBase() {
 
         fun ids(p: ShippingService.ShipmentPage) = p.shipments.map { it.getLong("id") }
 
-        val all = service.listShipments(ShippingService.ShipmentFilter(), Paging.window(1, 10), pool)
+        val all = service.listShipments(ShippingService.ShipmentFilter(), PageRequest(1, 10), pool)
 
         assertEquals(3, all.count)
         assertEquals(setOf(id(s1), id(s2), id(s3)), ids(all).toSet())
         assertEquals(listOf(id(s3), id(s2), id(s1)), ids(all), "newest first")
 
-        assertEquals(listOf(id(s2)), ids(service.listShipments(ShippingService.ShipmentFilter(statuses = listOf(ShipmentStatus.DELIVERED)), Paging.window(1, 10), pool)))
-        assertEquals(2, service.listShipments(ShippingService.ShipmentFilter(statuses = listOf(ShipmentStatus.IN_TRANSIT)), Paging.window(1, 10), pool).count)
-        assertEquals(3, service.listShipments(ShippingService.ShipmentFilter(statuses = listOf(ShipmentStatus.IN_TRANSIT, ShipmentStatus.DELIVERED)), Paging.window(1, 10), pool).count)
-        assertEquals(listOf(id(s3)), ids(service.listShipments(ShippingService.ShipmentFilter(stale = true), Paging.window(1, 10), pool)))
-        assertEquals(3, service.listShipments(ShippingService.ShipmentFilter(providerId = "manual"), Paging.window(1, 10), pool).count)
-        assertEquals(0, service.listShipments(ShippingService.ShipmentFilter(providerId = carrier.id), Paging.window(1, 10), pool).count)
-        assertEquals(listOf(id(s1)), ids(service.listShipments(ShippingService.ShipmentFilter(search = "find-me"), Paging.window(1, 10), pool)))
-        assertEquals(setOf(id(s1), id(s2)), ids(service.listShipments(ShippingService.ShipmentFilter(search = orderNow(a.id).publicId), Paging.window(1, 10), pool)).toSet())
-        assertEquals(3, service.listShipments(ShippingService.ShipmentFilter(search = "Steve"), Paging.window(1, 10), pool).count)
-        assertEquals(0, service.listShipments(ShippingService.ShipmentFilter(search = "100%"), Paging.window(1, 10), pool).count, "LIKE wildcards are escaped")
+        assertEquals(listOf(id(s2)), ids(service.listShipments(ShippingService.ShipmentFilter(statuses = listOf(ShipmentStatus.DELIVERED)), PageRequest(1, 10), pool)))
+        assertEquals(2, service.listShipments(ShippingService.ShipmentFilter(statuses = listOf(ShipmentStatus.IN_TRANSIT)), PageRequest(1, 10), pool).count)
+        assertEquals(3, service.listShipments(ShippingService.ShipmentFilter(statuses = listOf(ShipmentStatus.IN_TRANSIT, ShipmentStatus.DELIVERED)), PageRequest(1, 10), pool).count)
+        assertEquals(listOf(id(s3)), ids(service.listShipments(ShippingService.ShipmentFilter(stale = true), PageRequest(1, 10), pool)))
+        assertEquals(3, service.listShipments(ShippingService.ShipmentFilter(providerId = "manual"), PageRequest(1, 10), pool).count)
+        assertEquals(0, service.listShipments(ShippingService.ShipmentFilter(providerId = carrier.id), PageRequest(1, 10), pool).count)
+        assertEquals(listOf(id(s1)), ids(service.listShipments(ShippingService.ShipmentFilter(search = "find-me"), PageRequest(1, 10), pool)))
+        assertEquals(setOf(id(s1), id(s2)), ids(service.listShipments(ShippingService.ShipmentFilter(search = orderNow(a.id).publicId), PageRequest(1, 10), pool)).toSet())
+        assertEquals(3, service.listShipments(ShippingService.ShipmentFilter(search = "Steve"), PageRequest(1, 10), pool).count)
+        assertEquals(0, service.listShipments(ShippingService.ShipmentFilter(search = "100%"), PageRequest(1, 10), pool).count, "LIKE wildcards are escaped")
 
-        val page2 = service.listShipments(ShippingService.ShipmentFilter(), Paging.window(2, 2), pool)
+        val page2 = service.listShipments(ShippingService.ShipmentFilter(), PageRequest(2, 2), pool)
 
         assertEquals(3, page2.count)
         assertEquals(1, page2.shipments.size)

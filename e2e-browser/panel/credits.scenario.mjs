@@ -1,6 +1,6 @@
 // Scenario 65 of 13 section 25.4: store credits in the panel (grant by username, ledger with the admin as actor, revoke more than the balance).
 import fs from 'node:fs';
-import { must } from '../lib/api.mjs';
+import { must, PANEL_MARKET_API } from '../lib/api.mjs';
 import { assert, assertEqual } from '../lib/ui.mjs';
 import {
   signedIn,
@@ -87,7 +87,7 @@ export const scenarios = [
       await modalsClosed(page);
 
       const account = must(
-        await admin.get(`/api/panel/market/credits/accounts/${buyer.userId}`),
+        await admin.get(`${PANEL_MARKET_API}/credits/accounts/${buyer.userId}`),
         'credit account',
       ).json;
       assertEqual(

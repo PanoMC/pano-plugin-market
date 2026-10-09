@@ -91,6 +91,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.util.concurrent.CopyOnWriteArrayList
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * A scriptable provider for the subscription tests: [fake] plus a `continuePayment` and a scripted `checkEligibility` verdict ([onEligibility], every
@@ -370,7 +371,7 @@ class SubscriptionServiceIT : MarketDaoITBase() {
         assertEquals(code, e.getErrorCode(), "error code, body ${e.encode()}")
         assertEquals(status, e.getStatusCode())
 
-        return JsonObject(e.encode())
+        return ErrorBodies.details(e)
     }
 
     private suspend fun count(table: String, where: String = "1 = 1"): Long = sql("SELECT COUNT(*) AS n FROM `pano_$table` WHERE $where").single().getLong("n")
@@ -1852,22 +1853,22 @@ class SubscriptionServiceIT : MarketDaoITBase() {
         gatewayEvent("sub_gw_1", GatewaySubscriptionStatus.CANCELLED)
 
         val row = subscriptionOf(order)
-        val rows = sql("SELECT `event`, `eventId`, `orderId`, `body` FROM `pano_market_webhook_delivery` ORDER BY `id`")
+        val rows = sql("SELECT `event`, `eventId`, `subjectRef`, `body` FROM `pano_webhook_delivery` ORDER BY `id`")
 
-        assertEquals(listOf("subscription.started", "subscription.expired"), rows.map { it.getString("event") })
+        assertEquals(listOf("market.subscription.started", "market.subscription.expired"), rows.map { it.getString("event") })
         assertEquals(2, rows.map { it.getString("eventId") }.toSet().size)
-        assertTrue(rows.all { it.getLong("orderId") == order.id })
+        assertTrue(rows.all { it.getString("subjectRef") == "order:${order.id}" })
 
         val started = JsonObject(rows[0].getString("body"))
 
-        assertEquals("subscription.started", started.getString("event"))
+        assertEquals("market.subscription.started", started.getString("event"))
         assertEquals(row.id, started.getJsonObject("data").getJsonObject("subscription").getLong("id"))
         assertEquals(row.productName, started.getJsonObject("data").getJsonObject("subscription").getString("productName"))
         assertEquals(order(order.id).publicId, started.getJsonObject("data").getJsonObject("order").getString("publicId"))
 
         // a replayed status event emits nothing more
         gatewayEvent("sub_gw_1", GatewaySubscriptionStatus.CANCELLED)
-        assertEquals(2, count("market_webhook_delivery"))
+        assertEquals(2, count("webhook_delivery"))
     }
 
     // ==================================================================================== the composition roots

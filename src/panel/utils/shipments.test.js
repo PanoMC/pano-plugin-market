@@ -103,8 +103,10 @@ describe('list', () => {
 
 describe('label is a download link, never inline', () => {
   test('paths', () => {
-    expect(labelPath('/p', 7)).toBe('/p/api/panel/market/shipments/7/label');
-    expect(labelPath('', 7, true)).toBe('/api/panel/market/shipments/7/label?generic=true');
+    expect(labelPath('/p', 7)).toBe('/api/plugins/pano-plugin-market/panel/shipments/7/label');
+    expect(labelPath('', 7, true)).toBe(
+      '/api/plugins/pano-plugin-market/panel/shipments/7/label?generic=true',
+    );
   });
   test('no component renders a label inline', () => {
     for (const file of [
@@ -128,12 +130,12 @@ describe('cancel and release', () => {
     expect(cancelRequest(4).body).toEqual({});
     expect(cancelRequest(4, true)).toEqual({
       method: 'POST',
-      path: '/api/panel/market/shipments/4/cancel',
+      path: '/shipments/4/cancel',
       body: { force: true },
     });
     expect(releaseRequest(4)).toEqual({
       method: 'PUT',
-      path: '/api/panel/market/shipments/4',
+      path: '/shipments/4',
       body: { releaseItems: true },
     });
   });
@@ -232,7 +234,7 @@ describe('parcels', () => {
 describe('create request', () => {
   test('manual entry sends manual{} and no rate fields', () => {
     const { request } = createRequest(9, { ...base, note: ' hello ' });
-    expect(request.path).toBe('/api/panel/market/orders/9/shipments');
+    expect(request.path).toBe('/orders/9/shipments');
     expect(request.body).toEqual({
       items: [
         { orderItemId: 1, quantity: 3 },
@@ -333,7 +335,7 @@ describe('shipment edit', () => {
     });
     expect(request).toEqual({
       method: 'PUT',
-      path: '/api/panel/market/shipments/5',
+      path: '/shipments/5',
       body: { trackingNumber: 'T2', trackingUrl: 'https://x.example/t', status: 'DELIVERED' },
     });
   });
@@ -381,7 +383,7 @@ describe('shipping address', () => {
   test('request upper-cases the country and omits empty fields', () => {
     const { request } = addressRequest(3, { ...full, company: '' });
     expect(request.method).toBe('PUT');
-    expect(request.path).toBe('/api/panel/market/orders/3/shipping-address');
+    expect(request.path).toBe('/orders/3/shipping-address');
     expect(request.body.country).toBe('TR');
     expect(request.body.company).toBeUndefined();
   });

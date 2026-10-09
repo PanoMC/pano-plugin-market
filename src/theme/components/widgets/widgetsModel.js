@@ -25,6 +25,24 @@ export function hasContent(data, key) {
 }
 
 /**
+ * The widgets payload of a widget's `data` prop. The module `load` answers `{ data }`: a block or a widget element spreads that
+ * as props (`data` = the payload), while the sidebar slot merges the answer into `data` (`data.data` = the payload).
+ * Both shapes give the payload; a payload itself never has a `data` key.
+ */
+export function unwrapWidgets(data) {
+  const inner = data?.data;
+
+  if (inner && typeof inner === 'object') return inner;
+
+  return data && typeof data === 'object' ? data : {};
+}
+
+/** A sidebar item gets its sidebar id as the prop `sidebarId` (doc 01 section 2); the placement rule reads it from the data. */
+export function withSidebar(data, sidebarId) {
+  return sidebarId && !data?.sidebarId ? { ...data, sidebarId } : data;
+}
+
+/**
  * A widget inside a host sidebar renders only when the admin placed it there; without `sidebarId`
  * (the store page) the placement list does not apply.
  */

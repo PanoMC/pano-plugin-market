@@ -1,7 +1,7 @@
 // Host-bound glue shared by the subscription list and detail: the Retry Charge confirmation (13 section 14).
-import ApiUtil from '@panomc/sdk/utils/api';
+import { api } from '@panomc/sdk/plugin-api';
 import { showSuccessToast } from '../../../i18n';
-import { call, marketPath } from '../../utils/api.js';
+import { call } from '../../utils/api.js';
 import { toastError } from '../../utils/toast.js';
 
 const STALE = new Set(['SUBSCRIPTION_NOT_RETRYABLE', 'NOT_FOUND', 'INVALID_STATE']);
@@ -18,7 +18,7 @@ export function confirmRetry(confirmModal, $_, subscription, onDone = () => {}) 
     confirmLabel: $_('pages.subscriptions.actions.retry'),
     onConfirm: async () => {
       const result = await call(
-        ApiUtil.post({ path: marketPath(`/subscriptions/${subscription.id}/retry`), body: {} }),
+        api.panel.post({ path: `/subscriptions/${subscription.id}/retry`, body: {} }),
       );
       if (!result.ok) {
         toastError($_, result);

@@ -5,7 +5,7 @@ import { STORAGE_KEY } from '../cartModel.js';
 import { lineKey } from '../lineKey.js';
 import { metaRows, quoteRows } from '../../components/cart/cartView.js';
 
-const { createCartStore } = await import('../../stores/cart.js');
+const { createCartStore } = await import('../cartEngine.js');
 
 // The browser scenario TH-12 (E2E-16): the stock of a product drops while a visitor's cart holds 3. The real quote answers
 // `quantity: 3, maxQuantity: 1, errors: ['MAX_QUANTITY']`; the theme clamps the line to 1, which makes that quote stale, so the

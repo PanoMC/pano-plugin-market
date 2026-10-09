@@ -89,7 +89,6 @@ class MarketConfigTest {
         Triple("quoteRateLimitPerMinute", ConfigKind.INT, 60),
         Triple("couponLockThreshold", ConfigKind.INT, 5),
         Triple("couponLockMinutes", ConfigKind.INT, 15),
-        Triple("allowPrivateWebhookTargets", ConfigKind.BOOL, false),
         Triple("storePageSize", ConfigKind.INT, 24),
         Triple("moduleRecentBuyers", ConfigKind.BOOL, true),
         Triple("moduleRecentBuyersCount", ConfigKind.INT, 10),
@@ -369,5 +368,29 @@ class MarketConfigTest {
         assertEquals(VaultMode.CONVERT, back.mcVaultMode)
         assertEquals(2, back.version)
         assertEquals(MarketConfig.DEFAULT_BROADCAST_TEMPLATE, back.mcBroadcastTemplate)
+    }
+
+    @Test
+    fun `the private webhook targets switch is core's value, not a stored key`() {
+        val before = MarketConfig.coreAllowPrivateTargets
+
+        try {
+            assertFalse(MarketConfig().allowPrivateWebhookTargets, "false until the plugin binds core's config")
+
+            var flag = true
+            MarketConfig.coreAllowPrivateTargets = { flag }
+            val config = MarketConfig()
+
+            assertTrue(config.allowPrivateWebhookTargets)
+            flag = false
+            assertFalse(config.allowPrivateWebhookTargets, "read at every call, so a change in the platform settings applies at once")
+
+            // never written to the plugin's own file, by Gson (the config manager) or by Jackson (JsonObject.mapFrom), and not a writable settings key
+            assertFalse(JsonObject(gson.toJson(config)).containsKey("allowPrivateWebhookTargets"))
+            assertFalse(JsonObject.mapFrom(config).containsKey("allowPrivateWebhookTargets"))
+            assertTrue(MarketConfigKeys.writable(ConfigScope.GENERAL).none { it.name == "allowPrivateWebhookTargets" })
+        } finally {
+            MarketConfig.coreAllowPrivateTargets = before
+        }
     }
 }

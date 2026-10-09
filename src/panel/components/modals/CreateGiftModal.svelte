@@ -1,5 +1,5 @@
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import ProductSelector from '../ProductSelector.svelte';
   import { _, showSuccessToast, showErrorToast } from '../../../i18n';
   import { giftDatesReversed, validateGiftLimits } from '../../utils/category-gift.js';
@@ -157,19 +157,19 @@
 
       let result;
       if (isEdit && gift) {
-        result = await ApiUtil.put({
-          path: `/api/panel/market/gifts/${gift.id}`,
+        result = await api.panel.put({
+          path: `/gifts/${gift.id}`,
           body,
         });
       } else {
-        result = await ApiUtil.post({
-          path: '/api/panel/market/gifts',
+        result = await api.panel.post({
+          path: '/gifts',
           body,
         });
       }
 
       if (result.error) {
-        if (result.error === 'CODE_ALREADY_EXISTS') {
+        if (result.error?.code === 'CODE_ALREADY_EXISTS') {
           showErrorToast($_('modals.gift.toast-code-exists'));
         } else {
           showErrorToast($_('modals.gift.toast-save-error'));

@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * `CurrencyRateService` on a real MariaDB (MK-064, 04 section 8 `GET / PUT / POST refresh /settings/currencies`): the stored
@@ -50,7 +51,7 @@ class CurrencyRateIT : MarketDaoITBase() {
 
     private fun entry(currency: String?, mode: CurrencyRateMode?, rate: String? = null) = CurrencyRateEntry(currency, mode, rate?.let { BigDecimal(it) })
 
-    private fun fieldErrors(e: InvalidSettings): JsonObject = JsonObject(e.encode(emptyMap())).getJsonObject("fieldErrors")
+    private fun fieldErrors(e: InvalidSettings): JsonObject = ErrorBodies.details(e).getJsonObject("fieldErrors")
 
     private suspend fun stored(code: String) = w.currencyRates.getByCurrency(code, pool)
 

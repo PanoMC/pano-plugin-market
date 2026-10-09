@@ -1,5 +1,11 @@
 package com.panomc.plugins.market.routes.api.order
 
+import com.panomc.plugins.market.error.StoreUnavailable
+import com.panomc.plugins.market.error.StoreDisabled
+import com.panomc.platform.error.NotFound
+import com.panomc.plugins.market.routes.base.MarketSchemas
+import com.panomc.platform.schema.EndpointDoc
+import com.panomc.platform.error.BadRequest
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.model.Path
@@ -27,9 +33,9 @@ import com.panomc.plugins.market.service.BankTransferService
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters.param
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.Parameters.param
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
@@ -99,7 +105,14 @@ internal fun parseBankTransferNotice(body: JsonObject?): Pair<String?, String?> 
  */
 @Endpoint
 class BankTransferNotifyAPI(private val plugin: MarketPlugin) : MarketPublicMutationApi() {
-    override val paths = listOf(Path("/api/market/orders/:publicId/bank-transfer/notify", RouteType.POST))
+    override val paths = listOf(Path("/orders/:publicId/bank-transfer/notify", RouteType.POST))
+
+    override val doc = EndpointDoc(
+        summary = "The buyer says a bank transfer was sent; the store checks it by hand.",
+        tag = "orders",
+        response = MarketSchemas.empty(),
+        errors = listOf(NotFound::class, BadRequest::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 

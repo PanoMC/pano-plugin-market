@@ -1,5 +1,5 @@
-<div class="table-responsive">
-  <table class="table align-middle">
+<div class="market-ledger-table table-responsive">
+  <table class="market-ledger-table__table table align-middle">
     <caption class="visually-hidden">{$_('theme.profile.credits.ledger-title')}</caption>
     <thead>
       <tr>
@@ -36,10 +36,13 @@
 </div>
 
 <script>
+  import { plugin } from '@panomc/sdk/controllers';
   import { base } from '@panomc/sdk/svelte';
-  import { _ } from '../../../i18n.js';
   import { ledgerRow } from '../../lib/profileModel.js';
-  import { formatCredits, formatDateTime } from '../../utils/format.js';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { formatCredits, formatDateTime } = market.require('format').actions;
 
   /** entries: rows of GET me/credits; creditName: unit text. Empty lists are the caller's NoContent. */
   let { entries = [], creditName = '' } = $props();

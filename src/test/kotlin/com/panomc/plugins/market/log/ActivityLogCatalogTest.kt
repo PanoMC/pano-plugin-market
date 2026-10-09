@@ -16,7 +16,7 @@ import java.lang.reflect.Modifier
  * has an endpoint today is actually written by main code.
  */
 class ActivityLogCatalogTest {
-    /** The 94 types of 04 section 10 (28 existing + the new ones), in the spelling of the class name. */
+    /** The 89 types of 04 section 10 that the plugin still writes (28 existing + the new ones; the five webhook types moved to core), in the spelling of the class name. */
     private val catalogue: List<String> = """
         CREATED_MARKET_CATEGORY
         CREATED_MARKET_PRODUCT
@@ -107,11 +107,6 @@ class ActivityLogCatalogTest {
         UPDATED_MARKET_SHIPPING_CARRIER
         TOGGLED_MARKET_SHIPPING_CARRIER
         REVEALED_MARKET_SHIPPING_SECRET
-        CREATED_MARKET_WEBHOOK
-        UPDATED_MARKET_WEBHOOK
-        DELETED_MARKET_WEBHOOK
-        TESTED_MARKET_WEBHOOK
-        REDELIVERED_MARKET_WEBHOOK
     """.trimIndent().lines().map { it.trim() }.filter { it.isNotEmpty() }
 
     /** Classes of landed slices that 04 section 10 does not list (it has no row for them); each has its key and is written by its endpoint. */
@@ -119,6 +114,12 @@ class ActivityLogCatalogTest {
 
     /** Types whose writing endpoint is a later slice; each is exempt from the "written by main code" rule until it lands (the class and the key exist now). */
     private val writtenLater = mapOf("IMPORTED_MARKET_CATALOG" to "GW (provider catalogue import)")
+
+    /**
+     * The webhook types of the time before core owned webhooks (doc 06 section 4.4): the plugin no longer writes them, but rows already in the activity log still
+     * need their text, so the keys stay in the three fragments while the classes are gone.
+     */
+    private val retired = setOf("CREATED_MARKET_WEBHOOK", "UPDATED_MARKET_WEBHOOK", "DELETED_MARKET_WEBHOOK", "TESTED_MARKET_WEBHOOK", "REDELIVERED_MARKET_WEBHOOK")
 
     private val sourceRoot = File("src/main/kotlin/com/panomc/plugins/market")
 
@@ -146,7 +147,7 @@ class ActivityLogCatalogTest {
 
     @Test
     fun `every type of the catalogue has a class`() {
-        assertEquals(94, catalogue.size)
+        assertEquals(89, catalogue.size)
         assertEquals(catalogue.size, catalogue.toSet().size)
 
         val missing = catalogue.filter { it !in classes }
@@ -167,7 +168,8 @@ class ActivityLogCatalogTest {
             val keys = keys(locale)
 
             assertEquals(emptySet<String>(), classes.keys - keys.keys, "$locale: classes without activity-logs.<TYPE>")
-            assertEquals(emptySet<String>(), keys.keys - classes.keys, "$locale: keys without a class")
+            assertEquals(emptySet<String>(), keys.keys - classes.keys - retired, "$locale: keys without a class")
+            assertEquals(emptySet<String>(), retired - keys.keys, "$locale: a retired type lost its text (old log rows need it)")
 
             for ((type, text) in keys) {
                 assertTrue(text.isNotBlank(), "$locale $type is empty")
@@ -197,6 +199,8 @@ class ActivityLogCatalogTest {
         val problems = mutableListOf<String>()
 
         for ((type, text) in keys("en-US")) {
+            if (type in retired) continue
+
             val details = build(classes.getValue(type)).details
 
             for (name in placeholder.findAll(text).map { it.groupValues[1] }) if (!details.containsKey(name)) problems += "$type: {$name} is not in the details ${details.fieldNames()}"

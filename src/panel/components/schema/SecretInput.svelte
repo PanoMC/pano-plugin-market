@@ -96,9 +96,9 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _ } from '../../../i18n';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { toastError } from '../../utils/toast.js';
   import { SECRET_MASK, secretOnBlur, secretOnFocus, secretOnInput } from '../../utils/schema-form.js';
 
@@ -186,7 +186,7 @@
     passwordInvalid = false;
     let result;
     try {
-      result = await call(ApiUtil.post({ path: marketPath(revealPath), body: { password } }));
+      result = await call(api.panel.post({ path: revealPath, body: { password } }));
     } finally {
       loading = false;
     }

@@ -1,7 +1,6 @@
 package com.panomc.plugins.market.routes.base
 
 import com.panomc.plugins.market.error.RequestValueException
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 
@@ -11,14 +10,6 @@ import io.vertx.core.json.JsonObject
 
 private val IDEMPOTENCY_KEY = Regex("^[A-Za-z0-9_-]{16,64}$")
 private val DIGITS = Regex("^[0-9]{1,18}$")
-
-/** `page` / `pageSize` query values (04 section 1): defaults 1 and 10, `pageSize` at most [maxPageSize] (100). */
-fun parsePagingRequest(
-    page: Long?,
-    pageSize: Long?,
-    defaultPageSize: Int = Paging.DEFAULT_PAGE_SIZE,
-    maxPageSize: Int = Paging.MAX_PAGE_SIZE
-): Paging.Window = Paging.window(page, pageSize, defaultPageSize, maxPageSize)
 
 /**
  * The `Idempotency-Key` header (04 section 1): `^[A-Za-z0-9_-]{16,64}$`. Absent: `null` unless [required]. A

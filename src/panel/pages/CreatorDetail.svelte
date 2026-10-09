@@ -1,8 +1,10 @@
 <script module>
-  import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
-  import { marketPath } from '../utils/api.js';
+  import { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
+  import { failureOf } from '../utils/api.js';
   import { loadContext } from '../utils/context.js';
   import { normalizeEarningState } from '../utils/discounts.js';
+  import { pageOf } from '../utils/page.js';
 
   /** The three requests of the page: earnings (paged, filtered), payouts and the report row (balances). */
   function detailRequests(get, id, pageNum, state) {
@@ -10,31 +12,28 @@
     return Promise.all([
       get({
         path:
-          marketPath(`/creator-codes/${encoded}/earnings`) +
+          `/creator-codes/${encoded}/earnings` +
           buildQueryParams({ page: pageNum > 1 ? pageNum : null, state }),
       }),
-      get({ path: marketPath(`/creator-codes/${encoded}/payouts`) }),
-      get({ path: marketPath('/creator-codes/report') }),
+      get({ path: `/creator-codes/${encoded}/payouts` }),
+      get({ path: '/creator-codes/report' }),
     ]);
   }
 
-  const isBody = (body) => body && typeof body === 'object' && !body.error;
+  const isBody = (body) => failureOf(body) === null;
 
   /** Joins the three bodies into the data of the page; the first failed one sets `error`. */
-  function joinDetail(id, [earnings, payouts, report], pageNum, state) {
+  function joinDetail(id, [earnings, payouts, report], state) {
     const failed = [earnings, payouts].find((body) => !isBody(body));
     const row = isBody(report) ? (report.creators ?? []).find((c) => String(c.id) === String(id)) : null;
     return {
       id,
-      earnings: isBody(earnings) ? (earnings.earnings ?? []) : [],
-      earningCount: isBody(earnings) ? (earnings.earningCount ?? 0) : 0,
-      totalPage: isBody(earnings) ? (earnings.totalPage ?? 1) : 1,
+      earningsPage: pageOf(isBody(earnings) ? earnings : null),
       payouts: isBody(payouts) ? (payouts.payouts ?? []) : [],
       summary: row ?? null,
       currency: isBody(report) ? (report.currency ?? '') : '',
-      page: pageNum,
       state,
-      error: failed ? ((failed && typeof failed === 'object' && failed.error) || 'NETWORK_ERROR') : null,
+      error: failed === undefined ? null : failureOf(failed),
     };
   }
 
@@ -48,16 +47,14 @@
     const id = event.params.id;
     const requested = parseInt(event.url.searchParams.get('page')) || 1;
     const state = normalizeEarningState(event.url.searchParams.get('state'));
-    const get = (options) => ApiUtil.get({ ...options, request: event });
+    const get = (options) => api.panel.get({ ...options, request: event });
 
     let [bodies, ctx] = await Promise.all([detailRequests(get, id, requested, state), loadContext(event)]);
-    let pageNum = requested;
     // A stale ?page= (bookmark, back button) points past the last page: refetch page 1 once.
-    if (bodies[0]?.error === 'PAGE_NOT_FOUND' && requested > 1) {
-      pageNum = 1;
+    if (failureOf(bodies[0]) === 'PAGE_NOT_FOUND' && requested > 1) {
       bodies = await detailRequests(get, id, 1, state);
     }
-    return { data: { ...joinDetail(id, bodies, pageNum, state), ctx } };
+    return { data: { ...joinDetail(id, bodies, state), ctx } };
   }
 </script>
 
@@ -95,10 +92,11 @@
   const mayPay = $derived(can(user, 'PAY'));
   const currency = $derived(view.currency || ctx?.currency || '');
   const summary = $derived(view.summary);
-  const earnings = $derived(view.earnings ?? []);
+  const earningsPage = $derived(view.earningsPage ?? pageOf(null));
+  const earnings = $derived(earningsPage.items);
   const payouts = $derived(view.payouts ?? []);
-  const totalPage = $derived(view.totalPage ?? 1);
-  const currentPage = $derived(view.page ?? 1);
+  const totalPage = $derived(earningsPage.totalPages);
+  const currentPage = $derived(earningsPage.number);
   const state = $derived(view.state ?? null);
   const creatorName = $derived(summary?.creator ?? $page.url.searchParams.get('creator') ?? null);
 
@@ -116,10 +114,10 @@
   async function refresh() {
     if (refreshing) return;
     refreshing = true;
-    const get = (options) => ApiUtil.get(options);
+    const get = (options) => api.panel.get(options);
     const bodies = await detailRequests(get, data.id, currentPage, state);
     refreshing = false;
-    const next = joinDetail(data.id, bodies, currentPage, state);
+    const next = joinDetail(data.id, bodies, state);
     refreshError = next.error;
     if (!next.error) loaded = next;
   }
@@ -134,7 +132,7 @@
       confirmLabel: $_('pages.creator-detail.cancel-confirm'),
       variant: 'danger',
       onConfirm: async () => {
-        const result = await call(ApiUtil.post({ path: marketPath(`/creator-payouts/${payout.id}/cancel`) }));
+        const result = await call(api.panel.post({ path: `/creator-payouts/${payout.id}/cancel` }));
         if (!result.ok) {
           toastError($_, result);
           // a payout that is no longer pending (or gone) is stale: show the current state
@@ -203,7 +201,7 @@
     <div class="card">
       <CardHeader>
         <div slot="left">
-          {$_('pages.creator-detail.earning-count', { values: { count: view.earningCount ?? 0 } })}
+          {$_('pages.creator-detail.earning-count', { values: { count: earningsPage.totalItems } })}
         </div>
         <CardFilters slot="right">
           <FilterSelect

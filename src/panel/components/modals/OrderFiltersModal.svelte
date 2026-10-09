@@ -99,10 +99,10 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { page } from '@panomc/sdk/svelte';
   import { _ } from '../../../i18n';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { dayToEpoch, toDateInput } from '../../utils/format.js';
   import { can } from '../../utils/permissions.js';
   import {
@@ -143,8 +143,8 @@
 
   async function loadProviders() {
     if (!canSettings) return;
-    const result = await call(ApiUtil.get({ path: marketPath('/payment-providers') }));
-    providers = result.ok && Array.isArray(result.body.providers) ? result.body.providers : [];
+    const result = await call(api.panel.get({ path: '/payment-providers' }));
+    providers = result.ok && Array.isArray(result.body.items) ? result.body.items : [];
   }
 
   export function open() {

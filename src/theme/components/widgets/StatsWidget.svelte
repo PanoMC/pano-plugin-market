@@ -1,11 +1,11 @@
 {#if render}
-  <div class="card">
-    <div class="card-header">
+  <div class="market-stats-widget card">
+    <div class="market-stats-widget__header card-header">
       <i class="fa-solid fa-chart-simple me-2" aria-hidden="true"></i>{$_(
         'theme.widgets.stats.title',
       )}
     </div>
-    <div class="card-body">
+    <div class="market-stats-widget__body card-body">
       <div class="row row-cols-2 g-2 text-center">
         {#each rows as row (row.key)}
           <div class="col">
@@ -23,15 +23,35 @@
   </div>
 {/if}
 
+<script module>
+  import { plugin } from '@panomc/sdk/controllers';
+
+  // sidebar injection (doc 01 section 2): the build registers this view in the home and profile sidebars
+  export const view = {
+    sidebar: ['home', 'profile'],
+    id: 'market-stats',
+    priority: 40,
+    widget: true,
+  };
+
+  /** The one `market/widgets` load of the four widgets (the controller shares the request); the payload is the `data` prop. */
+  export const load = (event) =>
+    plugin('market')
+      .load('widgets', { event })
+      .then((data) => ({ data: data ?? {} }));
+</script>
+
 <script>
-  import { _ } from '../../../i18n.js';
-  import { shouldRender, statsRows } from './widgetsModel.js';
+  import { shouldRender, statsRows, unwrapWidgets, withSidebar } from './widgetsModel.js';
+
+  const { _ } = plugin('market');
 
   /** data: the widgets payload (`stats`), plus `sidebars` / `sidebarId` in a host sidebar. */
-  let { data = {} } = $props();
+  let { data = {}, sidebarId = '' } = $props();
 
-  const render = $derived(shouldRender(data, 'stats'));
-  const rows = $derived(statsRows(data?.stats));
+  const payload = $derived(unwrapWidgets(data));
+  const render = $derived(shouldRender(withSidebar(payload, sidebarId), 'stats'));
+  const rows = $derived(statsRows(payload.stats));
 
   const formatNumber = (value) => {
     try {

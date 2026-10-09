@@ -22,6 +22,10 @@ const event = (query, user) => ({
   parent: async () => ({ user, pageTitle: { set: (v) => titles.push(v) } }),
 });
 const NOW = new Date(2026, 9, 15, 12).getTime();
+const pageOf = (items, totalItems) => ({
+  items,
+  page: { number: 1, size: items.length, totalItems, totalPages: 1 },
+});
 
 beforeEach(() => {
   requests.length = 0;
@@ -29,9 +33,9 @@ beforeEach(() => {
   responder = (path) => {
     if (path.includes('/context')) return { currency: 'USD' };
     if (path.includes('/stats')) return { summary: {}, charts: {} };
-    if (path.includes('status=REVIEW')) return { orders: [{ id: 1 }], orderCount: 4 };
-    if (path.includes('/orders')) return { orders: [{ id: 2 }, { id: 3 }], orderCount: 2 };
-    if (path.includes('/servers')) return { servers: [{ id: 1, name: 'S' }] };
+    if (path.includes('status=REVIEW')) return pageOf([{ id: 1 }], 4);
+    if (path.includes('/orders')) return pageOf([{ id: 2 }, { id: 3 }], 2);
+    if (path.includes('/servers')) return { items: [{ id: 1, name: 'S' }] };
     if (path.includes('/health')) return { runtimeState: 'READY' };
     return {};
   };
@@ -41,10 +45,10 @@ describe('loadOverviewWith', () => {
   test('admin: every block is requested', async () => {
     const { data } = await loadOverviewWith(deps, event('', { admin: true }), NOW);
     expect(requests.some((p) => p.includes('/stats?from='))).toBe(true);
-    expect(requests).toContain('/api/panel/market/orders?pageSize=10');
-    expect(requests).toContain('/api/panel/market/orders?status=REVIEW&pageSize=1');
-    expect(requests).toContain('/api/panel/market/servers');
-    expect(requests).toContain('/api/panel/market/health');
+    expect(requests).toContain('/orders?pageSize=10');
+    expect(requests).toContain('/orders?status=REVIEW&pageSize=1');
+    expect(requests).toContain('/servers');
+    expect(requests).toContain('/health');
     expect(data.reviewCount).toBe(4);
     expect(data.orders).toHaveLength(2);
     expect(data.servers).toHaveLength(1);
@@ -55,14 +59,14 @@ describe('loadOverviewWith', () => {
 
   test('the range is sent to /stats', async () => {
     await loadOverviewWith(deps, event('?from=1000&to=2000', { admin: true }), NOW);
-    expect(requests).toContain('/api/panel/market/stats?from=1000&to=2000');
+    expect(requests).toContain('/stats?from=1000&to=2000');
   });
 
   test('chart view does not load the recent orders', async () => {
     const { data } = await loadOverviewWith(deps, event('?view=chart', { admin: true }), NOW);
     expect(data.view).toBe('chart');
-    expect(requests).not.toContain('/api/panel/market/orders?pageSize=10');
-    expect(requests).toContain('/api/panel/market/orders?status=REVIEW&pageSize=1');
+    expect(requests).not.toContain('/orders?pageSize=10');
+    expect(requests).toContain('/orders?status=REVIEW&pageSize=1');
     expect(data.ordersError).toBeNull();
   });
 
@@ -93,11 +97,11 @@ describe('loadOverviewWith', () => {
 
   test('each failure degrades its own block only', async () => {
     responder = (path) => {
-      if (path.includes('/stats')) return { error: 'STORE_BUSY' };
+      if (path.includes('/stats')) return { error: { code: 'STORE_BUSY' } };
       if (path.includes('/health')) return 'Bad Gateway';
-      if (path.includes('status=REVIEW')) return { error: 'X' };
-      if (path.includes('/orders')) return { orders: [{ id: 2 }] };
-      if (path.includes('/servers')) return { servers: [{ id: 1, name: 'S' }] };
+      if (path.includes('status=REVIEW')) return { error: { code: 'X' } };
+      if (path.includes('/orders')) return pageOf([{ id: 2 }], 1);
+      if (path.includes('/servers')) return { items: [{ id: 1, name: 'S' }] };
       if (path.includes('/context')) return { currency: 'USD' };
       return {};
     };

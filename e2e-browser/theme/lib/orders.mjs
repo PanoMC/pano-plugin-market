@@ -3,7 +3,7 @@
 // (an order's expiry, a subscription's status), the same "time travel by row rewind" the Kotlin E2E classes use (17 section 9.6).
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { Api, must } from '../../lib/api.mjs';
+import { Api, listOf, must, MARKET_API, PANEL_MARKET_API } from '../../lib/api.mjs';
 import { completePayment } from '../../lib/gateway.mjs';
 import { assert } from '../../lib/ui.mjs';
 import { text } from './checkout.mjs';
@@ -25,12 +25,12 @@ export async function waitUntil(condition, timeout, label) {
 export const idem = () => ({ 'Idempotency-Key': crypto.randomUUID() });
 
 /**
- * One SQL statement against the instance database (`MARKET_E2E_DB`, exported by e2e-instance.sh start), through the database container the way the
+ * One SQL statement against the instance database (`MARKET_E2E_DB`, exported by e2e-instance.sh start, else `PANO_OF_SLOT_DB`), through the database container the way the
  * instance script does it. The password is only read from the environment, never printed. Returns the tab-separated rows of a SELECT as arrays.
  */
 export function sql(statement) {
   const password = process.env.PANO_IT_MARIADB_PASSWORD;
-  const db = process.env.MARKET_E2E_DB;
+  const db = process.env.MARKET_E2E_DB || process.env.PANO_OF_SLOT_DB;
   const container = process.env.MARKET_E2E_DB_CONTAINER || 'pano-web-platform-db-1';
 
   if (!password) throw new Error('PANO_IT_MARIADB_PASSWORD is not set');
@@ -67,7 +67,7 @@ export function table(name) {
 
 /** A checkout through the storefront API; returns `{ publicId, token, json }` (`token` is the guest's access token). */
 export async function checkout(api, body) {
-  const res = must(await api.post('/api/market/checkout', body, idem()), 'checkout');
+  const res = must(await api.post(`${MARKET_API}/checkout`, body, idem()), 'checkout');
 
   return {
     publicId: res.json.order.publicId,
@@ -80,7 +80,7 @@ export async function checkout(api, body) {
 /** The buyer-side view of an order through the API (`token` for a guest). */
 export async function view(api, publicId, token) {
   const res = await api.get(
-    `/api/market/orders/${publicId}`,
+    `${MARKET_API}/orders/${publicId}`,
     token ? { 'X-Order-Token': token } : undefined,
   );
 
@@ -115,10 +115,11 @@ export async function paidOrder(api, items, extra = {}) {
 /** The numeric id of an order (the panel routes take it), found through the panel list by public id. */
 export async function orderRowId(admin, publicId) {
   const list = must(
-    await admin.get(`/api/panel/market/orders?search=${encodeURIComponent(publicId)}&page=1`),
+    await admin.get(`${PANEL_MARKET_API}/orders?search=${encodeURIComponent(publicId)}&page=1`),
     `panel order search ${publicId}`,
   ).json;
-  const row = (list.orders ?? []).find((o) => o.publicId === publicId) ?? (list.orders ?? [])[0];
+  const row =
+    listOf(list, 'orders').find((o) => o.publicId === publicId) ?? listOf(list, 'orders')[0];
 
   assert(row, `the panel lists the order ${publicId}`);
 
@@ -129,18 +130,18 @@ export async function orderRowId(admin, publicId) {
 export async function panelDetail(admin, publicId) {
   const id = await orderRowId(admin, publicId);
 
-  return must(await admin.get(`/api/panel/market/orders/${id}`), `panel order ${id}`).json;
+  return must(await admin.get(`${PANEL_MARKET_API}/orders/${id}`), `panel order ${id}`).json;
 }
 
 /** Runs `fn` with the store out of test mode (widgets only count real sales), puts it back afterwards and waits for the settings cache. */
 export async function withLiveStore(admin, fn) {
-  must(await admin.post('/api/panel/market/settings', { testMode: false }), 'test mode off');
+  must(await admin.post(`${PANEL_MARKET_API}/settings`, { testMode: false }), 'test mode off');
   await sleep(1500);
 
   try {
     return await fn();
   } finally {
-    must(await admin.post('/api/panel/market/settings', { testMode: true }), 'test mode on');
+    must(await admin.post(`${PANEL_MARKET_API}/settings`, { testMode: true }), 'test mode on');
     await sleep(1500);
   }
 }

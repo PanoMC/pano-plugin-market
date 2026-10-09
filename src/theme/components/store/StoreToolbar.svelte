@@ -1,4 +1,4 @@
-<div class="row g-2">
+<div class="market-store-toolbar row g-2">
   <div class="col-12 col-md-6">
     <label class="visually-hidden" for="marketSearch">{$_('theme.store.search-label')}</label>
     <div class="input-group">
@@ -8,7 +8,7 @@
       <input
         id="marketSearch"
         type="search"
-        class="form-control"
+        class="market-store-toolbar__input form-control"
         maxlength={SEARCH_MAX}
         placeholder={$_('theme.store.search-placeholder')}
         value={search}
@@ -20,7 +20,7 @@
     <label class="visually-hidden" for="marketSort">{$_('theme.store.sort-label')}</label>
     <select
       id="marketSort"
-      class="form-select"
+      class="market-store-toolbar__select form-select"
       value={sort}
       onchange={(event) => onsort?.(event.currentTarget.value)}>
       {#each SORTS as value (value)}
@@ -37,10 +37,13 @@
 </div>
 
 <script>
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { SEARCH_MAX, SORTS } from '../../lib/storeFilter.js';
-  import { isMultiCurrency } from '../../stores/currency.js';
   import CurrencySelect from './CurrencySelect.svelte';
+
+  const market = plugin('market');
+  const _ = market._;
+  const currencies = market.require('currency');
 
   /** search / sort: current values; currency: code in use; onsearch(text), onsort(value), oncurrency(code). */
   let {
@@ -53,5 +56,5 @@
     oncurrency,
   } = $props();
 
-  const showCurrency = $derived(isMultiCurrency(settings));
+  const showCurrency = $derived(currencies.actions.isMulti(settings));
 </script>

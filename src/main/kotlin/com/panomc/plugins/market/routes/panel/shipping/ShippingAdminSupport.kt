@@ -39,6 +39,7 @@ import com.panomc.plugins.market.spi.shipping.ShippingUrls
 import io.vertx.core.Vertx
 import io.vertx.ext.web.client.WebClient
 import io.vertx.sqlclient.Pool
+import com.panomc.plugins.market.util.MarketPaths
 
 /** The built-in shipping providers (03 section 7): one instance for the lifetime of the plugin. */
 internal val BUILT_IN_SHIPPING_PROVIDERS: List<ShippingProvider> by lazy { listOf(ManualShippingProvider()) }
@@ -50,7 +51,7 @@ internal val BUILT_IN_SHIPPING_PROVIDERS: List<ShippingProvider> by lazy { listO
 private class SettingsShippingContext(private val base: ProviderContext, token: String?) : ShippingContext, ProviderContext by base {
     override val urls: ShippingUrls = object : ShippingUrls {
         override fun webhook(channel: String): String =
-            "${base.site.baseUrl}/api/market/shipping/${base.providerId}/webhook/${token ?: "{installToken}"}" +
+            "${base.site.baseUrl}${MarketPaths.site("/shipping/${base.providerId}/webhook/")}${token ?: "{installToken}"}" +
                 if (channel == com.panomc.plugins.market.spi.MarketSpi.DEFAULT_CHANNEL) "" else "/$channel"
     }
 

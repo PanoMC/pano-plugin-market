@@ -15,8 +15,8 @@ import com.panomc.plugins.market.runtime.beans
 import com.panomc.plugins.market.service.ClientIpResolver
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
@@ -80,7 +80,7 @@ internal fun healthReader(plugin: MarketPlugin): MarketHealthReader {
 /** `GET /api/panel/market/health` (04 section 8): node `SET`. Answers while the market is not READY. */
 @Endpoint
 class PanelGetHealthAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/health", RouteType.GET))
+    override val paths = listOf(Path("/health", RouteType.GET))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.SETTINGS)
 

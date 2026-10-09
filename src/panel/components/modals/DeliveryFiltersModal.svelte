@@ -40,9 +40,9 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _ } from '../../../i18n';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { ACTION_TYPES, normalizeFilters } from '../../utils/deliveries.js';
 
   // filters: the URL filters of the list; onApply({ serverId, actionType }) (strings, '' = off);
@@ -54,8 +54,8 @@
   let servers = $state([]);
 
   async function loadServers() {
-    const result = await call(ApiUtil.get({ path: marketPath('/servers') }));
-    servers = result.ok && Array.isArray(result.body.servers) ? result.body.servers : [];
+    const result = await call(api.panel.get({ path: '/servers' }));
+    servers = result.ok && Array.isArray(result.body.items) ? result.body.items : [];
   }
 
   export function open() {

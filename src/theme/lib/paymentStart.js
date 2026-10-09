@@ -1,8 +1,9 @@
 // What happens after a successful checkout (14 §10.8). Pure: the page performs the navigation this returns.
 // Nothing here trusts a URL the server (or a gateway plugin) sent: a redirect target is http(s) only, an
-// attempt page must be on the same origin under /api/market/payments/attempts/.
+// attempt page must be on the same origin under /api/plugins/pano-plugin-market/payments/attempts/.
+import { SITE_API_ROOT } from './paths.js';
 
-export const ATTEMPT_PATH_PREFIX = '/api/market/payments/attempts/';
+export const ATTEMPT_PATH_PREFIX = `${SITE_API_ROOT}/payments/attempts/`;
 
 /** Payment kinds rendered on the order page (the order carries `payment.start`, 14 §11.4). */
 export const IN_PAGE_KINDS = ['IFRAME', 'EMBEDDED', 'INSTRUCTIONS', 'COMPLETED'];
@@ -35,7 +36,7 @@ export function isSafeExternalUrl(value) {
 
 /**
  * True for the market attempt page (FORM_POST / HTML): same origin as `origin` and the path starts with
- * `<base>/api/market/payments/attempts/`. `value` may be absolute or root-relative.
+ * `<base>/api/plugins/pano-plugin-market/payments/attempts/`. `value` may be absolute or root-relative.
  */
 export function isAttemptPageUrl(value, { origin, base = '' } = {}) {
   if (typeof value !== 'string' || value.length < 1 || value.length > 4096) return false;

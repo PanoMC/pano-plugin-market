@@ -9,10 +9,10 @@ import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
 import io.vertx.json.schema.SchemaRepository
 
-/** `GET /api/panel/market/discounts` (`P:DISC`): `discounts`, `discountCount`, `totalPage`; query `page`, `pageSize`, `search`, `status`. */
+/** `GET /api/panel/market/discounts` (`P:DISC`): the core page shape (`items`, `page`); query `page`, `pageSize`, `search`, `status`. */
 @Endpoint
 class PanelGetDiscountsAPI(plugin: MarketPlugin) : PromotionAdminRoute(plugin, Promotion.DISCOUNT) {
-    override val paths = listOf(Path("/api/panel/market/discounts", RouteType.GET))
+    override val paths = listOf(Path("/discounts", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = listValidation(schemaRepository)
 

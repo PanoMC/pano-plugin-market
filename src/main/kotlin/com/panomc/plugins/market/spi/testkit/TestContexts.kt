@@ -35,6 +35,7 @@ import io.vertx.ext.web.client.WebClient
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
+import com.panomc.plugins.market.spi.MarketSpiPaths
 
 /**
  * Ready-made provider contexts for plugin tests (02 section 14, 17 section 5.5): settings from a map, an in-memory
@@ -260,7 +261,7 @@ class TestPaymentContext internal constructor(
 
     override val urls: PaymentUrls = object : PaymentUrls {
         override fun webhook(channel: String): String =
-            "${site.baseUrl}/api/market/payments/$providerId/webhook" + if (channel == MarketSpi.DEFAULT_CHANNEL) "" else "/$channel"
+            "${site.baseUrl}${MarketSpiPaths.site("/payments/$providerId/webhook")}" + if (channel == MarketSpi.DEFAULT_CHANNEL) "" else "/$channel"
 
         override fun checkoutPage(): String = "${site.baseUrl}/store/checkout"
 
@@ -297,7 +298,7 @@ class TestShippingContext internal constructor(
 
     override val urls: ShippingUrls = object : ShippingUrls {
         override fun webhook(channel: String): String =
-            "${site.baseUrl}/api/market/shipping/$providerId/webhook/test-install-token" +
+            "${site.baseUrl}${MarketSpiPaths.site("/shipping/$providerId/webhook/test-install-token")}" +
                 if (channel == MarketSpi.DEFAULT_CHANNEL) "" else "/$channel"
     }
 
@@ -314,11 +315,11 @@ object SampleData {
     fun eur(internal: Long): Money = Money(internal, "EUR")
 
     fun attemptUrls(base: String = "https://shop.example", providerId: String = "fake", token: String = "tok", orderPublicId: String = "ABCDEFGHJKMNPQRSTVWX") = AttemptUrls(
-        success = "$base/api/market/payments/$providerId/return/$token/success",
-        cancel = "$base/api/market/payments/$providerId/return/$token/cancel",
-        pending = "$base/api/market/payments/$providerId/return/$token/pending",
-        result = "$base/api/market/payments/$providerId/return/$token/result",
-        notify = "$base/api/market/payments/$providerId/notify/$token",
+        success = "$base${MarketSpiPaths.site("/payments/$providerId/return/$token/success")}",
+        cancel = "$base${MarketSpiPaths.site("/payments/$providerId/return/$token/cancel")}",
+        pending = "$base${MarketSpiPaths.site("/payments/$providerId/return/$token/pending")}",
+        result = "$base${MarketSpiPaths.site("/payments/$providerId/return/$token/result")}",
+        notify = "$base${MarketSpiPaths.site("/payments/$providerId/notify/$token")}",
         orderPage = "$base/store/order/$orderPublicId"
     )
 

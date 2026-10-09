@@ -1,5 +1,5 @@
 <div
-  class="modal fade"
+  class="market-confirm-modal modal fade"
   {id}
   tabindex="-1"
   aria-labelledby="{id}-title"
@@ -7,8 +7,8 @@
   bind:this={element}>
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
-      <div class="modal-header">
-        <h2 class="modal-title fs-5" id="{id}-title">{title}</h2>
+      <div class="market-confirm-modal__header modal-header">
+        <h2 class="market-confirm-modal__title modal-title fs-5" id="{id}-title">{title}</h2>
         <button
           type="button"
           class="btn-close"
@@ -16,10 +16,13 @@
           aria-label={$_('theme.common.close')}></button>
       </div>
       {#if message}
-        <div class="modal-body">{message}</div>
+        <div class="market-confirm-modal__body modal-body">{message}</div>
       {/if}
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+      <div class="market-confirm-modal__footer modal-footer">
+        <button
+          type="button"
+          class="market-confirm-modal__action btn btn-outline-secondary"
+          data-bs-dismiss="modal">
           {cancelLabel || $_('theme.common.cancel')}
         </button>
         <button type="button" class={confirmClass} onclick={confirm}>
@@ -32,8 +35,10 @@
 
 <script>
   import { onMount } from 'svelte';
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { createConfirmController } from '../../lib/confirmModal.js';
+
+  const { _ } = plugin('market');
 
   /** id: unique DOM id; title / message / labels: already translated text; open it with bind:this + show(). */
   let {

@@ -11,10 +11,10 @@ import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
 import io.vertx.json.schema.SchemaRepository
 
-/** `GET /api/panel/market/coupons/:id/redemptions` (`P:DISC`): `redemptions[{orderId, playerUsername, amount, currency, state, createdAt}]`, `redemptionCount`, `totalPage`. */
+/** `GET /api/panel/market/coupons/:id/redemptions` (`P:DISC`): `items[{orderId, playerUsername, amount, currency, state, createdAt}]` and `page`. */
 @Endpoint
 class PanelGetCouponRedemptionsAPI(plugin: MarketPlugin) : PromotionAdminRoute(plugin, Promotion.COUPON) {
-    override val paths = listOf(Path("/api/panel/market/coupons/:id/redemptions", RouteType.GET))
+    override val paths = listOf(Path("/coupons/:id/redemptions", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = pagingValidation(schemaRepository)
 

@@ -2,12 +2,12 @@
 // (lines bounded by the unshipped remainder, parcels, rates, request bodies), ShipmentModal edit form,
 // the shipping-address form, cancel / release confirmations. No Svelte and no SDK import.
 import { can } from './permissions.js';
-import { errorKey, errorParams, marketPath } from './api.js';
+import { PANEL_URL, errorKey, errorParams } from './api.js';
 import { parseInteger } from './format.js';
 
 const present = (value) => value !== null && value !== undefined && String(value).trim() !== '';
 const clean = (value) => String(value ?? '').trim();
-const req = (method, path, body = {}) => ({ method, path: marketPath(path), body });
+const req = (method, path, body = {}) => ({ method, path, body });
 
 export const MANUAL_PROVIDER = 'manual';
 
@@ -82,7 +82,7 @@ export function rowActions(shipment, user) {
  * object (a carrier PDF / ZPL is untrusted content).
  */
 export const labelPath = (base, shipmentId, generic = false) =>
-  `${base}/api/panel/market/shipments/${shipmentId}/label${generic ? '?generic=true' : ''}`;
+  `${PANEL_URL}/shipments/${shipmentId}/label${generic ? '?generic=true' : ''}`;
 
 export const isHttpUrl = (value) => {
   if (!present(value)) return false;

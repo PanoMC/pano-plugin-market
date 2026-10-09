@@ -1,6 +1,6 @@
 // SDK-free logic of the player-page market tab / card (13 section 24). The host calls are injected
 // (like list-core.js), so the data loading and the view model are unit tested.
-import { marketPath } from '../../utils/api.js';
+import { failureOf } from '../../utils/api.js';
 import { guard } from '../../utils/guard.js';
 import { can } from '../../utils/permissions.js';
 import { PLUGIN_ID } from '../../utils/plugin.js';
@@ -8,8 +8,7 @@ import { PLUGIN_ID } from '../../utils/plugin.js';
 export const PLAYER_KEYS = ['OV', 'PAY'];
 
 /** GET /players/:username/summary path; the username is encoded (it comes from a route param). */
-export const summaryPath = (username) =>
-  marketPath(`/players/${encodeURIComponent(username)}/summary`);
+export const summaryPath = (username) => `/players/${encodeURIComponent(username)}/summary`;
 
 /** `/market/orders?search=<username>` (the "All Orders" card action; needs OV). */
 export const ordersLink = (username) => `/market/orders?search=${encodeURIComponent(username)}`;
@@ -20,9 +19,6 @@ export const createOrderLink = (username) =>
 
 /** The block list filtered to the player (the modal itself takes no prefill, see MPU-19 evidence). */
 export const blocksLink = (username) => `/market/blocks?search=${encodeURIComponent(username)}`;
-
-const failed = (body) => !body || typeof body !== 'object' || Boolean(body.error);
-const errorOf = (body) => (body && typeof body === 'object' && body.error) || 'NETWORK_ERROR';
 
 /**
  * Shared load of PlayerMarket.svelte and of PlayerMarketCard.svelte (hook load).
@@ -41,7 +37,8 @@ export async function loadPlayerSummary(deps, event, { title = null } = {}) {
       deps.get({ path: summaryPath(username), request: event }),
       deps.loadContext(event),
     ]);
-    if (failed(body)) return empty(errorOf(body));
+    const failure = failureOf(body);
+    if (failure) return empty(failure);
     return { data: { username, summary: body, ctx: ctx ?? null, error: null } };
   } catch {
     return empty('NETWORK_ERROR');

@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.charset.StandardCharsets
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * The key rules of 02 section 7.3 (steps 2 and 5) and 01 section 6.3 for inbound `market_payment_event` rows (17 section 11.1 `InboundEventKeyTest`):
@@ -133,7 +134,7 @@ class InboundEventKeyTest {
         val headers = mapOf("content-type" to listOf("application/json"), "x-signature" to listOf("t=1,v1=abcdef0123456789secret"), "authorization" to listOf("Bearer top-secret-token"))
         val secret = "abcdef0123456789secret"
         val call = com.panomc.plugins.market.routes.api.payment.InboundCall(
-            InboundKind.WEBHOOK, "fake", "default", null, null, null, "POST", "/api/market/payments/fake/webhook", "a=1&sig=$secret", mapOf("a" to listOf("1")), headers,
+            InboundKind.WEBHOOK, "fake", "default", null, null, null, "POST", "${MarketPaths.SITE_ROOT}/payments/fake/webhook", "a=1&sig=$secret", mapOf("a" to listOf("1")), headers,
             "application/json", "{\"card\":\"4111111111111111\",\"k\":\"$secret\"}".toByteArray(), null, "203.0.113.5", 1L
         )
         val stored = StoredRequestCodec.headersJson(call)

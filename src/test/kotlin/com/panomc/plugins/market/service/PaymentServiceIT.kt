@@ -77,6 +77,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
+import com.panomc.plugins.market.support.ErrorBodies
+import com.panomc.plugins.market.util.MarketPaths
 
 /** The foreign effects of O2 as a test sees them: which effect ran for which order, and a switch that makes the next one fail. */
 internal class RecordingEffects : ForeignEffects {
@@ -300,7 +302,7 @@ class PaymentServiceIT : MarketDaoITBase() {
         assertEquals(code, e.getErrorCode(), "error code, body ${e.encode()}")
         assertEquals(status, e.getStatusCode())
 
-        return JsonObject(e.encode())
+        return ErrorBodies.details(e)
     }
 
     private suspend fun pay(order: MarketOrder, method: String = "fake", credits: Long? = null, caller: PayCaller = PayCaller(), billing: JsonObject? = null): JsonObject? =
@@ -365,7 +367,7 @@ class PaymentServiceIT : MarketDaoITBase() {
         val form = buy(fx.product(price = 1000))
         val formAttempt = ph.attempts(orderOf(form).id).single()
 
-        assertEquals("/api/market/payments/attempts/${formAttempt.token}/page", form.payment!!.getString("url"))
+        assertEquals("${MarketPaths.SITE_ROOT}/payments/attempts/${formAttempt.token}/page", form.payment!!.getString("url"))
         assertFalse(form.payment!!.encode().contains("T1"), "the fields are not in the start the browser gets from the API")
 
         val storedForm = JsonObject(ph.cipher.decrypt(formAttempt.startPayload!!)!!).getJsonObject("formPost")
@@ -439,8 +441,8 @@ class PaymentServiceIT : MarketDaoITBase() {
         assertEquals("203.0.113.5", request.buyer.ip)
         assertEquals("Agent/1", request.buyer.userAgent)
         assertEquals(attempt.expiresAt, request.expiresAt)
-        assertEquals("https://shop.example/api/market/payments/fake/return/${attempt.token}/success", request.urls.success)
-        assertEquals("https://shop.example/api/market/payments/fake/notify/${attempt.token}", request.urls.notify)
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/payments/fake/return/${attempt.token}/success", request.urls.success)
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/payments/fake/notify/${attempt.token}", request.urls.notify)
         assertEquals("https://shop.example/store/order/${order.publicId}", request.urls.orderPage)
         assertNull(request.replaces)
         assertNull(request.subscription)
@@ -794,7 +796,7 @@ class PaymentServiceIT : MarketDaoITBase() {
         ph.effects.failOn = "StartShipping"
 
         assertThrows(IllegalStateException::class.java) { runBlocking { ph.succeed(order.id, attempt) } }
-        assertEquals(0, count("market_webhook_delivery"), "the order.paid row was written before the failing effect and is gone with the rollback")
+        assertEquals(0, count("webhook_delivery"), "the order.paid row was written before the failing effect and is gone with the rollback")
 
         val after = ph.order(order.id)
 
@@ -803,13 +805,13 @@ class PaymentServiceIT : MarketDaoITBase() {
         assertEquals(PaymentStatus.PENDING, ph.attempts(order.id).single().status, "the attempt is rolled back with the order")
         assertEquals(RedemptionState.HELD, w.redemptions.getByOrderId(order.id, pool).single().state)
         assertEquals(0, w.products.getById(product.id, pool)!!.soldCount)
-        assertEquals(0, count("market_webhook_delivery"), "the webhook row is in the same transaction")
+        assertEquals(0, count("webhook_delivery"), "the webhook row is in the same transaction")
 
         ph.effects.failOn = null
         ph.succeed(order.id, attempt)
 
         assertEquals(OrderStatus.COMPLETED, ph.order(order.id).status, "the event can be applied again")
-        assertEquals(1, count("market_webhook_delivery"))
+        assertEquals(1, count("webhook_delivery"))
     }
 
     @Test
@@ -820,23 +822,23 @@ class PaymentServiceIT : MarketDaoITBase() {
         val paid = orderOf(buy(fx.product(price = 1000)))
         val attempt = ph.attempts(paid.id).single()
 
-        assertEquals(0, count("market_webhook_delivery"))
+        assertEquals(0, count("webhook_delivery"))
 
         ph.succeed(paid.id, attempt)
         ph.succeed(paid.id, attempt)
 
-        val rows = sql("SELECT `event`, `orderId` FROM `pano_market_webhook_delivery`")
+        val rows = sql("SELECT `event`, `subjectRef` FROM `pano_webhook_delivery`")
 
         assertEquals(1, rows.size)
-        assertEquals("order.paid", rows.single().getString("event"))
-        assertEquals(paid.id, rows.single().getLong("orderId"))
+        assertEquals("market.order.paid", rows.single().getString("event"))
+        assertEquals("order:${paid.id}", rows.single().getString("subjectRef"))
 
         val underpaid = orderOf(buy(fx.product(price = 1000)))
 
         ph.succeed(underpaid.id, ph.attempts(underpaid.id).single(), amount = 100)
 
         assertEquals(OrderStatus.REVIEW, ph.order(underpaid.id).status)
-        assertEquals(1, count("market_webhook_delivery"), "no order.paid for an order that waits for a human")
+        assertEquals(1, count("webhook_delivery"), "no order.paid for an order that waits for a human")
     }
 
     @Test

@@ -1,6 +1,6 @@
 // Scenarios 62 and 63 of 13 section 25.4: the product editor and the stock dialog.
 import crypto from 'node:crypto';
-import { must } from '../lib/api.mjs';
+import { must, PANEL_MARKET_API, listOf } from '../lib/api.mjs';
 import { product } from '../lib/bootstrap.mjs';
 import { assert, assertEqual } from '../lib/ui.mjs';
 import { signedIn, openMarket, waitFor, bodyText, modalsClosed } from './lib/panel.mjs';
@@ -57,15 +57,15 @@ function assertStored(product, server) {
 
 async function productByName(admin, name) {
   const found = must(
-    await admin.get(`/api/panel/market/products?search=${encodeURIComponent(name)}`),
+    await admin.get(`${PANEL_MARKET_API}/products?search=${encodeURIComponent(name)}`),
     'find the product',
   ).json;
-  return (found.products ?? [])[0] ?? null;
+  return listOf(found, 'products')[0] ?? null;
 }
 
 /** The product detail as the editor loads it. */
 async function detailOf(admin, id) {
-  const body = must(await admin.get(`/api/panel/market/products/${id}`), 'product detail').json;
+  const body = must(await admin.get(`${PANEL_MARKET_API}/products/${id}`), 'product detail').json;
   return body.product ?? body;
 }
 
@@ -133,7 +133,6 @@ export const scenarios = [
           [0, 'Size', ['Small', 'Large']],
           [1, 'Color', ['Red', 'Blue']],
         ]) {
-          await page.getByRole('button', { name: 'Actions' }).first().click();
           await page.getByRole('button', { name: 'Add Option' }).click();
           await page.getByLabel('Option name, e.g. Size').nth(axis).fill(label);
           for (const [i, value] of values.entries()) {
@@ -149,7 +148,6 @@ export const scenarios = [
 
         // one custom field
         await openTab(page, 'Custom Fields');
-        await page.getByRole('button', { name: 'Actions' }).first().click();
         await page.getByRole('button', { name: 'Add Field' }).click();
         const fieldModal = page.locator('.modal.show');
         await fieldModal.getByLabel('Label', { exact: true }).fill('Engraving');
@@ -349,7 +347,6 @@ export const scenarios = [
 ];
 
 async function addAction(page, type) {
-  await page.getByRole('button', { name: 'Actions' }).first().click();
   await page.getByRole('button', { name: 'Add Action' }).click();
   await page
     .locator('.modal.show')

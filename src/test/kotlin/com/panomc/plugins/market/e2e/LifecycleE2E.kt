@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.e2e
 
+import com.panomc.platform.route.ApiPaths
 import com.panomc.plugins.market.e2e.support.E2eCatalog
 import com.panomc.plugins.market.e2e.support.E2eClient
 import com.panomc.plugins.market.e2e.support.E2eDb
@@ -30,11 +31,11 @@ import java.io.File
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
- * Migration and lifecycle (17 section 9.10): L-01 to L-06 on an instance of their own (`instance-lifecycle`, ports 18198 / 18199, database
- * `pano_market_e2e_lifecycle`; `MARKET_E2E_LIFECYCLE_PORT_BASE` / `MARKET_E2E_LIFECYCLE_SUFFIX` move them for a second stream, 17 section 10
- * hard codes the defaults for stream A, see `runtime/streams.md` gotcha 6). The class never touches the per-stream instance of the other E2E classes.
+ * Migration and lifecycle (17 section 9.10): L-01 to L-06 on an instance of their own (`instance-lifecycle<slot>`, the ports +10 / +11 of the slot's block, database
+ * `pano_market_e2e_lifecycle<slot>`; it runs inside a slot, `tools/of-slot.sh`; `MARKET_E2E_LIFECYCLE_PORT_BASE` / `MARKET_E2E_LIFECYCLE_SUFFIX` override them). The class never touches the per-stream instance of the other E2E classes.
  *
  * The instance is started, killed and restarted only through `scripts/e2e-instance.sh` (exact recorded PID, never a pattern). This is the one T4
  * class that may write schema and fixture SQL (17 section 8.3): L-01 loads `schema-v2.sql` / `seed-v2.sql` through the script, L-04 drops and
@@ -89,7 +90,7 @@ class LifecycleE2E {
         assertHealthy()
 
         // the seeded products, readable through the panel API with the values of seed-v2.sql (minor units x100 became decimals)
-        val products = lc.admin.get("/api/panel/market/products").ok().obj().getJsonArray("products").map { it as JsonObject }.associateBy { it.getLong("id") }
+        val products = lc.admin.get("${MarketPaths.PANEL_ROOT}/products").ok().obj().getJsonArray("items").map { it as JsonObject }.associateBy { it.getLong("id") }
         assertEquals(setOf(1L, 2L, 3L, 4L, 5L, 6L), products.keys, "six legacy products")
         data class P(val slug: String, val name: String, val price: Double, val credit: Double, val stock: Long?, val status: String, val sold: Long)
         val expected = mapOf(
@@ -112,7 +113,7 @@ class LifecycleE2E {
         }
 
         // the three legacy orders with their items
-        val orders = lc.admin.get("/api/panel/market/orders").ok().obj().getJsonArray("orders").map { it as JsonObject }.associateBy { it.getLong("id") }
+        val orders = lc.admin.get("${MarketPaths.PANEL_ROOT}/orders").ok().obj().getJsonArray("items").map { it as JsonObject }.associateBy { it.getLong("id") }
         assertEquals(setOf(1L, 2L, 3L), orders.keys)
         data class O(val user: String, val total: Double, val currency: String, val method: String, val status: String, val items: List<Triple<String, Int, Double>>)
         val wantOrders = mapOf(
@@ -160,7 +161,7 @@ class LifecycleE2E {
         assertEquals(4L, lc.db.long("SELECT `usedCount` - `legacyUsedCount` + 4 FROM `pano_market_coupon` WHERE `id` = 1"), "coupon usedCount = legacyUsedCount, no redemption rows")
 
         // stats equal the numbers of the seed (order 2: 2 x 10 + 5 = 25 USD at the stored rate 32.5 = 812.50 TRY; the REFUNDED and PENDING orders count for nothing)
-        val stats = lc.admin.get("/api/panel/market/stats").ok().obj()
+        val stats = lc.admin.get("${MarketPaths.PANEL_ROOT}/stats").ok().obj()
         val total = stats.getJsonObject("summary").getJsonObject("total")
         assertEquals(1, total.getInteger("count"), "one paid legacy order")
         assertEquals(812.5, total.getDouble("revenue"), 0.0001, "revenue in the stats currency")
@@ -176,8 +177,8 @@ class LifecycleE2E {
         assertTrue(settings.getString("secret") == "fixture-plaintext-secret" || settings.getString("secret").startsWith("v1:"), "the secret was not lost: ${settings.getString("secret")?.take(3)}")
 
         // the public side serves the migrated catalogue
-        val store = E2eClient(lc.url, "visitor").get("/api/market/store").ok().obj()
-        assertEquals("ok", store.getString("result"))
+        val store = E2eClient(lc.url, "visitor").get("${MarketPaths.SITE_ROOT}/store").ok().obj()
+        assertFalse(store.containsKey("result") || store.containsKey("error"), "a success body carries neither result nor error")
 
         // the migrated database still carries a version 2 creator code with earnings but no earning rows: the legacy-aware form of I14 (and of I6, I8, I11, I17)
         runBlocking { InvariantChecker.assertAll(lc.db.pool, legacy = true) }
@@ -214,7 +215,7 @@ class LifecycleE2E {
         assertTrue(secret!!.startsWith("v1:"), "the legacy plaintext secret is encrypted at rest after the upgrade (is plaintext: ${secret == LEGACY_FAKE_SECRET})")
         assertNotEquals(LEGACY_FAKE_SECRET, secret)
 
-        val revealed = lc.admin.post("/api/panel/market/payment-methods/fake/reveal", JsonObject().put("password", lc.adminPassword())).ok().obj()
+        val revealed = lc.admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/fake/reveal", JsonObject().put("password", lc.adminPassword())).ok().obj()
 
         assertEquals(LEGACY_FAKE_SECRET, revealed.getJsonObject("settings").getString("secret"), "the encrypted secret reveals to the same value")
     }
@@ -239,10 +240,10 @@ class LifecycleE2E {
 
         // before the setup the platform itself refuses every API call; the market is loaded and waits for the setup
         val visitor = E2eClient(lc.url, "visitor")
-        val early = visitor.get("/api/market/store")
+        val early = visitor.get("${MarketPaths.SITE_ROOT}/store")
         assertEquals(401, early.status, "the platform answers before the setup")
         assertEquals("INSTALLATION_REQUIRED", early.error)
-        assertEquals(401, visitor.post("/api/market/payments/fake/webhook", JsonObject()).status, "no inbound call reaches the market before the setup")
+        assertEquals(401, visitor.post("${MarketPaths.SITE_ROOT}/payments/fake/webhook", JsonObject()).status, "no inbound call reaches the market before the setup")
         assertTrue(lc.log().contains("Setup is not finished, waiting for setup completion"), "the market waits for the setup")
         assertFalse(lc.log().contains("[MarketPlugin] - Started!"), "the market did not start its bootstrap before the setup")
 
@@ -255,12 +256,12 @@ class LifecycleE2E {
         val log = lc.log()
         assertTrue(log.contains("Setup finished! Initializing plugin"), "the market saw the setup end")
         assertEquals(1, Regex(Regex.escape("[MarketPlugin] - Started!")).findAll(log).count(), "the bootstrap ran exactly once")
-        assertEquals(200, visitor.get("/api/market/store").status, "the store answers 200 without a restart")
+        assertEquals(200, visitor.get("${MarketPaths.SITE_ROOT}/store").status, "the store answers 200 without a restart")
 
         lc.login()
         assertHealthy()
         lc.bootstrap()
-        assertEquals(true, E2eClient(lc.url, "visitor").get("/api/market/store").obj().getJsonObject("settings").getBoolean("testMode"))
+        assertEquals(true, E2eClient(lc.url, "visitor").get("${MarketPaths.SITE_ROOT}/store").obj().getJsonObject("settings").getBoolean("testMode"))
 
         // stop gate. The panel API (PUT /api/panel/plugins/:id status=false) stops AND disables the plugin, and a disabled plugin's routes are unmounted by the
         // host, so the 503 STORE_UNAVAILABLE gate of 00 section 8.9 (a stopped plugin that keeps its routes) is not reachable over HTTP; it is proven by the
@@ -270,13 +271,13 @@ class LifecycleE2E {
         val ordersBefore = lc.db.count("market_order")
 
         lc.setPlugin("pano-plugin-market", false)
-        val store = visitor.get("/api/market/store")
-        assertFalse(store.status == 200 && store.json?.getString("result") == "ok", "the store does not answer while the plugin is off")
+        val store = visitor.get("${MarketPaths.SITE_ROOT}/store")
+        assertFalse(store.status == 200, "the store does not answer while the plugin is off")
         val checkout = lc.checkout(lc.admin, product)
         assertFalse(checkout.status in 200..299, "checkout is not served while the plugin is off, was ${checkout.status}")
         val hook = lc.gateway.sendWebhook("payment.succeeded", JsonObject().put("reference", "gone").put("amount", "1.00").put("currency", "EUR"))
         assertFalse(hook.any { it.statusCode() in 200..299 }, "the inbound route is not served while the plugin is off: ${hook.map { it.statusCode() }}")
-        val back = visitor.get("/api/market/payments/fake/return/anything/success")
+        val back = visitor.get("${MarketPaths.SITE_ROOT}/payments/fake/return/anything/success")
         assertNotEquals(303, back.status, "the return route does not redirect while the plugin is off")
         assertEquals(eventsBefore, lc.db.count("market_payment_event"), "nothing was stored while the plugin was off")
         assertEquals(ordersBefore, lc.db.count("market_order"), "no order was created while the plugin was off")
@@ -284,13 +285,13 @@ class LifecycleE2E {
         // start it again (and the dependent fake provider the panel disabled with it)
         lc.setPlugin("pano-plugin-market", true)
         lc.setPlugin("pano-plugin-market-fake", true)
-        Await.until(60_000, 500, "store answers 200 again") { visitor.get("/api/market/store").status == 200 }
+        Await.until(60_000, 500, "store answers 200 again") { visitor.get("${MarketPaths.SITE_ROOT}/store").status == 200 }
         lc.login()
         assertHealthy()
         lc.awaitProvidersActive()
 
         // the settings and the provider configuration survived the stop / start (config.conf and secret.key are in the data folder)
-        assertEquals(true, visitor.get("/api/market/store").obj().getJsonObject("settings").getBoolean("testMode"))
+        assertEquals(true, visitor.get("${MarketPaths.SITE_ROOT}/store").obj().getJsonObject("settings").getBoolean("testMode"))
 
         // and the money path works again end to end: checkout, webhook, order completes
         val order = lc.publicIdOf(lc.checkout(lc.admin, product).ok())
@@ -313,7 +314,7 @@ class LifecycleE2E {
         val plain = lc.product("L02A", "4.00")
         val delayed = lc.product("L02B", "4.00", actions = JsonArray().add(JsonObject().put("id", "a1").put("type", "CREDIT").put("phase", "GRANT").put("value", 5).put("delay", 3600)).encode())
         val endpoint = lc.admin.post(
-            "/api/panel/market/webhooks",
+            "${ApiPaths.PANEL_ROOT}/webhooks",
             JsonObject().put("name", "sink-${System.currentTimeMillis().toString(36)}").put("url", "http://127.0.0.1:${lc.gatewayPort}/hooks/store").put("events", JsonArray().add("*"))
         ).ok().obj().getLong("id")
         val credits = lc.creditBalance()
@@ -337,8 +338,8 @@ class LifecycleE2E {
         // row to rest again with its retry in the future
         val firstTry = Await.untilValue(60_000, 100, "the first webhook attempt was refused and the retry is scheduled") {
             lc.db.sql(
-                "SELECT * FROM `pano_market_webhook_delivery` WHERE `orderId` = ? AND `event` = 'order.paid' AND `attempts` >= 1 AND `status` <> 'SENDING' AND `nextAttemptAt` > ?",
-                paidOrderId, System.currentTimeMillis() + 15_000
+                "SELECT * FROM `pano_webhook_delivery` WHERE `subjectRef` = ? AND `event` = 'market.order.paid' AND `attempts` >= 1 AND `status` <> 'SENDING' AND `nextAttemptAt` > ?",
+                "order:$paidOrderId", System.currentTimeMillis() + 15_000
             ).firstOrNull()
         }
         val webhookId = firstTry.getLong("id")
@@ -372,12 +373,12 @@ class LifecycleE2E {
 
         // 4. time travel: the three open items become due, the jobs finish them
         lc.sql("UPDATE `pano_market_payment` SET `nextQueryAt` = ? WHERE `reference` = ?", System.currentTimeMillis() - 1_000, pendingRef)
-        lc.sql("UPDATE `pano_market_webhook_delivery` SET `nextAttemptAt` = ? WHERE `id` = ?", System.currentTimeMillis() - 1_000, webhookId)
+        lc.sql("UPDATE `pano_webhook_delivery` SET `nextAttemptAt` = ? WHERE `id` = ?", System.currentTimeMillis() - 1_000, webhookId)
         lc.sql("UPDATE `pano_market_delivery` SET `runAfter` = `runAfter` - 7200000, `nextAttemptAt` = `nextAttemptAt` - 7200000 WHERE `id` = ?", deliveryId)
 
         lc.awaitOrder(pending, "COMPLETED")
         Await.until(90_000, 500, "the delivery is CONFIRMED") { lc.db.string("SELECT `status` FROM `pano_market_delivery` WHERE `id` = ?", deliveryId) == "CONFIRMED" }
-        Await.until(90_000, 500, "the webhook is SUCCEEDED") { lc.db.string("SELECT `status` FROM `pano_market_webhook_delivery` WHERE `id` = ?", webhookId) == "SUCCEEDED" }
+        Await.until(90_000, 500, "the webhook is SUCCEEDED") { lc.db.string("SELECT `status` FROM `pano_webhook_delivery` WHERE `id` = ?", webhookId) == "SUCCEEDED" }
 
         // nothing ran twice
         assertEquals("SUCCEEDED", lc.attemptStatus(pendingRef))
@@ -389,20 +390,20 @@ class LifecycleE2E {
         assertEquals(1, finished.getInteger("attempts"), "the scheduled delivery was executed once")
         assertEquals(1, lc.db.count("market_credit_tx", "`type` = 'ACTION' AND `deliveryId` = ?", deliveryId), "one credit transaction for the delivery")
         assertEquals(credits + 500L, lc.creditBalance(), "the 5 credits arrived exactly once")
-        val sent = lc.db.sql("SELECT `attempts` FROM `pano_market_webhook_delivery` WHERE `id` = ?", webhookId).single().getInteger("attempts")
+        val sent = lc.db.sql("SELECT `attempts` FROM `pano_webhook_delivery` WHERE `id` = ?", webhookId).single().getInteger("attempts")
 
         assertEquals(2, sent, "the unsent webhook took two attempts (503, then 200)")
         assertEquals(sent, lc.gateway.hooks("store").count { it.header("X-Pano-Event-Id") == eventId }, "the sink saw exactly the attempts the row counted")
         // the order.paid of the order that completed after the restart is delivered once as well
         val second = Await.untilValue(90_000, 500, "the second order.paid is delivered") {
-            lc.db.sql("SELECT * FROM `pano_market_webhook_delivery` WHERE `orderId` = ? AND `event` = 'order.paid' AND `status` = 'SUCCEEDED'", lc.orderId(pending)).firstOrNull()
+            lc.db.sql("SELECT * FROM `pano_webhook_delivery` WHERE `subjectRef` = ? AND `event` = 'market.order.paid' AND `status` = 'SUCCEEDED'", "order:${lc.orderId(pending)}").firstOrNull()
         }
 
         assertEquals(1, second.getInteger("attempts"))
         assertEquals(1, lc.gateway.hooks("store").count { it.header("X-Pano-Event-Id") == second.getString("eventId") })
-        assertEquals(1, lc.db.count("market_webhook_delivery", "`orderId` = ? AND `event` = 'order.paid'", lc.orderId(pending)), "one webhook row per paid order")
+        assertEquals(1, lc.db.count("webhook_delivery", "`subjectRef` = ? AND `event` = 'market.order.paid'", "order:${lc.orderId(pending)}"), "one webhook row per paid order")
         assertNotNull(paidRef)
-        lc.sql("DELETE FROM `pano_market_webhook_endpoint` WHERE `id` = ?", endpoint)
+        lc.sql("DELETE FROM `pano_webhook_endpoint` WHERE `id` = ?", endpoint)
         lc.assertInvariants()
     }
 
@@ -421,7 +422,7 @@ class LifecycleE2E {
         val product = lc.product("L03", "4.00")
         val adminId = lc.adminId()
         val grant = lc.admin.request(
-            "POST", "/api/panel/market/credits/accounts/$adminId/grant", JsonObject().put("amount", 50).put("note", "lifecycle L-03"),
+            "POST", "${MarketPaths.PANEL_ROOT}/credits/accounts/$adminId/grant", JsonObject().put("amount", 50).put("note", "lifecycle L-03"),
             mapOf("Idempotency-Key" to UUID.randomUUID().toString())
         )
         grant.ok()
@@ -478,7 +479,7 @@ class LifecycleE2E {
 
         // order X is payable again: a new attempt closes the lost one, the money arrives, the 2.00 credits are spent exactly once
         assertEquals(true, lc.order(publicX).getBoolean("canRetryPayment"), "the order can be paid again")
-        lc.admin.post("/api/market/orders/$publicX/pay", JsonObject().put("paymentMethodId", "fake").put("useCredits", 2)).ok()
+        lc.admin.post("${MarketPaths.SITE_ROOT}/orders/$publicX/pay", JsonObject().put("paymentMethodId", "fake").put("useCredits", 2)).ok()
         lc.pay(publicX)
         lc.awaitOrder(publicX, "COMPLETED")
         assertEquals("SUCCEEDED", lc.attemptStatus(lc.reference(publicX)))
@@ -637,15 +638,15 @@ class LifecycleE2E {
         lc.script("restart", degraded = true)
         lc.login()
 
-        val health = lc.admin.get("/api/panel/market/health").ok().obj()
+        val health = lc.admin.get("${MarketPaths.PANEL_ROOT}/health").ok().obj()
 
         assertEquals("DEGRADED", health.getString("runtimeState"), "the market runs degraded")
         assertEquals(false, health.getJsonObject("schema").getBoolean("ok"))
         assertTrue(health.getJsonObject("schema").getJsonArray("missing").any { it.toString().contains("$table#$index") }, "health lists the missing index: ${health.getJsonObject("schema").getJsonArray("missing")}")
-        assertEquals(200, E2eClient(lc.url, "platform").get("/api/health").status, "the platform keeps running")
+        assertEquals(200, E2eClient(lc.url, "platform").get("/api/v1/health").status, "the platform keeps running")
 
         val visitor = E2eClient(lc.url, "visitor")
-        val store = visitor.get("/api/market/store")
+        val store = visitor.get("${MarketPaths.SITE_ROOT}/store")
 
         assertEquals(503, store.status)
         assertEquals("STORE_UNAVAILABLE", store.error)
@@ -668,12 +669,12 @@ class LifecycleE2E {
         lc.afterStart()
         assertEquals(wanted, indexColumns(), "the index is back")
         assertHealthy()
-        assertEquals(200, visitor.get("/api/market/store").status)
+        assertEquals(200, visitor.get("${MarketPaths.SITE_ROOT}/store").status)
 
         // the event the degraded store deferred waits for a replay (the gateway would redeliver it, or the admin replays it): it now completes the pending order once
         val deferredId = lc.db.long("SELECT `id` FROM `pano_market_payment_event` WHERE `status` = 'DEFERRED' ORDER BY `id` DESC LIMIT 1") ?: throw AssertionError("no deferred event")
 
-        lc.admin.post("/api/panel/market/payment-events/$deferredId/replay", JsonObject()).ok()
+        lc.admin.post("${MarketPaths.PANEL_ROOT}/payment-events/$deferredId/replay", JsonObject()).ok()
         lc.awaitOrder(pending, "COMPLETED")
         assertEquals(0L, lc.db.count("market_payment_event", "`status` = 'DEFERRED'"), "no deferred event is left")
 
@@ -738,7 +739,7 @@ class LifecycleE2E {
             lc.script("start")
             lc.login()
             lc.bootstrap()
-            assertEquals(true, E2eClient(lc.url, "visitor").get("/api/market/store").obj().getJsonObject("settings").getBoolean("testMode"), "the settings were saved")
+            assertEquals(true, E2eClient(lc.url, "visitor").get("${MarketPaths.SITE_ROOT}/store").obj().getJsonObject("settings").getBoolean("testMode"), "the settings were saved")
 
             lc.script("restart")
             lc.afterStart()
@@ -751,7 +752,7 @@ class LifecycleE2E {
     // ----------------------------------------------------------------------------------------------------------------------------------
 
     private fun assertHealthy() {
-        val health = lc.admin.get("/api/panel/market/health").ok().obj()
+        val health = lc.admin.get("${MarketPaths.PANEL_ROOT}/health").ok().obj()
 
         assertEquals("READY", health.getString("runtimeState"), "runtimeState: ${health.getJsonArray("bootstrapErrors")} ${health.getJsonObject("schema")}")
         assertEquals(true, health.getJsonObject("schema").getBoolean("ok"), "schema.ok: ${health.getJsonObject("schema")}")
@@ -763,9 +764,12 @@ class LifecycleE2E {
      * (inherited) `PANO_IT_MARIADB*` environment.
      */
     private class Lifecycle {
-        private val base = (System.getenv("MARKET_E2E_LIFECYCLE_PORT_BASE")?.toIntOrNull() ?: 18198)
+        private val slot = System.getenv("PANO_OF_SLOT")?.lowercase()?.takeIf { it.matches(Regex("[a-z0-9]{1,4}")) } ?: ""
+        private val base = System.getenv("MARKET_E2E_LIFECYCLE_PORT_BASE")?.toIntOrNull()
+            ?: System.getenv("PANO_OF_SLOT_BASE")?.toIntOrNull()?.plus(10)
+            ?: throw IllegalStateException("no test-instance slot: run through pano-open-frontend-spec/tools/of-slot.sh (or set MARKET_E2E_LIFECYCLE_PORT_BASE)")
         private val suffix = System.getenv("MARKET_E2E_LIFECYCLE_SUFFIX")?.lowercase()?.takeIf { it.matches(Regex("[a-z0-9]{1,8}")) } ?: ""
-        val name = "lifecycle$suffix"
+        val name = "lifecycle$slot$suffix"
         val httpPort = base
         val gatewayPort = base + 1
         val url = "http://127.0.0.1:$httpPort"
@@ -883,7 +887,7 @@ class LifecycleE2E {
         private fun openGateway() {
             closeGateway()
             gatewayOrNull = FakePayGateway(
-                port = gatewayPort, webhookTarget = { "$url/api/market/payments/fake/webhook" }, eventPrefix = "lc${eventSeed}"
+                port = gatewayPort, webhookTarget = { "$url${MarketPaths.SITE_ROOT}/payments/fake/webhook" }, eventPrefix = "lc${eventSeed}"
             )
         }
 
@@ -893,22 +897,22 @@ class LifecycleE2E {
             // the install step points the platform at `smtp.invalid`: a mail row would retry under a 60 s backoff and `mailsPending` could never drain (as in E2eSession.bootstrap 2a);
             // with the platform's mail switch off the mail job ends each row SKIPPED at its first claim
             admin.multipart(
-                "PUT", "/api/panel/settings",
+                "PUT", "/api/v1/panel/settings",
                 mapOf("email" to JsonObject().put("enabled", false).put("hostname", "").put("port", 587).put("ssl", false).put("starttls", "DISABLED").put("username", "").put("password", "").put("sender", "").encode())
             ).ok()
             admin.post(
-                "/api/panel/market/settings",
+                "${MarketPaths.PANEL_ROOT}/settings",
                 JsonObject()
                     .put("testMode", true).put("currency", "EUR").put("statsCurrency", "EUR").put("vatPercent", 20).put("showVatInPrice", true)
                     .put("allowGuestCheckout", true).put("allowGiftPurchase", true).put("orderExpiryMinutes", 60)
                     .put("checkoutRateLimitPerMinute", 100_000).put("quoteRateLimitPerMinute", 100_000).put("couponLockThreshold", 1000)
-                    .put("allowPrivateWebhookTargets", true).put("invoiceEnabled", true).put("sendEmailAfterPurchase", true).put("storeTimeZone", "UTC")
+                    .put("invoiceEnabled", true).put("sendEmailAfterPurchase", true).put("storeTimeZone", "UTC")
                     .put("storeEnabled", true).put("minimumOrderAmount", 0)
             ).ok()
-            admin.post("/api/panel/market/settings/credits", JsonObject().put("creditsEnabled", true).put("creditValue", 1.0).put("allowMixedCreditPayment", true)).ok()
+            admin.post("${MarketPaths.PANEL_ROOT}/settings/credits", JsonObject().put("creditsEnabled", true).put("creditValue", 1.0).put("allowMixedCreditPayment", true)).ok()
             for (id in listOf("fake", "fake-eur")) {
-                admin.post("/api/panel/market/payment-methods/$id", JsonObject().put("settings", JsonObject().put("gatewayUrl", gateway.baseUrl).put("secret", gateway.secret))).ok()
-                admin.post("/api/panel/market/payment-methods/$id/toggle", JsonObject().put("enabled", true)).ok()
+                admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/$id", JsonObject().put("settings", JsonObject().put("gatewayUrl", gateway.baseUrl).put("secret", gateway.secret))).ok()
+                admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/$id/toggle", JsonObject().put("enabled", true)).ok()
             }
             awaitProvidersActive()
             standard = true
@@ -918,7 +922,7 @@ class LifecycleE2E {
         fun ensureStandard() {
             if (standard && script("status", expect = null) == 0) {
                 login()
-                if (admin.get("/api/panel/market/health").status == 200 && gatewayOrNull != null) return
+                if (admin.get("${MarketPaths.PANEL_ROOT}/health").status == 200 && gatewayOrNull != null) return
             }
             closeGateway()
             script("start")
@@ -934,7 +938,7 @@ class LifecycleE2E {
         fun afterStart() {
             login()
             awaitProvidersActive()
-            val settings = E2eClient(url, "visitor").get("/api/market/store").obj().getJsonObject("settings")
+            val settings = E2eClient(url, "visitor").get("${MarketPaths.SITE_ROOT}/store").obj().getJsonObject("settings")
 
             check(settings.getBoolean("testMode") == true) { "the settings of the bootstrap did not survive the restart (testMode=${settings.getBoolean("testMode")})" }
         }
@@ -944,7 +948,7 @@ class LifecycleE2E {
 
             try {
                 Await.until(60_000, 500, "providers fake and fake-eur are ACTIVE") {
-                    val providers = admin.get("/api/panel/market/payment-providers", log = false).obj().getJsonArray("providers").map { it as JsonObject }
+                    val providers = admin.get("${MarketPaths.PANEL_ROOT}/payment-providers", log = false).obj().getJsonArray("items").map { it as JsonObject }
 
                     last = providers.joinToString { "${it.getString("id")}=${it.getString("state")}" }
                     listOf("fake", "fake-eur").all { id -> providers.firstOrNull { it.getString("id") == id }?.getString("state") == "ACTIVE" }
@@ -955,7 +959,7 @@ class LifecycleE2E {
         }
 
         fun setPlugin(pluginId: String, enabled: Boolean) {
-            admin.put("/api/panel/plugins/$pluginId", JsonObject().put("status", enabled)).ok()
+            admin.put("/api/v1/panel/addons/$pluginId", JsonObject().put("status", enabled)).ok()
         }
 
         // ---- data ---------------------------------------------------------------------------------------------------------------
@@ -978,12 +982,12 @@ class LifecycleE2E {
 
             credits?.let { body.put("useCredits", it) }
 
-            return client.post("/api/market/checkout", body, mapOf("Idempotency-Key" to UUID.randomUUID().toString()))
+            return client.post("${MarketPaths.SITE_ROOT}/checkout", body, mapOf("Idempotency-Key" to UUID.randomUUID().toString()))
         }
 
         fun publicIdOf(checkout: E2eResponse): String = checkout.obj().getJsonObject("order").getString("publicId")
 
-        fun order(publicId: String): JsonObject = admin.get("/api/market/orders/$publicId").ok().obj().getJsonObject("order")
+        fun order(publicId: String): JsonObject = admin.get("${MarketPaths.SITE_ROOT}/orders/$publicId").ok().obj().getJsonObject("order")
 
         fun orderId(publicId: String): Long = db.long("SELECT `id` FROM `pano_market_order` WHERE `publicId` = ?", publicId) ?: throw AssertionError("no order $publicId")
 
@@ -1020,7 +1024,7 @@ class LifecycleE2E {
             var last: JsonObject? = null
             try {
                 Await.until(30_000, 250, "queues drained") {
-                    val queues = admin.get("/api/panel/market/health", log = false).obj().getJsonObject("queues")
+                    val queues = admin.get("${MarketPaths.PANEL_ROOT}/health", log = false).obj().getJsonObject("queues")
                     last = queues
 
                     listOf("deliveriesPending", "webhooksPending", "mailsPending", "deferredEvents").all { (queues?.getInteger(it) ?: 0) == 0 }

@@ -143,14 +143,14 @@
 
 <script>
   import { onMount } from 'svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { CardHeader, NoContent } from '@panomc/sdk/components/panel';
   import { tooltip } from '@panomc/sdk/utils/tooltip';
   import { _, showErrorToast, showSuccessToast } from '../../../i18n';
   import ConfirmModal from '../ConfirmModal.svelte';
   import LoadError from '../LoadError.svelte';
   import ShippingZoneModal from '../modals/ShippingZoneModal.svelte';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { movedIds } from '../../utils/payment-methods.js';
   import {
     MAX_ZONES,
@@ -166,15 +166,15 @@
   // extra / extraError: GET /shipping/zones loaded with the page (utils/settings.js extraPathFor).
   let { extra = null, extraError = null } = $props();
 
-  let zones = $state.raw(Array.isArray(extra?.zones) ? extra.zones : []);
+  let zones = $state.raw(Array.isArray(extra?.items) ? extra.items : []);
   let loading = $state(!extra && !extraError);
   let loadError = $state(extraError);
   let busy = $state(false);
 
   async function fetchZones() {
-    const result = await call(ApiUtil.get({ path: marketPath('/shipping/zones') }));
+    const result = await call(api.panel.get({ path: '/shipping/zones' }));
     if (!result.ok) return result.error;
-    zones = Array.isArray(result.body.zones) ? result.body.zones : [];
+    zones = Array.isArray(result.body.items) ? result.body.items : [];
     return null;
   }
 
@@ -202,9 +202,7 @@
     busy = true;
     let result;
     try {
-      result = await call(
-        ApiUtil.post({ path: marketPath('/shipping/zones/sort'), body: { ids } }),
-      );
+      result = await call(api.panel.post({ path: '/shipping/zones/sort', body: { ids } }));
     } finally {
       busy = false;
     }
@@ -225,9 +223,7 @@
       }),
       confirmLabel: $_('common.delete'),
       onConfirm: async () => {
-        const result = await call(
-          ApiUtil.delete({ path: marketPath(`/shipping/zones/${zone.id}`) }),
-        );
+        const result = await call(api.panel.delete({ path: `/shipping/zones/${zone.id}` }));
         if (!result.ok && result.error !== 'NOT_FOUND') {
           toastError($_, result);
           return false;

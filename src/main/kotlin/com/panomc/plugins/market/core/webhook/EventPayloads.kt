@@ -2,39 +2,27 @@ package com.panomc.plugins.market.core.webhook
 
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.db.model.MarketOrderItem
+import com.panomc.plugins.market.util.StoreLinks
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.math.BigDecimal
 
-/** The store identity of the envelope (`store` object). */
-class StoreInfo(val name: String, val url: String)
+/** The store identity of the payloads; [links] gives the order address of the events (the front-end URL map, doc 05 section 10.2). */
+class StoreInfo(val name: String, val url: String, val links: StoreLinks = StoreLinks.ofBase(url))
 
 /**
  * JSON bodies of store webhooks (08 section 15.4). Money is a decimal number in the stated currency (the x100 columns
  * divided by 100, exact), time is epoch milliseconds, absent values are `null`. Billing data, addresses, IP addresses
- * and tokens are never included. Adding keys is not a breaking change; removing or renaming one bumps [API_VERSION].
+ * and tokens are never included. Adding keys is not a breaking change; removing or renaming one bumps the `apiVersion` of core's envelope.
  *
  * The shared objects ([order], [buyer], [recipient], [items]) are public so that the slices that emit the other events
  * (refund, dispute, subscription, shipment) compose their `data` from the same pieces.
  */
 object EventPayloads {
-    const val API_VERSION = 1
-
-    /** The envelope; its `id` is the `eventId` of the delivery row. */
-    fun envelope(eventId: String, event: String, createdAtMs: Long, testMode: Boolean, store: StoreInfo, data: JsonObject): JsonObject =
-        JsonObject()
-            .put("id", eventId)
-            .put("event", event)
-            .put("createdAt", createdAtMs)
-            .put("apiVersion", API_VERSION)
-            .put("testMode", testMode)
-            .put("store", JsonObject().put("name", store.name).put("url", store.url))
-            .put("data", data)
-
     fun money(minor: Long): BigDecimal = BigDecimal.valueOf(minor, 2)
 
     fun orderUrl(store: StoreInfo, publicId: String?): String? =
-        publicId?.let { "${store.url.trimEnd('/')}/store/order/$it" }
+        publicId?.let { store.links.order(it) }
 
     fun order(o: MarketOrder, store: StoreInfo): JsonObject = JsonObject()
         .put("id", o.id)
@@ -137,9 +125,6 @@ object EventPayloads {
         .put("buyer", buyer(o, buyerUuid))
         .put("recipient", recipient(o, recipientUuid))
         .put("items", items(items, serverNames, expiresAt))
-
-    /** `data` of `test.ping`. */
-    fun testPing(endpointId: Long): JsonObject = JsonObject().put("message", "ping").put("endpointId", endpointId)
 
     private fun snapshotSlug(snapshot: String?): String? = parseObject(snapshot)?.getString("slug")
 

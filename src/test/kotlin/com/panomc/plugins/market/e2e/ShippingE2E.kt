@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.e2e
 
+import com.panomc.platform.route.ApiPaths
 import com.panomc.plugins.market.e2e.support.E2eClient
 import com.panomc.plugins.market.e2e.support.E2eTestBase
 import com.panomc.plugins.market.support.Await
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test
 import java.net.InetSocketAddress
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * Shipping on a real instance (17 section 9.7, 10): zone, method and rate rows through the panel API, a physical order through checkout and the fake
@@ -58,13 +60,13 @@ class ShippingE2E : E2eTestBase() {
      */
     private fun <T> withShipping(country: String = "DE", freeShippingThreshold: String? = null, block: (Shipping) -> T): T {
         val n = sequence.incrementAndGet()
-        val others = admin.get("/api/panel/market/shipping/zones").ok().obj().getJsonArray("zones").map { it as JsonObject }.filter { it.getString("status") == "ACTIVE" }.map { it.getLong("id") }
+        val others = admin.get("${MarketPaths.PANEL_ROOT}/shipping/zones").ok().obj().getJsonArray("items").map { it as JsonObject }.filter { it.getString("status") == "ACTIVE" }.map { it.getLong("id") }
 
-        others.forEach { admin.put("/api/panel/market/shipping/zones/$it", JsonObject().put("status", "INACTIVE")).ok() }
+        others.forEach { admin.put("${MarketPaths.PANEL_ROOT}/shipping/zones/$it", JsonObject().put("status", "INACTIVE")).ok() }
 
         try {
             val zoneId = admin.post(
-                "/api/panel/market/shipping/zones", JsonObject().put("name", "E2E zone $n").put("countries", JsonArray().add(country)).put("status", "ACTIVE")
+                "${MarketPaths.PANEL_ROOT}/shipping/zones", JsonObject().put("name", "E2E zone $n").put("countries", JsonArray().add(country)).put("status", "ACTIVE")
             ).ok().obj().getLong("id")
 
             try {
@@ -77,18 +79,18 @@ class ShippingE2E : E2eTestBase() {
                     )
                 freeShippingThreshold?.let { body.put("freeShippingThreshold", it.toDouble()) }
 
-                val methodId = admin.post("/api/panel/market/shipping/methods", body).ok().obj().getLong("id")
+                val methodId = admin.post("${MarketPaths.PANEL_ROOT}/shipping/methods", body).ok().obj().getLong("id")
 
                 try {
                     return block(Shipping(zoneId, methodId))
                 } finally {
-                    admin.delete("/api/panel/market/shipping/methods/$methodId")
+                    admin.delete("${MarketPaths.PANEL_ROOT}/shipping/methods/$methodId")
                 }
             } finally {
-                admin.delete("/api/panel/market/shipping/zones/$zoneId")
+                admin.delete("${MarketPaths.PANEL_ROOT}/shipping/zones/$zoneId")
             }
         } finally {
-            others.forEach { admin.put("/api/panel/market/shipping/zones/$it", JsonObject().put("status", "ACTIVE")) }
+            others.forEach { admin.put("${MarketPaths.PANEL_ROOT}/shipping/zones/$it", JsonObject().put("status", "ACTIVE")) }
         }
     }
 
@@ -98,7 +100,7 @@ class ShippingE2E : E2eTestBase() {
         address?.let { body.put("shippingAddress", it) }
         methodId?.let { body.put("shippingMethodId", it) }
 
-        return client.post("/api/market/checkout/quote", body).ok().obj().getJsonObject("quote")
+        return client.post("${MarketPaths.SITE_ROOT}/checkout/quote", body).ok().obj().getJsonObject("quote")
     }
 
     private fun checkoutBody(productId: Long, quantity: Int, address: JsonObject?, methodId: Long?): JsonObject {
@@ -161,8 +163,8 @@ class ShippingE2E : E2eTestBase() {
         val buyer = buyer()
         val sink = WebhookSink().also { sinks += it }
         val endpointId = admin.post(
-            "/api/panel/market/webhooks",
-            JsonObject().put("name", "E2E shipping sink").put("url", sink.url).put("events", JsonArray().add("shipment.shipped")).put("format", "JSON").put("signing", "NONE")
+            "${ApiPaths.PANEL_ROOT}/webhooks",
+            JsonObject().put("name", "E2E shipping sink").put("url", sink.url).put("events", JsonArray().add("market.shipment.shipped")).put("format", "JSON").put("signing", "NONE")
         ).ok().obj().getLong("id")
 
         try {
@@ -206,7 +208,7 @@ class ShippingE2E : E2eTestBase() {
 
                 // the quote is frozen: changing the method's rate afterwards does not touch the order
                 admin.put(
-                    "/api/panel/market/shipping/methods/${shipping.methodId}",
+                    "${MarketPaths.PANEL_ROOT}/shipping/methods/${shipping.methodId}",
                     JsonObject().put(
                         "rates",
                         JsonArray().add(JsonObject().put("zoneId", shipping.zoneId).put("basis", "FLAT").put("price", 50.0))
@@ -221,7 +223,7 @@ class ShippingE2E : E2eTestBase() {
 
                 // manual shipment: IN_TRANSIT, order SHIPPED, mail once, webhook once
                 val itemId = itemId(orderId)
-                val created = admin.post("/api/panel/market/orders/$orderId/shipments", shipmentBody(itemId, 1, "E2E-TRACK-0001")).ok().obj().getJsonObject("shipment")
+                val created = admin.post("${MarketPaths.PANEL_ROOT}/orders/$orderId/shipments", shipmentBody(itemId, 1, "E2E-TRACK-0001")).ok().obj().getJsonObject("shipment")
                 val shipmentId = created.getLong("id")
 
                 assertEquals("IN_TRANSIT", created.getString("status"))
@@ -234,14 +236,14 @@ class ShippingE2E : E2eTestBase() {
 
                 Await.until(60_000, 500, "the shipment.shipped webhook reached the sink") { sink.received.isNotEmpty() }
 
-                assertEquals(1, sink.received.count { it.getString("event") == "shipment.shipped" }, "the sink got shipment.shipped once")
+                assertEquals(1, sink.received.count { it.getString("event") == "market.shipment.shipped" }, "the sink got shipment.shipped once")
                 assertEquals(
-                    1L, db.count("market_webhook_delivery", "`event` = 'shipment.shipped' AND `orderId` = ? AND `endpointId` = ?", orderId, endpointId),
+                    1L, db.count("webhook_delivery", "`event` = 'market.shipment.shipped' AND `subjectRef` = ? AND `endpointId` = ?", "order:$orderId", endpointId),
                     "one delivery row"
                 )
 
                 // delivered
-                admin.put("/api/panel/market/shipments/$shipmentId", JsonObject().put("status", "DELIVERED")).ok()
+                admin.put("${MarketPaths.PANEL_ROOT}/shipments/$shipmentId", JsonObject().put("status", "DELIVERED")).ok()
 
                 assertEquals("DELIVERED", db.string("SELECT `status` FROM `pano_market_shipment` WHERE `id` = ?", shipmentId))
                 assertEquals("DELIVERED", shippingStatus(publicId))
@@ -250,7 +252,7 @@ class ShippingE2E : E2eTestBase() {
                 )
             }
         } finally {
-            admin.delete("/api/panel/market/webhooks/$endpointId")
+            admin.delete("${ApiPaths.PANEL_ROOT}/webhooks/$endpointId")
         }
     }
 
@@ -290,7 +292,7 @@ class ShippingE2E : E2eTestBase() {
 
             assertEquals(400, refused.status)
             assertEquals("SHIPPING_UNAVAILABLE", refused.error)
-            assertEquals("NO_ZONE", refused.obj().getString("reason"))
+            assertEquals("NO_ZONE", refused.details.getString("reason"))
         }
     }
 
@@ -309,12 +311,12 @@ class ShippingE2E : E2eTestBase() {
             assertEquals(3, db.long("SELECT `quantity` FROM `pano_market_order_item` WHERE `id` = ?", itemId)?.toInt())
             assertEquals("PENDING", shippingStatus(publicId))
 
-            admin.post("/api/panel/market/orders/$orderId/shipments", shipmentBody(itemId, 1, "E2E-PART-0001")).ok()
+            admin.post("${MarketPaths.PANEL_ROOT}/orders/$orderId/shipments", shipmentBody(itemId, 1, "E2E-PART-0001")).ok()
 
             assertEquals("PARTIAL", shippingStatus(publicId))
             assertEquals(1L, shippedQuantity(itemId))
 
-            admin.post("/api/panel/market/orders/$orderId/shipments", shipmentBody(itemId, 2, "E2E-PART-0002")).ok()
+            admin.post("${MarketPaths.PANEL_ROOT}/orders/$orderId/shipments", shipmentBody(itemId, 2, "E2E-PART-0002")).ok()
 
             assertEquals("SHIPPED", shippingStatus(publicId))
             assertEquals(3L, shippedQuantity(itemId))
@@ -324,7 +326,7 @@ class ShippingE2E : E2eTestBase() {
             )
 
             // everything is shipped: one more unit is refused and nothing changes
-            val again = admin.post("/api/panel/market/orders/$orderId/shipments", shipmentBody(itemId, 3, "E2E-PART-0003"))
+            val again = admin.post("${MarketPaths.PANEL_ROOT}/orders/$orderId/shipments", shipmentBody(itemId, 3, "E2E-PART-0003"))
 
             assertEquals(400, again.status, "shipping 3 again: ${again.error} ${again.json}")
             assertEquals(3L, shippedQuantity(itemId))

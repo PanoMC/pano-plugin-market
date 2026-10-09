@@ -1,5 +1,8 @@
 <script module>
-  import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
+  import { failureOf, PANEL_URL } from '../utils/api.js';
+  import { emptyList } from '../utils/page.js';
 
   /**
    * @type {import("@sveltejs/kit").PageLoad}
@@ -19,17 +22,18 @@
     });
 
     try {
-      const res = await ApiUtil.get({
-        path: '/api/panel/market/categories' + queryParams,
+      const res = await api.panel.get({
+        path: '/categories' + queryParams,
         request: event,
       });
 
-      if (res.error) throw res.error;
+      const failure = failureOf(res);
+      if (failure) throw new Error(failure);
 
       return { data: res };
     } catch (e) {
       console.error('[Market] Failed to load categories', e);
-      return { data: { categories: [], categoryCount: 0 } };
+      return { data: emptyList(null) };
     }
   }
 </script>
@@ -43,8 +47,9 @@
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import CreateCategoryModal from '../components/modals/CreateCategoryModal.svelte';
   import { sectionsFor } from '../navigation.js';
-  import { call, errorKey, marketPath } from '../utils/api.js';
+  import { call, errorKey } from '../utils/api.js';
   import { siblingMove } from '../utils/category-gift.js';
+  import { pageOf } from '../utils/page.js';
 
   let { data } = $props();
 
@@ -69,8 +74,9 @@
   let searchValue = $derived($page.url.searchParams.get('search') || '');
 
   // Category tree data comes from load(); re-derives whenever load() re-runs.
-  let categoriesData = $derived(data.categories || []);
-  let categoryCount = $derived(data.categoryCount ?? (data.categories?.length ?? 0));
+  const list = $derived(pageOf(data));
+  let categoriesData = $derived(list.items);
+  let categoryCount = $derived(list.totalItems);
 
   let mappedCategories = $derived(categoriesData.map(mapCategory));
   let categories = $derived(optimisticCategories ?? mappedCategories);
@@ -106,7 +112,7 @@
       position: node.position ?? 0,
       imageFileName: node.imageFileName || null,
       image: node.imageFileName
-        ? `${base}/api/panel/market/categories/image/${node.imageFileName}`
+        ? `${PANEL_URL}/categories/image/${node.imageFileName}`
         : null,
       children: (node.children || []).map(mapCategory),
     };
@@ -171,7 +177,7 @@
       confirmLabel: $_('common.delete'),
       variant: 'danger',
       onConfirm: async () => {
-        const result = await call(ApiUtil.delete({ path: marketPath(`/categories/${category.id}`) }));
+        const result = await call(api.panel.delete({ path: `/categories/${category.id}` }));
         if (!result.ok) {
           // CATEGORY_IN_USE keeps the row; a missing row (404) or a stale tree is refreshed.
           showErrorToast($_(errorKey(result.error)));
@@ -190,7 +196,7 @@
   async function moveCategory(category, dir) {
     const body = siblingMove(categories, category.id, dir);
     if (!body) return;
-    const result = await call(ApiUtil.post({ path: marketPath('/categories/sort'), body }));
+    const result = await call(api.panel.post({ path: '/categories/sort', body }));
     if (!result.ok) showErrorToast($_(errorKey(result.error)));
     await refreshData();
   }
@@ -360,12 +366,13 @@
       : { id: sourceId, position: positionMap[target.position], targetId: target.id };
 
     try {
-      const result = await ApiUtil.post({
-        path: '/api/panel/market/categories/sort',
+      const result = await api.panel.post({
+        path: '/categories/sort',
         body,
       });
 
-      if (result.error) throw result.error;
+      const failure = failureOf(result);
+      if (failure) throw new Error(failure);
 
       // Reconcile the optimistic tree against the server's canonical order.
       await refreshData();

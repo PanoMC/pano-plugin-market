@@ -26,8 +26,6 @@ import com.panomc.plugins.market.db.impl.MarketShippingMethodDaoImpl
 import com.panomc.plugins.market.db.impl.MarketShippingRateDaoImpl
 import com.panomc.plugins.market.db.impl.MarketShippingZoneDaoImpl
 import com.panomc.plugins.market.db.impl.MarketServerStateDaoImpl
-import com.panomc.plugins.market.db.impl.MarketWebhookDeliveryDaoImpl
-import com.panomc.plugins.market.db.impl.MarketWebhookEndpointDaoImpl
 import com.panomc.plugins.market.db.impl.MarketDiscountDaoImpl
 import com.panomc.plugins.market.db.impl.MarketGiftDaoImpl
 import com.panomc.plugins.market.db.impl.MarketAddressDaoImpl
@@ -74,7 +72,7 @@ import org.junit.jupiter.api.Test
  * `MarketSchema.ensure` on a real MariaDB (17 section 11.3 `MarketSchemaIT`, 01 section 14.1): the tables declared so
  * far (the ten of the existing plugin plus the six of the catalogue step, MK-023), idempotency, the repair of the
  * frozen scheme-version-2 install, the `Dao.init` contract, the fixup framework and the "generic update no longer
- * writes the counters" rule of 00 section 8.3. MK-031 changes the table assertion to 53 tables and scheme version 10
+ * writes the counters" rule of 00 section 8.3. MK-031 changes the table assertion to 53 tables (51 since MK-15 moved the webhook tables to core) and scheme version 10
  * once the other tables exist.
  */
 class MarketSchemaIT : MarketDbTestBase() {
@@ -94,7 +92,7 @@ class MarketSchemaIT : MarketDbTestBase() {
         // scheme version 7 (MK-028)
         "credit_account", "credit_tx", "credit_entry",
         // scheme version 8 (MK-029)
-        "delivery", "server_state", "webhook_endpoint", "webhook_delivery", "mail_outbox",
+        "delivery", "server_state", "mail_outbox",
         // scheme versions 9 and 10, part a (MK-030)
         "subscription", "subscription_renewal", "block", "throttle", "goal",
         // scheme version 10, part b (MK-031)
@@ -128,7 +126,7 @@ class MarketSchemaIT : MarketDbTestBase() {
         val after = SchemaSnapshot.take(pool)
         assertTrue(first.clean && second.clean)
         assertEquals(before, after)
-        assertTrue(before.columns.isNotEmpty() && before.keys.isNotEmpty() && before.tables.size == 53)
+        assertTrue(before.columns.isNotEmpty() && before.keys.isNotEmpty() && before.tables.size == 51)
     }
 
     @Test
@@ -152,7 +150,7 @@ class MarketSchemaIT : MarketDbTestBase() {
 
             val expected = SchemaSnapshot.take(pool)
             val actual = SchemaSnapshot.take(referencePool)
-            assertEquals(53, expected.tables.size)
+            assertEquals(51, expected.tables.size)
             assertEquals(expected.tables, actual.tables)
             assertEquals(expected.columns, actual.columns)
             assertEquals(expected.keys, actual.keys)
@@ -236,8 +234,7 @@ class MarketSchemaIT : MarketDbTestBase() {
         { c -> MarketRefundDaoImpl().init(c) }, { c -> MarketRefundItemDaoImpl().init(c) },
         { c -> MarketDisputeDaoImpl().init(c) }, { c -> MarketProviderStateDaoImpl().init(c) },
         { c -> MarketCreditAccountDaoImpl().init(c) }, { c -> MarketCreditTxDaoImpl().init(c) }, { c -> MarketCreditEntryDaoImpl().init(c) },
-        { c -> MarketDeliveryDaoImpl().init(c) }, { c -> MarketServerStateDaoImpl().init(c) }, { c -> MarketWebhookEndpointDaoImpl().init(c) },
-        { c -> MarketWebhookDeliveryDaoImpl().init(c) }, { c -> MarketMailOutboxDaoImpl().init(c) },
+        { c -> MarketDeliveryDaoImpl().init(c) }, { c -> MarketServerStateDaoImpl().init(c) }, { c -> MarketMailOutboxDaoImpl().init(c) },
         { c -> MarketSubscriptionDaoImpl().init(c) }, { c -> MarketSubscriptionRenewalDaoImpl().init(c) }, { c -> MarketBlockDaoImpl().init(c) },
         { c -> MarketThrottleDaoImpl().init(c) }, { c -> MarketGoalDaoImpl().init(c) },
         { c -> MarketShippingZoneDaoImpl().init(c) }, { c -> MarketShippingMethodDaoImpl().init(c) }, { c -> MarketShippingRateDaoImpl().init(c) },

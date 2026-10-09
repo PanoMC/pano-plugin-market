@@ -53,7 +53,7 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _, showErrorToast } from '../../../i18n';
   import { countryOptions } from '../product/countries.js';
   import { isStaleError } from '../order-detail/actions.js';
@@ -103,7 +103,7 @@
     saving = true;
     try {
       const result = await call(
-        ApiUtil.put({ path: built.request.path, body: built.request.body }),
+        api.panel.put({ path: built.request.path, body: built.request.body }),
       );
       if (result.ok) {
         hideModal(modalElement);

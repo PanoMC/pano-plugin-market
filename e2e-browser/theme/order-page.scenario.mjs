@@ -1,7 +1,7 @@
 // Theme browser scenarios 37 to 42 of 14 section 20.3 (the order page), vanilla theme. Ids TH-37 .. TH-42 are the numbers of the spec.
 // Orders are made through the storefront API and opened the way a buyer lands on them (a gateway return, a mail link, a profile link); every
 // scenario fails on a console error or a page error that it did not provoke on purpose.
-import { must } from '../lib/api.mjs';
+import { must, MARKET_API, PANEL_MARKET_API } from '../lib/api.mjs';
 import { newContext } from '../lib/browser.mjs';
 import { assert, assertEqual, hydrated, open } from '../lib/ui.mjs';
 import {
@@ -133,7 +133,7 @@ export const scenarios = [
 
       // the first method points at an address nobody listens on, so the gateway cannot be reached when the payment starts
       must(
-        await admin.post('/api/panel/market/payment-methods/fake', {
+        await admin.post(`${PANEL_MARKET_API}/payment-methods/fake`, {
           settings: { gatewayUrl: 'http://127.0.0.1:1', secret: gateway.secret },
         }),
         'break the first method',
@@ -142,7 +142,7 @@ export const scenarios = [
 
       try {
         page.on('response', (response) => {
-          if (response.url() === `${env.url}/api/market/checkout`)
+          if (response.url() === `${env.url}${MARKET_API}/checkout`)
             swallowed.push(response.status());
         });
         await checkoutByForm(page, env, vip, 'fake');
@@ -181,7 +181,7 @@ export const scenarios = [
         assertEqual(paid.payment.methodId, 'fake-eur', 'the paying attempt is the second method');
       } finally {
         must(
-          await admin.post('/api/panel/market/payment-methods/fake', {
+          await admin.post(`${PANEL_MARKET_API}/payment-methods/fake`, {
             settings: { gatewayUrl: gateway.baseUrl, secret: gateway.secret },
           }),
           'repair the first method',
@@ -464,7 +464,7 @@ export const scenarios = [
         await link.waitFor({ timeout: 30000 });
         assertEqual(
           await link.getAttribute('href'),
-          `/api/market/orders/${placed.publicId}/invoice`,
+          `${MARKET_API}/orders/${placed.publicId}/invoice`,
           'the session path is a plain link to the route',
         );
 
@@ -495,7 +495,7 @@ export const scenarios = [
 
           must(
             await admin.post(
-              `/api/panel/market/orders/${await orderRowId(admin, placed.publicId)}/bank-transfer`,
+              `${PANEL_MARKET_API}/orders/${await orderRowId(admin, placed.publicId)}/bank-transfer`,
               { decision: 'APPROVE' },
             ),
             'approve the transfer',
@@ -565,7 +565,7 @@ export const scenarios = [
         const trackingUrl = 'https://tracking.example.com/t/E2E41TRACK';
         const created = must(
           await admin.post(
-            `/api/panel/market/orders/${await orderRowId(admin, placed.publicId)}/shipments`,
+            `${PANEL_MARKET_API}/orders/${await orderRowId(admin, placed.publicId)}/shipments`,
             {
               providerId: 'manual',
               items: [{ orderItemId: orderItem.id, quantity: 1 }],
@@ -577,7 +577,7 @@ export const scenarios = [
         ).json.shipment;
 
         must(
-          await admin.put(`/api/panel/market/shipments/${created.id}`, { status: 'IN_TRANSIT' }),
+          await admin.put(`${PANEL_MARKET_API}/shipments/${created.id}`, { status: 'IN_TRANSIT' }),
           'in transit',
         );
 
@@ -612,7 +612,7 @@ export const scenarios = [
 
         // the shipment is delivered while the page is open: the page polls and turns to "paid"
         must(
-          await admin.put(`/api/panel/market/shipments/${created.id}`, { status: 'DELIVERED' }),
+          await admin.put(`${PANEL_MARKET_API}/shipments/${created.id}`, { status: 'DELIVERED' }),
           'delivered',
         );
         await page.getByText(text('theme.order.state.paid')).first().waitFor({ timeout: 60000 });
@@ -632,7 +632,7 @@ export const scenarios = [
 
         must(
           await admin.post(
-            `/api/panel/market/orders/${await orderRowId(admin, placed.publicId)}/refunds`,
+            `${PANEL_MARKET_API}/orders/${await orderRowId(admin, placed.publicId)}/refunds`,
             { amount: total, reason: 'E2E refund' },
             idem(),
           ),
@@ -680,7 +680,7 @@ export const scenarios = [
         const statusCalls = [];
 
         page.on('request', (request) => {
-          if (request.url().includes(`/api/market/orders/${placed.publicId}/status`))
+          if (request.url().includes(`${MARKET_API}/orders/${placed.publicId}/status`))
             statusCalls.push(Date.now());
         });
 

@@ -70,7 +70,7 @@ class CreditRaceIT : MarketDaoITBase() {
 
     private fun key() = "panel:race-${sequence.incrementAndGet()}"
 
-    private fun codeOf(failure: Throwable): String? = (failure as? Error)?.let { JsonObject(it.encode()).getString("error") }
+    private fun codeOf(failure: Throwable): String? = (failure as? Error)?.let { JsonObject(it.encode()).getJsonObject("error").getString("code") }
 
     private suspend fun spentCount() = count("market_credit_tx", "`type` = 'CAPTURE'")
 

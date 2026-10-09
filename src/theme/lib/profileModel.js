@@ -1,5 +1,6 @@
 // Pure model of the profile pages (14 §12.1-12.3): navigation items, purchases / credits load results, order rows,
 // gift redemption, the free-amount top-up and the credit ledger. No SDK, no DOM: unit-tested.
+import { readList } from './api-result.js';
 import { creditAmountKey, messageKey, reasonKey } from './errorMap.js';
 import { waitSeconds } from './paymentPanel.js';
 
@@ -184,15 +185,25 @@ export function profileExtras({ sidebar = false, meta = false } = {}) {
   return extra;
 }
 
-const orderList = (res) =>
-  res && res.ok === true
-    ? {
-        state: 'READY',
-        orders: Array.isArray(res.orders) ? res.orders : [],
-        orderCount: Number(res.orderCount) || 0,
-        totalPage: Math.max(1, Number(res.totalPage) || 1),
-      }
-    : { state: 'ERROR', code: res?.code || 'NETWORK', orders: [], orderCount: 0, totalPage: 1 };
+const orderList = (res) => {
+  if (!(res && res.ok === true))
+    return {
+      state: 'ERROR',
+      code: res?.code || 'NETWORK',
+      orders: [],
+      orderCount: 0,
+      totalPages: 1,
+    };
+
+  const list = readList(res);
+
+  return {
+    state: 'READY',
+    orders: list.items,
+    orderCount: list.totalItems,
+    totalPages: list.totalPages,
+  };
+};
 
 /** The order list part of the purchases page state (also used after a client-side fetch). */
 export const readOrders = orderList;
@@ -218,9 +229,7 @@ export function resolvePurchasesLoad({
       filter: filter ?? { page: 1, status: '' },
       orders: orderList(orders),
       entitlements:
-        entitlements?.ok === true && Array.isArray(entitlements.entitlements)
-          ? entitlements.entitlements
-          : [],
+        entitlements?.ok === true && Array.isArray(entitlements.items) ? entitlements.items : [],
       entitlementsFailed: !(entitlements?.ok === true),
       summary: readSummary(summary),
       settings: settings || {},
@@ -286,8 +295,8 @@ export function resolveCreditsLoad({
       ledger: readLedger(credits),
       topUp,
       packs:
-        topUp && packs?.ok === true && Array.isArray(packs.products)
-          ? packs.products.filter((p) => isObject(p))
+        topUp && packs?.ok === true
+          ? readList(packs).items.filter((p) => isObject(p))
           : [],
       summary: readSummary(summary),
     },
@@ -298,11 +307,9 @@ export function resolveCreditsLoad({
 
 /** The ledger part of the credits page state. */
 export function readLedger(res) {
-  return {
-    entries: Array.isArray(res?.entries) ? res.entries : [],
-    entryCount: Number(res?.entryCount) || 0,
-    totalPage: Math.max(1, Number(res?.totalPage) || 1),
-  };
+  const list = readList(res);
+
+  return { entries: list.items, entryCount: list.totalItems, totalPages: list.totalPages };
 }
 
 // ---- purchases: entitlements and order rows ---------------------------------------------------------------

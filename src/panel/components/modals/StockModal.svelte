@@ -87,9 +87,9 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _, showErrorToast, showSuccessToast } from '../../../i18n';
-  import { call, errorKey, marketPath } from '../../utils/api.js';
+  import { call, errorKey } from '../../utils/api.js';
   import { stockFieldErrorKey } from '../../utils/stock.js';
 
   let { onUpdated = () => {} } = $props();
@@ -144,9 +144,7 @@
     saving = true;
     const body = { mode, value: sent };
     if (targetId) body.variantId = targetId;
-    const result = await call(
-      ApiUtil.post({ path: marketPath(`/products/${productId}/stock`), body }),
-    );
+    const result = await call(api.panel.post({ path: `/products/${productId}/stock`, body }));
     saving = false;
 
     if (!result.ok) {

@@ -177,6 +177,7 @@ import org.slf4j.LoggerFactory
 import java.math.BigDecimal
 import java.security.MessageDigest
 import java.util.Locale
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * What a shipping quote of the cart is (03, 10 section 5). The rate engine and the live carrier quotes are MK-132; until
@@ -2695,7 +2696,7 @@ class CheckoutService(
             description = candidate.row.customDescription?.takeIf { it.isNotBlank() } ?: descriptor.description.resolve(locale),
             hint = descriptor.checkoutHint?.resolve(locale),
             icon = descriptor.icon,
-            logoUrl = if (descriptor.logo != null) "/api/market/payment-providers/${candidate.id}/logo" else null,
+            logoUrl = if (descriptor.logo != null) MarketPaths.site("/payment-providers/${candidate.id}/logo") else null,
             color = descriptor.color,
             feeAmount = evaluation.feeAmount,
             available = reason == null,

@@ -1,7 +1,7 @@
 // Helpers of the theme scenarios 1 to 15 (14 section 20.3). Nothing here is a scenario: the runner skips every `lib` directory.
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
-import { Api, must } from '../../lib/api.mjs';
+import { Api, must, PANEL_MARKET_API, listOf } from '../../lib/api.mjs';
 import { product as createProduct, run } from '../../lib/bootstrap.mjs';
 import { assert, hydrated, open } from '../../lib/ui.mjs';
 
@@ -16,7 +16,7 @@ export async function html(env, path, headers = {}) {
 
 /** The slug the backend stored (it slugifies whatever was asked for: ASCII only). */
 export async function storedSlug(admin, id) {
-  const res = must(await admin.get(`/api/panel/market/products/${id}`), `product ${id}`);
+  const res = must(await admin.get(`${PANEL_MARKET_API}/products/${id}`), `product ${id}`);
 
   return res.json.product.slug;
 }
@@ -30,7 +30,10 @@ export async function product(admin, name, fields = {}) {
 
 /** Panel market settings (partial update), restored by the caller in a `finally`. */
 export async function setSettings(admin, patch) {
-  must(await admin.post('/api/panel/market/settings', patch), `settings ${JSON.stringify(patch)}`);
+  must(
+    await admin.post(`${PANEL_MARKET_API}/settings`, patch),
+    `settings ${JSON.stringify(patch)}`,
+  );
 }
 
 /** Runs `fn` with `patch` applied and puts `restore` back afterwards, whatever happens. */
@@ -102,7 +105,7 @@ export async function productWithImages(admin, name, fields, images) {
     form.append(part, new Blob([buffer], { type: 'image/png' }), `${part}.png`);
 
   const res = must(
-    await admin.request('POST', '/api/panel/market/products', form),
+    await admin.request('POST', `${PANEL_MARKET_API}/products`, form),
     `product ${name}`,
   );
 
@@ -115,20 +118,20 @@ export async function productWithImages(admin, name, fields, images) {
 }
 
 /**
- * A Minecraft server the platform knows (what `/api/server/connect` + the panel's accept do for a real component; no socket is opened).
+ * A Minecraft server the platform knows (what `/api/v1/server/connect` + the panel's accept do for a real component; no socket is opened).
  * Returns { id, name }.
  */
 export async function registerServer(env, admin, label) {
   const keys = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
   // the match key is a JSON number, the connect schema wants text
   const platformCode = String(
-    must(await admin.get('/api/panel/basicData'), 'basicData').json.platformServerMatchKey,
+    must(await admin.get('/api/v1/panel/basicData'), 'basicData').json.platformServerMatchKey,
   );
   const name = `e2eb-${label}-${run.tag}${run.next()}`;
   const anon = new Api(env.url, `mc-${label}`);
 
   must(
-    await anon.post('/api/server/connect', {
+    await anon.post('/api/v1/server/connect', {
       platformCode,
       serverName: name,
       host: '127.0.0.1',
@@ -144,11 +147,11 @@ export async function registerServer(env, admin, label) {
   );
 
   // a connect request waits for the owner's accept; it is listed as pending until then
-  const list = must(await admin.get('/api/panel/servers/pending'), 'pending servers').json;
-  const found = (list.servers || []).find((s) => s.name === name);
+  const list = must(await admin.get('/api/v1/panel/servers/pending'), 'pending servers').json;
+  const found = listOf(list, 'items').find((s) => s.name === name);
 
   assert(found, `the server ${name} is listed after connect`);
-  must(await admin.post(`/api/panel/servers/${found.id}/accept`, {}), `accept ${name}`);
+  must(await admin.post(`/api/v1/panel/servers/${found.id}/accept`, {}), `accept ${name}`);
 
   return { id: found.id, name };
 }
@@ -236,7 +239,7 @@ export async function verifiedBuyer(buyer, admin, label) {
   const account = await buyer(label);
 
   must(
-    await admin.put(`/api/panel/players/${account.userId}`, {
+    await admin.put(`/api/v1/panel/players/${account.userId}`, {
       username: account.username,
       email: `${account.username}@example.com`,
       newPassword: '',

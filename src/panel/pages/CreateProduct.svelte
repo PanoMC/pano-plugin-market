@@ -383,10 +383,11 @@
 {/snippet}
 
 <script module>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
+  import { failureOf, PANEL_URL } from '../utils/api.js';
   import { guard } from '../utils/guard.js';
   import { loadContextWith } from '../utils/list-core.js';
-  import { marketPath } from '../utils/api.js';
+  import { pageOf } from '../utils/page.js';
   import { PLUGIN_ID } from '../utils/plugin.js';
 
   /**
@@ -401,14 +402,14 @@
     allowed.pageTitle?.set?.(`plugins.${PLUGIN_ID}.pages.create-product.title`);
 
     const id = event.url.searchParams.get('id');
-    const get = (options) => ApiUtil.get(options);
-    const ok = (res) => !!res && typeof res === 'object' && !res.error;
+    const get = (options) => api.panel.get(options);
+    const ok = (res) => failureOf(res) === null;
 
     const [productRes, categoriesRes, serversRes, productsRes, ctx] = await Promise.all([
-      id ? get({ path: marketPath(`/products/${id}`), request: event }) : Promise.resolve(null),
-      get({ path: marketPath('/categories'), request: event }),
-      get({ path: marketPath('/servers'), request: event }),
-      get({ path: marketPath('/products/simple'), request: event }),
+      id ? get({ path: `/products/${id}`, request: event }) : Promise.resolve(null),
+      get({ path: '/categories', request: event }),
+      get({ path: '/servers', request: event }),
+      get({ path: '/products/simple', request: event }),
       loadContextWith({ get }, event),
     ]);
 
@@ -416,9 +417,7 @@
     let product = null;
     if (id) {
       if (ok(productRes)) product = productRes.product ?? productRes;
-      else
-        error =
-          (productRes && typeof productRes === 'object' && productRes.error) || 'NETWORK_ERROR';
+      else error = failureOf(productRes);
     }
 
     return {
@@ -427,9 +426,9 @@
         productId: id,
         product,
         ctx,
-        categories: ok(categoriesRes) ? (categoriesRes.categories ?? []) : [],
-        servers: ok(serversRes) ? (serversRes.servers ?? []) : [],
-        products: ok(productsRes) ? (productsRes.products ?? []) : [],
+        categories: ok(categoriesRes) ? pageOf(categoriesRes).items : [],
+        servers: ok(serversRes) ? (serversRes.items ?? []) : [],
+        products: ok(productsRes) ? (productsRes.items ?? []) : [],
         sideErrors: {
           categories: !ok(categoriesRes),
           servers: !ok(serversRes),
@@ -506,7 +505,7 @@
   let previewUrl = $state(
     untrack(() =>
       data.product?.imageFileName
-        ? `${base}/api/panel/market/products/image/${data.product.imageFileName}`
+        ? `${PANEL_URL}/products/image/${data.product.imageFileName}`
         : null,
     ),
   );
@@ -613,14 +612,14 @@
     const path = { categories: '/categories', servers: '/servers', products: '/products/simple' }[
       kind
     ];
-    const result = await call(ApiUtil.get({ path: marketPath(path) }));
+    const result = await call(api.panel.get({ path }));
     if (!result.ok) {
       showErrorToast($_(errorKey(result.error)));
       return;
     }
-    if (kind === 'categories') categoriesList = result.body.categories ?? [];
-    else if (kind === 'servers') serversList = result.body.servers ?? [];
-    else productsList = result.body.products ?? [];
+    if (kind === 'categories') categoriesList = pageOf(result.body).items;
+    else if (kind === 'servers') serversList = result.body.items ?? [];
+    else productsList = result.body.items ?? [];
     sideErrors[kind] = false;
   }
 
@@ -679,7 +678,7 @@
   // ---- save ----
 
   async function refresh() {
-    const result = await call(ApiUtil.get({ path: marketPath(`/products/${product.dbId}`) }));
+    const result = await call(api.panel.get({ path: `/products/${product.dbId}` }));
     if (!result.ok) {
       showErrorToast($_(errorKey(result.error)));
       return;
@@ -688,7 +687,7 @@
     product = fromApi(record, ctx);
     existingImageFileName = record.imageFileName ?? null;
     previewUrl = existingImageFileName
-      ? `${base}/api/panel/market/products/image/${existingImageFileName}`
+      ? `${PANEL_URL}/products/image/${existingImageFileName}`
       : null;
     selectedFile = null;
     imageRemoved = false;
@@ -737,12 +736,12 @@
 
       const result = await call(
         isEdit
-          ? ApiUtil.put({
-              path: marketPath(`/products/${product.dbId}`),
+          ? api.panel.put({
+              path: `/products/${product.dbId}`,
               body: formData,
               headers: {},
             })
-          : ApiUtil.post({ path: marketPath('/products'), body: formData, headers: {} }),
+          : api.panel.post({ path: '/products', body: formData, headers: {} }),
       );
 
       if (!result.ok) {
@@ -778,7 +777,7 @@
       variant: 'danger',
       onConfirm: async () => {
         const result = await call(
-          ApiUtil.delete({ path: marketPath(`/products/${product.dbId}`) }),
+          api.panel.delete({ path: `/products/${product.dbId}` }),
         );
         if (!result.ok) {
           showErrorToast($_('pages.create-product.delete-error'));

@@ -3,7 +3,6 @@ import './sdkMocks.js';
 
 // a query string keeps this import apart from the mocked './theme/register.js' of main.test.js
 const { registerTheme, registerOptional } = await import('../../register.js?real');
-const host = await import('../../utils/host.js');
 
 function fakePano({ failNav = false } = {}) {
   const calls = { pages: [], nav: [] };
@@ -24,20 +23,10 @@ function fakePano({ failNav = false } = {}) {
 }
 
 describe('registerTheme', () => {
-  test('binds the host and registers the store page and nav link', () => {
+  test('registers the nav link; the pages are view metadata, not register.js calls', () => {
     const pano = fakePano();
     registerTheme(pano);
-    expect(host.getPano()).toBe(pano);
-    expect(pano.calls.pages.map((p) => p.path)).toEqual([
-      '/store',
-      '/store/order/[id]',
-      '/store/[slug]',
-      '/store/checkout',
-      '/profile/purchases',
-      '/profile/credits',
-      '/profile/subscriptions',
-      '/profile/creator',
-    ]);
+    expect(pano.calls.pages).toEqual([]);
     expect(pano.calls.nav[0][0].href).toBe('/store');
     expect(pano.calls.nav[0][0].text).toBe('plugins.pano-plugin-market.nav-store');
   });

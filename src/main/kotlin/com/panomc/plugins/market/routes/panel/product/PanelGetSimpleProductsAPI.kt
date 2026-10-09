@@ -14,7 +14,7 @@ import com.panomc.plugins.market.routes.base.MarketPanelApi
 import io.vertx.core.json.JsonArray
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 
 /** `GET /api/panel/market/products/simple`: a picker list, readable with any market node (04 section 5). */
@@ -23,7 +23,7 @@ class PanelGetSimpleProductsAPI(private val plugin: MarketPlugin) : MarketPanelA
     // order = 0 so /products/simple is registered before the /products/:id path parameter route.
     override val order = 0
 
-    override val paths = listOf(Path("/api/panel/market/products/simple", RouteType.GET))
+    override val paths = listOf(Path("/products/simple", RouteType.GET))
 
     override val nodes: Set<MarketNode> = emptySet()
 
@@ -37,7 +37,7 @@ class PanelGetSimpleProductsAPI(private val plugin: MarketPlugin) : MarketPanelA
     override suspend fun handleAuthorized(context: RoutingContext): Result =
         Successful(
             mapOf(
-                "products" to JsonArray(products.getAllSimple(databaseManager.getSqlClient()).map { ProductJson.simple(it) })
+                "items" to JsonArray(products.getAllSimple(databaseManager.getSqlClient()).map { ProductJson.simple(it) })
             )
         )
 }

@@ -17,8 +17,8 @@ import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.enumSchema
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
@@ -31,7 +31,7 @@ import io.vertx.json.schema.common.dsl.Schemas.stringSchema
  */
 @Endpoint
 class PanelBankTransferDecisionAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/orders/:id/bank-transfer", RouteType.POST))
+    override val paths = listOf(Path("/orders/:id/bank-transfer", RouteType.POST))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.PAYMENTS)
 

@@ -122,14 +122,13 @@
       path: '/goals',
       params: [],
       nodes: ['CAT'],
-      emptyKey: 'goals',
       title: 'pages.goals.title',
     });
   }
 </script>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { CardHeader, NoContent } from '@panomc/sdk/components/panel';
   import { page, invalidateAll } from '@panomc/sdk/svelte';
   import { _, showErrorToast, showSuccessToast } from '../../i18n';
@@ -138,7 +137,7 @@
   import LoadError from '../components/LoadError.svelte';
   import GoalModal from '../components/modals/GoalModal.svelte';
   import { sectionsFor } from '../navigation.js';
-  import { call, errorKey, marketPath } from '../utils/api.js';
+  import { call, errorKey } from '../utils/api.js';
   import { fmt, currentLocale } from '../utils/locale.js';
   import { progressPercent } from '../utils/goals.js';
 
@@ -149,7 +148,7 @@
 
   const user = $derived($page.data?.user);
   const ctx = $derived(data.ctx ?? null);
-  const goals = $derived(data.goals ?? []);
+  const goals = $derived(data.items ?? []);
 
   // A modal is hidden before the page is re-loaded (13 §1.4); Bootstrap's fade takes 300 ms.
   function afterModalHidden(run) {
@@ -173,7 +172,7 @@
       confirmLabel: $_('common.delete'),
       variant: 'danger',
       onConfirm: async () => {
-        const result = await call(ApiUtil.delete({ path: marketPath(`/goals/${goal.id}`) }));
+        const result = await call(api.panel.delete({ path: `/goals/${goal.id}` }));
         if (!result.ok) {
           showErrorToast($_(errorKey(result.error)));
           if (result.error === 'NOT_FOUND') afterModalHidden(() => invalidateAll());

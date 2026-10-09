@@ -1,5 +1,5 @@
 // Helpers of the panel scenarios 56 to 65 (13 section 25.4). They only use the HTTP API (as a person with a session would) and the browser; no SQL.
-import { must } from '../../lib/api.mjs';
+import { must, PANEL_MARKET_API } from '../../lib/api.mjs';
 import { grantUserNode } from '../../lib/bootstrap.mjs';
 import { newContext } from '../../lib/browser.mjs';
 import { hydrated, panelOpen } from '../../lib/ui.mjs';
@@ -14,7 +14,7 @@ export async function staffAccount({ buyer, admin }, label, suffixes) {
   const api = await buyer(label);
   await grantUserNode(admin, api.userId, PANEL_ACCESS);
   for (const suffix of suffixes) await grantUserNode(admin, api.userId, node(suffix));
-  await api.post('/api/panel/dismissWhatsNew', { version: '1' });
+  await api.post('/api/v1/panel/dismissWhatsNew', { version: '1' });
   return api;
 }
 
@@ -76,14 +76,14 @@ export async function modalsClosed(page, timeout = 15000) {
  * instance, so a scenario that changes them restores them in a `finally`.
  */
 export async function settingsPatch(admin, changes) {
-  const res = must(await admin.get('/api/panel/market/settings'), 'read the market settings');
+  const res = must(await admin.get(`${PANEL_MARKET_API}/settings`), 'read the market settings');
   const before = res.json.settings ?? res.json;
   const restore = {};
   for (const key of Object.keys(changes)) if (key in before) restore[key] = before[key];
-  must(await admin.post('/api/panel/market/settings', changes), 'change the market settings');
+  must(await admin.post(`${PANEL_MARKET_API}/settings`, changes), 'change the market settings');
 
   return async () => {
-    await admin.post('/api/panel/market/settings', restore);
+    await admin.post(`${PANEL_MARKET_API}/settings`, restore);
   };
 }
 

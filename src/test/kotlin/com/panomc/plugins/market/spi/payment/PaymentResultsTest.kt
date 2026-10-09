@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import com.panomc.plugins.market.util.MarketPaths
 
 class PaymentResultsTest {
     private val attempt = PaymentTarget.Attempt(5)
@@ -18,9 +19,9 @@ class PaymentResultsTest {
     @Test
     fun `attempt urls derive the notify channel and the return step from the base urls`() {
         val u = PaymentTestData.urls()
-        assertEquals("https://shop.example/api/market/payments/fake/notify/tok/subscription", u.notify("subscription"))
-        assertEquals("https://shop.example/api/market/payments/fake/return/tok/step/basket-auth", u.step("basket-auth"))
-        assertEquals("https://shop.example/api/market/payments/fake/notify/tok", u.notify)
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/payments/fake/notify/tok/subscription", u.notify("subscription"))
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/payments/fake/return/tok/step/basket-auth", u.step("basket-auth"))
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/payments/fake/notify/tok", u.notify)
         assertEquals("https://shop.example/store/order/ABCDEFGHJKMNPQRSTVWX", u.orderPage)
     }
 

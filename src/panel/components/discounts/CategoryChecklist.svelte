@@ -30,9 +30,10 @@
 
 <script>
   import { onMount } from 'svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _ } from '../../../i18n';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
+  import { pageOf } from '../../utils/page.js';
   import ErrorText from './ErrorText.svelte';
 
   let { selected = $bindable([]), error = null } = $props();
@@ -56,7 +57,7 @@
   }
 
   onMount(async () => {
-    const result = await call(ApiUtil.get({ path: marketPath('/categories') }));
-    categories = result.ok ? flatten(result.body.categories ?? []) : [];
+    const result = await call(api.panel.get({ path: '/categories' }));
+    categories = result.ok ? flatten(pageOf(result.body).items) : [];
   });
 </script>

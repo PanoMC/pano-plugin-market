@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.routes.api.payment
 
+import com.panomc.plugins.market.util.StoreLinks
+import com.panomc.plugins.market.util.MarketLinks
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
@@ -42,6 +44,7 @@ import com.panomc.plugins.market.spi.payment.PaymentUrls
 import io.vertx.core.Vertx
 import io.vertx.ext.web.client.WebClient
 import io.vertx.sqlclient.Pool
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * The context of a provider call that has an attempt in play (start, continue, inbound): the base context of [ProviderContextImpl] plus the
@@ -51,21 +54,22 @@ import io.vertx.sqlclient.Pool
 internal class AttemptPaymentContext(
     private val base: ProviderContext,
     override val payments: PaymentLookup,
-    private val locks: AttemptLocks
+    private val locks: AttemptLocks,
+    private val links: StoreLinks = MarketLinks.platform
 ) : PaymentContext, ProviderContext by base {
     override val urls: PaymentUrls = object : PaymentUrls {
         override fun webhook(channel: String): String =
-            "${base.site.baseUrl}/api/market/payments/${base.providerId}/webhook" + if (channel == MarketSpi.DEFAULT_CHANNEL) "" else "/$channel"
+            "${base.site.baseUrl}${MarketPaths.site("/payments/${base.providerId}/webhook")}" + if (channel == MarketSpi.DEFAULT_CHANNEL) "" else "/$channel"
 
-        override fun checkoutPage(): String = "${base.site.baseUrl}/store/checkout"
+        override fun checkoutPage(): String = links.checkoutPage(base.site.baseUrl)
 
         override fun forAttempt(attempt: PaymentAttemptView): AttemptUrls {
-            val root = "${base.site.baseUrl}/api/market/payments/${base.providerId}"
+            val root = "${base.site.baseUrl}${MarketPaths.site("/payments/${base.providerId}")}"
 
             return AttemptUrls(
                 success = "$root/return/${attempt.token}/success", cancel = "$root/return/${attempt.token}/cancel",
                 pending = "$root/return/${attempt.token}/pending", result = "$root/return/${attempt.token}/result",
-                notify = "$root/notify/${attempt.token}", orderPage = "${base.site.baseUrl}/store/order/${attempt.orderPublicId}"
+                notify = "$root/notify/${attempt.token}", orderPage = links.orderPage(attempt.orderPublicId, base.site.baseUrl)
             )
         }
     }
@@ -232,7 +236,7 @@ private fun buildDispatcher(plugin: MarketPlugin): InboundDispatcher {
                 }
             )
         ),
-        attemptLocks(plugin), SystemClock, SecureIds(), { wiring.site().baseUrl.trimEnd('/') }
+        attemptLocks(plugin), SystemClock, SecureIds(), { wiring.site().baseUrl.trimEnd('/') }, linksOrNull = MarketLinks.platform
     )
 }
 

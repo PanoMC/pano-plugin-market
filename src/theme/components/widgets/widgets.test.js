@@ -12,11 +12,10 @@ import {
   statsRows,
   storeModules,
   supporterView,
+  unwrapWidgets,
+  withSidebar,
 } from './widgetsModel.js';
-
-const { INCLUDE, SIDEBAR_WIDGETS, loadWidgets, registerSidebarWidgets, sidebarWidget } =
-  await import('./widgetsLoader.js');
-const { setPano } = await import('../../utils/host.js');
+import widgets from '../../controllers/widgets.js';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const FILES = [
@@ -179,92 +178,160 @@ describe('visibility rules', () => {
   });
 });
 
-describe('loadWidgets', () => {
-  test('one request per event, even for four concurrent callers', async () => {
-    const calls = [];
-    const fetcher = async (path, options) => {
-      calls.push({ path, options });
-      return { ok: true, result: 'ok', goals: [{ id: 1 }], sidebars: ['home'] };
+describe('market/widgets controller', () => {
+  const fakeHost = (answer, clock = { now: 1000 }) => {
+    const sent = [];
+    const host = {
+      browser: true,
+      now: () => clock.now,
+      request: async (request) => {
+        sent.push(request);
+        if (typeof answer === 'function') return answer(request);
+
+        return answer;
+      },
     };
-    const event = {};
-    const all = await Promise.all([1, 2, 3, 4].map(() => loadWidgets(event, fetcher)));
-    expect(calls).toHaveLength(1);
-    expect(calls[0].path).toBe('/api/market/widgets');
-    expect(calls[0].options.query.include).toBe('recentBuyers,topSupporters,goals,stats');
-    expect(calls[0].options.query.include).toBe(INCLUDE);
-    expect(all[0]).toEqual({ goals: [{ id: 1 }], sidebars: ['home'] });
-    expect(all[3]).toBe(all[0]);
-    await loadWidgets({}, fetcher);
-    expect(calls).toHaveLength(2);
+
+    return { host, sent, clock };
+  };
+
+  test('is an instance controller with a load and nothing else', () => {
+    expect(widgets.name).toBe('widgets');
+    expect(widgets.version).toBe(1);
+    expect(widgets.scope).toBe('instance');
+    expect(typeof widgets.load).toBe('function');
   });
 
-  test('failures and throwing fetchers give {} (nothing renders), never reject', async () => {
-    expect(await loadWidgets({}, async () => ({ ok: false, code: 'NETWORK' }))).toEqual({});
+  test('asks /widgets once with the four keys and hands out the payload without the envelope', async () => {
+    const { host, sent } = fakeHost({ goals: [{ id: 1 }], sidebars: ['home'] });
+    const payload = await widgets.load({ host, params: {} });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0].method).toBe('GET');
+    const url = new URL(sent[0].path, 'https://shop.test');
+    expect(url.pathname).toBe('/plugins/pano-plugin-market/widgets');
+    expect(url.searchParams.get('include')).toBe('recentBuyers,topSupporters,goals,stats');
+    expect(payload).toEqual({ goals: [{ id: 1 }], sidebars: ['home'] });
+  });
+
+  test('four loads on one host share one request, a later load after 5 s asks again', async () => {
+    const { host, sent, clock } = fakeHost({ goals: [] });
+    const all = await Promise.all([1, 2, 3, 4].map(() => widgets.load({ host, params: {} })));
+
+    expect(sent).toHaveLength(1);
+    expect(all[3]).toBe(all[0]);
+    clock.now += 4999;
+    await widgets.load({ host, params: {} });
+    expect(sent).toHaveLength(1);
+    clock.now += 2;
+    await widgets.load({ host, params: {} });
+    expect(sent).toHaveLength(2);
+  });
+
+  test('another host (a server request) never reuses the answer', async () => {
+    const a = fakeHost({ goals: [] });
+    const b = fakeHost({ goals: [] });
+    await widgets.load({ host: a.host, params: {} });
+    await widgets.load({ host: b.host, params: {} });
+
+    expect(a.sent).toHaveLength(1);
+    expect(b.sent).toHaveLength(1);
+  });
+
+  test('failures and throwing hosts give {} (nothing renders), never reject', async () => {
     expect(
-      await loadWidgets({}, async () => {
-        throw new Error('x');
+      await widgets.load({ host: fakeHost({ error: { code: 'NETWORK_ERROR' } }).host, params: {} }),
+    ).toEqual({});
+    expect(
+      await widgets.load({
+        host: fakeHost(() => {
+          throw new Error('x');
+        }).host,
+        params: {},
       }),
     ).toEqual({});
-    expect(await loadWidgets({}, async () => null)).toEqual({});
-  });
-
-  test('without an event object nothing is cached and nothing breaks', async () => {
-    let n = 0;
-    const fetcher = async () => (n++, { ok: true });
-    await loadWidgets(undefined, fetcher);
-    await loadWidgets(undefined, fetcher);
-    expect(n).toBe(2);
   });
 });
 
-describe('sidebarWidget / registration', () => {
-  test('the thunk merges the module and a load() that adds the sidebar id', async () => {
-    const mod = await sidebarWidget(async () => ({ default: 'C' }), 'profile')();
-    expect(mod.default).toBe('C');
-    // the shared failing network path: load still resolves, carrying the sidebar id
-    const data = await mod.load({});
-    expect(data.sidebarId).toBe('profile');
+describe('unwrapWidgets', () => {
+  test('a block or element prop is the payload, a slot prop wraps it once more', () => {
+    const payload = { goals: [1], sidebars: ['home'] };
+
+    expect(unwrapWidgets(payload)).toBe(payload);
+    expect(unwrapWidgets({ data: payload })).toBe(payload);
+    expect(unwrapWidgets(undefined)).toEqual({});
+    expect(unwrapWidgets(null)).toEqual({});
+    expect(unwrapWidgets({ data: {} })).toEqual({});
+  });
+});
+
+describe('sidebar placement', () => {
+  test('withSidebar adds the sidebar id prop to the data once and never overwrites one', () => {
+    const data = { goals: [1], sidebars: ['home'] };
+    expect(withSidebar(data, 'home')).toEqual({
+      goals: [1],
+      sidebars: ['home'],
+      sidebarId: 'home',
+    });
+    expect(withSidebar(data, '')).toBe(data);
+    expect(withSidebar(data, undefined)).toBe(data);
+    const placed = { sidebarId: 'profile' };
+    expect(withSidebar(placed, 'home')).toBe(placed);
+    // the placement rule sees the prop: a widget the admin did not place in this sidebar stays hidden
+    expect(shouldRender(withSidebar(data, 'profile'), 'goals')).toBe(false);
+    expect(shouldRender(withSidebar(data, 'home'), 'goals')).toBe(true);
   });
 
-  function fakePano(features) {
-    const registered = [];
-    return {
-      registered,
-      features: { has: (f) => features.includes(f) },
-      ui: { sidebar: { register: (o) => registered.push(o) } },
+  test('the four widget views carry their sidebar injection and widget: true as view metadata', () => {
+    const expected = {
+      GoalWidget: ['market-goals', 70],
+      TopSupportersWidget: ['market-top-supporters', 60],
+      RecentBuyersWidget: ['market-recent-buyers', 50],
+      StatsWidget: ['market-stats', 40],
     };
-  }
-
-  test('registers 4 widgets in home and profile only with page-sidebar-id', () => {
-    const pano = fakePano(['page-sidebar-id']);
-    setPano(pano);
-    expect(registerSidebarWidgets(pano)).toBe(8);
-    expect(pano.registered).toHaveLength(8);
-    for (const sid of ['home', 'profile']) {
-      const rows = pano.registered.filter((r) => r.sidebarId === sid);
-      expect(rows.map((r) => [r.id, r.priority])).toEqual([
-        ['market-goals', 70],
-        ['market-top-supporters', 60],
-        ['market-recent-buyers', 50],
-        ['market-stats', 40],
-      ]);
-      expect(rows.every((r) => typeof r.component === 'function')).toBe(true);
-      expect(Object.keys(rows[0]).sort()).toEqual(['component', 'id', 'priority', 'sidebarId']);
+    for (const [file, [id, priority]] of Object.entries(expected)) {
+      const src = read(`./${file}.svelte`);
+      // prettier may wrap the object over several lines: compare it with the whitespace folded
+      expect(src.replace(/\s+/g, ' '), file).toContain(
+        `export const view = { sidebar: ['home', 'profile'], id: '${id}', priority: ${priority}, widget: true, };`,
+      );
+      // the module load is the one `market/widgets` load of the page; the payload is the `data` prop
+      expect(src, file).toContain('export const load = (event) =>');
+      expect(src, file).toContain(".load('widgets', { event })");
+      expect(src, file).toContain('.then((data) => ({ data: data ?? {} }));');
     }
-    expect(SIDEBAR_WIDGETS.every((w) => w.priority < 80)).toBe(true);
   });
 
-  test('without the feature nothing is registered', () => {
-    const pano = fakePano([]);
-    setPano(pano);
-    expect(registerSidebarWidgets(pano)).toBe(0);
-    expect(pano.registered).toHaveLength(0);
+  test('the five widget tags are distinct and follow pano-market-<view without Widget>', () => {
+    const tags = {
+      GoalWidget: ['widgets', 'pano-market-goal'],
+      RecentBuyersWidget: ['widgets', 'pano-market-recent-buyers'],
+      TopSupportersWidget: ['widgets', 'pano-market-top-supporters'],
+      StatsWidget: ['widgets', 'pano-market-stats'],
+      NavCart: ['cart', 'pano-market-nav-cart'],
+    };
+    const seen = new Set();
+
+    for (const [view, [dir, tag]] of Object.entries(tags)) {
+      const src = read(`../${dir}/${view}.svelte`).replace(/\s+/g, ' ');
+
+      expect(src, view).toMatch(/export const view = \{[^}]*\bwidget: true,? ?\}/);
+      expect(
+        `pano-market-${view
+          .replace(/(Widget|Block)$/, '')
+          .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+          .toLowerCase()}`,
+      ).toBe(tag);
+      seen.add(tag);
+    }
+
+    expect(seen.size).toBe(5);
   });
 
-  test('register.js wires item 11 through the per-item guard', () => {
+  test('register.js no longer registers the widgets (the build does)', () => {
     const src = read('../../register.js');
-    expect(src).toContain("optional('sidebar-widgets'");
-    expect(src).toContain('registerSidebarWidgets(pano)');
+    expect(src).not.toContain('registerSidebarWidgets');
+    expect(src).not.toContain('sidebar.register');
   });
 });
 
@@ -300,14 +367,15 @@ describe('markup rules', () => {
   });
 
   test('every widget gates on shouldRender and the store modules on storeModules', () => {
-    for (const f of FILES.slice(0, 4)) expect(src[f]).toContain('shouldRender(data,');
+    for (const f of FILES.slice(0, 4))
+      expect(src[f]).toContain('shouldRender(withSidebar(payload, sidebarId),');
     expect(src.StoreModules).toContain('storeModules(settings, widgets)');
   });
 
   test('only allow-listed SDK imports', () => {
     for (const s of Object.values(src))
       for (const m of s.matchAll(/from '(@panomc\/sdk[^']*)'/g))
-        expect(['@panomc/sdk/components/theme']).toContain(m[1]);
+        expect(['@panomc/sdk/components/theme', '@panomc/sdk/controllers']).toContain(m[1]);
   });
 });
 

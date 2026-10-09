@@ -24,4 +24,12 @@ describe('NavCart imports', () => {
 
     for (const name of used) expect(imported.has(name)).toBe(true);
   });
+
+  test('the click leaves the offcanvas alone and leads to the checkout only without a host', () => {
+    expect(source).toContain('onclick={openCheckout}');
+    expect(source).toContain('if (hasOffcanvasHost(document)) return;');
+    expect(source).toContain('goto(checkoutHref(getPanoContext().context));');
+    // the theme markup is unchanged: Bootstrap's data attributes still open the offcanvas
+    expect(source).toContain('data-bs-target="#marketCartOffcanvas"');
+  });
 });

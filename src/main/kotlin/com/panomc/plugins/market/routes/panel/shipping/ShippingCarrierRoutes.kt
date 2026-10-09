@@ -21,21 +21,21 @@ import io.vertx.json.schema.SchemaRepository
 /** `GET /api/panel/market/shipping/carriers` (`P:SET`): every shipping provider, usable or not, with masked settings. */
 @Endpoint
 class PanelGetShippingCarriersAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin) {
-    override val paths = listOf(Path("/api/panel/market/shipping/carriers", RouteType.GET))
+    override val paths = listOf(Path("/shipping/carriers", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = noBodyValidation(schemaRepository)
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
         context.response().putHeader("Cache-Control", "no-store")
 
-        return Successful(mapOf("providers" to JsonArray(service.listCarriers())))
+        return Successful(mapOf("items" to JsonArray(service.listCarriers())))
     }
 }
 
 /** `POST /shipping/carriers/:id` (`settings{}`, `config{testMode}`): saves a carrier; the row is created on the first save. */
 @Endpoint
 class PanelSaveShippingCarrierAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin) {
-    override val paths = listOf(Path("/api/panel/market/shipping/carriers/:id", RouteType.POST))
+    override val paths = listOf(Path("/shipping/carriers/:id", RouteType.POST))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = bodyValidation(schemaRepository)
 
@@ -53,7 +53,7 @@ class PanelSaveShippingCarrierAPI(plugin: MarketPlugin) : ShippingAdminRoute(plu
 /** `POST /shipping/carriers/:id/toggle` (`enabled`): `manual` cannot be disabled. */
 @Endpoint
 class PanelToggleShippingCarrierAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin) {
-    override val paths = listOf(Path("/api/panel/market/shipping/carriers/:id/toggle", RouteType.POST))
+    override val paths = listOf(Path("/shipping/carriers/:id/toggle", RouteType.POST))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = bodyValidation(schemaRepository)
 
@@ -71,7 +71,7 @@ class PanelToggleShippingCarrierAPI(plugin: MarketPlugin) : ShippingAdminRoute(p
 /** `POST /shipping/carriers/:id/reveal` (`password`): throttled, only the secret fields, `Cache-Control: no-store`. */
 @Endpoint
 class PanelRevealShippingSecretAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin) {
-    override val paths = listOf(Path("/api/panel/market/shipping/carriers/:id/reveal", RouteType.POST))
+    override val paths = listOf(Path("/shipping/carriers/:id/reveal", RouteType.POST))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = bodyValidation(schemaRepository)
 
@@ -95,7 +95,7 @@ class PanelRevealShippingSecretAPI(plugin: MarketPlugin) : ShippingAdminRoute(pl
 /** `POST /shipping/carriers/:id/actions/:actionId`: runs a settings action; a carrier failure is 502 `SHIPPING_PROVIDER_ERROR`. */
 @Endpoint
 class PanelRunShippingActionAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin) {
-    override val paths = listOf(Path("/api/panel/market/shipping/carriers/:id/actions/:actionId", RouteType.POST))
+    override val paths = listOf(Path("/shipping/carriers/:id/actions/:actionId", RouteType.POST))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = bodyValidation(schemaRepository)
 
@@ -116,7 +116,7 @@ class PanelRunShippingActionAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugi
 /** `GET /shipping/carriers/:id/services`: `listServices` of the provider, 10 s timeout. */
 @Endpoint
 class PanelGetShippingServicesAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin) {
-    override val paths = listOf(Path("/api/panel/market/shipping/carriers/:id/services", RouteType.GET))
+    override val paths = listOf(Path("/shipping/carriers/:id/services", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = noBodyValidation(schemaRepository)
 

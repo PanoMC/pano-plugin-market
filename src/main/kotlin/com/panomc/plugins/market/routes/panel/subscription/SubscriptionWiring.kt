@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.subscription
 
+import com.panomc.plugins.market.util.MarketLinks
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.time.SystemClock
@@ -40,7 +41,7 @@ private fun build(plugin: MarketPlugin): SubscriptionBeans {
     val subscriptions = context.getBean(MarketSubscriptionDao::class.java)
     val sqlClient: suspend () -> io.vertx.sqlclient.SqlClient = { databaseManager().getSqlClient() }
     val actions = SubscriptionActions(
-        SystemClock, db, subs, subscriptions, paymentService(plugin), sqlClient, sink, { paymentWiring(plugin).site().baseUrl.trimEnd('/') + "/profile/subscriptions" },
+        SystemClock, db, subs, subscriptions, paymentService(plugin), sqlClient, sink, { MarketLinks.platform.subscriptions() ?: paymentWiring(plugin).site().baseUrl.trimEnd('/') },
         PortalPages(SystemClock)
     )
     val job = SubscriptionJob(

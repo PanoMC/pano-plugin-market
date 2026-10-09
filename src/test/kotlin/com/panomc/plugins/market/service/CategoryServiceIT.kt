@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * The category part of `CatalogService` on a real MariaDB (MK-051): create with `tiered` / `upgradeMode`, a PUT that is a
@@ -37,7 +38,7 @@ class CategoryServiceIT : MarketDaoITBase() {
     private suspend fun fieldErrors(block: suspend () -> Unit): Map<String, String> {
         val e = runCatching { block() }.exceptionOrNull()
         assertTrue(e is BadRequest, "expected BAD_REQUEST, got $e")
-        return JsonObject((e as BadRequest).encode(emptyMap())).getJsonObject("fieldErrors").map.mapValues { it.value as String }
+        return ErrorBodies.details((e as BadRequest)).getJsonObject("fieldErrors").map.mapValues { it.value as String }
     }
 
     private suspend fun entitlement(categoryId: Long, status: EntitlementStatus, order: Long) {

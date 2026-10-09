@@ -1,5 +1,9 @@
 package com.panomc.plugins.market.routes.api.payment
 
+import com.panomc.plugins.market.error.StoreUnavailable
+import com.panomc.plugins.market.error.StoreDisabled
+import com.panomc.platform.error.NotFound
+import com.panomc.platform.schema.EndpointDoc
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.model.Path
 import com.panomc.platform.model.Result
@@ -10,8 +14,8 @@ import com.panomc.plugins.market.routes.panel.settings.payment.paymentMethodServ
 import io.vertx.core.buffer.Buffer
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Parameters
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Parameters
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
@@ -22,7 +26,14 @@ import io.vertx.json.schema.common.dsl.Schemas.stringSchema
  */
 @Endpoint
 class GetPaymentProviderLogoAPI(private val plugin: MarketPlugin) : MarketApi() {
-    override val paths = listOf(Path("/api/market/payment-providers/:id/logo", RouteType.GET))
+    override val paths = listOf(Path("/payment-providers/:id/logo", RouteType.GET))
+
+    override val doc = EndpointDoc(
+        summary = "The logo of a payment provider.",
+        tag = "payment-providers",
+        binary = true,
+        errors = listOf(NotFound::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     // The panel shows the logos too, also while the storefront is switched off.
     override val requiresStoreEnabled: Boolean = false

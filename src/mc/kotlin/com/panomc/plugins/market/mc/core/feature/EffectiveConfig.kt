@@ -27,8 +27,13 @@ data class RemoteConfig(
     val storeUrl: String?,
     val creditName: String?,
     val currency: String?,
-    val serverId: Long?
-)
+    val serverId: Long?,
+    val productUrlTemplate: String? = null,
+    val registerUrl: String? = null
+) {
+    /** The store, product and register links of this answer. */
+    val links: StoreLinks get() = StoreLinks(storeUrl, productUrlTemplate, registerUrl)
+}
 
 /**
  * [LocalConfig] + the last `MARKET_CONFIG`, read live. Until the first answer arrived the built-in panel defaults apply to

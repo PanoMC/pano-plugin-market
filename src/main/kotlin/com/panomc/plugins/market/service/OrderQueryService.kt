@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.platform.model.PageRequest
 import com.panomc.plugins.market.core.money.Currencies
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.config.MarketConfig
@@ -49,7 +50,6 @@ import com.panomc.plugins.market.util.CsvValue
 import com.panomc.plugins.market.util.CsvWriter
 import com.panomc.plugins.market.util.MoneyUtil
 import com.panomc.plugins.market.util.OrderStatus
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.coAwait
@@ -164,13 +164,13 @@ class OrderQueryService(
     // ================================================================================================================ list
 
     /** `GET /orders`: newest first, the filter of 04 section 7; [pii] decides the e-mail mask and the e-mail predicate of the search. */
-    suspend fun list(filter: OrderFilter, window: Paging.Window, pii: Boolean, client: SqlClient): OrderPage {
+    suspend fun list(filter: OrderFilter, window: PageRequest, pii: Boolean, client: SqlClient): OrderPage {
         val args = ArrayList<Any?>()
         val where = whereOf(filter, pii, args)
         val count = client.preparedQuery("SELECT COUNT(*) AS c FROM ${table("market_order")} o WHERE $where").execute(Tuple.from(args)).coAwait().first().getLong("c")
 
         val pageArgs = ArrayList<Any?>(args).also {
-            it += window.pageSize.toLong()
+            it += window.size.toLong()
             it += window.offset
         }
         val rows = client.preparedQuery(

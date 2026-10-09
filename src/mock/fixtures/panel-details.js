@@ -1,7 +1,7 @@
 // Preview fixtures of the panel detail / secondary pages: order detail, overview (stats, servers,
 // health), credits, blocks, discounts / coupons / creator codes, gifts, comparisons and goals.
 // Shapes mirror the Kotlin routes; money on the wire is a decimal number (MoneyUtil.toDecimal).
-import { DAY, NOW, PLAYERS, countFor, listBody, matches, rng, rows } from '../kit.js';
+import { DAY, NOW, PLAYERS, countFor, failure, listBody, matches, rng, rows } from '../kit.js';
 import { routes as listRoutes } from './panel-lists.js';
 import {
   PAYMENT_METHODS,
@@ -13,18 +13,17 @@ import {
   weighted,
 } from './world.js';
 
-const API = '/api/panel/market';
+const API = '/plugins/pano-plugin-market/panel';
 const HOUR = 3600000;
 const MINUTE = 60000;
 const PAGE_SIZE = 10; // Paging.DEFAULT_PAGE_SIZE
-const NOT_FOUND = { result: 'error', error: 'NOT_FOUND' };
+const NOT_FOUND = failure('NOT_FOUND');
 const STORE_CURRENCY = 'USD';
 const ADMINS = ['Admin_Kahverengi', 'Mod_Alex'];
 
 const get = (path, handler) => ({ method: 'GET', path: API + path, handler });
 const idOf = (raw) => (/^[0-9]{1,15}$/.test(String(raw)) ? Number(raw) : null);
 const numberOf = (raw) => (raw === undefined || raw === null || raw === '' ? null : Number(raw));
-const ok = (body) => ({ result: 'ok', ...body });
 
 // ================================================================================== order detail
 
@@ -658,7 +657,7 @@ function buildOrderDetail(row, volume) {
     runChargebackActions: false,
   };
 
-  return ok({
+  return {
     order,
     items,
     payments,
@@ -673,7 +672,7 @@ function buildOrderDetail(row, volume) {
     revokePending: 0,
     revokeFailed: 0,
     allowed,
-  });
+  };
 }
 
 /** GET /orders/:id; a non-numeric id is not ours (another route, e.g. an export), unknown = 404. */
@@ -726,7 +725,7 @@ function paymentEvents({ params, query, volume }) {
       createdAt: row.createdAt + 15000 + at * 9000,
     }))
     .reverse();
-  return listBody('events', 'eventCount', events, query, PAGE_SIZE);
+  return listBody(events, query, PAGE_SIZE);
 }
 
 // ================================================================================== overview
@@ -808,7 +807,7 @@ export function statsBody(volume, query = {}) {
     ['GBP', 0.1, 0.8],
   ];
 
-  return ok({
+  return {
     summary: {
       weekly,
       monthly,
@@ -852,7 +851,7 @@ export function statsBody(volume, query = {}) {
     },
     statsCurrency: STORE_CURRENCY,
     statsCurrencySymbol: '$',
-  });
+  };
 }
 
 const SERVER_STATES = ['READY', 'READY', 'VERSION_MISMATCH', 'OFFLINE'];
@@ -861,7 +860,7 @@ const SERVER_STATES = ['READY', 'READY', 'VERSION_MISMATCH', 'OFFLINE'];
 function listedServers(volume) {
   const route = listRoutes.find((r) => r.method === 'GET' && r.path === `${API}/servers`);
   const body = route?.handler({ query: {}, params: {}, volume });
-  return Array.isArray(body?.servers) ? body.servers : serverRows(volume);
+  return Array.isArray(body?.items) ? body.items : serverRows(volume);
 }
 
 /** Fallback server rows (McServerView.toJson) when the list fixtures carry no /servers. */
@@ -904,7 +903,7 @@ const JOBS = [
 
 export function healthBody(volume) {
   const busy = volume === 'many';
-  return ok({
+  return {
     runtimeState: 'READY',
     schema: { ok: true, missing: [], unfixed: [] },
     bootstrapErrors: [],
@@ -946,7 +945,7 @@ export function healthBody(volume) {
     lockedSubjects: busy ? 2 : 0,
     rejectedEventsLastHour: busy ? 5 : 0,
     routes: [],
-  });
+  };
 }
 
 // ================================================================================== credits
@@ -1041,13 +1040,11 @@ export function creditAccounts(volume) {
 function creditAccountsBody({ query, volume }) {
   const all = creditAccounts(volume);
   const body = listBody(
-    'accounts',
-    'accountCount',
     all.filter((a) => matches(query.search, a.username)),
     query,
     PAGE_SIZE,
   );
-  if (body.result !== 'ok') return body;
+  if (body.error) return body;
   const outstanding = sum(all.map((a) => a.balance));
   const txs = creditTransactions(volume);
   const total = (types) =>
@@ -1069,10 +1066,7 @@ function creditAccountBody({ params, query, volume }) {
   const userId = idOf(params.userId);
   if (userId === null || userId < 1 || userId > PLAYERS.length) return NOT_FOUND;
   const entries = accountEntries(volume, userId);
-  const body = listBody('entries', 'entryCount', entries, query, PAGE_SIZE);
-  return body.result === 'ok'
-    ? { result: 'ok', balance: entries[0]?.balanceAfter ?? 0, ...body }
-    : body;
+  return listBody(entries, query, PAGE_SIZE, { balance: entries[0]?.balanceAfter ?? 0 });
 }
 
 function creditTransactionsBody({ query, volume }) {
@@ -1088,7 +1082,7 @@ function creditTransactionsBody({ query, volume }) {
       (from === null || tx.createdAt >= from) &&
       (to === null || tx.createdAt < to),
   );
-  return listBody('transactions', 'transactionCount', list, query, PAGE_SIZE);
+  return listBody(list, query, PAGE_SIZE);
 }
 
 // ================================================================================== blocks
@@ -1153,7 +1147,7 @@ function blocksBody({ query, volume }) {
       (!query.source || b.source === query.source) &&
       (!prefix || b.value.toLowerCase().startsWith(prefix)),
   );
-  return listBody('blocks', 'blockCount', list, query, PAGE_SIZE);
+  return listBody(list, query, PAGE_SIZE);
 }
 
 // ================================================================================== promotions
@@ -1413,7 +1407,7 @@ function creatorReport({ query, volume }) {
       available: money(payable - paidOut),
     };
   });
-  return ok({ creators, currency: STORE_CURRENCY });
+  return { creators, currency: STORE_CURRENCY };
 }
 
 const creatorOf = (volume, rawId) => creatorRows(volume).find((code) => code.id === idOf(rawId));
@@ -1422,12 +1416,12 @@ function creatorEarningsBody({ params, query, volume }) {
   const code = creatorOf(volume, params.id);
   if (!code) return NOT_FOUND;
   const list = creatorEarnings(volume, code).filter((e) => !query.state || e.state === query.state);
-  return listBody('earnings', 'earningCount', list, query, PAGE_SIZE);
+  return listBody(list, query, PAGE_SIZE);
 }
 
 function creatorPayoutsBody({ params, volume }) {
   const code = creatorOf(volume, params.id);
-  return code ? ok({ payouts: creatorPayouts(volume, code) }) : NOT_FOUND;
+  return code ? { payouts: creatorPayouts(volume, code) } : NOT_FOUND;
 }
 
 const GIFT_NAMES = [
@@ -1471,13 +1465,13 @@ export function giftRows(volume) {
 }
 
 /** `search` matches the code or the name / creator, `status` the status (PromotionAdminService.list). */
-function promotionList(key, countKey, build, texts) {
+function promotionList(build, texts) {
   return ({ query, volume }) => {
     const list = build(volume).filter(
       (row) =>
         (!query.status || row.status === query.status) && matches(query.search, ...texts(row)),
     );
-    return listBody(key, countKey, list, query, PAGE_SIZE);
+    return listBody(list, query, PAGE_SIZE);
   };
 }
 
@@ -1506,7 +1500,7 @@ function redemptions(kind) {
     });
     // one row per order (the modal keys its rows by orderId)
     const unique = list.filter((r, at) => list.findIndex((o) => o.orderId === r.orderId) === at);
-    return listBody('redemptions', 'redemptionCount', unique, query, PAGE_SIZE);
+    return listBody(unique, query, PAGE_SIZE);
   };
 }
 
@@ -1582,13 +1576,13 @@ function comparisonsBody({ query, volume }) {
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
     }));
-  return listBody('comparisons', 'comparisonCount', list, query, PAGE_SIZE);
+  return listBody(list, query, PAGE_SIZE);
 }
 
 function comparisonBody({ params, volume }) {
   const c = comparisonRows(volume).find((row) => row.id === idOf(params.id));
   if (!c) return NOT_FOUND;
-  return ok({
+  return {
     id: c.id,
     name: c.name,
     status: c.status,
@@ -1596,7 +1590,7 @@ function comparisonBody({ params, volume }) {
     selectedProducts: c.productIds,
     features: c.features,
     cellValues: c.cellValues,
-  });
+  };
 }
 
 // ================================================================================== goals
@@ -1687,19 +1681,16 @@ export const routes = [
 
   get(
     '/discounts',
-    promotionList('discounts', 'discountCount', discountRows, (row) => [row.name]),
+    promotionList(discountRows, (row) => [row.name]),
   ),
   get(
     '/coupons',
-    promotionList('coupons', 'couponCount', couponRows, (row) => [row.code, row.name]),
+    promotionList(couponRows, (row) => [row.code, row.name]),
   ),
   get('/coupons/:id/redemptions', redemptions('coupons')),
   get(
     '/creator-codes',
-    promotionList('creatorCodes', 'creatorCodeCount', creatorRows, (row) => [
-      row.code,
-      row.creator,
-    ]),
+    promotionList(creatorRows, (row) => [row.code, row.creator]),
   ),
   get('/creator-codes/report', creatorReport),
   get('/creator-codes/:id/earnings', creatorEarningsBody),
@@ -1708,14 +1699,14 @@ export const routes = [
 
   get(
     '/gifts',
-    promotionList('gifts', 'giftCount', giftRows, (row) => [row.code, row.name]),
+    promotionList(giftRows, (row) => [row.code, row.name]),
   ),
   get('/gifts/:id/redemptions', redemptions('gifts')),
 
   get('/comparisons', comparisonsBody),
   get('/comparisons/:id', comparisonBody),
 
-  get('/goals', ({ volume }) => ok({ goals: goalRows(volume) })),
+  get('/goals', ({ volume }) => ({ items: goalRows(volume) })),
 ];
 
 export const pages = [

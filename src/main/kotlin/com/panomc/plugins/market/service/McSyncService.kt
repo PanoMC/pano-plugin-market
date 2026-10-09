@@ -46,6 +46,7 @@ import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import com.panomc.plugins.market.util.MarketPaths
 
 /** What the market knows about the connection to one Minecraft server (08 section 8.5); the first match of the table decides. */
 enum class ServerReadiness { REMOVED, OFFLINE, VERSION_MISMATCH, READY, COMPONENT_MISSING }
@@ -728,7 +729,7 @@ class McSyncService(
         private const val NON_TERMINAL = "'PENDING','SCHEDULED','WAITING_SERVER','WAITING_PLAYER','SENT','QUEUED'"
 
         /** The panel's download of the running jar (04 section 8, `GET /mc-component/download`; MC-04 serves it). */
-        const val DOWNLOAD_URL = "/api/panel/market/mc-component/download"
+        const val DOWNLOAD_URL = "${MarketPaths.PANEL_ROOT}/mc-component/download"
 
         private val logger = LoggerFactory.getLogger(McSyncService::class.java)
 

@@ -1,11 +1,8 @@
 package com.panomc.plugins.market.db
 
-import com.panomc.plugins.market.db.dao.MarketWebhookEndpointDao
 import com.panomc.plugins.market.db.impl.MarketDeliveryDaoImpl
 import com.panomc.plugins.market.db.impl.MarketMailOutboxDaoImpl
 import com.panomc.plugins.market.db.impl.MarketServerStateDaoImpl
-import com.panomc.plugins.market.db.impl.MarketWebhookDeliveryDaoImpl
-import com.panomc.plugins.market.db.impl.MarketWebhookEndpointDaoImpl
 import com.panomc.plugins.market.db.model.*
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -15,15 +12,13 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
-/** `market_delivery`, `market_server_state`, `market_webhook_endpoint`, `market_webhook_delivery`, `market_mail_outbox` (01 section 9). */
+/** `market_delivery`, `market_server_state`, `market_mail_outbox` (01 section 9; the webhook tables are core's since MK-15). */
 class MarketDeliveryDaoIT : MarketDaoITBase() {
     /** A DAO round-trip test writes raw rows (credit legs without a transaction, counters without orders, ...) that the cross-table invariants I1 to I22 reconcile, on purpose. */
     override suspend fun assertInvariants() {}
 
     private val deliveries = MarketDeliveryDaoImpl()
     private val servers = MarketServerStateDaoImpl()
-    private val endpoints = MarketWebhookEndpointDaoImpl()
-    private val hooks = MarketWebhookDeliveryDaoImpl()
     private val mails = MarketMailOutboxDaoImpl()
 
     private fun delivery(key: String = "1:a1:0:GRANT:0:0") = MarketDelivery(
@@ -168,139 +163,6 @@ class MarketDeliveryDaoIT : MarketDaoITBase() {
         val failure = runCatching { sql("INSERT INTO `pano_market_server_state` (`serverId`, `createdAt`, `updatedAt`) VALUES (8, 1, 1)") }.exceptionOrNull()
         assertNotNull(failure)
         assertEquals(1L, count("market_server_state"))
-    }
-
-    // --- webhook endpoint ---------------------------------------------------------------------------------------
-
-    private fun endpoint(name: String = "Discord") = MarketWebhookEndpoint(
-        name = name, url = "https://example.com/hook", events = "[\"order.paid\",\"order.refunded\"]", format = WebhookFormat.DISCORD,
-        signing = WebhookSigning.HMAC_SHA256, secret = "v1:secret", headers = "v1:headers", template = "{\"embeds\":[]}", enabled = true, maxAttempts = 5,
-        createdAt = 10, updatedAt = 20
-    )
-
-    @Test
-    fun `a webhook endpoint round-trips, updates and deletes`(): Unit = runBlocking {
-        val id = endpoints.add(endpoint(), pool)
-        val row = endpoints.getById(id, pool)!!
-        assertEquals("Discord", row.name)
-        assertEquals("[\"order.paid\",\"order.refunded\"]", row.events)
-        assertEquals(WebhookFormat.DISCORD, row.format)
-        assertEquals(WebhookSigning.HMAC_SHA256, row.signing)
-        assertEquals("v1:secret", row.secret)
-        assertEquals("v1:headers", row.headers)
-        assertEquals("{\"embeds\":[]}", row.template)
-        assertTrue(row.enabled)
-        assertEquals(5, row.maxAttempts)
-        assertEquals(0, row.failureCount)
-
-        assertTrue(endpoints.update(MarketWebhookEndpoint(id = id, name = "Renamed", url = "https://example.com/2", events = "[\"*\"]", enabled = false, maxAttempts = 3, disabledReason = "ADMIN"), 99, pool))
-        val updated = endpoints.getById(id, pool)!!
-        assertEquals(listOf("Renamed", "https://example.com/2", "[\"*\"]"), listOf(updated.name, updated.url, updated.events))
-        assertEquals(WebhookFormat.JSON, updated.format)
-        assertNull(updated.secret)
-        assertFalse(updated.enabled)
-        assertEquals("ADMIN", updated.disabledReason)
-        assertEquals(99L, updated.updatedAt)
-        assertFalse(endpoints.update(MarketWebhookEndpoint(id = 9_999), 1, pool))
-
-        endpoints.add(endpoint("Second"), pool)
-        assertEquals(listOf("Renamed", "Second"), endpoints.getAll(pool).map { it.name })
-        assertTrue(endpoints.delete(id, pool))
-        assertFalse(endpoints.delete(id, pool))
-        assertNull(endpoints.getById(id, pool))
-    }
-
-    @Test
-    fun `fifty consecutive failures disable an endpoint and one success resets the counter`(): Unit = runBlocking {
-        val id = endpoints.add(endpoint(), pool)
-        repeat(49) { assertTrue(endpoints.recordOutcome(id, false, 500, 1_000L + it, MarketWebhookEndpointDao.DEFAULT_DISABLE_AFTER, pool)) }
-        var row = endpoints.getById(id, pool)!!
-        assertEquals(49, row.failureCount)
-        assertTrue(row.enabled)
-        assertNull(row.disabledReason)
-        assertEquals(500, row.lastStatusCode)
-
-        assertTrue(endpoints.recordOutcome(id, true, 200, 2_000, MarketWebhookEndpointDao.DEFAULT_DISABLE_AFTER, pool))
-        row = endpoints.getById(id, pool)!!
-        assertEquals(0, row.failureCount)
-        assertTrue(row.enabled)
-        assertEquals(200, row.lastStatusCode)
-        assertEquals(2_000L, row.lastDeliveryAt)
-
-        repeat(50) { endpoints.recordOutcome(id, false, null, 3_000L + it, MarketWebhookEndpointDao.DEFAULT_DISABLE_AFTER, pool) }
-        row = endpoints.getById(id, pool)!!
-        assertEquals(50, row.failureCount)
-        assertFalse(row.enabled)
-        assertEquals(MarketWebhookEndpointDao.AUTO_DISABLED_REASON, row.disabledReason)
-        assertNull(row.lastStatusCode)
-        assertFalse(endpoints.recordOutcome(9_999, false, 500, 1, 50, pool))
-    }
-
-    // --- webhook delivery ---------------------------------------------------------------------------------------
-
-    private fun hook(eventId: String = "0b0e5b1e-0000-4000-8000-000000000001") = MarketWebhookDelivery(
-        endpointId = 3, deliveryId = 4, eventId = eventId, event = "order.paid", orderId = 11, url = "https://example.com/hook", format = WebhookFormat.DISCORD,
-        signing = WebhookSigning.HMAC_SHA256, secret = "v1:s", body = "{\"a\":1}", status = WebhookDeliveryStatus.PENDING, attempts = 1, maxAttempts = 6,
-        nextAttemptAt = 100, claimedUntil = 110, lastStatusCode = 503, lastError = "e", lastResponse = "r", durationMs = 12, deliveredAt = null, createdAt = 10, updatedAt = 20
-    )
-
-    @Test
-    fun `a webhook delivery round-trips and the event id is unique`(): Unit = runBlocking {
-        val id = hooks.add(hook(), pool)!!
-        val row = hooks.getById(id, pool)!!
-        assertEquals(listOf(3L, 4L), listOf(row.endpointId, row.deliveryId))
-        assertEquals("0b0e5b1e-0000-4000-8000-000000000001", row.eventId)
-        assertEquals("order.paid", row.event)
-        assertEquals(11L, row.orderId)
-        assertEquals(WebhookFormat.DISCORD, row.format)
-        assertEquals(WebhookSigning.HMAC_SHA256, row.signing)
-        assertEquals("v1:s", row.secret)
-        assertEquals("{\"a\":1}", row.body)
-        assertEquals(WebhookDeliveryStatus.PENDING, row.status)
-        assertEquals(listOf(1, 6), listOf(row.attempts, row.maxAttempts))
-        assertEquals(listOf(100L, 110L), listOf(row.nextAttemptAt, row.claimedUntil))
-        assertEquals(listOf(503, 12), listOf(row.lastStatusCode, row.durationMs))
-        assertEquals(listOf("e", "r"), listOf(row.lastError, row.lastResponse))
-
-        // same event id, everything else different
-        assertNull(hooks.add(MarketWebhookDelivery(eventId = "0b0e5b1e-0000-4000-8000-000000000001", event = "order.refunded", url = "https://other.example", body = "x", endpointId = 9), pool))
-        assertEquals(1L, count("market_webhook_delivery"))
-        assertEquals("order.paid", hooks.getByEventId("0b0e5b1e-0000-4000-8000-000000000001", pool)!!.event)
-        assertNotNull(hooks.add(hook("0b0e5b1e-0000-4000-8000-000000000002"), pool))
-        assertEquals(2L, count("market_webhook_delivery"))
-        assertNull(hooks.getByEventId("nope", pool))
-    }
-
-    @Test
-    fun `the database itself rejects a duplicate webhook event id`(): Unit = runBlocking {
-        hooks.add(hook("0b0e5b1e-0000-4000-8000-0000000000aa"), pool)
-        val failure = runCatching {
-            sql("INSERT INTO `pano_market_webhook_delivery` (`eventId`, `event`, `url`, `format`, `signing`, `body`, `createdAt`, `updatedAt`) VALUES ('0b0e5b1e-0000-4000-8000-0000000000aa', 'e', 'u', 'JSON', 'NONE', 'b', 1, 1)")
-        }.exceptionOrNull()
-        assertNotNull(failure)
-        assertEquals(1L, count("market_webhook_delivery"))
-    }
-
-    @Test
-    fun `webhook delivery lookups and the result update`(): Unit = runBlocking {
-        val a = hooks.add(hook("e-1"), pool)!!
-        val b = hooks.add(hook("e-2").let { MarketWebhookDelivery(endpointId = 3, eventId = "e-2", event = "order.paid", orderId = 11, url = "u", body = "b", status = WebhookDeliveryStatus.FAILED, nextAttemptAt = 50) }, pool)!!
-        hooks.add(MarketWebhookDelivery(endpointId = 8, eventId = "e-3", event = "x", url = "u", body = "b", nextAttemptAt = 10), pool)
-        assertEquals(listOf(b, a), hooks.getByEndpointId(3, 10, pool).map { it.id })
-        assertEquals(listOf(b), hooks.getByEndpointId(3, 1, pool).map { it.id })
-        assertEquals(listOf(a, b), hooks.getByOrderId(11, pool).map { it.id })
-        assertEquals(listOf(b), hooks.getDue(WebhookDeliveryStatus.FAILED, 60, 10, pool).map { it.id })
-        assertEquals(0, hooks.getDue(WebhookDeliveryStatus.FAILED, 40, 10, pool).size)
-
-        assertTrue(hooks.markResult(b, WebhookDeliveryStatus.FAILED, WebhookDeliveryStatus.SUCCEEDED, 2, null, 204, null, "ok", 31, 70, 71, pool))
-        val done = hooks.getById(b, pool)!!
-        assertEquals(WebhookDeliveryStatus.SUCCEEDED, done.status)
-        assertEquals(listOf(2, 204, 31), listOf(done.attempts, done.lastStatusCode, done.durationMs))
-        assertNull(done.nextAttemptAt)
-        assertEquals(70L, done.deliveredAt)
-        // the row left FAILED: a second writer holding the old state loses
-        assertFalse(hooks.markResult(b, WebhookDeliveryStatus.FAILED, WebhookDeliveryStatus.DEAD, 3, null, 500, "e", null, null, null, 80, pool))
-        assertEquals(WebhookDeliveryStatus.SUCCEEDED, hooks.getById(b, pool)!!.status)
     }
 
     // --- mail outbox --------------------------------------------------------------------------------------------

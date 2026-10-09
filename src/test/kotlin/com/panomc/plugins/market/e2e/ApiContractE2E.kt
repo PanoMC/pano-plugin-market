@@ -21,6 +21,7 @@ import org.junit.jupiter.api.TestMethodOrder
 import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * The API contract on a real instance (17 section 9.9, 11 section 14.3, 04 section 12): the "route tests". API-01 to API-10.
@@ -66,7 +67,7 @@ class ApiContractE2E : E2eTestBase() {
                 Triple("nopanel", setOf(MarketNode.SETTINGS), false)
             val buyers = specs.map { (label, _, _) -> label to buyer(canPay = false) }
 
-            val snapshot = admin.get("/api/panel/permission/snapshot").ok().obj()
+            val snapshot = admin.get("/api/v1/panel/permission/snapshot").ok().obj()
             val nodes = (snapshot.getJsonArray("nodes") ?: JsonArray()).map { it as JsonObject }.toMutableList()
 
             fun grant(userId: Long, node: String) {
@@ -82,7 +83,7 @@ class ApiContractE2E : E2eTestBase() {
             }
 
             admin.post(
-                "/api/panel/permission/snapshot",
+                "/api/v1/panel/permission/snapshot",
                 JsonObject().put("groups", snapshot.getJsonArray("groups") ?: JsonArray()).put("tracks", snapshot.getJsonArray("tracks") ?: JsonArray()).put("nodes", JsonArray(nodes))
             ).ok()
 
@@ -104,7 +105,15 @@ class ApiContractE2E : E2eTestBase() {
 
     // --- the route list ------------------------------------------------------------------------------------------------
 
-    private fun healthRoutes(): List<JsonObject> = admin.get("/api/panel/market/health").ok().obj().getJsonArray("routes").map { it as JsonObject }
+    /**
+     * The routes the plugin reports. `GET /health` lists the path each class declares (relative to its namespace, 04 section 2); the tests address the
+     * routes by their full path, so the panel namespace prefix is put in front of a panel class and the site prefix in front of every other one.
+     */
+    private fun healthRoutes(): List<JsonObject> = admin.get("${MarketPaths.PANEL_ROOT}/health").ok().obj().getJsonArray("routes").map { it as JsonObject }.map { route ->
+        val panel = route.getString("auth").let { it.startsWith("P:") || it == "LEGACY-PANEL" }
+
+        JsonObject().put("method", route.getString("method")).put("auth", route.getString("auth")).put("path", (if (panel) MarketPaths.PANEL_ROOT else MarketPaths.SITE_ROOT) + route.getString("path"))
+    }
 
     private fun liveRows(): List<PanelEndpointMatrix.Row> = PanelEndpointMatrix.readTsv().filter { it.live }
 
@@ -223,11 +232,12 @@ class ApiContractE2E : E2eTestBase() {
 
         assertEquals(rows.map { it.key }.toSortedSet(), registered.keys.toSortedSet(), "the panel routes of /health and the LIVE rows of permission-matrix.tsv are the same set")
         rows.forEach { assertEquals(it.auth, registered[it.key], "auth class of ${it.key}") }
-        assertTrue(rows.size >= 150, "the matrix has ${rows.size} LIVE rows")
+        // 150 before MK-15 moved the webhook endpoints to core; the set equality above is the real gate
+        assertTrue(rows.size >= 146, "the matrix has ${rows.size} LIVE rows")
 
         // the settings as the answer shows them, without the invoice sequence list: the one granted call that writes (PUT /settings/invoice-sequence for the
         // series E2EAPI, which nothing issues from) adds a row there
-        fun settingsView(): JsonObject = admin.get("/api/panel/market/settings").ok().obj().also { it.remove("invoiceSequences") }
+        fun settingsView(): JsonObject = admin.get("${MarketPaths.PANEL_ROOT}/settings").ok().obj().also { it.remove("invoiceSequences") }
 
         val settingsBefore = settingsView().encode()
         val failures = ArrayList<String>()
@@ -311,7 +321,7 @@ class ApiContractE2E : E2eTestBase() {
         // the calls of the granted users left the instance as it was
         assertEquals(settingsBefore, settingsView().encode(), "the settings are unchanged after the matrix")
 
-        val sequences = admin.get("/api/panel/market/settings").ok().obj().getJsonArray("invoiceSequences").map { it as JsonObject }.filter { it.getString("series") == "E2EAPI" }
+        val sequences = admin.get("${MarketPaths.PANEL_ROOT}/settings").ok().obj().getJsonArray("invoiceSequences").map { it as JsonObject }.filter { it.getString("series") == "E2EAPI" }
 
         assertTrue(sequences.all { it.getLong("lastNumber") == 0L }, "the E2EAPI series issued nothing: $sequences")
     }
@@ -372,7 +382,7 @@ class ApiContractE2E : E2eTestBase() {
 
         // a guest has no ambient credential: a PUB-M call without a session is not a CSRF case
         val guest = visitor("guest")
-        val guestAnswer = guest.request("POST", "/api/market/checkout/quote", JsonObject().put("items", JsonArray()), mapOf("Idempotency-Key" to idempotencyKey()), log = false)
+        val guestAnswer = guest.request("POST", "${MarketPaths.SITE_ROOT}/checkout/quote", JsonObject().put("items", JsonArray()), mapOf("Idempotency-Key" to idempotencyKey()), log = false)
 
         assertNotEquals("INVALID_CSRF_TOKEN", guestAnswer.error, "a guest PUB-M call is not subject to CSRF")
 
@@ -411,7 +421,7 @@ class ApiContractE2E : E2eTestBase() {
 
     private fun assertEnvelope(answer: E2eResponse, status: Int, error: String? = null, what: String) {
         assertEquals(status, answer.status, "$what: status ${answer.status} ${answer.json?.encode()?.take(200)}")
-        assertEquals("error", answer.obj().getString("result"), "$what: result")
+        assertEquals(setOf("error"), answer.obj().fieldNames(), "$what: the body is exactly the envelope")
         assertNotNull(answer.error, "$what: error code")
         if (error != null) assertEquals(error, answer.error, "$what: error code")
     }
@@ -422,47 +432,47 @@ class ApiContractE2E : E2eTestBase() {
         val key = mapOf("Idempotency-Key" to idempotencyKey())
 
         // an id that is not an integer
-        assertEnvelope(admin.get("/api/panel/market/products/1.5"), 400, "BAD_REQUEST", "panel product 1.5").also { assertNotNull(it) }
-        assertNotNull(admin.get("/api/panel/market/products/1.5").obj().getString("bodyValidationError"), "bodyValidationError names the field")
-        assertEnvelope(admin.put("/api/panel/market/orders/1.5/status", JsonObject().put("status", "COMPLETED")), 400, "BAD_REQUEST", "order status 1.5")
-        assertEnvelope(admin.get("/api/panel/market/orders?page=1.5"), 400, "BAD_REQUEST", "page 1.5")
-        assertEnvelope(buyer.client.request("DELETE", "/api/market/me/cart/items/1.5", null, log = false), 400, "BAD_REQUEST", "cart item 1.5")
+        assertEnvelope(admin.get("${MarketPaths.PANEL_ROOT}/products/1.5"), 400, "BAD_REQUEST", "panel product 1.5").also { assertNotNull(it) }
+        assertNotNull(admin.get("${MarketPaths.PANEL_ROOT}/products/1.5").details.getString("bodyValidationError"), "bodyValidationError names the field")
+        assertEnvelope(admin.put("${MarketPaths.PANEL_ROOT}/orders/1.5/status", JsonObject().put("status", "COMPLETED")), 400, "BAD_REQUEST", "order status 1.5")
+        assertEnvelope(admin.get("${MarketPaths.PANEL_ROOT}/orders?page=1.5"), 400, "BAD_REQUEST", "page 1.5")
+        assertEnvelope(buyer.client.request("DELETE", "${MarketPaths.SITE_ROOT}/me/cart/items/1.5", null, log = false), 400, "BAD_REQUEST", "cart item 1.5")
 
         // a wrong type in a body
         val wrongType = JsonObject().put("items", JsonArray().add(JsonObject().put("productId", "1.5").put("quantity", 1))).put("paymentMethodId", "fake")
 
-        assertEnvelope(buyer.client.post("/api/market/checkout", wrongType, key), 400, "BAD_REQUEST", "checkout productId \"1.5\"")
-        assertNotNull(buyer.client.post("/api/market/checkout", wrongType, key).obj().getString("bodyValidationError"))
-        assertEnvelope(buyer.client.post("/api/market/checkout/quote", wrongType), 400, "BAD_REQUEST", "quote productId \"1.5\"")
-        assertEnvelope(admin.post("/api/panel/market/settings", JsonObject().put("vatPercent", "twenty")), 400, null, "a string for a number")
+        assertEnvelope(buyer.client.post("${MarketPaths.SITE_ROOT}/checkout", wrongType, key), 400, "BAD_REQUEST", "checkout productId \"1.5\"")
+        assertNotNull(buyer.client.post("${MarketPaths.SITE_ROOT}/checkout", wrongType, key).details.getString("bodyValidationError"))
+        assertEnvelope(buyer.client.post("${MarketPaths.SITE_ROOT}/checkout/quote", wrongType), 400, "BAD_REQUEST", "quote productId \"1.5\"")
+        assertEnvelope(admin.post("${MarketPaths.PANEL_ROOT}/settings", JsonObject().put("vatPercent", "twenty")), 400, null, "a string for a number")
 
         // a negative price, a negative quantity
-        val negative = admin.multipart("POST", "/api/panel/market/products", mapOf("name" to "neg", "slug" to "api-neg-$run", "price" to "-5", "status" to "ACTIVE"))
+        val negative = admin.multipart("POST", "${MarketPaths.PANEL_ROOT}/products", mapOf("name" to "neg", "slug" to "api-neg-$run", "price" to "-5", "status" to "ACTIVE"))
 
         assertEnvelope(negative, 400, "INVALID_PRODUCT", "negative price")
-        assertEquals("OUT_OF_RANGE", negative.obj().getJsonObject("fieldErrors").getString("price"))
+        assertEquals("OUT_OF_RANGE", negative.details.getJsonObject("fieldErrors").getString("price"))
         assertEquals(0L, db.count("market_product", "`slug` = ?", "api-neg-$run"), "a refused product is not stored")
-        assertEnvelope(buyer.client.post("/api/market/checkout", JsonObject().put("items", JsonArray().add(line(catalog.id("VIP"), -1))).put("paymentMethodId", "fake"), key), 400, "INVALID_CART", "negative quantity")
-        assertEnvelope(admin.post("/api/panel/market/credits/accounts/${buyer.userId}/grant", JsonObject().put("amount", -1).put("note", "x"), key), 400, null, "negative credit amount")
+        assertEnvelope(buyer.client.post("${MarketPaths.SITE_ROOT}/checkout", JsonObject().put("items", JsonArray().add(line(catalog.id("VIP"), -1))).put("paymentMethodId", "fake"), key), 400, "INVALID_CART", "negative quantity")
+        assertEnvelope(admin.post("${MarketPaths.PANEL_ROOT}/credits/accounts/${buyer.userId}/grant", JsonObject().put("amount", -1).put("note", "x"), key), 400, null, "negative credit amount")
 
         // an unknown property under additionalProperties:false
-        assertEnvelope(admin.post("/api/panel/market/settings", JsonObject().put("noSuchSetting", 1)), 400, "BAD_REQUEST", "unknown settings property")
-        assertEnvelope(admin.put("/api/panel/market/settings/invoice-sequence", JsonObject().put("series", "A").put("nextNumber", 1).put("extra", true)), 400, "BAD_REQUEST", "unknown invoice sequence property")
+        assertEnvelope(admin.post("${MarketPaths.PANEL_ROOT}/settings", JsonObject().put("noSuchSetting", 1)), 400, "BAD_REQUEST", "unknown settings property")
+        assertEnvelope(admin.put("${MarketPaths.PANEL_ROOT}/settings/invoice-sequence", JsonObject().put("series", "A").put("nextNumber", 1).put("extra", true)), 400, "BAD_REQUEST", "unknown invoice sequence property")
 
         // pageSize above the maximum is refused, not clamped; the public store allows 60
-        for (path in listOf("/api/panel/market/orders", "/api/panel/market/coupons", "/api/panel/market/products", "/api/panel/market/credits/accounts")) {
+        for (path in listOf("${MarketPaths.PANEL_ROOT}/orders", "${MarketPaths.PANEL_ROOT}/coupons", "${MarketPaths.PANEL_ROOT}/products", "${MarketPaths.PANEL_ROOT}/credits/accounts")) {
             val refused = admin.get("$path?pageSize=101")
 
-            assertEnvelope(refused, 400, "BAD_REQUEST", "$path pageSize=101")
-            assertTrue(refused.obj().getString("bodyValidationError").contains("pageSize"), "$path names pageSize")
+            assertEnvelope(refused, 400, "INVALID_FIELDS", "$path pageSize=101")
+            assertEquals("OUT_OF_RANGE", refused.fields.getString("pageSize"), "$path names pageSize (04 section 4: INVALID_FIELDS with fields.pageSize)")
             assertEquals(200, admin.get("$path?pageSize=100").status, "$path pageSize=100 is the maximum and works")
         }
 
-        assertEnvelope(buyer.client.get("/api/market/me/orders?pageSize=101"), 400, "BAD_REQUEST", "buyer orders pageSize=101")
-        assertEnvelope(visitor().get("/api/market/store/products?pageSize=101"), 400, "BAD_REQUEST", "store pageSize=101")
+        assertEnvelope(buyer.client.get("${MarketPaths.SITE_ROOT}/me/orders?pageSize=101"), 400, "INVALID_FIELDS", "buyer orders pageSize=101")
+        assertEnvelope(visitor().get("${MarketPaths.SITE_ROOT}/store/products?pageSize=101"), 400, "INVALID_FIELDS", "store pageSize=101")
 
         // a page beyond the last
-        assertEnvelope(admin.get("/api/panel/market/coupons?page=9999"), 404, "PAGE_NOT_FOUND", "page beyond the last")
+        assertEnvelope(admin.get("${MarketPaths.PANEL_ROOT}/coupons?page=9999"), 404, "PAGE_NOT_FOUND", "page beyond the last")
     }
 
     // --- API-05 --------------------------------------------------------------------------------------------------------
@@ -500,25 +510,25 @@ class ApiContractE2E : E2eTestBase() {
         assertEquals(false, order(stranger, publicId, token).getBoolean("limited"), "the token holder")
 
         // an unknown public id
-        assertEnvelope(stranger.get("/api/market/orders/ZZZZZZZZZZZZZZZZ"), 404, "NOT_FOUND", "unknown public id")
-        assertEnvelope(owner.client.get("/api/market/orders/ZZZZZZZZZZZZZZZZ/status"), 404, "NOT_FOUND", "unknown public id, status")
+        assertEnvelope(stranger.get("${MarketPaths.SITE_ROOT}/orders/ZZZZZZZZZZZZZZZZ"), 404, "NOT_FOUND", "unknown public id")
+        assertEnvelope(owner.client.get("${MarketPaths.SITE_ROOT}/orders/ZZZZZZZZZZZZZZZZ/status"), 404, "NOT_FOUND", "unknown public id, status")
 
         // the numeric id is never accepted on the public routes (not by the owner, not with the token, not by the admin)
         val numeric = orderRow(publicId).getLong("id").toString()
 
         for (client in listOf(owner.client, stranger, admin)) {
-            assertEnvelope(client.get("/api/market/orders/$numeric", mapOf("X-Order-Token" to token)), 404, "NOT_FOUND", "numeric id ${client.label}")
-            assertEnvelope(client.get("/api/market/orders/$numeric/status"), 404, "NOT_FOUND", "numeric id status ${client.label}")
-            assertEnvelope(client.get("/api/market/orders/$numeric/invoice"), 404, "NOT_FOUND", "numeric id invoice ${client.label}")
+            assertEnvelope(client.get("${MarketPaths.SITE_ROOT}/orders/$numeric", mapOf("X-Order-Token" to token)), 404, "NOT_FOUND", "numeric id ${client.label}")
+            assertEnvelope(client.get("${MarketPaths.SITE_ROOT}/orders/$numeric/status"), 404, "NOT_FOUND", "numeric id status ${client.label}")
+            assertEnvelope(client.get("${MarketPaths.SITE_ROOT}/orders/$numeric/invoice"), 404, "NOT_FOUND", "numeric id invoice ${client.label}")
         }
 
         // the invoice without ownership: 404 (never 403: the order is not revealed)
-        assertEnvelope(other.client.get("/api/market/orders/$publicId/invoice"), 404, "NOT_FOUND", "invoice, another user")
-        assertEnvelope(stranger.get("/api/market/orders/$publicId/invoice"), 404, "NOT_FOUND", "invoice, a stranger")
-        assertEnvelope(other.client.get("/api/market/orders/$publicId/invoice", mapOf("X-Order-Token" to "wrong-token")), 404, "NOT_FOUND", "invoice, wrong token")
+        assertEnvelope(other.client.get("${MarketPaths.SITE_ROOT}/orders/$publicId/invoice"), 404, "NOT_FOUND", "invoice, another user")
+        assertEnvelope(stranger.get("${MarketPaths.SITE_ROOT}/orders/$publicId/invoice"), 404, "NOT_FOUND", "invoice, a stranger")
+        assertEnvelope(other.client.get("${MarketPaths.SITE_ROOT}/orders/$publicId/invoice", mapOf("X-Order-Token" to "wrong-token")), 404, "NOT_FOUND", "invoice, wrong token")
 
         // owner-only mutations without ownership: 404 as well, and nothing changed
-        val cancel = other.client.post("/api/market/orders/$publicId/cancel", JsonObject())
+        val cancel = other.client.post("${MarketPaths.SITE_ROOT}/orders/$publicId/cancel", JsonObject())
 
         assertEnvelope(cancel, 404, "NOT_FOUND", "cancel by another user")
         assertEquals("PENDING", orderStatus(publicId), "another user cannot cancel the order")
@@ -530,13 +540,13 @@ class ApiContractE2E : E2eTestBase() {
         val maintenance = JsonObject().put("enabled", enabled).put("bypassPermissionNode", "").put("showLoginButton", true).put("customLoginUrl", "").put("showSiteLogo", false)
             .put("title", "e2e").put("messageHtml", "").put("customCss", "")
 
-        admin.multipart("PUT", "/api/panel/settings", mapOf("maintenance" to maintenance.encode(), "password" to session.env.adminPassword())).ok()
+        admin.multipart("PUT", "/api/v1/panel/settings", mapOf("maintenance" to maintenance.encode(), "password" to session.env.adminPassword())).ok()
     }
 
     @Test
     fun `API-06 inbound route properties - answers under maintenance and to GET POST PUT, 413 above 1 MB, 404 for an unknown provider and an unknown token`() {
         val guest = visitor("gateway")
-        val webhook = "/api/market/payments/fake/webhook"
+        val webhook = "${MarketPaths.SITE_ROOT}/payments/fake/webhook"
         val methods = listOf("GET", "POST", "PUT")
 
         fun probe(): Map<String, Int> = methods.associateWith { guest.request(it, webhook, if (it == "GET") null else JsonObject().put("e2e", "api-06"), log = false).status }
@@ -551,19 +561,19 @@ class ApiContractE2E : E2eTestBase() {
         enableMaintenance(true)
 
         try {
-            val closed = guest.get("/api/market/store")
+            val closed = guest.get("${MarketPaths.SITE_ROOT}/store")
 
             assertEquals(503, closed.status, "maintenance is active: a visitor is refused ${closed.error}")
             assertEquals(baseline, probe(), "the webhook route answers the same under maintenance mode")
 
-            val notify = guest.request("POST", "/api/market/payments/fake/notify/${"0".repeat(40)}", JsonObject(), log = false)
+            val notify = guest.request("POST", "${MarketPaths.SITE_ROOT}/payments/fake/notify/${"0".repeat(40)}", JsonObject(), log = false)
 
             assertEquals(404, notify.status, "an unknown notify token under maintenance")
         } finally {
             enableMaintenance(false)
         }
 
-        assertEquals(200, guest.get("/api/market/store").status, "maintenance is off again")
+        assertEquals(200, guest.get("${MarketPaths.SITE_ROOT}/store").status, "maintenance is off again")
 
         // body above 1 MB: 413, nothing stored
         val eventsBefore = db.count("market_payment_event")
@@ -578,11 +588,11 @@ class ApiContractE2E : E2eTestBase() {
         assertNotEquals(413, small.status, "a small body is not refused as too large")
 
         // unknown provider id, unknown notify token, shapes the routes refuse
-        assertEquals(404, guest.request("POST", "/api/market/payments/no-such-provider/webhook", JsonObject(), log = false).status, "unknown provider")
-        assertEquals(404, guest.request("GET", "/api/market/payments/no-such-provider/webhook", null, log = false).status, "unknown provider GET")
-        assertEquals(404, guest.request("POST", "/api/market/payments/fake/notify/${"1".repeat(40)}", JsonObject(), log = false).status, "unknown notify token")
-        assertEquals(404, guest.request("POST", "/api/market/payments/fake/notify/not-a-token", JsonObject(), log = false).status, "notify token of the wrong shape")
-        assertEquals(404, guest.request("GET", "/api/market/payments/fake/return/${"2".repeat(40)}/success", null, log = false).status.let { if (it == 303) 404 else it }, "unknown return token")
+        assertEquals(404, guest.request("POST", "${MarketPaths.SITE_ROOT}/payments/no-such-provider/webhook", JsonObject(), log = false).status, "unknown provider")
+        assertEquals(404, guest.request("GET", "${MarketPaths.SITE_ROOT}/payments/no-such-provider/webhook", null, log = false).status, "unknown provider GET")
+        assertEquals(404, guest.request("POST", "${MarketPaths.SITE_ROOT}/payments/fake/notify/${"1".repeat(40)}", JsonObject(), log = false).status, "unknown notify token")
+        assertEquals(404, guest.request("POST", "${MarketPaths.SITE_ROOT}/payments/fake/notify/not-a-token", JsonObject(), log = false).status, "notify token of the wrong shape")
+        assertEquals(404, guest.request("GET", "${MarketPaths.SITE_ROOT}/payments/fake/return/${"2".repeat(40)}/success", null, log = false).status.let { if (it == 303) 404 else it }, "unknown return token")
     }
 
     // --- API-07 --------------------------------------------------------------------------------------------------------
@@ -597,9 +607,16 @@ class ApiContractE2E : E2eTestBase() {
 
         assertEquals("c58d57a", doc.getString("recordedFrom"))
 
+        // the file records the handlers of c58d57a under their pre-cutover paths; the live routes are addressed by the versioned ones
+        fun moved(path: String) = when {
+            path.startsWith("/api/panel/market") -> MarketPaths.PANEL_ROOT + path.removePrefix("/api/panel/market")
+            path.startsWith("/api/market") -> MarketPaths.SITE_ROOT + path.removePrefix("/api/market")
+            else -> path
+        }
+
         return doc.getJsonArray("endpoints").map { it as JsonObject }.map { e ->
             Golden(
-                e.getString("tag"), e.getString("method"), e.getString("path"), e.getString("kind"), e.getJsonArray("keys").map { it as String }.toSet(),
+                e.getString("tag"), e.getString("method"), moved(e.getString("path")), e.getString("kind"), e.getJsonArray("keys").map { it as String }.toSet(),
                 (e.getJsonArray("intentionalRemovals") ?: JsonArray()).map { (it as JsonObject).getString("key") }.toSet()
             )
         }
@@ -640,7 +657,7 @@ class ApiContractE2E : E2eTestBase() {
 
                 parent?.let { fields["parentId"] = it.toString() }
 
-                return admin.multipart("POST", "/api/panel/market/categories", fields).ok().obj().getLong("id")
+                return admin.multipart("POST", "${MarketPaths.PANEL_ROOT}/categories", fields).ok().obj().getLong("id")
             }
 
             categoryId = category("API root $run$n")
@@ -651,8 +668,8 @@ class ApiContractE2E : E2eTestBase() {
 
             product = Product(fresh.id, fresh.slug)
             scratchProduct = catalog.fresh("FREE").id
-            comparisonId = admin.post("/api/panel/market/comparisons", JsonObject().put("name", "api $run$n").put("status", "ACTIVE").put("selectedProducts", JsonArray().add(product.id))).ok().obj().getLong("id")
-            scratchComparison = admin.post("/api/panel/market/comparisons", JsonObject().put("name", "api scratch $run$n")).ok().obj().getLong("id")
+            comparisonId = admin.post("${MarketPaths.PANEL_ROOT}/comparisons", JsonObject().put("name", "api $run$n").put("status", "ACTIVE").put("selectedProducts", JsonArray().add(product.id))).ok().obj().getLong("id")
+            scratchComparison = admin.post("${MarketPaths.PANEL_ROOT}/comparisons", JsonObject().put("name", "api scratch $run$n")).ok().obj().getLong("id")
 
             for (group in listOf("coupons", "discounts", "gifts", "creator-codes")) {
                 ids[group] = createPromotion(group, "scratch")
@@ -676,25 +693,25 @@ class ApiContractE2E : E2eTestBase() {
                 else -> JsonObject().put("creator", "api$suffix${unique.get()}").put("code", code).put("discount", 5).put("unit", "PERCENT").put("commissionPercent", 10)
             }
 
-            return admin.post("/api/panel/market/$group", body).ok().obj().getLong("id")
+            return admin.post("${MarketPaths.PANEL_ROOT}/$group", body).ok().obj().getLong("id")
         }
 
         fun cleanUp() {
             created.forEach { admin.delete(it) }
-            for (group in listOf("coupons", "discounts", "gifts", "creator-codes")) admin.delete("/api/panel/market/$group/${ids["$group:main"]}")
-            admin.delete("/api/panel/market/comparisons/$comparisonId")
-            admin.delete("/api/panel/market/products/${product.id}")
-            admin.delete("/api/panel/market/products/$scratchProduct")
-            admin.delete("/api/panel/market/categories/$scratchCategory")
-            admin.delete("/api/panel/market/categories/$childCategoryId")
-            admin.delete("/api/panel/market/categories/$categoryId")
+            for (group in listOf("coupons", "discounts", "gifts", "creator-codes")) admin.delete("${MarketPaths.PANEL_ROOT}/$group/${ids["$group:main"]}")
+            admin.delete("${MarketPaths.PANEL_ROOT}/comparisons/$comparisonId")
+            admin.delete("${MarketPaths.PANEL_ROOT}/products/${product.id}")
+            admin.delete("${MarketPaths.PANEL_ROOT}/products/$scratchProduct")
+            admin.delete("${MarketPaths.PANEL_ROOT}/categories/$scratchCategory")
+            admin.delete("${MarketPaths.PANEL_ROOT}/categories/$childCategoryId")
+            admin.delete("${MarketPaths.PANEL_ROOT}/categories/$categoryId")
         }
     }
 
     private class Product(val id: Long, val slug: String)
 
     private fun Fixture.probe(g: Golden): E2eResponse? {
-        val p = "/api/panel/market"
+        val p = "${MarketPaths.PANEL_ROOT}"
         val visitor = visitor("golden")
         val form = mapOf("name" to "api golden $run${unique.incrementAndGet()}", "slug" to "api-golden-$run${unique.incrementAndGet()}", "price" to "2.00", "status" to "ACTIVE")
         val group = g.path.removePrefix("$p/").substringBefore('/')
@@ -706,52 +723,52 @@ class ApiContractE2E : E2eTestBase() {
         }
 
         return when (g.key) {
-            "GET /api/market/store" -> visitor.get("/api/market/store")
-            "GET /api/market/products/:slug" -> visitor.get("/api/market/products/${product.slug}")
-            "GET /api/panel/market/categories" -> admin.get("$p/categories")
-            "POST /api/panel/market/categories" -> remember(admin.multipart("POST", "$p/categories", mapOf("name" to "api created $run${unique.incrementAndGet()}", "status" to "ACTIVE")), "/categories")
-            "PUT /api/panel/market/categories/:id" -> admin.multipart("PUT", "$p/categories/$scratchCategory", mapOf("name" to "api renamed $run", "status" to "ACTIVE"))
-            "DELETE /api/panel/market/categories/:id" -> {
+            "GET ${MarketPaths.SITE_ROOT}/store" -> visitor.get("${MarketPaths.SITE_ROOT}/store")
+            "GET ${MarketPaths.SITE_ROOT}/products/:slug" -> visitor.get("${MarketPaths.SITE_ROOT}/products/${product.slug}")
+            "GET ${MarketPaths.PANEL_ROOT}/categories" -> admin.get("$p/categories")
+            "POST ${MarketPaths.PANEL_ROOT}/categories" -> remember(admin.multipart("POST", "$p/categories", mapOf("name" to "api created $run${unique.incrementAndGet()}", "status" to "ACTIVE")), "/categories")
+            "PUT ${MarketPaths.PANEL_ROOT}/categories/:id" -> admin.multipart("PUT", "$p/categories/$scratchCategory", mapOf("name" to "api renamed $run", "status" to "ACTIVE"))
+            "DELETE ${MarketPaths.PANEL_ROOT}/categories/:id" -> {
                 val doomed = admin.multipart("POST", "$p/categories", mapOf("name" to "api doomed $run${unique.incrementAndGet()}", "status" to "ACTIVE")).ok().obj().getLong("id")
 
                 admin.delete("$p/categories/$doomed")
             }
-            "POST /api/panel/market/categories/sort" -> admin.post("$p/categories/sort", JsonObject().put("id", childCategoryId).put("position", "AFTER").put("targetId", categoryId))
-            "GET /api/panel/market/products" -> admin.get("$p/products")
-            "GET /api/panel/market/products/simple" -> admin.get("$p/products/simple")
-            "GET /api/panel/market/products/:id" -> admin.get("$p/products/${product.id}")
-            "POST /api/panel/market/products" -> remember(admin.multipart("POST", "$p/products", form), "/products")
-            "PUT /api/panel/market/products/:id" -> admin.multipart("PUT", "$p/products/$scratchProduct", form)
-            "POST /api/panel/market/products/:id/clone" -> remember(admin.post("$p/products/${product.id}/clone", JsonObject()), "/products")
-            "DELETE /api/panel/market/products/:id" -> {
+            "POST ${MarketPaths.PANEL_ROOT}/categories/sort" -> admin.post("$p/categories/sort", JsonObject().put("id", childCategoryId).put("position", "AFTER").put("targetId", categoryId))
+            "GET ${MarketPaths.PANEL_ROOT}/products" -> admin.get("$p/products")
+            "GET ${MarketPaths.PANEL_ROOT}/products/simple" -> admin.get("$p/products/simple")
+            "GET ${MarketPaths.PANEL_ROOT}/products/:id" -> admin.get("$p/products/${product.id}")
+            "POST ${MarketPaths.PANEL_ROOT}/products" -> remember(admin.multipart("POST", "$p/products", form), "/products")
+            "PUT ${MarketPaths.PANEL_ROOT}/products/:id" -> admin.multipart("PUT", "$p/products/$scratchProduct", form)
+            "POST ${MarketPaths.PANEL_ROOT}/products/:id/clone" -> remember(admin.post("$p/products/${product.id}/clone", JsonObject()), "/products")
+            "DELETE ${MarketPaths.PANEL_ROOT}/products/:id" -> {
                 val doomed = admin.multipart("POST", "$p/products", form).ok().obj().getLong("id")
 
                 admin.delete("$p/products/$doomed")
             }
-            "GET /api/panel/market/comparisons" -> admin.get("$p/comparisons")
-            "GET /api/panel/market/comparisons/:id" -> admin.get("$p/comparisons/$comparisonId")
-            "POST /api/panel/market/comparisons" -> remember(admin.post("$p/comparisons", JsonObject().put("name", "api created $run${unique.incrementAndGet()}")), "/comparisons")
-            "PUT /api/panel/market/comparisons/:id" -> admin.put("$p/comparisons/$scratchComparison", JsonObject().put("name", "api renamed $run"))
-            "POST /api/panel/market/comparisons/:id/clone" -> remember(admin.post("$p/comparisons/$comparisonId/clone", JsonObject()), "/comparisons")
-            "DELETE /api/panel/market/comparisons/:id" -> {
+            "GET ${MarketPaths.PANEL_ROOT}/comparisons" -> admin.get("$p/comparisons")
+            "GET ${MarketPaths.PANEL_ROOT}/comparisons/:id" -> admin.get("$p/comparisons/$comparisonId")
+            "POST ${MarketPaths.PANEL_ROOT}/comparisons" -> remember(admin.post("$p/comparisons", JsonObject().put("name", "api created $run${unique.incrementAndGet()}")), "/comparisons")
+            "PUT ${MarketPaths.PANEL_ROOT}/comparisons/:id" -> admin.put("$p/comparisons/$scratchComparison", JsonObject().put("name", "api renamed $run"))
+            "POST ${MarketPaths.PANEL_ROOT}/comparisons/:id/clone" -> remember(admin.post("$p/comparisons/$comparisonId/clone", JsonObject()), "/comparisons")
+            "DELETE ${MarketPaths.PANEL_ROOT}/comparisons/:id" -> {
                 val doomed = admin.post("$p/comparisons", JsonObject().put("name", "api doomed $run${unique.incrementAndGet()}")).ok().obj().getLong("id")
 
                 admin.delete("$p/comparisons/$doomed")
             }
-            "GET /api/panel/market/orders" -> admin.get("$p/orders")
-            "GET /api/panel/market/orders/:id" -> admin.get("$p/orders/$orderDbId")
-            "PUT /api/panel/market/orders/:id/status" -> admin.put("$p/orders/$orderDbId/status", JsonObject().put("status", "COMPLETED"))
-            "PUT /api/panel/market/orders/:id/exchange-rate" -> admin.put("$p/orders/$orderDbId/exchange-rate", JsonObject().put("exchangeRate", 1.25))
-            "POST /api/panel/market/orders/:id/exchange-rate/refresh" -> admin.post("$p/orders/$orderDbId/exchange-rate/refresh", JsonObject())
-            "GET /api/panel/market/stats" -> admin.get("$p/stats")
-            "GET /api/panel/market/settings" -> admin.get("$p/settings")
-            "POST /api/panel/market/settings" -> admin.post("$p/settings", JsonObject().put("storeName", admin.get("$p/settings").ok().obj().getString("storeName")))
-            "POST /api/panel/market/settings/credits" -> admin.post("$p/settings/credits", JsonObject().put("creditsEnabled", true))
-            "POST /api/panel/market/settings/exchange-rate/refresh" -> admin.post("$p/settings/exchange-rate/refresh", JsonObject())
-            "POST /api/panel/market/payment-methods/:id" ->
+            "GET ${MarketPaths.PANEL_ROOT}/orders" -> admin.get("$p/orders")
+            "GET ${MarketPaths.PANEL_ROOT}/orders/:id" -> admin.get("$p/orders/$orderDbId")
+            "PUT ${MarketPaths.PANEL_ROOT}/orders/:id/status" -> admin.put("$p/orders/$orderDbId/status", JsonObject().put("status", "COMPLETED"))
+            "PUT ${MarketPaths.PANEL_ROOT}/orders/:id/exchange-rate" -> admin.put("$p/orders/$orderDbId/exchange-rate", JsonObject().put("exchangeRate", 1.25))
+            "POST ${MarketPaths.PANEL_ROOT}/orders/:id/exchange-rate/refresh" -> admin.post("$p/orders/$orderDbId/exchange-rate/refresh", JsonObject())
+            "GET ${MarketPaths.PANEL_ROOT}/stats" -> admin.get("$p/stats")
+            "GET ${MarketPaths.PANEL_ROOT}/settings" -> admin.get("$p/settings")
+            "POST ${MarketPaths.PANEL_ROOT}/settings" -> admin.post("$p/settings", JsonObject().put("storeName", admin.get("$p/settings").ok().obj().getString("storeName")))
+            "POST ${MarketPaths.PANEL_ROOT}/settings/credits" -> admin.post("$p/settings/credits", JsonObject().put("creditsEnabled", true))
+            "POST ${MarketPaths.PANEL_ROOT}/settings/exchange-rate/refresh" -> admin.post("$p/settings/exchange-rate/refresh", JsonObject())
+            "POST ${MarketPaths.PANEL_ROOT}/payment-methods/:id" ->
                 admin.post("$p/payment-methods/fake", JsonObject().put("settings", JsonObject().put("gatewayUrl", gateway.baseUrl).put("secret", gateway.secret)))
-            "POST /api/panel/market/payment-methods/:id/toggle" -> admin.post("$p/payment-methods/fake/toggle", JsonObject().put("enabled", true))
-            "POST /api/panel/market/payment-methods/:id/reveal" -> admin.post("$p/payment-methods/fake/reveal", JsonObject().put("password", session.env.adminPassword()))
+            "POST ${MarketPaths.PANEL_ROOT}/payment-methods/:id/toggle" -> admin.post("$p/payment-methods/fake/toggle", JsonObject().put("enabled", true))
+            "POST ${MarketPaths.PANEL_ROOT}/payment-methods/:id/reveal" -> admin.post("$p/payment-methods/fake/reveal", JsonObject().put("password", session.env.adminPassword()))
             else -> when {
                 group in setOf("coupons", "discounts", "gifts", "creator-codes") -> promotionProbe(g, group)
                 else -> throw AssertionError("no probe for the golden endpoint ${g.key}")
@@ -760,7 +777,7 @@ class ApiContractE2E : E2eTestBase() {
     }
 
     private fun Fixture.promotionProbe(g: Golden, group: String): E2eResponse {
-        val p = "/api/panel/market"
+        val p = "${MarketPaths.PANEL_ROOT}"
         val code = "API${run.uppercase()}${unique.incrementAndGet()}"
 
         return when (g.method) {
@@ -787,7 +804,7 @@ class ApiContractE2E : E2eTestBase() {
         val endpoints = golden()
 
         // a key may only be missing from the live answer when the spec removes it on purpose and the golden file says so (04 section 3: the store list is cards, no description)
-        assertEquals(mapOf("GET /api/market/store" to setOf("products[].description")), endpoints.filter { it.removed.isNotEmpty() }.associate { it.key to it.removed }, "the acknowledged removals")
+        assertEquals(mapOf("GET ${MarketPaths.SITE_ROOT}/store" to setOf("items[].description")), endpoints.filter { it.removed.isNotEmpty() }.associate { it.key to it.removed }, "the acknowledged removals")
         assertEquals(53, endpoints.size, "the golden file holds the 53 route classes of c58d57a (the recon doc counted 54)")
         assertEquals(endpoints.size, endpoints.map { it.key }.toSet().size, "no endpoint twice")
         assertEquals(setOf("KEEP", "CHANGE"), endpoints.map { it.tag }.toSet())
@@ -807,7 +824,7 @@ class ApiContractE2E : E2eTestBase() {
                 if (g.kind == "FILE") {
                     // a file route: registered (above) and answers an unknown file name with the platform's 404, not a 500
                     val path = g.path.replace(":fileName", "no-such-file.png")
-                    val answer = (if (g.path.startsWith("/api/panel/")) admin else visitor()).get(path)
+                    val answer = (if (g.path.startsWith(MarketPaths.PANEL_ROOT)) admin else visitor()).get(path)
 
                     if (answer.status !in setOf(404, 400)) failures += "${g.key}: an unknown file answered ${answer.status}"
 
@@ -832,7 +849,8 @@ class ApiContractE2E : E2eTestBase() {
                 observed++
 
                 val live = keyPaths(answer.obj())
-                val missing = g.keys - live
+                // the success body has no `result` key any more (04 section 3); the golden file recorded it
+                val missing = g.keys - live - "result"
 
                 if (missing.isNotEmpty()) failures += "${g.key} (${g.tag}) lost keys: ${missing.sorted()}"
             }
@@ -885,7 +903,7 @@ class ApiContractE2E : E2eTestBase() {
         awaitOrder(publicId, "COMPLETED")
 
         val logsBefore = db.count("panel_activity_log", "`type` = 'EXPORTED_MARKET_ORDERS'")
-        val answer = admin.get("/api/panel/market/orders/export?search=$publicId&columns=publicId,status,productName")
+        val answer = admin.get("${MarketPaths.PANEL_ROOT}/orders/export?search=$publicId&columns=publicId,status,productName")
 
         assertEquals(200, answer.status, "export: ${answer.status} ${answer.error}")
         assertTrue(answer.header("Content-Type")!!.startsWith("text/csv"), "content type ${answer.header("Content-Type")}")
@@ -922,18 +940,18 @@ class ApiContractE2E : E2eTestBase() {
         // the PII columns need OM or PAY: the viewer is refused, not silently given them
         val viewer = user("node-OV").client
 
-        assertEquals(403, viewer.get("/api/panel/market/orders/export?columns=email").status, "email column below the PII tier")
-        assertEquals(200, viewer.get("/api/panel/market/orders/export?columns=publicId,status").status)
+        assertEquals(403, viewer.get("${MarketPaths.PANEL_ROOT}/orders/export?columns=email").status, "email column below the PII tier")
+        assertEquals(200, viewer.get("${MarketPaths.PANEL_ROOT}/orders/export?columns=publicId,status").status)
 
         // L11 (MK-152 seam named in evidence/MK-170.md): 6 exports a minute per panel user, the next one is 429 with retryAfter; another user is not affected
-        val statuses = (1..10).map { viewer.get("/api/panel/market/orders/export?columns=publicId", log = false) }
+        val statuses = (1..10).map { viewer.get("${MarketPaths.PANEL_ROOT}/orders/export?columns=publicId", log = false) }
         val firstRefused = statuses.indexOfFirst { it.status == 429 }
 
         assertTrue(firstRefused in 1..5, "the 7th export of the minute is refused (the viewer had already made 2): statuses ${statuses.map { it.status }}")
         assertTrue(statuses.drop(firstRefused).all { it.status == 429 }, "once refused, refused: ${statuses.map { it.status }}")
         assertEquals("TOO_MANY_REQUESTS", statuses[firstRefused].error)
-        assertTrue(statuses[firstRefused].obj().getInteger("retryAfter") in 1..60, "retryAfter: ${statuses[firstRefused].json}")
-        assertEquals(200, user("umbrella").client.get("/api/panel/market/orders/export?columns=publicId", log = false).status, "another user is not limited by the viewer's bucket")
+        assertTrue(statuses[firstRefused].details.getInteger("retryAfter") in 1..60, "retryAfter: ${statuses[firstRefused].json}")
+        assertEquals(200, user("umbrella").client.get("${MarketPaths.PANEL_ROOT}/orders/export?columns=publicId", log = false).status, "another user is not limited by the viewer's bucket")
     }
 
     // --- API-09 --------------------------------------------------------------------------------------------------------
@@ -979,7 +997,7 @@ class ApiContractE2E : E2eTestBase() {
 
     @Test
     fun `API-09 activity logs - each mutating panel call writes exactly one log of its type, without secrets, tokens, addresses or e-mail`() {
-        val p = "/api/panel/market"
+        val p = "${MarketPaths.PANEL_ROOT}"
         val n = "$run${unique.incrementAndGet()}"
         val key = { mapOf("Idempotency-Key" to idempotencyKey()) }
         var performed = 0
@@ -1110,14 +1128,7 @@ class ApiContractE2E : E2eTestBase() {
         step("UPDATED_MARKET_SETTINGS", "settings") { admin.post("$p/settings", JsonObject().put("storeName", storeName)) }
         step("TOGGLED_MARKET_PAYMENT_METHOD", "toggle method") { admin.post("$p/payment-methods/fake/toggle", JsonObject().put("enabled", true)) }
 
-        // webhooks, blocks, shipping zones
-        val hook = step("CREATED_MARKET_WEBHOOK", "create webhook") {
-            admin.post("$p/webhooks", JsonObject().put("name", "api9 $n").put("url", "http://127.0.0.1:${session.env.gatewayPort}/api9-sink").put("events", JsonArray().add("order.paid")).put("format", "JSON").put("signing", "NONE"))
-        }.obj().getLong("id")
-
-        step("UPDATED_MARKET_WEBHOOK", "update webhook") { admin.put("$p/webhooks/$hook", JsonObject().put("name", "api9 renamed $n")) }
-        step("DELETED_MARKET_WEBHOOK", "delete webhook") { admin.delete("$p/webhooks/$hook") }
-
+        // blocks, shipping zones (the webhook endpoints are core's since MK-15: their routes and activity logs are not the market's)
         val block = step("CREATED_MARKET_BLOCK", "create block") { admin.post("$p/blocks", JsonObject().put("type", "PLAYER").put("value", "api9block$n").put("reason", "api9")) }.obj().getLong("id")
 
         step("DELETED_MARKET_BLOCK", "delete block") { admin.delete("$p/blocks/$block") }
@@ -1154,7 +1165,8 @@ class ApiContractE2E : E2eTestBase() {
         assertEquals(before, lastLogId(), "a refused call writes no activity log")
 
         println("API-09 performed=$performed")
-        assertTrue(performed >= 46, "performed $performed logged calls")
+        // 46 before MK-15 moved the webhook endpoints to core: their create, update and delete calls are no longer the market's
+        assertTrue(performed >= 43, "performed $performed logged calls")
     }
 
     // --- API-10 --------------------------------------------------------------------------------------------------------
@@ -1175,10 +1187,11 @@ class ApiContractE2E : E2eTestBase() {
 
     @Test
     fun `API-10 demo and usage modes - in demo mode checkout is DISABLED_FOR_DEMO and the webhook route still answers`() {
-        // A separate, short-lived instance (own directory, database and ports 18598 / 18599 of stream F): the script installs it, stops it, and the
+        // A separate, short-lived instance (own directory, database and the ports +12 / +13 of the slot's block): the script installs it, stops it, and the
         // JVM is started by hand with the one extra argument `--demo` (the script has no switch for it). Stopped by its exact PID.
-        val http = DEMO_HTTP_PORT
-        val options = arrayOf("--name", "fd", "--http-port", http.toString(), "--gateway-port", (http + 1).toString())
+        val http = demoHttpPort()
+        val demoName = "fd${System.getenv("PANO_OF_SLOT") ?: ""}"
+        val options = arrayOf("--name", demoName, "--http-port", http.toString(), "--gateway-port", (http + 1).toString())
         val started = runScript("start", *options)
 
         assertEquals(0, started.first, "the demo instance installed: ${started.second}")
@@ -1186,9 +1199,9 @@ class ApiContractE2E : E2eTestBase() {
         // the same calls outside demo mode: the control for what the demo run answers
         val plain = E2eClient("http://127.0.0.1:$http", "plain")
         val methods = listOf("GET", "POST", "PUT")
-        val webhookPath = "/api/market/payments/fake/webhook"
+        val webhookPath = "${MarketPaths.SITE_ROOT}/payments/fake/webhook"
         fun webhookStatuses(client: E2eClient) = methods.associateWith { client.request(it, webhookPath, if (it == "GET") null else JsonObject().put("e2e", "api-10"), log = false).status }
-        val plainCheckout = plain.request("POST", "/api/market/checkout", JsonObject().put("items", JsonArray()).put("paymentMethodId", "fake"), mapOf("Idempotency-Key" to idempotencyKey()), log = false)
+        val plainCheckout = plain.request("POST", "${MarketPaths.SITE_ROOT}/checkout", JsonObject().put("items", JsonArray()).put("paymentMethodId", "fake"), mapOf("Idempotency-Key" to idempotencyKey()), log = false)
         val plainWebhook = webhookStatuses(plain)
 
         assertNotEquals("DISABLED_FOR_DEMO", plainCheckout.error, "outside demo mode checkout is not refused by the demo gate: ${plainCheckout.status} ${plainCheckout.error}")
@@ -1198,10 +1211,8 @@ class ApiContractE2E : E2eTestBase() {
 
         assertEquals(0, stopped.first, "the demo instance stopped for the hand start: ${stopped.second}")
 
-        val instance = File(session.env.dir!!).canonicalFile.parentFile.resolve("instance-fd")
-        val moduleRoot = instance.resolve("../../..").canonicalFile
-        val platformRoot = moduleRoot.resolve("../..").canonicalFile
-        val jar = platformRoot.resolve("build/libs/Pano-local-build.jar")
+        val instance = File(session.env.dir!!).canonicalFile.parentFile.resolve("instance-$demoName")
+        val jar = instance.resolve("pano.jar") // the copy the script staged for this instance, never build/libs
 
         check(jar.isFile) { "no $jar" }
 
@@ -1211,7 +1222,7 @@ class ApiContractE2E : E2eTestBase() {
         builder.directory(instance).redirectErrorStream(true).redirectOutput(instance.resolve("pano-demo.log")).redirectInput(ProcessBuilder.Redirect.from(File("/dev/null")))
         builder.environment()["PANO_DB_HOST"] = System.getenv("PANO_IT_MARIADB")!!.substringBefore(':')
         builder.environment()["PANO_DB_PORT"] = System.getenv("PANO_IT_MARIADB")!!.substringAfter(':', "3306")
-        builder.environment()["PANO_DB_NAME"] = "pano_market_e2e_fd"
+        builder.environment()["PANO_DB_NAME"] = "pano_market_e2e_$demoName"
         builder.environment()["PANO_DB_USER"] = "root"
         builder.environment()["PANO_DB_PASSWORD"] = System.getenv("PANO_IT_MARIADB_PASSWORD") ?: ""
         builder.environment()["PANO_HTTP_PORT"] = http.toString()
@@ -1222,18 +1233,18 @@ class ApiContractE2E : E2eTestBase() {
             val base = "http://127.0.0.1:$http"
             val guest = E2eClient(base, "demo")
 
-            Await.until(240_000, 1000, "the demo instance answers") { runCatching { guest.get("/api/market/store", log = false).status == 200 }.getOrDefault(false) }
+            Await.until(240_000, 1000, "the demo instance answers") { runCatching { guest.get("${MarketPaths.SITE_ROOT}/store", log = false).status == 200 }.getOrDefault(false) }
 
             // reads still work in demo mode
-            assertEquals(200, guest.get("/api/market/store").status, "a GET works in demo mode")
+            assertEquals(200, guest.get("${MarketPaths.SITE_ROOT}/store").status, "a GET works in demo mode")
 
             // the checkout (a mutation) is refused by the platform's demo gate
-            val checkout = guest.request("POST", "/api/market/checkout", JsonObject().put("items", JsonArray()).put("paymentMethodId", "fake"), mapOf("Idempotency-Key" to idempotencyKey()), log = false)
+            val checkout = guest.request("POST", "${MarketPaths.SITE_ROOT}/checkout", JsonObject().put("items", JsonArray()).put("paymentMethodId", "fake"), mapOf("Idempotency-Key" to idempotencyKey()), log = false)
 
             assertEquals("DISABLED_FOR_DEMO", checkout.error, "checkout in demo mode: ${checkout.status} ${checkout.json}")
             assertEquals(401, checkout.status, "the platform answers DisabledForDemo with 401")
 
-            val quote = guest.request("POST", "/api/market/checkout/quote", JsonObject().put("items", JsonArray()), mapOf("Idempotency-Key" to idempotencyKey()), log = false)
+            val quote = guest.request("POST", "${MarketPaths.SITE_ROOT}/checkout/quote", JsonObject().put("items", JsonArray()), mapOf("Idempotency-Key" to idempotencyKey()), log = false)
 
             assertEquals("DISABLED_FOR_DEMO", quote.error, "quote in demo mode")
 
@@ -1245,7 +1256,7 @@ class ApiContractE2E : E2eTestBase() {
             assertEquals(plainWebhook, demoWebhook, "the webhook route answers the same in demo mode and outside it")
             println("API-10 demo: checkout ${checkout.status} ${checkout.error}, webhook $demoWebhook")
 
-            assertEquals(404, guest.request("POST", "/api/market/payments/no-such-provider/webhook", JsonObject(), log = false).status)
+            assertEquals(404, guest.request("POST", "${MarketPaths.SITE_ROOT}/payments/no-such-provider/webhook", JsonObject(), log = false).status)
         } finally {
             // exact PID, SIGTERM first
             process.destroy()
@@ -1260,7 +1271,8 @@ class ApiContractE2E : E2eTestBase() {
         const val MISSING_ID = 999_999_999L
         const val PANEL_ACCESS = "pano.panel.access.panel"
         const val NODE_PREFIX = "pano.plugin.pano-plugin-market."
-        const val DEMO_HTTP_PORT = 18598
+        fun demoHttpPort(): Int = System.getenv("PANO_OF_SLOT_BASE")?.toIntOrNull()?.plus(12)
+            ?: throw IllegalStateException("no test-instance slot: run through pano-open-frontend-spec/tools/of-slot.sh")
 
         val NODE_SUFFIX = mapOf(
             MarketNode.CATALOG to "manage.market.catalog",

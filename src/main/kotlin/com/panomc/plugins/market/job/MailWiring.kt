@@ -3,6 +3,8 @@ package com.panomc.plugins.market.job
 import com.panomc.platform.config.ConfigManager
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.mail.MailManager
+import com.panomc.plugins.market.util.MarketLinks
+import com.panomc.plugins.market.util.StoreLinks
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.time.SystemClock
 import com.panomc.plugins.market.db.dao.MarketEntitlementDao
@@ -71,7 +73,12 @@ internal object MailWiring {
         val mailOutbox = context.getBean(MarketMailOutboxDao::class.java)
         val service = MailOutboxService(config, SystemClock, mailOutbox, context.getBean(MarketOrderEventDao::class.java))
         val (i18n, format) = marketI18n(plugin)
-        val site = { MailSite(platformConfig().websiteName, platformConfig().websiteUrl.trim().trimEnd('/')) }
+        val site = {
+            val websiteUrl = platformConfig().websiteUrl.trim().trimEnd('/')
+
+            // no site address: no buttons, as before the front-end URL map existed
+            MailSite(platformConfig().websiteName, websiteUrl, if (websiteUrl.isEmpty()) StoreLinks.NONE else MarketLinks.platform)
+        }
         val builder = MailContentBuilder(i18n, format, config, site)
         val orders = context.getBean(MarketOrderDao::class.java)
         val orderItems = context.getBean(MarketOrderItemDao::class.java)

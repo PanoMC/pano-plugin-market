@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Isolated Pano instance for the market end-to-end tests (17 section 8.1, MK-012). Never the dev instance.
 #
+# Runs only inside a test-instance slot: `pano-open-frontend-spec/tools/of-slot.sh <command...>` takes slot a or b and exports
+# PANO_OF_SLOT (+ PANO_OF_SLOT_* variables, tools/README.md section 1). Without --name the instance IS the slot's:
+# name slot<x>, directory instance-slot<x>, database pano_market_e2e_slot<x>, Pano HTTP port and gateway port of the slot's
+# block (a: 18400.., b: 18500..). Without PANO_OF_SLOT and without --name this script exits 2 and prints the of-slot.sh line.
+# (The unnamed default instance on 18188 does not exist any more.)
+#
 #   e2e-instance.sh start   [--keep] [options]   delete + recreate the instance dir and database, boot, install, wait until the market is up
 #   e2e-instance.sh stop                          SIGTERM to the recorded PID, wait for it, check the port is free
 #   e2e-instance.sh kill                          SIGKILL to the recorded PID (crash tests)
@@ -9,12 +15,14 @@
 #   e2e-instance.sh install-legacy [options]      boot WITHOUT the market jar, install, stop, load the scheme-v2 fixtures,
 #                                                 insert the plugin scheme-version row (2), copy the jars, start
 #
-# Options:  --name <n>            second, named instance (needs --http-port and --gateway-port); dir instance-<n>, database pano_market_e2e_<n>
-#           --http-port <p>       Pano HTTP port (default 18188)
-#           --gateway-port <p>    port reserved for the fake gateway of the test JVM (default 18189); checked free, never opened here
-#           --ui external:<theme>,<panel>
+# Options:  --name <n>            a named instance for a person at a terminal (needs --http-port and --gateway-port, except when it is
+#                                 the slot's own name); dir instance-<n>, database pano_market_e2e_<n>
+#           --http-port <p>       Pano HTTP port (default: the slot's)
+#           --gateway-port <p>    port reserved for the fake gateway of the test JVM (default: the slot's); checked free, never opened here
+#           --ui external[:<theme>,<panel>]
 #                                 also serve the host UIs from the local checkouts (themes/vanilla-theme, panel-ui) with
-#                                 `vite dev` on those two ports, API calls proxied to this instance. The UIFiles zips are never touched.
+#                                 `vite dev` on those two ports, API calls proxied to this instance. Without ports (inside a slot)
+#                                 the slot's theme and panel ports. The UIFiles zips are never touched.
 #           --keep                start: reuse the instance directory and database (data kept; no install when already installed)
 #
 # Environment (secrets are only ever read from here, never printed or written to a file):
@@ -29,7 +37,7 @@
 #   MARKET_E2E_JAVA_OPTS      extra JVM options (default -XX:MaxRAMPercentage=40)
 #   MARKET_E2E_READY_TIMEOUT  seconds to wait for each readiness phase (default 300)
 #   MARKET_E2E_ALLOW_DEGRADED set to 1: start / restart accept a market that runs DEGRADED (503 STORE_UNAVAILABLE, ERROR in the log); only the log
-#                             marker and GET /api/health are awaited (LifecycleE2E L-04)
+#                             marker and GET /api/v1/health are awaited (LifecycleE2E L-04)
 #   MARKET_E2E_LEGACY_EXTRA_SQL  install-legacy: a SQL file loaded after seed-v2.sql, before the migrating boot (LifecycleE2E L-01b)
 #   MARKET_E2E_THEME_DIR / MARKET_E2E_PANEL_DIR   host UI checkouts for --ui external
 #
@@ -40,6 +48,8 @@
 #   14 instance did not become ready in time   15 install (smoke script) failed   16 market plugin did not start (log marker
 #   missing or an ERROR line mentions the market)   17 stop / kill / restart without a recorded PID
 #   18 the JRE 11 binary is missing   19 stop: the recorded PID or the port did not go away
+#   The JVM runs from a copy of the Pano jar inside the instance directory (pano.jar; `cp --reflink=auto`, checked with `unzip -tq`,
+#   exit 11 when the copy is damaged), so a Gradle build that rewrites build/libs/Pano-local-build.jar never touches a running instance.
 # Every process is addressed by the PID this script recorded (and verified to belong to the instance directory); never a pattern.
 set -uo pipefail
 
@@ -65,7 +75,7 @@ CMD=${1:-}
 [ -n "$CMD" ] || die 2 "usage: e2e-instance.sh start|stop|kill|restart|status|install-legacy [options] (see the header)"
 shift
 
-NAME=default
+NAME=
 HTTP_PORT=
 GW_PORT=
 UI=
@@ -81,14 +91,18 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-[[ "$NAME" =~ ^[a-z][a-z0-9]{0,19}$ ]] || die 2 "--name must match [a-z][a-z0-9]{0,19}"
-if [ "$NAME" = default ]; then
-  INSTANCE="$BASE/instance"
-  DB_NAME=pano_market_e2e
-else
-  INSTANCE="$BASE/instance-$NAME"
-  DB_NAME="pano_market_e2e_$NAME"
+# The slot (of-slot.sh) gives the name and the ports; without one there is no default instance.
+if [ -z "$NAME" ]; then
+  [ -n "${PANO_OF_SLOT:-}" ] || die 2 "no test-instance slot: run it as  /home/kahverengi/Projects/Pano/pano-open-frontend-spec/tools/of-slot.sh <command that calls $(basename "$0")>  (or pass --name with --http-port and --gateway-port from a terminal)"
+  NAME=${PANO_OF_SLOT_NAME:?PANO_OF_SLOT is set but PANO_OF_SLOT_NAME is not (use of-slot.sh)}
+  : "${HTTP_PORT:=${PANO_OF_SLOT_HTTP_PORT:?}}" "${GW_PORT:=${PANO_OF_SLOT_GATEWAY_PORT:?}}"
+elif [ -n "${PANO_OF_SLOT_NAME:-}" ] && [ "$NAME" = "$PANO_OF_SLOT_NAME" ]; then
+  : "${HTTP_PORT:=${PANO_OF_SLOT_HTTP_PORT:?}}" "${GW_PORT:=${PANO_OF_SLOT_GATEWAY_PORT:?}}"
 fi
+[[ "$NAME" =~ ^[a-z][a-z0-9]{0,19}$ ]] || die 2 "--name must match [a-z][a-z0-9]{0,19}"
+[ "$NAME" != default ] || die 2 "the unnamed default instance does not exist any more (use of-slot.sh)"
+INSTANCE="$BASE/instance-$NAME"
+DB_NAME="pano_market_e2e_$NAME"
 # The only database names this script ever creates or drops.
 [[ "$DB_NAME" =~ ^pano_market_e2e(_[a-z][a-z0-9]{0,19})?$ ]] || die 2 "refusing database name $DB_NAME"
 
@@ -101,7 +115,13 @@ UI_THEME_PORT=
 UI_PANEL_PORT=
 parse_ui() {
   [ -n "$UI" ] || return 0
-  [[ "$UI" =~ ^external:([0-9]+),([0-9]+)$ ]] || die 2 "--ui must be external:<themePort>,<panelPort>"
+  if [ "$UI" = external ]; then
+    [ -n "${PANO_OF_SLOT_THEME_PORT:-}" ] && [ -n "${PANO_OF_SLOT_PANEL_PORT:-}" ] || die 2 "--ui external without ports needs a slot (of-slot.sh)"
+    UI_THEME_PORT=$PANO_OF_SLOT_THEME_PORT
+    UI_PANEL_PORT=$PANO_OF_SLOT_PANEL_PORT
+    return 0
+  fi
+  [[ "$UI" =~ ^external:([0-9]+),([0-9]+)$ ]] || die 2 "--ui must be external or external:<themePort>,<panelPort>"
   UI_THEME_PORT=${BASH_REMATCH[1]}
   UI_PANEL_PORT=${BASH_REMATCH[2]}
 }
@@ -126,11 +146,7 @@ load_ports() {
 }
 
 default_ports() {
-  if [ "$NAME" != default ]; then
-    [ -n "$HTTP_PORT" ] && [ -n "$GW_PORT" ] || die 2 "a named instance needs --http-port and --gateway-port"
-  fi
-  HTTP_PORT=${HTTP_PORT:-18188}
-  GW_PORT=${GW_PORT:-18189}
+  [ -n "$HTTP_PORT" ] && [ -n "$GW_PORT" ] || die 2 "a named instance outside a slot needs --http-port and --gateway-port"
 }
 
 # ---------------------------------------------------------------------------------------------- helpers
@@ -223,6 +239,13 @@ resolve_jars() {
     [ "$EMBEDDED" = 1 ] || die 11 "standalone checkout: set MARKET_E2E_PANO_JAR"
     PANO_JAR="$P/build/libs/Pano-local-build.jar"
     CHECK_STALE=1
+    # The plain build jar embeds stale panel-ui / vanilla-theme zips (the install then hangs). Use the run jar (built UIs, current engine)
+    # unless MARKET_E2E_EMBEDDED_UI=1 or the UI builds / bun are missing.
+    local um="$P/.." rj
+    if [ -z "${MARKET_E2E_EMBEDDED_UI:-}" ] && [ -f "$um/themes/vanilla-theme/build/manifest.json" ] && [ -f "$um/panel-ui/build/manifest.json" ] && command -v bun >/dev/null 2>&1; then
+      rj=$(bun "$M/scripts/e2e-run-jar.mjs" 2>/dev/null | tail -n 1)
+      if [ -n "$rj" ] && [ -f "$rj" ]; then PANO_JAR=$rj; CHECK_STALE=0; say "run jar with built UIs: $rj"; fi
+    fi
   else
     CHECK_STALE=0
   fi
@@ -272,8 +295,18 @@ record_ports() {
   } > "$PORTSFILE"
 }
 
+# The JVM never opens build/libs/Pano-local-build.jar: it runs from a copy inside the instance directory.
+RUN_JAR=
+stage_pano_jar() {
+  RUN_JAR="$INSTANCE/pano.jar"
+  rm -f -- "$RUN_JAR"
+  cp --reflink=auto -- "$PANO_JAR" "$RUN_JAR" 2>/dev/null || die 11 "copying the Pano jar to $RUN_JAR failed"
+  unzip -tq "$RUN_JAR" >/dev/null 2>&1 || die 11 "the copy $RUN_JAR of $PANO_JAR is damaged (the source was probably being written; run the build, then retry)"
+}
+
 launch_pano() {
   jre
+  [ -f "$INSTANCE/pano.jar" ] || stage_pano_jar
   local pid
   (
     cd "$INSTANCE" || exit 1
@@ -282,7 +315,7 @@ launch_pano() {
     export PANO_HTTP_PORT=$HTTP_PORT
     # shellcheck disable=SC2086
     exec setsid "$JAVA_BIN" ${MARKET_E2E_JAVA_OPTS:--XX:MaxRAMPercentage=40} \
-      -Dpano.market.fakeProvider=true -Dpano.market.jobScale=${MARKET_E2E_JOB_SCALE:-5} -Dpf4j.pluginsDir=plugins -jar "$PANO_JAR" -nogui \
+      -Dpano.market.fakeProvider=true -Dpano.market.jobScale=${MARKET_E2E_JOB_SCALE:-5} -Dpf4j.pluginsDir=plugins -jar "$INSTANCE/pano.jar" -nogui \
       </dev/null >pano.log 2>&1
   ) &
   pid=$!
@@ -345,7 +378,7 @@ start_ui() {
     </dev/null >"$INSTANCE/ui-theme.log" 2>&1) &
   tpid=$!
   echo "$tpid" > "$INSTANCE/ui-theme.pid"
-  (cd "$panel_dir" && DEV=true VITE_API_URL="http://127.0.0.1:$HTTP_PORT/panel/api" exec setsid node_modules/.bin/vite dev --host=127.0.0.1 --port "$UI_PANEL_PORT" --strictPort \
+  (cd "$panel_dir" && DEV=true VITE_API_URL="http://127.0.0.1:$HTTP_PORT/api" exec setsid node_modules/.bin/vite dev --host=127.0.0.1 --port "$UI_PANEL_PORT" --strictPort \
     </dev/null >"$INSTANCE/ui-panel.log" 2>&1) &
   ppid_=$!
   echo "$ppid_" > "$INSTANCE/ui-panel.pid"
@@ -356,8 +389,8 @@ start_ui() {
   return 0
 }
 
-health_ok() { [ "$(http_code "http://127.0.0.1:$HTTP_PORT/api/health")" = 200 ]; }
-store_ok() { [ "$(http_code "http://127.0.0.1:$HTTP_PORT/api/market/store")" = 200 ]; }
+health_ok() { [ "$(http_code "http://127.0.0.1:$HTTP_PORT/api/v1/health")" = 200 ]; }
+store_ok() { [ "$(http_code "http://127.0.0.1:$HTTP_PORT/api/plugins/pano-plugin-market/store")" = 200 ]; }
 
 # The vendored copy (with PANO_DB_PREFIX) is used in every layout; the platform original cannot set a table prefix.
 smoke_script() { echo "$M/scripts/smoke-install.sh"; }
@@ -395,7 +428,7 @@ abort_boot() { # kill what we started, keep the logs
 
 boot_and_wait() { # $1 = install | keep ; assumes the JVM is not running
   launch_pano || abort_boot 14 "the JVM did not start"
-  wait_until "health" health_ok || abort_boot 14 "no GET /api/health 200 within ${READY_TIMEOUT}s"
+  wait_until "health" health_ok || abort_boot 14 "no GET /api/v1/health 200 within ${READY_TIMEOUT}s"
   if [ "$1" = install ] && [ ! -f "$INSTANCE/installed" ]; then
     install_pano || abort_boot 15 "the install (smoke-install.sh) failed"
     : > "$INSTANCE/installed"
@@ -405,26 +438,38 @@ boot_and_wait() { # $1 = install | keep ; assumes the JVM is not running
   fi
 }
 
-# CP-2: the block-list IP case of F-18 (17 9.3) needs the instance to trust the loopback peer as a proxy, otherwise X-Forwarded-For is never
-# judged (ClientIpResolver) and the scenario ends as a skipped assumption. Pano rewrites config.conf on shutdown, so the key is set while the
-# JVM is stopped and the JVM is booted again with it. MARKET_E2E_NO_TRUSTED_PROXY=1 switches this off (and makes F-18 skip).
+# Config keys the tests need that the install does not set. Pano rewrites config.conf on shutdown, so the keys are set while the JVM is
+# stopped and the JVM is booted again with them (the function runs twice around the restart; it is a no-op once both are set).
+#  - CP-2: the block-list IP case of F-18 (17 9.3) needs the instance to trust the loopback peer as a proxy, otherwise X-Forwarded-For
+#    is never judged (ClientIpResolver) and the scenario ends as a skipped assumption. MARKET_E2E_NO_TRUSTED_PROXY=1 switches this off
+#    (and makes F-18 skip).
+#  - CX-08: `webhooks.allow-private-targets = true`, because the sinks of the webhook tests listen on loopback (core refuses private
+#    targets otherwise).
 trust_loopback_proxy() {
-  [ -z "${MARKET_E2E_NO_TRUSTED_PROXY:-}" ] || return 0
-  [ -z "${MARKET_E2E_NO_TRUSTED_LOOPBACK:-}" ] || return 0 # the stream-F name of the same switch
-  case "$INSTANCE" in *-lifecycle) return 0 ;; esac # the lifecycle instance keeps its own flow
   [ -f "$INSTANCE/plugins/$(basename "$PLUGIN_JAR")" ] || return 0 # install-legacy installs without the market
-  grep -qE '^[[:space:]]*trusted-proxies[[:space:]]*=[[:space:]]*\[[[:space:]]*\]' "$INSTANCE/config.conf" 2>/dev/null || return 0 # already trusted (the function runs twice around the restart)
-  stop_recorded || abort_boot 19 "the install JVM did not exit for the trusted-proxies edit"
+  local want_proxy=1 want_webhooks=1
+  { [ -z "${MARKET_E2E_NO_TRUSTED_PROXY:-}" ] && [ -z "${MARKET_E2E_NO_TRUSTED_LOOPBACK:-}" ]; } || want_proxy=0 # the second name is the stream-F one
+  case "$INSTANCE" in *-lifecycle*) want_proxy=0 ;; esac # the lifecycle instance keeps its own proxy flow, but its webhook sinks (L-02) are on loopback too
+  grep -qE '^[[:space:]]*trusted-proxies[[:space:]]*=[[:space:]]*\[[[:space:]]*\]' "$INSTANCE/config.conf" 2>/dev/null || want_proxy=0 # already trusted
+  grep -qE '^[[:space:]]*allow-private-targets[[:space:]]*=[[:space:]]*false' "$INSTANCE/config.conf" 2>/dev/null || want_webhooks=0 # already allowed
+  [ "$want_proxy$want_webhooks" != 00 ] || return 0
+  stop_recorded || abort_boot 19 "the install JVM did not exit for the config edit"
   [ -f "$INSTANCE/config.conf" ] || abort_boot 14 "no config.conf in the instance after the install"
-  sed -i -E 's/^([[:space:]]*trusted-proxies[[:space:]]*=[[:space:]]*)\[[^]]*\]/\1["127.0.0.1", "::1"]/' "$INSTANCE/config.conf"
-  grep -Eq '^[[:space:]]*trusted-proxies[[:space:]]*=[[:space:]]*\[[^]]*127\.0\.0\.1' "$INSTANCE/config.conf" || abort_boot 14 "trusted-proxies could not be written to config.conf (single-line form expected)"
+  if [ "$want_proxy" = 1 ]; then
+    sed -i -E 's/^([[:space:]]*trusted-proxies[[:space:]]*=[[:space:]]*)\[[^]]*\]/\1["127.0.0.1", "::1"]/' "$INSTANCE/config.conf"
+    grep -Eq '^[[:space:]]*trusted-proxies[[:space:]]*=[[:space:]]*\[[^]]*127\.0\.0\.1' "$INSTANCE/config.conf" || abort_boot 14 "trusted-proxies could not be written to config.conf (single-line form expected)"
+  fi
+  if [ "$want_webhooks" = 1 ]; then
+    sed -i -E 's/^([[:space:]]*allow-private-targets[[:space:]]*=[[:space:]]*)false/\1true/' "$INSTANCE/config.conf"
+    grep -Eq '^[[:space:]]*allow-private-targets[[:space:]]*=[[:space:]]*true' "$INSTANCE/config.conf" || abort_boot 14 "webhooks.allow-private-targets could not be written to config.conf"
+  fi
   mv -f "$INSTANCE/pano.log" "$INSTANCE/pano-install.log" 2>/dev/null
-  launch_pano || abort_boot 14 "the JVM did not start after the trusted-proxies edit"
-  wait_until "health" health_ok || abort_boot 14 "no GET /api/health 200 after the trusted-proxies edit"
+  launch_pano || abort_boot 14 "the JVM did not start after the config edit"
+  wait_until "health" health_ok || abort_boot 14 "no GET /api/v1/health 200 after the config edit"
 }
 
 # Finding of MK-012 (see evidence/MK-012.md): the market plugin of a JVM that was booted BEFORE the setup finished does not
-# initialise when the setup finishes (no "Setup finished! Initializing plugin..." line, no marker, /api/market/store keeps
+# initialise when the setup finishes (no "Setup finished! Initializing plugin..." line, no marker, /api/plugins/pano-plugin-market/store keeps
 # failing); a boot of the installed instance does. Until that is fixed (MK-020 owns MarketPlugin) the instance is restarted once
 # after the install. MARKET_E2E_NO_POST_INSTALL_RESTART=1 switches this off to verify the fix.
 post_install_restart() {
@@ -432,13 +477,13 @@ post_install_restart() {
   [ -f "$INSTANCE/plugins/$(basename "$PLUGIN_JAR")" ] || return 0 # install-legacy installs without the market
   local i
   # The marker alone is not proof: a plugin that finished its setup hook after the wizard logs "Started!" with its beans missing
-  # (MarketBootstrap "No qualifying bean ...", /api/market/store 500), so the store route must answer too (MK-080).
+  # (MarketBootstrap "No qualifying bean ...", /api/plugins/pano-plugin-market/store 500), so the store route must answer too (MK-080).
   for ((i = 0; i < 20; i++)); do market_marker_ok && store_ok && return 0; sleep 1; done
   say "note: the market did not initialise in the install JVM; restarting it once (post-install restart, see evidence/MK-012.md)"
   stop_recorded || abort_boot 19 "the install JVM did not exit for the post-install restart"
   mv -f "$INSTANCE/pano.log" "$INSTANCE/pano-install.log" 2>/dev/null
   launch_pano || abort_boot 14 "the JVM did not start after the install"
-  wait_until "health" health_ok || abort_boot 14 "no GET /api/health 200 after the post-install restart"
+  wait_until "health" health_ok || abort_boot 14 "no GET /api/v1/health 200 after the post-install restart"
 }
 
 wait_market() {
@@ -446,10 +491,10 @@ wait_market() {
   # MARKET_E2E_ALLOW_DEGRADED=1 (17 L-04): the instance is meant to run with a broken schema, so the market answers 503 STORE_UNAVAILABLE and logs
   # an ERROR; ready then means "the marker is there and the platform answers", nothing more.
   if [ -n "${MARKET_E2E_ALLOW_DEGRADED:-}" ]; then
-    wait_until "health" health_ok || abort_boot 14 "no GET /api/health 200 within ${READY_TIMEOUT}s"
+    wait_until "health" health_ok || abort_boot 14 "no GET /api/v1/health 200 within ${READY_TIMEOUT}s"
     return 0
   fi
-  wait_until "store" store_ok || abort_boot 14 "no GET /api/market/store 200 within ${READY_TIMEOUT}s"
+  wait_until "store" store_ok || abort_boot 14 "no GET /api/plugins/pano-plugin-market/store 200 within ${READY_TIMEOUT}s"
   local errs; errs=$(market_errors)
   [ -z "$errs" ] || abort_boot 16 "ERROR line(s) mention the market: $(echo "$errs" | head -n 2 | cut -c1-200)"
 }
@@ -492,6 +537,7 @@ cmd_start() { # $1 = fresh | keep
     [ -d "$INSTANCE" ] || die 17 "--keep: no instance directory $INSTANCE (run start first)"
     rm -f "$INSTANCE/plugins/"*.jar
   fi
+  stage_pano_jar
   copy_plugin_jars with
   record_ports
   boot_and_wait install
@@ -538,7 +584,7 @@ cmd_status() {
   load_ports
   local pid; pid=$(recorded_pid)
   if [ -n "$pid" ] && is_instance_java "$pid"; then
-    echo "running pid=$pid http=${HTTP_PORT:-?} db=$DB_NAME health=$(http_code "http://127.0.0.1:${HTTP_PORT:-0}/api/health") dir=$INSTANCE"
+    echo "running pid=$pid http=${HTTP_PORT:-?} db=$DB_NAME health=$(http_code "http://127.0.0.1:${HTTP_PORT:-0}/api/v1/health") dir=$INSTANCE"
     return 0
   fi
   echo "not running (instance '$NAME', db $DB_NAME)"
@@ -555,6 +601,7 @@ cmd_install_legacy() {
   case "$INSTANCE" in "$BASE"/instance|"$BASE"/instance-*) rm -rf -- "$INSTANCE" ;; *) die 2 "refusing to delete $INSTANCE" ;; esac
   mkdir -p "$INSTANCE"
   db_recreate
+  stage_pano_jar
   copy_plugin_jars without
   record_ports
   boot_and_wait install
@@ -571,6 +618,7 @@ cmd_install_legacy() {
   # Without this row the platform runs initPluginDB (fresh install) instead of the migration chain.
   db_run "USE \`$DB_NAME\`; INSERT INTO \`pano_scheme_version\` (\`pluginId\`, \`key\`, \`extra\`) VALUES ('$PLUGIN_ID', '2', 'e2e legacy fixture')" >/dev/null 2>"$BASE/db.err" \
     || die 13 "the plugin scheme-version row could not be inserted: $(head -c 200 "$BASE/db.err")"
+  stage_pano_jar
   copy_plugin_jars with
   boot_and_wait keep
   wait_market
@@ -589,10 +637,11 @@ cmd_start_presetup() {
   case "$INSTANCE" in "$BASE"/instance|"$BASE"/instance-*) rm -rf -- "$INSTANCE" ;; *) die 2 "refusing to delete $INSTANCE" ;; esac
   mkdir -p "$INSTANCE"
   db_recreate
+  stage_pano_jar
   copy_plugin_jars with
   record_ports
   launch_pano || abort_boot 14 "the JVM did not start"
-  wait_until "health" health_ok || abort_boot 14 "no GET /api/health 200 within ${READY_TIMEOUT}s"
+  wait_until "health" health_ok || abort_boot 14 "no GET /api/v1/health 200 within ${READY_TIMEOUT}s"
   say "ok: instance '$NAME' up before setup (PID $(recorded_pid), http $HTTP_PORT, database $DB_NAME)"
   print_exports
 }

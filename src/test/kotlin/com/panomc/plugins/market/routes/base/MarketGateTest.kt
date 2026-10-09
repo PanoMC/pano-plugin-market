@@ -1,7 +1,6 @@
 package com.panomc.plugins.market.routes.base
 
 import com.panomc.platform.error.BadRequest
-import com.panomc.platform.error.InvalidCsrfToken
 import com.panomc.platform.error.NoPermission
 import com.panomc.plugins.market.error.MarketBusyException
 import com.panomc.plugins.market.error.RequestValueException
@@ -69,25 +68,6 @@ class MarketGateTest {
         assertThrows(StoreDisabled::class.java) { MarketGate.requireStoreEnabled(false) }
     }
 
-    @Test
-    fun `csrf is required for an authenticated mutating call without proof and nowhere else`() {
-        val mutating = listOf(HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.PATCH)
-        val safe = listOf(HttpMethod.GET, HttpMethod.HEAD, HttpMethod.OPTIONS)
-
-        for (m in mutating) {
-            assertTrue(MarketGate.csrfViolation(m, isLoggedIn = true, csrfSafe = false), "$m logged in without proof")
-            assertFalse(MarketGate.csrfViolation(m, isLoggedIn = true, csrfSafe = true), "$m with proof")
-            assertFalse(MarketGate.csrfViolation(m, isLoggedIn = false, csrfSafe = false), "$m as a guest has no ambient credential")
-        }
-
-        for (m in safe) {
-            assertFalse(MarketGate.csrfViolation(m, isLoggedIn = true, csrfSafe = false), "$m never changes state")
-            assertTrue(MarketGate.isSafeMethod(m))
-        }
-
-        mutating.forEach { assertFalse(MarketGate.isSafeMethod(it)) }
-    }
-
     // ---- translating failures
 
     private class Recorder {
@@ -138,8 +118,8 @@ class MarketGateTest {
 
         assertTrue(translated is BadRequest)
         val body = JsonObject((translated as BadRequest).encode())
-        assertEquals("BAD_REQUEST", body.getString("error"))
-        assertEquals("pageSize: TOO_BIG", body.getString("bodyValidationError"))
+        assertEquals("BAD_REQUEST", body.getJsonObject("error").getString("code"))
+        assertEquals("pageSize: TOO_BIG", body.getJsonObject("error").getJsonObject("details").getString("bodyValidationError"))
         assertTrue(recorder.headers.isEmpty())
     }
 
@@ -235,19 +215,16 @@ class MarketGateTest {
         MarketRuntime.finish(null, emptyList(), degraded = false)
     }
 
-    private class StubUser(val csrfSafe: Boolean) : MarketUserApi() {
+    private class StubUser : MarketUserApi() {
         override val paths = emptyList<com.panomc.platform.model.Path>()
         override suspend fun handleMarket(context: RoutingContext): com.panomc.platform.model.Result? = null
         override fun getValidationHandler(schemaRepository: io.vertx.json.schema.SchemaRepository) = null
-        override fun isCsrfSafe(context: RoutingContext) = csrfSafe
     }
 
-    private class StubMutation(val loggedIn: Boolean, val csrfSafe: Boolean) : MarketPublicMutationApi() {
+    private class StubMutation : MarketPublicMutationApi() {
         override val paths = emptyList<com.panomc.platform.model.Path>()
         override suspend fun handleMarket(context: RoutingContext): com.panomc.platform.model.Result? = null
         override fun getValidationHandler(schemaRepository: io.vertx.json.schema.SchemaRepository) = null
-        override suspend fun isLoggedIn(context: RoutingContext) = loggedIn
-        override fun isCsrfSafe(context: RoutingContext) = csrfSafe
     }
 
     private class StubPublic(override val requiresStoreEnabled: Boolean = true) : MarketApi() {
@@ -282,28 +259,14 @@ class MarketGateTest {
     }
 
     @Test
-    fun `USER route, a mutating call without proof is refused, with proof or on GET it passes`() = runBlocking {
+    fun `the USER and PUB-M classes check no CSRF proof of their own, the platform's Api wrapper does`() = runBlocking {
         ready()
 
-        for (method in listOf(HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.PATCH)) {
-            assertThrows(InvalidCsrfToken::class.java) { StubUser(csrfSafe = false).marketChecks(requestContext(method)) }
-            StubUser(csrfSafe = true).marketChecks(requestContext(method))
+        for (method in listOf(HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE, HttpMethod.PATCH, HttpMethod.GET)) {
+            StubUser().marketChecks(requestContext(method))
+            StubMutation().marketChecks(requestContext(method))
         }
 
-        StubUser(csrfSafe = false).marketChecks(requestContext(HttpMethod.GET))
-        MarketRuntime.reset()
-    }
-
-    @Test
-    fun `PUB-M route, logged in without proof is refused, a guest or a proven session passes`() = runBlocking {
-        ready()
-
-        assertThrows(InvalidCsrfToken::class.java) {
-            runBlocking { StubMutation(loggedIn = true, csrfSafe = false).marketChecks(requestContext(HttpMethod.POST)) }
-        }
-        StubMutation(loggedIn = false, csrfSafe = false).marketChecks(requestContext(HttpMethod.POST))
-        StubMutation(loggedIn = true, csrfSafe = true).marketChecks(requestContext(HttpMethod.POST))
-        StubMutation(loggedIn = true, csrfSafe = false).marketChecks(requestContext(HttpMethod.GET))
         MarketRuntime.reset()
     }
 
@@ -328,9 +291,9 @@ class MarketGateTest {
 
             assertThrows(StoreUnavailable::class.java) { runBlocking { StubPublic().marketChecks(get) } }
             assertThrows(StoreUnavailable::class.java) {
-                runBlocking { StubMutation(loggedIn = false, csrfSafe = true).marketChecks(get) }
+                runBlocking { StubMutation().marketChecks(get) }
             }
-            assertThrows(StoreUnavailable::class.java) { StubUser(csrfSafe = true).marketChecks(get) }
+            assertThrows(StoreUnavailable::class.java) { StubUser().marketChecks(get) }
             assertThrows(StoreUnavailable::class.java) { StubPanel().gate() }
 
             StubPanel(exemptFromRuntimeGate = true).gate()
@@ -346,9 +309,9 @@ class MarketGateTest {
         val get = requestContext(HttpMethod.GET)
 
         assertThrows(StoreDisabled::class.java) { runBlocking { StubPublic().marketChecks(get) } }
-        assertThrows(StoreDisabled::class.java) { StubUser(csrfSafe = true).marketChecks(get) }
+        assertThrows(StoreDisabled::class.java) { StubUser().marketChecks(get) }
         assertThrows(StoreDisabled::class.java) {
-            runBlocking { StubMutation(loggedIn = false, csrfSafe = true).marketChecks(get) }
+            runBlocking { StubMutation().marketChecks(get) }
         }
         StubPublic(requiresStoreEnabled = false).marketChecks(get)
 

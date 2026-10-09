@@ -336,10 +336,10 @@
   onAdd={addProduct} />
 
 <script module>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
+  import { failureOf } from '../utils/api.js';
   import { guard } from '../utils/guard.js';
   import { loadContextWith } from '../utils/list-core.js';
-  import { marketPath } from '../utils/api.js';
   import { PLUGIN_ID } from '../utils/plugin.js';
   import { playerFromSearch } from '../components/create-order/model.js';
 
@@ -353,18 +353,18 @@
     if (allowed.denied) return allowed.denied;
     allowed.pageTitle?.set?.(`plugins.${PLUGIN_ID}.pages.create-order.title`);
 
-    const get = (options) => ApiUtil.get(options);
+    const get = (options) => api.panel.get(options);
     const [ctx, productsRes, serversRes] = await Promise.all([
       loadContextWith({ get }, event),
-      get({ path: marketPath('/products/simple'), request: event }),
-      get({ path: marketPath('/servers'), request: event }),
+      get({ path: '/products/simple', request: event }),
+      get({ path: '/servers', request: event }),
     ]);
-    const ok = (res) => res && typeof res === 'object' && !res.error;
+    const ok = (res) => failureOf(res) === null;
     return {
       data: {
         ctx,
-        products: ok(productsRes) ? (productsRes.products ?? []) : [],
-        servers: ok(serversRes) ? (serversRes.servers ?? []) : [],
+        products: ok(productsRes) ? (productsRes.items ?? []) : [],
+        servers: ok(serversRes) ? (serversRes.items ?? []) : [],
         player: playerFromSearch(event.url?.search),
         error: null,
       },
@@ -453,7 +453,7 @@
   }
 
   const runner = createQuoteRunner({
-    send: (payload) => call(ApiUtil.post({ path: marketPath('/orders/quote'), body: payload })),
+    send: (payload) => call(api.panel.post({ path: '/orders/quote', body: payload })),
     onPending: (value) => (pending = value),
     onResult: (result) => (quote = result),
   });
@@ -519,8 +519,8 @@
     offerForce = false;
     const payload = $state.snapshot(body);
     const result = await call(
-      ApiUtil.post({
-        path: marketPath('/orders'),
+      api.panel.post({
+        path: '/orders',
         body: payload,
         headers: submitHeaders(idempotency, payload),
       }),

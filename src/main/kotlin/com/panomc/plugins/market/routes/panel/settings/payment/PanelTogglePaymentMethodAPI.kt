@@ -14,9 +14,9 @@ import com.panomc.plugins.market.routes.base.MarketPanelApi
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.Parameters
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.booleanSchema
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
@@ -31,7 +31,7 @@ import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 class PanelTogglePaymentMethodAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
     override val nodes: Set<MarketNode> = setOf(MarketNode.SETTINGS)
 
-    override val paths = listOf(Path("/api/panel/market/payment-methods/:id/toggle", RouteType.POST))
+    override val paths = listOf(Path("/payment-methods/:id/toggle", RouteType.POST))
 
     private val authProvider by lazy { plugin.applicationContext.getBean(AuthProvider::class.java) }
 

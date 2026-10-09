@@ -57,7 +57,7 @@ describe('createQuoteRunner', () => {
     expect(h.calls).toHaveLength(1);
     expect(h.calls[0]).toEqual({
       method: 'POST',
-      path: '/api/market/checkout/quote',
+      path: '/checkout/quote',
       body: { couponCode: 'AB' },
     });
     expect(h.quotes).toEqual([{ total: 5 }]);

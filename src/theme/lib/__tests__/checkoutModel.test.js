@@ -27,7 +27,7 @@ import {
   validateBilling,
   validateCheckout,
 } from '../checkoutModel.js';
-import { defaultDraft } from '../../stores/checkoutDraft.js';
+import { defaultDraft } from '../checkoutDraftModel.js';
 
 const config = (extra = {}) => ({
   guestCheckout: true,

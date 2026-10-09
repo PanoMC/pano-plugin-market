@@ -171,6 +171,41 @@ class MarketGameWireFixtureTest {
         assertEquals(listOf("MARKET_NOT_READY"), listOf(config.reason, query.reason, purchase.reason, admin.reason, economy.reason).distinct())
     }
 
+    @Test
+    fun `config answers the two addresses of the front-end URL map with and without them`() {
+        val fixture = JsonParser.parseString(File(dir, "MarketConfigMessage.json").readText(Charsets.UTF_8)).asJsonObject
+
+        assertEquals("https://example.com/store/{slug}", fixture.get("productUrlTemplate").asString, "the shared fixture carries both fields")
+        assertEquals("https://example.com/register", fixture.get("registerUrl").asString)
+
+        fixture.remove("productUrlTemplate")
+        fixture.remove("registerUrl")
+
+        val without = gson.fromJson(fixture, MarketConfigEventResponse::class.java)
+
+        assertEquals(null, without.productUrlTemplate, "an answer from before the URL map has neither field")
+        assertEquals(null, without.registerUrl)
+
+        val answer = MarketConfigEventResponse(
+            accepted = true, configHash = "h", storeUrl = "https://shop.example", productUrlTemplate = "https://shop.example/store/{slug}",
+            registerUrl = "https://shop.example/register"
+        )
+        val encoded = JsonParser.parseString(answer.encode()).asJsonObject
+
+        assertEquals("https://shop.example/store/{slug}", encoded.get("productUrlTemplate").asString)
+        assertEquals("https://shop.example/register", encoded.get("registerUrl").asString)
+        assertEquals("https://shop.example", encoded.get("storeUrl").asString, "storeUrl keeps its meaning: the site address")
+
+        val back = gson.fromJson(encoded, MarketConfigEventResponse::class.java)
+
+        assertEquals(answer.productUrlTemplate, back.productUrlTemplate)
+        assertEquals(answer.registerUrl, back.registerUrl)
+
+        val bare = JsonParser.parseString(MarketConfigEventResponse(accepted = true, configHash = "h").encode()).asJsonObject
+
+        assertFalse(bare.has("productUrlTemplate") && !bare.get("productUrlTemplate").isJsonNull, "no value, no field")
+    }
+
     // ===== the reverse: no Pano-side field without a fixture ===========================================================================
 
     private val framing = setOf("eventId", "responseName", "event")
@@ -225,7 +260,9 @@ class MarketGameWireFixtureTest {
 
     @Test
     fun `every property of every Pano response class is carried by a fixture`() {
-        assertCovered(MarketConfigEventResponse::class.java, objectsAt("MarketConfigMessage"), "MarketConfigEventResponse")
+        assertCovered(
+            MarketConfigEventResponse::class.java, objectsAt("MarketConfigMessage"), "MarketConfigEventResponse"
+        )
         assertCovered(McSettingsView::class.java, objectsAt("MarketConfigMessage", "settings"), "McSettingsView")
         assertCovered(MarketQueryEventResponse::class.java, objectsAt("MarketQueryMessage"), "MarketQueryEventResponse")
         assertCovered(MarketQueryData::class.java, objectsAt("MarketQueryMessage", "data"), "MarketQueryData")

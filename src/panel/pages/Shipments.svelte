@@ -170,7 +170,6 @@
       path: '/shipments',
       params: SHIPMENT_PARAMS,
       nodes: ['OV'],
-      emptyKey: 'shipments',
       title: 'pages.shipments.title',
     });
   }
@@ -178,7 +177,7 @@
 
 <script>
   import FilterSelect from '../components/FilterSelect.svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import {
     CardHeader,
     CardFilters,
@@ -197,6 +196,7 @@
   import { sectionsFor } from '../navigation.js';
   import { call } from '../utils/api.js';
   import { gotoList } from '../utils/list.js';
+  import { pageOf } from '../utils/page.js';
   import { currentLocale } from '../utils/locale.js';
   import {
     STATUS_TABS,
@@ -231,10 +231,11 @@
 
   const user = $derived($page.data?.user);
   const filters = $derived(normalizeFilters(data.filters));
-  const shipments = $derived(data.shipments ?? []);
-  const shipmentCount = $derived(data.shipmentCount ?? data.count ?? 0);
-  const totalPage = $derived(data.totalPage ?? 1);
-  const currentPage = $derived(data.page ?? 1);
+  const list = $derived(pageOf(data));
+  const shipments = $derived(list.items);
+  const shipmentCount = $derived(list.totalItems);
+  const totalPage = $derived(list.totalPages);
+  const currentPage = $derived(list.number);
   const currentTab = $derived(activeTab(filters.status));
 
   // The URL is the source of truth; load() re-runs on every navigation and drops `page` on a filter change.
@@ -262,7 +263,7 @@
   // code and refreshes the list. Returns the call() result.
   async function run(request, successKey) {
     const result = await call(
-      ApiUtil[request.method.toLowerCase()]({ path: request.path, body: request.body }),
+      api.panel[request.method.toLowerCase()]({ path: request.path, body: request.body }),
     );
     if (!result.ok) {
       showErrorToast(failureText($_, result.error, result.body));
@@ -305,7 +306,7 @@
       variant: 'danger',
       onConfirm: async () => {
         const result = await call(
-          ApiUtil.post({
+          api.panel.post({
             path: cancelRequest(shipment.id).path,
             body: cancelRequest(shipment.id).body,
           }),
@@ -335,7 +336,7 @@
       variant: 'danger',
       onConfirm: async () => {
         const request = cancelRequest(shipment.id, true);
-        const result = await call(ApiUtil.post({ path: request.path, body: request.body }));
+        const result = await call(api.panel.post({ path: request.path, body: request.body }));
         if (result.ok) {
           showSuccessToast($_('pages.shipments.toast.cancelled'));
           await invalidateAll();

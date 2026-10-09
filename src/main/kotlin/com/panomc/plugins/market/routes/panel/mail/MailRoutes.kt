@@ -1,8 +1,9 @@
 package com.panomc.plugins.market.routes.panel.mail
 
+import com.panomc.platform.model.PageRequest
+import com.panomc.platform.model.Paging
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
-import com.panomc.platform.error.PageNotFound
 import com.panomc.platform.model.Path
 import com.panomc.platform.model.Result
 import com.panomc.platform.model.RouteType
@@ -18,18 +19,17 @@ import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseBodyId
 import com.panomc.plugins.market.routes.base.parseId
 import com.panomc.plugins.market.routes.base.parseOptionalEnum
-import com.panomc.plugins.market.routes.base.parsePagingRequest
+import com.panomc.plugins.market.routes.base.parsePageRequest
 import com.panomc.plugins.market.routes.base.rejectUnknownKeys
 import com.panomc.plugins.market.routes.panel.order.actingUserId
 import com.panomc.plugins.market.routes.panel.order.logOrderDecision
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
@@ -69,23 +69,21 @@ internal fun parseTestMailRequest(body: JsonObject): TestMailRequest {
 }
 
 /** The query of `GET /mails`: `status?`, `kind?`, `orderId?`, `page?`, `pageSize?`; a value outside the contract is a 400. */
-internal class MailListQuery(val status: MailStatus?, val kind: MailKind?, val orderId: Long?, val window: Paging.Window)
+internal class MailListQuery(val status: MailStatus?, val kind: MailKind?, val orderId: Long?, val window: PageRequest)
 
 internal fun parseMailListQuery(status: String?, kind: String?, orderId: String?, page: String?, pageSize: String?): MailListQuery {
-    fun number(raw: String?, name: String): Long? = raw?.trim()?.takeIf { it.isNotEmpty() }?.let { it.toLongOrNull() ?: throw RequestValueException(name, "MUST_BE_A_NUMBER") }
-
     return MailListQuery(
         status = parseOptionalEnum(MailStatus.entries.toTypedArray(), status?.trim()?.takeIf { it.isNotEmpty() }, "status"),
         kind = parseOptionalEnum(MailKind.entries.toTypedArray(), kind?.trim()?.takeIf { it.isNotEmpty() }, "kind"),
         orderId = orderId?.trim()?.takeIf { it.isNotEmpty() }?.let { parseId(it, "orderId") },
-        window = parsePagingRequest(number(page, "page"), number(pageSize, "pageSize"))
+        window = parsePageRequest(page, pageSize)
     )
 }
 
 /** `POST /api/panel/market/orders/:id/mails/resend` (`P:OM`): `{}`; 400 `INVALID_MAIL_KIND`, `MAIL_RECIPIENT_REQUIRED`; 409 `MAIL_DISABLED`, `MAIL_NOT_APPLICABLE`. Log `RESENT_MARKET_ORDER_MAIL`. */
 @Endpoint
 class PanelResendOrderMailAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/orders/:id/mails/resend", RouteType.POST))
+    override val paths = listOf(Path("/orders/:id/mails/resend", RouteType.POST))
 
     override val nodes = setOf(MarketNode.ORDERS_MANAGE)
 
@@ -109,19 +107,19 @@ class PanelResendOrderMailAPI(private val plugin: MarketPlugin) : MarketPanelApi
     }
 }
 
-/** `GET /api/panel/market/mails` (`P:OV`): `mails[]`, `mailCount`, `totalPage`; the recipient is masked without `OM` / `PAY`. */
+/** `GET /api/panel/market/mails` (`P:OV`): `items[]` (the mails) and `page`; the recipient is masked without `OM` / `PAY`. */
 @Endpoint
 class PanelGetMailsAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/mails", RouteType.GET))
+    override val paths = listOf(Path("/mails", RouteType.GET))
 
     override val nodes = setOf(MarketNode.ORDERS_VIEW)
 
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler {
-        var builder = ValidationHandlerBuilder.create(schemaRepository)
+        var builder = Paging.params(ValidationHandlerBuilder.create(schemaRepository))
 
-        for (name in listOf("status", "kind", "orderId", "page", "pageSize")) builder = builder.queryParameter(optionalParam(name, stringSchema()))
+        for (name in listOf("status", "kind", "orderId")) builder = builder.queryParameter(optionalParam(name, stringSchema()))
 
         return builder.build()
     }
@@ -132,18 +130,15 @@ class PanelGetMailsAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
         val page = MailWiring.admin(plugin).list(
             query.status, query.kind, query.orderId, query.window, has(context, MarketNode.ORDERS_MANAGE, MarketNode.PAYMENTS), databaseManager.getSqlClient()
         )
-        val totalPages = Paging.totalPages(page.total, query.window.pageSize)
 
-        if (Paging.isBeyondLast(query.window.page, totalPages)) throw PageNotFound()
-
-        return Successful(mapOf("mails" to page.rows, "mailCount" to page.total, "totalPage" to totalPages))
+        return Successful(Paging.response(page.rows, page.total, query.window))
     }
 }
 
 /** `POST /api/panel/market/mails/:id/retry` (`P:OM`): `{}`; 409 `INVALID_STATE`, `MAIL_DISABLED`; 502 `MAIL_SEND_FAILED`. Log `RETRIED_MARKET_MAIL`. */
 @Endpoint
 class PanelRetryMailAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/mails/:id/retry", RouteType.POST))
+    override val paths = listOf(Path("/mails/:id/retry", RouteType.POST))
 
     override val nodes = setOf(MarketNode.ORDERS_MANAGE)
 
@@ -164,7 +159,7 @@ class PanelRetryMailAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
 /** `POST /api/panel/market/settings/mail/test` (`P:SET`): `kind?`, `recipient?` (default: the admin's e-mail); `{}`; 409 `MAIL_DISABLED`; 502 `MAIL_SEND_FAILED`. Log `SENT_MARKET_TEST_MAIL`. */
 @Endpoint
 class PanelSendTestMailAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/settings/mail/test", RouteType.POST))
+    override val paths = listOf(Path("/settings/mail/test", RouteType.POST))
 
     override val nodes = setOf(MarketNode.SETTINGS)
 

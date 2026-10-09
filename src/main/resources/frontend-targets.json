@@ -1,0 +1,7 @@
+{
+  "store": "/store",
+  "product": "/store/{slug}",
+  "checkout": "/store/checkout",
+  "order": { "path": "/store/order/{id}", "fallback": true },
+  "subscriptions": "/profile/subscriptions"
+}

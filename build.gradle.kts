@@ -2,6 +2,7 @@ import java.net.URL
 import java.nio.file.Files
 import java.nio.file.FileSystems
 import java.nio.file.StandardCopyOption
+import java.util.Properties
 import java.util.zip.ZipFile
 
 buildscript {
@@ -32,7 +33,12 @@ val bootstrap = (project.findProperty("bootstrap") as String?)?.toBoolean() ?: f
 val panoSource = (project.findProperty("panoSource") as String?) ?: "release"
 val panoJar = project.findProperty("panoJar") as String?
 val panoReleaseToken = (project.findProperty("panoReleaseToken") as String?) ?: System.getenv("PANO_RELEASE_TOKEN")
-val noui = project.hasProperty("noui")
+// The UI bundle is skipped with -Pnoui, and also when the invocation only runs test tiers (`:test`, `:dbTest`, `:e2eTest`): those read
+// the Kotlin classes and resources, never the UI zip, so a UI toolchain problem must not fail them (CX-08). A run that also builds
+// the jar (`build`, `jar`, `shadowJar`, ...) still builds the UI.
+val testTierTasks = setOf("test", "dbTest", "e2eTest", "mcTest")
+val noui = project.hasProperty("noui") ||
+    gradle.startParameter.taskNames.let { names -> names.isNotEmpty() && names.all { it.substringAfterLast(':') in testTierTasks } }
 val pluginsDir: File? by rootProject.extra
 
 val os = System.getProperty("os.name").lowercase()
@@ -62,6 +68,22 @@ val bunBinDir = File(bunDir, bunPlatform)
 var bunBin = if (isWindows) File(bunBinDir, "bun.exe") else File(bunBinDir, "bun")
 
 val pluginId: String by project
+
+// api-level (pano-api migrate-v1): "panoApiLevel" of the pano-web-platform tree this plugin is built in, else "current" from
+// the pano-api-level.properties inside the Pano jar on compileClasspath. `apiLevel=` in gradle.properties lowers it.
+val panoApiLevel: String? by lazy {
+    (findProperty("apiLevel") as String?)
+        ?: (rootProject.findProperty("panoApiLevel") as String?)
+        ?: configurations.findByName("compileClasspath")?.files?.firstNotNullOfOrNull { jar ->
+            if (!jar.isFile || !jar.name.endsWith(".jar")) null
+            else ZipFile(jar).use { zip ->
+                zip.getEntry("pano-api-level.properties")?.let { entry ->
+                    Properties().apply { load(zip.getInputStream(entry)) }.getProperty("current")
+                }
+            }
+        }
+}
+
 val pluginName: String by project
 val pluginDescription: String? by project
 val pluginPanoVersion: String by project
@@ -387,6 +409,7 @@ tasks {
     shadowJar {
         manifest {
             attributes["id"] = pluginId
+            panoApiLevel?.let { attributes["api-level"] = it }
             attributes["name"] = pluginName
             pluginDescription?.let { attributes["description"] = it }
             attributes["pano-version"] = pluginPanoVersion
@@ -737,6 +760,8 @@ val fakeProviderJar by tasks.registering(Jar::class) {
             "developer" to "Pano",
             "dependencies" to "pano-plugin-market"
         )
+        // without it the host refuses the fake provider as API level 0 (TOO_OLD) and no e2e instance can use it
+        panoApiLevel?.let { attributes["api-level"] = it }
     }
 }
 

@@ -415,7 +415,7 @@
                                 class="rounded border object-fit-cover"
                                 width="64"
                                 height="64"
-                                src="{base}/api/panel/market/products/image/{variant.imageFileName}"
+                                src="{PANEL_URL}/products/image/{variant.imageFileName}"
                                 alt={$_('pages.create-product.variants.image')} />
                               <button
                                 type="button"
@@ -471,7 +471,7 @@
 
 <script>
   import { CardHeader, DragAndDropZone, NoContent } from '@panomc/sdk/components/panel';
-  import { base } from '@panomc/sdk/svelte';
+  import { PANEL_URL } from '../../utils/api.js';
   import { _, showErrorToast } from '../../../i18n';
   import ConfirmModal from '../ConfirmModal.svelte';
   import KeyValueList from '../KeyValueList.svelte';

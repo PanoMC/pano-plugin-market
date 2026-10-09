@@ -34,13 +34,17 @@ import com.panomc.plugins.market.pdf.InvoiceMailAttachments
 import com.panomc.plugins.market.util.HtmlSanitizer
 import com.panomc.plugins.market.util.MarketStatus
 import com.panomc.plugins.market.util.OrderStatus
+import com.panomc.plugins.market.util.StoreLinks
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.sqlclient.SqlClient
 import java.net.URI
 
-/** The facts of the site a mail names (12 section 4.4): `websiteName`, `websiteUrl` (no trailing slash; empty = no buttons). */
-class MailSite(val websiteName: String, val websiteUrl: String)
+/**
+ * The facts of the site a mail names (12 section 4.4): `websiteName`, `websiteUrl` (no trailing slash; empty = no buttons) and the [links] to the
+ * pages of the front-end (the URL map of doc 05 section 10.2); a page that has no address is left out of the mail.
+ */
+class MailSite(val websiteName: String, val websiteUrl: String, val links: StoreLinks = StoreLinks.ofBase(websiteUrl))
 
 /**
  * Everything the content of one mail reads (12 section 5), already loaded: the pure input of [MailContentBuilder].
@@ -168,11 +172,11 @@ class MailContentBuilder(
 
     private suspend fun gift(i: MailInput, vars: Map<String, Any?>): MailContent {
         val message = i.order.giftMessage?.trim()?.takeIf { it.isNotEmpty() }?.let { cut(it) }
-        val base = site().websiteUrl
+        val store = site().links.store()
 
         return shell(
             i, vars, "gift-received", paragraphs = listOf(t(i, "mail.gift-received.body", vars), t(i, "mail.gift-received.body-2", vars)),
-            quote = message, items = items(i, withPrices = false), button = if (base.isEmpty()) null else t(i, "mail.gift-received.button", vars) to "$base/store"
+            quote = message, items = items(i, withPrices = false), button = store?.let { t(i, "mail.gift-received.button", vars) to it }
         )
     }
 
@@ -269,8 +273,7 @@ class MailContentBuilder(
             MailContent.Row(t(i, "mail.common.product", v), v.getValue("productName").toString()),
             MailContent.Row(t(i, "mail.common.amount", v), v.getValue("amount").toString(), strong = true)
         )
-        val base = site().websiteUrl
-        val target = siteUrl(i.params.getString("payUrl")) ?: if (base.isEmpty()) null else "$base/profile"
+        val target = siteUrl(i.params.getString("payUrl")) ?: site().links.profile()
 
         return shell(
             i, v, "subscription-payment-failed",
@@ -297,11 +300,11 @@ class MailContentBuilder(
         val v = subscriptionVars(i, sub, vars, null)
         val reason = (i.params.getString("endReason") ?: sub.endReason)?.trim().orEmpty()
         val key = "mail.subscription-ended.reason.$reason".takeIf { reason.matches(REASON) && i18n.has(i.locale, it) } ?: "mail.subscription-ended.reason.OTHER"
-        val base = site().websiteUrl
+        val store = site().links.store()
 
         return shell(
             i, v, "subscription-ended", paragraphs = listOf(t(i, "mail.subscription-ended.body", v), t(i, key, v)),
-            button = if (base.isEmpty()) null else t(i, "mail.subscription-ended.button", v) to "$base/store"
+            button = store?.let { t(i, "mail.subscription-ended.button", v) to it }
         )
     }
 
@@ -365,9 +368,9 @@ class MailContentBuilder(
 
     /** The "Manage subscription" link to the buyer's profile; none without a site URL. */
     private suspend fun manage(i: MailInput, vars: Map<String, Any?>): Pair<String, String>? {
-        val base = site().websiteUrl
+        val profile = site().links.profile()
 
-        return if (base.isEmpty()) null else t(i, "mail.common.manage-subscription", vars) to "$base/profile"
+        return profile?.let { t(i, "mail.common.manage-subscription", vars) to it }
     }
 
     /** The name of the product an entitlement reminder is about: the snapshot of its order line (never the live product). */
@@ -379,13 +382,12 @@ class MailContentBuilder(
     }
 
     private fun productUrl(i: MailInput): String? {
-        val base = site().websiteUrl
         val slug = i.productSlug?.takeIf { it.isNotBlank() } ?: return null
 
-        return if (base.isEmpty() || !SLUG.matches(slug)) null else "$base/store/$slug"
+        return if (!SLUG.matches(slug)) null else site().links.product(slug)
     }
 
-    /** A site-relative link stored in `params` (`/store/order/<publicId>`) made absolute; an absolute http(s) link is kept; anything else is no link. */
+    /** A site-relative link stored in `params` (older rows kept `/store/order/<publicId>`) made absolute; an absolute http(s) link is kept; anything else is no link. */
     private fun siteUrl(raw: String?): String? {
         val value = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val base = site().websiteUrl
@@ -547,13 +549,10 @@ class MailContentBuilder(
     }
 
     private fun orderUrl(order: MarketOrder): String? {
-        val base = site().websiteUrl
-
-        if (base.isEmpty()) return null
-
         val publicId = order.publicId?.takeIf { it.isNotBlank() } ?: return null
+        val token = if (order.userId == null && !order.accessToken.isNullOrBlank()) mapOf("token" to order.accessToken) else emptyMap()
 
-        return "$base/store/order/$publicId" + if (order.userId == null && !order.accessToken.isNullOrBlank()) "?token=${order.accessToken}" else ""
+        return site().links.order(publicId, token)
     }
 
     private fun shippingAddress(order: MarketOrder): String {

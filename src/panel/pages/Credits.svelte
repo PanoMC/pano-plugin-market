@@ -314,9 +314,9 @@
 <CreditAdjustModal bind:this={adjustModal} {ctx} onSaved={onAdjusted} />
 
 <script module>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
+  import { failureOf } from '../utils/api.js';
   import { loadList } from '../utils/list.js';
-  import { marketPath } from '../utils/api.js';
 
   /**
    * @type {import("@sveltejs/kit").PageLoad}
@@ -330,24 +330,22 @@
             path: '/credits/transactions',
             params: ['type', 'userId', 'orderId', 'from', 'to'],
             nodes: ['PAY'],
-            emptyKey: 'transactions',
             title: 'pages.credits.title',
           })
         : await loadList(event, {
             path: '/credits/accounts',
             params: ['search'],
             nodes: ['PAY'],
-            emptyKey: 'accounts',
             title: 'pages.credits.title',
           });
     result.data.section = section;
     // The totals come with the accounts list; the transactions tab asks for one row only.
     if (section === 'transactions' && !result.data.error) {
-      const totals = await ApiUtil.get({
-        path: marketPath('/credits/accounts') + '?pageSize=1',
+      const totals = await api.panel.get({
+        path: '/credits/accounts' + '?pageSize=1',
         request: event,
       });
-      result.data.totals = totals && !totals.error ? (totals.totals ?? {}) : {};
+      result.data.totals = failureOf(totals) === null ? (totals.totals ?? {}) : {};
     }
     return result;
   }
@@ -380,6 +378,7 @@
     transactionParams,
   } from '../utils/credits.js';
   import { gotoList } from '../utils/list.js';
+  import { pageOf } from '../utils/page.js';
   import { fmt, currentLocale } from '../utils/locale.js';
   import { can } from '../utils/permissions.js';
 
@@ -390,13 +389,14 @@
   const user = $derived($page.data?.user);
   const ctx = $derived(data.ctx ?? null);
   const section = $derived(data.section === 'transactions' ? 'transactions' : 'accounts');
-  const accounts = $derived(data.accounts ?? []);
-  const transactions = $derived(data.transactions ?? []);
-  const accountCount = $derived(data.accountCount ?? accounts.length);
-  const transactionCount = $derived(data.transactionCount ?? transactions.length);
+  const list = $derived(pageOf(data));
+  const accounts = $derived(section === 'accounts' ? list.items : []);
+  const transactions = $derived(section === 'transactions' ? list.items : []);
+  const accountCount = $derived(section === 'accounts' ? list.totalItems : 0);
+  const transactionCount = $derived(section === 'transactions' ? list.totalItems : 0);
   const totals = $derived(data.totals ?? {});
-  const totalPage = $derived(data.totalPage ?? 1);
-  const currentPage = $derived(data.page ?? 1);
+  const totalPage = $derived(list.totalPages);
+  const currentPage = $derived(list.number);
   const search = $derived($page.url.searchParams.get('search') || '');
 
   // Filters of the transactions tab live in the URL; the inputs start from it.

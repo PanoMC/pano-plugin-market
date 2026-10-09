@@ -314,11 +314,9 @@ open class StoreMenu(
         return MenuItem(index, material(product.icon, "PAPER"), "§f" + clean(product.name), lore, action)
     }
 
-    /** `storeUrl/store/<slug>`, the store itself when Pano sent no slug (19 section 7.3). */
+    /** The product link from `productUrlTemplate` (else `storeUrl/store/<slug>`), the store itself when Pano sent no slug (19 section 7.3). */
     private fun productUrl(product: QueryProduct): String {
-        val base = config.remote?.storeUrl?.trimEnd('/') ?: return ""
-        val slug = product.slug?.takeIf { it.isNotBlank() && it.all { c -> c.isLetterOrDigit() || c == '-' || c == '_' || c == '.' } }
-        return if (slug != null) "$base/store/$slug" else "$base/store"
+        return config.remote?.links?.productUrl(product.slug) ?: ""
     }
 
     private fun clean(s: String) = ChatFormat.plainValue(s)
@@ -407,7 +405,7 @@ open class StoreMenu(
         }
     }
 
-    private fun registerUrl(): String? = config.remote?.storeUrl?.trimEnd('/')?.let { "$it/register" }
+    private fun registerUrl(): String? = config.remote?.links?.registerUrl()
 
     /** Caller holds the session lock. */
     private fun showConfirm(session: Session, product: QueryProduct, processing: Boolean = false) {

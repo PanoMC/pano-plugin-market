@@ -305,7 +305,8 @@ object DiscordRenderer {
      */
     fun vars(event: String, envelope: JsonObject, labels: DiscordLabels): Map<String, String> {
         val data = envelope.getJsonObject("data") ?: JsonObject()
-        val store = envelope.getJsonObject("store") ?: JsonObject()
+        // core's envelope names the site `site`; the planner's own envelope of a product action still says `store`
+        val store = envelope.getJsonObject("site") ?: envelope.getJsonObject("store") ?: JsonObject()
         val order = data.getJsonObject("order")
         val buyer = data.getJsonObject("buyer")
         val recipient = data.getJsonObject("recipient")

@@ -219,7 +219,7 @@
 
 <script>
   import { tick } from 'svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { tooltip } from '@panomc/sdk/utils/tooltip';
   import { _ as rawI18n } from '@panomc/sdk/utils/language';
   import { _, showSuccessToast } from '../../../i18n';
@@ -227,7 +227,7 @@
   import CopyButton from '../CopyButton.svelte';
   import PluginHook from '../PluginHook.svelte';
   import SchemaForm from '../schema/SchemaForm.svelte';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { currentLocale, fmt } from '../../utils/locale.js';
   import { actionBlocked, providerName, testModeControl } from '../../utils/payment-methods.js';
   import {
@@ -317,8 +317,8 @@
       const config = {};
       if (testControl === 'flag') config.testMode = testMode;
       result = await call(
-        ApiUtil.post({
-          path: marketPath(`/shipping/carriers/${encodeURIComponent(carrier.id)}`),
+        api.panel.post({
+          path: `/shipping/carriers/${encodeURIComponent(carrier.id)}`,
           body: { settings: buildSettingsPayload(carrier.schema, working), config },
         }),
       );
@@ -373,10 +373,8 @@
     let result;
     try {
       result = await call(
-        ApiUtil.post({
-          path: marketPath(
-            `/shipping/carriers/${encodeURIComponent(current.id)}/actions/${encodeURIComponent(action.id)}`,
-          ),
+        api.panel.post({
+          path: `/shipping/carriers/${encodeURIComponent(current.id)}/actions/${encodeURIComponent(action.id)}`,
           body: { input: {} },
         }),
       );

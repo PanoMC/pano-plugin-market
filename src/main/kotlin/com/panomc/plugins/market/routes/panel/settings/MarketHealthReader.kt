@@ -101,14 +101,14 @@ class MarketHealthReader(
     }
 
     /**
-     * The four counters the E2E drain waits on are the number of rows that still have work to do: deliveries that are not terminal, mails and webhook rows that
+     * The four counters the E2E drain waits on are the number of rows that still have work to do: deliveries that are not terminal, mails and webhook rows (the market's rows in core's `webhook_delivery`) that
      * are not sent (a `FAILED` webhook row is retried, `DEAD` is not), payment events that are `DEFERRED`; `failed` ones are the rows that need a human.
      */
     private suspend fun queues(sql: SqlClient): Map<String, Long> = linkedMapOf(
         "deliveriesPending" to count(sql, "market_delivery", "`status` IN ('PENDING', 'SCHEDULED', 'WAITING_SERVER', 'WAITING_PLAYER', 'SENDING', 'SENT', 'QUEUED')"),
         "deliveriesFailed" to count(sql, "market_delivery", "`status` = 'FAILED'"),
         "mailsPending" to count(sql, "market_mail_outbox", "`status` IN ('PENDING', 'SENDING')"),
-        "webhooksPending" to count(sql, "market_webhook_delivery", "`status` IN ('PENDING', 'SENDING', 'FAILED')"),
+        "webhooksPending" to count(sql, "webhook_delivery", "`source` = 'market' AND `status` IN ('PENDING', 'SENDING', 'FAILED')"),
         "deferredEvents" to count(sql, "market_payment_event", "`status` = 'DEFERRED'"),
         "failedEvents" to count(sql, "market_payment_event", "`status` = 'FAILED'")
     )

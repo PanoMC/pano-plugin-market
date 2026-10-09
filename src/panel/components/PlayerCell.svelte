@@ -18,5 +18,5 @@
 
   let { username, link = true } = $props();
 
-  const picture = $derived(`/api/profile/picture/${encodeURIComponent(username ?? '')}`);
+  const picture = $derived(`/api/v1/profile/picture/${encodeURIComponent(username ?? '')}`);
 </script>

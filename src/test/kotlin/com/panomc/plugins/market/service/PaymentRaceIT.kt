@@ -123,7 +123,7 @@ class PaymentRaceIT : MarketDaoITBase() {
             assertEquals(ReservationState.COMMITTED, ph.order(order.id).reservationState)
             assertEquals(2, w.products.getById(product.id, pool)!!.soldCount, "round $round: sold once")
             assertEquals(10, ph.effects.of(order.id).size - before, "round $round: the effects of O2 once")
-            assertEquals(1, count("market_webhook_delivery", "`orderId` = ?", order.id), "round $round: one order.paid row")
+            assertEquals(1, count("webhook_delivery", "`subjectRef` = ?", "order:${order.id}"), "round $round: one order.paid row")
         }
 
         assertEquals(Race.rounds, w.coupons.getById(coupon.id, pool)!!.usedCount)

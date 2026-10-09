@@ -12,14 +12,14 @@
 {/if}
 
 <script module>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { loadContext } from '../../utils/context.js';
   import { loadPlayerSummary } from './summary.js';
 
   // Hook load: runs inside the player layout load with event.params.username. A failure leaves
   // the card empty (data.error); it never throws into the host page.
   export function load(event) {
-    return loadPlayerSummary({ get: (o) => ApiUtil.get(o), loadContext }, event);
+    return loadPlayerSummary({ get: (o) => api.panel.get(o), loadContext }, event);
   }
 </script>
 

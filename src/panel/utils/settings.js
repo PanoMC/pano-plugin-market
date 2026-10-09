@@ -5,7 +5,6 @@
 // allows more than the backend (store page size 60 vs 100, seller name 255 vs 120, seller address 1000
 // vs 500) the stricter value wins, so a value the form accepts is never refused by the server.
 import { parseInteger } from './format.js';
-import { deliveriesPath, parseEndpointId } from './webhooks.js';
 
 // ---------------------------------------------------------------------------------------------
 // Field table
@@ -144,7 +143,6 @@ export const FIELDS = {
   quoteRateLimitPerMinute: int(60, 1, 100_000),
   couponLockThreshold: int(5, 1, 100),
   couponLockMinutes: int(15, 1, 1440),
-  allowPrivateWebhookTargets: bool(false),
   // mail
   sendEmailAfterPurchase: bool(true),
   mailDisabledKinds: lst([]),
@@ -256,7 +254,6 @@ export const SECTION_KEYS = {
     'quoteRateLimitPerMinute',
     'couponLockThreshold',
     'couponLockMinutes',
-    'allowPrivateWebhookTargets',
   ],
   mail: [
     'sendEmailAfterPurchase',
@@ -832,13 +829,18 @@ export const PAGE_SECTIONS = [
   'shipping-zones',
   'shipping-carriers',
   'webhooks',
-  'webhook-deliveries',
   'modules',
   'security',
   'mail',
   'minecraft',
   'health',
 ];
+
+/**
+ * Webhooks are the platform's since MK-15 (doc 06 section 4): the settings section of the store is one row that opens the platform page, filtered to the
+ * events of this plugin. Relative to the panel base.
+ */
+export const PLATFORM_WEBHOOKS_PATH = '/settings/webhooks?source=market';
 
 /** `?section=` value -> a known section, `general` for anything else. */
 export function resolveSection(value) {
@@ -862,8 +864,5 @@ export function extraPathFor(section, searchParams = null) {
   if (section === 'shipping-carriers') return '/shipping/carriers';
   if (section === 'shipping-zones') return '/shipping/zones';
   if (section === 'shipping-methods') return ['/shipping/methods', '/shipping/carriers'];
-  if (section === 'webhooks') return '/webhooks';
-  if (section === 'webhook-deliveries')
-    return deliveriesPath({ endpointId: parseEndpointId(searchParams?.get('endpointId')) });
   return null;
 }

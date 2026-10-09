@@ -51,9 +51,9 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _, showSuccessToast } from '../../../i18n';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { MAIL_KINDS, fieldErrorKey } from '../../utils/settings.js';
   import { testMailRequest } from '../../utils/settings-extra.js';
   import { toastError } from '../../utils/toast.js';
@@ -87,9 +87,7 @@
     saving = true;
     let result;
     try {
-      result = await call(
-        ApiUtil.post({ path: marketPath('/settings/mail/test'), body: request.body }),
-      );
+      result = await call(api.panel.post({ path: '/settings/mail/test', body: request.body }));
     } finally {
       saving = false;
     }

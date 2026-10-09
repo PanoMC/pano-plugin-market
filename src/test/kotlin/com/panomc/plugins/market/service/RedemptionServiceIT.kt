@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CopyOnWriteArrayList
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * Gift-code redemption on a real MariaDB (MK-113; 21 section 6, 07 section 10, 04 section 4 `POST /me/gifts/redeem`): the zero-total order of
@@ -126,7 +127,7 @@ class RedemptionServiceIT : MarketDaoITBase() {
         assertEquals(code, e.getErrorCode(), "error code, body ${e.encode()}")
         assertEquals(status, e.getStatusCode())
 
-        return JsonObject(e.encode())
+        return ErrorBodies.details(e)
     }
 
     private suspend fun invalid(reason: String, block: suspend () -> Any?) {
@@ -591,7 +592,7 @@ class RedemptionServiceIT : MarketDaoITBase() {
             assertEquals(1, ok, "round $round: ${results.map { it.exceptionOrNull() }}")
             assertEquals(1, failures.size)
             assertEquals("INVALID_GIFT_CODE", (failures.single() as Error).getErrorCode())
-            assertEquals("CODE_LIMIT_REACHED", JsonObject((failures.single() as Error).encode()).getString("reason"))
+            assertEquals("CODE_LIMIT_REACHED", ErrorBodies.details(failures.single()).getString("reason"))
             assertEquals(1, usedCount(gift.id))
             assertEquals(1, count("market_redemption", "`refId` = ? AND `kind` = 'GIFT'", gift.id))
             assertEquals(9, stockOf(vip), "the loser kept nothing")

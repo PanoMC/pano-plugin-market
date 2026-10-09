@@ -22,7 +22,7 @@ object E2eInstanceGuard {
     private val LOOPBACK = setOf("127.0.0.1", "localhost", "[::1]", "::1")
 
     fun checkUrl(url: String?) {
-        if (url.isNullOrBlank()) throw E2eGuardViolation("MARKET_E2E_URL is not set (start the instance with scripts/e2e-instance.sh)")
+        if (url.isNullOrBlank()) throw E2eGuardViolation("MARKET_E2E_URL is not set (run through pano-open-frontend-spec/tools/of-slot.sh and start the instance with scripts/e2e-instance.sh)")
         val uri = try {
             URI.create(url)
         } catch (e: IllegalArgumentException) {

@@ -1,6 +1,6 @@
-<div class="card">
-  <div class="card-body">
-    <h2 class="h5">{$_('theme.checkout.buyer')}</h2>
+<div class="market-buyer-section card">
+  <div class="market-buyer-section__body card-body">
+    <h2 class="market-buyer-section__title h5">{$_('theme.checkout.buyer')}</h2>
 
     {#if user}
       <div class="d-flex align-items-center gap-3">
@@ -15,13 +15,13 @@
     {:else}
       <div class="row g-3">
         <div class="col-md-6">
-          <label class="form-label" for={usernameId}>
+          <label class="market-buyer-section__label form-label" for={usernameId}>
             {$_('theme.checkout.minecraft-username')}
             <span class="text-danger" aria-hidden="true">*</span>
           </label>
           <input
             id={usernameId}
-            class={['form-control', errors.username && 'is-invalid']}
+            class={['market-buyer-section__input', 'form-control', errors.username && 'is-invalid']}
             type="text"
             maxlength="32"
             autocomplete="username"
@@ -41,13 +41,13 @@
           {/if}
         </div>
         <div class="col-md-6">
-          <label class="form-label" for={emailId}>
+          <label class="market-buyer-section__email form-label" for={emailId}>
             {$_('theme.checkout.email')}
             <span class="text-danger" aria-hidden="true">*</span>
           </label>
           <input
             id={emailId}
-            class={['form-control', errors.email && 'is-invalid']}
+            class={['market-buyer-section__input-2', 'form-control', errors.email && 'is-invalid']}
             type="email"
             maxlength="255"
             autocomplete="email"
@@ -77,8 +77,11 @@
 
 <script>
   import { PlayerHead } from '@panomc/sdk/components/theme';
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { fieldErrorKey, fieldId } from '../../lib/checkoutModel.js';
+
+  const market = plugin('market');
+  const { _ } = market;
 
   /**
    * user: the logged-in user ({username, email}) or null for a guest.

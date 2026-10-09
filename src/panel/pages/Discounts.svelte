@@ -1,14 +1,15 @@
 <script module>
-  import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
-  import { marketPath } from '../utils/api.js';
+  import { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
+  import { failureOf } from '../utils/api.js';
   import { loadContext } from '../utils/context.js';
   import { loadList } from '../utils/list.js';
 
-  // Each discount section maps to its own list endpoint + the empty-row key of a failed load.
+  // Each discount section maps to its own list endpoint.
   const LISTS = {
-    general: { path: '/discounts', emptyKey: 'discounts' },
-    coupons: { path: '/coupons', emptyKey: 'coupons' },
-    creators: { path: '/creator-codes', emptyKey: 'creatorCodes' },
+    general: { path: '/discounts' },
+    coupons: { path: '/coupons' },
+    creators: { path: '/creator-codes' },
   };
   const SECTION_KEYS = ['general', 'coupons', 'creators', 'payouts'];
 
@@ -25,13 +26,14 @@
       const params = event.url.searchParams;
       const filters = { from: params.get('from'), to: params.get('to') };
       const [body, ctx] = await Promise.all([
-        ApiUtil.get({
-          path: marketPath('/creator-codes/report') + buildQueryParams(filters),
+        api.panel.get({
+          path: '/creator-codes/report' + buildQueryParams(filters),
           request: event,
         }),
         loadContext(event),
       ]);
-      if (!body || typeof body !== 'object' || body.error)
+      const failure = failureOf(body);
+      if (failure)
         return {
           data: {
             section,
@@ -39,7 +41,7 @@
             currency: ctx?.currency ?? '',
             filters,
             ctx,
-            error: (body && typeof body === 'object' && body.error) || 'NETWORK_ERROR',
+            error: failure,
           },
         };
       return {
@@ -57,7 +59,6 @@
       path: LISTS[section].path,
       params: ['search', 'status'],
       nodes: ['DISC'],
-      emptyKey: LISTS[section].emptyKey,
       title: 'pages.discounts.title',
     });
     result.data.section = section;
@@ -82,6 +83,7 @@
   import RedemptionsModal from '../components/modals/RedemptionsModal.svelte';
   import { sectionsFor } from '../navigation.js';
   import { call } from '../utils/api.js';
+  import { pageOf } from '../utils/page.js';
   import { toastError } from '../utils/toast.js';
 
   let { data } = $props();
@@ -89,7 +91,8 @@
   const user = $derived($page.data?.user);
   const ctx = $derived(data.ctx ?? null);
   const section = $derived(SECTION_KEYS.includes(data.section) ? data.section : 'general');
-  const currentPage = $derived(data.page || 1);
+  const list = $derived(pageOf(data));
+  const currentPage = $derived(list.number);
   const currentSearch = $derived($page.url.searchParams.get('search') || '');
   const currentStatus = $derived($page.url.searchParams.get('status') || 'all');
   const loadError = $derived(data.error || null);
@@ -137,7 +140,7 @@
       confirmLabel: $_('common.delete'),
       variant: 'danger',
       onConfirm: async () => {
-        const result = await call(ApiUtil.delete({ path: marketPath(`${config.path}/${row.id}`) }));
+        const result = await call(api.panel.delete({ path: `${config.path}/${row.id}` }));
         if (!result.ok) {
           // A row that is already gone (404 NOT_FOUND) is toasted and the list refreshed.
           toastError($_, result);
@@ -211,42 +214,42 @@
     <LoadError error={loadError} />
   {:else if section === 'general'}
     <GeneralDiscounts
-      discounts={data.discounts}
-      discountCount={data.discountCount}
+      discounts={list.items}
+      discountCount={list.totalItems}
       page={currentPage}
-      totalPage={data.totalPage}
+      totalPage={list.totalPages}
       search={currentSearch}
       status={currentStatus}
       {section}
       {ctx}
       onEdit={openDiscountEdit}
-      onDelete={(row) => remove('discount', row, data.discounts?.length ?? 0)} />
+      onDelete={(row) => remove('discount', row, list.items.length)} />
   {:else if section === 'coupons'}
     <CouponCodes
-      coupons={data.coupons}
-      couponCount={data.couponCount}
+      coupons={list.items}
+      couponCount={list.totalItems}
       page={currentPage}
-      totalPage={data.totalPage}
+      totalPage={list.totalPages}
       search={currentSearch}
       status={currentStatus}
       {section}
       {ctx}
       onEdit={openCouponEdit}
       onRedemptions={(row) => openRedemptions('coupons', row)}
-      onDelete={(row) => remove('coupon', row, data.coupons?.length ?? 0)} />
+      onDelete={(row) => remove('coupon', row, list.items.length)} />
   {:else if section === 'creators'}
     <CreatorCodes
-      creatorCodes={data.creatorCodes}
-      creatorCodeCount={data.creatorCodeCount}
+      creatorCodes={list.items}
+      creatorCodeCount={list.totalItems}
       page={currentPage}
-      totalPage={data.totalPage}
+      totalPage={list.totalPages}
       search={currentSearch}
       status={currentStatus}
       {section}
       {ctx}
       onEdit={openCreatorEdit}
       onRedemptions={(row) => openRedemptions('creator-codes', row)}
-      onDelete={(row) => remove('creator', row, data.creatorCodes?.length ?? 0)} />
+      onDelete={(row) => remove('creator', row, list.items.length)} />
   {:else}
     <CreatorPayouts
       creators={data.creators}

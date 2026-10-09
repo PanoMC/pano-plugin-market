@@ -1,8 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  DEFAULT_CHECKOUT_URL,
+  OFFCANVAS_ID,
+  checkoutHref,
   countCacheValue,
   errorKey,
   fieldPairs,
+  hasOffcanvasHost,
   isDiscounted,
   metaRows,
   navVisible,
@@ -129,5 +133,39 @@ describe('NavCart', () => {
       resolveNavCount({ mode: 'NONE', user, cacheRaw: countCacheValue({ id: 8 }, 5, now), now }),
     ).toEqual({ fetch: true });
     expect(resolveNavCount({ mode: 'NONE', user, cacheRaw: null, now })).toEqual({ fetch: true });
+  });
+});
+
+describe('NavCart as a widget', () => {
+  test('the offcanvas host is the element CartOffcanvas renders', () => {
+    const page = (ids) => ({ getElementById: (id) => (ids.includes(id) ? {} : null) });
+
+    expect(OFFCANVAS_ID).toBe('marketCartOffcanvas');
+    expect(hasOffcanvasHost(page([OFFCANVAS_ID]))).toBe(true);
+    expect(hasOffcanvasHost(page(['other']))).toBe(false);
+    expect(hasOffcanvasHost(undefined)).toBe(false);
+    expect(hasOffcanvasHost({})).toBe(false);
+  });
+
+  test('checkoutHref: URL map entry, else /store/checkout, site path made absolute with the site URL', () => {
+    expect(DEFAULT_CHECKOUT_URL).toBe('/store/checkout');
+    expect(checkoutHref(undefined)).toBe('/store/checkout');
+    expect(checkoutHref({})).toBe('/store/checkout');
+    expect(checkoutHref({ urls: { 'market.checkout': '/shop/checkout' } })).toBe('/shop/checkout');
+    expect(checkoutHref({ urls: {}, base: 'https://pano.example.com' })).toBe(
+      'https://pano.example.com/store/checkout',
+    );
+    expect(
+      checkoutHref({ urls: { 'market.checkout': '/shop/co' }, base: 'https://pano.example.com/' }),
+    ).toBe('https://pano.example.com/shop/co');
+    expect(
+      checkoutHref({
+        urls: { 'market.checkout': 'https://shop.example.org/c' },
+        base: 'https://x.y',
+      }),
+    ).toBe('https://shop.example.org/c');
+    expect(
+      checkoutHref({ urls: { 'market.checkout': '//cdn.example/c' }, base: 'https://x.y' }),
+    ).toBe('//cdn.example/c');
   });
 });

@@ -14,7 +14,7 @@ import io.vertx.json.schema.SchemaRepository
 /** `PUT /api/panel/market/gifts/:id` (`P:DISC`): a partial update that never writes `usedCount` (nor `earnings` / `paidOut`); a missing row is 404 `NOT_FOUND`. */
 @Endpoint
 class PanelUpdateGiftAPI(plugin: MarketPlugin) : PromotionAdminRoute(plugin, Promotion.GIFT) {
-    override val paths = listOf(Path("/api/panel/market/gifts/:id", RouteType.PUT))
+    override val paths = listOf(Path("/gifts/:id", RouteType.PUT))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = bodyValidation(schemaRepository)
 

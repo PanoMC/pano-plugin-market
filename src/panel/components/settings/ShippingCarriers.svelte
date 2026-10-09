@@ -155,7 +155,7 @@
 
 <script>
   import { onMount } from 'svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { NoContent } from '@panomc/sdk/components/panel';
   import { base } from '@panomc/sdk/svelte';
   import { tooltip } from '@panomc/sdk/utils/tooltip';
@@ -164,7 +164,7 @@
   import LoadError from '../LoadError.svelte';
   import StatusBadge from '../StatusBadge.svelte';
   import CarrierModal from '../modals/CarrierModal.svelte';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { loadContext } from '../../utils/context.js';
   import { currentLocale } from '../../utils/locale.js';
   import { effectiveTestMode, isHttpUrl, providerName } from '../../utils/payment-methods.js';
@@ -176,7 +176,7 @@
   // for GET /shipping/carriers, without a rules tab and without reordering. The settings page may pass
   // the shared `ctx`; without it the component reads GET /context itself.
   function carriersOf(body) {
-    const list = body?.carriers ?? body?.providers;
+    const list = body?.items;
     return Array.isArray(list) ? list : [];
   }
 
@@ -212,7 +212,7 @@
       : 'fa-solid fa-truck';
 
   async function fetchCarriers() {
-    const result = await call(ApiUtil.get({ path: marketPath('/shipping/carriers') }));
+    const result = await call(api.panel.get({ path: '/shipping/carriers' }));
     if (!result.ok) return { error: result.error };
     return { carriers: carriersOf(result.body) };
   }
@@ -251,8 +251,8 @@
     let result;
     try {
       result = await call(
-        ApiUtil.post({
-          path: marketPath(`/shipping/carriers/${encodeURIComponent(carrier.id)}/toggle`),
+        api.panel.post({
+          path: `/shipping/carriers/${encodeURIComponent(carrier.id)}/toggle`,
           body: { enabled: next },
         }),
       );

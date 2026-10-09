@@ -1,0 +1,1626 @@
+[
+  {
+    "method": "GET",
+    "old": "/api/market/categories/image/:fileName",
+    "new": "/api/plugins/pano-plugin-market/categories/image/:fileName",
+    "relative": "/plugins/pano-plugin-market/categories/image/:fileName",
+    "class": "GetCategoryImageAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/GetCategoryImageAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/market/checkout",
+    "new": "/api/plugins/pano-plugin-market/checkout",
+    "relative": "/plugins/pano-plugin-market/checkout",
+    "class": "CheckoutAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/checkout/CheckoutAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/checkout/config",
+    "new": "/api/plugins/pano-plugin-market/checkout/config",
+    "relative": "/plugins/pano-plugin-market/checkout/config",
+    "class": "GetCheckoutConfigAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/checkout/GetCheckoutConfigAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/market/checkout/quote",
+    "new": "/api/plugins/pano-plugin-market/checkout/quote",
+    "relative": "/plugins/pano-plugin-market/checkout/quote",
+    "class": "QuoteAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/checkout/QuoteAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/me/addresses",
+    "new": "/api/plugins/pano-plugin-market/me/addresses",
+    "relative": "/plugins/pano-plugin-market/me/addresses",
+    "class": "GetAddressesAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/address/AddressRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/market/me/addresses",
+    "new": "/api/plugins/pano-plugin-market/me/addresses",
+    "relative": "/plugins/pano-plugin-market/me/addresses",
+    "class": "CreateAddressAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/address/AddressRoutes.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/market/me/addresses/:id",
+    "new": "/api/plugins/pano-plugin-market/me/addresses/:id",
+    "relative": "/plugins/pano-plugin-market/me/addresses/:id",
+    "class": "DeleteAddressAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/address/AddressRoutes.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/market/me/addresses/:id",
+    "new": "/api/plugins/pano-plugin-market/me/addresses/:id",
+    "relative": "/plugins/pano-plugin-market/me/addresses/:id",
+    "class": "UpdateAddressAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/address/AddressRoutes.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/market/me/cart",
+    "new": "/api/plugins/pano-plugin-market/me/cart",
+    "relative": "/plugins/pano-plugin-market/me/cart",
+    "class": "DeleteCartAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/cart/DeleteCartAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/me/cart",
+    "new": "/api/plugins/pano-plugin-market/me/cart",
+    "relative": "/plugins/pano-plugin-market/me/cart",
+    "class": "GetCartAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/cart/GetCartAPI.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/market/me/cart",
+    "new": "/api/plugins/pano-plugin-market/me/cart",
+    "relative": "/plugins/pano-plugin-market/me/cart",
+    "class": "PutCartAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/cart/PutCartAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/market/me/cart/items",
+    "new": "/api/plugins/pano-plugin-market/me/cart/items",
+    "relative": "/plugins/pano-plugin-market/me/cart/items",
+    "class": "AddCartItemAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/cart/AddCartItemAPI.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/market/me/cart/items/:itemId",
+    "new": "/api/plugins/pano-plugin-market/me/cart/items/:itemId",
+    "relative": "/plugins/pano-plugin-market/me/cart/items/:itemId",
+    "class": "DeleteCartItemAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/cart/DeleteCartItemAPI.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/market/me/cart/items/:itemId",
+    "new": "/api/plugins/pano-plugin-market/me/cart/items/:itemId",
+    "relative": "/plugins/pano-plugin-market/me/cart/items/:itemId",
+    "class": "UpdateCartItemAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/cart/UpdateCartItemAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/market/me/cart/merge",
+    "new": "/api/plugins/pano-plugin-market/me/cart/merge",
+    "relative": "/plugins/pano-plugin-market/me/cart/merge",
+    "class": "MergeCartAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/cart/MergeCartAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/me/creator",
+    "new": "/api/plugins/pano-plugin-market/me/creator",
+    "relative": "/plugins/pano-plugin-market/me/creator",
+    "class": "GetMyCreatorAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/creator/GetMyCreatorAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/me/credits",
+    "new": "/api/plugins/pano-plugin-market/me/credits",
+    "relative": "/plugins/pano-plugin-market/me/credits",
+    "class": "GetMyCreditsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/credit/CreditRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/me/entitlements",
+    "new": "/api/plugins/pano-plugin-market/me/entitlements",
+    "relative": "/plugins/pano-plugin-market/me/entitlements",
+    "class": "GetMyEntitlementsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/order/BuyerOrderRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/market/me/gifts/redeem",
+    "new": "/api/plugins/pano-plugin-market/me/gifts/redeem",
+    "relative": "/plugins/pano-plugin-market/me/gifts/redeem",
+    "class": "RedeemGiftAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/gift/RedeemGiftAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/me/orders",
+    "new": "/api/plugins/pano-plugin-market/me/orders",
+    "relative": "/plugins/pano-plugin-market/me/orders",
+    "class": "GetMyOrdersAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/order/BuyerOrderRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/me/subscriptions",
+    "new": "/api/plugins/pano-plugin-market/me/subscriptions",
+    "relative": "/plugins/pano-plugin-market/me/subscriptions",
+    "class": "GetMySubscriptionsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/subscription/SubscriptionRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/market/me/subscriptions/:id/cancel",
+    "new": "/api/plugins/pano-plugin-market/me/subscriptions/:id/cancel",
+    "relative": "/plugins/pano-plugin-market/me/subscriptions/:id/cancel",
+    "class": "CancelMySubscriptionAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/subscription/SubscriptionRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/market/me/subscriptions/:id/portal",
+    "new": "/api/plugins/pano-plugin-market/me/subscriptions/:id/portal",
+    "relative": "/plugins/pano-plugin-market/me/subscriptions/:id/portal",
+    "class": "PortalMySubscriptionAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/subscription/SubscriptionRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/market/me/subscriptions/:id/resume",
+    "new": "/api/plugins/pano-plugin-market/me/subscriptions/:id/resume",
+    "relative": "/plugins/pano-plugin-market/me/subscriptions/:id/resume",
+    "class": "ResumeMySubscriptionAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/subscription/SubscriptionRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/me/subscriptions/portal-pages/:token",
+    "new": "/api/plugins/pano-plugin-market/me/subscriptions/portal-pages/:token",
+    "relative": "/plugins/pano-plugin-market/me/subscriptions/portal-pages/:token",
+    "class": "GetMySubscriptionPortalPageAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/subscription/SubscriptionRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/me/summary",
+    "new": "/api/plugins/pano-plugin-market/me/summary",
+    "relative": "/plugins/pano-plugin-market/me/summary",
+    "class": "GetMySummaryAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/user/GetMySummaryAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/orders/:publicId",
+    "new": "/api/plugins/pano-plugin-market/orders/:publicId",
+    "relative": "/plugins/pano-plugin-market/orders/:publicId",
+    "class": "GetOrderAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/order/GetOrderAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/market/orders/:publicId/bank-transfer/notify",
+    "new": "/api/plugins/pano-plugin-market/orders/:publicId/bank-transfer/notify",
+    "relative": "/plugins/pano-plugin-market/orders/:publicId/bank-transfer/notify",
+    "class": "BankTransferNotifyAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/order/BankTransferNotifyAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/market/orders/:publicId/cancel",
+    "new": "/api/plugins/pano-plugin-market/orders/:publicId/cancel",
+    "relative": "/plugins/pano-plugin-market/orders/:publicId/cancel",
+    "class": "CancelOrderAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/order/PayOrderAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/orders/:publicId/invoice",
+    "new": "/api/plugins/pano-plugin-market/orders/:publicId/invoice",
+    "relative": "/plugins/pano-plugin-market/orders/:publicId/invoice",
+    "class": "GetOrderInvoiceAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/order/GetOrderInvoiceAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/market/orders/:publicId/pay",
+    "new": "/api/plugins/pano-plugin-market/orders/:publicId/pay",
+    "relative": "/plugins/pano-plugin-market/orders/:publicId/pay",
+    "class": "PayOrderAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/order/PayOrderAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/market/orders/:publicId/payment/continue",
+    "new": "/api/plugins/pano-plugin-market/orders/:publicId/payment/continue",
+    "relative": "/plugins/pano-plugin-market/orders/:publicId/payment/continue",
+    "class": "ContinueOrderPaymentAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/order/PayOrderAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/orders/:publicId/status",
+    "new": "/api/plugins/pano-plugin-market/orders/:publicId/status",
+    "relative": "/plugins/pano-plugin-market/orders/:publicId/status",
+    "class": "GetOrderStatusAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/order/GetOrderStatusAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/payment-providers/:id/logo",
+    "new": "/api/plugins/pano-plugin-market/payment-providers/:id/logo",
+    "relative": "/plugins/pano-plugin-market/payment-providers/:id/logo",
+    "class": "GetPaymentProviderLogoAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/payment/GetPaymentProviderLogoAPI.kt"
+  },
+  {
+    "method": "ANY",
+    "old": "/api/market/payments/:providerId/notify/:attemptToken",
+    "new": "/api/plugins/pano-plugin-market/payments/:providerId/notify/:attemptToken",
+    "relative": "/plugins/pano-plugin-market/payments/:providerId/notify/:attemptToken",
+    "class": "PaymentNotifyAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/payment/InboundRoutes.kt"
+  },
+  {
+    "method": "ANY",
+    "old": "/api/market/payments/:providerId/notify/:attemptToken/:channel",
+    "new": "/api/plugins/pano-plugin-market/payments/:providerId/notify/:attemptToken/:channel",
+    "relative": "/plugins/pano-plugin-market/payments/:providerId/notify/:attemptToken/:channel",
+    "class": "PaymentNotifyAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/payment/InboundRoutes.kt"
+  },
+  {
+    "method": "ANY",
+    "old": "/api/market/payments/:providerId/return/:attemptToken/:outcome",
+    "new": "/api/plugins/pano-plugin-market/payments/:providerId/return/:attemptToken/:outcome",
+    "relative": "/plugins/pano-plugin-market/payments/:providerId/return/:attemptToken/:outcome",
+    "class": "PaymentReturnAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/payment/InboundRoutes.kt"
+  },
+  {
+    "method": "ANY",
+    "old": "/api/market/payments/:providerId/return/:attemptToken/step/:name",
+    "new": "/api/plugins/pano-plugin-market/payments/:providerId/return/:attemptToken/step/:name",
+    "relative": "/plugins/pano-plugin-market/payments/:providerId/return/:attemptToken/step/:name",
+    "class": "PaymentReturnAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/payment/InboundRoutes.kt"
+  },
+  {
+    "method": "ANY",
+    "old": "/api/market/payments/:providerId/webhook",
+    "new": "/api/plugins/pano-plugin-market/payments/:providerId/webhook",
+    "relative": "/plugins/pano-plugin-market/payments/:providerId/webhook",
+    "class": "PaymentWebhookAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/payment/InboundRoutes.kt"
+  },
+  {
+    "method": "ANY",
+    "old": "/api/market/payments/:providerId/webhook/:channel",
+    "new": "/api/plugins/pano-plugin-market/payments/:providerId/webhook/:channel",
+    "relative": "/plugins/pano-plugin-market/payments/:providerId/webhook/:channel",
+    "class": "PaymentWebhookAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/payment/InboundRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/payments/attempts/:attemptToken/page",
+    "new": "/api/plugins/pano-plugin-market/payments/attempts/:attemptToken/page",
+    "relative": "/plugins/pano-plugin-market/payments/attempts/:attemptToken/page",
+    "class": "GetPaymentAttemptPageAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/payment/InboundRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/products/:slug",
+    "new": "/api/plugins/pano-plugin-market/products/:slug",
+    "relative": "/plugins/pano-plugin-market/products/:slug",
+    "class": "GetStoreProductAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/store/GetStoreProductAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/products/image/:fileName",
+    "new": "/api/plugins/pano-plugin-market/products/image/:fileName",
+    "relative": "/plugins/pano-plugin-market/products/image/:fileName",
+    "class": "GetProductImageAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/GetProductImageAPI.kt"
+  },
+  {
+    "method": "ANY",
+    "old": "/api/market/shipping/:providerId/webhook/:installToken",
+    "new": "/api/plugins/pano-plugin-market/shipping/:providerId/webhook/:installToken",
+    "relative": "/plugins/pano-plugin-market/shipping/:providerId/webhook/:installToken",
+    "class": "ShippingWebhookAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/shipping/ShippingWebhookAPI.kt"
+  },
+  {
+    "method": "ANY",
+    "old": "/api/market/shipping/:providerId/webhook/:installToken/:channel",
+    "new": "/api/plugins/pano-plugin-market/shipping/:providerId/webhook/:installToken/:channel",
+    "relative": "/plugins/pano-plugin-market/shipping/:providerId/webhook/:installToken/:channel",
+    "class": "ShippingWebhookAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/shipping/ShippingWebhookAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/store",
+    "new": "/api/plugins/pano-plugin-market/store",
+    "relative": "/plugins/pano-plugin-market/store",
+    "class": "GetStoreAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/store/GetStoreAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/store/products",
+    "new": "/api/plugins/pano-plugin-market/store/products",
+    "relative": "/plugins/pano-plugin-market/store/products",
+    "class": "GetStoreProductsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/store/GetStoreProductsAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/market/widgets",
+    "new": "/api/plugins/pano-plugin-market/widgets",
+    "relative": "/plugins/pano-plugin-market/widgets",
+    "class": "GetWidgetsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/api/store/GetWidgetsAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/blocks",
+    "new": "/api/plugins/pano-plugin-market/panel/blocks",
+    "relative": "/panel/plugins/pano-plugin-market/blocks",
+    "class": "PanelGetBlocksAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/block/BlockRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/blocks",
+    "new": "/api/plugins/pano-plugin-market/panel/blocks",
+    "relative": "/panel/plugins/pano-plugin-market/blocks",
+    "class": "PanelCreateBlockAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/block/BlockRoutes.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/panel/market/blocks/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/blocks/:id",
+    "relative": "/panel/plugins/pano-plugin-market/blocks/:id",
+    "class": "PanelDeleteBlockAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/block/BlockRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/categories",
+    "new": "/api/plugins/pano-plugin-market/panel/categories",
+    "relative": "/panel/plugins/pano-plugin-market/categories",
+    "class": "PanelGetCategoriesAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/category/PanelGetCategoriesAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/categories",
+    "new": "/api/plugins/pano-plugin-market/panel/categories",
+    "relative": "/panel/plugins/pano-plugin-market/categories",
+    "class": "PanelCreateCategoryAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/category/PanelCreateCategoryAPI.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/panel/market/categories/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/categories/:id",
+    "relative": "/panel/plugins/pano-plugin-market/categories/:id",
+    "class": "PanelDeleteCategoryAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/category/PanelDeleteCategoryAPI.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/categories/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/categories/:id",
+    "relative": "/panel/plugins/pano-plugin-market/categories/:id",
+    "class": "PanelUpdateCategoryAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/category/PanelUpdateCategoryAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/categories/image/:fileName",
+    "new": "/api/plugins/pano-plugin-market/panel/categories/image/:fileName",
+    "relative": "/panel/plugins/pano-plugin-market/categories/image/:fileName",
+    "class": "PanelGetCategoryImageAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/category/PanelGetCategoryImageAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/categories/sort",
+    "new": "/api/plugins/pano-plugin-market/panel/categories/sort",
+    "relative": "/panel/plugins/pano-plugin-market/categories/sort",
+    "class": "PanelSortCategoriesAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/category/PanelSortCategoriesAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/comparisons",
+    "new": "/api/plugins/pano-plugin-market/panel/comparisons",
+    "relative": "/panel/plugins/pano-plugin-market/comparisons",
+    "class": "PanelGetComparisonsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/comparison/PanelGetComparisonsAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/comparisons",
+    "new": "/api/plugins/pano-plugin-market/panel/comparisons",
+    "relative": "/panel/plugins/pano-plugin-market/comparisons",
+    "class": "PanelCreateComparisonAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/comparison/PanelCreateComparisonAPI.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/panel/market/comparisons/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/comparisons/:id",
+    "relative": "/panel/plugins/pano-plugin-market/comparisons/:id",
+    "class": "PanelDeleteComparisonAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/comparison/PanelDeleteComparisonAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/comparisons/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/comparisons/:id",
+    "relative": "/panel/plugins/pano-plugin-market/comparisons/:id",
+    "class": "PanelGetComparisonAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/comparison/PanelGetComparisonAPI.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/comparisons/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/comparisons/:id",
+    "relative": "/panel/plugins/pano-plugin-market/comparisons/:id",
+    "class": "PanelUpdateComparisonAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/comparison/PanelUpdateComparisonAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/comparisons/:id/clone",
+    "new": "/api/plugins/pano-plugin-market/panel/comparisons/:id/clone",
+    "relative": "/panel/plugins/pano-plugin-market/comparisons/:id/clone",
+    "class": "PanelCloneComparisonAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/comparison/PanelCloneComparisonAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/context",
+    "new": "/api/plugins/pano-plugin-market/panel/context",
+    "relative": "/panel/plugins/pano-plugin-market/context",
+    "class": "PanelGetContextAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/PanelGetContextAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/coupons",
+    "new": "/api/plugins/pano-plugin-market/panel/coupons",
+    "relative": "/panel/plugins/pano-plugin-market/coupons",
+    "class": "PanelGetCouponsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/coupon/PanelGetCouponsAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/coupons",
+    "new": "/api/plugins/pano-plugin-market/panel/coupons",
+    "relative": "/panel/plugins/pano-plugin-market/coupons",
+    "class": "PanelCreateCouponAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/coupon/PanelCreateCouponAPI.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/panel/market/coupons/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/coupons/:id",
+    "relative": "/panel/plugins/pano-plugin-market/coupons/:id",
+    "class": "PanelDeleteCouponAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/coupon/PanelDeleteCouponAPI.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/coupons/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/coupons/:id",
+    "relative": "/panel/plugins/pano-plugin-market/coupons/:id",
+    "class": "PanelUpdateCouponAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/coupon/PanelUpdateCouponAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/coupons/:id/redemptions",
+    "new": "/api/plugins/pano-plugin-market/panel/coupons/:id/redemptions",
+    "relative": "/panel/plugins/pano-plugin-market/coupons/:id/redemptions",
+    "class": "PanelGetCouponRedemptionsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/coupon/PanelGetCouponRedemptionsAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/creator-codes",
+    "new": "/api/plugins/pano-plugin-market/panel/creator-codes",
+    "relative": "/panel/plugins/pano-plugin-market/creator-codes",
+    "class": "PanelGetCreatorCodesAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/creatorcode/PanelGetCreatorCodesAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/creator-codes",
+    "new": "/api/plugins/pano-plugin-market/panel/creator-codes",
+    "relative": "/panel/plugins/pano-plugin-market/creator-codes",
+    "class": "PanelCreateCreatorCodeAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/creatorcode/PanelCreateCreatorCodeAPI.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/panel/market/creator-codes/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/creator-codes/:id",
+    "relative": "/panel/plugins/pano-plugin-market/creator-codes/:id",
+    "class": "PanelDeleteCreatorCodeAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/creatorcode/PanelDeleteCreatorCodeAPI.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/creator-codes/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/creator-codes/:id",
+    "relative": "/panel/plugins/pano-plugin-market/creator-codes/:id",
+    "class": "PanelUpdateCreatorCodeAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/creatorcode/PanelUpdateCreatorCodeAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/creator-codes/:id/earnings",
+    "new": "/api/plugins/pano-plugin-market/panel/creator-codes/:id/earnings",
+    "relative": "/panel/plugins/pano-plugin-market/creator-codes/:id/earnings",
+    "class": "PanelGetCreatorEarningsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/creatorcode/CreatorRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/creator-codes/:id/payouts",
+    "new": "/api/plugins/pano-plugin-market/panel/creator-codes/:id/payouts",
+    "relative": "/panel/plugins/pano-plugin-market/creator-codes/:id/payouts",
+    "class": "PanelGetCreatorPayoutsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/creatorcode/CreatorRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/creator-codes/:id/payouts",
+    "new": "/api/plugins/pano-plugin-market/panel/creator-codes/:id/payouts",
+    "relative": "/panel/plugins/pano-plugin-market/creator-codes/:id/payouts",
+    "class": "PanelCreateCreatorPayoutAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/creatorcode/CreatorRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/creator-codes/:id/redemptions",
+    "new": "/api/plugins/pano-plugin-market/panel/creator-codes/:id/redemptions",
+    "relative": "/panel/plugins/pano-plugin-market/creator-codes/:id/redemptions",
+    "class": "PanelGetCreatorCodeRedemptionsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/creatorcode/PanelGetCreatorCodeRedemptionsAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/creator-codes/report",
+    "new": "/api/plugins/pano-plugin-market/panel/creator-codes/report",
+    "relative": "/panel/plugins/pano-plugin-market/creator-codes/report",
+    "class": "PanelGetCreatorReportAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/creatorcode/CreatorRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/creator-payouts/:id/cancel",
+    "new": "/api/plugins/pano-plugin-market/panel/creator-payouts/:id/cancel",
+    "relative": "/panel/plugins/pano-plugin-market/creator-payouts/:id/cancel",
+    "class": "PanelCancelCreatorPayoutAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/creatorcode/CreatorRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/credits/accounts",
+    "new": "/api/plugins/pano-plugin-market/panel/credits/accounts",
+    "relative": "/panel/plugins/pano-plugin-market/credits/accounts",
+    "class": "PanelGetCreditAccountsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/credit/CreditAdminRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/credits/accounts/:userId",
+    "new": "/api/plugins/pano-plugin-market/panel/credits/accounts/:userId",
+    "relative": "/panel/plugins/pano-plugin-market/credits/accounts/:userId",
+    "class": "PanelGetCreditAccountAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/credit/CreditAdminRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/credits/accounts/:userId/grant",
+    "new": "/api/plugins/pano-plugin-market/panel/credits/accounts/:userId/grant",
+    "relative": "/panel/plugins/pano-plugin-market/credits/accounts/:userId/grant",
+    "class": "PanelGrantCreditsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/credit/CreditAdminRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/credits/accounts/:userId/revoke",
+    "new": "/api/plugins/pano-plugin-market/panel/credits/accounts/:userId/revoke",
+    "relative": "/panel/plugins/pano-plugin-market/credits/accounts/:userId/revoke",
+    "class": "PanelRevokeCreditsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/credit/CreditAdminRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/credits/transactions",
+    "new": "/api/plugins/pano-plugin-market/panel/credits/transactions",
+    "relative": "/panel/plugins/pano-plugin-market/credits/transactions",
+    "class": "PanelGetCreditTransactionsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/credit/CreditAdminRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/deliveries",
+    "new": "/api/plugins/pano-plugin-market/panel/deliveries",
+    "relative": "/panel/plugins/pano-plugin-market/deliveries",
+    "class": "PanelGetDeliveriesAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/delivery/DeliveryAdminRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/deliveries/:id/cancel",
+    "new": "/api/plugins/pano-plugin-market/panel/deliveries/:id/cancel",
+    "relative": "/panel/plugins/pano-plugin-market/deliveries/:id/cancel",
+    "class": "PanelCancelDeliveryAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/delivery/DeliveryAdminRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/deliveries/:id/retry",
+    "new": "/api/plugins/pano-plugin-market/panel/deliveries/:id/retry",
+    "relative": "/panel/plugins/pano-plugin-market/deliveries/:id/retry",
+    "class": "PanelRetryDeliveryAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/delivery/DeliveryAdminRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/discounts",
+    "new": "/api/plugins/pano-plugin-market/panel/discounts",
+    "relative": "/panel/plugins/pano-plugin-market/discounts",
+    "class": "PanelGetDiscountsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/discount/PanelGetDiscountsAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/discounts",
+    "new": "/api/plugins/pano-plugin-market/panel/discounts",
+    "relative": "/panel/plugins/pano-plugin-market/discounts",
+    "class": "PanelCreateDiscountAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/discount/PanelCreateDiscountAPI.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/panel/market/discounts/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/discounts/:id",
+    "relative": "/panel/plugins/pano-plugin-market/discounts/:id",
+    "class": "PanelDeleteDiscountAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/discount/PanelDeleteDiscountAPI.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/discounts/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/discounts/:id",
+    "relative": "/panel/plugins/pano-plugin-market/discounts/:id",
+    "class": "PanelUpdateDiscountAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/discount/PanelUpdateDiscountAPI.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/disputes/:disputeId",
+    "new": "/api/plugins/pano-plugin-market/panel/disputes/:disputeId",
+    "relative": "/panel/plugins/pano-plugin-market/disputes/:disputeId",
+    "class": "PanelUpdateDisputeAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/dispute/DisputeRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/gifts",
+    "new": "/api/plugins/pano-plugin-market/panel/gifts",
+    "relative": "/panel/plugins/pano-plugin-market/gifts",
+    "class": "PanelGetGiftsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/gift/PanelGetGiftsAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/gifts",
+    "new": "/api/plugins/pano-plugin-market/panel/gifts",
+    "relative": "/panel/plugins/pano-plugin-market/gifts",
+    "class": "PanelCreateGiftAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/gift/PanelCreateGiftAPI.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/panel/market/gifts/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/gifts/:id",
+    "relative": "/panel/plugins/pano-plugin-market/gifts/:id",
+    "class": "PanelDeleteGiftAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/gift/PanelDeleteGiftAPI.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/gifts/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/gifts/:id",
+    "relative": "/panel/plugins/pano-plugin-market/gifts/:id",
+    "class": "PanelUpdateGiftAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/gift/PanelUpdateGiftAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/gifts/:id/redemptions",
+    "new": "/api/plugins/pano-plugin-market/panel/gifts/:id/redemptions",
+    "relative": "/panel/plugins/pano-plugin-market/gifts/:id/redemptions",
+    "class": "PanelGetGiftRedemptionsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/gift/PanelGetGiftRedemptionsAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/goals",
+    "new": "/api/plugins/pano-plugin-market/panel/goals",
+    "relative": "/panel/plugins/pano-plugin-market/goals",
+    "class": "PanelGetGoalsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/goal/PanelGetGoalsAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/goals",
+    "new": "/api/plugins/pano-plugin-market/panel/goals",
+    "relative": "/panel/plugins/pano-plugin-market/goals",
+    "class": "PanelCreateGoalAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/goal/PanelCreateGoalAPI.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/panel/market/goals/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/goals/:id",
+    "relative": "/panel/plugins/pano-plugin-market/goals/:id",
+    "class": "PanelDeleteGoalAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/goal/PanelDeleteGoalAPI.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/goals/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/goals/:id",
+    "relative": "/panel/plugins/pano-plugin-market/goals/:id",
+    "class": "PanelUpdateGoalAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/goal/PanelUpdateGoalAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/health",
+    "new": "/api/plugins/pano-plugin-market/panel/health",
+    "relative": "/panel/plugins/pano-plugin-market/health",
+    "class": "PanelGetHealthAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/PanelGetHealthAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/mails",
+    "new": "/api/plugins/pano-plugin-market/panel/mails",
+    "relative": "/panel/plugins/pano-plugin-market/mails",
+    "class": "PanelGetMailsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/mail/MailRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/mails/:id/retry",
+    "new": "/api/plugins/pano-plugin-market/panel/mails/:id/retry",
+    "relative": "/panel/plugins/pano-plugin-market/mails/:id/retry",
+    "class": "PanelRetryMailAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/mail/MailRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/mc-component/download",
+    "new": "/api/plugins/pano-plugin-market/panel/mc-component/download",
+    "relative": "/panel/plugins/pano-plugin-market/mc-component/download",
+    "class": "PanelGetMcComponentDownloadAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/server/PanelGetMcComponentDownloadAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/orders",
+    "new": "/api/plugins/pano-plugin-market/panel/orders",
+    "relative": "/panel/plugins/pano-plugin-market/orders",
+    "class": "PanelGetOrdersAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/order/PanelGetOrdersAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders",
+    "new": "/api/plugins/pano-plugin-market/panel/orders",
+    "relative": "/panel/plugins/pano-plugin-market/orders",
+    "class": "PanelCreateOrderAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/order/PanelCreateOrderAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/orders/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id",
+    "class": "PanelGetOrderAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/order/PanelGetOrderAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders/:id/anonymize",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/anonymize",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/anonymize",
+    "class": "PanelAnonymizeOrderAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/order/PanelAnonymizeOrderAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders/:id/bank-transfer",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/bank-transfer",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/bank-transfer",
+    "class": "PanelBankTransferDecisionAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/order/PanelBankTransferDecisionAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders/:id/chargeback-actions",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/chargeback-actions",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/chargeback-actions",
+    "class": "PanelRunChargebackActionsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/dispute/DisputeRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders/:id/deliveries/rerun",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/deliveries/rerun",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/deliveries/rerun",
+    "class": "PanelRerunDeliveriesAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/delivery/DeliveryAdminRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders/:id/disputes",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/disputes",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/disputes",
+    "class": "PanelCreateDisputeAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/dispute/DisputeRoutes.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/orders/:id/exchange-rate",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/exchange-rate",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/exchange-rate",
+    "class": "PanelUpdateOrderExchangeRateAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/order/PanelUpdateOrderExchangeRateAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders/:id/exchange-rate/refresh",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/exchange-rate/refresh",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/exchange-rate/refresh",
+    "class": "PanelRefreshOrderExchangeRateAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/order/PanelRefreshOrderExchangeRateAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/orders/:id/invoice",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/invoice",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/invoice",
+    "class": "PanelGetOrderInvoiceAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/invoice/InvoiceRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders/:id/invoice/regenerate",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/invoice/regenerate",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/invoice/regenerate",
+    "class": "PanelRegenerateOrderInvoiceAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/invoice/InvoiceRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders/:id/mails/resend",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/mails/resend",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/mails/resend",
+    "class": "PanelResendOrderMailAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/mail/MailRoutes.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/orders/:id/note",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/note",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/note",
+    "class": "PanelUpdateOrderNoteAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/order/PanelUpdateOrderNoteAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/orders/:id/refund-preview",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/refund-preview",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/refund-preview",
+    "class": "PanelRefundPreviewAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/refund/RefundRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders/:id/refunds",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/refunds",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/refunds",
+    "class": "PanelCreateRefundAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/refund/RefundRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders/:id/review",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/review",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/review",
+    "class": "PanelReviewOrderAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/order/PanelReviewOrderAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders/:id/revoke",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/revoke",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/revoke",
+    "class": "PanelRevokeOrderAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/delivery/DeliveryAdminRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders/:id/shipments",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/shipments",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/shipments",
+    "class": "PanelCreateShipmentAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipment/ShipmentRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/orders/:id/shipping",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/shipping",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/shipping",
+    "class": "PanelGetOrderShippingAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipment/ShipmentRoutes.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/orders/:id/shipping-address",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/shipping-address",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/shipping-address",
+    "class": "PanelUpdateOrderShippingAddressAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipment/ShipmentRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders/:id/shipping/rates",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/shipping/rates",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/shipping/rates",
+    "class": "PanelOrderShippingRatesAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipment/ShipmentRoutes.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/orders/:id/status",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/:id/status",
+    "relative": "/panel/plugins/pano-plugin-market/orders/:id/status",
+    "class": "PanelUpdateOrderStatusAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/order/PanelUpdateOrderStatusAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/orders/export",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/export",
+    "relative": "/panel/plugins/pano-plugin-market/orders/export",
+    "class": "PanelExportOrdersAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/order/PanelExportOrdersAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/orders/quote",
+    "new": "/api/plugins/pano-plugin-market/panel/orders/quote",
+    "relative": "/panel/plugins/pano-plugin-market/orders/quote",
+    "class": "PanelQuoteOrderAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/order/PanelQuoteOrderAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/payment-events",
+    "new": "/api/plugins/pano-plugin-market/panel/payment-events",
+    "relative": "/panel/plugins/pano-plugin-market/payment-events",
+    "class": "PanelGetPaymentEventListAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/payment/PaymentEventRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/payment-events/:eventId/replay",
+    "new": "/api/plugins/pano-plugin-market/panel/payment-events/:eventId/replay",
+    "relative": "/panel/plugins/pano-plugin-market/payment-events/:eventId/replay",
+    "class": "PanelReplayPaymentEventAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/payment/PaymentEventRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/payment-methods/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/payment-methods/:id",
+    "relative": "/panel/plugins/pano-plugin-market/payment-methods/:id",
+    "class": "PanelSavePaymentMethodAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/payment/PanelSavePaymentMethodAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/payment-methods/:id/actions/:actionId",
+    "new": "/api/plugins/pano-plugin-market/panel/payment-methods/:id/actions/:actionId",
+    "relative": "/panel/plugins/pano-plugin-market/payment-methods/:id/actions/:actionId",
+    "class": "PanelRunPaymentActionAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/payment/PanelRunPaymentActionAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/payment-methods/:id/reveal",
+    "new": "/api/plugins/pano-plugin-market/panel/payment-methods/:id/reveal",
+    "relative": "/panel/plugins/pano-plugin-market/payment-methods/:id/reveal",
+    "class": "PanelRevealPaymentSecretAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/payment/PanelRevealPaymentSecretAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/payment-methods/:id/toggle",
+    "new": "/api/plugins/pano-plugin-market/panel/payment-methods/:id/toggle",
+    "relative": "/panel/plugins/pano-plugin-market/payment-methods/:id/toggle",
+    "class": "PanelTogglePaymentMethodAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/payment/PanelTogglePaymentMethodAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/payment-methods/sort",
+    "new": "/api/plugins/pano-plugin-market/panel/payment-methods/sort",
+    "relative": "/panel/plugins/pano-plugin-market/payment-methods/sort",
+    "class": "PanelSavePaymentMethodAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/payment/PanelSavePaymentMethodAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/payment-providers",
+    "new": "/api/plugins/pano-plugin-market/panel/payment-providers",
+    "relative": "/panel/plugins/pano-plugin-market/payment-providers",
+    "class": "PanelGetPaymentProvidersAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/payment/PanelGetPaymentProvidersAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/payments/:paymentId/events",
+    "new": "/api/plugins/pano-plugin-market/panel/payments/:paymentId/events",
+    "relative": "/panel/plugins/pano-plugin-market/payments/:paymentId/events",
+    "class": "PanelGetPaymentEventsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/payment/PaymentEventRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/payments/:paymentId/query",
+    "new": "/api/plugins/pano-plugin-market/panel/payments/:paymentId/query",
+    "relative": "/panel/plugins/pano-plugin-market/payments/:paymentId/query",
+    "class": "PanelQueryPaymentAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/payment/PaymentEventRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/players/:username/summary",
+    "new": "/api/plugins/pano-plugin-market/panel/players/:username/summary",
+    "relative": "/panel/plugins/pano-plugin-market/players/:username/summary",
+    "class": "PanelGetPlayerSummaryAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/player/PlayerSummary.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/products",
+    "new": "/api/plugins/pano-plugin-market/panel/products",
+    "relative": "/panel/plugins/pano-plugin-market/products",
+    "class": "PanelGetProductsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/product/PanelGetProductsAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/products",
+    "new": "/api/plugins/pano-plugin-market/panel/products",
+    "relative": "/panel/plugins/pano-plugin-market/products",
+    "class": "PanelCreateProductAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/product/PanelCreateProductAPI.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/panel/market/products/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/products/:id",
+    "relative": "/panel/plugins/pano-plugin-market/products/:id",
+    "class": "PanelDeleteProductAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/product/PanelDeleteProductAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/products/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/products/:id",
+    "relative": "/panel/plugins/pano-plugin-market/products/:id",
+    "class": "PanelGetProductAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/product/PanelGetProductAPI.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/products/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/products/:id",
+    "relative": "/panel/plugins/pano-plugin-market/products/:id",
+    "class": "PanelUpdateProductAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/product/PanelUpdateProductAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/products/:id/clone",
+    "new": "/api/plugins/pano-plugin-market/panel/products/:id/clone",
+    "relative": "/panel/plugins/pano-plugin-market/products/:id/clone",
+    "class": "PanelCloneProductAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/product/PanelCloneProductAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/products/:id/stock",
+    "new": "/api/plugins/pano-plugin-market/panel/products/:id/stock",
+    "relative": "/panel/plugins/pano-plugin-market/products/:id/stock",
+    "class": "PanelAdjustProductStockAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/product/PanelAdjustProductStockAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/products/image/:fileName",
+    "new": "/api/plugins/pano-plugin-market/panel/products/image/:fileName",
+    "relative": "/panel/plugins/pano-plugin-market/products/image/:fileName",
+    "class": "PanelGetProductImageAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/product/PanelGetProductImageAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/products/simple",
+    "new": "/api/plugins/pano-plugin-market/panel/products/simple",
+    "relative": "/panel/plugins/pano-plugin-market/products/simple",
+    "class": "PanelGetSimpleProductsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/product/PanelGetSimpleProductsAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/refunds/:refundId/cancel",
+    "new": "/api/plugins/pano-plugin-market/panel/refunds/:refundId/cancel",
+    "relative": "/panel/plugins/pano-plugin-market/refunds/:refundId/cancel",
+    "class": "PanelCancelRefundAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/refund/RefundRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/refunds/:refundId/retry",
+    "new": "/api/plugins/pano-plugin-market/panel/refunds/:refundId/retry",
+    "relative": "/panel/plugins/pano-plugin-market/refunds/:refundId/retry",
+    "class": "PanelRetryRefundAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/refund/RefundRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/servers",
+    "new": "/api/plugins/pano-plugin-market/panel/servers",
+    "relative": "/panel/plugins/pano-plugin-market/servers",
+    "class": "PanelGetServersAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/server/PanelGetServersAPI.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/servers/:id/settings",
+    "new": "/api/plugins/pano-plugin-market/panel/servers/:id/settings",
+    "relative": "/panel/plugins/pano-plugin-market/servers/:id/settings",
+    "class": "PanelPutServerSettingsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/server/PanelPutServerSettingsAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/settings",
+    "new": "/api/plugins/pano-plugin-market/panel/settings",
+    "relative": "/panel/plugins/pano-plugin-market/settings",
+    "class": "PanelGetSettingsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/PanelGetSettingsAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/settings",
+    "new": "/api/plugins/pano-plugin-market/panel/settings",
+    "relative": "/panel/plugins/pano-plugin-market/settings",
+    "class": "PanelUpdateSettingsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/PanelUpdateSettingsAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/settings/credits",
+    "new": "/api/plugins/pano-plugin-market/panel/settings/credits",
+    "relative": "/panel/plugins/pano-plugin-market/settings/credits",
+    "class": "PanelUpdateCreditSettingsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/PanelUpdateCreditSettingsAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/settings/currencies",
+    "new": "/api/plugins/pano-plugin-market/panel/settings/currencies",
+    "relative": "/panel/plugins/pano-plugin-market/settings/currencies",
+    "class": "PanelCurrencyRatesAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/currency/PanelCurrencyRatesAPI.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/settings/currencies",
+    "new": "/api/plugins/pano-plugin-market/panel/settings/currencies",
+    "relative": "/panel/plugins/pano-plugin-market/settings/currencies",
+    "class": "PanelCurrencyRatesAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/currency/PanelCurrencyRatesAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/settings/currencies/refresh",
+    "new": "/api/plugins/pano-plugin-market/panel/settings/currencies/refresh",
+    "relative": "/panel/plugins/pano-plugin-market/settings/currencies/refresh",
+    "class": "PanelRefreshCurrencyRatesAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/currency/PanelCurrencyRatesAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/settings/exchange-rate/refresh",
+    "new": "/api/plugins/pano-plugin-market/panel/settings/exchange-rate/refresh",
+    "relative": "/panel/plugins/pano-plugin-market/settings/exchange-rate/refresh",
+    "class": "PanelRefreshExchangeRateAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/PanelRefreshExchangeRateAPI.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/settings/invoice-sequence",
+    "new": "/api/plugins/pano-plugin-market/panel/settings/invoice-sequence",
+    "relative": "/panel/plugins/pano-plugin-market/settings/invoice-sequence",
+    "class": "PanelUpdateInvoiceSequenceAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/invoice/InvoiceRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/settings/invoice/preview",
+    "new": "/api/plugins/pano-plugin-market/panel/settings/invoice/preview",
+    "relative": "/panel/plugins/pano-plugin-market/settings/invoice/preview",
+    "class": "PanelGetInvoicePreviewAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/invoice/InvoiceRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/settings/legal",
+    "new": "/api/plugins/pano-plugin-market/panel/settings/legal",
+    "relative": "/panel/plugins/pano-plugin-market/settings/legal",
+    "class": "PanelLegalTextAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/legal/PanelLegalTextAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/settings/legal",
+    "new": "/api/plugins/pano-plugin-market/panel/settings/legal",
+    "relative": "/panel/plugins/pano-plugin-market/settings/legal",
+    "class": "PanelLegalTextAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/settings/legal/PanelLegalTextAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/settings/mail/test",
+    "new": "/api/plugins/pano-plugin-market/panel/settings/mail/test",
+    "relative": "/panel/plugins/pano-plugin-market/settings/mail/test",
+    "class": "PanelSendTestMailAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/mail/MailRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/shipments",
+    "new": "/api/plugins/pano-plugin-market/panel/shipments",
+    "relative": "/panel/plugins/pano-plugin-market/shipments",
+    "class": "PanelGetShipmentsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipment/ShipmentRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/shipments/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/shipments/:id",
+    "relative": "/panel/plugins/pano-plugin-market/shipments/:id",
+    "class": "PanelGetShipmentAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipment/ShipmentRoutes.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/shipments/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/shipments/:id",
+    "relative": "/panel/plugins/pano-plugin-market/shipments/:id",
+    "class": "PanelUpdateShipmentAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipment/ShipmentRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/shipments/:id/cancel",
+    "new": "/api/plugins/pano-plugin-market/panel/shipments/:id/cancel",
+    "relative": "/panel/plugins/pano-plugin-market/shipments/:id/cancel",
+    "class": "PanelCancelShipmentAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipment/ShipmentRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/shipments/:id/label",
+    "new": "/api/plugins/pano-plugin-market/panel/shipments/:id/label",
+    "relative": "/panel/plugins/pano-plugin-market/shipments/:id/label",
+    "class": "PanelGetShipmentLabelAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipment/PanelGetShipmentLabelAPI.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/shipments/:id/retry",
+    "new": "/api/plugins/pano-plugin-market/panel/shipments/:id/retry",
+    "relative": "/panel/plugins/pano-plugin-market/shipments/:id/retry",
+    "class": "PanelRetryShipmentAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipment/ShipmentRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/shipments/:id/track",
+    "new": "/api/plugins/pano-plugin-market/panel/shipments/:id/track",
+    "relative": "/panel/plugins/pano-plugin-market/shipments/:id/track",
+    "class": "PanelTrackShipmentAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipment/ShipmentRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/shipping/carriers",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/carriers",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/carriers",
+    "class": "PanelGetShippingCarriersAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingCarrierRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/shipping/carriers/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/carriers/:id",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/carriers/:id",
+    "class": "PanelSaveShippingCarrierAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingCarrierRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/shipping/carriers/:id/actions/:actionId",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/carriers/:id/actions/:actionId",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/carriers/:id/actions/:actionId",
+    "class": "PanelRunShippingActionAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingCarrierRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/shipping/carriers/:id/reveal",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/carriers/:id/reveal",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/carriers/:id/reveal",
+    "class": "PanelRevealShippingSecretAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingCarrierRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/shipping/carriers/:id/services",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/carriers/:id/services",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/carriers/:id/services",
+    "class": "PanelGetShippingServicesAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingCarrierRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/shipping/carriers/:id/toggle",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/carriers/:id/toggle",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/carriers/:id/toggle",
+    "class": "PanelToggleShippingCarrierAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingCarrierRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/shipping/methods",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/methods",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/methods",
+    "class": "PanelGetShippingMethodsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingMethodRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/shipping/methods",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/methods",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/methods",
+    "class": "PanelSaveShippingMethodAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingMethodRoutes.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/panel/market/shipping/methods/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/methods/:id",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/methods/:id",
+    "class": "PanelDeleteShippingMethodAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingMethodRoutes.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/shipping/methods/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/methods/:id",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/methods/:id",
+    "class": "PanelSaveShippingMethodAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingMethodRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/shipping/methods/sort",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/methods/sort",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/methods/sort",
+    "class": "PanelSaveShippingMethodAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingMethodRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/shipping/zones",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/zones",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/zones",
+    "class": "PanelGetShippingZonesAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingZoneRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/shipping/zones",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/zones",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/zones",
+    "class": "PanelSaveShippingZoneAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingZoneRoutes.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/panel/market/shipping/zones/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/zones/:id",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/zones/:id",
+    "class": "PanelDeleteShippingZoneAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingZoneRoutes.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/shipping/zones/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/zones/:id",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/zones/:id",
+    "class": "PanelSaveShippingZoneAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingZoneRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/shipping/zones/sort",
+    "new": "/api/plugins/pano-plugin-market/panel/shipping/zones/sort",
+    "relative": "/panel/plugins/pano-plugin-market/shipping/zones/sort",
+    "class": "PanelSaveShippingZoneAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/shipping/ShippingZoneRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/stats",
+    "new": "/api/plugins/pano-plugin-market/panel/stats",
+    "relative": "/panel/plugins/pano-plugin-market/stats",
+    "class": "PanelGetMarketStatsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/stats/PanelGetMarketStatsAPI.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/subscriptions",
+    "new": "/api/plugins/pano-plugin-market/panel/subscriptions",
+    "relative": "/panel/plugins/pano-plugin-market/subscriptions",
+    "class": "PanelGetSubscriptionsAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/subscription/SubscriptionRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/subscriptions/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/subscriptions/:id",
+    "relative": "/panel/plugins/pano-plugin-market/subscriptions/:id",
+    "class": "PanelGetSubscriptionAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/subscription/SubscriptionRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/subscriptions/:id/cancel",
+    "new": "/api/plugins/pano-plugin-market/panel/subscriptions/:id/cancel",
+    "relative": "/panel/plugins/pano-plugin-market/subscriptions/:id/cancel",
+    "class": "PanelCancelSubscriptionAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/subscription/SubscriptionRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/subscriptions/:id/retry",
+    "new": "/api/plugins/pano-plugin-market/panel/subscriptions/:id/retry",
+    "relative": "/panel/plugins/pano-plugin-market/subscriptions/:id/retry",
+    "class": "PanelRetrySubscriptionAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/subscription/SubscriptionRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/webhook-deliveries",
+    "new": "/api/plugins/pano-plugin-market/panel/webhook-deliveries",
+    "relative": "/panel/plugins/pano-plugin-market/webhook-deliveries",
+    "class": "PanelGetWebhookDeliveriesAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/webhook/WebhookRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/webhook-deliveries/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/webhook-deliveries/:id",
+    "relative": "/panel/plugins/pano-plugin-market/webhook-deliveries/:id",
+    "class": "PanelGetWebhookDeliveryAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/webhook/WebhookRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/webhook-deliveries/:id/redeliver",
+    "new": "/api/plugins/pano-plugin-market/panel/webhook-deliveries/:id/redeliver",
+    "relative": "/panel/plugins/pano-plugin-market/webhook-deliveries/:id/redeliver",
+    "class": "PanelRedeliverWebhookAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/webhook/WebhookRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/webhooks",
+    "new": "/api/plugins/pano-plugin-market/panel/webhooks",
+    "relative": "/panel/plugins/pano-plugin-market/webhooks",
+    "class": "PanelGetWebhooksAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/webhook/WebhookRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/webhooks",
+    "new": "/api/plugins/pano-plugin-market/panel/webhooks",
+    "relative": "/panel/plugins/pano-plugin-market/webhooks",
+    "class": "PanelSaveWebhookAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/webhook/WebhookRoutes.kt"
+  },
+  {
+    "method": "DELETE",
+    "old": "/api/panel/market/webhooks/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/webhooks/:id",
+    "relative": "/panel/plugins/pano-plugin-market/webhooks/:id",
+    "class": "PanelDeleteWebhookAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/webhook/WebhookRoutes.kt"
+  },
+  {
+    "method": "PUT",
+    "old": "/api/panel/market/webhooks/:id",
+    "new": "/api/plugins/pano-plugin-market/panel/webhooks/:id",
+    "relative": "/panel/plugins/pano-plugin-market/webhooks/:id",
+    "class": "PanelSaveWebhookAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/webhook/WebhookRoutes.kt"
+  },
+  {
+    "method": "GET",
+    "old": "/api/panel/market/webhooks/:id/deliveries",
+    "new": "/api/plugins/pano-plugin-market/panel/webhooks/:id/deliveries",
+    "relative": "/panel/plugins/pano-plugin-market/webhooks/:id/deliveries",
+    "class": "PanelGetWebhookEndpointDeliveriesAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/webhook/WebhookRoutes.kt"
+  },
+  {
+    "method": "POST",
+    "old": "/api/panel/market/webhooks/:id/test",
+    "new": "/api/plugins/pano-plugin-market/panel/webhooks/:id/test",
+    "relative": "/panel/plugins/pano-plugin-market/webhooks/:id/test",
+    "class": "PanelTestWebhookAPI",
+    "file": "src/main/kotlin/com/panomc/plugins/market/routes/panel/webhook/WebhookRoutes.kt"
+  }
+]

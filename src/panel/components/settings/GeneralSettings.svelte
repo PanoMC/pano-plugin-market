@@ -300,14 +300,15 @@
 
 <script>
   import { untrack } from 'svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { Date as DateComponent } from '@panomc/sdk/components/panel';
   import { _, showSuccessToast } from '../../../i18n';
   import ConfirmModal from '../ConfirmModal.svelte';
   import SettingRow from './SettingRow.svelte';
   import SwitchRow from './SwitchRow.svelte';
   import { fetchSettings, reportFailure, saveSection } from './save.js';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
+  import { pageOf } from '../../utils/page.js';
   import { toastError } from '../../utils/toast.js';
   import { currentLocale } from '../../utils/locale.js';
   import {
@@ -394,9 +395,7 @@
   async function refreshRate() {
     refreshingRate = true;
     try {
-      const result = await call(
-        ApiUtil.post({ path: marketPath('/settings/exchange-rate/refresh') }),
-      );
+      const result = await call(api.panel.post({ path: '/settings/exchange-rate/refresh' }));
       if (!result.ok) {
         toastError($_, result);
         return;
@@ -418,9 +417,9 @@
   }
 
   async function ordersExist() {
-    const result = await call(ApiUtil.get({ path: marketPath('/orders') }));
+    const result = await call(api.panel.get({ path: '/orders' }));
     if (!result.ok) return null;
-    return Number(result.body.orderCount) > 0;
+    return pageOf(result.body).totalItems > 0;
   }
 
   async function persist() {

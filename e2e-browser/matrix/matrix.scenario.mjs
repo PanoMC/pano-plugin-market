@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { must } from '../lib/api.mjs';
+import { must, PANEL_MARKET_API } from '../lib/api.mjs';
 import { newContext, setColorMode } from '../lib/browser.mjs';
 import {
   assert,
@@ -257,7 +257,7 @@ async function uiOne({ theme, browser, env, catalogue, buyer }) {
     { locale: 'ru', width: 1280, account: true },
   ]) {
     if (account)
-      must(await reader.put('/api/profile', { localeCode: locale }), `switch to ${locale}`);
+      must(await reader.put('/api/v1/profile', { localeCode: locale }), `switch to ${locale}`);
 
     const ctx = await newContext(browser, {
       locale,
@@ -326,7 +326,7 @@ async function pageMatrix({ theme, browser, env, admin, catalogue, buyer, warnin
         const approve = async (api, placed) => {
           must(
             await admin.post(
-              `/api/panel/market/orders/${await orderRowId(admin, placed.publicId)}/bank-transfer`,
+              `${PANEL_MARKET_API}/orders/${await orderRowId(admin, placed.publicId)}/bank-transfer`,
               { decision: 'APPROVE' },
             ),
             'approve the transfer',
@@ -345,7 +345,7 @@ async function pageMatrix({ theme, browser, env, admin, catalogue, buyer, warnin
           { moduleTopSupporters: true, moduleStats: true, moduleGoal: false },
           { moduleSidebars: ['home'] },
         ]) {
-          must(await admin.post('/api/panel/market/settings', patch), 'widget settings');
+          must(await admin.post(`${PANEL_MARKET_API}/settings`, patch), 'widget settings');
         }
 
         await sleep(1500);

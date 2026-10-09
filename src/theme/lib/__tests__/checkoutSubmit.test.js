@@ -578,11 +578,14 @@ describe('a provider error at start, as the real answer arrives', () => {
   // the 502 body of PAYMENT_PROVIDER_ERROR carries the provider's own `code` next to the order (E2E-18 found the checkout staying on the form)
   test('goes to the order page with the order the checkout created', () => {
     const res = normalize({
-      result: 'error',
-      error: 'PAYMENT_PROVIDER_ERROR',
-      code: 'GATEWAY_UNREACHABLE',
-      order: { publicId: 'ORD123' },
-      orderToken: 'tok-abc',
+      error: {
+        code: 'PAYMENT_PROVIDER_ERROR',
+        details: {
+          code: 'GATEWAY_UNREACHABLE',
+          order: { publicId: 'ORD123' },
+          orderToken: 'tok-abc',
+        },
+      },
     });
     const plan = failurePlan({
       res,

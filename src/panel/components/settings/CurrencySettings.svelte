@@ -200,13 +200,13 @@
 
 <script>
   import { untrack } from 'svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { Date as DateComponent } from '@panomc/sdk/components/panel';
   import { _, showSuccessToast } from '../../../i18n';
   import ConfirmModal from '../ConfirmModal.svelte';
   import LoadError from '../LoadError.svelte';
   import { fetchSettings, reportFailure, postSettings } from './save.js';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { currentLocale } from '../../utils/locale.js';
   import { toastError } from '../../utils/toast.js';
   import {
@@ -294,7 +294,7 @@
   }
 
   async function fetchCurrencies() {
-    const result = await call(ApiUtil.get({ path: marketPath('/settings/currencies') }));
+    const result = await call(api.panel.get({ path: '/settings/currencies' }));
     return result.ok ? { body: result.body } : { error: result.error };
   }
 
@@ -340,7 +340,7 @@
   async function refreshRates() {
     refreshing = true;
     try {
-      const result = await call(ApiUtil.post({ path: marketPath('/settings/currencies/refresh') }));
+      const result = await call(api.panel.post({ path: '/settings/currencies/refresh' }));
       if (!result.ok) {
         toastError($_, result);
         return;
@@ -358,8 +358,7 @@
     try {
       const result = await saveCurrencies({
         post: postSettings,
-        put: (payload) =>
-          call(ApiUtil.put({ path: marketPath('/settings/currencies'), body: payload })),
+        put: (payload) => call(api.panel.put({ path: '/settings/currencies', body: payload })),
         baseline: settings,
         values: draft,
         rows,

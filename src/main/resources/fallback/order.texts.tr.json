@@ -1,0 +1,33 @@
+{
+  "title": "Siparişin",
+  "heading": "Siparişin",
+  "order": "Sipariş",
+  "status": "Durum",
+  "total": "Toplam",
+  "back": "Mağazaya dön",
+  "notFound": "Bu siparişi bulamadık. E-postandaki bağlantıyı kontrol et ya da siparişi veren hesapla giriş yap.",
+  "unavailable": "Mağaza şu an kullanılamıyor. Lütfen biraz sonra tekrar dene.",
+  "statusLabel": {
+    "PENDING": "Ödeme bekleniyor",
+    "REVIEW": "İnceleniyor",
+    "COMPLETED": "Ödendi",
+    "PARTIALLY_REFUNDED": "Kısmen iade edildi",
+    "REFUNDED": "İade edildi",
+    "CHARGEBACK": "İtiraz edildi",
+    "FAILED": "Başarısız",
+    "CANCELLED": "İptal edildi",
+    "EXPIRED": "Süresi doldu"
+  },
+  "lead": {
+    "PENDING": "Ödemenin onaylanması bekleniyor. Sayfayı yenilediğinde güncel durumu görürsün.",
+    "PENDING_cancel": "Ödeme iptal edildi. Sipariş bir süre açık kalır, mağazadan yeniden ödeyebilirsin.",
+    "REVIEW": "Ödemen ulaştı ve sipariş kontrol ediliyor. Tamamlanınca e-posta alacaksın.",
+    "COMPLETED": "Teşekkürler, ödemen onaylandı.",
+    "PARTIALLY_REFUNDED": "Bu siparişin bir kısmı iade edildi.",
+    "REFUNDED": "Bu sipariş iade edildi.",
+    "CHARGEBACK": "Bu siparişin ödemesine itiraz edildi.",
+    "FAILED": "Ödeme gerçekleşmedi. Mağazadan yeniden deneyebilirsin.",
+    "CANCELLED": "Bu sipariş iptal edildi.",
+    "EXPIRED": "Bu siparişin süresi ödenmeden doldu."
+  }
+}

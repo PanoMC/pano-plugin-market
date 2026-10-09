@@ -110,6 +110,12 @@ class McGameServiceIT : MarketDaoITBase() {
     private var storeUrl: String? = "https://example.com"
 
     @Volatile
+    private var productUrlTemplate: String? = "https://example.com/store/{slug}"
+
+    @Volatile
+    private var registerUrl: String? = "https://example.com/register"
+
+    @Volatile
     private var texts: Map<String, Map<String, String>> = emptyMap()
 
     private val server7 = server(7, "Lobby")
@@ -185,7 +191,7 @@ class McGameServiceIT : MarketDaoITBase() {
             db = c.ph.db, clock = w.clock, config = { cfg() }, serverStates = w.serverStates, credits = c.credits, creditTxs = w.creditTxs, checkout = c.service, users = directory,
             permissions = McPermissions { userId, node -> node in granted[userId].orEmpty() }, orders = w.orders, orderItems = w.orderItems, products = w.products,
             categories = w.categories, store = store, widgets = widgets, read = { w.pool }, activity = { logs += it }, pluginId = "pano-plugin-market",
-            marketVersion = { version }, storeUrl = { storeUrl }, texts = { locale -> texts[locale].orEmpty() }, textLocales = { listOf("en-US", "tr", "ru") },
+            marketVersion = { version }, storeUrl = { storeUrl }, productUrlTemplate = { productUrlTemplate }, registerUrl = { registerUrl }, texts = { locale -> texts[locale].orEmpty() }, textLocales = { listOf("en-US", "tr", "ru") },
             announce = { order, _ -> announced += order.publicId!! }, ready = { ready.get() }
         )
     }
@@ -1439,6 +1445,30 @@ class McGameServiceIT : MarketDaoITBase() {
         storeUrl = null
 
         assertNull(configOf().storeUrl)
+    }
+
+    @Test
+    fun `config carries the product address template and the register address of the front-end URL map, and a change reaches the hash`(): Unit = runBlocking {
+        val first = configOf()
+
+        assertEquals("https://example.com/store/{slug}", first.productUrlTemplate)
+        assertEquals("https://example.com/register", first.registerUrl)
+
+        productUrlTemplate = "https://play.example.com/shop/item/{slug}"
+
+        val renamed = configOf()
+
+        assertNotEquals(first.configHash, renamed.configHash, "the component pulls again when the product address moves")
+        assertEquals("https://play.example.com/shop/item/{slug}", renamed.productUrlTemplate)
+
+        registerUrl = null
+        productUrlTemplate = null
+
+        val none = configOf()
+
+        assertNull(none.productUrlTemplate, "a page without an address is left out, the component keeps appending to storeUrl")
+        assertNull(none.registerUrl)
+        assertEquals("https://example.com", none.storeUrl)
     }
 
     @Test

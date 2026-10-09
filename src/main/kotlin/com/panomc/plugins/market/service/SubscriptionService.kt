@@ -1,11 +1,12 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.util.StoreLinks
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.delivery.DeliveryError
 import com.panomc.plugins.market.core.order.OrderEffect
 import com.panomc.plugins.market.core.subscription.CancelActor
 import com.panomc.plugins.market.core.subscription.RenewalDedupe
-import com.panomc.plugins.market.core.time.Backoff
+import com.panomc.platform.webhook.Backoff
 import com.panomc.plugins.market.db.model.BlockSource
 import com.panomc.plugins.market.db.model.RemoteCancelState
 import com.panomc.plugins.market.db.tx.MarketDb
@@ -224,7 +225,12 @@ class SubscriptionService(
      * The order service, for the cancel (O7) of a renewal order whose subscription ended (09 section 10.5 step 2). A provider, because the order service
      * is built with this service as its subscription seam; `null` (the default) leaves such an order to expire.
      */
-    private val orderService: () -> OrderService? = { null }
+    private val orderService: () -> OrderService? = { null },
+    /**
+     * The pages of the front-end (the URL map, doc 05 section 10.2): the pay link of a renewal order and the subscriptions page are written into the mail
+     * params as full addresses when the mail is queued. The default has no pages, so such a mail has no link.
+     */
+    private val links: StoreLinks = StoreLinks.NONE
 ) : OfferedPendingSubscriptions, PaymentSubscriptions {
     private fun table(name: String) = "`${subscriptions.prefix()}$name`"
 
@@ -836,13 +842,13 @@ class SubscriptionService(
 
         when (kind) {
             MailKind.SUBSCRIPTION_PAYMENT_FAILED -> {
-                params.put("reason", effect.reason).put("graceEndsAt", row.graceEndsAt).put("methodLabel", row.storedMethodLabel).put("manageUrl", MANAGE_PATH)
+                params.put("reason", effect.reason).put("graceEndsAt", row.graceEndsAt).put("methodLabel", row.storedMethodLabel).put("manageUrl", links.subscriptions())
 
                 // the pay link of the renewal order, absent when the gateway bills the subscription (09 section 12.2)
                 if (row.mode != SubscriptionMode.GATEWAY) {
                     val renewalOrder = context.renewalOrder ?: renewals.getByPeriod(id, row.cycleCount.coerceAtLeast(1), conn)?.orderId?.let { orders.getById(it, conn) }
 
-                    renewalOrder?.publicId?.let { params.put("payUrl", "/store/order/$it") }
+                    renewalOrder?.publicId?.let { id -> links.order(id)?.let { params.put("payUrl", it) } }
                 }
             }
             MailKind.SUBSCRIPTION_CANCELLED -> params.put("endsAt", row.currentPeriodEnd)
@@ -1556,9 +1562,9 @@ class SubscriptionService(
         val outbox = mail ?: return
         val recipient = row.email ?: return
         val params = JsonObject().put("productName", row.productName).put("periodEnd", row.currentPeriodEnd).put("price", EventPayloads.money(row.price))
-            .put("currency", row.currency).put("manageUrl", MANAGE_PATH)
+            .put("currency", row.currency).put("manageUrl", links.subscriptions())
 
-        renewalOrder?.publicId?.let { params.put("payUrl", "/store/order/$it") }
+        renewalOrder?.publicId?.let { id -> links.order(id)?.let { params.put("payUrl", it) } }
 
         outbox.enqueue(
             conn, MailKind.SUBSCRIPTION_REMINDER, MailRefType.SUBSCRIPTION, row.id, refKey = periodIndex.toString(), orderId = row.initialOrderId, userId = row.userId,
@@ -2312,7 +2318,6 @@ class SubscriptionService(
         private const val MAX_ID_TRIES = 8
         private const val PAID_FACTS_MAX = 512
         private const val CLEANUP_BATCH = 50
-        private const val MANAGE_PATH = "/profile/subscriptions"
 
         /** The lease of a charge on `nextChargeAt` and `renewal.nextAttemptAt`: a crashed run is noticed after this long, never charged twice (09 section 8.3). */
         const val CHARGE_LEASE_MS = 15 * SubscriptionTimings.MINUTE_MS

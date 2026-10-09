@@ -3,6 +3,7 @@ package com.panomc.plugins.market.e2e.support
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * The standard catalogue of 17 section 5.6, seeded through the panel API (17 section 8.2 step 5). Prices are decimal strings (EUR, 20 % VAT shown
@@ -102,7 +103,7 @@ class E2eCatalog(private val admin: E2eClient, private val db: E2eDb) {
         stock?.let { form["stock"] = it.toString() }
         actions?.let { form["actions"] = it }
         form.putAll(extra)
-        val answer = admin.multipart("POST", "/api/panel/market/products", form)
+        val answer = admin.multipart("POST", "${MarketPaths.PANEL_ROOT}/products", form)
         if (answer.status != 200) {
             problems += "product $key: ${answer.status} ${answer.error} ${answer.json?.encode()?.take(500)}"
             throw AssertionError(problems.last())
@@ -127,7 +128,7 @@ class E2eCatalog(private val admin: E2eClient, private val db: E2eDb) {
         form["name"] = "${standard.name} $n"
         form["status"] = "ACTIVE"
         overrides.forEach { (k, v) -> if (v.isEmpty()) form.remove(k) else form[k] = v }
-        val answer = admin.multipart("POST", "/api/panel/market/products", form)
+        val answer = admin.multipart("POST", "${MarketPaths.PANEL_ROOT}/products", form)
         if (answer.status != 200) throw AssertionError("fresh $key: ${answer.status} ${answer.error} ${answer.json}")
         return FreshProduct(answer.obj().getLong("id"), slug)
     }
@@ -158,7 +159,7 @@ class E2eCatalog(private val admin: E2eClient, private val db: E2eDb) {
 
     private fun category(name: String, tiered: Boolean, upgradeMode: String): Long {
         db.long("SELECT `id` FROM `pano_market_category` WHERE `name` = ? LIMIT 1", name)?.let { return it }
-        val answer = admin.multipart("POST", "/api/panel/market/categories", mapOf("name" to name, "tiered" to tiered.toString(), "upgradeMode" to upgradeMode, "status" to "ACTIVE"))
+        val answer = admin.multipart("POST", "${MarketPaths.PANEL_ROOT}/categories", mapOf("name" to name, "tiered" to tiered.toString(), "upgradeMode" to upgradeMode, "status" to "ACTIVE"))
         if (answer.status != 200) {
             problems += "category $name: ${answer.status} ${answer.error} ${answer.json}"
             throw AssertionError(problems.last())
@@ -169,15 +170,15 @@ class E2eCatalog(private val admin: E2eClient, private val db: E2eDb) {
     // --- codes ---------------------------------------------------------------------------------------------------------
 
     private fun coupon(code: String, body: JsonObject) {
-        coupons[code] = existingCode("market_coupon", code) ?: create("/api/panel/market/coupons", body.put("code", code), "coupon $code")
+        coupons[code] = existingCode("market_coupon", code) ?: create("${MarketPaths.PANEL_ROOT}/coupons", body.put("code", code), "coupon $code")
     }
 
     private fun creatorCode(code: String, body: JsonObject) {
-        coupons[code] = existingCode("market_creator_code", code) ?: create("/api/panel/market/creator-codes", body.put("code", code), "creator code $code")
+        coupons[code] = existingCode("market_creator_code", code) ?: create("${MarketPaths.PANEL_ROOT}/creator-codes", body.put("code", code), "creator code $code")
     }
 
     private fun gift(code: String, body: JsonObject) {
-        coupons[code] = existingCode("market_gift", code) ?: create("/api/panel/market/gifts", body.put("code", code), "gift $code")
+        coupons[code] = existingCode("market_gift", code) ?: create("${MarketPaths.PANEL_ROOT}/gifts", body.put("code", code), "gift $code")
     }
 
     private fun existingCode(table: String, code: String): Long? = db.long("SELECT `id` FROM `pano_$table` WHERE `code` = ?", code)
@@ -197,7 +198,7 @@ class E2eCatalog(private val admin: E2eClient, private val db: E2eDb) {
         val body = JsonObject().put("name", "E2E $code").put("code", code).put("discount", discountPercent).put("unit", "PERCENT")
         redeemLimit?.let { body.put("redeemLimit", it) }
         customerRedeemLimit?.let { body.put("customerRedeemLimit", it) }
-        return create("/api/panel/market/coupons", body, "fresh coupon") to code
+        return create("${MarketPaths.PANEL_ROOT}/coupons", body, "fresh coupon") to code
     }
 
     // --- action JSON of 01 section 2.2 ---------------------------------------------------------------------------------

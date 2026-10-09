@@ -20,9 +20,9 @@
 </MarketLayout>
 
 <script module>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
+  import { failureOf } from '../utils/api.js';
   import { loadContext } from '../utils/context.js';
-  import { marketPath } from '../utils/api.js';
   import { extraPathFor, resolveSection } from '../utils/settings.js';
 
   /**
@@ -41,20 +41,19 @@
     const extraPaths = extraPath ? [extraPath].flat() : [];
 
     const [settings, ctx, extra] = await Promise.all([
-      ApiUtil.get({ path: marketPath('/settings'), request: event }),
+      api.panel.get({ path: '/settings', request: event }),
       loadContext(event),
-      Promise.all(extraPaths.map((path) => ApiUtil.get({ path: marketPath(path), request: event }))),
+      Promise.all(extraPaths.map((path) => api.panel.get({ path, request: event }))),
     ]);
     // one path: its answer; several: the list of answers (the first one decides success)
     const first = extra[0] ?? null;
 
     // Do NOT fall back to an empty settings object on failure: the sections would silently render
     // defaults that, if saved, overwrite the real config. Surface an explicit error state instead.
-    if (!settings || typeof settings !== 'object' || settings.error) {
-      return { data: { section, ctx, error: settings?.error || 'NETWORK_ERROR' } };
-    }
+    const settingsFailure = failureOf(settings);
+    if (settingsFailure) return { data: { section, ctx, error: settingsFailure } };
 
-    const extraOk = first && typeof first === 'object' && !first.error;
+    const extraOk = first && failureOf(first) === null;
 
     return {
       data: {
@@ -62,7 +61,7 @@
         ctx,
         settings,
         extra: extraOk ? (Array.isArray(extraPath) ? extra : first) : null,
-        extraError: extraPath && !extraOk ? first?.error || 'NETWORK_ERROR' : null,
+        extraError: extraPath && !extraOk ? failureOf(first) || 'NETWORK_ERROR' : null,
       },
     };
   }

@@ -41,6 +41,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * T4 scenarios MC-E1 to MC-E7 of 19 section 13 (17 section 9.11 V-17), played by a [FakeMcServer] against the isolated instance: the REAL market
@@ -60,7 +61,7 @@ class McE2E : E2eTestBase() {
     @AfterEach
     fun closeFakeServers() {
         // a block a scenario placed and did not lift (the scenario failed half way) must not outlive it
-        blocks.forEach { runCatching { admin.delete("/api/panel/market/blocks/$it") } }
+        blocks.forEach { runCatching { admin.delete("${MarketPaths.PANEL_ROOT}/blocks/$it") } }
         blocks.clear()
         servers.forEach { runCatching { it.close() } }
         servers.clear()
@@ -125,7 +126,7 @@ class McE2E : E2eTestBase() {
 
     private fun giveCredits(buyer: E2eBuyer, amount: Number): Long {
         admin.post(
-            "/api/panel/market/credits/accounts/${buyer.userId}/grant", JsonObject().put("amount", amount).put("note", "e2e mc credits"), mapOf("Idempotency-Key" to idempotencyKey())
+            "${MarketPaths.PANEL_ROOT}/credits/accounts/${buyer.userId}/grant", JsonObject().put("amount", amount).put("note", "e2e mc credits"), mapOf("Idempotency-Key" to idempotencyKey())
         ).ok()
 
         return creditMinor(buyer.userId)
@@ -164,7 +165,7 @@ class McE2E : E2eTestBase() {
         db.sql("SELECT `type`, `userId`, `details` FROM `pano_panel_activity_log` WHERE `id` > ? AND `type` LIKE '%INGAME' ORDER BY `id`", after)
 
     private fun putOverride(server: FakeMcServer, settings: JsonObject?) {
-        admin.put("/api/panel/market/servers/${server.serverId}/settings", JsonObject().put("settings", settings)).ok()
+        admin.put("${MarketPaths.PANEL_ROOT}/servers/${server.serverId}/settings", JsonObject().put("settings", settings)).ok()
     }
 
     // ---- MC-E1 -----------------------------------------------------------------------------------------------------
@@ -417,18 +418,18 @@ class McE2E : E2eTestBase() {
 
         giveCredits(blockedBuyer, 50)
 
-        val blockId = admin.post("/api/panel/market/blocks", JsonObject().put("type", "PLAYER").put("value", blockedBuyer.username).put("reason", "e2e MC-E4")).ok().obj().getLong("id").toString()
+        val blockId = admin.post("${MarketPaths.PANEL_ROOT}/blocks", JsonObject().put("type", "PLAYER").put("value", blockedBuyer.username).put("reason", "e2e MC-E4")).ok().obj().getLong("id").toString()
 
         blocks += blockId
         failed(purchase(server, blockedBuyer.username, creditProduct()), "BUYER_BLOCKED")
         assertEquals(0L, ordersOf(blockedBuyer))
         assertEquals(5000L, creditMinor(blockedBuyer.userId))
-        admin.delete("/api/panel/market/blocks/$blockId").ok()
+        admin.delete("${MarketPaths.PANEL_ROOT}/blocks/$blockId").ok()
         blocks.clear()
 
         // a legal text that is required: refused without the confirmation (the answer names the text), accepted with it
         val title = "MC-E4 terms ${System.nanoTime().toString(36)}"
-        val legalId = admin.post("/api/panel/market/settings/legal", JsonObject().put("locale", "en-US").put("title", title).put("content", "<p>The terms.</p>")).ok().obj().getLong("id")
+        val legalId = admin.post("${MarketPaths.PANEL_ROOT}/settings/legal", JsonObject().put("locale", "en-US").put("title", title).put("content", "<p>The terms.</p>")).ok().obj().getLong("id")
         val legalBuyer = buyer()
 
         giveCredits(legalBuyer, 50)

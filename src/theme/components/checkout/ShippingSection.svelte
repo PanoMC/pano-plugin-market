@@ -1,15 +1,16 @@
-<div class="card">
-  <div class="card-body vstack gap-3">
-    <h2 class="h5 mb-0">{$_('theme.checkout.shipping')}</h2>
+<div class="market-shipping-section card">
+  <div class="market-shipping-section__body card-body vstack gap-3">
+    <h2 class="market-shipping-section__title h5 mb-0">{$_('theme.checkout.shipping')}</h2>
 
     {#if loggedIn && addresses.length > 0}
       <fieldset class="vstack gap-2">
-        <legend class="form-label fs-6">{$_('theme.checkout.saved-addresses')}</legend>
-        <div class="list-group">
+        <legend class="market-shipping-section__label form-label fs-6"
+          >{$_('theme.checkout.saved-addresses')}</legend>
+        <div class="market-shipping-section__list list-group">
           {#each addresses as saved (saved.id)}
-            <label class="list-group-item d-flex gap-2">
+            <label class="market-shipping-section__item list-group-item d-flex gap-2">
               <input
-                class="form-check-input flex-shrink-0"
+                class="market-shipping-section__check form-check-input flex-shrink-0"
                 type="radio"
                 name="market-checkout-address-choice"
                 value={saved.id}
@@ -18,16 +19,16 @@
               <span>
                 <span class="fw-semibold">{saved.label || summaryName(saved)}</span>
                 {#if saved.isDefault}
-                  <span class="badge text-bg-secondary ms-1"
+                  <span class="market-shipping-section__badge badge text-bg-secondary ms-1"
                     >{$_('theme.checkout.address-default')}</span>
                 {/if}
                 <span class="d-block small text-body-secondary">{summary(saved)}</span>
               </span>
             </label>
           {/each}
-          <label class="list-group-item d-flex gap-2">
+          <label class="market-shipping-section__address-new list-group-item d-flex gap-2">
             <input
-              class="form-check-input flex-shrink-0"
+              class="market-shipping-section__check-2 form-check-input flex-shrink-0"
               type="radio"
               name="market-checkout-address-choice"
               value="new"
@@ -53,7 +54,7 @@
         <div class="form-check">
           <input
             id="market-checkout-save-address"
-            class="form-check-input"
+            class="market-shipping-section__check-3 form-check-input"
             type="checkbox"
             checked={saveAddress}
             onchange={(event) => onchange({ saveAddress: event.currentTarget.checked })} />
@@ -68,15 +69,26 @@
         class="vstack gap-2"
         aria-busy={quoting ? 'true' : undefined}
         aria-describedby={errors.method ? `${methodId}-error` : undefined}>
-        <legend class="form-label fs-6">{$_('theme.checkout.shipping-method')}</legend>
+        <legend class="market-shipping-section__shipping-method form-label fs-6"
+          >{$_('theme.checkout.shipping-method')}</legend>
 
         {#if options.length > 0}
-          <div class={['list-group', quoting && 'opacity-50']}>
+          <div
+            class={[
+              'market-shipping-section__shipping-free',
+              'list-group',
+              quoting && 'opacity-50',
+            ]}>
             {#each options as option, index (option.methodId)}
-              <label class="list-group-item d-flex gap-2">
+              <label class="market-shipping-section__item-2 list-group-item d-flex gap-2">
                 <input
                   id={index === 0 ? methodId : undefined}
-                  class={['form-check-input', 'flex-shrink-0', errors.method && 'is-invalid']}
+                  class={[
+                    'market-shipping-section__check-4',
+                    'form-check-input',
+                    'flex-shrink-0',
+                    errors.method && 'is-invalid',
+                  ]}
                   type="radio"
                   name="market-checkout-shipping-method"
                   value={option.methodId}
@@ -92,7 +104,8 @@
                   {/if}
                 </span>
                 {#if option.free}
-                  <span class="badge text-bg-success align-self-start"
+                  <span
+                    class="market-shipping-section__badge-2 badge text-bg-success align-self-start"
                     >{$_('theme.checkout.shipping-free')}</span>
                 {:else}
                   <span class="text-nowrap">
@@ -110,7 +123,7 @@
             </div>
           {/if}
         {:else if !quoting}
-          <div class="alert alert-warning mb-0" role="alert">
+          <div class="market-shipping-section__alert alert alert-warning mb-0" role="alert">
             {$_('theme.errors.SHIPPING_UNAVAILABLE')}
           </div>
         {/if}
@@ -120,10 +133,13 @@
 </div>
 
 <script>
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { fieldId } from '../../lib/checkoutModel.js';
-  import { formatMoney } from '../../utils/format.js';
   import AddressForm from './AddressForm.svelte';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { formatMoney } = market.require('format').actions;
 
   const MAX_SAVED_ADDRESSES = 10;
 

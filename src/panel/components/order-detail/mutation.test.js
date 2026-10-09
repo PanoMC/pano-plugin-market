@@ -57,7 +57,7 @@ describe('loadOrderDetailWith (13 §6)', () => {
   const getter = (map) => ({
     get: async ({ path }) => map[path],
   });
-  const API = '/api/panel/market';
+  const API = '';
 
   test('loads the order and the context in parallel, sets the title', async () => {
     const detail = { order: { id: 5 }, items: [] };
@@ -84,7 +84,10 @@ describe('loadOrderDetailWith (13 §6)', () => {
     );
     expect(denied.data.error).toBe('NO_PERMISSION');
     const missing = await loadOrderDetailWith(
-      getter({ [`${API}/orders/5`]: { error: 'NOT_FOUND' }, [`${API}/context`]: { a: 1 } }),
+      getter({
+        [`${API}/orders/5`]: { error: { code: 'NOT_FOUND' } },
+        [`${API}/context`]: { a: 1 },
+      }),
       event('5'),
     );
     expect(missing.data).toMatchObject({ id: 5, detail: null, error: 'NOT_FOUND', ctx: { a: 1 } });
@@ -98,7 +101,10 @@ describe('loadOrderDetailWith (13 §6)', () => {
   test('a failed context does not fail the page', async () => {
     const detail = { order: { id: 5 } };
     const out = await loadOrderDetailWith(
-      getter({ [`${API}/orders/5`]: detail, [`${API}/context`]: { error: 'NO_PERMISSION' } }),
+      getter({
+        [`${API}/orders/5`]: detail,
+        [`${API}/context`]: { error: { code: 'NO_PERMISSION' } },
+      }),
       event('5'),
     );
     expect(out.data.detail).toBe(detail);

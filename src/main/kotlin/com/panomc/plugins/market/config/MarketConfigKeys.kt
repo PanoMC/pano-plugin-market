@@ -173,7 +173,6 @@ object MarketConfigKeys {
         int("quoteRateLimitPerMinute", 60, 1, 100_000),
         int("couponLockThreshold", 5, 1, 1000),
         int("couponLockMinutes", 15, 1, 10_080),
-        bool("allowPrivateWebhookTargets", false),
         // Storefront
         int("storePageSize", 24, 1, 100),
         bool("moduleRecentBuyers", true),

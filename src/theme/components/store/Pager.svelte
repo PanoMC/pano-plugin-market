@@ -1,6 +1,6 @@
-{#if totalPage > 1}
-  <nav aria-label={$_('theme.store.pager-label')}>
-    <ul class="pagination justify-content-center flex-wrap mb-0">
+{#if totalPages > 1}
+  <nav class="market-pager" aria-label={$_('theme.store.pager-label')}>
+    <ul class="market-pager__pager pagination justify-content-center flex-wrap mb-0">
       {#each items as item, index (index)}
         {#if item.type === 'gap'}
           <li class="page-item disabled">
@@ -38,11 +38,14 @@
 {/if}
 
 <script>
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { pagerItems } from '../../lib/storeFilter.js';
 
-  /** page: current page (1-based); totalPage; onpage(n). */
-  let { page = 1, totalPage = 1, onpage } = $props();
+  const market = plugin('market');
+  const _ = market._;
 
-  const items = $derived(pagerItems(page, totalPage));
+  /** page: current page (1-based); totalPages; onpage(n). */
+  let { page = 1, totalPages = 1, onpage } = $props();
+
+  const items = $derived(pagerItems(page, totalPages));
 </script>

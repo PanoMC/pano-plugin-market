@@ -1,5 +1,9 @@
 package com.panomc.plugins.market.routes.api.checkout
 
+import com.panomc.plugins.market.error.StoreUnavailable
+import com.panomc.plugins.market.error.StoreDisabled
+import com.panomc.plugins.market.routes.base.MarketSchemas
+import com.panomc.platform.schema.EndpointDoc
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.config.ConfigManager
@@ -19,8 +23,8 @@ import com.panomc.plugins.market.service.CheckoutConfigService
 import com.panomc.plugins.market.service.LegalTextService
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 import io.vertx.sqlclient.Pool
@@ -28,7 +32,14 @@ import io.vertx.sqlclient.Pool
 /** `GET /api/market/checkout/config` (04 section 3, auth class `PUB`): see [CheckoutConfigService]. Never cached. */
 @Endpoint
 class GetCheckoutConfigAPI(private val plugin: MarketPlugin) : MarketApi() {
-    override val paths = listOf(Path("/api/market/checkout/config", RouteType.GET))
+    override val paths = listOf(Path("/checkout/config", RouteType.GET))
+
+    override val doc = EndpointDoc(
+        summary = "What the checkout page needs before it prices a cart: guest and gift switches, billing mode, address fields, legal text, currencies and credit top-up limits.",
+        tag = "checkout",
+        response = MarketSchemas.checkoutConfig,
+        errors = listOf(StoreUnavailable::class, StoreDisabled::class)
+    )
 
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 

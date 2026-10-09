@@ -321,7 +321,7 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { untrack } from 'svelte';
   import { _ } from '../../../i18n';
   import { call, newIdempotency, resetIdempotency } from '../../utils/api.js';
@@ -532,7 +532,7 @@
     let result;
     try {
       result = await call(
-        ApiUtil.post({
+        api.panel.post({
           path: request.request.path,
           body: request.request.body,
           headers,

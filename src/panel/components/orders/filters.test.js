@@ -90,13 +90,13 @@ describe('list loading around the page', () => {
       get: async ({ path }) => {
         paths.push(path);
         if (path.endsWith('/context')) return { currency: 'USD' };
-        if (path.includes('page=9')) return { error: 'PAGE_NOT_FOUND' };
-        return { orders: [{ id: 1 }], orderCount: 1, totalPage: 1 };
+        if (path.includes('page=9')) return { error: { code: 'PAGE_NOT_FOUND' } };
+        return { items: [{ id: 1 }], page: { number: 1, size: 10, totalItems: 1, totalPages: 1 } };
       },
     };
     const { data } = await loadListWith(deps, event('?page=9&status=REFUNDED&testMode=true'), opts);
-    expect(data.page).toBe(1);
-    expect(data.orders).toHaveLength(1);
+    expect(data.page.number).toBe(1);
+    expect(data.items).toHaveLength(1);
     expect(data.filters.status).toBe('REFUNDED');
     expect(data.filters.testMode).toBe('true');
     const orderPaths = paths.filter((p) => p.includes('/orders?'));
@@ -148,7 +148,9 @@ describe('CSV export', () => {
   });
   test('exportUrl', () => {
     const url = exportUrl('/panel', { status: 'REFUNDED' }, ['orderId'], ',', buildQueryParams);
-    expect(url).toBe('/panel/api/panel/market/orders/export?status=REFUNDED&columns=orderId');
+    expect(url).toBe(
+      '/api/plugins/pano-plugin-market/panel/orders/export?status=REFUNDED&columns=orderId',
+    );
   });
 });
 

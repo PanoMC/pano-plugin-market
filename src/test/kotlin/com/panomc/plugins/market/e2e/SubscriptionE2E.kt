@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.e2e
 
+import com.panomc.platform.route.ApiPaths
 import com.panomc.plugins.market.e2e.support.E2eBuyer
 import com.panomc.plugins.market.e2e.support.E2eTestBase
 import com.panomc.plugins.market.support.Await
@@ -19,6 +20,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * Subscriptions on a real instance (17 section 9.6, 09 sections 8 to 10): S-01 a merchant-initiated subscription from checkout to a renewal, S-02 a failed
@@ -40,14 +42,14 @@ class SubscriptionE2E : E2eTestBase() {
     // --- fixtures ------------------------------------------------------------------------------------------------------
 
     private fun ensureGroup() {
-        val snapshot = admin.get("/api/panel/permission/snapshot").ok().obj()
+        val snapshot = admin.get("/api/v1/panel/permission/snapshot").ok().obj()
         val groups = snapshot.getJsonArray("groups") ?: JsonArray()
 
         if (groups.any { (it as JsonObject).getString("name") == group }) return
 
         groups.add(JsonObject().put("name", group).put("displayName", group))
         admin.post(
-            "/api/panel/permission/snapshot",
+            "/api/v1/panel/permission/snapshot",
             JsonObject().put("groups", groups).put("tracks", snapshot.getJsonArray("tracks") ?: JsonArray()).put("nodes", snapshot.getJsonArray("nodes") ?: JsonArray())
         ).ok()
     }
@@ -98,7 +100,7 @@ class SubscriptionE2E : E2eTestBase() {
     /** One signed event of the fake gateway to `/api/market/payments/<provider>/webhook`; the answer is asserted to be 200. */
     private fun sendEvent(provider: String, type: String, data: JsonObject) {
         val body = gateway.eventBody(type, data, gateway.nextEventId())
-        val request = HttpRequest.newBuilder(URI.create("$baseUrl/api/market/payments/$provider/webhook")).header("Content-Type", "application/json")
+        val request = HttpRequest.newBuilder(URI.create("$baseUrl${MarketPaths.SITE_ROOT}/payments/$provider/webhook")).header("Content-Type", "application/json")
             .header("X-Fake-Signature", gateway.signatureHeader(body, FakePayGateway.Signature.VALID)!!).POST(HttpRequest.BodyPublishers.ofByteArray(body)).build()
         val answer = http.send(request, HttpResponse.BodyHandlers.ofString())
 
@@ -146,9 +148,9 @@ class SubscriptionE2E : E2eTestBase() {
     fun `S-01 a merchant-initiated subscription activates with the stored method, is charged once when its time comes and renews`() {
         val sinkName = "s01" + System.nanoTime().toString(36).takeLast(8)
         val endpointId = admin.post(
-            "/api/panel/market/webhooks",
+            "${ApiPaths.PANEL_ROOT}/webhooks",
             JsonObject().put("name", "E2E subscription sink").put("url", "${gateway.baseUrl}/hooks/$sinkName")
-                .put("events", JsonArray().add("subscription.started").add("subscription.renewed")).put("format", "JSON").put("signing", "NONE")
+                .put("events", JsonArray().add("market.subscription.started").add("market.subscription.renewed")).put("format", "JSON").put("signing", "NONE")
         ).ok().obj().getLong("id")
 
         try {
@@ -213,18 +215,18 @@ class SubscriptionE2E : E2eTestBase() {
             Await.until(60_000, 500, "the sink got subscription.started and subscription.renewed") {
                 val events = gateway.hooks(sinkName).map { JsonObject(it.bodyText()).getString("event") }
 
-                "subscription.started" in events && "subscription.renewed" in events
+                "market.subscription.started" in events && "market.subscription.renewed" in events
             }
 
             val bodies = gateway.hooks(sinkName).map { JsonObject(it.bodyText()) }
-            val renewedHook = bodies.single { it.getString("event") == "subscription.renewed" }.getJsonObject("data")
+            val renewedHook = bodies.single { it.getString("event") == "market.subscription.renewed" }.getJsonObject("data")
 
             assertEquals(subscriptionId, renewedHook.getJsonObject("subscription").getLong("id"))
             assertEquals(2, renewedHook.getJsonObject("subscription").getInteger("cycleCount"))
             assertEquals(renewal.getString("publicId"), renewedHook.getJsonObject("order").getString("publicId"))
-            assertEquals(1, bodies.count { it.getString("event") == "subscription.started" })
+            assertEquals(1, bodies.count { it.getString("event") == "market.subscription.started" })
         } finally {
-            admin.delete("/api/panel/market/webhooks/$endpointId")
+            admin.delete("${ApiPaths.PANEL_ROOT}/webhooks/$endpointId")
         }
     }
 
@@ -298,11 +300,11 @@ class SubscriptionE2E : E2eTestBase() {
         settledDeliveries(orderId, 2)
 
         // somebody else's subscription is not visible
-        assertEquals(404, buyer().client.post("/api/market/me/subscriptions/$subscriptionId/cancel", JsonObject().put("atPeriodEnd", true)).status)
+        assertEquals(404, buyer().client.post("${MarketPaths.SITE_ROOT}/me/subscriptions/$subscriptionId/cancel", JsonObject().put("atPeriodEnd", true)).status)
         assertEquals("ACTIVE", status(subscriptionId))
 
         // cancel at period end: still ACTIVE, flag set, mail queued
-        val cancelled = client.post("/api/market/me/subscriptions/$subscriptionId/cancel", JsonObject().put("atPeriodEnd", true)).ok().obj()
+        val cancelled = client.post("${MarketPaths.SITE_ROOT}/me/subscriptions/$subscriptionId/cancel", JsonObject().put("atPeriodEnd", true)).ok().obj()
         val afterCancel = subscription(subscriptionId)
 
         assertEquals(subscriptionId, (cancelled.getJsonObject("subscription") ?: cancelled).getLong("id"))
@@ -311,17 +313,17 @@ class SubscriptionE2E : E2eTestBase() {
         assertEquals("BUYER_CANCEL", afterCancel.getString("endReason"))
         assertEquals(1, mails("SUBSCRIPTION_CANCELLED", subscriptionId).size)
 
-        val listed = client.get("/api/market/me/subscriptions").ok().obj().getJsonArray("subscriptions").map { it as JsonObject }.single { it.getLong("id") == subscriptionId }
+        val listed = client.get("${MarketPaths.SITE_ROOT}/me/subscriptions").ok().obj().getJsonArray("items").map { it as JsonObject }.single { it.getLong("id") == subscriptionId }
 
         assertEquals(true, listed.getBoolean("cancelAtPeriodEnd"))
         assertEquals(true, listed.getBoolean("canResume"))
 
         // an identical second request changes nothing (idempotent)
-        client.post("/api/market/me/subscriptions/$subscriptionId/cancel", JsonObject().put("atPeriodEnd", true)).ok()
+        client.post("${MarketPaths.SITE_ROOT}/me/subscriptions/$subscriptionId/cancel", JsonObject().put("atPeriodEnd", true)).ok()
         assertEquals(1, mails("SUBSCRIPTION_CANCELLED", subscriptionId).size)
 
         // resume before the end clears the flag
-        client.post("/api/market/me/subscriptions/$subscriptionId/resume", JsonObject()).ok()
+        client.post("${MarketPaths.SITE_ROOT}/me/subscriptions/$subscriptionId/resume", JsonObject()).ok()
 
         val resumed = subscription(subscriptionId)
 
@@ -332,7 +334,7 @@ class SubscriptionE2E : E2eTestBase() {
         assertEquals(1L, orderEvents(started.publicId, "SUBSCRIPTION_RESUMED"))
 
         // cancel again, then the period runs out
-        client.post("/api/market/me/subscriptions/$subscriptionId/cancel", JsonObject().put("atPeriodEnd", true)).ok()
+        client.post("${MarketPaths.SITE_ROOT}/me/subscriptions/$subscriptionId/cancel", JsonObject().put("atPeriodEnd", true)).ok()
         assertTrue(flag(subscription(subscriptionId), "cancelAtPeriodEnd"))
         db.rewind("market_subscription", subscriptionId, "currentPeriodEnd", 40 * day)
 
@@ -352,8 +354,8 @@ class SubscriptionE2E : E2eTestBase() {
         assertFalse("group.$group" in nodesOf(started.buyer.userId))
 
         // a closed subscription cannot be cancelled or resumed again
-        assertEquals(409, client.post("/api/market/me/subscriptions/$subscriptionId/cancel", JsonObject().put("atPeriodEnd", true)).status)
-        assertEquals(409, client.post("/api/market/me/subscriptions/$subscriptionId/resume", JsonObject()).status)
+        assertEquals(409, client.post("${MarketPaths.SITE_ROOT}/me/subscriptions/$subscriptionId/cancel", JsonObject().put("atPeriodEnd", true)).status)
+        assertEquals(409, client.post("${MarketPaths.SITE_ROOT}/me/subscriptions/$subscriptionId/resume", JsonObject()).status)
     }
 
     // --- S-04 ----------------------------------------------------------------------------------------------------------

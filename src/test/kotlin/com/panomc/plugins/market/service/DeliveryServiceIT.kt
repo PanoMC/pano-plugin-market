@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.core.webhook.WebhookEvents
+
 import com.panomc.plugins.market.core.delivery.DeliveryError
 import com.panomc.plugins.market.core.delivery.ProductAction
 import com.panomc.plugins.market.core.order.OrderActor
@@ -135,7 +137,8 @@ class Placed(val order: MarketOrder, val items: List<MarketOrderItem>, val produ
 internal class DeliveryWorld(
     val w: TestWiring,
     maxAttempts: Int = 5,
-    webhookDeliveries: com.panomc.plugins.market.db.dao.MarketWebhookDeliveryDao? = null,
+    webhookQueue: ActionWebhookQueue? = null,
+    webhookSecret: (String) -> String? = { it },
     discordLabels: com.panomc.plugins.market.core.webhook.DiscordLabelSource? = null
 ) {
     val permissionStore = FakePermissions()
@@ -165,7 +168,7 @@ internal class DeliveryWorld(
 
     val service = DeliveryService(
         w.db, locks, w.clock, w.ids, { w.config }, w.orders, w.orderItems, w.orderEvents, w.deliveries, w.entitlements, w.creditAccounts, w.products, w.fields,
-        roster, directory, playerAccounts, credits, permissionService, Random(7), webhookDeliveries, discordLabels
+        roster, directory, playerAccounts, credits, permissionService, Random(7), webhookQueue, webhookSecret, discordLabels
     )
     val effects = DeliveryEffects(entitlementService, service, w.orders, ForeignEffects { _, _, _ -> })
 
@@ -1463,14 +1466,14 @@ class DeliveryServiceIT : MarketDaoITBase() {
     fun `the outcome of an action webhook comes back to its delivery row, a dead one fails it and a redelivery that succeeds confirms it (91)`(): Unit = runBlocking {
         val u = steve()
         val hook = ProductAction(id = "w1", type = DeliveryActionType.WEBHOOK, webhook = com.panomc.plugins.market.core.delivery.WebhookSpec("https://hooks.example.com/x"))
-        val reporter = DeliveryWebhookReporter(d.service)
+        val listener = d.service.outcomeListener
         val now = w.clock.now()
 
-        fun decision(status: com.panomc.plugins.market.db.model.WebhookDeliveryStatus) =
-            com.panomc.plugins.market.core.webhook.Decision(status, null, null, status == com.panomc.plugins.market.db.model.WebhookDeliveryStatus.SUCCEEDED, now)
+        fun decision(status: com.panomc.platform.db.model.WebhookDeliveryStatus) =
+            com.panomc.platform.webhook.Decision(status, null, null, status == com.panomc.platform.db.model.WebhookDeliveryStatus.SUCCEEDED, now)
 
-        suspend fun report(deliveryId: Long, status: com.panomc.plugins.market.db.model.WebhookDeliveryStatus) =
-            w.db.tx { conn -> reporter.report(conn, com.panomc.plugins.market.db.model.MarketWebhookDelivery(deliveryId = deliveryId), decision(status)) }
+        suspend fun report(deliveryId: Long, status: com.panomc.platform.db.model.WebhookDeliveryStatus) =
+            w.db.tx { conn -> listener.onOutcome(conn, com.panomc.platform.db.model.WebhookDelivery(endpointId = 0, source = "market", ownerRef = WebhookEvents.ownerRefOf(deliveryId)), decision(status)) }
 
         suspend fun sent(): Pair<Placed, Long> {
             val placed = d.place(user = u, actions = listOf(hook))
@@ -1488,20 +1491,20 @@ class DeliveryServiceIT : MarketDaoITBase() {
         val (ok, okId) = sent()
 
         // a retry in the queue is neither: nothing changes
-        report(okId, com.panomc.plugins.market.db.model.WebhookDeliveryStatus.FAILED)
+        report(okId, com.panomc.platform.db.model.WebhookDeliveryStatus.FAILED)
         assertEquals(DeliveryStatus.SENT, d.row(okId).status)
 
-        report(okId, com.panomc.plugins.market.db.model.WebhookDeliveryStatus.SUCCEEDED)
+        report(okId, com.panomc.platform.db.model.WebhookDeliveryStatus.SUCCEEDED)
         assertEquals(DeliveryStatus.CONFIRMED, d.row(okId).status)
         assertEquals(FulfillmentStatus.FULFILLED, d.order(ok.order.id).fulfillmentStatus)
 
         // a replayed report changes nothing
-        report(okId, com.panomc.plugins.market.db.model.WebhookDeliveryStatus.SUCCEEDED)
+        report(okId, com.panomc.platform.db.model.WebhookDeliveryStatus.SUCCEEDED)
         assertEquals(DeliveryStatus.CONFIRMED, d.row(okId).status)
 
         val (dead, deadId) = sent()
 
-        report(deadId, com.panomc.plugins.market.db.model.WebhookDeliveryStatus.DEAD)
+        report(deadId, com.panomc.platform.db.model.WebhookDeliveryStatus.DEAD)
 
         assertEquals(DeliveryStatus.FAILED, d.row(deadId).status)
         assertEquals(DeliveryError.WEBHOOK_DEAD, d.row(deadId).lastErrorCode)
@@ -1509,7 +1512,7 @@ class DeliveryServiceIT : MarketDaoITBase() {
         assertEquals(1, w.orderEvents.getByOrderId(dead.order.id, pool).count { it.type == OrderEventType.DELIVERY_FAILED })
 
         // the webhook row is redelivered and now succeeds: a positive result always wins
-        report(deadId, com.panomc.plugins.market.db.model.WebhookDeliveryStatus.SUCCEEDED)
+        report(deadId, com.panomc.platform.db.model.WebhookDeliveryStatus.SUCCEEDED)
 
         assertEquals(DeliveryStatus.CONFIRMED, d.row(deadId).status)
         assertNull(d.row(deadId).lastErrorCode)

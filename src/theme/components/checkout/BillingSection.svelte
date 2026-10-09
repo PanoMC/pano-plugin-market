@@ -1,12 +1,12 @@
-<div class="card">
-  <div class="card-body vstack gap-3">
-    <h2 class="h5 mb-0">{$_('theme.checkout.billing')}</h2>
+<div class="market-billing-section card">
+  <div class="market-billing-section__body card-body vstack gap-3">
+    <h2 class="market-billing-section__title h5 mb-0">{$_('theme.checkout.billing')}</h2>
 
     {#if req.mode === 'OPTIONAL'}
       <div class="form-check">
         <input
           id="market-checkout-billing-open"
-          class="form-check-input"
+          class="market-billing-section__check form-check-input"
           type="checkbox"
           checked={req.open}
           disabled={req.forcedOpen}
@@ -23,7 +23,7 @@
           <div class="form-check">
             <input
               id="market-checkout-billing-type-{type}"
-              class="form-check-input"
+              class="market-billing-section__check-2 form-check-input"
               type="radio"
               name="market-checkout-billing-type"
               value={type}
@@ -39,7 +39,7 @@
         <div class="form-check">
           <input
             id="market-checkout-billing-same"
-            class="form-check-input"
+            class="market-billing-section__check-3 form-check-input"
             type="checkbox"
             checked={sameAsShipping}
             onchange={(event) => onsame(event.currentTarget.checked)} />
@@ -76,13 +76,19 @@
 
       {#if !req.showAddress && req.showCompany && req.copy}
         <div>
-          <label class="form-label" for={fieldId('billing', 'company')}>
+          <label
+            class="market-billing-section__label form-label"
+            for={fieldId('billing', 'company')}>
             {$_('theme.checkout.address.company')}
             <span class="text-danger" aria-hidden="true">*</span>
           </label>
           <input
             id={fieldId('billing', 'company')}
-            class={['form-control', errors.company && 'is-invalid']}
+            class={[
+              'market-billing-section__input',
+              'form-control',
+              errors.company && 'is-invalid',
+            ]}
             type="text"
             maxlength={ADDRESS_TEXT_MAX}
             autocomplete="billing organization"
@@ -101,7 +107,9 @@
         <div class="row g-2">
           {#if req.showIdentity}
             <div class="col-md-6">
-              <label class="form-label" for={fieldId('billing', 'identityNumber')}>
+              <label
+                class="market-billing-section__identity-number form-label"
+                for={fieldId('billing', 'identityNumber')}>
                 {$_('theme.checkout.address.identityNumber')}
                 {#if req.identityRequired}
                   <span class="text-danger" aria-hidden="true">*</span>
@@ -109,7 +117,11 @@
               </label>
               <input
                 id={fieldId('billing', 'identityNumber')}
-                class={['form-control', errors.identityNumber && 'is-invalid']}
+                class={[
+                  'market-billing-section__input-2',
+                  'form-control',
+                  errors.identityNumber && 'is-invalid',
+                ]}
                 type="text"
                 inputmode="numeric"
                 maxlength={IDENTITY_MAX}
@@ -129,11 +141,17 @@
 
           {#if req.showCompany}
             <div class="col-md-6">
-              <label class="form-label" for={fieldId('billing', 'taxOffice')}
+              <label
+                class="market-billing-section__tax-office form-label"
+                for={fieldId('billing', 'taxOffice')}
                 >{$_('theme.checkout.address.taxOffice')}</label>
               <input
                 id={fieldId('billing', 'taxOffice')}
-                class={['form-control', errors.taxOffice && 'is-invalid']}
+                class={[
+                  'market-billing-section__input-3',
+                  'form-control',
+                  errors.taxOffice && 'is-invalid',
+                ]}
                 type="text"
                 maxlength={TAX_MAX}
                 autocomplete="off"
@@ -148,13 +166,19 @@
               {/if}
             </div>
             <div class="col-md-6">
-              <label class="form-label" for={fieldId('billing', 'taxNumber')}>
+              <label
+                class="market-billing-section__tax-number form-label"
+                for={fieldId('billing', 'taxNumber')}>
                 {$_('theme.checkout.address.taxNumber')}
                 <span class="text-danger" aria-hidden="true">*</span>
               </label>
               <input
                 id={fieldId('billing', 'taxNumber')}
-                class={['form-control', errors.taxNumber && 'is-invalid']}
+                class={[
+                  'market-billing-section__input-4',
+                  'form-control',
+                  errors.taxNumber && 'is-invalid',
+                ]}
                 type="text"
                 maxlength={TAX_MAX}
                 autocomplete="off"
@@ -177,11 +201,14 @@
 </div>
 
 <script>
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { fieldErrorKey, fieldId } from '../../lib/checkoutModel.js';
   import { COUNTRY_CODES } from '../../lib/countries.js';
   import { ADDRESS_TEXT_MAX, IDENTITY_MAX, TAX_MAX } from '../../lib/validation.js';
   import AddressForm from './AddressForm.svelte';
+
+  const market = plugin('market');
+  const { _ } = market;
 
   const TYPES = ['INDIVIDUAL', 'COMPANY'];
 

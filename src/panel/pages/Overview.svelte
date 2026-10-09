@@ -81,14 +81,15 @@
   onApply={(from, to) => navigate({ range: 'custom', from, to })} />
 
 <script module>
-  import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { loadOverviewWith } from '../components/overview/load.js';
 
   /**
    * @type {import("@sveltejs/kit").PageLoad}
    */
   export function load(event) {
-    return loadOverviewWith({ get: (options) => ApiUtil.get(options), buildQueryParams }, event);
+    return loadOverviewWith({ get: (options) => api.panel.get(options), buildQueryParams }, event);
   }
 </script>
 

@@ -1,6 +1,6 @@
 // Theme browser scenarios 11 to 15 of 14 section 20.3 (cart), vanilla theme. Ids TH-11 .. TH-15 are the numbers of the spec.
 import fs from 'node:fs';
-import { Api, must } from '../lib/api.mjs';
+import { Api, must, MARKET_API, PANEL_MARKET_API } from '../lib/api.mjs';
 import { newContext } from '../lib/browser.mjs';
 import { BUYER_PASSWORD } from '../lib/bootstrap.mjs';
 import { assert, assertEqual, open } from '../lib/ui.mjs';
@@ -127,7 +127,10 @@ export const scenarios = [
 
       // the owner lowers the stock to 1 while the visitor has the page open
       must(
-        await admin.post(`/api/panel/market/products/${item.id}/stock`, { mode: 'SET', value: 1 }),
+        await admin.post(`${PANEL_MARKET_API}/products/${item.id}/stock`, {
+          mode: 'SET',
+          value: 1,
+        }),
         'lower the stock',
       );
 
@@ -200,7 +203,7 @@ export const scenarios = [
 
       const api = new Api(env.url, account.username);
       must(await api.login(account.username, BUYER_PASSWORD), 'second device login');
-      const server = must(await api.get('/api/market/me/cart'), 'server cart').json;
+      const server = must(await api.get(`${MARKET_API}/me/cart`), 'server cart').json;
       const pairs = (server.cart?.items ?? server.items ?? [])
         .map((i) => [i.productId, i.quantity])
         .sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0));
@@ -313,7 +316,7 @@ export const scenarios = [
       await addFromCard(page, env, vip, vip.name);
 
       const serverCart = async () => {
-        const body = must(await account.get('/api/market/me/cart'), 'server cart').json;
+        const body = must(await account.get(`${MARKET_API}/me/cart`), 'server cart').json;
 
         return (body.cart?.items ?? body.items ?? []).map((i) => i.productId);
       };
@@ -453,7 +456,7 @@ export const scenarios = [
       // signed in: the count comes from one summary request, not from the browser
       const account = await buyer('nav');
       must(
-        await account.post('/api/market/me/cart/items', {
+        await account.post(`${MARKET_API}/me/cart/items`, {
           productId: vip.id,
           variantId: 0,
           quantity: 2,
@@ -471,7 +474,7 @@ export const scenarios = [
       let summaries = 0;
       home.on(
         'request',
-        (r) => new URL(r.url()).pathname === '/api/market/me/summary' && summaries++,
+        (r) => new URL(r.url()).pathname === `${MARKET_API}/me/summary` && summaries++,
       );
       await open(home, `${env.url}/`);
       assertEqual(

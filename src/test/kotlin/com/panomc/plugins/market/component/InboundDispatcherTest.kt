@@ -76,9 +76,12 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.SiteLinksFixture
+import com.panomc.plugins.market.util.StoreLinks
 import org.junit.jupiter.api.TestInstance
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.util.MarketPaths
 
 /** `market_payment_event` held in memory with the semantics the dispatcher relies on: the unique key `uq_event`, conditional updates, `SUPERSEDED` never revived. */
 internal class InMemoryEventStore(private val clock: FakeClock) : InboundEventStore {
@@ -369,9 +372,9 @@ class InboundDispatcherTest {
         LockingContext(TestContexts.payment("fake", TestContexts.settings(), vertx, tm ?: testMode), locks)
     }
 
-    private fun build(timeoutMs: Long = 5_000L) = InboundDispatcher(
+    private fun build(timeoutMs: Long = 5_000L, links: StoreLinks? = null) = InboundDispatcher(
         store, attempts, providers, PaymentEventApplier(attempts) { event, attempt, ctx -> sink.apply(event, attempt, ctx) }, locks, clock, SeqIds(),
-        { "https://shop.example" }, { state }, providerTimeoutMs = timeoutMs
+        { "https://shop.example" }, { state }, providerTimeoutMs = timeoutMs, linksOrNull = links
     )
 
     private fun call(
@@ -380,7 +383,7 @@ class InboundDispatcherTest {
         form: Map<String, List<String>>? = null, channel: String = "default"
     ) = InboundCall(
         kind, providerId, channel, tokenOf, if (kind == InboundKind.RETURN) outcome ?: ReturnOutcome.SUCCESS else null, step, method,
-        "/api/market/payments/$providerId/" + when (kind) { InboundKind.WEBHOOK -> "webhook"; InboundKind.NOTIFY -> "notify/$tokenOf"; InboundKind.RETURN -> "return/$tokenOf/success" }, query, emptyMap(),
+        "${MarketPaths.SITE_ROOT}/payments/$providerId/" + when (kind) { InboundKind.WEBHOOK -> "webhook"; InboundKind.NOTIFY -> "notify/$tokenOf"; InboundKind.RETURN -> "return/$tokenOf/success" }, query, emptyMap(),
         headers, headers["content-type"]?.firstOrNull(), body, form, "203.0.113.9", clock.now()
     )
 
@@ -1010,6 +1013,44 @@ class InboundDispatcherTest {
     }
 
     @Test
+    fun `a return lands on the order page the front-end serves, with the hint of the outcome`(): Unit = runBlocking {
+        val moved = SiteLinksFixture().renameOrder()
+
+        dispatcher = build(links = moved.links)
+        fake.onInbound = { ok() }
+
+        val success = dispatcher.handle(call(InboundKind.RETURN, outcome = ReturnOutcome.SUCCESS))
+
+        assertEquals(303, success.status)
+        assertEquals("https://shop.example/shop/purchase/ORDER000000000000001?return=success", success.headers["Location"])
+        assertEquals(
+            "https://shop.example/shop/purchase/ORDER000000000000001?return=cancel",
+            dispatcher.handle(call(InboundKind.RETURN, outcome = ReturnOutcome.CANCEL)).headers["Location"]
+        )
+        assertEquals(
+            "https://shop.example/shop/purchase/ORDER000000000000001", dispatcher.handle(call(InboundKind.RETURN, outcome = ReturnOutcome.STEP, step = "basket")).headers["Location"]
+        )
+    }
+
+    @Test
+    fun `a return to a site without an order page or a store goes to the page of Pano, then to the site`(): Unit = runBlocking {
+        val away = SiteLinksFixture(site = "https://play.example.com", website = "https://api.example.com").disable("/store", "/store/order/[id]")
+
+        dispatcher = build(links = away.links)
+        fake.onInbound = { ok() }
+
+        assertEquals(
+            "https://api.example.com/_pano/market.order?id=ORDER000000000000001&return=success", dispatcher.handle(call(InboundKind.RETURN)).headers["Location"],
+            "the order page is a fallback page of Pano"
+        )
+
+        // a market that is not started cannot look the order up: with no store page either, the buyer goes to the site itself
+        state = MarketRuntime.State.STOPPED
+
+        assertEquals("https://shop.example", dispatcher.handle(call(InboundKind.RETURN)).headers["Location"])
+    }
+
+    @Test
     fun `a RETURN only ever redirects to the order page, whatever the provider answers`(): Unit = runBlocking {
         fake.onInbound = { ok(reply = HttpReply.redirect("https://evil.example/phish")) }
 
@@ -1162,13 +1203,13 @@ class InboundDispatcherTest {
 
         fun mount(path: String, kind: InboundKind) = mount(path) { InboundRouteSupport.callOf(it, kind) { "203.0.113.9" } }
 
-        mount("/api/market/payments/:providerId/webhook", InboundKind.WEBHOOK)
-        mount("/api/market/payments/:providerId/webhook/:channel", InboundKind.WEBHOOK)
-        mount("/api/market/payments/:providerId/notify/:attemptToken", InboundKind.NOTIFY)
+        mount("${MarketPaths.SITE_ROOT}/payments/:providerId/webhook", InboundKind.WEBHOOK)
+        mount("${MarketPaths.SITE_ROOT}/payments/:providerId/webhook/:channel", InboundKind.WEBHOOK)
+        mount("${MarketPaths.SITE_ROOT}/payments/:providerId/notify/:attemptToken", InboundKind.NOTIFY)
 
         // the two return routes of PaymentReturnAPI: the paths and the STEP / outcome decision are the route's own constants and function
-        mount(InboundRouteSupport.RETURN_STEP_PATH) { InboundRouteSupport.returnCallOf(it) { "203.0.113.9" } }
-        mount(InboundRouteSupport.RETURN_OUTCOME_PATH) { InboundRouteSupport.returnCallOf(it) { "203.0.113.9" } }
+        mount(MarketPaths.site(InboundRouteSupport.RETURN_STEP_PATH)) { InboundRouteSupport.returnCallOf(it) { "203.0.113.9" } }
+        mount(MarketPaths.site(InboundRouteSupport.RETURN_OUTCOME_PATH)) { InboundRouteSupport.returnCallOf(it) { "203.0.113.9" } }
 
         return router
     }
@@ -1196,7 +1237,7 @@ class InboundDispatcherTest {
             ok(reply = HttpReply(202, "application/json", "{\"received\":true}".toByteArray()).also { r -> r.headers = mapOf("X-Gateway-Ack" to "1", "Set-Cookie" to "sid=1") })
         }
 
-        val response = client.post(port, "localhost", "/api/market/payments/fake/webhook/orders?a=1&b=%C3%A9")
+        val response = client.post(port, "localhost", "${MarketPaths.SITE_ROOT}/payments/fake/webhook/orders?a=1&b=%C3%A9")
             .putHeader("X-Signature", "t=1,v1=abc").putHeader("Content-Type", "application/octet-stream").sendBuffer(Buffer.buffer(body)).coAwait()
         val request = seen!!.http
 
@@ -1228,21 +1269,21 @@ class InboundDispatcherTest {
         fake.onInbound = { seen = it; ok() }
 
         val limit = 1_048_576 // 02 section 7.1, written out so that a change of the constant is a change of the contract
-        val exact = client.post(port, "localhost", "/api/market/payments/fake/webhook").sendBuffer(Buffer.buffer(ByteArray(limit) { 'x'.code.toByte() })).coAwait()
+        val exact = client.post(port, "localhost", "${MarketPaths.SITE_ROOT}/payments/fake/webhook").sendBuffer(Buffer.buffer(ByteArray(limit) { 'x'.code.toByte() })).coAwait()
 
         assertEquals(200, exact.statusCode())
         assertEquals(limit, seen!!.http.body.size)
 
         seen = null
 
-        val over = client.post(port, "localhost", "/api/market/payments/fake/webhook").sendBuffer(Buffer.buffer(ByteArray(limit + 1) { 'x'.code.toByte() })).coAwait()
+        val over = client.post(port, "localhost", "${MarketPaths.SITE_ROOT}/payments/fake/webhook").sendBuffer(Buffer.buffer(ByteArray(limit + 1) { 'x'.code.toByte() })).coAwait()
 
         assertEquals(413, over.statusCode())
         assertNull(seen, "an over-limit body never reaches the provider")
         assertEquals(1, rows().size, "and is not stored")
 
         val form = MultipartForm.create().attribute("status", "ok").attribute("ref", "a").attribute("ref", "b")
-        val multipart = client.post(port, "localhost", "/api/market/payments/fake/webhook").sendMultipartForm(form).coAwait()
+        val multipart = client.post(port, "localhost", "${MarketPaths.SITE_ROOT}/payments/fake/webhook").sendMultipartForm(form).coAwait()
 
         assertEquals(200, multipart.statusCode())
         assertEquals(0, seen!!.http.body.size, "a multipart body is not buffered")
@@ -1255,7 +1296,7 @@ class InboundDispatcherTest {
 
         fake.onInbound = { seen = it; ok(reply = HttpReply.text("pong")) }
 
-        val notify = client.get(port, "localhost", "/api/market/payments/fake/notify/$token?uid=1&sig=abc").send().coAwait()
+        val notify = client.get(port, "localhost", "${MarketPaths.SITE_ROOT}/payments/fake/notify/$token?uid=1&sig=abc").send().coAwait()
 
         assertEquals(200, notify.statusCode())
         assertEquals("pong", notify.bodyAsString())
@@ -1264,7 +1305,7 @@ class InboundDispatcherTest {
         assertEquals(0, seen!!.http.body.size, "an empty-body GET pingback")
         assertEquals("uid=1&sig=abc", seen!!.http.rawQuery)
 
-        val back = client.get(port, "localhost", "/api/market/payments/fake/return/$token/pending").send().coAwait()
+        val back = client.get(port, "localhost", "${MarketPaths.SITE_ROOT}/payments/fake/return/$token/pending").send().coAwait()
 
         assertEquals(303, back.statusCode())
         assertEquals("https://shop.example/store/order/ORDER000000000000001?return=pending", back.getHeader("Location"))
@@ -1272,13 +1313,13 @@ class InboundDispatcherTest {
         val before = rows().size
 
         for (path in listOf(
-            "/api/market/payments/FAKE/notify/$token", "/api/market/payments/fake/notify/short", "/api/market/payments/fake/notify/${"A".repeat(40)}",
-            "/api/market/payments/fake/return/$token/unknown", "/api/market/payments/f/notify/$token", "/api/market/payments/fake/webhook/Bad_Channel"
+            "${MarketPaths.SITE_ROOT}/payments/FAKE/notify/$token", "${MarketPaths.SITE_ROOT}/payments/fake/notify/short", "${MarketPaths.SITE_ROOT}/payments/fake/notify/${"A".repeat(40)}",
+            "${MarketPaths.SITE_ROOT}/payments/fake/return/$token/unknown", "${MarketPaths.SITE_ROOT}/payments/f/notify/$token", "${MarketPaths.SITE_ROOT}/payments/fake/webhook/Bad_Channel"
         )) {
             assertEquals(404, client.get(port, "localhost", path).send().coAwait().statusCode(), path)
         }
 
-        assertEquals(404, client.get(port, "localhost", "/api/market/payments/fake/notify/${"f".repeat(40)}").send().coAwait().statusCode(), "a token nobody holds")
+        assertEquals(404, client.get(port, "localhost", "${MarketPaths.SITE_ROOT}/payments/fake/notify/${"f".repeat(40)}").send().coAwait().statusCode(), "a token nobody holds")
         assertEquals(before, rows().size, "nothing was stored by any of them")
     }
 
@@ -1292,7 +1333,7 @@ class InboundDispatcherTest {
             ok(reply = HttpReply.redirect("https://basket.gateway.example/auth?x=1").also { r -> r.headers = r.headers + ("Set-Cookie" to "sid=1") })
         }
 
-        val step = client.get(port, "localhost", "/api/market/payments/fake/return/$token/step/basket?basket=b-1").send().coAwait()
+        val step = client.get(port, "localhost", "${MarketPaths.SITE_ROOT}/payments/fake/return/$token/step/basket?basket=b-1").send().coAwait()
 
         assertEquals(303, step.statusCode())
         assertEquals("https://basket.gateway.example/auth?x=1", step.getHeader("Location"), "the provider's own absolute redirect is passed through")
@@ -1311,37 +1352,37 @@ class InboundDispatcherTest {
         seen = null
 
         for (path in listOf(
-            "/api/market/payments/fake/return/$token/step", "/api/market/payments/fake/return/$token/step/Bad_Name", "/api/market/payments/fake/return/$token/step/UPPER",
-            "/api/market/payments/fake/return/$token/step/${"a".repeat(33)}", "/api/market/payments/fake/return/$token/step/a.b",
-            "/api/market/payments/FAKE/return/$token/step/basket", "/api/market/payments/fake/return/short/step/basket", "/api/market/payments/fake/return/${"A".repeat(40)}/step/basket"
+            "${MarketPaths.SITE_ROOT}/payments/fake/return/$token/step", "${MarketPaths.SITE_ROOT}/payments/fake/return/$token/step/Bad_Name", "${MarketPaths.SITE_ROOT}/payments/fake/return/$token/step/UPPER",
+            "${MarketPaths.SITE_ROOT}/payments/fake/return/$token/step/${"a".repeat(33)}", "${MarketPaths.SITE_ROOT}/payments/fake/return/$token/step/a.b",
+            "${MarketPaths.SITE_ROOT}/payments/FAKE/return/$token/step/basket", "${MarketPaths.SITE_ROOT}/payments/fake/return/short/step/basket", "${MarketPaths.SITE_ROOT}/payments/fake/return/${"A".repeat(40)}/step/basket"
         )) {
             assertEquals(404, client.get(port, "localhost", path).send().coAwait().statusCode(), path)
         }
 
-        assertEquals(404, client.get(port, "localhost", "/api/market/payments/fake/return/${"f".repeat(40)}/step/basket").send().coAwait().statusCode(), "a token nobody holds")
+        assertEquals(404, client.get(port, "localhost", "${MarketPaths.SITE_ROOT}/payments/fake/return/${"f".repeat(40)}/step/basket").send().coAwait().statusCode(), "a token nobody holds")
 
         attempts.add(2, providerId = "other")
 
-        assertEquals(404, client.get(port, "localhost", "/api/market/payments/fake/return/${"%040x".format(2L)}/step/basket").send().coAwait().statusCode(), "the token of another provider's attempt")
+        assertEquals(404, client.get(port, "localhost", "${MarketPaths.SITE_ROOT}/payments/fake/return/${"%040x".format(2L)}/step/basket").send().coAwait().statusCode(), "the token of another provider's attempt")
         assertNull(seen, "no provider code ran for any of them")
         assertEquals(before, rows().size, "nothing was stored by any of them")
 
         // whatever else a provider answers on a step hop, the browser lands on the order page, never on a relative or a non-redirect reply
         fake.onInbound = { ok(reply = HttpReply.redirect("/relative/path")) }
 
-        val relative = client.get(port, "localhost", "/api/market/payments/fake/return/$token/step/basket").send().coAwait()
+        val relative = client.get(port, "localhost", "${MarketPaths.SITE_ROOT}/payments/fake/return/$token/step/basket").send().coAwait()
 
         assertEquals(303, relative.statusCode())
         assertEquals("https://shop.example/store/order/ORDER000000000000001", relative.getHeader("Location"))
 
         fake.onInbound = { ok(reply = HttpReply.text("not a redirect")) }
 
-        assertEquals("https://shop.example/store/order/ORDER000000000000001", client.get(port, "localhost", "/api/market/payments/fake/return/$token/step/basket").send().coAwait().getHeader("Location"))
+        assertEquals("https://shop.example/store/order/ORDER000000000000001", client.get(port, "localhost", "${MarketPaths.SITE_ROOT}/payments/fake/return/$token/step/basket").send().coAwait().getHeader("Location"))
 
         // and the outcome route next to it still answers its own 303 with the hint, never the provider's redirect
         fake.onInbound = { ok(reply = HttpReply.redirect("https://evil.example/x")) }
 
-        val success = client.get(port, "localhost", "/api/market/payments/fake/return/$token/success").send().coAwait()
+        val success = client.get(port, "localhost", "${MarketPaths.SITE_ROOT}/payments/fake/return/$token/success").send().coAwait()
 
         assertEquals(303, success.statusCode())
         assertEquals("https://shop.example/store/order/ORDER000000000000001?return=success", success.getHeader("Location"))

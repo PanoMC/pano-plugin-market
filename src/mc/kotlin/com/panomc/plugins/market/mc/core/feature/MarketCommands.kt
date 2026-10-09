@@ -145,7 +145,7 @@ class MarketCommands(
         ask(sender, request, MarketQueryMessage::class.java, { it.accepted to it.reason }) { m ->
             val d = m.data
             if (d == null || d.registered == false) {
-                val url = config.remote?.storeUrl?.trimEnd('/')?.let { "$it/register" }
+                val url = config.remote?.links?.registerUrl()
                 sender.send(t(sender, Msg.CREDITS_UNREGISTERED, "url" to (url ?: "")), url)
             } else {
                 sender.send(t(sender, Msg.CREDITS_BALANCE, "balance" to number(d.balance ?: 0.0), "credit" to (d.creditName ?: config.remote?.creditName ?: "")))

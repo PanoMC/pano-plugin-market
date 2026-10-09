@@ -43,6 +43,7 @@ import io.vertx.core.json.JsonObject
 import java.math.BigDecimal
 import java.math.RoundingMode
 import org.slf4j.LoggerFactory
+import com.panomc.plugins.market.util.MarketPaths
 
 /** Builds the context a provider gets for the settings hooks (`validateSettings`, `onSettingsSaved`, `runAction`). */
 fun interface PaymentContexts {
@@ -558,7 +559,7 @@ class PaymentMethodService(
             .put("name", d.displayName.toJson())
             .put("description", d.description.toJson())
             .put("icon", d.icon)
-            .put("logoUrl", if (d.logo != null) "/api/market/payment-providers/$id/logo" else null)
+            .put("logoUrl", if (d.logo != null) MarketPaths.site("/payment-providers/$id/logo") else null)
             .put("color", d.color)
             .put("region", d.region)
             .put("docsUrl", d.docsUrl)

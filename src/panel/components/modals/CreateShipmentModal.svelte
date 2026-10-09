@@ -277,11 +277,11 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _, showErrorToast } from '../../../i18n';
   import { isStaleError } from '../order-detail/actions.js';
   import { fetchPath, hideModal, showModal } from '../order-detail/send.js';
-  import { call, errorKey, marketPath } from '../../utils/api.js';
+  import { call, errorKey } from '../../utils/api.js';
   import { fmt } from '../../utils/locale.js';
   import {
     CARRIER_MAX,
@@ -403,7 +403,7 @@
     if (!orderId) return;
     loading = true;
     try {
-      const result = await fetchPath(marketPath(`/orders/${orderId}/shipping`));
+      const result = await fetchPath(`/orders/${orderId}/shipping`);
       if (!result.ok) {
         loadError = result.error;
         return;
@@ -431,7 +431,7 @@
     ratesFailed = false;
     try {
       const request = ratesRequest(orderId, { providerId, parcels: checked.parcels, serviceCode });
-      const result = await call(ApiUtil.post({ path: request.path, body: request.body }));
+      const result = await call(api.panel.post({ path: request.path, body: request.body }));
       if (!result.ok) {
         ratesFailed = true;
         rates = [];
@@ -469,7 +469,7 @@
     saving = true;
     try {
       const result = await call(
-        ApiUtil.post({ path: built.request.path, body: built.request.body }),
+        api.panel.post({ path: built.request.path, body: built.request.body }),
       );
       if (result.ok) {
         hideModal(modalElement);

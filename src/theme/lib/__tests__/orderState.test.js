@@ -11,6 +11,7 @@ import {
   hasOrderParams,
   invoiceNeedsBlob,
   invoicePath,
+  invoiceUrl,
   isUsableToken,
   orderExtras,
   parseOrderId,
@@ -665,7 +666,8 @@ describe('items and shipments', () => {
   });
 
   test('invoice link and blob decision', () => {
-    expect(invoicePath(ID)).toBe(`/api/market/orders/${ID}/invoice`);
+    expect(invoicePath(ID)).toBe(`/orders/${ID}/invoice`);
+    expect(invoiceUrl(ID)).toBe(`/api/plugins/pano-plugin-market/orders/${ID}/invoice`);
     expect(invoiceNeedsBlob('tok123')).toBe(true);
     expect(invoiceNeedsBlob(null)).toBe(false);
   });

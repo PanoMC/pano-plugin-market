@@ -1,10 +1,9 @@
 <script>
   import { DragAndDropZone } from '@panomc/sdk/components/panel';
-  import { base } from '@panomc/sdk/svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import IconPicker from '../IconPicker.svelte';
   import { _, showSuccessToast, showErrorToast } from '../../../i18n';
-  import { call, errorKey, marketPath } from '../../utils/api.js';
+  import { call, errorKey, PANEL_URL } from '../../utils/api.js';
   import {
     DEFAULT_UPGRADE_MODE,
     UPGRADE_MODES,
@@ -84,7 +83,7 @@
   let displayImageUrl = $derived(
     previewUrl ||
       (!removeImage && imageFileName
-        ? `${base}/api/panel/market/categories/image/${imageFileName}`
+        ? `${PANEL_URL}/categories/image/${imageFileName}`
         : null)
   );
 
@@ -183,8 +182,8 @@
         if (removeImage) formData.append('removeImage', 'true');
 
         result = await call(
-          ApiUtil.put({
-            path: marketPath(`/categories/${category.id}`),
+          api.panel.put({
+            path: `/categories/${category.id}`,
             body: formData,
             headers: {},
           }),
@@ -196,7 +195,7 @@
         }
         if (selectedFile) formData.append('image', selectedFile);
         result = await call(
-          ApiUtil.post({ path: marketPath('/categories'), body: formData, headers: {} }),
+          api.panel.post({ path: '/categories', body: formData, headers: {} }),
         );
       }
 

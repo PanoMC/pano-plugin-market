@@ -77,6 +77,7 @@ import org.junit.jupiter.api.Test
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * `CheckoutService.checkout` on a real MariaDB (MK-075; 06 sections 4 to 8 and 14.2, 04 section 3, 11 section 4.1; the
@@ -127,7 +128,7 @@ class CheckoutServiceIT : MarketDaoITBase() {
         error("expected an error, the checkout succeeded")
     }
 
-    private fun extras(e: Error): JsonObject = JsonObject(e.encode())
+    private fun extras(e: Error): JsonObject = ErrorBodies.details(e)
 
     private suspend fun expect(code: String, status: Int, block: suspend () -> Any?): JsonObject {
         val e = fails(block)
@@ -1100,7 +1101,7 @@ class CheckoutServiceIT : MarketDaoITBase() {
         val (_, caller) = user("Alice")
 
         h.blocked = { payer, _, _, _, _ -> payer == "Steve" }
-        expect("BUYER_BLOCKED", 403) { h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake")) }.also { assertEquals(setOf("result", "error"), it.fieldNames(), "no detail about the rule") }
+        expect("BUYER_BLOCKED", 403) { h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake")) }.also { assertEquals(emptySet<String>(), it.fieldNames(), "no detail about the rule") }
 
         h.blocked = { _, recipient, _, _, _ -> recipient == "Bob" }
         expect("BUYER_BLOCKED", 403) { h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "recipientUsername" to "Bob"), caller = caller) }

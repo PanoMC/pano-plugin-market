@@ -5,102 +5,92 @@ import { orderRows } from './world.js';
 import { pages, routes, serverRows } from './panel-details.js';
 
 const router = createRouter(routes);
-const API = '/api/panel/market';
+const API = '/plugins/pano-plugin-market/panel';
 const get = (path, volume = 'many') => router.answer('GET', API + path, volume);
 const keys = (value) => Object.keys(value).sort();
 
-/** [path, row key, count key, [filter query, predicate] ...] of every paged list. */
+/** [path, [filter query, predicate] ...] of every paged list. */
 const LISTS = [
-  [
-    '/credits/accounts',
-    'accounts',
-    'accountCount',
-    ['search=steve', (r) => /steve/i.test(r.username)],
-  ],
-  ['/credits/accounts/1', 'entries', 'entryCount'],
+  ['/credits/accounts', ['search=steve', (r) => /steve/i.test(r.username)]],
+  ['/credits/accounts/1'],
   [
     '/credits/transactions',
-    'transactions',
-    'transactionCount',
     ['type=TOPUP', (r) => r.type === 'TOPUP'],
     ['userId=2', (r) => r.userId === 2],
   ],
   [
     '/blocks',
-    'blocks',
-    'blockCount',
     ['type=IP', (r) => r.type === 'IP'],
     ['source=CHARGEBACK', (r) => r.source === 'CHARGEBACK'],
     ['search=203.', (r) => r.value.startsWith('203.')],
   ],
   [
     '/discounts',
-    'discounts',
-    'discountCount',
     ['status=INACTIVE', (r) => r.status === 'INACTIVE'],
     ['search=sale', (r) => /sale/i.test(r.name)],
   ],
   [
     '/coupons',
-    'coupons',
-    'couponCount',
     ['status=ACTIVE', (r) => r.status === 'ACTIVE'],
     ['search=welcome', (r) => /welcome/i.test(r.code + r.name)],
   ],
   [
     '/creator-codes',
-    'creatorCodes',
-    'creatorCodeCount',
     ['status=ACTIVE', (r) => r.status === 'ACTIVE'],
     ['search=dream', (r) => /dream/i.test(r.code + r.creator)],
   ],
   [
     '/gifts',
-    'gifts',
-    'giftCount',
     ['status=ACTIVE', (r) => r.status === 'ACTIVE'],
     ['search=halloween', (r) => /halloween/i.test(r.code + r.name)],
   ],
   [
     '/comparisons',
-    'comparisons',
-    'comparisonCount',
     ['status=ACTIVE', (r) => r.status === 'ACTIVE'],
     ['search=rank', (r) => /rank/i.test(r.name)],
   ],
 ];
 
 describe('paged lists', () => {
-  for (const [path, key, countKey, ...filters] of LISTS) {
+  for (const [path, ...filters] of LISTS) {
     test(`${path}: shape, default page size 10, pagination`, () => {
       const body = get(path);
-      expect(body.result).toBe('ok');
-      expect(Array.isArray(body[key])).toBe(true);
-      expect(body[key].length).toBeLessThanOrEqual(10);
-      expect(body[countKey]).toBeGreaterThan(0);
-      expect(body.totalPage).toBe(Math.max(1, Math.ceil(body[countKey] / 10)));
+      expect(body).not.toHaveProperty('result');
+      expect(Array.isArray(body.items)).toBe(true);
+      expect(body.items.length).toBeLessThanOrEqual(10);
+      expect(body.page.totalItems).toBeGreaterThan(0);
+      expect(body.page).toEqual({
+        number: 1,
+        size: 10,
+        totalItems: body.page.totalItems,
+        totalPages: Math.ceil(body.page.totalItems / 10),
+      });
 
-      const all = get(`${path}?pageSize=100`)[key];
+      const all = get(`${path}?pageSize=100`).items;
       const small = get(`${path}?pageSize=3&page=2`);
-      if (all.length > 3) expect(small[key]).toEqual(all.slice(3, 6));
-      expect(get(`${path}?page=9999`)).toEqual({ result: 'error', error: 'PAGE_NOT_FOUND' });
+      if (all.length > 3) expect(small.items).toEqual(all.slice(3, 6));
+      expect(get(`${path}?page=9999`)).toEqual({ error: { code: 'PAGE_NOT_FOUND' } });
+      expect(get(`${path}?pageSize=101`).error).toEqual({
+        code: 'INVALID_FIELDS',
+        fields: { pageSize: 'OUT_OF_RANGE' },
+      });
     });
 
     for (const [query, predicate] of filters) {
       test(`${path}?${query} filters`, () => {
         const all = get(`${path}?pageSize=100`);
         const filtered = get(`${path}?${query}&pageSize=100`);
-        expect(filtered.result).toBe('ok');
-        expect(filtered[key].every(predicate)).toBe(true);
-        expect(filtered[countKey]).toBe(filtered[key].length);
-        expect(filtered[countKey]).toBeLessThan(all[countKey]);
-        expect(filtered[countKey]).toBeGreaterThan(0);
+        expect(filtered).not.toHaveProperty('error');
+        expect(filtered.items.every(predicate)).toBe(true);
+        expect(filtered.page.totalItems).toBe(filtered.items.length);
+        expect(filtered.page.totalItems).toBeLessThan(all.page.totalItems);
+        expect(filtered.page.totalItems).toBeGreaterThan(0);
       });
     }
 
     test(`${path}: empty volume`, () => {
       const body = get(path, 'empty');
-      expect(body).toMatchObject({ result: 'ok', [key]: [], [countKey]: 0, totalPage: 0 });
+      expect(body).toMatchObject({ items: [], page: { number: 1, totalItems: 0, totalPages: 0 } });
     });
   }
 });
@@ -108,7 +98,7 @@ describe('paged lists', () => {
 describe('row shapes', () => {
   test('credits', () => {
     const accounts = get('/credits/accounts');
-    expect(keys(accounts.accounts[0])).toEqual(['balance', 'userId', 'username']);
+    expect(keys(accounts.items[0])).toEqual(['balance', 'userId', 'username']);
     expect(keys(accounts.totals)).toEqual([
       'external',
       'held',
@@ -118,8 +108,8 @@ describe('row shapes', () => {
       'spent',
     ]);
     const account = get('/credits/accounts/1');
-    expect(account.balance).toBe(account.entries[0].balanceAfter);
-    expect(keys(account.entries[0])).toEqual([
+    expect(account.balance).toBe(account.items[0].balanceAfter);
+    expect(keys(account.items[0])).toEqual([
       'actorUsername',
       'amount',
       'balanceAfter',
@@ -132,10 +122,10 @@ describe('row shapes', () => {
       'shortfall',
       'type',
     ]);
-    expect(get('/credits/accounts/1?pageSize=100').entries.every((e) => e.balanceAfter >= 0)).toBe(
+    expect(get('/credits/accounts/1?pageSize=100').items.every((e) => e.balanceAfter >= 0)).toBe(
       true,
     );
-    expect(keys(get('/credits/transactions').transactions[0])).toEqual([
+    expect(keys(get('/credits/transactions').items[0])).toEqual([
       'actorUsername',
       'amount',
       'createdAt',
@@ -149,11 +139,11 @@ describe('row shapes', () => {
       'userId',
       'username',
     ]);
-    expect(get('/credits/accounts/999')).toEqual({ result: 'error', error: 'NOT_FOUND' });
+    expect(get('/credits/accounts/999')).toEqual({ error: { code: 'NOT_FOUND' } });
   });
 
   test('blocks', () => {
-    expect(keys(get('/blocks').blocks[0])).toEqual([
+    expect(keys(get('/blocks').items[0])).toEqual([
       'createdAt',
       'createdBy',
       'createdByUsername',
@@ -170,7 +160,7 @@ describe('row shapes', () => {
   });
 
   test('promotions', () => {
-    expect(keys(get('/discounts').discounts[0])).toEqual([
+    expect(keys(get('/discounts').items[0])).toEqual([
       'categoryIds',
       'createdAt',
       'expiryDate',
@@ -189,7 +179,7 @@ describe('row shapes', () => {
       'usedCount',
       'value',
     ]);
-    expect(keys(get('/coupons').coupons[0])).toEqual([
+    expect(keys(get('/coupons').items[0])).toEqual([
       'categoryIds',
       'code',
       'createdAt',
@@ -208,7 +198,7 @@ describe('row shapes', () => {
       'updatedAt',
       'usedCount',
     ]);
-    expect(keys(get('/creator-codes').creatorCodes[0])).toEqual([
+    expect(keys(get('/creator-codes').items[0])).toEqual([
       'code',
       'commissionPercent',
       'createdAt',
@@ -226,7 +216,7 @@ describe('row shapes', () => {
       'updatedAt',
       'usedCount',
     ]);
-    expect(keys(get('/gifts').gifts[0])).toEqual([
+    expect(keys(get('/gifts').items[0])).toEqual([
       'code',
       'createdAt',
       'creditAmount',
@@ -248,16 +238,12 @@ describe('row shapes', () => {
   });
 
   test('redemptions of coupons, gifts and creator codes', () => {
-    for (const [path, key] of [
-      ['/coupons', 'coupons'],
-      ['/gifts', 'gifts'],
-      ['/creator-codes', 'creatorCodes'],
-    ]) {
-      const row = get(`${path}?pageSize=100`)[key].find((r) => r.usedCount > 0);
+    for (const path of ['/coupons', '/gifts', '/creator-codes']) {
+      const row = get(`${path}?pageSize=100`).items.find((r) => r.usedCount > 0);
       const body = get(`${path}/${row.id}/redemptions`);
-      expect(body.result).toBe('ok');
-      expect(body.redemptionCount).toBeGreaterThan(0);
-      expect(keys(body.redemptions[0])).toEqual([
+      expect(body).not.toHaveProperty('error');
+      expect(body.page.totalItems).toBeGreaterThan(0);
+      expect(keys(body.items[0])).toEqual([
         'amount',
         'createdAt',
         'currency',
@@ -265,11 +251,9 @@ describe('row shapes', () => {
         'playerUsername',
         'state',
       ]);
-      const ids = get(`${path}/${row.id}/redemptions?pageSize=100`).redemptions.map(
-        (r) => r.orderId,
-      );
+      const ids = get(`${path}/${row.id}/redemptions?pageSize=100`).items.map((r) => r.orderId);
       expect(new Set(ids).size).toBe(ids.length);
-      expect(get(`${path}/99999/redemptions`)).toEqual({ result: 'error', error: 'NOT_FOUND' });
+      expect(get(`${path}/99999/redemptions`)).toEqual({ error: { code: 'NOT_FOUND' } });
     }
   });
 
@@ -290,14 +274,14 @@ describe('row shapes', () => {
     ]);
     expect(report.creators.map((c) => c.id).sort()).toEqual(
       get('/creator-codes?pageSize=100')
-        .creatorCodes.map((c) => c.id)
+        .items.map((c) => c.id)
         .sort(),
     );
     expect(report.creators.every((c) => c.available >= 0)).toBe(true);
 
-    const code = get('/creator-codes?pageSize=100').creatorCodes.find((c) => c.usedCount > 20);
+    const code = get('/creator-codes?pageSize=100').items.find((c) => c.usedCount > 20);
     const earnings = get(`/creator-codes/${code.id}/earnings`);
-    expect(keys(earnings.earnings[0])).toEqual([
+    expect(keys(earnings.items[0])).toEqual([
       'amount',
       'availableAt',
       'baseAmount',
@@ -309,8 +293,8 @@ describe('row shapes', () => {
       'state',
     ]);
     const paid = get(`/creator-codes/${code.id}/earnings?state=PAID&pageSize=100`);
-    expect(paid.earnings.length).toBeGreaterThan(0);
-    expect(paid.earnings.every((e) => e.state === 'PAID')).toBe(true);
+    expect(paid.items.length).toBeGreaterThan(0);
+    expect(paid.items.every((e) => e.state === 'PAID')).toBe(true);
     const payouts = get(`/creator-codes/${code.id}/payouts`);
     expect(keys(payouts.payouts[0])).toEqual([
       'amount',
@@ -323,10 +307,9 @@ describe('row shapes', () => {
       'paidBy',
       'state',
     ]);
-    expect(get('/creator-codes/99999/earnings')).toEqual({ result: 'error', error: 'NOT_FOUND' });
-    expect(get('/creator-codes/99999/payouts')).toEqual({ result: 'error', error: 'NOT_FOUND' });
+    expect(get('/creator-codes/99999/earnings')).toEqual({ error: { code: 'NOT_FOUND' } });
+    expect(get('/creator-codes/99999/payouts')).toEqual({ error: { code: 'NOT_FOUND' } });
     expect(get('/creator-codes/report', 'empty')).toEqual({
-      result: 'ok',
       creators: [],
       currency: 'USD',
     });
@@ -334,7 +317,7 @@ describe('row shapes', () => {
 
   test('comparisons: list row and detail', () => {
     const list = get('/comparisons');
-    expect(keys(list.comparisons[0])).toEqual([
+    expect(keys(list.items[0])).toEqual([
       'createdAt',
       'id',
       'name',
@@ -343,27 +326,26 @@ describe('row shapes', () => {
       'status',
       'updatedAt',
     ]);
-    const detail = get(`/comparisons/${list.comparisons[0].id}`);
+    const detail = get(`/comparisons/${list.items[0].id}`);
     expect(keys(detail)).toEqual([
       'cellValues',
       'features',
       'id',
       'name',
       'priority',
-      'result',
       'selectedProducts',
       'status',
     ]);
     expect(keys(detail.features[0])).toEqual(['id', 'name']);
     const pid = detail.selectedProducts.find((id) => id !== null);
     expect(detail.cellValues[`${detail.features[0].id}-${pid}`]).toBeDefined();
-    expect(get('/comparisons/99999')).toEqual({ result: 'error', error: 'NOT_FOUND' });
+    expect(get('/comparisons/99999')).toEqual({ error: { code: 'NOT_FOUND' } });
   });
 
   test('goals', () => {
     const body = get('/goals');
-    expect(keys(body)).toEqual(['goals', 'result']);
-    expect(keys(body.goals[0])).toEqual([
+    expect(keys(body)).toEqual(['items']);
+    expect(keys(body.items[0])).toEqual([
       'completedAt',
       'createdAt',
       'currency',
@@ -385,22 +367,16 @@ describe('row shapes', () => {
       'updatedAt',
     ]);
     expect(
-      body.goals.every((g) => g.percent >= 0 && g.percent <= 100 && g.progress <= g.target),
+      body.items.every((g) => g.percent >= 0 && g.percent <= 100 && g.progress <= g.target),
     ).toBe(true);
-    expect(get('/goals', 'empty')).toEqual({ result: 'ok', goals: [] });
+    expect(get('/goals', 'empty')).toEqual({ items: [] });
   });
 });
 
 describe('overview', () => {
   test('stats', () => {
     const body = get('/stats', 'few');
-    expect(keys(body)).toEqual([
-      'charts',
-      'result',
-      'statsCurrency',
-      'statsCurrencySymbol',
-      'summary',
-    ]);
+    expect(keys(body)).toEqual(['charts', 'statsCurrency', 'statsCurrencySymbol', 'summary']);
     expect(keys(body.summary)).toEqual([
       'activeSubscriptions',
       'monthly',
@@ -450,8 +426,8 @@ describe('overview', () => {
   });
 
   test('servers and health', () => {
-    const servers = { servers: serverRows('many') };
-    expect(keys(servers.servers[0])).toEqual([
+    const servers = { items: serverRows('many') };
+    expect(keys(servers.items[0])).toEqual([
       'connected',
       'downloadUrl',
       'id',
@@ -467,7 +443,7 @@ describe('overview', () => {
       'type',
       'waitingDeliveries',
     ]);
-    expect(servers.servers.some((s) => s.marketState !== 'READY' && s.waitingDeliveries > 0)).toBe(
+    expect(servers.items.some((s) => s.marketState !== 'READY' && s.waitingDeliveries > 0)).toBe(
       true,
     );
     expect(serverRows('empty')).toEqual([]);
@@ -484,7 +460,6 @@ describe('overview', () => {
       'providers',
       'queues',
       'rejectedEventsLastHour',
-      'result',
       'routes',
       'runtimeState',
       'schema',
@@ -516,7 +491,6 @@ describe('order detail', () => {
     'order',
     'payments',
     'refunds',
-    'result',
     'revokeFailed',
     'revokePending',
     'shipments',
@@ -670,17 +644,17 @@ describe('order detail', () => {
   });
 
   test('unknown and foreign ids', () => {
-    expect(get('/orders/1')).toEqual({ result: 'error', error: 'NOT_FOUND' });
-    expect(get('/orders/1001', 'empty')).toEqual({ result: 'error', error: 'NOT_FOUND' });
+    expect(get('/orders/1')).toEqual({ error: { code: 'NOT_FOUND' } });
+    expect(get('/orders/1001', 'empty')).toEqual({ error: { code: 'NOT_FOUND' } });
     expect(get('/orders/export')).toBeUndefined();
   });
 
   test('payment events of an attempt', () => {
     const detail = get(`/orders/${orderRows('few')[0].id}`, 'few');
     const body = get(`/payments/${detail.order.paymentId}/events`, 'few');
-    expect(body.result).toBe('ok');
-    expect(body.eventCount).toBe(body.events.length);
-    expect(keys(body.events[0])).toEqual([
+    expect(body).not.toHaveProperty('error');
+    expect(body.page.totalItems).toBe(body.items.length);
+    expect(keys(body.items[0])).toEqual([
       'attempts',
       'channel',
       'createdAt',
@@ -698,8 +672,8 @@ describe('order detail', () => {
       'status',
       'verified',
     ]);
-    expect(body.events.every((e) => e.orderId === detail.order.id)).toBe(true);
-    expect(get('/payments/1/events', 'few')).toEqual({ result: 'error', error: 'NOT_FOUND' });
+    expect(body.items.every((e) => e.orderId === detail.order.id)).toBe(true);
+    expect(get('/payments/1/events', 'few')).toEqual({ error: { code: 'NOT_FOUND' } });
   });
 });
 
@@ -724,7 +698,9 @@ describe('determinism and the page list', () => {
       for (const path of paths) {
         const a = JSON.stringify(get(path, volume));
         expect(JSON.stringify(createRouter(routes).answer('GET', API + path, volume))).toBe(a);
-        expect(JSON.parse(a).result).toBe('ok');
+        // a success body: no `error` key, no `result` key
+        expect(JSON.parse(a)).not.toHaveProperty('error');
+        expect(JSON.parse(a)).not.toHaveProperty('result');
       }
     }
     const id = orderRows('many')[5].id;

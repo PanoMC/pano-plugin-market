@@ -119,7 +119,9 @@ class MarketFeatures(
                 storeUrl = pick(m.storeUrl, previous?.storeUrl)?.takeIf { isWebUrl(it) },
                 creditName = pick(m.creditName, previous?.creditName)?.let { ChatFormat.plainValue(it).take(32) },
                 currency = pick(m.currency, previous?.currency),
-                serverId = pick(m.serverId, previous?.serverId)
+                serverId = pick(m.serverId, previous?.serverId),
+                productUrlTemplate = pick(m.productUrlTemplate, previous?.productUrlTemplate),
+                registerUrl = pick(m.registerUrl, previous?.registerUrl)
             )
         )
     }

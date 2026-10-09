@@ -1,6 +1,7 @@
 // Pure state helpers of the orders list (13 §5): URL filters, status tabs, row actions, CSV export.
 // No Svelte and no SDK import, so everything here is unit tested.
 import { can } from '../../utils/permissions.js';
+import { PANEL_URL } from '../../utils/api.js';
 
 /** URL names forwarded to GET /orders (page is handled by loadList). */
 export const ORDER_PARAMS = [
@@ -104,8 +105,8 @@ export function exportParams(filters, columns, delimiter) {
 }
 
 /** Absolute-path URL of the export download. */
-export function exportUrl(base, filters, columns, delimiter, buildQueryParams) {
-  return `${base}/api/panel/market/orders/export${buildQueryParams(
+export function exportUrl(_base, filters, columns, delimiter, buildQueryParams) {
+  return `${PANEL_URL}/orders/export${buildQueryParams(
     exportParams(filters, columns, delimiter),
   )}`;
 }

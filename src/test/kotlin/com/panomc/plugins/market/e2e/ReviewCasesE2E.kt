@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.e2e
 
+import com.panomc.platform.route.ApiPaths
 import com.panomc.plugins.market.e2e.mc.FakeMcServer
 import com.panomc.plugins.market.e2e.support.E2eBuyer
 import com.panomc.plugins.market.e2e.support.E2eClient
@@ -35,6 +36,7 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * The revision-2 scenarios of 17 section 9.11, V-01 to V-17 (V-18 is `ResourceIsolationE2E`), over HTTP against the isolated instance: every case that the
@@ -93,12 +95,12 @@ class ReviewCasesE2E : E2eTestBase() {
 
     private fun grant(userId: Long, amount: Number) {
         admin.post(
-            "/api/panel/market/credits/accounts/$userId/grant", JsonObject().put("amount", amount).put("note", "e2e review case"), mapOf("Idempotency-Key" to idempotencyKey())
+            "${MarketPaths.PANEL_ROOT}/credits/accounts/$userId/grant", JsonObject().put("amount", amount).put("note", "e2e review case"), mapOf("Idempotency-Key" to idempotencyKey())
         ).ok()
     }
 
     private fun revokeCredits(userId: Long, amount: Number): E2eResponse = admin.post(
-        "/api/panel/market/credits/accounts/$userId/revoke", JsonObject().put("amount", amount).put("note", "e2e review case"), mapOf("Idempotency-Key" to idempotencyKey())
+        "${MarketPaths.PANEL_ROOT}/credits/accounts/$userId/revoke", JsonObject().put("amount", amount).put("note", "e2e review case"), mapOf("Idempotency-Key" to idempotencyKey())
     )
 
     /** The balance in minor units (x100); held credits are not in it. */
@@ -127,14 +129,14 @@ class ReviewCasesE2E : E2eTestBase() {
 
         refund?.let { body.put("refund", it) }
 
-        return admin.post("/api/panel/market/orders/${orderId(publicId)}/review", body)
+        return admin.post("${MarketPaths.PANEL_ROOT}/orders/${orderId(publicId)}/review", body)
     }
 
     private fun refund(orderId: Long, body: JsonObject, key: String = idempotencyKey()): E2eResponse =
-        admin.post("/api/panel/market/orders/$orderId/refunds", body, mapOf("Idempotency-Key" to key))
+        admin.post("${MarketPaths.PANEL_ROOT}/orders/$orderId/refunds", body, mapOf("Idempotency-Key" to key))
 
     private fun cancelOrder(client: E2eClient, publicId: String, token: String? = null) {
-        val answer = client.post("/api/market/orders/$publicId/cancel", JsonObject(), token?.let { mapOf("X-Order-Token" to it) } ?: emptyMap())
+        val answer = client.post("${MarketPaths.SITE_ROOT}/orders/$publicId/cancel", JsonObject(), token?.let { mapOf("X-Order-Token" to it) } ?: emptyMap())
 
         assertTrue(answer.status == 200 || answer.status == 409, "cancel of $publicId answered ${answer.status} ${answer.error}")
     }
@@ -152,14 +154,14 @@ class ReviewCasesE2E : E2eTestBase() {
         val accounts = JsonArray().add(JsonObject().put("bank", "E2E Bank").put("holder", "E2E Store").put("iban", "DE89370400440532013000").put("currency", "EUR"))
 
         admin.post(
-            "/api/panel/market/payment-methods/bank-transfer",
+            "${MarketPaths.PANEL_ROOT}/payment-methods/bank-transfer",
             JsonObject().put("settings", JsonObject().put("accounts", accounts.encode()).put("instructions", "Transfer the exact amount."))
         ).ok()
-        admin.post("/api/panel/market/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", true)).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", true)).ok()
     }
 
     private fun bankTransferOff() {
-        admin.post("/api/panel/market/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", false))
+        admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/bank-transfer/toggle", JsonObject().put("enabled", false))
     }
 
     /** A live paid order: the bank transfer placed and approved under `testMode = false` (the instance has no live gateway, nothing can charge anyone). */
@@ -169,7 +171,7 @@ class ReviewCasesE2E : E2eTestBase() {
             return session.withSettings(JsonObject().put("testMode", false)) {
                 val id = publicIdOf(checkout(buyer.client, body, method = "bank-transfer").ok())
 
-                admin.post("/api/panel/market/orders/${orderId(id)}/bank-transfer", JsonObject().put("decision", "APPROVE")).ok()
+                admin.post("${MarketPaths.PANEL_ROOT}/orders/${orderId(id)}/bank-transfer", JsonObject().put("decision", "APPROVE")).ok()
                 awaitOrder(id, "COMPLETED")
                 assertEquals(0L, orderRow(id).getLong("testMode"), "the bank transfer order is a live order")
 
@@ -198,12 +200,12 @@ class ReviewCasesE2E : E2eTestBase() {
             .filter { it.getString("details").replace(" ", "").contains("\"orderId\":$orderId") }
 
     private fun storeHook(name: String, vararg events: String): Long = admin.post(
-        "/api/panel/market/webhooks",
-        JsonObject().put("name", "E2E review sink $name").put("url", "${gateway.baseUrl}/hooks/$name").put("events", JsonArray(events.toList())).put("format", "JSON").put("signing", "NONE")
+        "${ApiPaths.PANEL_ROOT}/webhooks",
+        JsonObject().put("name", "E2E review sink $name").put("url", "${gateway.baseUrl}/hooks/$name").put("events", JsonArray(events.map { if (it == "*" || it.startsWith("market.")) it else "market.$it" })).put("format", "JSON").put("signing", "NONE")
     ).ok().obj().getLong("id")
 
     private fun hookEvents(name: String, event: String, orderId: Long): Int = gateway.hooks(name).map { JsonObject(it.bodyText()) }.count {
-        it.getString("event") == event && it.getJsonObject("data")?.getJsonObject("order")?.getLong("id") == orderId
+        it.getString("event") == "market.$event" && it.getJsonObject("data")?.getJsonObject("order")?.getLong("id") == orderId
     }
 
     private fun hookName(prefix: String) = prefix + System.nanoTime().toString(36).takeLast(8)
@@ -225,7 +227,7 @@ class ReviewCasesE2E : E2eTestBase() {
         assertEquals(0, gateway.payments.getValue(referenceA).amount.compareTo(BigDecimal("20.00")), "attempt A asks the gateway for 20.00")
         assertEquals(0L, balance(buyer.userId), "the 80 credits are held")
 
-        val retender = buyer.client.post("/api/market/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake").put("useCredits", 0)).ok()
+        val retender = buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake").put("useCredits", 0)).ok()
 
         assertNotNull(retender.obj().getJsonObject("payment"))
 
@@ -316,7 +318,7 @@ class ReviewCasesE2E : E2eTestBase() {
         assertEquals(0, gateway.payments.getValue(referenceA).amount.compareTo(BigDecimal("100.00")))
         assertEquals(8000L, balance(buyer.userId), "nothing is held yet")
 
-        buyer.client.post("/api/market/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake").put("useCredits", 80)).ok()
+        buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$publicId/pay", JsonObject().put("paymentMethodId", "fake").put("useCredits", 80)).ok()
 
         val referenceB = referenceOf(publicId)
 
@@ -426,7 +428,7 @@ class ReviewCasesE2E : E2eTestBase() {
 
         val beforeCancel = balance(second.buyer.userId)
 
-        second.buyer.client.post("/api/market/me/subscriptions/${second.subscriptionId}/cancel", JsonObject().put("atPeriodEnd", false)).ok()
+        second.buyer.client.post("${MarketPaths.SITE_ROOT}/me/subscriptions/${second.subscriptionId}/cancel", JsonObject().put("atPeriodEnd", false)).ok()
         Await.until(60_000, 500, "the open renewal order is cancelled") { orderStatus(secondRenewal.getString("publicId")) in setOf("CANCELLED", "EXPIRED") }
         assertEquals(0L, creditTx(secondRenewal.getLong("id"), "RELEASE"), "cancelling posts no RELEASE for a renewal that held nothing")
         assertEquals(beforeCancel, balance(second.buyer.userId), "no credits appear when the subscription is cancelled")
@@ -439,7 +441,7 @@ class ReviewCasesE2E : E2eTestBase() {
 
         assertEquals(0L, thirdRenewal.getLong("creditAmount"))
 
-        third.buyer.client.post("/api/market/orders/${thirdRenewal.getString("publicId")}/pay", JsonObject().put("paymentMethodId", "credits")).ok()
+        third.buyer.client.post("${MarketPaths.SITE_ROOT}/orders/${thirdRenewal.getString("publicId")}/pay", JsonObject().put("paymentMethodId", "credits")).ok()
         awaitOrder(thirdRenewal.getString("publicId"), "COMPLETED")
 
         val paid = orderRow(thirdRenewal.getString("publicId"))
@@ -459,7 +461,7 @@ class ReviewCasesE2E : E2eTestBase() {
 
     // --- V-03 ----------------------------------------------------------------------------------------------------------
 
-    private fun quote(client: E2eClient, body: JsonObject): JsonObject = client.post("/api/market/checkout/quote", body).ok().obj().getJsonObject("quote")
+    private fun quote(client: E2eClient, body: JsonObject): JsonObject = client.post("${MarketPaths.SITE_ROOT}/checkout/quote", body).ok().obj().getJsonObject("quote")
 
     private fun option(quote: JsonObject, methodId: String): JsonObject =
         quote.getJsonArray("paymentMethods").map { it as JsonObject }.firstOrNull { it.getString("id") == methodId }
@@ -491,25 +493,25 @@ class ReviewCasesE2E : E2eTestBase() {
 
         assertEquals(400, guestRefused.status)
         assertEquals("PAYMENT_METHOD_UNAVAILABLE", guestRefused.error)
-        assertEquals("TEST_MODE", guestRefused.json!!.getString("reason"))
+        assertEquals("TEST_MODE", guestRefused.details.getString("reason"))
 
         val ordersBefore = db.count("market_order", "`userId` = ?", plain.userId)
         val plainRefused = checkout(plain.client, cart(line(vip)))
 
         assertEquals(400, plainRefused.status)
         assertEquals("PAYMENT_METHOD_UNAVAILABLE", plainRefused.error)
-        assertEquals("TEST_MODE", plainRefused.json!!.getString("reason"))
+        assertEquals("TEST_MODE", plainRefused.details.getString("reason"))
         assertEquals(ordersBefore, db.count("market_order", "`userId` = ?", plain.userId), "the refusal created no order")
 
         // /pay on an open order of the plain user (placed with a method that is not a test-mode one) is refused as well
         bankTransferOn()
         try {
             val open = publicIdOf(checkout(plain.client, cart(line(vip)), method = "bank-transfer").ok())
-            val payRefused = plain.client.post("/api/market/orders/$open/pay", JsonObject().put("paymentMethodId", "fake"))
+            val payRefused = plain.client.post("${MarketPaths.SITE_ROOT}/orders/$open/pay", JsonObject().put("paymentMethodId", "fake"))
 
             assertEquals(400, payRefused.status)
             assertEquals("PAYMENT_METHOD_UNAVAILABLE", payRefused.error)
-            assertEquals("TEST_MODE", payRefused.json!!.getString("reason"))
+            assertEquals("TEST_MODE", payRefused.details.getString("reason"))
             cancelOrder(plain.client, open)
         } finally {
             bankTransferOff()
@@ -530,7 +532,7 @@ class ReviewCasesE2E : E2eTestBase() {
 
         assertEquals(1L, adminRow.getLong("testMode"))
 
-        val panelView = admin.get("/api/panel/market/orders/${adminRow.getLong("id")}").ok().obj()
+        val panelView = admin.get("${MarketPaths.PANEL_ROOT}/orders/${adminRow.getLong("id")}").ok().obj()
 
         assertEquals(true, (panelView.getJsonObject("order") ?: panelView).getValue("testMode").let { it == true || (it as? Number)?.toInt() == 1 }, "the panel order carries testMode")
         cancelOrder(admin, adminOrder)
@@ -559,7 +561,7 @@ class ReviewCasesE2E : E2eTestBase() {
         return product(price, actions = actions.encode())
     }
 
-    private fun panelOrder(orderId: Long): JsonObject = admin.get("/api/panel/market/orders/$orderId").ok().obj()
+    private fun panelOrder(orderId: Long): JsonObject = admin.get("${MarketPaths.PANEL_ROOT}/orders/$orderId").ok().obj()
 
     @Test
     fun `V-04 a refund while the target server is offline settles the money, leaves the order PARTIAL with revokePending and an alert, and revokeFirst holds the gateway call`() {
@@ -638,7 +640,7 @@ class ReviewCasesE2E : E2eTestBase() {
 
             assertEquals(400, second.status)
             assertEquals("INVALID_REFUND_AMOUNT", second.error)
-            assertEquals(4.0, second.obj().getDouble("max"), 0.0001, "the maximum subtracts the refund that is still PENDING")
+            assertEquals(4.0, second.details.getDouble("max"), 0.0001, "the maximum subtracts the refund that is still PENDING")
             assertEquals(1, refundRows(orderId).size)
 
             // a refund made at the gateway's dashboard arrives for what is left (a gateway cannot refund more than it captured): booked, confirmed, never FAILED
@@ -768,7 +770,7 @@ class ReviewCasesE2E : E2eTestBase() {
             assertEquals(1, hookEvents(name, "order.chargeback", orderId), "and no second O11 webhook")
             assertEquals(grants, deliveryRows(orderId, "GRANT").size, "nothing is granted again")
         } finally {
-            admin.delete("/api/panel/market/webhooks/$endpointId")
+            admin.delete("${ApiPaths.PANEL_ROOT}/webhooks/$endpointId")
         }
     }
 
@@ -792,7 +794,7 @@ class ReviewCasesE2E : E2eTestBase() {
                     val body = guestBody(product("10.00"), victim).put("recipientUsername", attacker.username)
                     val id = publicIdOf(checkout(visitor("v08-guest"), body, method = "bank-transfer").ok())
 
-                    admin.post("/api/panel/market/orders/${orderId(id)}/bank-transfer", JsonObject().put("decision", "APPROVE")).ok()
+                    admin.post("${MarketPaths.PANEL_ROOT}/orders/${orderId(id)}/bank-transfer", JsonObject().put("decision", "APPROVE")).ok()
                     awaitOrder(id, "COMPLETED")
 
                     id to orderId(id)
@@ -806,7 +808,7 @@ class ReviewCasesE2E : E2eTestBase() {
             assertEquals("g:${victim.lowercase()}", row.getString("buyerKey"))
             assertEquals(attacker.userId, row.getLong("recipientUserId"))
 
-            val dispute = admin.post("/api/panel/market/orders/$orderId/disputes", JsonObject().put("reason", "e2e guest gift chargeback")).ok().obj().getLong("id")
+            val dispute = admin.post("${MarketPaths.PANEL_ROOT}/orders/$orderId/disputes", JsonObject().put("reason", "e2e guest gift chargeback")).ok().obj().getLong("id")
 
             assertNotNull(dispute)
             assertEquals("CHARGEBACK", orderStatus(publicId))
@@ -829,11 +831,11 @@ class ReviewCasesE2E : E2eTestBase() {
             assertTrue(server.platform.console.none { it.startsWith("ban") }, "no ban reached the console: ${server.platform.console}")
 
             // the admin confirms: the ban is aimed at the recipient
-            admin.post("/api/panel/market/orders/$orderId/chargeback-actions", JsonObject()).ok()
+            admin.post("${MarketPaths.PANEL_ROOT}/orders/$orderId/chargeback-actions", JsonObject()).ok()
             Await.until(120_000, 500, "the ban reached the server") { server.platform.console.contains("ban ${attacker.username} Chargeback") }
             assertTrue(server.platform.console.none { it.contains(victim) }, "never the victim")
 
-            admin.put("/api/panel/market/disputes/$dispute", JsonObject().put("status", "WON")).ok()
+            admin.put("${MarketPaths.PANEL_ROOT}/disputes/$dispute", JsonObject().put("status", "WON")).ok()
             assertEquals("COMPLETED", orderStatus(publicId))
             assertEquals(0, blocks(orderId).size)
         }
@@ -843,12 +845,12 @@ class ReviewCasesE2E : E2eTestBase() {
 
     @Test
     fun `V-09 top-up then spend then chargeback records the debt, revokes the credit-paid order and refuses a hold until the debt is repaid`() {
-        admin.post("/api/panel/market/settings/credits", JsonObject().put("creditTopUpEnabled", true)).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/settings/credits", JsonObject().put("creditTopUpEnabled", true)).ok()
         // the buyer block of the chargeback would answer BUYER_BLOCKED before the hold is tried: it is off here, V-07 / V-08 cover the blocks
         try {
             session.withSettings(JsonObject().put("autoBlockOnChargeback", false)) { topUpSpendChargeback() }
         } finally {
-            admin.post("/api/panel/market/settings/credits", JsonObject().put("creditTopUpEnabled", false))
+            admin.post("${MarketPaths.PANEL_ROOT}/settings/credits", JsonObject().put("creditTopUpEnabled", false))
         }
     }
 
@@ -907,7 +909,7 @@ class ReviewCasesE2E : E2eTestBase() {
     // --- V-10 ----------------------------------------------------------------------------------------------------------
 
     private fun tierCategory(): Long = admin.multipart(
-        "POST", "/api/panel/market/categories", mapOf("name" to "E2E rv tiers ${slug("cat")}", "tiered" to "true", "upgradeMode" to "DIFFERENCE", "status" to "ACTIVE")
+        "POST", "${MarketPaths.PANEL_ROOT}/categories", mapOf("name" to "E2E rv tiers ${slug("cat")}", "tiered" to "true", "upgradeMode" to "DIFFERENCE", "status" to "ACTIVE")
     ).ok().obj().getLong("id")
 
     private class Tiers(val tier1: Long, val tier2: Long, val node1: String, val node2: String)
@@ -959,7 +961,7 @@ class ReviewCasesE2E : E2eTestBase() {
         // refund path (an admin refund of a fresh chain): the preview warns, the request must decide
         val second = buyer()
         val (lower2, upper2) = upgradeChain(second, tiers)
-        val preview = admin.get("/api/panel/market/orders/${lower2.second}/refund-preview").ok().obj()
+        val preview = admin.get("${MarketPaths.PANEL_ROOT}/orders/${lower2.second}/refund-preview").ok().obj()
         val warning = preview.getJsonArray("warnings").map { it as JsonObject }.firstOrNull { it.getString("code") == "UPGRADE_DEPENDENT" }
 
         assertNotNull(warning, "the preview reports the dependent successor")
@@ -985,7 +987,7 @@ class ReviewCasesE2E : E2eTestBase() {
     private fun creatorCode(creator: E2eBuyer): Pair<Long, String> {
         val code = "RV" + System.currentTimeMillis().toString(36).uppercase() + unique()
         val id = admin.post(
-            "/api/panel/market/creator-codes",
+            "${MarketPaths.PANEL_ROOT}/creator-codes",
             JsonObject().put("creator", creator.username).put("code", code).put("discount", 0).put("unit", "PERCENT").put("commissionPercent", 10)
         ).ok().obj().getLong("id")
 
@@ -993,11 +995,11 @@ class ReviewCasesE2E : E2eTestBase() {
     }
 
     private fun payout(codeId: Long, amount: Double, key: String = idempotencyKey()): E2eResponse = admin.post(
-        "/api/panel/market/creator-codes/$codeId/payouts", JsonObject().put("amount", amount).put("method", "MANUAL").put("note", "paid outside the store"), mapOf("Idempotency-Key" to key)
+        "${MarketPaths.PANEL_ROOT}/creator-codes/$codeId/payouts", JsonObject().put("amount", amount).put("method", "MANUAL").put("note", "paid outside the store"), mapOf("Idempotency-Key" to key)
     )
 
     private fun reportOf(codeId: Long): JsonObject =
-        admin.get("/api/panel/market/creator-codes/report").ok().obj().getJsonArray("creators").map { it as JsonObject }.single { it.getLong("id") == codeId }
+        admin.get("${MarketPaths.PANEL_ROOT}/creator-codes/report").ok().obj().getJsonArray("creators").map { it as JsonObject }.single { it.getLong("id") == codeId }
 
     @Test
     fun `V-11 an earning cannot be paid out while PENDING and the reversal of a PAID earning makes available negative and blocks payouts`() {
@@ -1016,7 +1018,7 @@ class ReviewCasesE2E : E2eTestBase() {
 
         assertEquals(400, early.status)
         assertEquals("INVALID_PAYOUT_AMOUNT", early.error)
-        assertEquals(0.0, early.obj().getDouble("available"), 0.0001)
+        assertEquals(0.0, early.details.getDouble("available"), 0.0001)
         assertEquals(0L, db.count("market_creator_payout", "`creatorCodeId` = ?", codeId), "the refused payout wrote nothing")
 
         // earning two: no hold, AVAILABLE; it is paid out in full
@@ -1033,7 +1035,7 @@ class ReviewCasesE2E : E2eTestBase() {
         assertEquals(0.0, reportOf(codeId).getDouble("available"), 0.0001)
 
         // the PAID earning's order is charged back: the reversal shows up as a negative available and blocks every further payout
-        admin.post("/api/panel/market/orders/${second.second}/disputes", JsonObject().put("reason", "e2e creator chargeback")).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/orders/${second.second}/disputes", JsonObject().put("reason", "e2e creator chargeback")).ok()
 
         val reversed = db.sql("SELECT * FROM `pano_market_creator_earning` WHERE `orderId` = ?", second.second).single()
 
@@ -1045,7 +1047,7 @@ class ReviewCasesE2E : E2eTestBase() {
 
         assertEquals(400, blocked.status)
         assertEquals("INVALID_PAYOUT_AMOUNT", blocked.error)
-        assertTrue(blocked.obj().getDouble("available") < 0.0, "the answer shows the negative available")
+        assertTrue(blocked.details.getDouble("available") < 0.0, "the answer shows the negative available")
         assertEquals(1L, db.count("market_creator_payout", "`creatorCodeId` = ?", codeId), "still the one payout")
     }
 
@@ -1085,7 +1087,7 @@ class ReviewCasesE2E : E2eTestBase() {
 
             assertEquals(429, fourth.status, "L4 by $label: ${fourth.error}")
             assertEquals("TOO_MANY_REQUESTS", fourth.error)
-            assertTrue(fourth.obj().getInteger("retryAfter") >= 1)
+            assertTrue(fourth.details.getInteger("retryAfter") >= 1)
 
             // a subject that differs only in the counted dimension is not affected
             keep(open(0, "control").ok(), checkIp = false)
@@ -1158,7 +1160,7 @@ class ReviewCasesE2E : E2eTestBase() {
 
             assertEquals(400, bulk.status)
             assertEquals("INVALID_CART", bulk.error)
-            assertTrue(bulk.obj().getJsonObject("lineErrors").encode().contains("MAX_QUANTITY"), "line error MAX_QUANTITY: ${bulk.json?.encode()}")
+            assertTrue(bulk.details.getJsonObject("lineErrors").encode().contains("MAX_QUANTITY"), "line error MAX_QUANTITY: ${bulk.json?.encode()}")
 
             // the bank-transfer notice does not extend the order: one hour, the buyer notifies, 61 minutes later it is EXPIRED and the stock is back
             session.withSettings(JsonObject().put("bankTransferExpiryHours", 1)) {
@@ -1168,7 +1170,7 @@ class ReviewCasesE2E : E2eTestBase() {
                 val oid = orderId(id)
 
                 assertEquals(4L, productStock(limited), "the stock is reserved")
-                buyer.client.post("/api/market/orders/$id/bank-transfer/notify", JsonObject().put("senderName", "Ada").put("note", "paid")).ok()
+                buyer.client.post("${MarketPaths.SITE_ROOT}/orders/$id/bank-transfer/notify", JsonObject().put("senderName", "Ada").put("note", "paid")).ok()
                 assertEquals("PENDING", orderStatus(id), "the order itself stays PENDING (the notice moves the attempt to PROCESSING)")
 
                 db.rewind("market_order", oid, "expiresAt", 2 * 3_600_000L)
@@ -1178,7 +1180,7 @@ class ReviewCasesE2E : E2eTestBase() {
                 assertEquals("EXPIRED", db.string("SELECT `status` FROM `pano_market_payment` WHERE `orderId` = ? ORDER BY `id` DESC LIMIT 1", oid), "the notice did not extend the attempt")
 
                 // a later approval is a LATE payment: the order goes to review
-                admin.post("/api/panel/market/orders/$oid/bank-transfer", JsonObject().put("decision", "APPROVE"))
+                admin.post("${MarketPaths.PANEL_ROOT}/orders/$oid/bank-transfer", JsonObject().put("decision", "APPROVE"))
                 assertEquals("REVIEW", orderStatus(id))
                 assertEquals("LATE", orderRow(id).getString("reviewReason"))
                 reviewOrder(id, "REJECT", refund = false).ok()
@@ -1207,7 +1209,7 @@ class ReviewCasesE2E : E2eTestBase() {
 
             assertEquals(400, second.status)
             assertEquals("INVALID_COUPON", second.error)
-            assertEquals("CODE_LIMIT_REACHED", second.obj().getString("reason"))
+            assertEquals("CODE_LIMIT_REACHED", second.details.getString("reason"))
             assertEquals(1L, db.long("SELECT `usedCount` FROM `pano_market_coupon` WHERE `id` = ?", couponId), "the refused order consumed nothing")
 
             // a different recipient is fine: the limit is the customer's, not the payer's
@@ -1224,7 +1226,7 @@ class ReviewCasesE2E : E2eTestBase() {
     // --- V-14 ----------------------------------------------------------------------------------------------------------
 
     private fun setStartKind(kind: String) {
-        admin.post("/api/panel/market/payment-methods/fake", JsonObject().put("settings", JsonObject().put("startKind", kind))).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/fake", JsonObject().put("settings", JsonObject().put("startKind", kind))).ok()
     }
 
     @Test
@@ -1241,7 +1243,7 @@ class ReviewCasesE2E : E2eTestBase() {
 
             val url = payment.getString("url")
 
-            assertTrue(url.startsWith("/api/market/payments/attempts/") && url.endsWith("/page"), "market serves the page itself: $url")
+            assertTrue(url.startsWith("${MarketPaths.SITE_ROOT}/payments/attempts/") && url.endsWith("/page"), "market serves the page itself: $url")
 
             // the same page for the buyer (with his session) and for a visitor (without any): it does not depend on a cookie
             val asBuyer = buyer.client.get(url)
@@ -1269,7 +1271,7 @@ class ReviewCasesE2E : E2eTestBase() {
 
             assertEquals("HTML", view.getString("kind"))
             assertFalse(view.encode().contains("<html"), "the html itself is not part of the order view")
-            assertEquals(404, visitor("v14-unknown").get("/api/market/payments/attempts/${"0".repeat(32)}/page").status)
+            assertEquals(404, visitor("v14-unknown").get("${MarketPaths.SITE_ROOT}/payments/attempts/${"0".repeat(32)}/page").status)
             cancelOrder(buyer.client, publicId)
         } finally {
             setStartKind("REDIRECT")
@@ -1280,16 +1282,16 @@ class ReviewCasesE2E : E2eTestBase() {
 
     @Test
     fun `V-15 a free-amount credit top-up is paid and posted, refused below the minimum, for a guest and with items, a gift credits the recipient and the server cart is untouched`() {
-        admin.post("/api/panel/market/settings/credits", JsonObject().put("creditTopUpEnabled", true).put("creditTopUpFreeAmount", true)).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/settings/credits", JsonObject().put("creditTopUpEnabled", true).put("creditTopUpFreeAmount", true)).ok()
         try {
             val alice = buyer()
             val bob = buyer()
             val filler = product("3.00")
 
             // the server cart holds an item that the top-up must leave alone
-            alice.client.post("/api/market/me/cart/items", line(filler)).ok()
+            alice.client.post("${MarketPaths.SITE_ROOT}/me/cart/items", line(filler)).ok()
 
-            val before = alice.client.get("/api/market/me/cart").ok().obj().getJsonObject("cart").getJsonArray("items").size()
+            val before = alice.client.get("${MarketPaths.SITE_ROOT}/me/cart").ok().obj().getJsonObject("cart").getJsonArray("items").size()
 
             assertEquals(1, before)
 
@@ -1300,16 +1302,16 @@ class ReviewCasesE2E : E2eTestBase() {
             awaitOrder(publicId, "COMPLETED")
             Await.until(30_000, 250, "the top-up arrives") { balance(alice.userId) == 2000L }
             assertEquals(1L, creditTx(orderId(publicId), "TOPUP"), "exactly one TOPUP row")
-            assertEquals(1, alice.client.get("/api/market/me/cart").ok().obj().getJsonObject("cart").getJsonArray("items").size(), "the server cart is untouched")
+            assertEquals(1, alice.client.get("${MarketPaths.SITE_ROOT}/me/cart").ok().obj().getJsonObject("cart").getJsonArray("items").size(), "the server cart is untouched")
 
             // below the minimum
             val below = checkout(alice.client, JsonObject().put("creditTopUp", 0.5))
 
             assertEquals(400, below.status)
             assertEquals("INVALID_CREDIT_AMOUNT", below.error)
-            assertEquals("BELOW_MINIMUM", below.obj().getString("reason"))
-            assertNotNull(below.obj().getValue("min"))
-            assertNotNull(below.obj().getValue("max"))
+            assertEquals("BELOW_MINIMUM", below.details.getString("reason"))
+            assertNotNull(below.details.getValue("min"))
+            assertNotNull(below.details.getValue("max"))
 
             // a guest needs an account
             val guest = checkout(
@@ -1333,16 +1335,16 @@ class ReviewCasesE2E : E2eTestBase() {
             Await.until(30_000, 250, "the gift top-up arrives") { balance(bob.userId) == 1500L }
             assertEquals(2000L, balance(alice.userId), "the payer's own balance did not change")
             assertEquals(bob.userId, db.long("SELECT `userId` FROM `pano_market_credit_tx` WHERE `orderId` = ? AND `type` = 'TOPUP'", orderId(gift)), "the TOPUP is on the recipient's account")
-            assertEquals(1, alice.client.get("/api/market/me/cart").ok().obj().getJsonObject("cart").getJsonArray("items").size(), "the server cart is still untouched")
+            assertEquals(1, alice.client.get("${MarketPaths.SITE_ROOT}/me/cart").ok().obj().getJsonObject("cart").getJsonArray("items").size(), "the server cart is still untouched")
         } finally {
-            admin.post("/api/panel/market/settings/credits", JsonObject().put("creditTopUpFreeAmount", false).put("creditTopUpEnabled", false))
+            admin.post("${MarketPaths.PANEL_ROOT}/settings/credits", JsonObject().put("creditTopUpFreeAmount", false).put("creditTopUpEnabled", false))
         }
     }
 
     // --- V-16 ----------------------------------------------------------------------------------------------------------
 
     private fun widgets(): JsonObject =
-        visitor("v16").get("/api/market/widgets?include=recentBuyers,topSupporters,goals,stats").ok().obj()
+        visitor("v16").get("${MarketPaths.SITE_ROOT}/widgets?include=recentBuyers,topSupporters,goals,stats").ok().obj()
 
     @Test
     fun `V-16 widgets - stats is absent while moduleStats is off, sidebars echoes moduleSidebars and an unknown sidebar id is refused on save`() {
@@ -1362,13 +1364,13 @@ class ReviewCasesE2E : E2eTestBase() {
         }
 
         // an unknown host sidebar id is refused on save and nothing changes
-        val before = admin.get("/api/panel/market/settings").ok().obj().let { it.getJsonObject("settings") ?: it }.getJsonArray("moduleSidebars")
-        val refused = admin.post("/api/panel/market/settings", JsonObject().put("moduleSidebars", JsonArray().add("home").add("nowhere")))
+        val before = admin.get("${MarketPaths.PANEL_ROOT}/settings").ok().obj().let { it.getJsonObject("settings") ?: it }.getJsonArray("moduleSidebars")
+        val refused = admin.post("${MarketPaths.PANEL_ROOT}/settings", JsonObject().put("moduleSidebars", JsonArray().add("home").add("nowhere")))
 
         assertEquals(400, refused.status)
         assertEquals("INVALID_SETTINGS", refused.error)
-        assertTrue(refused.obj().getJsonObject("fieldErrors").containsKey("moduleSidebars"), refused.json?.encode() ?: "")
-        assertEquals(before, admin.get("/api/panel/market/settings").ok().obj().let { it.getJsonObject("settings") ?: it }.getJsonArray("moduleSidebars"), "the refused save changed nothing")
+        assertTrue(refused.details.getJsonObject("fieldErrors").containsKey("moduleSidebars"), refused.json?.encode() ?: "")
+        assertEquals(before, admin.get("${MarketPaths.PANEL_ROOT}/settings").ok().obj().let { it.getJsonObject("settings") ?: it }.getJsonArray("moduleSidebars"), "the refused save changed nothing")
     }
 
     // --- V-17 ----------------------------------------------------------------------------------------------------------

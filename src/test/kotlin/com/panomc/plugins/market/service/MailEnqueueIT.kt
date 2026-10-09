@@ -443,7 +443,7 @@ class MailEnqueueIT : MarketDaoITBase() {
 
     private fun deliveryService(d: DeliveryWorld) = DeliveryService(
         w.db, d.locks, w.clock, w.ids, { w.config }, w.orders, w.orderItems, w.orderEvents, w.deliveries, w.entitlements, w.creditAccounts, w.products, w.fields,
-        d.roster, directory, d.playerAccounts, d.credits, d.permissionService, kotlin.random.Random(7), null, null, mails
+        d.roster, directory, d.playerAccounts, d.credits, d.permissionService, kotlin.random.Random(7), null, { it }, null, mails
     )
 
     private suspend fun runDeliveries(service: DeliveryService) {

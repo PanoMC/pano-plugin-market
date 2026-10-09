@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.routes.api
 
+import com.panomc.platform.error.NotFound
+import com.panomc.platform.schema.EndpointDoc
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.model.Path
@@ -12,9 +14,9 @@ import com.panomc.plugins.market.util.ImageUtil
 import com.panomc.plugins.market.util.MarketStatus
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.Parameters.param
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.Parameters.param
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.booleanSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
@@ -30,7 +32,14 @@ class GetCategoryImageAPI(
     private val plugin: MarketPlugin,
     private val marketCategoryDao: MarketCategoryDao
 ) : MarketApi() {
-    override val paths = listOf(Path("/api/market/categories/image/:fileName", RouteType.GET))
+    override val paths = listOf(Path("/categories/image/:fileName", RouteType.GET))
+
+    override val doc = EndpointDoc(
+        summary = "A category image file.",
+        tag = "categories",
+        binary = true,
+        errors = listOf(NotFound::class)
+    )
 
     private val databaseManager: DatabaseManager by lazy {
         plugin.applicationContext.getBean(DatabaseManager::class.java)

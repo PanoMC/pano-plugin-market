@@ -113,7 +113,7 @@ export function canonicalQuery(filter) {
   return pairs.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
 }
 
-/** Query object of GET /api/market/store/products. Empty values stay out (the api wrapper skips them). */
+/** Query object of GET /store/products. Empty values stay out (the api wrapper skips them). */
 export function listQuery(filter, currency) {
   return {
     category: filter.category ?? undefined,
@@ -182,8 +182,8 @@ export function storeSearch(filter, urlCurrency) {
  * Items: { type: 'prev'|'next', page, disabled } | { type: 'page', page, current } | { type: 'gap' }.
  * A gap that would hide a single page shows that page instead.
  */
-export function pagerItems(current, totalPage, radius = 2) {
-  const total = Math.max(1, Math.floor(Number(totalPage) || 1));
+export function pagerItems(current, totalPages, radius = 2) {
+  const total = Math.max(1, Math.floor(Number(totalPages) || 1));
   const page = Math.min(total, Math.max(1, Math.floor(Number(current) || 1)));
   const from = Math.max(1, page - radius);
   const to = Math.min(total, page + radius);

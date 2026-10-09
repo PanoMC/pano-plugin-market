@@ -1082,7 +1082,7 @@ object MarketSchema {
         return "INSERT IGNORE INTO `${CREDIT_ACCOUNT.physicalName(prefix)}` (`type`, `systemKey`, `balance`, `createdAt`, `updatedAt`) VALUES $rows"
     }
 
-    // --- scheme version 8: delivery, server state, webhooks, mail outbox (01 section 9) ---------------------------
+    // --- scheme version 8: delivery, server state, mail outbox (01 section 9; the webhook tables moved to core, see WebhookImport) ---------------------------
 
     val DELIVERY = table("market_delivery", "Market delivery table.") {
         id()
@@ -1140,54 +1140,6 @@ object MarketSchema {
         text("settings") // JSON
         timestamps()
         unique("uq_server", "serverId")
-    }
-
-    val WEBHOOK_ENDPOINT = table("market_webhook_endpoint", "Market webhook endpoint table.") {
-        id()
-        str("name", 128)
-        str("url", 1024)
-        text("events", nullable = false) // JSON
-        str("format", 16, "JSON")
-        str("signing", 16, "NONE")
-        text("secret") // ENC
-        text("headers") // ENC
-        text("template")
-        flag("enabled", 1)
-        int("maxAttempts", default = 8)
-        int("failureCount", default = 0)
-        int("lastStatusCode", nullable = true)
-        bigint("lastDeliveryAt", nullable = true)
-        str("disabledReason", 64, nullable = true)
-        timestamps()
-    }
-
-    val WEBHOOK_DELIVERY = table("market_webhook_delivery", "Market webhook delivery table.") {
-        id()
-        bigint("endpointId", default = 0)
-        bigint("deliveryId", default = 0)
-        char("eventId", 36)
-        str("event", 64)
-        bigint("orderId", nullable = true)
-        str("url", 1024)
-        str("format", 16)
-        str("signing", 16)
-        text("secret") // ENC
-        text("body", nullable = false)
-        str("status", 16, "PENDING")
-        int("attempts", default = 0)
-        int("maxAttempts", default = 8)
-        bigint("nextAttemptAt", nullable = true)
-        bigint("claimedUntil", nullable = true)
-        int("lastStatusCode", nullable = true)
-        str("lastError", 512, nullable = true)
-        str("lastResponse", 2048, nullable = true)
-        int("durationMs", nullable = true)
-        bigint("deliveredAt", nullable = true)
-        timestamps()
-        unique("uq_eventId", "eventId")
-        key("idx_due", "status", "nextAttemptAt")
-        key("idx_endpoint", "endpointId", "id")
-        key("idx_order", "orderId")
     }
 
     val MAIL_OUTBOX = table("market_mail_outbox", "Market mail outbox table.") {
@@ -1479,7 +1431,7 @@ object MarketSchema {
         ENTITLEMENT, ADDRESS, CART, CART_ITEM, INVOICE,
         PAYMENT, PAYMENT_EVENT, REFUND, REFUND_ITEM, DISPUTE, PROVIDER_STATE,
         CREDIT_ACCOUNT, CREDIT_TX, CREDIT_ENTRY,
-        DELIVERY, SERVER_STATE, WEBHOOK_ENDPOINT, WEBHOOK_DELIVERY, MAIL_OUTBOX,
+        DELIVERY, SERVER_STATE, MAIL_OUTBOX,
         SUBSCRIPTION, SUBSCRIPTION_RENEWAL, BLOCK, THROTTLE, GOAL,
         SHIPPING_ZONE, SHIPPING_METHOD, SHIPPING_RATE, SHIPPING_CARRIER, SHIPMENT, SHIPMENT_ITEM, SHIPMENT_EVENT
     )

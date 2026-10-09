@@ -14,13 +14,13 @@ import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 
 /** `DELETE /api/panel/market/goals/:id` (04 section 5, `P:CAT`). */
 @Endpoint
 class PanelDeleteGoalAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/goals/:id", RouteType.DELETE))
+    override val paths = listOf(Path("/goals/:id", RouteType.DELETE))
 
     override val nodes = setOf(MarketNode.CATALOG)
 

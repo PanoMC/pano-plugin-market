@@ -134,10 +134,10 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _ } from '../../../i18n';
   import ProductSelector from '../ProductSelector.svelte';
-  import { call, errorKey, marketPath } from '../../utils/api.js';
+  import { call, errorKey } from '../../utils/api.js';
   import { showModal, hideModal } from '../order-detail/send.js';
   import {
     activeVariants,
@@ -188,7 +188,7 @@
     errors = { fields: {} };
     if (id === null || id === undefined) return;
     loading = true;
-    const result = await call(ApiUtil.get({ path: marketPath(`/products/${id}`) }));
+    const result = await call(api.panel.get({ path: `/products/${id}` }));
     if (mine !== sequence) return;
     loading = false;
     if (!result.ok) {

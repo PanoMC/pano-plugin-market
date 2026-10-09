@@ -1,6 +1,7 @@
 // Pure logic of the payment method list and modal (13 §16): ordering, filters, per-state
 // behaviour, the checkout-rules form and its request body, the status tab. No Svelte, no SDK
 // import, so it is unit tested.
+import { SITE_URL } from './api.js';
 import { PLUGIN_ID } from './plugin.js';
 import { resolveText } from './schema-form.js';
 
@@ -26,7 +27,7 @@ export const regionOf = (value) => (value === 'tr' || value === 'global' ? value
 
 /** Public logo route served by market (04 §8); the card falls back to the descriptor icon on error. */
 export const logoPath = (base, id) =>
-  `${base ?? ''}/api/market/payment-providers/${encodeURIComponent(id)}/logo`;
+  `${SITE_URL}/payment-providers/${encodeURIComponent(id)}/logo`;
 
 /** Name shown for a provider: the admin's custom label, else the descriptor name. */
 export function providerName(provider, locale = 'en-US', rawTranslate) {

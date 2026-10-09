@@ -174,11 +174,11 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _, showSuccessToast } from '../../../i18n';
   import TagInput from '../TagInput.svelte';
   import { countryName, countryOptions } from '../product/countries.js';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { currentLocale } from '../../utils/locale.js';
   import {
     MAX_POSTAL_PATTERNS,
@@ -260,8 +260,8 @@
     let response;
     try {
       response = isEdit
-        ? await call(ApiUtil.put({ path: marketPath(`/shipping/zones/${zone.id}`), body }))
-        : await call(ApiUtil.post({ path: marketPath('/shipping/zones'), body }));
+        ? await call(api.panel.put({ path: `/shipping/zones/${zone.id}`, body }))
+        : await call(api.panel.post({ path: '/shipping/zones', body }));
     } finally {
       saving = false;
     }

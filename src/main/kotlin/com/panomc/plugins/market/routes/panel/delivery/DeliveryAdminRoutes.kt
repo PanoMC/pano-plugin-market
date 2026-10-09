@@ -1,9 +1,9 @@
 package com.panomc.plugins.market.routes.panel.delivery
 
+import com.panomc.platform.model.Paging
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.error.BadRequest
-import com.panomc.platform.error.PageNotFound
 import com.panomc.platform.model.Path
 import com.panomc.platform.model.Result
 import com.panomc.platform.model.RouteType
@@ -35,22 +35,20 @@ import com.panomc.plugins.market.routes.base.parseEnum
 import com.panomc.plugins.market.routes.base.parseId
 import com.panomc.plugins.market.routes.base.parseIdList
 import com.panomc.plugins.market.routes.base.parseOptionalEnum
-import com.panomc.plugins.market.routes.base.parsePagingRequest
 import com.panomc.plugins.market.routes.panel.order.actingUserId
 import com.panomc.plugins.market.routes.panel.order.logOrderDecision
 import com.panomc.plugins.market.routes.panel.order.panelOrder
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.plugins.market.service.platform.PlatformServerRoster
 import com.panomc.plugins.market.util.MoneyUtil
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
@@ -97,25 +95,25 @@ private fun noBodyValidation(schemaRepository: SchemaRepository): ValidationHand
 
 /**
  * `GET /api/panel/market/deliveries` (`P:OV`, 08 section 14.5, 04 section 7): query `status`, `phase`, `serverId`, `actionType`, `search`, `page`,
- * `pageSize`; `deliveries[]`, `deliveryCount`, `totalPage`. The payload of a webhook row never carries its secret.
+ * `pageSize`; `items[]` (the deliveries) and `page`. The payload of a webhook row never carries its secret.
  */
 @Endpoint
 class PanelGetDeliveriesAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/deliveries", RouteType.GET))
+    override val paths = listOf(Path("/deliveries", RouteType.GET))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.ORDERS_VIEW)
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler {
-        var builder = ValidationHandlerBuilder.create(schemaRepository)
+        var builder = Paging.params(ValidationHandlerBuilder.create(schemaRepository))
 
-        for (name in listOf("status", "phase", "serverId", "actionType", "search", "page", "pageSize")) builder = builder.queryParameter(optionalParam(name, stringSchema()))
+        for (name in listOf("status", "phase", "serverId", "actionType", "search")) builder = builder.queryParameter(optionalParam(name, stringSchema()))
 
         return builder.build()
     }
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
         val request = context.request()
-        val window = parsePagingRequest(request.getParam("page")?.let { number(it, "page") }, request.getParam("pageSize")?.let { number(it, "pageSize") })
+        val window = Paging.request(context)
         val filter = DeliveryAdminService.Filter(
             status = parseOptionalEnum(DeliveryStatus.entries.toTypedArray(), request.getParam("status"), "status"),
             phase = parseOptionalEnum(DeliveryPhase.entries.toTypedArray(), request.getParam("phase"), "phase"),
@@ -125,11 +123,8 @@ class PanelGetDeliveriesAPI(private val plugin: MarketPlugin) : MarketPanelApi()
         )
 
         val page = deliveryAdminService(plugin).list(filter, window)
-        val totalPages = Paging.totalPages(page.total, window.pageSize)
 
-        if (Paging.isBeyondLast(window.page, totalPages)) throw PageNotFound()
-
-        return Successful(mapOf("deliveries" to JsonArray(page.rows), "deliveryCount" to page.total, "totalPage" to totalPages))
+        return Successful(Paging.response(page.rows, page.total, window))
     }
 
     private fun number(raw: String, name: String): Long = raw.trim().toLongOrNull() ?: throw RequestValueException(name, "MUST_BE_A_NUMBER")
@@ -142,7 +137,7 @@ class PanelGetDeliveriesAPI(private val plugin: MarketPlugin) : MarketPanelApi()
  */
 @Endpoint
 class PanelRerunDeliveriesAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/orders/:id/deliveries/rerun", RouteType.POST))
+    override val paths = listOf(Path("/orders/:id/deliveries/rerun", RouteType.POST))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.ORDERS_MANAGE)
 
@@ -181,7 +176,7 @@ class PanelRerunDeliveriesAPI(private val plugin: MarketPlugin) : MarketPanelApi
 /** `POST /api/panel/market/deliveries/:id/retry` (`P:OM`, 08 section 14.2): the same row and key; `{}`; 409 `DELIVERY_NOT_RETRYABLE`. `force` is accepted and ignored. */
 @Endpoint
 class PanelRetryDeliveryAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/deliveries/:id/retry", RouteType.POST))
+    override val paths = listOf(Path("/deliveries/:id/retry", RouteType.POST))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.ORDERS_MANAGE)
 
@@ -200,7 +195,7 @@ class PanelRetryDeliveryAPI(private val plugin: MarketPlugin) : MarketPanelApi()
 /** `POST /api/panel/market/deliveries/:id/cancel` (`P:OM`, 08 section 14.3): `{}`; 409 `DELIVERY_NOT_CANCELLABLE`. */
 @Endpoint
 class PanelCancelDeliveryAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/deliveries/:id/cancel", RouteType.POST))
+    override val paths = listOf(Path("/deliveries/:id/cancel", RouteType.POST))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.ORDERS_MANAGE)
 
@@ -219,7 +214,7 @@ class PanelCancelDeliveryAPI(private val plugin: MarketPlugin) : MarketPanelApi(
 /** `POST /api/panel/market/orders/:id/revoke` (`P:OM`, 08 section 14.4): body `orderItemIds?[]` (default: every line); `{created}` = `REVOKE` rows planned; no money moves. */
 @Endpoint
 class PanelRevokeOrderAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/orders/:id/revoke", RouteType.POST))
+    override val paths = listOf(Path("/orders/:id/revoke", RouteType.POST))
 
     override val nodes: Set<MarketNode> = setOf(MarketNode.ORDERS_MANAGE)
 

@@ -292,7 +292,7 @@ function detailsOf(res) {
 }
 
 /**
- * The action of a failed `POST /api/market/checkout` (14 §10.9). `code` = the error code (`NETWORK` for a lost
+ * The action of a failed `POST /checkout` (14 §10.9). `code` = the error code (`NETWORK` for a lost
  * answer), `res` = the response (its extras are copied into `details`). Always returns an object: an unknown
  * code is `{ kind: 'GENERIC', dropKey: true }` with the generic text. Every action carries `code`, `kind`,
  * `messageKey` and `details`; `keepKey` / `dropKey` tell what happens to the idempotency key.

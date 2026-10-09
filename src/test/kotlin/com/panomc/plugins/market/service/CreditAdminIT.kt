@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.platform.error.PageNotFound
+import com.panomc.platform.model.PageRequest
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.db.MarketDaoITBase
 import com.panomc.plugins.market.db.model.CreditTxType
@@ -9,7 +11,6 @@ import com.panomc.plugins.market.error.InvalidSettings
 import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.routes.panel.credit.CreditAdminService
 import com.panomc.plugins.market.routes.panel.credit.CreditMovement
-import com.panomc.plugins.market.routes.panel.credit.CreditPageOutOfRange
 import com.panomc.plugins.market.routes.panel.credit.applyCreditSettings
 import com.panomc.plugins.market.routes.panel.credit.parseCreditAmount
 import com.panomc.plugins.market.routes.panel.credit.parseCreditMove
@@ -19,7 +20,6 @@ import com.panomc.plugins.market.support.MarketTestDb
 import com.panomc.plugins.market.support.Race
 import com.panomc.plugins.market.support.TestUser
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * The panel credit routes' logic on a real MariaDB (MK-093; 07 sections 11.1, 11.2, 14.2): grant / revoke with the `Idempotency-Key` rules, the note and
@@ -75,7 +76,7 @@ class CreditAdminIT : MarketDaoITBase() {
 
     private suspend fun revoke(target: TestUser, amount: Any?, key: String = key()) = move(CreditTxType.REVOKE, target, amount, key)
 
-    private val first = Paging.Window(1, 50)
+    private val first = PageRequest(1, 50)
 
     private suspend fun hold(target: TestUser, credits: Long, order: Long) = w.db.tx { conn ->
         this.credits.lockAccounts(listOf(target.id), true, conn)
@@ -390,21 +391,21 @@ class CreditAdminIT : MarketDaoITBase() {
 
         val all = admin.accountList(null, first)
 
-        assertEquals(listOf("Alex", "Bob_x", "Anna", "Cem"), all.getJsonArray("accounts").map { (it as JsonObject).getString("username") }, "balance DESC, userId ASC")
-        assertEquals(4L, all.getLong("accountCount"))
-        assertEquals(1L, all.getLong("totalPage"))
+        assertEquals(listOf("Alex", "Bob_x", "Anna", "Cem"), all.getJsonArray("items").map { (it as JsonObject).getString("username") }, "balance DESC, userId ASC")
+        assertEquals(4L, all.getJsonObject("page").getLong("totalItems"))
+        assertEquals(1L, all.getJsonObject("page").getLong("totalPages"))
 
-        assertEquals(listOf("Alex", "Anna"), admin.accountList("a", first).getJsonArray("accounts").map { (it as JsonObject).getString("username") }, "case-insensitive prefix")
-        assertEquals(listOf("Bob_x"), admin.accountList("BOB_", first).getJsonArray("accounts").map { (it as JsonObject).getString("username") })
-        assertEquals(0, admin.accountList("%", first).getJsonArray("accounts").size(), "a wildcard is literal")
-        assertEquals(0, admin.accountList("lex", first).getJsonArray("accounts").size(), "prefix, not substring")
+        assertEquals(listOf("Alex", "Anna"), admin.accountList("a", first).getJsonArray("items").map { (it as JsonObject).getString("username") }, "case-insensitive prefix")
+        assertEquals(listOf("Bob_x"), admin.accountList("BOB_", first).getJsonArray("items").map { (it as JsonObject).getString("username") })
+        assertEquals(0, admin.accountList("%", first).getJsonArray("items").size(), "a wildcard is literal")
+        assertEquals(0, admin.accountList("lex", first).getJsonArray("items").size(), "prefix, not substring")
 
-        val page2 = admin.accountList(null, Paging.Window(2, 3))
+        val page2 = admin.accountList(null, PageRequest(2, 3))
 
-        assertEquals(listOf("Cem"), page2.getJsonArray("accounts").map { (it as JsonObject).getString("username") })
-        assertEquals(2L, page2.getLong("totalPage"))
-        assertThrows(CreditPageOutOfRange::class.java) { runBlocking { admin.accountList(null, Paging.Window(3, 3)) } }
-        assertEquals(0L, admin.accountList("zzz", first).getLong("accountCount"))
+        assertEquals(listOf("Cem"), page2.getJsonArray("items").map { (it as JsonObject).getString("username") })
+        assertEquals(2L, page2.getJsonObject("page").getLong("totalPages"))
+        assertThrows(PageNotFound::class.java) { runBlocking { admin.accountList(null, PageRequest(3, 3)) } }
+        assertEquals(0L, admin.accountList("zzz", first).getJsonObject("page").getLong("totalItems"))
     }
 
     @Test
@@ -417,10 +418,10 @@ class CreditAdminIT : MarketDaoITBase() {
         revoke(alex, 100)
 
         val detail = admin.accountDetail(alex.id, first)
-        val entries = detail.getJsonArray("entries").map { it as JsonObject }
+        val entries = detail.getJsonArray("items").map { it as JsonObject }
 
         assertEquals(0.0, detail.getDouble("balance"))
-        assertEquals(3L, detail.getLong("entryCount"))
+        assertEquals(3L, detail.getJsonObject("page").getLong("totalItems"))
         assertEquals(listOf("REVOKE", "REVOKE", "GRANT"), entries.map { it.getString("type") })
         assertEquals(listOf(-15.0, -5.0, 20.0), entries.map { it.getDouble("amount") })
         assertEquals(listOf(0.0, 15.0, 20.0), entries.map { it.getDouble("balanceAfter") })
@@ -433,12 +434,12 @@ class CreditAdminIT : MarketDaoITBase() {
         val none = admin.accountDetail(ghost.id, first)
 
         assertEquals(0.0, none.getDouble("balance"))
-        assertEquals(0, none.getJsonArray("entries").size())
-        assertEquals(0L, none.getLong("entryCount"))
+        assertEquals(0, none.getJsonArray("items").size())
+        assertEquals(0L, none.getJsonObject("page").getLong("totalItems"))
 
         sql("DELETE FROM `${prefix}market_credit_account` WHERE `userId` = ?", ghost.id)
 
-        assertEquals(0L, admin.accountDetail(ghost.id, first).getLong("entryCount"))
+        assertEquals(0L, admin.accountDetail(ghost.id, first).getJsonObject("page").getLong("totalItems"))
         assertEquals(0L, count("market_credit_account", "`userId` = ?", ghost.id), "reading created no row")
     }
 
@@ -455,9 +456,9 @@ class CreditAdminIT : MarketDaoITBase() {
         revoke(alex, 5)
 
         val all = admin.transactions(parseCreditTxFilter(null, null, null, null, null), first)
-        val rows = all.getJsonArray("transactions").map { it as JsonObject }
+        val rows = all.getJsonArray("items").map { it as JsonObject }
 
-        assertEquals(3L, all.getLong("transactionCount"))
+        assertEquals(3L, all.getJsonObject("page").getLong("totalItems"))
         assertEquals(listOf("REVOKE", "REVOKE", "GRANT"), rows.map { it.getString("type") }, "id DESC")
         assertEquals(listOf("Alex", "Bea", "Alex"), rows.map { it.getString("username") })
         assertEquals(7.0, rows[1].getDouble("shortfall"), "Bea had nothing: a zero-entry transaction is listed")
@@ -467,15 +468,15 @@ class CreditAdminIT : MarketDaoITBase() {
         assertNull(rows[0].getValue("orderId"))
 
         fun ids(filter: com.panomc.plugins.market.routes.panel.credit.CreditTxFilter) =
-            runBlocking { admin.transactions(filter, first).getJsonArray("transactions").map { (it as JsonObject).getString("type") + (it.getLong("userId")) } }
+            runBlocking { admin.transactions(filter, first).getJsonArray("items").map { (it as JsonObject).getString("type") + (it.getLong("userId")) } }
 
         assertEquals(listOf("REVOKE${alex.id}", "GRANT${alex.id}"), ids(parseCreditTxFilter(null, alex.id.toString(), null, null, null)))
         assertEquals(listOf("REVOKE${alex.id}", "REVOKE${bea.id}"), ids(parseCreditTxFilter("REVOKE", null, null, null, null)))
         assertEquals(3, ids(parseCreditTxFilter("REVOKE,GRANT", null, null, null, null)).size)
         assertEquals(listOf("REVOKE${bea.id}"), ids(parseCreditTxFilter(null, null, null, "1500", "2500")))
         assertEquals(emptyList<String>(), ids(parseCreditTxFilter(null, null, "99", null, null)))
-        assertEquals(1L, admin.transactions(parseCreditTxFilter(null, null, null, null, null), Paging.Window(3, 1)).getJsonArray("transactions").size().toLong())
-        assertThrows(CreditPageOutOfRange::class.java) { runBlocking { admin.transactions(parseCreditTxFilter(null, null, null, null, null), Paging.Window(4, 1)) } }
+        assertEquals(1L, admin.transactions(parseCreditTxFilter(null, null, null, null, null), PageRequest(3, 1)).getJsonArray("items").size().toLong())
+        assertThrows(PageNotFound::class.java) { runBlocking { admin.transactions(parseCreditTxFilter(null, null, null, null, null), PageRequest(4, 1)) } }
     }
 
     // ================================================================================================== settings
@@ -488,7 +489,7 @@ class CreditAdminIT : MarketDaoITBase() {
     private fun fieldErrors(body: JsonObject): JsonObject {
         val e = assertThrows(InvalidSettings::class.java) { applyCreditSettings(body, current()) }
 
-        return JsonObject(e.encode(emptyMap())).getJsonObject("fieldErrors")
+        return ErrorBodies.details(e).getJsonObject("fieldErrors")
     }
 
     @Test

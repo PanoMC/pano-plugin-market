@@ -1,8 +1,8 @@
-<div>
+<div class="market-legal-checkbox">
   <div class="form-check">
     <input
       id={checkId}
-      class={['form-check-input', invalid && 'is-invalid']}
+      class={['market-legal-checkbox__check', 'form-check-input', invalid && 'is-invalid']}
       type="checkbox"
       {checked}
       {disabled}
@@ -13,7 +13,7 @@
     <label class="form-check-label" for={checkId}>
       {label.before}<button
         type="button"
-        class="btn btn-link p-0 align-baseline"
+        class="market-legal-checkbox__action btn btn-link p-0 align-baseline"
         onclick={() => modal?.show()}>{legal.title}</button
       >{label.after}
       {#if required}
@@ -36,9 +36,12 @@
 <LegalModal bind:this={modal} title={legal.title} content={legal.content} />
 
 <script>
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { LEGAL_CHECK_ID, splitLegalLabel, TITLE_SENTINEL } from '../../lib/paymentModel.js';
   import LegalModal from './LegalModal.svelte';
+
+  const market = plugin('market');
+  const { _ } = market;
 
   /**
    * "I have read and accept the [title]": `legal` = checkout config legal ({ required, id, title, content });

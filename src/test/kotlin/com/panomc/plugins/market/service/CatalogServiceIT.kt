@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * `CatalogService` on a real MariaDB (MK-050): product save with its set parts, partial update, stock honoured on
@@ -55,8 +56,8 @@ class CatalogServiceIT : MarketDaoITBase() {
         val e = runCatching { block() }.exceptionOrNull()
         assertTrue(e is InvalidProduct, "expected INVALID_PRODUCT, got $e")
         val body = JsonObject((e as InvalidProduct).encode(emptyMap()))
-        assertEquals("INVALID_PRODUCT", body.getString("error"))
-        return body.getJsonObject("fieldErrors").map.mapValues { it.value as String }
+        assertEquals("INVALID_PRODUCT", body.getJsonObject("error").getString("code"))
+        return ErrorBodies.details(e).getJsonObject("fieldErrors").map.mapValues { it.value as String }
     }
 
     private suspend fun productCount(): Long = count("market_product")
@@ -1248,6 +1249,6 @@ class CatalogServiceIT : MarketDaoITBase() {
     private suspend fun comparisonErrors(block: suspend () -> Unit): Map<String, String> {
         val e = runCatching { block() }.exceptionOrNull()
         assertTrue(e is com.panomc.platform.error.BadRequest, "expected BAD_REQUEST, got $e")
-        return JsonObject((e as com.panomc.platform.error.BadRequest).encode(emptyMap())).getJsonObject("fieldErrors").map.mapValues { it.value as String }
+        return ErrorBodies.details((e as com.panomc.platform.error.BadRequest)).getJsonObject("fieldErrors").map.mapValues { it.value as String }
     }
 }

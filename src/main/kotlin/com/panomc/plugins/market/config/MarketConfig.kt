@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.config
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.panomc.platform.api.config.ConfigComment
 import com.panomc.platform.api.config.ConfigSection
 import com.panomc.platform.api.config.PluginConfig
@@ -106,7 +107,6 @@ class MarketConfig(
     val quoteRateLimitPerMinute: Int = 60,
     val couponLockThreshold: Int = 5,
     val couponLockMinutes: Int = 15,
-    val allowPrivateWebhookTargets: Boolean = false,
     @ConfigSection("Storefront")
     val storePageSize: Int = 24,
     val moduleRecentBuyers: Boolean = true,
@@ -143,7 +143,18 @@ class MarketConfig(
     val mcVaultDirection: VaultDirection = VaultDirection.BOTH,
     version: Int = 1
 ) : PluginConfig(version) {
+    /**
+     * One setting for the platform and the store (doc 06 section 4.1): core's `webhooks.allow-private-targets`, as the site owner set it in the platform
+     * settings. Nothing is stored here any more; callers still pass it through `TargetPolicy.effectiveAllowPrivate(flag, hosted)`, which forces it off when hosted.
+     */
+    @get:JsonIgnore
+    val allowPrivateWebhookTargets: Boolean get() = coreAllowPrivateTargets()
+
     companion object {
+        /** Bound by `MarketPlugin` at start to core's config; `false` until then (and in tests that do not bind it). */
+        @Volatile
+        var coreAllowPrivateTargets: () -> Boolean = { false }
+
         const val DEFAULT_BROADCAST_TEMPLATE = "&a{player} &7bought &e{product}&7 from the &b{store}&7!"
     }
 }

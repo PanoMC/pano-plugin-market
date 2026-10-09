@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.api.shipping
 
+import com.panomc.platform.schema.EndpointDoc
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.model.Path
 import com.panomc.platform.model.Result
@@ -7,7 +8,7 @@ import com.panomc.platform.model.RouteType
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.shipping.TrackingSource
-import com.panomc.plugins.market.core.time.Backoff
+import com.panomc.platform.webhook.Backoff
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.core.time.Ids
 import com.panomc.plugins.market.core.time.SecureIds
@@ -458,6 +459,12 @@ class ShippingWebhookAPI(private val plugin: MarketPlugin) : MarketInboundApi() 
         Path("$WEBHOOK_PATH/:channel", RouteType.ROUTE)
     )
 
+    override val doc = EndpointDoc(
+        summary = "Where a carrier posts tracking events; the provider reads and answers it.",
+        tag = "shipping",
+        binary = true
+    )
+
     override suspend fun handleMarket(context: RoutingContext): Result? {
         val token = context.pathParam("installToken")?.takeIf { InboundRouteSupport.TOKEN.matches(it) } ?: return InboundRouteSupport.notFound(context).let { null }
         val call = InboundRouteSupport.callOf(context, InboundKind.WEBHOOK) ?: return InboundRouteSupport.notFound(context).let { null }
@@ -468,6 +475,6 @@ class ShippingWebhookAPI(private val plugin: MarketPlugin) : MarketInboundApi() 
     }
 
     companion object {
-        const val WEBHOOK_PATH = "/api/market/shipping/:providerId/webhook/:installToken"
+        const val WEBHOOK_PATH = "/shipping/:providerId/webhook/:installToken"
     }
 }

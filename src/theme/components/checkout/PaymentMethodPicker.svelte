@@ -1,9 +1,9 @@
-<div class="card">
-  <div class="card-body vstack gap-3">
-    <h2 class="h5 mb-0">{$_('theme.checkout.payment')}</h2>
+<div class="market-payment-method-picker card">
+  <div class="market-payment-method-picker__body card-body vstack gap-3">
+    <h2 class="market-payment-method-picker__title h5 mb-0">{$_('theme.checkout.payment')}</h2>
 
     {#if alertKey}
-      <div class="alert alert-warning mb-0" role="alert">
+      <div class="market-payment-method-picker__alert alert alert-warning mb-0" role="alert">
         {$_(alertKey)}
         {#if alertDetail}
           <span class="d-block small">{alertDetail}</span>
@@ -14,18 +14,30 @@
     {#if view.mode === 'NONE_NEEDED'}
       <p class="mb-0 text-body-secondary">{$_('theme.checkout.no-payment-needed')}</p>
     {:else if view.mode === 'NO_METHOD'}
-      <div class="alert alert-warning mb-0" role="alert">
+      <div
+        class="market-payment-method-picker__no-payment-method alert alert-warning mb-0"
+        role="alert">
         {$_('theme.checkout.no-payment-method')}
       </div>
     {:else}
-      <div class="list-group" role="radiogroup" aria-label={$_('theme.checkout.payment')}>
+      <div
+        class="market-payment-method-picker__list list-group"
+        role="radiogroup"
+        aria-label={$_('theme.checkout.payment')}>
         {#each view.methods as method (method.id)}
           {@const unavailable = method.available === false}
           {@const logo = logoSource(method.logoUrl)}
           {@const color = safeColor(method.color)}
-          <label class={['list-group-item', 'd-flex', 'gap-3', unavailable && 'opacity-50']}>
+          <label
+            class={[
+              'market-payment-method-picker__item',
+              'list-group-item',
+              'd-flex',
+              'gap-3',
+              unavailable && 'opacity-50',
+            ]}>
             <input
-              class="form-check-input flex-shrink-0 mt-1"
+              class="market-payment-method-picker__check form-check-input flex-shrink-0 mt-1"
               type="radio"
               name={PAY_GROUP}
               value={method.id}
@@ -38,7 +50,7 @@
                   src={logo.relative ? `${base}${logo.url}` : logo.url}
                   height="24"
                   alt=""
-                  class="object-fit-contain" />
+                  class="market-payment-method-picker__image object-fit-contain" />
               {:else}
                 <i
                   class={[safeIcon(method.icon), 'fa-fw']}
@@ -60,7 +72,8 @@
               {/if}
             </span>
             {#if Number(method.feeAmount) > 0}
-              <span class="badge text-bg-secondary align-self-start flex-shrink-0">
+              <span
+                class="market-payment-method-picker__badge badge text-bg-secondary align-self-start flex-shrink-0">
                 +{formatMoney(method.feeAmount, currency, { removeCents })}
               </span>
             {/if}
@@ -70,7 +83,9 @@
 
       {#if method}
         {#if external}
-          <div class="alert alert-info mb-0" role="status">
+          <div
+            class="market-payment-method-picker__external-pricing alert alert-info mb-0"
+            role="status">
             {$_('theme.errors.EXTERNAL_PRICING')}
           </div>
         {/if}
@@ -94,7 +109,7 @@
 
 <script>
   import { base } from '@panomc/sdk/svelte';
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import {
     isExternalPricing,
     logoSource,
@@ -106,7 +121,10 @@
     selectedMethod,
     unavailableKey,
   } from '../../lib/paymentModel.js';
-  import { formatMoney } from '../../utils/format.js';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { formatMoney } = market.require('format').actions;
 
   /**
    * The payment methods of the quote, in server order (`quote`), one radio group with the credits radio

@@ -16,8 +16,8 @@ import com.panomc.plugins.market.routes.panel.credit.applyCreditSettings
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 
 /**
@@ -30,7 +30,7 @@ class PanelUpdateCreditSettingsAPI(
 ) : MarketPanelApi() {
     override val nodes: Set<MarketNode> = setOf(MarketNode.SETTINGS)
 
-    override val paths = listOf(Path("/api/panel/market/settings/credits", RouteType.POST))
+    override val paths = listOf(Path("/settings/credits", RouteType.POST))
 
     private val authProvider by lazy {
         plugin.applicationContext.getBean(AuthProvider::class.java)

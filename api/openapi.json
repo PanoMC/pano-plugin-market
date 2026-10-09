@@ -1,0 +1,5902 @@
+{
+  "components": {
+    "headers": {
+      "PanoApiLevel": {
+        "description": "The API level this Pano implements.",
+        "schema": {
+          "type": "integer"
+        }
+      }
+    },
+    "responses": {
+      "Error400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Bad request: BAD_REQUEST",
+        "x-pano-error-codes": [
+          "BAD_REQUEST"
+        ]
+      },
+      "Error401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Not logged in: NOT_LOGGED_IN",
+        "x-pano-error-codes": [
+          "NOT_LOGGED_IN"
+        ]
+      },
+      "Error403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Forbidden: INVALID_CSRF_TOKEN, NO_PERMISSION",
+        "x-pano-error-codes": [
+          "INVALID_CSRF_TOKEN",
+          "NO_PERMISSION"
+        ]
+      },
+      "Error429": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Too many requests: RATE_LIMIT_EXCEEDED",
+        "x-pano-error-codes": [
+          "RATE_LIMIT_EXCEEDED"
+        ]
+      },
+      "Error500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Internal server error: INTERNAL_SERVER_ERROR",
+        "x-pano-error-codes": [
+          "INTERNAL_SERVER_ERROR"
+        ]
+      },
+      "Error503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Service unavailable: MAINTENANCE_MODE_ENABLED",
+        "x-pano-error-codes": [
+          "MAINTENANCE_MODE_ENABLED"
+        ]
+      }
+    },
+    "schemas": {
+      "Error": {
+        "description": "The body of every non-2xx answer.",
+        "properties": {
+          "error": {
+            "properties": {
+              "code": {
+                "description": "A stable, declared code.",
+                "pattern": "^[A-Z][A-Z0-9_]*$",
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": true,
+                "description": "Extra facts about the failure.",
+                "type": "object"
+              },
+              "fields": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Field name to code, for a rejected form.",
+                "type": "object"
+              },
+              "message": {
+                "description": "Optional English text.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "MarketOrder": {
+        "properties": {
+          "billingInfo": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "canCancel": {
+            "type": "boolean"
+          },
+          "canRetryPayment": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "credits": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expiresAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "fulfillmentStatus": {
+            "type": "string"
+          },
+          "invoiceAvailable": {
+            "type": "boolean"
+          },
+          "isGift": {
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "properties": {
+                "imageFileName": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "integer"
+                },
+                "variantName": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "limited": {
+            "type": "boolean"
+          },
+          "number": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "paidAt": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "payment": {
+            "properties": {
+              "label": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "methodId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "start": {
+                "properties": {
+                  "kind": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "paymentMethods": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "publicId": {
+            "type": "string"
+          },
+          "recipientUsername": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "refundPending": {
+            "type": "boolean"
+          },
+          "shipments": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "shipping": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "shippingAddress": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "shippingStatus": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "testMode": {
+            "type": "boolean"
+          },
+          "totals": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "createdAt",
+          "currency",
+          "fulfillmentStatus",
+          "isGift",
+          "items",
+          "limited",
+          "publicId",
+          "shippingStatus",
+          "status"
+        ],
+        "type": "object"
+      },
+      "MarketProductCard": {
+        "properties": {
+          "billingMode": {
+            "type": "string"
+          },
+          "categoryId": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "compareAtPrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "creditPrice": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "featured": {
+            "type": "boolean"
+          },
+          "hasVariants": {
+            "type": "boolean"
+          },
+          "icon": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "integer"
+          },
+          "imageFileName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inStock": {
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "needsOptions": {
+            "type": "boolean"
+          },
+          "owned": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "period": {
+            "properties": {
+              "count": {
+                "type": "integer"
+              },
+              "unit": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "count",
+              "unit"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "physical": {
+            "type": "boolean"
+          },
+          "price": {
+            "type": "number"
+          },
+          "priceFrom": {
+            "type": "boolean"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "sale": {
+            "properties": {
+              "amountOff": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "endsAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "percent": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "shortDescription": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slug": {
+            "type": "string"
+          },
+          "stock": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tierRank": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "billingMode",
+          "currency",
+          "featured",
+          "hasVariants",
+          "id",
+          "inStock",
+          "kind",
+          "name",
+          "needsOptions",
+          "physical",
+          "price",
+          "slug"
+        ],
+        "type": "object"
+      },
+      "MarketProductDetail": {
+        "properties": {
+          "billingMode": {
+            "type": "string"
+          },
+          "bundleItems": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "categoryId": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "categoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "compareAtPrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "creditPrice": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "featured": {
+            "type": "boolean"
+          },
+          "fields": {
+            "items": {
+              "properties": {
+                "defaultValue": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "fieldKey": {
+                  "type": "string"
+                },
+                "helpText": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "label": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "pattern": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "placeholder": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "fieldKey",
+                "label",
+                "required",
+                "type"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "hasVariants": {
+            "type": "boolean"
+          },
+          "icon": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "integer"
+          },
+          "imageFileName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inStock": {
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "metaDescription": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metaTitle": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "needsOptions": {
+            "type": "boolean"
+          },
+          "owned": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "period": {
+            "properties": {
+              "count": {
+                "type": "integer"
+              },
+              "unit": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "count",
+              "unit"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "physical": {
+            "type": "boolean"
+          },
+          "price": {
+            "type": "number"
+          },
+          "priceFrom": {
+            "type": "boolean"
+          },
+          "pricesIncludeVat": {
+            "type": "boolean"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "purchasable": {
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "ok"
+            ],
+            "type": "object"
+          },
+          "requiredProducts": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "sale": {
+            "properties": {
+              "amountOff": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "endsAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "percent": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "serverChoices": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "shortDescription": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slug": {
+            "type": "string"
+          },
+          "stock": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tierRank": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "upgrade": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "variants": {
+            "items": {
+              "properties": {
+                "compareAtPrice": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "creditPrice": {
+                  "type": "number"
+                },
+                "id": {
+                  "type": "integer"
+                },
+                "imageFileName": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "inStock": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "optionValues": {
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "periodCount": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "price": {
+                  "type": "number"
+                },
+                "stock": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "inStock",
+                "name",
+                "price"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "vatPercent": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "billingMode",
+          "bundleItems",
+          "currency",
+          "featured",
+          "fields",
+          "hasVariants",
+          "id",
+          "inStock",
+          "kind",
+          "name",
+          "needsOptions",
+          "physical",
+          "price",
+          "purchasable",
+          "requiredProducts",
+          "serverChoices",
+          "slug",
+          "variants"
+        ],
+        "type": "object"
+      },
+      "MarketQuote": {
+        "properties": {
+          "baseCurrency": {
+            "type": "string"
+          },
+          "canCheckout": {
+            "type": "boolean"
+          },
+          "coupon": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "couponDiscount": {
+            "type": "number"
+          },
+          "creatorCode": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "creatorDiscount": {
+            "type": "number"
+          },
+          "credits": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "currency": {
+            "type": "string"
+          },
+          "discountTotal": {
+            "type": "number"
+          },
+          "display": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "displayCurrency": {
+            "type": "string"
+          },
+          "gatewayAmount": {
+            "type": "number"
+          },
+          "legal": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "lines": {
+            "items": {
+              "properties": {
+                "couponAmount": {
+                  "type": "number"
+                },
+                "discountAmount": {
+                  "type": "number"
+                },
+                "errors": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "imageFileName": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "lineKey": {
+                  "type": "string"
+                },
+                "lineTotal": {
+                  "type": "number"
+                },
+                "listUnitPrice": {
+                  "type": "number"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "parentLineKey": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "productId": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "quantity": {
+                  "type": "integer"
+                },
+                "slug": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "unitPrice": {
+                  "type": "number"
+                },
+                "variantId": {
+                  "type": "integer"
+                },
+                "variantName": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "vatAmount": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "errors",
+                "kind",
+                "lineKey",
+                "lineTotal",
+                "name",
+                "quantity",
+                "unitPrice"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "messages": {
+            "items": {
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "fields": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "level": {
+                  "type": "string"
+                },
+                "lineKey": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "level"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "minimumOrderAmount": {
+            "type": "number"
+          },
+          "paymentFee": {
+            "type": "number"
+          },
+          "paymentMethods": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "pricesIncludeVat": {
+            "type": "boolean"
+          },
+          "pricingMode": {
+            "type": "string"
+          },
+          "requiredBuyerFields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "requiresShipping": {
+            "type": "boolean"
+          },
+          "shippingMethodId": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "shippingOptions": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "shippingTotal": {
+            "type": "number"
+          },
+          "subtotal": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          },
+          "upgradeDiscount": {
+            "type": "number"
+          },
+          "vatTotal": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "baseCurrency",
+          "canCheckout",
+          "currency",
+          "discountTotal",
+          "gatewayAmount",
+          "lines",
+          "messages",
+          "paymentFee",
+          "paymentMethods",
+          "requiredBuyerFields",
+          "requiresShipping",
+          "shippingTotal",
+          "subtotal",
+          "total",
+          "vatTotal"
+        ],
+        "type": "object"
+      },
+      "Page": {
+        "description": "Where a list stands: page numbers start at 1, `pageSize` is at most 100.",
+        "properties": {
+          "number": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "size": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "totalItems": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "totalPages": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "number",
+          "size",
+          "totalItems",
+          "totalPages"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "description": "A site session token, sent by a server-side front-end that holds a front-end key. Not valid on the panel API.",
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "sessionCookie": {
+        "description": "The session cookie set by login. A mutation also repeats the `pano_csrf_token` cookie in the `X-CSRF-Token` header. Behind a plain-http origin the cookie names end in `_http`.",
+        "in": "cookie",
+        "name": "pano_auth_token",
+        "type": "apiKey"
+      }
+    }
+  },
+  "info": {
+    "description": "The public API of the plugin pano-plugin-market, served below /api/v1/plugins/pano-plugin-market.",
+    "summary": "Pano plugin API: pano-plugin-market",
+    "title": "Pano plugin API: pano-plugin-market",
+    "version": "1",
+    "x-pano-api-level": 1,
+    "x-pano-plugin-id": "pano-plugin-market",
+    "x-pano-scope": "plugin"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/categories/image/{fileName}": {
+      "get": {
+        "operationId": "GetCategoryImage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fileName",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "thumbnail",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "summary": "A category image file.",
+        "tags": [
+          "categories"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/checkout": {
+      "post": {
+        "operationId": "Checkout",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "order": {
+                      "$ref": "#/components/schemas/MarketOrder"
+                    },
+                    "orderToken": {
+                      "type": "string"
+                    },
+                    "payment": {
+                      "properties": {
+                        "kind": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "order",
+                    "orderToken"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad request: BAD_REQUEST, EMPTY_CART, INVALID_CART",
+            "x-pano-error-codes": [
+              "BAD_REQUEST",
+              "EMPTY_CART",
+              "INVALID_CART"
+            ]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: BUYER_BLOCKED",
+            "x-pano-error-codes": [
+              "BUYER_BLOCKED"
+            ]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict: IDEMPOTENCY_CONFLICT, OUT_OF_STOCK",
+            "x-pano-error-codes": [
+              "IDEMPOTENCY_CONFLICT",
+              "OUT_OF_STOCK"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_BUSY, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_BUSY",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "Creates an order from a cart and starts its payment. Needs an Idempotency-Key header; the order token is returned only here.",
+        "tags": [
+          "checkout"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/checkout/config": {
+      "get": {
+        "operationId": "GetCheckoutConfig",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "addressFields": {
+                      "type": "object"
+                    },
+                    "billingInfoMode": {
+                      "type": "string"
+                    },
+                    "creditName": {
+                      "type": "string"
+                    },
+                    "creditTopUp": {
+                      "type": "object"
+                    },
+                    "creditsEnabled": {
+                      "type": "boolean"
+                    },
+                    "currencies": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "giftPurchase": {
+                      "type": "boolean"
+                    },
+                    "guestCheckout": {
+                      "type": "boolean"
+                    },
+                    "legal": {
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "minimumOrderAmount": {
+                      "type": "number"
+                    },
+                    "mixedCredit": {
+                      "type": "boolean"
+                    },
+                    "shippingCountries": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "addressFields",
+                    "billingInfoMode",
+                    "creditTopUp",
+                    "creditsEnabled",
+                    "currencies",
+                    "giftPurchase",
+                    "guestCheckout",
+                    "minimumOrderAmount",
+                    "mixedCredit",
+                    "shippingCountries"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "What the checkout page needs before it prices a cart: guest and gift switches, billing mode, address fields, legal text, currencies and credit top-up limits.",
+        "tags": [
+          "checkout"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/checkout/quote": {
+      "post": {
+        "operationId": "Quote",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "quote": {
+                      "$ref": "#/components/schemas/MarketQuote"
+                    }
+                  },
+                  "required": [
+                    "quote"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "Prices a cart. It never fails for a business reason: problems come back as messages with canCheckout false.",
+        "tags": [
+          "checkout"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/addresses": {
+      "get": {
+        "operationId": "GetAddresses",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: NO_PERMISSION",
+            "x-pano-error-codes": [
+              "NO_PERMISSION"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The saved shipping addresses of the buyer.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      },
+      "post": {
+        "operationId": "CreateAddress",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad request: BAD_REQUEST, INVALID_FIELDS",
+            "x-pano-error-codes": [
+              "BAD_REQUEST",
+              "INVALID_FIELDS"
+            ]
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Saves a shipping address and answers its id.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/addresses/{id}": {
+      "delete": {
+        "operationId": "DeleteAddress",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Deletes a saved shipping address.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      },
+      "put": {
+        "operationId": "UpdateAddress",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad request: BAD_REQUEST, INVALID_FIELDS",
+            "x-pano-error-codes": [
+              "BAD_REQUEST",
+              "INVALID_FIELDS"
+            ]
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Changes a saved shipping address.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/cart": {
+      "delete": {
+        "operationId": "DeleteCart",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "cart": {
+                      "properties": {
+                        "couponCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "creatorCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "currency": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "giftMessage": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "recipientUsername": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "shippingAddressId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "shippingMethodId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "items"
+                      ],
+                      "type": "object"
+                    },
+                    "quote": {
+                      "$ref": "#/components/schemas/MarketQuote"
+                    }
+                  },
+                  "required": [
+                    "cart",
+                    "quote"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad request: BAD_REQUEST, INVALID_CART",
+            "x-pano-error-codes": [
+              "BAD_REQUEST",
+              "INVALID_CART"
+            ]
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Empties the cart and answers it with its quote.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      },
+      "get": {
+        "operationId": "GetCart",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "currency",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "cart": {
+                      "properties": {
+                        "couponCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "creatorCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "currency": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "giftMessage": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "recipientUsername": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "shippingAddressId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "shippingMethodId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "items"
+                      ],
+                      "type": "object"
+                    },
+                    "quote": {
+                      "$ref": "#/components/schemas/MarketQuote"
+                    }
+                  },
+                  "required": [
+                    "cart",
+                    "quote"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad request: BAD_REQUEST, INVALID_CART",
+            "x-pano-error-codes": [
+              "BAD_REQUEST",
+              "INVALID_CART"
+            ]
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: NO_PERMISSION",
+            "x-pano-error-codes": [
+              "NO_PERMISSION"
+            ]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The cart of the signed-in buyer with its real quote.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      },
+      "put": {
+        "operationId": "PutCart",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "cart": {
+                      "properties": {
+                        "couponCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "creatorCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "currency": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "giftMessage": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "recipientUsername": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "shippingAddressId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "shippingMethodId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "items"
+                      ],
+                      "type": "object"
+                    },
+                    "quote": {
+                      "$ref": "#/components/schemas/MarketQuote"
+                    }
+                  },
+                  "required": [
+                    "cart",
+                    "quote"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad request: BAD_REQUEST, INVALID_CART",
+            "x-pano-error-codes": [
+              "BAD_REQUEST",
+              "INVALID_CART"
+            ]
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Replaces the whole cart and answers it with its quote.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/cart/items": {
+      "post": {
+        "operationId": "AddCartItem",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "cart": {
+                      "properties": {
+                        "couponCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "creatorCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "currency": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "giftMessage": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "recipientUsername": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "shippingAddressId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "shippingMethodId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "items"
+                      ],
+                      "type": "object"
+                    },
+                    "quote": {
+                      "$ref": "#/components/schemas/MarketQuote"
+                    }
+                  },
+                  "required": [
+                    "cart",
+                    "quote"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad request: BAD_REQUEST, INVALID_CART",
+            "x-pano-error-codes": [
+              "BAD_REQUEST",
+              "INVALID_CART"
+            ]
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Adds a line to the cart and answers it with its quote.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/cart/items/{itemId}": {
+      "delete": {
+        "operationId": "DeleteCartItem",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "cart": {
+                      "properties": {
+                        "couponCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "creatorCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "currency": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "giftMessage": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "recipientUsername": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "shippingAddressId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "shippingMethodId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "items"
+                      ],
+                      "type": "object"
+                    },
+                    "quote": {
+                      "$ref": "#/components/schemas/MarketQuote"
+                    }
+                  },
+                  "required": [
+                    "cart",
+                    "quote"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad request: BAD_REQUEST, INVALID_CART",
+            "x-pano-error-codes": [
+              "BAD_REQUEST",
+              "INVALID_CART"
+            ]
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Removes a cart line and answers the cart with its quote.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      },
+      "put": {
+        "operationId": "UpdateCartItem",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "cart": {
+                      "properties": {
+                        "couponCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "creatorCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "currency": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "giftMessage": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "recipientUsername": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "shippingAddressId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "shippingMethodId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "items"
+                      ],
+                      "type": "object"
+                    },
+                    "quote": {
+                      "$ref": "#/components/schemas/MarketQuote"
+                    }
+                  },
+                  "required": [
+                    "cart",
+                    "quote"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad request: BAD_REQUEST, INVALID_CART",
+            "x-pano-error-codes": [
+              "BAD_REQUEST",
+              "INVALID_CART"
+            ]
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Changes a cart line and answers the cart with its quote.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/cart/merge": {
+      "post": {
+        "operationId": "MergeCart",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "cart": {
+                      "properties": {
+                        "couponCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "creatorCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "currency": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "giftMessage": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "items": {
+                          "items": {
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "recipientUsername": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "shippingAddressId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        },
+                        "shippingMethodId": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "items"
+                      ],
+                      "type": "object"
+                    },
+                    "quote": {
+                      "$ref": "#/components/schemas/MarketQuote"
+                    }
+                  },
+                  "required": [
+                    "cart",
+                    "quote"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad request: BAD_REQUEST, INVALID_CART",
+            "x-pano-error-codes": [
+              "BAD_REQUEST",
+              "INVALID_CART"
+            ]
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Merges a guest cart into the stored cart and answers it with its quote.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/creator": {
+      "get": {
+        "operationId": "GetMyCreator",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: NO_PERMISSION",
+            "x-pano-error-codes": [
+              "NO_PERMISSION"
+            ]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND, PAGE_NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND",
+              "PAGE_NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The creator codes of the buyer with their earnings; 404 when the buyer has none.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/credits": {
+      "get": {
+        "operationId": "GetMyCredits",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "balance": {
+                      "type": "number"
+                    },
+                    "creditName": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "amount": {
+                            "type": "number"
+                          },
+                          "balanceAfter": {
+                            "type": "number"
+                          },
+                          "createdAt": {
+                            "type": "integer"
+                          },
+                          "id": {
+                            "type": "integer"
+                          },
+                          "note": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "orderPublicId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "amount",
+                          "balanceAfter",
+                          "createdAt",
+                          "id",
+                          "type"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "page": {
+                      "properties": {
+                        "number": {
+                          "type": "integer"
+                        },
+                        "size": {
+                          "type": "integer"
+                        },
+                        "totalItems": {
+                          "type": "integer"
+                        },
+                        "totalPages": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "number",
+                        "size",
+                        "totalItems",
+                        "totalPages"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "balance",
+                    "items",
+                    "page"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: NO_PERMISSION",
+            "x-pano-error-codes": [
+              "NO_PERMISSION"
+            ]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: PAGE_NOT_FOUND",
+            "x-pano-error-codes": [
+              "PAGE_NOT_FOUND"
+            ]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict: CREDITS_DISABLED",
+            "x-pano-error-codes": [
+              "CREDITS_DISABLED"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The credit balance and the ledger of the buyer.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/entitlements": {
+      "get": {
+        "operationId": "GetMyEntitlements",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "active",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "expiresAt": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "id": {
+                            "type": "integer"
+                          },
+                          "orderPublicId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "productId": {
+                            "type": "integer"
+                          },
+                          "productName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "startsAt": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "subscriptionId": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "variantName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "productId",
+                          "status"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: NO_PERMISSION",
+            "x-pano-error-codes": [
+              "NO_PERMISSION"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "What the buyer owns, gifts included.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/gifts/redeem": {
+      "post": {
+        "operationId": "RedeemGift",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "order": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "order"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Redeems a gift code and answers the order it creates.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/orders": {
+      "get": {
+        "operationId": "GetMyOrders",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "createdAt": {
+                            "type": "integer"
+                          },
+                          "currency": {
+                            "type": "string"
+                          },
+                          "fulfillmentStatus": {
+                            "type": "string"
+                          },
+                          "isGift": {
+                            "type": "boolean"
+                          },
+                          "itemNames": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "number": {
+                            "type": "integer"
+                          },
+                          "paidAt": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "publicId": {
+                            "type": "string"
+                          },
+                          "received": {
+                            "type": "boolean"
+                          },
+                          "recipientUsername": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "shippingStatus": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "total": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "createdAt",
+                          "currency",
+                          "isGift",
+                          "itemNames",
+                          "publicId",
+                          "received",
+                          "status",
+                          "total"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "page": {
+                      "$ref": "#/components/schemas/Page"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "page"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: NO_PERMISSION",
+            "x-pano-error-codes": [
+              "NO_PERMISSION"
+            ]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: PAGE_NOT_FOUND",
+            "x-pano-error-codes": [
+              "PAGE_NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The orders of the buyer and the gifts the buyer received, newest first.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/subscriptions": {
+      "get": {
+        "operationId": "GetMySubscriptions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: NO_PERMISSION",
+            "x-pano-error-codes": [
+              "NO_PERMISSION"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The subscriptions of the buyer.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/subscriptions/portal-pages/{token}": {
+      "get": {
+        "operationId": "GetMySubscriptionPortalPage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: NO_PERMISSION",
+            "x-pano-error-codes": [
+              "NO_PERMISSION"
+            ]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The page a billing portal address resolves to.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/subscriptions/{id}/cancel": {
+      "post": {
+        "operationId": "CancelMySubscription",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "atPeriodEnd": {
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict: SUBSCRIPTION_NOT_CANCELLABLE",
+            "x-pano-error-codes": [
+              "SUBSCRIPTION_NOT_CANCELLABLE"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Cancels a subscription, or answers the address where the provider cancels it.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/subscriptions/{id}/portal": {
+      "post": {
+        "operationId": "PortalMySubscription",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "purpose": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "url"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "The address of the provider's billing portal for a subscription.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/subscriptions/{id}/resume": {
+      "post": {
+        "operationId": "ResumeMySubscription",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "subscription": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "subscription"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict: SUBSCRIPTION_NOT_RESUMABLE",
+            "x-pano-error-codes": [
+              "SUBSCRIPTION_NOT_RESUMABLE"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Resumes a cancelled subscription.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/me/summary": {
+      "get": {
+        "operationId": "GetMySummary",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "activeSubscriptionCount": {
+                      "type": "integer"
+                    },
+                    "cartItemCount": {
+                      "type": "integer"
+                    },
+                    "creditBalance": {
+                      "type": "number"
+                    },
+                    "creditName": {
+                      "type": "string"
+                    },
+                    "creditsEnabled": {
+                      "type": "boolean"
+                    },
+                    "isCreator": {
+                      "type": "boolean"
+                    },
+                    "subscriptionCount": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "activeSubscriptionCount",
+                    "cartItemCount",
+                    "creditBalance",
+                    "creditsEnabled",
+                    "isCreator",
+                    "subscriptionCount"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: NO_PERMISSION",
+            "x-pano-error-codes": [
+              "NO_PERMISSION"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "What a navbar badge and the profile navigation need: credit balance, cart size and subscription counts.",
+        "tags": [
+          "me"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/orders/{publicId}": {
+      "get": {
+        "operationId": "GetOrder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "order": {
+                      "$ref": "#/components/schemas/MarketOrder"
+                    }
+                  },
+                  "required": [
+                    "order"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "One order, cut down to what the caller may see: the owner (session or order token), the gift recipient, or anyone else.",
+        "tags": [
+          "orders"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/orders/{publicId}/bank-transfer/notify": {
+      "post": {
+        "operationId": "BankTransferNotify",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "The buyer says a bank transfer was sent; the store checks it by hand.",
+        "tags": [
+          "orders"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/orders/{publicId}/cancel": {
+      "post": {
+        "operationId": "CancelOrder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict: ORDER_NOT_CANCELLABLE",
+            "x-pano-error-codes": [
+              "ORDER_NOT_CANCELLABLE"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "Cancels a pending order.",
+        "tags": [
+          "orders"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/orders/{publicId}/invoice": {
+      "get": {
+        "operationId": "GetOrderInvoice",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "refundId",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict: INVOICE_NOT_ISSUABLE",
+            "x-pano-error-codes": [
+              "INVOICE_NOT_ISSUABLE"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Internal server error: INTERNAL_SERVER_ERROR, INVOICE_RENDER_FAILED",
+            "x-pano-error-codes": [
+              "INTERNAL_SERVER_ERROR",
+              "INVOICE_RENDER_FAILED"
+            ]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "The PDF invoice of a paid order.",
+        "tags": [
+          "orders"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/orders/{publicId}/pay": {
+      "post": {
+        "operationId": "PayOrder",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "payment": {
+                      "properties": {
+                        "kind": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict: ORDER_NOT_PAYABLE",
+            "x-pano-error-codes": [
+              "ORDER_NOT_PAYABLE"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "Starts a payment for a pending order with the chosen method.",
+        "tags": [
+          "orders"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/orders/{publicId}/payment/continue": {
+      "post": {
+        "operationId": "ContinueOrderPayment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "payment": {
+                      "properties": {
+                        "kind": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict: ORDER_NOT_PAYABLE",
+            "x-pano-error-codes": [
+              "ORDER_NOT_PAYABLE"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "Continues the open payment attempt of an order.",
+        "tags": [
+          "orders"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/orders/{publicId}/status": {
+      "get": {
+        "operationId": "GetOrderStatus",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "publicId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "fulfillmentStatus": {
+                      "type": "string"
+                    },
+                    "paymentStatus": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "shippingStatus": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "fulfillmentStatus",
+                    "shippingStatus",
+                    "status",
+                    "updatedAt"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "The small status answer a page polls while a payment settles.",
+        "tags": [
+          "orders"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/payment-providers/{id}/logo": {
+      "get": {
+        "operationId": "GetPaymentProviderLogo",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "The logo of a payment provider.",
+        "tags": [
+          "payment-providers"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/payments/attempts/{attemptToken}/page": {
+      "get": {
+        "operationId": "GetPaymentAttemptPage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attemptToken",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "summary": "The hosted page of a payment attempt, for providers that show instructions.",
+        "tags": [
+          "payments"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/products/image/{fileName}": {
+      "get": {
+        "operationId": "GetProductImage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "fileName",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "thumbnail",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "summary": "A product or variant image file.",
+        "tags": [
+          "products"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/products/{slug}": {
+      "get": {
+        "operationId": "GetStoreProduct",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "currency",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "product": {
+                      "$ref": "#/components/schemas/MarketProductDetail"
+                    }
+                  },
+                  "required": [
+                    "product"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "One product page: description, variants, custom fields, bundle items and whether the caller can buy it.",
+        "tags": [
+          "store"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/store": {
+      "get": {
+        "operationId": "GetStore",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "currency",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "bestsellers": {
+                      "items": {
+                        "$ref": "#/components/schemas/MarketProductCard"
+                      },
+                      "type": "array"
+                    },
+                    "categories": {
+                      "items": {
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "comparisonProducts": {
+                      "items": {
+                        "$ref": "#/components/schemas/MarketProductCard"
+                      },
+                      "type": "array"
+                    },
+                    "comparisons": {
+                      "items": {
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "featured": {
+                      "items": {
+                        "$ref": "#/components/schemas/MarketProductCard"
+                      },
+                      "type": "array"
+                    },
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/MarketProductCard"
+                      },
+                      "type": "array"
+                    },
+                    "page": {
+                      "properties": {
+                        "number": {
+                          "type": "integer"
+                        },
+                        "size": {
+                          "type": "integer"
+                        },
+                        "totalItems": {
+                          "type": "integer"
+                        },
+                        "totalPages": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "number",
+                        "size",
+                        "totalItems",
+                        "totalPages"
+                      ],
+                      "type": "object"
+                    },
+                    "settings": {
+                      "properties": {
+                        "allowGiftPurchase": {
+                          "type": "boolean"
+                        },
+                        "allowGuestCheckout": {
+                          "type": "boolean"
+                        },
+                        "creditsEnabled": {
+                          "type": "boolean"
+                        },
+                        "currencies": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "currency": {
+                          "type": "string"
+                        },
+                        "currencySymbol": {
+                          "type": "string"
+                        },
+                        "modules": {
+                          "type": "object"
+                        },
+                        "pageSize": {
+                          "type": "integer"
+                        },
+                        "storeName": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "allowGiftPurchase",
+                        "allowGuestCheckout",
+                        "creditsEnabled",
+                        "currencies",
+                        "currency",
+                        "currencySymbol",
+                        "modules",
+                        "pageSize",
+                        "storeName"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "bestsellers",
+                    "categories",
+                    "comparisonProducts",
+                    "comparisons",
+                    "featured",
+                    "items",
+                    "page",
+                    "settings"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "The store front: settings, the category tree, the first page of products, featured and bestselling products and the comparisons.",
+        "tags": [
+          "store"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/store/products": {
+      "get": {
+        "operationId": "GetStoreProducts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "featured",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "currency",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/MarketProductCard"
+                      },
+                      "type": "array"
+                    },
+                    "page": {
+                      "$ref": "#/components/schemas/Page"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "page"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad request: BAD_REQUEST, INVALID_FIELDS",
+            "x-pano-error-codes": [
+              "BAD_REQUEST",
+              "INVALID_FIELDS"
+            ]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found: NOT_FOUND, PAGE_NOT_FOUND",
+            "x-pano-error-codes": [
+              "NOT_FOUND",
+              "PAGE_NOT_FOUND"
+            ]
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "A filtered and sorted page of products.",
+        "tags": [
+          "store"
+        ],
+        "x-pano-stability": "public"
+      }
+    },
+    "/widgets": {
+      "get": {
+        "operationId": "GetWidgets",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "goals": {
+                      "items": {
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "recentBuyers": {
+                      "items": {
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "sidebars": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "stats": {
+                      "type": "object"
+                    },
+                    "topSupporters": {
+                      "items": {
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "sidebars"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "Pano-Api-Level": {
+                "$ref": "#/components/headers/PanoApiLevel"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Service unavailable: MAINTENANCE_MODE_ENABLED, STORE_DISABLED, STORE_UNAVAILABLE",
+            "x-pano-error-codes": [
+              "MAINTENANCE_MODE_ENABLED",
+              "STORE_DISABLED",
+              "STORE_UNAVAILABLE"
+            ]
+          }
+        },
+        "summary": "The store modules for a sidebar or the home page: recent buyers, top supporters, community goals and statistics, each only when its module is on.",
+        "tags": [
+          "store"
+        ],
+        "x-pano-stability": "public"
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "/api/plugins/pano-plugin-market"
+    }
+  ],
+  "tags": [
+    {
+      "name": "categories"
+    },
+    {
+      "name": "checkout"
+    },
+    {
+      "name": "me"
+    },
+    {
+      "name": "orders"
+    },
+    {
+      "name": "payment-providers"
+    },
+    {
+      "name": "payments"
+    },
+    {
+      "name": "products"
+    },
+    {
+      "name": "store"
+    }
+  ]
+}

@@ -189,14 +189,14 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { base } from '@panomc/sdk/svelte';
   import { _, showErrorToast } from '../../../i18n';
   import CopyButton from '../CopyButton.svelte';
   import StatusBadge from '../StatusBadge.svelte';
   import { isStaleError } from '../order-detail/actions.js';
   import { hideModal, showModal } from '../order-detail/send.js';
-  import { call, errorKey, marketPath } from '../../utils/api.js';
+  import { call, errorKey } from '../../utils/api.js';
   import { currentLocale } from '../../utils/locale.js';
   import { can } from '../../utils/permissions.js';
   import {
@@ -252,7 +252,7 @@
     loading = true;
     loadError = null;
     try {
-      const result = await call(ApiUtil.get({ path: marketPath(`/shipments/${id}`) }));
+      const result = await call(api.panel.get({ path: `/shipments/${id}` }));
       if (!result.ok) {
         loadError = result.error;
         return;
@@ -295,7 +295,7 @@
     saving = true;
     try {
       const result = await call(
-        ApiUtil.put({ path: built.request.path, body: built.request.body }),
+        api.panel.put({ path: built.request.path, body: built.request.body }),
       );
       if (!result.ok) {
         showErrorToast(failureText($_, result.error, result.body));

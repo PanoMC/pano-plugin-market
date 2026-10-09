@@ -1,12 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 import {
   KNOWN_ERRORS,
+  PANEL_URL,
+  SITE_URL,
   call,
+  errorCode,
+  errorDetails,
+  errorFields,
   errorKey,
   errorParams,
+  failureOf,
   idempotencyKeyFor,
-  marketPath,
   newIdempotency,
+  panelUrl,
+  siteUrl,
   resetIdempotency,
 } from './api.js';
 import { uuid } from './uuid.js';
@@ -62,12 +69,18 @@ describe('api (13 25.1 tests 12-14)', () => {
       ok: false,
       error: 'NETWORK_ERROR',
       body: {},
+      details: {},
+      fields: {},
     });
     expect((await call(Promise.resolve(null))).error).toBe('NETWORK_ERROR');
-    const failed = await call(Promise.resolve({ error: 'NOT_FOUND', extra: 1 }));
+    const failed = await call(
+      Promise.resolve({ error: { code: 'NOT_FOUND', details: { extra: 1 } } }),
+    );
     expect(failed.ok).toBe(false);
     expect(failed.error).toBe('NOT_FOUND');
     expect(failed.body.extra).toBe(1);
+    expect(failed.details).toEqual({ extra: 1 });
+    expect(failed.fields).toEqual({});
     expect(await call(Promise.resolve({ id: 7 }))).toEqual({ ok: true, body: { id: 7 } });
     expect((await call(Promise.reject(new Error('boom')))).error).toBe('NETWORK_ERROR');
   });
@@ -78,6 +91,8 @@ describe('api (13 25.1 tests 12-14)', () => {
         ok: false,
         error: 'NETWORK_ERROR',
         body: {},
+        details: {},
+        fields: {},
       });
     }
     const blob = new Blob(['a,b']);
@@ -105,9 +120,50 @@ describe('api helpers', () => {
     expect(errorParams('NOT_FOUND', {})).toEqual({});
   });
 
-  test('marketPath', () => {
-    expect(marketPath('/orders')).toBe('/api/panel/market/orders');
-    expect(marketPath('/api/panel/players')).toBe('/api/panel/players');
+  test('the error envelope: code, details and fields (04 section 3)', async () => {
+    const body = {
+      error: {
+        code: 'INVALID_SETTINGS',
+        message: 'x',
+        details: { fieldErrors: { vatPercent: 'OUT_OF_RANGE' } },
+        fields: { email: 'EXISTS' },
+      },
+    };
+    expect(errorCode(body)).toBe('INVALID_SETTINGS');
+    expect(errorDetails(body)).toEqual({ fieldErrors: { vatPercent: 'OUT_OF_RANGE' } });
+    expect(errorFields(body)).toEqual({ email: 'EXISTS' });
+    const failed = await call(Promise.resolve(body));
+    expect(failed.error).toBe('INVALID_SETTINGS');
+    expect(failed.body.fieldErrors.vatPercent).toBe('OUT_OF_RANGE');
+    expect(failed.fields.email).toBe('EXISTS');
+    // no details / fields: empty objects, never undefined
+    expect(errorDetails({ error: { code: 'NOT_FOUND' } })).toEqual({});
+    expect(errorFields({ error: { code: 'NOT_FOUND' } })).toEqual({});
+    // a success body, or something that is not a body, has no code
+    expect(errorCode({ id: 1 })).toBeNull();
+    expect(errorCode(null)).toBeNull();
+    expect(errorCode('<html>')).toBeNull();
+    // an error without a usable code reads as UNKNOWN (errors.UNKNOWN)
+    expect(errorCode({ error: {} })).toBe('UNKNOWN');
+    expect(errorCode({ error: 'NOT_FOUND' })).toBe('UNKNOWN');
+  });
+
+  test('failureOf: null for a success, the code for an error, NETWORK_ERROR for a non-object', () => {
+    expect(failureOf({ items: [] })).toBeNull();
+    expect(failureOf({ error: { code: 'PAGE_NOT_FOUND' } })).toBe('PAGE_NOT_FOUND');
+    expect(failureOf(undefined)).toBe('NETWORK_ERROR');
+    expect(failureOf('<html>502</html>')).toBe('NETWORK_ERROR');
+  });
+
+  test('panelUrl / siteUrl: full addresses under /api/v1 for src and href', () => {
+    expect(PANEL_URL).toBe('/api/plugins/pano-plugin-market/panel');
+    expect(SITE_URL).toBe('/api/plugins/pano-plugin-market');
+    expect(panelUrl('/orders/export')).toBe(
+      '/api/plugins/pano-plugin-market/panel/orders/export',
+    );
+    expect(siteUrl('/payment-providers/x/logo')).toBe(
+      '/api/plugins/pano-plugin-market/payment-providers/x/logo',
+    );
   });
 
   test('uuid falls back to getRandomValues, then stays a v4 UUID', () => {

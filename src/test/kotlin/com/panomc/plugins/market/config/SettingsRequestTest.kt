@@ -9,13 +9,14 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.ErrorBodies
 
 /** `POST /settings` (04 section 8): partial update, additionalProperties false, `INVALID_SETTINGS` with fieldErrors. */
 class SettingsRequestTest {
     private fun current(): JsonObject = JsonObject(Gson().toJson(MarketConfig()))
 
     private fun fieldErrors(error: InvalidSettings): JsonObject =
-        JsonObject(error.encode(emptyMap())).getJsonObject("fieldErrors")
+        ErrorBodies.details(error).getJsonObject("fieldErrors")
 
     @Test
     fun `the schema lists exactly the non credit keys and refuses additional properties`() {

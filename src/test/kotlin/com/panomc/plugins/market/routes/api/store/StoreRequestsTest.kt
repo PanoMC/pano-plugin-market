@@ -3,6 +3,7 @@ package com.panomc.plugins.market.routes.api.store
 import com.panomc.plugins.market.db.model.ProductKind
 import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.service.ProductSort
+import com.panomc.plugins.market.support.assertOutOfRange
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -67,18 +68,18 @@ class StoreRequestsTest {
     @Test
     fun `page size is at most 60 and a default above that is capped`() {
         assertEquals(60, parse(pageSize = "60").pageSize)
-        refused("pageSize") { parse(pageSize = "61") }
-        refused("pageSize") { parse(pageSize = "0") }
-        refused("pageSize") { parse(pageSize = "-3") }
+        assertOutOfRange("pageSize") { parse(pageSize = "61") }
+        assertOutOfRange("pageSize") { parse(pageSize = "0") }
+        assertOutOfRange("pageSize") { parse(pageSize = "-3") }
         assertEquals(60, parse(default = 500).pageSize)
         assertEquals(1, parse(default = 0).pageSize)
     }
 
     @Test
     fun `bad values are refused with the field name`() {
-        refused("page") { parse(page = "0") }
-        refused("page") { parse(page = "abc") }
-        refused("page") { parse(page = "1.5") }
+        assertOutOfRange("page") { parse(page = "0") }
+        assertOutOfRange("page") { parse(page = "abc") }
+        assertOutOfRange("page") { parse(page = "1.5") }
         refused("category") { parse(category = "x") }
         refused("category") { parse(category = "0") }
         refused("category") { parse(category = "1.5") }

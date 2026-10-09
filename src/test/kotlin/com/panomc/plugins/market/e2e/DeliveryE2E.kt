@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test
 import java.security.KeyPairGenerator
 import java.util.Base64
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * The inline delivery engine on a real instance (MK-102, 08 sections 4.1, 5 to 7, 17): a paid order with a `CREDIT` and a `PERMISSION via=PANO`
@@ -28,7 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * E2E-08 adds the scenarios D-01 to D-06 of 17 section 9.6 (a command that waits for a server, the explicit re-run, the action webhook with its HMAC and
  * retries, the webhook target policy, a timed product that expires, a refund before a delayed delivery ran). Time travel is by row rewind only
- * (`market_webhook_delivery.nextAttemptAt`, `market_entitlement.startsAt` / `expiresAt`).
+ * (`webhook_delivery.nextAttemptAt`, `market_entitlement.startsAt` / `expiresAt`).
  */
 class DeliveryE2E : E2eTestBase() {
     override val tag = "dlv"
@@ -41,14 +42,14 @@ class DeliveryE2E : E2eTestBase() {
     private fun ensureRankGroup() = ensureGroup(rankGroup)
 
     private fun ensureGroup(name: String) {
-        val snapshot = admin.get("/api/panel/permission/snapshot").ok().obj()
+        val snapshot = admin.get("/api/v1/panel/permission/snapshot").ok().obj()
         val groups = snapshot.getJsonArray("groups") ?: JsonArray()
 
         if (groups.any { (it as JsonObject).getString("name") == name }) return
 
         groups.add(JsonObject().put("name", name).put("displayName", name))
         admin.post(
-            "/api/panel/permission/snapshot",
+            "/api/v1/panel/permission/snapshot",
             JsonObject().put("groups", groups).put("tracks", snapshot.getJsonArray("tracks") ?: JsonArray()).put("nodes", snapshot.getJsonArray("nodes") ?: JsonArray())
         ).ok()
     }
@@ -189,7 +190,7 @@ class DeliveryE2E : E2eTestBase() {
         val id = registeredServerId ?: return
 
         // the server only exists for D-01 (its delivery was cancelled by the scenario): remove it so later classes of the run see the instance without one
-        val answer = admin.post("/api/panel/servers/$id/delete", JsonObject().put("currentPassword", session.env.adminPassword()))
+        val answer = admin.post("/api/v1/panel/servers/$id/delete", JsonObject().put("currentPassword", session.env.adminPassword()))
 
         check(answer.status in 200..299) { "removing the test server answered ${answer.status} ${answer.error}" }
     }
@@ -203,11 +204,11 @@ class DeliveryE2E : E2eTestBase() {
         registeredServerId?.let { return it }
 
         val keys = KeyPairGenerator.getInstance("RSA").also { it.initialize(2048) }.generateKeyPair()
-        val platformCode = admin.get("/api/panel/basicData").ok().obj().getValue("platformServerMatchKey").toString()
+        val platformCode = admin.get("/api/v1/panel/basicData").ok().obj().getValue("platformServerMatchKey").toString()
         val name = "e2e-srv-" + System.nanoTime().toString(36).takeLast(8)
 
         visitor("mc").post(
-            "/api/server/connect",
+            "/api/v1/server/connect",
             JsonObject().put("platformCode", platformCode).put("serverName", name).put("host", "127.0.0.1").put("port", 25565).put("playerCount", 0)
                 .put("maxPlayerCount", 20).put("serverType", "PAPER").put("serverVersion", "1.21").put("startTime", System.currentTimeMillis())
                 .put("publicKey", Base64.getEncoder().encodeToString(keys.public.encoded))
@@ -215,7 +216,7 @@ class DeliveryE2E : E2eTestBase() {
 
         val id = db.long("SELECT `id` FROM `pano_server` WHERE `name` = ? ORDER BY `id` DESC LIMIT 1", name) ?: throw AssertionError("the connect request created no server row")
 
-        admin.post("/api/panel/servers/$id/accept", JsonObject()).ok()
+        admin.post("/api/v1/panel/servers/$id/accept", JsonObject()).ok()
         registeredServerId = id
 
         return id
@@ -232,7 +233,7 @@ class DeliveryE2E : E2eTestBase() {
 
     private fun flag(row: Row, column: String): Boolean = row.getValue(column).let { it == true || (it as? Number)?.toInt() == 1 }
 
-    private fun webhookRows(deliveryId: Long): List<Row> = db.sql("SELECT * FROM `pano_market_webhook_delivery` WHERE `deliveryId` = ? ORDER BY `id`", deliveryId)
+    private fun webhookRows(deliveryId: Long): List<Row> = db.sql("SELECT * FROM `pano_webhook_delivery` WHERE `ownerRef` = ? ORDER BY `id`", "delivery:$deliveryId")
 
     @Test
     fun `D-01 a command waits for a server - WAITING_SERVER, fulfillment PENDING, listed, the sale is not blocked`() {
@@ -260,17 +261,17 @@ class DeliveryE2E : E2eTestBase() {
         assertEquals(0L, orderEvents(publicId, "DELIVERY_FAILED"))
 
         // listed under the status filter (search = the buyer's name, so the rows of other scenarios do not matter)
-        val listed = admin.get("/api/panel/market/deliveries?status=WAITING_SERVER&search=${buyer.username}").ok().obj().getJsonArray("deliveries").map { it as JsonObject }
+        val listed = admin.get("${MarketPaths.PANEL_ROOT}/deliveries?status=WAITING_SERVER&search=${buyer.username}").ok().obj().getJsonArray("items").map { it as JsonObject }
 
         assertEquals(listOf(row.getLong("id")), listed.map { it.getLong("id") })
         assertEquals("WAITING_SERVER", listed.single().getString("status"))
         assertEquals("COMMAND", listed.single().getString("actionType"))
 
         // an open row is not part of the health queue (it would never drain), and the admin can cancel it
-        admin.post("/api/panel/market/deliveries/${row.getLong("id")}/cancel", JsonObject()).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/deliveries/${row.getLong("id")}/cancel", JsonObject()).ok()
 
         assertEquals("CANCELLED", deliveries(publicId).single().getString("status"))
-        assertEquals(0L, admin.get("/api/panel/market/deliveries?status=WAITING_SERVER&search=${buyer.username}").ok().obj().getLong("deliveryCount"))
+        assertEquals(0L, admin.get("${MarketPaths.PANEL_ROOT}/deliveries?status=WAITING_SERVER&search=${buyer.username}").ok().obj().getJsonObject("page").getLong("totalItems"))
     }
 
     @Test
@@ -292,7 +293,7 @@ class DeliveryE2E : E2eTestBase() {
         val before = snapshot(first)
 
         // the effective row took effect, so this grants again: the admin holds PAY as well as OM
-        val answer = admin.post("/api/panel/market/orders/$orderId/deliveries/rerun", JsonObject().put("all", true)).ok().obj()
+        val answer = admin.post("${MarketPaths.PANEL_ROOT}/orders/$orderId/deliveries/rerun", JsonObject().put("all", true)).ok().obj()
 
         assertEquals(1, answer.getInteger("created"))
         assertEquals(0, answer.getInteger("skipped"))
@@ -317,7 +318,7 @@ class DeliveryE2E : E2eTestBase() {
         assertEquals(1, orderEvents(publicId, "DELIVERY_RERUN").toInt())
 
         // the identical request again re-runs the (now second) effective row: again exactly one more row, never a repeat of an old key
-        admin.post("/api/panel/market/orders/$orderId/deliveries/rerun", JsonObject().put("all", true)).ok()
+        admin.post("${MarketPaths.PANEL_ROOT}/orders/$orderId/deliveries/rerun", JsonObject().put("all", true)).ok()
 
         val three = awaitSettled(publicId, 3)
 
@@ -355,7 +356,7 @@ class DeliveryE2E : E2eTestBase() {
             assertEquals(500, failed.getInteger("lastStatusCode"))
             assertTrue(failed.getLong("nextAttemptAt") > System.currentTimeMillis(), "the backoff is in the future")
 
-            db.rewind("market_webhook_delivery", failed.getLong("id"), "nextAttemptAt", 3_600_000)
+            db.rewind("webhook_delivery", failed.getLong("id"), "nextAttemptAt", 3_600_000)
         }
 
         val done = Await.untilValue(90_000, 500, "the webhook of $publicId succeeded") { webhookRows(deliveryId).singleOrNull()?.takeIf { it.getString("status") == "SUCCEEDED" } }
@@ -364,7 +365,7 @@ class DeliveryE2E : E2eTestBase() {
         assertEquals(200, done.getInteger("lastStatusCode"))
 
         // the log: three attempts of one row (one event id), and the panel detail says the same
-        val detail = admin.get("/api/panel/market/webhook-deliveries/${done.getLong("id")}").ok().obj()
+        val detail = admin.get("${com.panomc.platform.route.ApiPaths.PANEL_ROOT}/webhook-deliveries/${done.getLong("id")}").ok().obj()
         val view = detail.getJsonObject("delivery") ?: detail
 
         assertEquals(3, view.getInteger("attempts"))
@@ -378,7 +379,7 @@ class DeliveryE2E : E2eTestBase() {
         assertEquals(1, requests.map { it.header("X-Pano-Event-Id") }.toSet().size, "the event id is stable across the retries")
         assertEquals(done.getString("eventId"), requests.first().header("X-Pano-Event-Id"))
         assertEquals(1, requests.map { it.bodyText() }.toSet().size, "the body is identical on every attempt")
-        assertEquals(deliveryId, done.getLong("deliveryId"))
+        assertEquals("delivery:$deliveryId", done.getString("ownerRef"))
 
         for (request in requests) {
             val header = request.header("X-Pano-Signature") ?: throw AssertionError("no X-Pano-Signature")
@@ -395,33 +396,20 @@ class DeliveryE2E : E2eTestBase() {
     }
 
     @Test
-    fun `D-04 the webhook target policy refuses a private address and a file URL when private targets are not allowed`() {
-        session.withSettings(JsonObject().put("allowPrivateWebhookTargets", false)) {
-            val before = admin.get("/api/panel/market/webhooks").ok().obj().getJsonArray("webhooks").size()
+    fun `D-04 the webhook target policy refuses the metadata address and a file URL in a WEBHOOK action, whatever the private-targets switch of the platform says`() {
+        // the flag is the platform's (webhooks.allow-private-targets, doc 06 section 4.1); link-local and non-http addresses are refused with it as well
+        val n = sequence.incrementAndGet()
 
-            for (url in listOf("http://169.254.169.254/", "file:///etc/passwd")) {
-                val refused = admin.post(
-                    "/api/panel/market/webhooks",
-                    JsonObject().put("name", "E2E policy").put("url", url).put("events", JsonArray().add("order.paid")).put("format", "JSON").put("signing", "NONE")
-                )
-
-                assertEquals(400, refused.status, "$url: ${refused.json}")
-                assertEquals("INVALID_WEBHOOK_URL", refused.error, url)
-            }
-
-            assertEquals(before, admin.get("/api/panel/market/webhooks").ok().obj().getJsonArray("webhooks").size(), "no endpoint was stored")
-
-            // the same rule guards a WEBHOOK action of a product
-            val n = sequence.incrementAndGet()
+        for (url in listOf("http://169.254.169.254/latest", "file:///etc/passwd")) {
             val product = admin.multipart(
-                "POST", "/api/panel/market/products",
+                "POST", "${MarketPaths.PANEL_ROOT}/products",
                 mapOf(
                     "name" to "Policy $n", "slug" to "e2e-policy-${System.currentTimeMillis().toString(36)}-$n", "price" to "1.00", "status" to "ACTIVE",
-                    "actions" to JsonArray().add(action("a1", "WEBHOOK", JsonObject().put("url", "http://169.254.169.254/latest").put("format", "JSON").put("signing", "NONE"))).encode()
+                    "actions" to JsonArray().add(action("a1", "WEBHOOK", JsonObject().put("url", url).put("format", "JSON").put("signing", "NONE"))).encode()
                 )
             )
 
-            assertEquals(400, product.status, "${product.json}")
+            assertEquals(400, product.status, "$url: ${product.json}")
             assertTrue(product.json.toString().contains("INVALID_WEBHOOK_URL"), "the field error names the rule: ${product.json}")
         }
     }
@@ -501,7 +489,7 @@ class DeliveryE2E : E2eTestBase() {
         // a full refund with revoke: the row that never ran is cancelled, nothing has to be undone. `manual` (money returned outside the gateway, 21 section 3.6)
         // because the fake gateway only refunds a payment whose id it was told in the paid event, and ids of one JVM (`pay_<n>`) repeat across runs on a kept database
         admin.post(
-            "/api/panel/market/orders/$orderId/refunds", JsonObject().put("revoke", true).put("manual", true).put("reason", "E2E D-06"), mapOf("Idempotency-Key" to idempotencyKey())
+            "${MarketPaths.PANEL_ROOT}/orders/$orderId/refunds", JsonObject().put("revoke", true).put("manual", true).put("reason", "E2E D-06"), mapOf("Idempotency-Key" to idempotencyKey())
         ).ok()
         awaitOrder(publicId, "REFUNDED")
 

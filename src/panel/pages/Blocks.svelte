@@ -157,7 +157,6 @@
       path: '/blocks',
       params: BLOCK_PARAMS,
       nodes: ['OM'],
-      emptyKey: 'blocks',
       title: 'pages.blocks.title',
     });
   }
@@ -165,7 +164,7 @@
 
 <script>
   import FilterSelect from '../components/FilterSelect.svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import {
     CardHeader,
     CardFilters,
@@ -180,7 +179,7 @@
   import LoadError from '../components/LoadError.svelte';
   import BlockModal from '../components/modals/BlockModal.svelte';
   import { sectionsFor } from '../navigation.js';
-  import { call, marketPath } from '../utils/api.js';
+  import { call } from '../utils/api.js';
   import {
     SOURCES,
     TYPE_TABS,
@@ -191,6 +190,7 @@
     rowActions,
   } from '../utils/blocks.js';
   import { gotoList } from '../utils/list.js';
+  import { pageOf } from '../utils/page.js';
   import { currentLocale } from '../utils/locale.js';
   import { can } from '../utils/permissions.js';
   import { toastError } from '../utils/toast.js';
@@ -202,10 +202,11 @@
 
   const user = $derived($page.data?.user);
   const filters = $derived(normalizeFilters(data.filters));
-  const blocks = $derived(data.blocks ?? []);
-  const blockCount = $derived(data.blockCount ?? data.count ?? 0);
-  const totalPage = $derived(data.totalPage ?? 1);
-  const currentPage = $derived(data.page ?? 1);
+  const list = $derived(pageOf(data));
+  const blocks = $derived(list.items);
+  const blockCount = $derived(list.totalItems);
+  const totalPage = $derived(list.totalPages);
+  const currentPage = $derived(list.number);
   const currentTab = $derived(activeTypeTab(filters.type));
   // Read once per load(): the host remounts the page whenever load() re-runs.
   const now = $derived.by(() => {
@@ -247,7 +248,7 @@
       confirmLabel: $_('pages.blocks.actions.remove'),
       variant: 'danger',
       onConfirm: async () => {
-        const result = await call(ApiUtil.delete({ path: marketPath(`/blocks/${block.id}`) }));
+        const result = await call(api.panel.delete({ path: `/blocks/${block.id}` }));
         if (!result.ok) {
           toastError($_, result);
           if (result.error !== 'NOT_FOUND') return false;

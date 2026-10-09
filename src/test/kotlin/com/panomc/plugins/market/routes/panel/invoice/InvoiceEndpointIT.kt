@@ -52,6 +52,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * The invoice endpoints on a real MariaDB (MK-144; 12 sections 8 and 9; T-API-1 to T-API-3 and T-API-6 in their service form, T-DB-6): owner-only
@@ -307,7 +308,7 @@ class InvoiceEndpointIT : MarketDaoITBase() {
         val failure = runCatching { endpoints.buyerFile(resolve(placed, session = 7), InvoiceType.INVOICE, null, pool) }.exceptionOrNull()
 
         assertTrue(failure is InvoiceRenderFailed, "got $failure")
-        assertEquals("INVOICE_RENDER_FAILED", body(failure as Error).getString("error"))
+        assertEquals("INVOICE_RENDER_FAILED", body(failure as Error).getJsonObject("error").getString("code"))
         assertNull(w.invoices.getById(invoice.id, pool)!!.fileName)
         assertEquals(0, Files.walk(folder).filter { it.toString().endsWith(".pdf") || it.toString().endsWith(".tmp") }.count().toInt(), "no half-written file")
 
@@ -471,9 +472,9 @@ class InvoiceEndpointIT : MarketDaoITBase() {
         fun reason(block: () -> Unit): String {
             val e = failure<InvoiceNotIssuable>(block)
 
-            assertEquals("INVOICE_NOT_ISSUABLE", body(e).getString("error"))
+            assertEquals("INVOICE_NOT_ISSUABLE", body(e).getJsonObject("error").getString("code"))
 
-            return body(e).getString("reason")
+            return ErrorBodies.details(e).getString("reason")
         }
 
         val unpaid = place(status = OrderStatus.PENDING)
@@ -550,8 +551,8 @@ class InvoiceEndpointIT : MarketDaoITBase() {
 
         val low = failure<InvalidInvoiceSequence> { runBlocking { endpoints.setSequence("INV", 50) } }
 
-        assertEquals("INVALID_INVOICE_SEQUENCE", body(low).getString("error"))
-        assertEquals(101L, body(low).getLong("minimum"), "the smallest accepted value is the counter plus one")
+        assertEquals("INVALID_INVOICE_SEQUENCE", body(low).getJsonObject("error").getString("code"))
+        assertEquals(101L, ErrorBodies.details(low).getLong("minimum"), "the smallest accepted value is the counter plus one")
         assertEquals(100L, w.sequences.getValue("invoice:INV", pool), "the counter did not move")
 
         assertEquals("INV-2025-000101", issue(place()).number)
@@ -562,7 +563,7 @@ class InvoiceEndpointIT : MarketDaoITBase() {
         for (bad in listOf("inv", "TOOLONGSERIES", "A B", "")) {
             val e = failure<InvalidInvoiceSequence> { runBlocking { endpoints.setSequence(bad, 5) } }
 
-            assertNull(body(e).getValue("minimum"), "an invalid series has no minimum: '$bad'")
+            assertNull(ErrorBodies.details(e).getValue("minimum"), "an invalid series has no minimum: '$bad'")
         }
 
         assertTrue(runCatching { endpoints.setSequence("CN", 0) }.exceptionOrNull() is InvalidInvoiceSequence, "zero would move backwards from nothing too")

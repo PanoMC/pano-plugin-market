@@ -143,11 +143,11 @@ describe('subscriptionView', () => {
     expect(readSubscriptions({ ok: false, code: 'NETWORK' })).toBeNull();
     expect(readSubscriptions(undefined)).toBeNull();
     expect(readSubscriptions({ ok: true })).toEqual([]);
-    expect(readSubscriptions({ ok: true, subscriptions: [row(), 3, null] })).toHaveLength(1);
+    expect(readSubscriptions({ ok: true, items: [row(), 3, null] })).toHaveLength(1);
   });
 
   test('replaceSubscription swaps the returned row and leaves others alone', () => {
-    const list = readSubscriptions({ ok: true, subscriptions: [row(), row({ id: 8 })] });
+    const list = readSubscriptions({ ok: true, items: [row(), row({ id: 8 })] });
     const next = replaceSubscription(list, row({ cancelAtPeriodEnd: true }));
     expect(next[0].cancelAtPeriodEnd).toBe(true);
     expect(next[1]).toBe(list[1]);
@@ -160,10 +160,10 @@ describe('requests', () => {
   test('cancel is at period end only; the body cannot be mutated into an immediate cancel', () => {
     expect(CANCEL_BODY).toEqual({ atPeriodEnd: true });
     expect(Object.isFrozen(CANCEL_BODY)).toBe(true);
-    expect(actionPath(7, 'cancel')).toBe('/api/market/me/subscriptions/7/cancel');
-    expect(actionPath('a b', 'portal')).toBe('/api/market/me/subscriptions/a%20b/portal');
-    expect(SUBSCRIPTION_PATH).toBe('/api/market/me/subscriptions');
-    expect(CREATOR_PATH).toBe('/api/market/me/creator');
+    expect(actionPath(7, 'cancel')).toBe('/me/subscriptions/7/cancel');
+    expect(actionPath('a b', 'portal')).toBe('/me/subscriptions/a%20b/portal');
+    expect(SUBSCRIPTION_PATH).toBe('/me/subscriptions');
+    expect(CREATOR_PATH).toBe('/me/creator');
   });
 });
 
@@ -238,7 +238,7 @@ describe('resolveSubscriptionsLoad', () => {
 
   test('rows, title and the page extras behind the feature flags', () => {
     const r = resolveSubscriptionsLoad({
-      subscriptions: { ok: true, subscriptions: [row()] },
+      subscriptions: { ok: true, items: [row()] },
       features: { sidebar: true, meta: true },
     });
     expect(r.data.state).toBe('READY');
@@ -247,7 +247,7 @@ describe('resolveSubscriptionsLoad', () => {
     expect(r.sidebar).toBe('profile');
     expect(r.meta).toEqual({ robots: 'noindex,nofollow' });
 
-    const plain = resolveSubscriptionsLoad({ subscriptions: { ok: true, subscriptions: [] } });
+    const plain = resolveSubscriptionsLoad({ subscriptions: { ok: true, items: [] } });
     expect('sidebar' in plain).toBe(false);
     expect('meta' in plain).toBe(false);
   });
@@ -303,10 +303,22 @@ describe('creator rows and badges (14 §12.5)', () => {
   });
 
   test('readEarnings clamps the page count', () => {
-    expect(readEarnings(null)).toEqual({ earnings: [], earningCount: 0, totalPage: 1 });
+    expect(readEarnings(null)).toEqual({ earnings: [], earningCount: 0, totalPages: 1 });
     expect(
-      readEarnings({ earnings: [{ orderNumber: 1 }, 5], earningCount: 2, totalPage: 0 }).totalPage,
+      readEarnings({
+        items: [{ orderNumber: 1 }, 5],
+        page: { number: 1, size: 10, totalItems: 2, totalPages: 0 },
+      }).totalPages,
     ).toBe(1);
+  });
+
+  test('readEarnings reads the page object and ignores the array under its old name', () => {
+    const page = { number: 2, size: 10, totalItems: 11, totalPages: 2 };
+    const row = { orderNumber: 1, amount: 1, state: 'AVAILABLE', createdAt: 1 };
+
+    expect(readEarnings({ items: [row], page })).toMatchObject({ earningCount: 11, totalPages: 2 });
+    expect(readEarnings({ items: [row], page }).earnings).toMatchObject([{ orderNumber: 1 }]);
+    expect(readEarnings({ earnings: [row], page }).earnings).toEqual([]);
   });
 });
 
@@ -324,9 +336,8 @@ describe('resolveCreatorLoad', () => {
       },
     ],
     totals: { earned: 12.5, paidOut: 5, available: 7.5, currency: 'USD' },
-    earnings: [{ orderNumber: 3, amount: 2, state: 'AVAILABLE', createdAt: 1 }],
-    earningCount: 1,
-    totalPage: 1,
+    items: [{ orderNumber: 3, amount: 2, state: 'AVAILABLE', createdAt: 1 }],
+    page: { number: 1, size: 10, totalItems: 1, totalPages: 1 },
     payouts: [{ amount: 5, method: 'CREDIT', state: 'PAID', paidAt: 2 }],
     ...over,
   });
@@ -452,6 +463,7 @@ describe('source rules of the subscription and creator files (14 §2)', () => {
       '@panomc/sdk/svelte',
       '@panomc/sdk/components/theme',
       '@panomc/sdk/utils/component',
+      '@panomc/sdk/controllers',
     ];
     for (const file of FILES)
       for (const m of read(file).matchAll(/from\s+['"](@panomc\/sdk[^'"]*)['"]/g))
@@ -497,10 +509,15 @@ describe('source rules of the subscription and creator files (14 §2)', () => {
 });
 
 describe('registration', () => {
-  test('both pages are registered with ProfileLayout', () => {
-    const src = read('src/theme/register.js');
-    expect(src).toContain("path: '/profile/subscriptions'");
-    expect(src).toContain("path: '/profile/creator'");
-    expect(src.match(/systemLayout: 'ProfileLayout'/g)).toHaveLength(4);
+  test('both pages are registered with ProfileLayout (view metadata of the page files)', () => {
+    for (const [file, route] of [
+      ['SubscriptionsPage', '/profile/subscriptions'],
+      ['CreatorPage', '/profile/creator'],
+    ]) {
+      expect(read(`src/theme/pages/profile/${file}.svelte`)).toContain(
+        `export const view = { path: '${route}', systemLayout: 'ProfileLayout' };`,
+      );
+    }
+    expect(read('src/theme/register.js')).not.toContain('systemLayout');
   });
 });

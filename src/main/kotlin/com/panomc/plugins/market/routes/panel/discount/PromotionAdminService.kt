@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.discount
 
+import com.panomc.platform.model.PageRequest
 import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.core.time.Clock
@@ -18,7 +19,6 @@ import com.panomc.plugins.market.service.ShippingService
 import com.panomc.plugins.market.service.platform.UserDirectory
 import com.panomc.plugins.market.util.GiftType
 import com.panomc.plugins.market.util.MoneyUtil
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.coAwait
@@ -67,7 +67,7 @@ class PromotionAdminService(
     // ----------------------------------------------------------------------------------------------------- lists
 
     /** `GET /<plural>`: live rows, newest first; [search] matches the code (or the name), [status] the status. */
-    suspend fun list(promotion: Promotion, window: Paging.Window, search: String?, status: String?): PromotionPage {
+    suspend fun list(promotion: Promotion, window: PageRequest, search: String?, status: String?): PromotionPage {
         val sql = client()
         val columns = PromotionRules.columns(promotion)
         val where = StringBuilder("`deletedAt` IS NULL")
@@ -93,7 +93,7 @@ class PromotionAdminService(
         val total = sql.preparedQuery("SELECT COUNT(*) AS `n` FROM ${table(promotion)} WHERE $where").execute(params).coAwait().first().getLong("n")
         val rows = sql.preparedQuery(
             "SELECT ${columns.joinToString(", ") { "`${it.name}`" }} FROM ${table(promotion)} WHERE $where ORDER BY `id` DESC LIMIT ? OFFSET ?"
-        ).execute(copy(params).addLong(window.pageSize.toLong()).addLong(window.offset)).coAwait().map { row -> json(columns, row) }
+        ).execute(copy(params).addLong(window.size.toLong()).addLong(window.offset)).coAwait().map { row -> json(columns, row) }
 
         return PromotionPage(decorate(promotion, rows, sql), total)
     }
@@ -368,13 +368,13 @@ class PromotionAdminService(
     // ---------------------------------------------------------------------------------------------- redemptions
 
     /** `GET /<plural>/:id/redemptions`: 404 for a row that never existed; a soft-deleted row keeps its history readable. */
-    suspend fun redemptionList(promotion: Promotion, id: Long, window: Paging.Window): RedemptionPage {
+    suspend fun redemptionList(promotion: Promotion, id: Long, window: PageRequest): RedemptionPage {
         val sql = client()
         val exists = sql.preparedQuery("SELECT 1 FROM ${table(promotion)} WHERE `id` = ?").execute(Tuple.of(id)).coAwait().iterator().hasNext()
 
         if (!exists) throw NotFound()
 
-        return redemptions.listFor(sql, promotion.kind, id, window.page.toLong(), window.pageSize.toLong())
+        return redemptions.listFor(sql, promotion.kind, id, window.number.toLong(), window.size.toLong())
     }
 
     private companion object {

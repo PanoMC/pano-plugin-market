@@ -69,7 +69,7 @@ class MigrationInterruptedIT : MarketMigrationTestBase() {
         resetState()
         for (step in chain()) step.migrate(pool)
         ensure()
-        assertEquals(53, SchemaSnapshot.take(pool).tables.size)
+        assertEquals(51, SchemaSnapshot.take(pool).tables.size)
         return Reference(SchemaSnapshot.take(pool), data())
     }
 

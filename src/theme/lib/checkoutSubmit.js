@@ -5,7 +5,7 @@ import { checkoutAction } from './errorMap.js';
 import { afterCheckout, orderPagePath } from './paymentStart.js';
 import { wireAddress } from './checkoutModel.js';
 
-export const CHECKOUT_PATH = '/api/market/checkout';
+export const CHECKOUT_PATH = '/checkout';
 export const IDEMPOTENCY_HEADER = 'Idempotency-Key';
 /** sessionStorage key prefix of an order's access token (14 §11.1: `pano-plugin-market-order:<publicId>`). */
 export const ORDER_TOKEN_PREFIX = 'pano-plugin-market-order:';
@@ -14,7 +14,7 @@ const isObject = (value) => value !== null && typeof value === 'object' && !Arra
 const money = (value) => Math.round(Number(value) * 100) / 100;
 
 /**
- * The body of `POST /api/market/checkout`: the quote body plus `expectedTotal` (the `total` the buyer is looking
+ * The body of `POST /checkout`: the quote body plus `expectedTotal` (the `total` the buyer is looking
  * at), `acceptLegal` + `legalTextId` when the legal text is required, `hideFromBroadcast` when ticked. `useCredits`
  * is always a number here: the credits the quote applied (never `"MAX"`); when none were applied it is left out.
  */

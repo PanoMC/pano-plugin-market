@@ -44,9 +44,9 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _, showSuccessToast } from '../../../i18n';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { fieldErrorKey, sequenceError } from '../../utils/settings.js';
   import { toastError } from '../../utils/toast.js';
   import { hideModal, showModal } from '../order-detail/send.js';
@@ -88,8 +88,8 @@
     let result;
     try {
       result = await call(
-        ApiUtil.put({
-          path: marketPath('/settings/invoice-sequence'),
+        api.panel.put({
+          path: '/settings/invoice-sequence',
           body: { series, nextNumber: Number(text) },
         }),
       );

@@ -14,7 +14,7 @@ import io.vertx.json.schema.SchemaRepository
 /** `POST /api/panel/market/gifts` (`P:DISC`): `{id}`; 400 with `fieldErrors`; a code that exists in any of the three code tables is 409 `CODE_ALREADY_EXISTS`. */
 @Endpoint
 class PanelCreateGiftAPI(plugin: MarketPlugin) : PromotionAdminRoute(plugin, Promotion.GIFT) {
-    override val paths = listOf(Path("/api/panel/market/gifts", RouteType.POST))
+    override val paths = listOf(Path("/gifts", RouteType.POST))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = bodyValidation(schemaRepository)
 

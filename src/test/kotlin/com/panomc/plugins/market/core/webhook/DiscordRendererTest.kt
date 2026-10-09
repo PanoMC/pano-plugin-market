@@ -36,6 +36,17 @@ class DiscordRendererTest {
     private fun embed(body: JsonObject): JsonObject = body.getJsonArray("embeds").getJsonObject(0)
 
     @Test
+    fun `core's envelope names the site, the planner's still says store, both fill the store tokens`() {
+        val core = paid()
+        val site = core.remove("store")
+        core.put("site", site)
+
+        assertEquals("Test Craft", DiscordRenderer.vars("order.paid", core, labels).getValue("store.name"))
+        assertEquals("https://shop.example.com", DiscordRenderer.vars("order.paid", core, labels).getValue("store.url"))
+        assertEquals("Test Craft", DiscordRenderer.vars("order.paid", paid(), labels).getValue("store.name"))
+    }
+
+    @Test
     fun `the built-in body is valid JSON for names with quotes, backslashes and newlines`() {
         val nasty = "Ste\"ve\\\n\r\t{x} "
         val body = render(null, paid(username = nasty, items = listOf(item("Rank \"VIP\"\nline2", 2, "Gold\\Plus"))))

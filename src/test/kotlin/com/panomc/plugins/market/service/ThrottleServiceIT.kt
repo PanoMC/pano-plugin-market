@@ -199,6 +199,6 @@ class ThrottleServiceIT : MarketDaoITBase() {
         clock.advance(minute - 1)
 
         assertEquals(1L, t.retryAfterSeconds(until))
-        assertEquals(1, io.vertx.core.json.JsonObject(TooManyRequests(t.retryAfterSeconds(until)).encode()).getInteger("retryAfter"))
+        assertEquals(1, com.panomc.plugins.market.support.ErrorBodies.details(TooManyRequests(t.retryAfterSeconds(until))).getInteger("retryAfter"))
     }
 }

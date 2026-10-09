@@ -1,5 +1,12 @@
 package com.panomc.plugins.market.routes.user.subscription
 
+import com.panomc.plugins.market.error.SubscriptionNotResumable
+import com.panomc.plugins.market.error.SubscriptionNotCancellable
+import com.panomc.plugins.market.error.StoreUnavailable
+import com.panomc.plugins.market.error.StoreDisabled
+import com.panomc.platform.error.NotLoggedIn
+import com.panomc.platform.schema.EndpointDoc
+import com.panomc.platform.schema.CoreSchemas
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.error.NotFound
@@ -23,9 +30,9 @@ import com.panomc.plugins.market.spi.payment.PortalPurpose
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters.param
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.Parameters.param
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.booleanSchema
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
@@ -39,7 +46,14 @@ private fun optionalBody(schemaRepository: SchemaRepository, build: io.vertx.jso
 /** `GET /api/market/me/subscriptions` (`USER`, 04 section 4, 09 section 13): every row of the buyer except `PENDING`, newest first. */
 @Endpoint
 class GetMySubscriptionsAPI(private val plugin: MarketPlugin) : MarketUserApi() {
-    override val paths = listOf(Path("/api/market/me/subscriptions", RouteType.GET))
+    override val paths = listOf(Path("/me/subscriptions", RouteType.GET))
+
+    override val doc = EndpointDoc(
+        summary = "The subscriptions of the buyer.",
+        tag = "me",
+        response = CoreSchemas.list(objectSchema()),
+        errors = listOf(NotLoggedIn::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler? = null
 
@@ -48,7 +62,7 @@ class GetMySubscriptionsAPI(private val plugin: MarketPlugin) : MarketUserApi() 
 
         noStore(context)
 
-        return Successful(mapOf("subscriptions" to rows))
+        return Successful(mapOf("items" to rows))
     }
 }
 
@@ -58,7 +72,14 @@ class GetMySubscriptionsAPI(private val plugin: MarketPlugin) : MarketUserApi() 
  */
 @Endpoint
 class CancelMySubscriptionAPI(private val plugin: MarketPlugin) : MarketUserApi() {
-    override val paths = listOf(Path("/api/market/me/subscriptions/:id/cancel", RouteType.POST))
+    override val paths = listOf(Path("/me/subscriptions/:id/cancel", RouteType.POST))
+
+    override val doc = EndpointDoc(
+        summary = "Cancels a subscription, or answers the address where the provider cancels it.",
+        tag = "me",
+        response = objectSchema(),
+        errors = listOf(NotFound::class, SubscriptionNotCancellable::class, NotLoggedIn::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = optionalBody(schemaRepository) { optionalProperty("atPeriodEnd", booleanSchema()) }
 
@@ -80,7 +101,14 @@ class CancelMySubscriptionAPI(private val plugin: MarketPlugin) : MarketUserApi(
 /** `POST /api/market/me/subscriptions/:id/resume` (`USER`, CSRF, 09 section 10.2): undo a cancel at the period end; `{subscription}`. 409 `SUBSCRIPTION_NOT_RESUMABLE`; 502. */
 @Endpoint
 class ResumeMySubscriptionAPI(private val plugin: MarketPlugin) : MarketUserApi() {
-    override val paths = listOf(Path("/api/market/me/subscriptions/:id/resume", RouteType.POST))
+    override val paths = listOf(Path("/me/subscriptions/:id/resume", RouteType.POST))
+
+    override val doc = EndpointDoc(
+        summary = "Resumes a cancelled subscription.",
+        tag = "me",
+        response = objectSchema().requiredProperty("subscription", objectSchema()),
+        errors = listOf(NotFound::class, SubscriptionNotResumable::class, NotLoggedIn::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = optionalBody(schemaRepository)
 
@@ -99,7 +127,14 @@ class ResumeMySubscriptionAPI(private val plugin: MarketPlugin) : MarketUserApi(
  */
 @Endpoint
 class PortalMySubscriptionAPI(private val plugin: MarketPlugin) : MarketUserApi() {
-    override val paths = listOf(Path("/api/market/me/subscriptions/:id/portal", RouteType.POST))
+    override val paths = listOf(Path("/me/subscriptions/:id/portal", RouteType.POST))
+
+    override val doc = EndpointDoc(
+        summary = "The address of the provider's billing portal for a subscription.",
+        tag = "me",
+        response = objectSchema().requiredProperty("url", stringSchema()),
+        errors = listOf(NotFound::class, NotLoggedIn::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = optionalBody(schemaRepository) { optionalProperty("purpose", stringSchema()) }
 
@@ -121,7 +156,14 @@ class PortalMySubscriptionAPI(private val plugin: MarketPlugin) : MarketUserApi(
  */
 @Endpoint
 class GetMySubscriptionPortalPageAPI(private val plugin: MarketPlugin) : MarketUserApi() {
-    override val paths = listOf(Path("/api/market/me/subscriptions/portal-pages/:token", RouteType.GET))
+    override val paths = listOf(Path("/me/subscriptions/portal-pages/:token", RouteType.GET))
+
+    override val doc = EndpointDoc(
+        summary = "The page a billing portal address resolves to.",
+        tag = "me",
+        binary = true,
+        errors = listOf(NotFound::class, NotLoggedIn::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository).pathParameter(param("token", stringSchema())).build()

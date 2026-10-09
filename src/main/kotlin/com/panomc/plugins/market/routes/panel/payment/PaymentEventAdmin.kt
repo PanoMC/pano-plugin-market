@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.payment
 
+import com.panomc.platform.model.PageRequest
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.core.abuse.Redactor
 import com.panomc.plugins.market.db.dao.MarketOrderDao
@@ -13,7 +14,6 @@ import com.panomc.plugins.market.error.StatusQueryNotSupported
 import com.panomc.plugins.market.permission.FieldGating
 import com.panomc.plugins.market.routes.api.payment.ReplayResult
 import com.panomc.plugins.market.service.PaymentService
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.coAwait
@@ -26,8 +26,8 @@ class Replayed(val status: String, val providerId: String) {
     fun toJson(): JsonObject = JsonObject().put("status", status)
 }
 
-/** One page of provider traffic: the rows as JSON, how many rows match, how many pages. */
-class PaymentEventPage(val rows: List<JsonObject>, val count: Long, val totalPage: Long)
+/** One page of provider traffic: the rows as JSON and how many rows match. */
+class PaymentEventPage(val rows: List<JsonObject>, val count: Long)
 
 /**
  * What the panel does with the raw provider traffic (04 section 7, 02 section 7.3, 11 sections 4.3 and 8.4), as a service so the rules run in a database
@@ -62,14 +62,14 @@ class PaymentEventAdmin(
     private fun table(name: String) = "`${prefix()}$name`"
 
     /** `GET /payments/:paymentId/events`: the events of one attempt, oldest first. 404 when there is no such attempt. */
-    suspend fun forPayment(paymentId: Long, window: Paging.Window, raw: Boolean, client: SqlClient): PaymentEventPage {
+    suspend fun forPayment(paymentId: Long, window: PageRequest, raw: Boolean, client: SqlClient): PaymentEventPage {
         payments.getById(paymentId, client) ?: throw NotFound()
 
         return page("`paymentId` = ?", listOf(paymentId), "`id` ASC", window, raw, client)
     }
 
     /** `GET /payment-events`: inbound traffic by [statuses] (default [ATTENTION]) and provider, newest first. */
-    suspend fun list(statuses: Set<PaymentEventStatus>, providerId: String?, window: Paging.Window, raw: Boolean, client: SqlClient): PaymentEventPage {
+    suspend fun list(statuses: Set<PaymentEventStatus>, providerId: String?, window: PageRequest, raw: Boolean, client: SqlClient): PaymentEventPage {
         val wanted = (if (statuses.isEmpty()) ATTENTION else statuses.toList())
         val args = ArrayList<Any?>()
         var where = "`direction` = 'IN' AND `status` IN (${wanted.joinToString(", ") { "'${it.name}'" }})"
@@ -82,10 +82,10 @@ class PaymentEventAdmin(
         return page(where, args, "`id` DESC", window, raw, client)
     }
 
-    private suspend fun page(where: String, args: List<Any?>, order: String, window: Paging.Window, raw: Boolean, client: SqlClient): PaymentEventPage {
+    private suspend fun page(where: String, args: List<Any?>, order: String, window: PageRequest, raw: Boolean, client: SqlClient): PaymentEventPage {
         val count = client.preparedQuery("SELECT COUNT(*) AS c FROM ${table("market_payment_event")} WHERE $where").execute(Tuple.from(args)).coAwait().first().getLong("c")
         val rows = client.preparedQuery("SELECT $COLUMNS FROM ${table("market_payment_event")} WHERE $where ORDER BY $order LIMIT ? OFFSET ?")
-            .execute(Tuple.from(args + window.pageSize + window.offset)).coAwait()
+            .execute(Tuple.from(args + window.size + window.offset)).coAwait()
 
         val redactors = HashMap<String, Redactor>()
         val out = ArrayList<JsonObject>()
@@ -97,7 +97,7 @@ class PaymentEventAdmin(
             out += json(row, raw, redactor)
         }
 
-        return PaymentEventPage(out, count, Paging.totalPages(count, window.pageSize))
+        return PaymentEventPage(out, count)
     }
 
     private fun json(row: Row, raw: Boolean, redactor: Redactor): JsonObject {

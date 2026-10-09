@@ -57,7 +57,7 @@ export const scenarios = [
       for (const { locale, viewport, account } of combos) {
         if (account)
           must(
-            await reader.put('/api/profile', { localeCode: locale }),
+            await reader.put('/api/v1/profile', { localeCode: locale }),
             `switch the account to ${locale}`,
           );
 
@@ -158,6 +158,15 @@ export const scenarios = [
           `${label}: no unreplaced translation placeholder in the cart`,
         );
 
+        // the offcanvas slides in (class `showing` until the transition ends): a click on the moving link never gets "stable"
+        await page.waitForFunction(
+          () => {
+            const el = document.querySelector('#marketCartOffcanvas');
+            return !!el && el.classList.contains('show') && !el.classList.contains('showing');
+          },
+          undefined,
+          { timeout: 30000 },
+        );
         await offcanvas.getByRole('link', { name: 'Checkout' }).click();
         await page.waitForURL('**/store/checkout', { timeout: 30000 });
         await page

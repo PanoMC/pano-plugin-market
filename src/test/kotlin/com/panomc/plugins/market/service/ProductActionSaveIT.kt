@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * Action validation and `ActionGuard` inside the product save transaction (MK-104; 08 section 2.2, 11 section 14.4): the rules run against the stored row
@@ -154,7 +155,7 @@ class ProductActionSaveIT : MarketDaoITBase() {
         val e = runCatching { service.update(saved.id, input("serverChoices" to emptyList<Int>()), Caller(admin = true)) }.exceptionOrNull()
 
         assertTrue(e is InvalidProduct)
-        assertEquals("SERVER_CHOICES_REQUIRED", JsonObject((e as InvalidProduct).encode(emptyMap())).getJsonObject("fieldErrors").getString("actions.0.serverMode"))
+        assertEquals("SERVER_CHOICES_REQUIRED", ErrorBodies.details((e as InvalidProduct)).getJsonObject("fieldErrors").getString("actions.0.serverMode"))
         assertEquals("[1,3]", w.products.getById(saved.id, pool)!!.serverChoices)
     }
 
@@ -164,7 +165,7 @@ class ProductActionSaveIT : MarketDaoITBase() {
         val e = runCatching { service.create(named("actions" to unknown), Caller(admin = true)) }.exceptionOrNull()
 
         assertTrue(e is InvalidProduct)
-        assertEquals("UNKNOWN_SERVER", JsonObject((e as InvalidProduct).encode(emptyMap())).getJsonObject("fieldErrors").getString("actions.0.targetServers"))
+        assertEquals("UNKNOWN_SERVER", ErrorBodies.details((e as InvalidProduct)).getJsonObject("fieldErrors").getString("actions.0.targetServers"))
         assertEquals(0, count("market_product"))
 
         val perUnit = runCatching { service.create(named("actions" to """[{"type":"COMMAND","value":["x"],"targetServers":[1],"perUnit":true}]"""), Caller(admin = true)) }.exceptionOrNull()

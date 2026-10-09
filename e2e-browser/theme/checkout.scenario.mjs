@@ -1,7 +1,7 @@
 // Theme browser scenarios 16 to 22 of 14 section 20.3 (checkout: guest, login gate, codes, gift, legal, billing), vanilla theme.
 // Ids TH-16 .. TH-22 are the numbers of the spec. The fake gateway is a test-mode method: only a signed-in buyer with the PAY node may use it
 // (06 section 6.7), so a guest pays by bank transfer in these scenarios and the gateway round trip is made by a signed-in buyer.
-import { must } from '../lib/api.mjs';
+import { must, MARKET_API, PANEL_MARKET_API } from '../lib/api.mjs';
 import { BUYER_PASSWORD, coupon } from '../lib/bootstrap.mjs';
 import { newContext } from '../lib/browser.mjs';
 import { assert, assertEqual, open } from '../lib/ui.mjs';
@@ -344,7 +344,7 @@ export const scenarios = [
       const cpn = await coupon(admin, 10);
       const code = `CR${tag}`;
       const creatorId = must(
-        await admin.post('/api/panel/market/creator-codes', {
+        await admin.post(`${PANEL_MARKET_API}/creator-codes`, {
           creator: streamer.username,
           code,
           discount: 5,
@@ -354,7 +354,7 @@ export const scenarios = [
         'creator code',
       ).json.id;
       const sale = must(
-        await admin.post('/api/panel/market/discounts', {
+        await admin.post(`${PANEL_MARKET_API}/discounts`, {
           name: `E2E sale ${tag}`,
           value: 30,
           unit: 'PERCENT',
@@ -368,7 +368,7 @@ export const scenarios = [
         // the quote of the API is the oracle for what the page must show
         const oracle = async (account, combine) => {
           return must(
-            await account.post('/api/market/checkout/quote', {
+            await account.post(`${MARKET_API}/checkout/quote`, {
               items: [{ productId: item.id, quantity: 1 }],
               couponCode: cpn.code,
               creatorCode: code,
@@ -438,8 +438,8 @@ export const scenarios = [
           );
         }
       } finally {
-        await admin.request('DELETE', `/api/panel/market/discounts/${sale}`);
-        await admin.request('DELETE', `/api/panel/market/creator-codes/${creatorId}`);
+        await admin.request('DELETE', `${PANEL_MARKET_API}/discounts/${sale}`);
+        await admin.request('DELETE', `${PANEL_MARKET_API}/creator-codes/${creatorId}`);
       }
     },
   },
@@ -542,7 +542,7 @@ export const scenarios = [
 
       const publish = async (title, content) =>
         must(
-          await admin.post('/api/panel/market/settings/legal', {
+          await admin.post(`${PANEL_MARKET_API}/settings/legal`, {
             locale: 'en-US',
             title,
             content,
@@ -693,7 +693,7 @@ export const scenarios = [
           const page = await ctx.page();
           const quoteBodies = [];
 
-          await page.route(`${env.url}/api/market/checkout/quote`, async (route) => {
+          await page.route(`${env.url}${MARKET_API}/checkout/quote`, async (route) => {
             quoteBodies.push(JSON.parse(route.request().postData() || '{}'));
             const response = await route.fetch();
             const json = await response.json();

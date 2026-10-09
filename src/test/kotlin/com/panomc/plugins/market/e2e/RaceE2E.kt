@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.e2e
 
+import com.panomc.platform.route.ApiPaths
 import com.panomc.plugins.market.e2e.support.E2eBuyer
 import com.panomc.plugins.market.e2e.support.E2eCatalog
 import com.panomc.plugins.market.e2e.support.E2eClient
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.UUID
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * Race conditions over HTTP (17 section 9.4), all 28 scenarios: R-01, R-04, R-10 (MK-080), R-02, R-03, R-05 to R-09 and R-11 to R-14 (E2E-05) and R-15 to R-28
@@ -54,7 +56,7 @@ class RaceE2E : E2eTestBase() {
                 val round = E2eRace.round(
                     2,
                     setup = { i -> hooks[i].also { it.warm() } },
-                    action = { hook -> hook.request("POST", "/api/market/payments/fake/webhook", body, mapOf("X-Fake-Signature" to signature), csrf = false, cookiesOn = false) }
+                    action = { hook -> hook.request("POST", "${MarketPaths.SITE_ROOT}/payments/fake/webhook", body, mapOf("X-Fake-Signature" to signature), csrf = false, cookiesOn = false) }
                 )
                 val answers = round.values()
 
@@ -246,8 +248,8 @@ class RaceE2E : E2eTestBase() {
                         when (i) {
                             0 -> post(clients[0], first)
                             1 -> post(clients[1], second)
-                            3 -> clients[3].get("/api/market/orders/$publicId/status")
-                            5 -> clients[5].post("/api/panel/market/payments/$paymentId/query", JsonObject())
+                            3 -> clients[3].get("${MarketPaths.SITE_ROOT}/orders/$publicId/status")
+                            5 -> clients[5].post("${MarketPaths.PANEL_ROOT}/payments/$paymentId/query", JsonObject())
                             else -> clients[i].get(returnTarget)
                         }
                     }
@@ -298,7 +300,7 @@ class RaceE2E : E2eTestBase() {
             assertEquals(2L, db.count("market_order_item", "`variantId` = ?", small), "exactly two orders hold the variant")
 
             // the winners cancel: both units are back and nothing stays booked (the expiry path is R-04's)
-            for ((i, answer) in answers.withIndex()) if (answer.status == 200) buyers[i].client.post("/api/market/orders/${publicIdOf(answer)}/cancel", JsonObject()).ok()
+            for ((i, answer) in answers.withIndex()) if (answer.status == 200) buyers[i].client.post("${MarketPaths.SITE_ROOT}/orders/${publicIdOf(answer)}/cancel", JsonObject()).ok()
 
             assertEquals(2L, variantStock(small), "the stock is back after the cancellations")
             assertEquals(0L, reservedOfVariant(small), "and nothing is reserved any more")
@@ -325,13 +327,13 @@ class RaceE2E : E2eTestBase() {
 
             assertEquals(3, answers.count { it.status == 200 }, "exactly three orders take the coupon: ${answers.map { it.status to it.error }}")
             assertEquals(17, refused.count { it.status == 400 && it.error == "INVALID_COUPON" }, "the other 17 are refused: ${refused.map { it.status to it.error }}")
-            assertEquals(List(17) { "CODE_LIMIT_REACHED" }, refused.map { it.obj().getString("reason") }, "with the reason of the limit: ${refused.firstOrNull()?.text}")
+            assertEquals(List(17) { "CODE_LIMIT_REACHED" }, refused.map { it.details.getString("reason") }, "with the reason of the limit: ${refused.firstOrNull()?.text}")
             assertEquals(3L, db.count("market_redemption", "`kind` = 'COUPON' AND `refId` = ? AND `state` = 'HELD'", couponId), "three HELD redemptions")
             assertEquals(3L, db.long("SELECT `usedCount` FROM `pano_market_coupon` WHERE `id` = ?", couponId), "usedCount is 3")
             assertEquals(3L, db.long("SELECT COUNT(DISTINCT `orderId`) FROM `pano_market_redemption` WHERE `kind` = 'COUPON' AND `refId` = ?", couponId), "on three different orders")
 
             // the winners cancel (their buyers are shared with other scenarios): the uses go back
-            for ((i, answer) in answers.withIndex()) if (answer.status == 200) buyers[i].client.post("/api/market/orders/${publicIdOf(answer)}/cancel", JsonObject()).ok()
+            for ((i, answer) in answers.withIndex()) if (answer.status == 200) buyers[i].client.post("${MarketPaths.SITE_ROOT}/orders/${publicIdOf(answer)}/cancel", JsonObject()).ok()
 
             assertEquals(0L, db.count("market_redemption", "`kind` = 'COUPON' AND `refId` = ? AND `state` = 'HELD'", couponId), "no redemption is held after the cancellations")
             assertEquals(0L, db.long("SELECT `usedCount` FROM `pano_market_coupon` WHERE `id` = ?", couponId), "usedCount is back to 0")
@@ -506,7 +508,7 @@ class RaceE2E : E2eTestBase() {
 
             assertEquals(1, answers.count { it.status == 200 }, "exactly one checkout succeeds: ${answers.map { it.status to it.error }}")
             assertEquals(5, refused.count { it.status == 409 && it.error == "COOLDOWN_ACTIVE" }, "the other five are refused: ${refused.map { it.status to it.error }}")
-            assertTrue(refused.all { (it.obj().getInteger("retryAfter") ?: 0) in 1..3600 }, "each tells when to come back: ${refused.map { it.json?.getValue("retryAfter") }}")
+            assertTrue(refused.all { (it.details.getInteger("retryAfter") ?: 0) in 1..3600 }, "each tells when to come back: ${refused.map { it.details.getValue("retryAfter") }}")
             assertEquals(1L, db.long("SELECT COUNT(DISTINCT `orderId`) FROM `pano_market_order_item` WHERE `productId` = ?", product.id), "exactly one order holds the product")
 
             settle()
@@ -538,10 +540,10 @@ class RaceE2E : E2eTestBase() {
                 action = { i ->
                     val k = i / 2
 
-                    if (i % 2 == 0) payers[k].first.post("/api/panel/market/orders/${placed[k].orderId}/refunds", JsonObject(), keyed())
+                    if (i % 2 == 0) payers[k].first.post("${MarketPaths.PANEL_ROOT}/orders/${placed[k].orderId}/refunds", JsonObject(), keyed())
                     else {
                         Thread.sleep(sweep(k, round))
-                        payers[k].second.post("/api/panel/market/orders/${placed[k].orderId}/refunds", JsonObject(), keyed())
+                        payers[k].second.post("${MarketPaths.PANEL_ROOT}/orders/${placed[k].orderId}/refunds", JsonObject(), keyed())
                     }
                 }
             )
@@ -558,7 +560,7 @@ class RaceE2E : E2eTestBase() {
                 ends.merge(refused.error.orEmpty(), 1, Int::plus)
                 assertTrue(refused.error == "INVALID_REFUND_AMOUNT" || refused.error == "INVALID_ORDER_TRANSITION", "${p.publicId}: refused as ${refused.error}: ${refused.text}")
 
-                if (refused.error == "INVALID_REFUND_AMOUNT") assertEquals(0.0, refused.obj().getDouble("max"), 0.0001, "${p.publicId}: nothing is left to refund")
+                if (refused.error == "INVALID_REFUND_AMOUNT") assertEquals(0.0, refused.details.getDouble("max"), 0.0001, "${p.publicId}: nothing is left to refund")
 
                 val row = orderRow(p.publicId)
 
@@ -595,7 +597,7 @@ class RaceE2E : E2eTestBase() {
             val round = E2eRace.round(
                 5,
                 setup = { i -> i.also { clients[it].warm() } },
-                action = { i -> clients[i].post("/api/panel/market/orders/${p.orderId}/refunds", JsonObject(), keyed(key)) }
+                action = { i -> clients[i].post("${MarketPaths.PANEL_ROOT}/orders/${p.orderId}/refunds", JsonObject(), keyed(key)) }
             )
             val answers = round.values()
 
@@ -642,7 +644,7 @@ class RaceE2E : E2eTestBase() {
                 awaitOrder(publicId, "COMPLETED")
 
                 val known = gateway.refunds.keys.toSet()
-                val requested = admin.post("/api/panel/market/orders/$orderId/refunds", JsonObject(), keyed()).ok().obj().getJsonObject("refund")
+                val requested = admin.post("${MarketPaths.PANEL_ROOT}/orders/$orderId/refunds", JsonObject(), keyed()).ok().obj().getJsonObject("refund")
                 val refundId = requested.getLong("id")
                 val gatewayRefund = (gateway.refunds.keys - known).single()
 
@@ -741,7 +743,7 @@ class RaceE2E : E2eTestBase() {
                     if (i % 2 == 0) post(webhookClients[i / 2], hooks[i / 2])
                     else {
                         Thread.sleep(sweep(i / 2, round))
-                        placed[i / 2].buyer.client.post("/api/market/orders/${placed[i / 2].publicId}/cancel", JsonObject())
+                        placed[i / 2].buyer.client.post("${MarketPaths.SITE_ROOT}/orders/${placed[i / 2].publicId}/cancel", JsonObject())
                     }
                 }
             )
@@ -786,7 +788,7 @@ class RaceE2E : E2eTestBase() {
             val round = E2eRace.round(
                 placed.size * 2,
                 setup = { i -> i.also { clients[it / 2][it % 2].warm() } },
-                action = { i -> clients[i / 2][i % 2].post("/api/market/orders/${placed[i / 2].publicId}/pay", JsonObject().put("paymentMethodId", "fake")) }
+                action = { i -> clients[i / 2][i % 2].post("${MarketPaths.SITE_ROOT}/orders/${placed[i / 2].publicId}/pay", JsonObject().put("paymentMethodId", "fake")) }
             )
             val answers = round.values()
 
@@ -857,14 +859,14 @@ class RaceE2E : E2eTestBase() {
             val product = catalog.fresh("VIP")
             val code = "GF" + uniqueCode(10)
             val giftId = admin.post(
-                "/api/panel/market/gifts", JsonObject().put("code", code).put("type", "PRODUCT").put("productId", product.id).put("redeemLimit", 1)
+                "${MarketPaths.PANEL_ROOT}/gifts", JsonObject().put("code", code).put("type", "PRODUCT").put("productId", product.id).put("redeemLimit", 1)
             ).ok().obj().getLong("id")
             val users = listOf(buyers[0], buyers[1])
 
             val round = E2eRace.round(
                 2,
                 setup = { i -> i.also { users[it].client.warm() } },
-                action = { i -> users[i].client.post("/api/market/me/gifts/redeem", JsonObject().put("code", code)) }
+                action = { i -> users[i].client.post("${MarketPaths.SITE_ROOT}/me/gifts/redeem", JsonObject().put("code", code)) }
             )
             val answers = round.values()
 
@@ -873,7 +875,7 @@ class RaceE2E : E2eTestBase() {
             val refused = answers.single { it.status == 400 }
 
             assertEquals("INVALID_GIFT_CODE", refused.error)
-            assertEquals("CODE_LIMIT_REACHED", refused.obj().getString("reason"), "the reason of the refusal: ${refused.text}")
+            assertEquals("CODE_LIMIT_REACHED", refused.details.getString("reason"), "the reason of the refusal: ${refused.text}")
 
             assertEquals(1L, db.count("market_order", "`giftId` = ?", giftId), "one order carries the gift")
             assertEquals(1L, db.count("market_redemption", "`kind` = 'GIFT' AND `refId` = ? AND `state` IN ('HELD', 'APPLIED')", giftId), "one live redemption")
@@ -927,7 +929,7 @@ class RaceE2E : E2eTestBase() {
                 action = { i ->
                     if (i % 2 == 0) {
                         Thread.sleep(sweep(i / 2, round))
-                        revokers[i / 2].post("/api/panel/market/credits/accounts/${owners[i / 2].userId}/revoke", JsonObject().put("amount", 100).put("note", "e2e race revoke"), keyed())
+                        revokers[i / 2].post("${MarketPaths.PANEL_ROOT}/credits/accounts/${owners[i / 2].userId}/revoke", JsonObject().put("amount", 100).put("note", "e2e race revoke"), keyed())
                     } else checkout(owners[i / 2].client, cart(line(product.id)).put("payWithCredits", true), method = "credits")
                 }
             )
@@ -981,7 +983,7 @@ class RaceE2E : E2eTestBase() {
                 6,
                 setup = { i -> i.also { if (it == 5) adjuster.warm() else shoppers[it].client.warm() } },
                 action = { i ->
-                    if (i == 5) adjuster.post("/api/panel/market/products/${product.id}/stock", JsonObject().put("mode", "ADJUST").put("value", -1))
+                    if (i == 5) adjuster.post("${MarketPaths.PANEL_ROOT}/products/${product.id}/stock", JsonObject().put("mode", "ADJUST").put("value", -1))
                     else checkout(shoppers[i].client, cart(line(product.id)))
                 }
             )
@@ -1003,7 +1005,7 @@ class RaceE2E : E2eTestBase() {
 
             // the winners cancel: every unit is back, nothing stays booked
             for ((i, answer) in checkouts.withIndex()) {
-                if (answer.status == 200) shoppers[i].client.post("/api/market/orders/${answer.obj().getJsonObject("order").getString("publicId")}/cancel", JsonObject()).ok()
+                if (answer.status == 200) shoppers[i].client.post("${MarketPaths.SITE_ROOT}/orders/${answer.obj().getJsonObject("order").getString("publicId")}/cancel", JsonObject()).ok()
             }
 
             assertEquals(3L - adjusted, productStock(product.id), "after the cancellations the stock is 3 - adjustment")
@@ -1024,7 +1026,7 @@ class RaceE2E : E2eTestBase() {
             val round = E2eRace.round(
                 10,
                 setup = { i -> i.also { clients[it].warm() } },
-                action = { i -> clients[i].post("/api/market/me/cart/items", JsonObject().put("productId", product.id).put("quantity", 1)) }
+                action = { i -> clients[i].post("${MarketPaths.SITE_ROOT}/me/cart/items", JsonObject().put("productId", product.id).put("quantity", 1)) }
             )
 
             assertEquals(List(10) { 200 }, round.values().map { it.status }, "every add is answered 200: ${round.values().map { it.status to it.error }}")
@@ -1036,12 +1038,12 @@ class RaceE2E : E2eTestBase() {
             assertEquals(1L, db.count("market_cart_item", "`cartId` = ?", cartId), "one row for the one line")
             assertEquals(10L, db.long("SELECT `quantity` FROM `pano_market_cart_item` WHERE `cartId` = ?", cartId), "its quantity is 10")
 
-            val view = owner.client.get("/api/market/me/cart").ok().obj().getJsonObject("cart").getJsonArray("items")
+            val view = owner.client.get("${MarketPaths.SITE_ROOT}/me/cart").ok().obj().getJsonObject("cart").getJsonArray("items")
 
             assertEquals(1, view.size())
             assertEquals(10, view.getJsonObject(0).getInteger("quantity"))
 
-            owner.client.delete("/api/market/me/cart").ok()
+            owner.client.delete("${MarketPaths.SITE_ROOT}/me/cart").ok()
             settle()
             round
         }
@@ -1118,7 +1120,7 @@ class RaceE2E : E2eTestBase() {
                 val product = catalog.fresh("VIP")
                 val code = "RP" + uniqueCode(10)
                 val codeId = admin.post(
-                    "/api/panel/market/creator-codes",
+                    "${MarketPaths.PANEL_ROOT}/creator-codes",
                     JsonObject().put("creator", "creator-$code").put("code", code).put("discount", 5).put("unit", "PERCENT").put("commissionPercent", 10)
                 ).ok().obj().getLong("id")
 
@@ -1144,7 +1146,7 @@ class RaceE2E : E2eTestBase() {
                     setup = { i -> i.also { payers[it].warm() } },
                     action = { i ->
                         payers[i].post(
-                            "/api/panel/market/creator-codes/$codeId/payouts",
+                            "${MarketPaths.PANEL_ROOT}/creator-codes/$codeId/payouts",
                             JsonObject().put("amount", available).put("method", "MANUAL").put("note", "e2e race payout"), keyed()
                         )
                     }
@@ -1214,7 +1216,7 @@ class RaceE2E : E2eTestBase() {
                     } else {
                         if (k % 2 == 0) Thread.sleep(sweep(k, round))
 
-                        refunders[k].post("/api/panel/market/orders/${placed[k].orderId}/refunds", JsonObject(), keyed())
+                        refunders[k].post("${MarketPaths.PANEL_ROOT}/orders/${placed[k].orderId}/refunds", JsonObject(), keyed())
                     }
                 }
             )
@@ -1303,12 +1305,12 @@ class RaceE2E : E2eTestBase() {
                 setup = { i -> i.also { clients[it].warm() } },
                 action = { i ->
                     when (i) {
-                        0 -> coupons.post("/api/panel/market/coupons", JsonObject().put("name", "Race $code").put("code", code).put("discount", 10).put("unit", "PERCENT"))
+                        0 -> coupons.post("${MarketPaths.PANEL_ROOT}/coupons", JsonObject().put("name", "Race $code").put("code", code).put("discount", 10).put("unit", "PERCENT"))
                         1 -> creators.post(
-                            "/api/panel/market/creator-codes",
+                            "${MarketPaths.PANEL_ROOT}/creator-codes",
                             JsonObject().put("creator", "creator-$code").put("code", code).put("discount", 5).put("unit", "PERCENT").put("commissionPercent", 10)
                         )
-                        else -> gifts.post("/api/panel/market/gifts", JsonObject().put("code", code).put("type", "PRODUCT").put("productId", product.id).put("redeemLimit", 1))
+                        else -> gifts.post("${MarketPaths.PANEL_ROOT}/gifts", JsonObject().put("code", code).put("type", "PRODUCT").put("productId", product.id).put("redeemLimit", 1))
                     }
                 }
             )
@@ -1352,7 +1354,7 @@ class RaceE2E : E2eTestBase() {
     private fun uniqueCode(length: Int): String = UUID.randomUUID().toString().replace("-", "").take(length).uppercase()
 
     private fun grant(userId: Long, amount: Number, key: String = idempotencyKey(), client: E2eClient = admin): E2eResponse =
-        client.post("/api/panel/market/credits/accounts/$userId/grant", JsonObject().put("amount", amount).put("note", "e2e race grant"), keyed(key))
+        client.post("${MarketPaths.PANEL_ROOT}/credits/accounts/$userId/grant", JsonObject().put("amount", amount).put("note", "e2e race grant"), keyed(key))
 
     private fun creditBalance(userId: Long): Long = db.long("SELECT `balance` FROM `pano_market_credit_account` WHERE `userId` = ? AND `type` = 'USER'", userId) ?: 0L
 
@@ -1368,7 +1370,7 @@ class RaceE2E : E2eTestBase() {
     }
 
     private fun post(client: E2eClient, hook: Pair<ByteArray, String>, provider: String = "fake"): E2eResponse =
-        client.request("POST", "/api/market/payments/$provider/webhook", hook.first, mapOf("X-Fake-Signature" to hook.second), csrf = false, cookiesOn = false)
+        client.request("POST", "${MarketPaths.SITE_ROOT}/payments/$provider/webhook", hook.first, mapOf("X-Fake-Signature" to hook.second), csrf = false, cookiesOn = false)
 
     /** Marks the payment paid at the gateway and signs its `payment.succeeded`. */
     private fun paidHook(reference: String): Pair<ByteArray, String> {
@@ -1453,7 +1455,7 @@ class RaceE2E : E2eTestBase() {
 
     /** `available` of one creator code in the report, in the store currency. */
     private fun availableOf(codeId: Long): Double =
-        admin.get("/api/panel/market/creator-codes/report").ok().obj().getJsonArray("creators").map { it as JsonObject }.single { it.getLong("id") == codeId }.getDouble("available")
+        admin.get("${MarketPaths.PANEL_ROOT}/creator-codes/report").ok().obj().getJsonArray("creators").map { it as JsonObject }.single { it.getLong("id") == codeId }.getDouble("available")
 
     /**
      * The end of one round: the queues that act on money, stock and entitlements (deliveries, webhooks, deferred inbound events) are drained and every global
@@ -1463,7 +1465,7 @@ class RaceE2E : E2eTestBase() {
      */
     private fun settle() {
         Await.until(30_000, 250, "the queues of the round are drained") {
-            val queues = admin.get("/api/panel/market/health", log = false).obj().getJsonObject("queues")
+            val queues = admin.get("${MarketPaths.PANEL_ROOT}/health", log = false).obj().getJsonObject("queues")
 
             listOf("deliveriesPending", "webhooksPending", "deferredEvents").all { (queues?.getInteger(it) ?: 0) == 0 }
         }
@@ -1506,15 +1508,15 @@ class RaceE2E : E2eTestBase() {
     private fun <T> withStoreSink(label: String, body: (StoreSink) -> T): T {
         val hook = label + System.nanoTime().toString(36).takeLast(8)
         val endpointId = admin.post(
-            "/api/panel/market/webhooks",
-            JsonObject().put("name", "E2E $hook").put("url", "${gateway.baseUrl}/hooks/$hook").put("events", JsonArray().add("order.paid")).put("format", "JSON")
+            "${ApiPaths.PANEL_ROOT}/webhooks",
+            JsonObject().put("name", "E2E $hook").put("url", "${gateway.baseUrl}/hooks/$hook").put("events", JsonArray().add("market.order.paid")).put("format", "JSON")
                 .put("signing", "HMAC_SHA256").put("secret", "whsec_e2e_${label}_" + System.nanoTime().toString(36))
         ).ok().obj().getLong("id")
 
         try {
             return body(StoreSink(endpointId, hook))
         } finally {
-            admin.delete("/api/panel/market/webhooks/$endpointId")
+            admin.delete("${ApiPaths.PANEL_ROOT}/webhooks/$endpointId")
         }
     }
 
@@ -1525,12 +1527,12 @@ class RaceE2E : E2eTestBase() {
     private fun assertOrderPaidReachedSinkOnce(sink: StoreSink, publicId: String) {
         val calls = gateway.hooks(sink.hook).map { JsonObject(it.bodyText()) }.filter { it.getJsonObject("data")?.getJsonObject("order")?.getString("publicId") == publicId }
 
-        assertEquals(listOf("order.paid"), calls.map { it.getString("event") }, "the store webhook sink got exactly one call for $publicId, and it is order.paid")
+        assertEquals(listOf("market.order.paid"), calls.map { it.getString("event") }, "the store webhook sink got exactly one call for $publicId, and it is order.paid")
 
         val orderId = orderRow(publicId).getLong("id")
 
         assertEquals(
-            listOf("SUCCEEDED"), db.sql("SELECT `status` FROM `pano_market_webhook_delivery` WHERE `orderId` = ? AND `endpointId` = ?", orderId, sink.endpointId).map { it.getString("status") },
+            listOf("SUCCEEDED"), db.sql("SELECT `status` FROM `pano_webhook_delivery` WHERE `subjectRef` = ? AND `endpointId` = ?", "order:$orderId", sink.endpointId).map { it.getString("status") },
             "the one order.paid delivery row is SUCCEEDED once the queue is drained"
         )
     }
@@ -1541,7 +1543,7 @@ class RaceE2E : E2eTestBase() {
      * it). Delivery (MK-102): the standard VIP product has two GRANT actions (`a1`, `a2` of `E2eCatalog.grantAndRevoke`: a permission and a credit
      * action; the REVOKE rows are the inverse the planner derives later, CP-1), so the O2 transaction plans exactly two rows, however many copies of the webhook race for it. Mail (MK-142):
      * O2 queues exactly one `ORDER_CONFIRMATION` to the buyer, however many copies of the webhook race for it. Webhook: O2 emits `order.paid` once per
-     * enabled endpoint; a caller that registered its [StoreSink] expects exactly one `market_webhook_delivery` row of that endpoint for the order (event
+     * enabled endpoint; a caller that registered its [StoreSink] expects exactly one `webhook_delivery` row of that endpoint for the order (event
      * `order.paid`), a caller without one expects none.
      */
     private fun assertSingleSetOfSideEffects(orderId: Long, sink: StoreSink? = null) {
@@ -1551,12 +1553,13 @@ class RaceE2E : E2eTestBase() {
         val sideEffects = mapOf(
             "market_delivery" to Triple("orderId", "`orderItemId`, `actionId`, `unitIndex`, `phase`, `attemptGroup`", 2L),
             "market_mail_outbox" to Triple("orderId", "`kind`, `recipient`", 1L),
-            "market_webhook_delivery" to Triple("orderId", "`endpointId`, `event`", if (sink == null) 0L else 1L)
+            "webhook_delivery" to Triple("subjectRef", "`endpointId`, `event`", if (sink == null) 0L else 1L)
         )
 
         for ((table, spec) in sideEffects) {
             val (column, key, expected) = spec
-            val row = db.sql("SELECT COUNT(*) AS n, COUNT(DISTINCT $key) AS d FROM `pano_$table` WHERE `$column` = ?", orderId).first()
+            // core's delivery log names the order in `subjectRef` (`order:<id>`)
+            val row = db.sql("SELECT COUNT(*) AS n, COUNT(DISTINCT $key) AS d FROM `pano_$table` WHERE `$column` = ?", if (table == "webhook_delivery") "order:$orderId" else orderId).first()
 
             assertEquals(expected, row.getLong("n"), "rows of $table for the order (MK-102: VIP has two GRANT actions, one row each; MK-142: one ORDER_CONFIRMATION mail; one order.paid row per registered store endpoint)")
             assertEquals(row.getLong("n"), row.getLong("d"), "no business key of $table exists twice for the order")
@@ -1564,7 +1567,7 @@ class RaceE2E : E2eTestBase() {
 
         if (sink != null) {
             assertEquals(
-                1L, db.count("market_webhook_delivery", "`orderId` = ? AND `endpointId` = ? AND `event` = 'order.paid'", orderId, sink.endpointId),
+                1L, db.count("webhook_delivery", "`subjectRef` = ? AND `endpointId` = ? AND `event` = 'market.order.paid'", "order:$orderId", sink.endpointId),
                 "exactly one order.paid delivery row for the order and the registered endpoint"
             )
         }

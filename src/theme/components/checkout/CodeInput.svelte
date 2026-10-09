@@ -1,12 +1,13 @@
-<div>
-  <label class="form-label" for={id}>{label}</label>
+<div class="market-code-input">
+  <label class="market-code-input__label form-label" for={id}>{label}</label>
 
   {#if isApplied}
     <div class="d-flex align-items-center gap-2">
-      <span class="badge text-bg-success text-break">{info.code ?? applied}</span>
+      <span class="market-code-input__badge badge text-bg-success text-break"
+        >{info.code ?? applied}</span>
       <button
         type="button"
-        class="btn btn-sm btn-outline-secondary"
+        class="market-code-input__action btn btn-sm btn-outline-secondary"
         aria-label={$_('theme.checkout.code-remove', { values: { code: info.code ?? applied } })}
         {disabled}
         onclick={remove}>
@@ -17,7 +18,7 @@
     <div class="input-group">
       <input
         {id}
-        class={['form-control', invalid && 'is-invalid']}
+        class={['market-code-input__input', 'form-control', invalid && 'is-invalid']}
         type="text"
         maxlength="64"
         autocomplete="off"
@@ -35,7 +36,7 @@
         }} />
       <button
         type="button"
-        class="btn btn-outline-primary"
+        class="market-code-input__code-apply btn btn-outline-primary"
         disabled={disabled || locked || busy || text.trim() === ''}
         onclick={apply}>
         {#if busy}
@@ -56,8 +57,11 @@
 </div>
 
 <script>
-  import { _ } from '../../../i18n.js';
-  import { now } from '../../stores/clock.js';
+  import { plugin } from '@panomc/sdk/controllers';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const clock = market.require('clock');
 
   /**
    * One code field (coupon, creator code). `applied` = the code in the draft; `info` = codeState() of
@@ -84,7 +88,9 @@
   const isApplied = $derived(info.status === 'APPLIED' && applied !== '');
   const invalid = $derived(info.status === 'INVALID');
   const seconds = $derived(
-    info.status === 'LOCKED' ? Math.max(0, Math.ceil((Number(info.until) - $now) / 1000)) : 0,
+    info.status === 'LOCKED'
+      ? Math.max(0, Math.ceil((Number(info.until) - clock.state.now) / 1000))
+      : 0,
   );
   const locked = $derived(info.status === 'LOCKED' && seconds > 0);
 

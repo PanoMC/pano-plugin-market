@@ -159,14 +159,14 @@
 {/each}
 
 <script module>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { loadOrderDetailWith } from '../components/order-detail/load-core.js';
 
   /**
    * @type {import("@sveltejs/kit").PageLoad}
    */
   export function load(event) {
-    return loadOrderDetailWith({ get: (options) => ApiUtil.get(options) }, event);
+    return loadOrderDetailWith({ get: (options) => api.panel.get(options) }, event);
   }
 </script>
 

@@ -11,8 +11,8 @@ import com.panomc.plugins.market.spi.shipping.LabelFormat
 import io.vertx.core.buffer.Buffer
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
@@ -77,7 +77,7 @@ internal fun labelHeaders(context: RoutingContext, format: LabelFormat, fileName
 /** `GET /api/panel/market/shipments/:id/label` (`P:OM`): q `index?` (0), `generic?`; the stored carrier label, or market's generic PDF label. */
 @Endpoint
 class PanelGetShipmentLabelAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_MANAGE)) {
-    override val paths = listOf(Path("/api/panel/market/shipments/:id/label", RouteType.GET))
+    override val paths = listOf(Path("/shipments/:id/label", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository)

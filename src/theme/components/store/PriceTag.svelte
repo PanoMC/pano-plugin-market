@@ -1,4 +1,4 @@
-<div>
+<div class="market-price-tag">
   <div class="d-flex flex-wrap align-items-baseline gap-2">
     {#if product.priceFrom}
       <span class="small text-body-secondary">{$_('theme.store.price-starting-at')}</span>
@@ -12,7 +12,7 @@
       <span class="small text-body-secondary">{suffix}</span>
     {/if}
     {#if settings.creditsEnabled && product.creditPrice != null}
-      <span class="badge text-bg-info text-wrap text-start">
+      <span class="market-price-tag__badge badge text-bg-info text-wrap text-start">
         <i class="fa-solid fa-coins me-1" aria-hidden="true"></i>{formatCredits(
           product.creditPrice,
           settings.creditName || $_('theme.store.credits'),
@@ -28,16 +28,20 @@
 </div>
 
 <script>
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { strikePrice } from '../../lib/sale.js';
-  import { now } from '../../stores/clock.js';
-  import { formatCredits, formatMoney, formatPeriod, formatPrice } from '../../utils/format.js';
+
+  const market = plugin('market');
+  const _ = market._;
+  const clock = market.require('clock');
+  const { formatCredits, formatMoney, formatPeriod, formatPrice } =
+    market.require('format').actions;
 
   /** Shared by the card, the product page and the cart. showVat: the VAT note (product page only). */
   let { product, settings = {}, showVat = false } = $props();
 
   const currency = $derived(product.currency || settings.displayCurrency || settings.currency);
-  const strike = $derived(strikePrice(product, settings, $now));
+  const strike = $derived(strikePrice(product, settings, clock.state.now));
 
   function money(amount) {
     return currency

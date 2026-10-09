@@ -69,7 +69,7 @@ class Redactor(secretValues: Set<String> = emptySet()) {
         val queryAt = url.indexOf('?')
         val path = if (queryAt < 0) url else url.substring(0, queryAt)
         val query = if (queryAt < 0) null else url.substring(queryAt + 1)
-        val shortPath = path.split('/').joinToString("/") { seg -> if (TOKEN_SEGMENT.matches(seg)) seg.substring(0, 6) + ELLIPSIS else seg }
+        val shortPath = path.split('/').joinToString("/") { seg -> if (seg != PLUGIN_SEGMENT && TOKEN_SEGMENT.matches(seg)) seg.substring(0, 6) + ELLIPSIS else seg }
         val shortQuery = query?.split('&')?.joinToString("&") { pair ->
             val eq = pair.indexOf('=')
             if (eq > 0 && pair.substring(0, eq).lowercase() in SENSITIVE_QUERY) pair.substring(0, eq + 1) + REDACTED else pair
@@ -145,6 +145,9 @@ class Redactor(secretValues: Set<String> = emptySet()) {
         )
         private val HEX_ESCAPE = Regex("%[0-9A-F]{2}")
         private val TOKEN_SEGMENT = Regex("^[A-Za-z0-9_-]{16,}$")
+
+        /** The plugin id sits in every market path (`/api/plugins/<id>/...`); it is long enough to look like a token and is not one. */
+        private val PLUGIN_SEGMENT = com.panomc.plugins.market.spi.MarketSpiPaths.PLUGIN_ID
 
         private const val KEYS = "card_number|cardNumber|identityNumber|password|cvv2|cvv|cvc|tckn|pan"
 

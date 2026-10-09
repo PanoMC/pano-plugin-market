@@ -14,18 +14,20 @@ import java.io.File
 import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
 import java.util.jar.JarFile
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * The panel endpoint matrix of 11 section 14.3 as the tests see it (MK-160, 17 section 15): the checked-in `permission-matrix.tsv` on one side,
  * the routes the code actually declares on the other, found by reflection over `routes.panel` (no host, no router: a route class is built with
  * placeholders for its constructor parameters, which is enough because every route reads its collaborators lazily).
  *
- * TSV columns: `method`, `path` (below `/api/panel/market`), `auth` (`P:<node>[,<node>]`, `P:ANY` = any market node, the umbrella is implied),
+ * TSV columns: `method`, `path` (below the market panel API, `MarketPaths.PANEL_ROOT`), `auth` (`P:<node>[,<node>]`, `P:ANY` = any market node, the umbrella is implied),
  * `state` (`LIVE` = a route class exists, `PENDING` = the slice in `slice` still adds it), `slice`, `note`. The E2E matrix test (E2E-10) reads the same
  * file and calls every LIVE row with a user that holds one node.
  */
 object PanelEndpointMatrix {
-    const val API_PREFIX = "/api/panel/market"
+    /** Where the panel routes are mounted; the routes themselves declare paths relative to it (04 section 2). */
+    const val API_PREFIX = MarketPaths.PANEL_ROOT
     const val PANEL_PACKAGE = "com.panomc.plugins.market.routes.panel"
     private const val TSV_RESOURCE = "/permission-matrix.tsv"
 
@@ -97,8 +99,8 @@ object PanelEndpointMatrix {
         val paths = type.getMethod("getPaths").invoke(route) as List<Path>
 
         paths.map { path ->
-            require(path.url.startsWith("$API_PREFIX/") || path.url == API_PREFIX) { "${type.simpleName}: ${path.url} is outside $API_PREFIX" }
-            CodeRoute(path.routeType.name, path.url.removePrefix(API_PREFIX), RouteAuth.describe(route), type)
+            require(path.url.startsWith("/") && !path.url.startsWith("/api") && !path.url.startsWith("/panel")) { "${type.simpleName}: ${path.url} must be relative to the panel namespace" }
+            CodeRoute(path.routeType.name, path.url, RouteAuth.describe(route), type)
         }
     }
 

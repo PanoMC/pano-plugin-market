@@ -9,23 +9,26 @@
   <LoadingBlock rows={6} />
 {:else if pageState === 'EMPTY'}
   <NoContent icon="fa-solid fa-cart-shopping fa-3x" text={$_('theme.cart.empty')} />
-  <div class="text-center mt-3">
-    <a class="btn btn-primary" href="{base}/store">{$_('theme.cart.browse')}</a>
+  <div class="market-checkout-page text-center mt-3">
+    <a class="market-checkout-page__action btn btn-primary" href="{base}/store"
+      >{$_('theme.cart.browse')}</a>
   </div>
 {:else if pageState === 'LOGIN_REQUIRED'}
   <LoginRequiredCard {loginHref} {registerHref} showReturnHint={!has('login-return-url')} />
 {:else}
-  <div class="row g-4" aria-busy={pageState === 'QUOTING' ? 'true' : 'false'}>
+  <div class="market-checkout-page row g-4" aria-busy={pageState === 'QUOTING' ? 'true' : 'false'}>
     <div class="col-lg-7 vstack gap-3">
       {#if pageState === 'BLOCKED'}
-        <div class="alert alert-danger mb-0" role="alert">{$_('theme.errors.BUYER_BLOCKED')}</div>
+        <div class="market-checkout-page__alert alert alert-danger mb-0" role="alert">
+          {$_('theme.errors.BUYER_BLOCKED')}
+        </div>
       {/if}
 
       <fieldset class="vstack gap-3 border-0 p-0 m-0" disabled={formDisabled}>
         <legend class="visually-hidden">{$_('theme.checkout.title')}</legend>
 
         <BuyerSection
-          user={loggedIn ? $user : null}
+          user={loggedIn ? session.state.user : null}
           guest={draft.guest}
           errors={errors.guest}
           {loginHref}
@@ -61,6 +64,16 @@
             removeCents={settings.removeCents === true}
             onchange={onShippingChange}
             onblur={onShippingBlur} />
+
+          <!-- slot opened for other plugins (doc 01 section 6), e.g. a carrier's pickup point selector -->
+          <PluginSlot
+            id="market:checkout:shipping"
+            props={{
+              quote,
+              methodId: draft.shippingMethodId,
+              address: draft.shippingAddress,
+              onchange: onShippingChange,
+            }} />
         {/if}
 
         {#if visible.billing}
@@ -99,6 +112,12 @@
             removeCents={settings.removeCents === true}
             alertKey={notices.payment?.messageKey ?? ''}
             onselect={onSelectMethod} />
+
+          <!-- slot opened for other plugins (doc 01 section 6): the view of the chosen payment method (id = method id) -->
+          <PluginSlot
+            id="market:checkout:payment"
+            props={{ quote, method: draft.paymentMethodId, onselect: onSelectMethod }}
+            filter={(item) => item.id === draft.paymentMethodId} />
         {/if}
       </fieldset>
 
@@ -120,7 +139,7 @@
         <div class="form-check">
           <input
             id="market-checkout-hide"
-            class="form-check-input"
+            class="market-checkout-page__check form-check-input"
             type="checkbox"
             checked={hideFromBroadcast}
             disabled={formDisabled}
@@ -133,7 +152,7 @@
 
       <button
         type="button"
-        class="btn btn-primary btn-lg w-100"
+        class="market-checkout-page__redirecting btn btn-primary btn-lg w-100"
         disabled={place.disabled || rateLocked}
         onclick={placeOrder}>
         {#if pageState === 'SUBMITTING' || pageState === 'LEAVING'}
@@ -175,11 +194,13 @@
           oncode={onCode} />
 
         {#if cartFailed}
-          <ErrorAlert onretry={() => cart.retry()} />
+          <ErrorAlert onretry={() => cartCtl.actions.retry()} />
         {/if}
 
         {#if runnerState.status === 'RATE_LIMITED'}
-          <div class="alert alert-warning mb-0" role="alert">
+          <div
+            class="market-checkout-page__too-many-requests alert alert-warning mb-0"
+            role="alert">
             {$_('theme.errors.TOO_MANY_REQUESTS', { values: { seconds: waitSeconds } })}
           </div>
         {:else if runnerState.status === 'ERROR'}
@@ -194,14 +215,14 @@
 
 {#snippet noticeAlert(notice)}
   <div
-    class={['alert', notice.cls ?? 'alert-danger', 'mb-0']}
+    class={['market-checkout-page__edit-cart', 'alert', alertClass(notice.cls, 'alert-danger'), 'mb-0']}
     id="market-checkout-notice-{notice.where}"
     role="alert">
     {$_(notice.messageKey, { values: noticeValues(notice) })}
     {#if notice.button === 'EDIT_CART'}
       <button
         type="button"
-        class="btn btn-sm btn-outline-secondary d-block mt-2"
+        class="market-checkout-page__action-2 btn btn-sm btn-outline-secondary d-block mt-2"
         data-bs-toggle="offcanvas"
         data-bs-target="#marketCartOffcanvas"
         aria-controls="marketCartOffcanvas">
@@ -210,7 +231,7 @@
     {:else if notice.button === 'RELOAD'}
       <button
         type="button"
-        class="btn btn-sm btn-outline-secondary d-block mt-2"
+        class="market-checkout-page__reload btn btn-sm btn-outline-secondary d-block mt-2"
         onclick={() => location.reload()}>
         {$_('theme.checkout.reload')}
       </button>
@@ -219,41 +240,37 @@
 {/snippet}
 
 <script module>
-  import { get } from 'svelte/store';
-  import { currentLanguage } from '@panomc/sdk/utils/language';
-  import { parseTopup, resolveCheckoutLoad } from '../lib/checkoutModel.js';
-  import { ensureSettings, setSettings } from '../stores/storeSettings.js';
-  import { call } from '../utils/api.js';
-  import { has } from '../utils/host.js';
+  // page metadata (doc 01 section 2): the build registers this view as a page, no register.js entry. The data of the page
+  // comes from the `market/checkout` controller (`controller` below, doc 02 section 4); this function only hands the
+  // settings it fetched to `market/settings`.
+  export const view = { path: '/store/checkout', controller: 'checkout' };
+
+  import { plugin } from '@panomc/sdk/controllers';
+  import { error } from '@panomc/sdk/svelte';
 
   export async function load(event) {
-    const topup = parseTopup(event.url.searchParams.get('topup'));
-    const locale = get(currentLanguage)?.code;
-
-    const [res, settings] = await Promise.all([
-      call('GET', '/api/market/checkout/config', { event, query: { locale } }),
-      ensureSettings(event),
-    ]);
-
-    const result = resolveCheckoutLoad({
-      res,
-      settings,
-      topup,
-      features: { meta: has('page-meta') },
+    const market = plugin('market');
+    const result = await market.load('checkout', {
+      // a server load is made for its request; the browser has one host for the whole page
+      event: typeof window === 'undefined' ? event : undefined,
+      params: { ...event.params, url: event.url },
     });
 
-    if (result.data.settingsLoaded) setSettings(result.data.settings);
+    if (!result) throw error(503, 'market/checkout is not available');
+
+    if (result.data.settingsLoaded && typeof window !== 'undefined')
+      market.use('settings')?.actions.set(result.data.settings);
 
     return result;
   }
 </script>
 
 <script>
-  import { getContext, onMount, tick, untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
+  import { get } from 'svelte/store';
   import { base, goto } from '@panomc/sdk/svelte';
-  import { NoContent } from '@panomc/sdk/components/theme';
-  import { showToast } from '@panomc/sdk/toasts';
-  import { _ } from '../../i18n.js';
+  import { NoContent, PluginSlot } from '@panomc/sdk/components/theme';
+  import { currentLanguage } from '@panomc/sdk/utils/language';
   import ErrorAlert from '../components/common/ErrorAlert.svelte';
   import LoadingBlock from '../components/common/LoadingBlock.svelte';
   import BillingSection from '../components/checkout/BillingSection.svelte';
@@ -267,6 +284,7 @@
   import ShippingSection from '../components/checkout/ShippingSection.svelte';
   import StoreStateCard from '../components/store/StoreStateCard.svelte';
   import { toWireItems } from '../lib/cartModel.js';
+  import { ownerKeyOf } from '../lib/checkoutDraftModel.js';
   import {
     ADDRESS_FIELDS,
     applyQuoteSelections,
@@ -316,18 +334,21 @@
   import { createQuoteRunner } from '../lib/quoteRunner.js';
   import { codesHidden, nextCodeState } from '../lib/summaryModel.js';
   import { validateEmail, validateGiftRecipient, validateUsername } from '../lib/validation.js';
-  import { cart } from '../stores/cart.js';
-  import { checkoutDraft, ownerKeyOf } from '../stores/checkoutDraft.js';
-  import { now } from '../stores/clock.js';
-  import { effectiveCurrency, initCurrency, preferred } from '../stores/currency.js';
-  import { bindSession, isLoggedIn, user, hostSession } from '../stores/session.js';
-  import { storeSettings } from '../stores/storeSettings.js';
-  import { formatCredits, formatMoney } from '../utils/format.js';
-  import { loginUrl, registerUrl } from '../utils/host.js';
+  import { alertClass } from '../lib/classes.js';
+
+  const market = plugin('market');
+  const _ = market._;
+  const cartCtl = market.require('cart');
+  const draftCtl = market.require('checkoutDraft');
+  const clock = market.require('clock');
+  const currencies = market.require('currency');
+  const session = market.require('session');
+  const storeSettings = market.require('settings');
+  const { call } = market.require('api').actions;
+  const { formatCredits, formatMoney } = market.require('format').actions;
+  const { has, loginUrl, registerUrl } = market.require('host').actions;
 
   let { data } = $props();
-
-  bindSession(hostSession(getContext));
 
   // The page is re-mounted whenever load() runs again (14 F2), so the loaded data only seeds the state.
   const init = untrack(() => data);
@@ -377,11 +398,11 @@
   let retryTimer = null;
   let legalRefetching = false;
 
-  const draft = $derived($checkoutDraft);
-  const loggedIn = $derived($isLoggedIn);
-  const cartFailed = $derived($cart.mode === 'SERVER' && $cart.status === 'ERROR');
-  const waitSeconds = $derived(Math.max(0, Math.ceil((rateUntil - $now) / 1000)));
-  const submitWait = $derived(Math.max(0, Math.ceil((submitLockUntil - $now) / 1000)));
+  const draft = $derived(draftCtl.state);
+  const loggedIn = $derived(session.state.isLoggedIn);
+  const cartFailed = $derived(cartCtl.state.mode === 'SERVER' && cartCtl.state.status === 'ERROR');
+  const waitSeconds = $derived(Math.max(0, Math.ceil((rateUntil - clock.state.now) / 1000)));
+  const submitWait = $derived(Math.max(0, Math.ceil((submitLockUntil - clock.state.now) / 1000)));
   const rateLocked = $derived(submitLockUntil > 0 && submitWait > 0);
 
   const visible = $derived(sectionsVisible({ config, quote, topup }));
@@ -409,7 +430,7 @@
       ? effectiveBillingInfo(billingReq, draft.billingInfo, effectiveShipping)
       : null,
   );
-  const ownName = $derived(loggedIn ? ($user?.username ?? '') : committed.username);
+  const ownName = $derived(loggedIn ? (session.state.user?.username ?? '') : committed.username);
   const guestBody = $derived(
     !loggedIn &&
       validateUsername(committed.username) === null &&
@@ -431,9 +452,13 @@
     buildQuoteBody({
       topup,
       loggedIn,
-      items: !loggedIn && $cart.mode === 'GUEST' ? toWireItems($cart.lines) : [],
+      items: !loggedIn && cartCtl.state.mode === 'GUEST' ? toWireItems(cartCtl.state.lines) : [],
       guest: guestBody,
-      currency: effectiveCurrency($storeSettings ?? settings, null, $preferred),
+      currency: currencies.actions.effective(
+        storeSettings.state.settings ?? settings,
+        null,
+        currencies.state.preferred,
+      ),
       locale: $currentLanguage?.code,
       draft: { ...draft, giftMessage: committed.message },
       recipientUsername: recipientBody,
@@ -444,14 +469,14 @@
   // a logged-in buyer's items are the server cart: its lines are part of what the quote depends on
   const quoteSignature = $derived(
     loggedIn
-      ? `${canonicalBody(quoteBody)}|${JSON.stringify(toWireItems($cart.lines))}`
+      ? `${canonicalBody(quoteBody)}|${JSON.stringify(toWireItems(cartCtl.state.lines))}`
       : canonicalBody(quoteBody),
   );
 
   const pageState = $derived(
     derivePageState({
       cartReady: mounted && cartReady,
-      count: $cart.count,
+      count: cartCtl.state.count,
       topup,
       loggedIn,
       guestCheckout: config.guestCheckout === true,
@@ -484,7 +509,7 @@
       data.state === 'READY' &&
       submit === 'IDLE' &&
       forced === null &&
-      (topup !== null || $cart.count > 0) &&
+      (topup !== null || cartCtl.state.count > 0) &&
       (loggedIn || (topup === null && config.guestCheckout === true)),
   );
 
@@ -502,7 +527,7 @@
     quote = next;
     quoteSig = signature;
 
-    const before = checkoutDraft.get();
+    const before = draftCtl.actions.get();
     // the credit choice stays valid (it is never switched on here), then the payment / shipping selection
     const credits = creditsPatchAfterQuote({ draft: before, quote: next, config });
     const patch = { ...credits, ...applyQuoteSelections({ ...before, ...credits }, next) };
@@ -524,11 +549,11 @@
       if (state.drop) patch[member] = '';
     }
 
-    if (Object.keys(patch).length) checkoutDraft.patch(patch);
+    if (Object.keys(patch).length) draftCtl.actions.patch(patch);
 
-    carrierExtrasState = nextCarrierExtras(carrierExtrasState, next, checkoutDraft.get());
+    carrierExtrasState = nextCarrierExtras(carrierExtrasState, next, draftCtl.actions.get());
 
-    cart.clampToQuote(next);
+    cartCtl.actions.clampToQuote(next);
     persistToServerCart();
 
     if (legalChanged(config, next)) refetchConfig();
@@ -539,7 +564,7 @@
     if (legalRefetching) return;
     legalRefetching = true;
 
-    const res = await call('GET', '/api/market/checkout/config', {
+    const res = await call('GET', '/checkout/config', {
       query: { locale: get(currentLanguage)?.code },
     });
     legalRefetching = false;
@@ -578,10 +603,10 @@
 
   /** For a logged-in buyer codes, recipient and shipping selection are kept on the server cart (14 §10.6). */
   function persistToServerCart() {
-    const state = get(cart);
-    if (!get(isLoggedIn) || topup !== null || state.mode !== 'SERVER') return;
+    const state = cartCtl.state;
+    if (!session.state.isLoggedIn || topup !== null || state.mode !== 'SERVER') return;
 
-    const d = checkoutDraft.get();
+    const d = draftCtl.actions.get();
     const gift = visible.gift && d.isGift && recipientBody !== null;
     const wanted = {
       couponCode: d.couponCode.trim() || null,
@@ -597,26 +622,26 @@
     if (Object.keys(patch).length === 0) return;
 
     persisted = { ...persisted, ...patch };
-    cart.putCart(patch);
+    cartCtl.actions.putCart(patch);
   }
 
   async function loadAddresses() {
     addressesLoaded = true;
 
-    const res = await call('GET', '/api/market/me/addresses');
-    if (unmounted || !res.ok || !Array.isArray(res.addresses)) return;
+    const res = await call('GET', '/me/addresses');
+    if (unmounted || !res.ok || !Array.isArray(res.items)) return;
 
-    addresses = res.addresses;
+    addresses = res.items;
 
-    const d = checkoutDraft.get();
+    const d = draftCtl.actions.get();
     if (d.shippingAddressId !== null && !addresses.some((a) => a.id === d.shippingAddressId))
-      checkoutDraft.patch({ shippingAddressId: null });
+      draftCtl.actions.patch({ shippingAddressId: null });
     else if (
       d.shippingAddressId === null &&
       Object.values(d.shippingAddress).every((value) => !value)
     ) {
       const preferredAddress = addresses.find((a) => a.isDefault) ?? null;
-      if (preferredAddress) checkoutDraft.patch({ shippingAddressId: preferredAddress.id });
+      if (preferredAddress) draftCtl.actions.patch({ shippingAddressId: preferredAddress.id });
     }
   }
 
@@ -626,10 +651,10 @@
     config,
     quote,
     topup,
-    draft: checkoutDraft.get(),
-    user: get(user),
+    draft: draftCtl.actions.get(),
+    user: session.state.user,
     saved: addresses,
-    carrierExtras: carrierExtrasFor(carrierExtrasState, checkoutDraft.get()),
+    carrierExtras: carrierExtrasFor(carrierExtrasState, draftCtl.actions.get()),
   });
 
   /** Recomputes the error of one field (on blur). */
@@ -675,24 +700,24 @@
 
   function onGuestChange(patch) {
     clearNotices();
-    checkoutDraft.patch({ guest: { ...checkoutDraft.get().guest, ...patch } });
+    draftCtl.actions.patch({ guest: { ...draftCtl.actions.get().guest, ...patch } });
     refreshShown('guest');
   }
 
   function onGuestBlur(field) {
-    const d = checkoutDraft.get();
+    const d = draftCtl.actions.get();
     committed = { ...committed, username: d.guest.username, email: d.guest.email };
     refreshField('guest', field);
   }
 
   function onGiftChange(patch) {
     clearNotices();
-    checkoutDraft.patch(patch);
+    draftCtl.actions.patch(patch);
 
     // switching the gift on commits an already typed recipient; switching it off drops the gift errors
     if ('isGift' in patch) {
       if (patch.isGift)
-        committed = { ...committed, recipient: checkoutDraft.get().recipientUsername };
+        committed = { ...committed, recipient: draftCtl.actions.get().recipientUsername };
       else errors = { ...errors, gift: {} };
     }
 
@@ -700,7 +725,7 @@
   }
 
   function onGiftBlur(field) {
-    const d = checkoutDraft.get();
+    const d = draftCtl.actions.get();
 
     if (field === 'recipient') committed = { ...committed, recipient: d.recipientUsername };
     if (field === 'message') committed = { ...committed, message: d.giftMessage };
@@ -710,7 +735,7 @@
 
   function onShippingChange(patch) {
     clearNotices();
-    checkoutDraft.patch(patch);
+    draftCtl.actions.patch(patch);
 
     if ('shippingAddressId' in patch && patch.shippingAddressId !== null)
       errors = { ...errors, shipping: {} };
@@ -724,13 +749,13 @@
 
   function onBillingChange(patch) {
     clearNotices();
-    checkoutDraft.patch({ billingInfo: { ...checkoutDraft.get().billingInfo, ...patch } });
+    draftCtl.actions.patch({ billingInfo: { ...draftCtl.actions.get().billingInfo, ...patch } });
     refreshShown('billing');
   }
 
   function onBillingToggle(patch) {
     clearNotices();
-    checkoutDraft.patch(patch);
+    draftCtl.actions.patch(patch);
     errors = { ...errors, billing: {} };
   }
 
@@ -748,21 +773,21 @@
 
   function onCreditsChange(patch) {
     clearNotices();
-    checkoutDraft.patch(patch);
+    draftCtl.actions.patch(patch);
   }
 
   function onSelectMethod(id) {
     clearNotices();
 
-    const d = checkoutDraft.get();
-    checkoutDraft.patch(selectMethodPatch(d, id, selectedMethod(quote, id)));
+    const d = draftCtl.actions.get();
+    draftCtl.actions.patch(selectMethodPatch(d, id, selectedMethod(quote, id)));
   }
 
   /** Apply (`code`) or remove (null) the coupon / creator code: the new body asks for a fresh quote. */
   function onCode(kind, code) {
     clearNotices();
     codeUi = { ...codeUi, [kind]: { status: 'IDLE' } };
-    checkoutDraft.patch({ [kind === 'coupon' ? 'couponCode' : 'creatorCode']: code ?? '' });
+    draftCtl.actions.patch({ [kind === 'coupon' ? 'couponCode' : 'creatorCode']: code ?? '' });
   }
 
   function onLegalChange(checked) {
@@ -829,11 +854,10 @@
   function finishSuccess(plan) {
     if (plan.token) saveOrderToken(sessionStore(), plan.token.publicId, plan.token.value);
 
-    if (plan.saveAddress)
-      call('POST', '/api/market/me/addresses', { body: plan.saveAddress }).catch(() => {});
+    if (plan.saveAddress) call('POST', '/me/addresses', { body: plan.saveAddress }).catch(() => {});
 
-    checkoutDraft.clear();
-    if (plan.clearCart) cart.afterCheckout();
+    draftCtl.actions.clear();
+    if (plan.clearCart) cartCtl.actions.afterCheckout();
 
     submit = 'LEAVING';
     navigate(plan.navigation);
@@ -864,7 +888,7 @@
 
     const out = await submitCheckout({
       call,
-      draftStore: checkoutDraft,
+      draftStore: draftCtl.actions,
       quoteBody,
       quote,
       config,
@@ -881,7 +905,7 @@
           res: out,
           topup,
           loggedIn,
-          draft: checkoutDraft.get(),
+          draft: draftCtl.actions.get(),
           context: submitContext(),
         }),
       );
@@ -897,13 +921,13 @@
       res,
       topup,
       loggedIn,
-      draft: checkoutDraft.get(),
+      draft: draftCtl.actions.get(),
       context: submitContext(),
     });
     const { action } = plan;
     const details = action.details;
 
-    if (Object.keys(plan.keyPatch).length) checkoutDraft.patch(plan.keyPatch);
+    if (Object.keys(plan.keyPatch).length) draftCtl.actions.patch(plan.keyPatch);
 
     if (plan.success) {
       finishSuccess(plan.success);
@@ -925,13 +949,14 @@
 
     switch (action.kind) {
       case 'STATE':
-        if (action.state === 'EMPTY') cart.retry();
+        if (action.state === 'EMPTY') cartCtl.actions.retry();
         else forced = action.state;
         break;
 
       case 'ALERT':
-        if (action.clearMethod) checkoutDraft.patch({ paymentMethodId: null });
-        if (action.clearCredits) checkoutDraft.patch({ payWithCredits: false, useCredits: null });
+        if (action.clearMethod) draftCtl.actions.patch({ paymentMethodId: null });
+        if (action.clearCredits)
+          draftCtl.actions.patch({ payWithCredits: false, useCredits: null });
 
         alert(action.where, {
           button: action.editCart ? 'EDIT_CART' : undefined,
@@ -957,7 +982,7 @@
               }
             : { status: 'INVALID', messageKey: action.messageKey },
         };
-        checkoutDraft.patch({ [member]: '' });
+        draftCtl.actions.patch({ [member]: '' });
         break;
       }
 
@@ -978,7 +1003,7 @@
         break;
 
       case 'LEAVE':
-        showToast(`plugins.pano-plugin-market.${action.messageKey}`);
+        market.toast(action.messageKey);
         navigate({ type: 'GOTO', path: action.to });
         break;
 
@@ -1048,7 +1073,7 @@
     for (const field of [...ADDRESS_FIELDS, ...BILLING_EXTRAS])
       if (mapped.has(field)) marked[field] = 'FIELD_REQUIRED';
 
-    checkoutDraft.patch({ billingOpen: true });
+    draftCtl.actions.patch({ billingOpen: true });
     errors = { ...errors, billing: marked };
     focusId(firstInvalidId({ billing: marked }) ?? fieldId('billing', 'firstName'));
   }
@@ -1056,14 +1081,14 @@
   // ---- mount ----------------------------------------------------------------------------------------------------
 
   onMount(() => {
-    initCurrency();
+    currencies.actions.init();
 
-    const restored = checkoutDraft.restore(ownerKeyOf(get(user)));
+    const restored = draftCtl.actions.restore(ownerKeyOf(session.state.user));
 
     // credits are never pre-applied: a choice made before a reload or an earlier visit is not restored, the buyer
     // confirms it again (owner decision, 14 §10.5)
     const dropCredits = restoredCreditsPatch(restored);
-    if (Object.keys(dropCredits).length > 0) checkoutDraft.patch(dropCredits);
+    if (Object.keys(dropCredits).length > 0) draftCtl.actions.patch(dropCredits);
 
     committed = {
       username: restored.guest.username,
@@ -1073,13 +1098,13 @@
     };
     mounted = true;
 
-    cart.init().then(() => {
+    cartCtl.actions.init().then(() => {
       if (unmounted) return;
 
       // a logged-in buyer's server cart wins over the draft on the first mount (14 §10.2)
-      if (get(isLoggedIn)) {
-        const merged = mergeServerCodes(checkoutDraft.get(), get(cart).codes);
-        checkoutDraft.set(merged);
+      if (session.state.isLoggedIn) {
+        const merged = mergeServerCodes(draftCtl.actions.get(), cartCtl.state.codes);
+        draftCtl.actions.set(merged);
         committed = {
           ...committed,
           recipient: merged.recipientUsername,
@@ -1094,7 +1119,7 @@
       unmounted = true;
       if (retryTimer !== null) clearTimeout(retryTimer);
       runner.stop();
-      checkoutDraft.detach();
+      draftCtl.actions.detach();
     };
   });
 </script>

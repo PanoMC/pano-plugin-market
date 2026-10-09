@@ -1,21 +1,27 @@
 package com.panomc.plugins.market.error
 
+import com.panomc.platform.api.ErrorCatalogProvider
 import com.panomc.platform.model.Error
+import org.springframework.stereotype.Component
 
 /**
- * Every error class of the market plugin with a sample instance (04 section 11). The `ErrorCatalogTest` compares
+ * Every error class of the market plugin with a sample instance (04 section 11), offered to the platform as an [ErrorCatalogProvider]
+ * (04 section 3) so the plugin's OpenAPI document can list the codes and statuses. The `ErrorCatalogTest` compares
  * this list to the catalogue table of the design (code, HTTP status, extras) and to the classes of this package, so
  * a code cannot be added, renamed or given another status without the table being touched.
  */
-object ErrorCatalog {
-    class Entry(val type: Class<out Error>, val sample: () -> Error) {
+object ErrorCatalog : ErrorCatalogProvider {
+    /** One class of the catalogue; calling it builds the sample (the [ErrorCatalogProvider] form of an entry). */
+    class Entry(val type: Class<out Error>, val sample: () -> Error) : () -> Error {
         val code: String get() = sample().getErrorCode()
         val status: Int get() = sample().getStatusCode()
+
+        override fun invoke(): Error = sample()
     }
 
     private inline fun <reified T : Error> e(noinline sample: () -> T) = Entry(T::class.java, sample)
 
-    val entries: List<Entry> = listOf(
+    override val entries: List<Entry> = listOf(
         // existing
         e { CodeAlreadyExists() },
         e { SlugAlreadyExists() },
@@ -99,4 +105,10 @@ object ErrorCatalog {
         e { StoreUnavailable() },
         e { StoreBusy() }
     )
+}
+
+/** The bean the platform finds (`getBeansOfType(ErrorCatalogProvider)`) to list the market's codes in the plugin's OpenAPI document. */
+@Component
+class MarketErrorCatalogProvider : ErrorCatalogProvider {
+    override val entries: List<() -> Error> get() = ErrorCatalog.entries
 }

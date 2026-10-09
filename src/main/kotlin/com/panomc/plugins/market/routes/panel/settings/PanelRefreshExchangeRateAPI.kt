@@ -15,7 +15,7 @@ import com.panomc.plugins.market.service.ExchangeRateService
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 
 /**
@@ -27,7 +27,7 @@ import io.vertx.json.schema.SchemaRepository
 class PanelRefreshExchangeRateAPI(
     private val plugin: MarketPlugin
 ) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/settings/exchange-rate/refresh", RouteType.POST))
+    override val paths = listOf(Path("/settings/exchange-rate/refresh", RouteType.POST))
 
     override val nodes = setOf(MarketNode.SETTINGS)
 

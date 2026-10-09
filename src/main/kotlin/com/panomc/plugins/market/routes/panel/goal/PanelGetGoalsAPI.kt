@@ -10,13 +10,13 @@ import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 
 /** `GET /api/panel/market/goals` (04 section 5, `P:CAT`): every goal with `progress` and `percent`. */
 @Endpoint
 class PanelGetGoalsAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/goals", RouteType.GET))
+    override val paths = listOf(Path("/goals", RouteType.GET))
 
     override val nodes = setOf(MarketNode.CATALOG)
 
@@ -26,5 +26,5 @@ class PanelGetGoalsAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
         ValidationHandlerBuilder.create(schemaRepository).build()
 
     override suspend fun handleAuthorized(context: RoutingContext): Result =
-        Successful(mapOf("goals" to goals.list().map { goalJson(it) }))
+        Successful(mapOf("items" to goals.list().map { goalJson(it) }))
 }

@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.lang.reflect.Modifier
+import com.panomc.platform.route.Mount
+import com.panomc.platform.route.Namespace
 
 /**
  * 11 section 14.2 and 19.10 item 1 (MK-160): the structure that makes the permission check impossible to forget. Every panel route extends
@@ -75,7 +77,12 @@ class PermissionReflectionTest {
             route.nodes // a route whose nodes were never initialised throws here
             assertTrue(route.paths.isNotEmpty(), "${type.simpleName} declares a path")
 
-            for (path in route.paths) assertTrue(path.url.startsWith("/api/panel/market"), "${type.simpleName}: ${path.url}")
+            assertEquals(Mount.API, route.mount, "${type.simpleName} is mounted under /api/v1")
+            assertEquals(Namespace.PANEL, route.namespace, "${type.simpleName} is a panel route")
+
+            for (path in route.paths) {
+                assertTrue(path.url.startsWith("/") && !path.url.startsWith("/api") && !path.url.startsWith("/panel"), "${type.simpleName}: ${path.url} is relative to the panel namespace")
+            }
         }
     }
 
@@ -87,7 +94,7 @@ class PermissionReflectionTest {
             val route = PanelEndpointMatrix.instantiate(type) as MarketPanelApi
 
             for (path in route.paths) {
-                val key = "${path.routeType.name} ${path.url.removePrefix(PanelEndpointMatrix.API_PREFIX)}"
+                val key = "${path.routeType.name} ${path.url}"
                 val row = rows[key] ?: error("$key (${type.simpleName}) has no row in permission-matrix.tsv")
 
                 assertEquals(row.nodes, route.nodes, "$key (${type.simpleName}): declared nodes against the TSV")

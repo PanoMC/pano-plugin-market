@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import java.util.concurrent.TimeUnit
+import com.panomc.plugins.market.spi.MarketSpiPaths
 
 /**
  * A notification the plugin signed itself (with the test settings) and the same notification with one more
@@ -288,7 +289,7 @@ abstract class PaymentContractChecks : AutoCloseable {
                 assertTrue(origin.startsWith("https://"), "Html origin '$origin' is not https")
             else -> Unit
         }
-        val json = result.toPaymentStartJson("en-US", attemptPageUrl = "https://shop.example/api/market/payments/attempts/tok/page")
+        val json = result.toPaymentStartJson("en-US", attemptPageUrl = "https://shop.example${MarketSpiPaths.site("/payments/attempts/tok/page")}")
         assertEquals(result.kind, json.getString("kind"))
     }
 }

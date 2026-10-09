@@ -1,7 +1,10 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.platform.model.PageRequest
+import com.panomc.platform.model.Paging
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.config.MarketConfig
+import com.panomc.plugins.market.routes.base.pageJson
 import com.panomc.plugins.market.core.credit.CreditMath
 import com.panomc.plugins.market.core.delivery.DeliveryError
 import com.panomc.plugins.market.core.delivery.DeliveryEvent
@@ -35,7 +38,6 @@ import com.panomc.plugins.market.error.InvalidState
 import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.service.platform.UserDirectory
 import com.panomc.plugins.market.util.MoneyUtil
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.coAwait
@@ -127,9 +129,6 @@ class CreatorPayoutOutcome(val payout: MarketCreatorPayout, val replay: Boolean,
 class CreatorBalance(val earned: Long, val reversed: Long, val pending: Long, val payable: Long, val paidOut: Long) {
     val available: Long get() = payable - paidOut
 }
-
-/** The page asked for lies beyond the last one (404 `PAGE_NOT_FOUND` in the route). */
-class CreatorPageOutOfRange : RuntimeException()
 
 /**
  * Creator earnings, reversal and payouts (21 section 7, 07 section 12, 08 section 12, 04 sections 4 and 6): [accrue] at O2 / O4, [CreatorReversal] at O10 / O11,
@@ -503,8 +502,8 @@ class CreatorService(
             .put("currency", config().currency)
     }
 
-    /** `GET /creator-codes/:id/earnings`: [state] filters, paged newest first; 404 for an unknown code, [CreatorPageOutOfRange] beyond the last page. */
-    suspend fun earningsOf(codeId: Long, state: CreatorEarningState?, window: Paging.Window): JsonObject {
+    /** `GET /creator-codes/:id/earnings`: [state] filters, paged newest first; 404 for an unknown code, 404 `PAGE_NOT_FOUND` beyond the last page. */
+    suspend fun earningsOf(codeId: Long, state: CreatorEarningState?, window: PageRequest): JsonObject {
         val c = client()
 
         requireCode(codeId, c)
@@ -513,29 +512,23 @@ class CreatorService(
         val where = if (state == null) "`creatorCodeId` = ?" else "`creatorCodeId` = ? AND `state` = ?"
         val args = if (state == null) listOf<Any?>(codeId) else listOf(codeId, state.name)
         val count = c.preparedQuery("SELECT COUNT(*) FROM ${t("market_creator_earning")} WHERE $where").execute(Tuple.from(args)).coAwait().first().getLong(0)
-        val total = Paging.totalPages(count, window.pageSize)
 
-        if (Paging.isBeyondLast(window.page, total)) throw CreatorPageOutOfRange()
+        Paging.requireInRange(window, count)
 
         val rows = c.preparedQuery(
             "SELECT `id`, `orderId`, `baseAmount`, `commissionPercent`, `amount`, `reversedAmount`, `state`, `availableAt`, `createdAt` FROM ${t("market_creator_earning")} " +
                 "WHERE $where ORDER BY `id` DESC LIMIT ? OFFSET ?"
-        ).execute(Tuple.from(args + listOf(window.pageSize.toLong(), window.offset))).coAwait()
+        ).execute(Tuple.from(args + listOf(window.size.toLong(), window.offset))).coAwait()
 
-        return JsonObject()
-            .put(
-                "earnings",
-                JsonArray(
-                    rows.map {
-                        JsonObject().put("id", it.getLong("id")).put("orderId", it.getLong("orderId")).put("baseAmount", money(it.getLong("baseAmount")))
-                            .put("commissionPercent", money(it.getLong("commissionPercent"))).put("amount", money(it.getLong("amount")))
-                            .put("reversedAmount", money(it.getLong("reversedAmount"))).put("state", it.getString("state")).put("availableAt", it.getLong("availableAt"))
-                            .put("createdAt", it.getLong("createdAt"))
-                    }
-                )
-            )
-            .put("earningCount", count)
-            .put("totalPage", total)
+        return pageJson(
+            rows.map {
+                JsonObject().put("id", it.getLong("id")).put("orderId", it.getLong("orderId")).put("baseAmount", money(it.getLong("baseAmount")))
+                    .put("commissionPercent", money(it.getLong("commissionPercent"))).put("amount", money(it.getLong("amount")))
+                    .put("reversedAmount", money(it.getLong("reversedAmount"))).put("state", it.getString("state")).put("availableAt", it.getLong("availableAt"))
+                    .put("createdAt", it.getLong("createdAt"))
+            },
+            count, window
+        )
     }
 
     /** `GET /creator-codes/:id/payouts`: newest first, `paidBy` is the admin's username (null when unknown); 404 for an unknown code. */
@@ -564,9 +557,9 @@ class CreatorService(
 
     /**
      * `GET /api/market/me/creator`: the codes whose `creatorUserId` is [userId], the totals over them, their earnings (newest first, paged; the order number only) and
-     * their payouts. 404 when the user owns no code; [CreatorPageOutOfRange] beyond the last page. No buyer data is exposed.
+     * their payouts. 404 when the user owns no code; 404 `PAGE_NOT_FOUND` beyond the last page. No buyer data is exposed.
      */
-    suspend fun mine(userId: Long, window: Paging.Window): JsonObject {
+    suspend fun mine(userId: Long, window: PageRequest): JsonObject {
         val c = client()
 
         releaseDue(c)
@@ -596,52 +589,39 @@ class CreatorService(
         }
 
         val count = c.preparedQuery("SELECT COUNT(*) FROM ${t("market_creator_earning")} WHERE `creatorCodeId` IN ($marks)").execute(Tuple.from(ids)).coAwait().first().getLong(0)
-        val total = Paging.totalPages(count, window.pageSize)
 
-        if (Paging.isBeyondLast(window.page, total)) throw CreatorPageOutOfRange()
+        Paging.requireInRange(window, count)
 
         val earningRows = c.preparedQuery(
             "SELECT `orderId`, `amount`, `state`, `availableAt`, `createdAt` FROM ${t("market_creator_earning")} WHERE `creatorCodeId` IN ($marks) ORDER BY `id` DESC LIMIT ? OFFSET ?"
-        ).execute(Tuple.from(ids + listOf(window.pageSize.toLong(), window.offset))).coAwait()
+        ).execute(Tuple.from(ids + listOf(window.size.toLong(), window.offset))).coAwait()
         val payoutRows = c.preparedQuery(
             "SELECT `amount`, `method`, `state`, `paidAt`, `createdAt` FROM ${t("market_creator_payout")} WHERE `creatorCodeId` IN ($marks) ORDER BY `id` DESC LIMIT $MINE_PAYOUTS"
         ).execute(Tuple.from(ids)).coAwait()
 
-        return JsonObject()
-            .put(
-                "codes",
-                JsonArray(
+        return pageJson(
+            earningRows.map {
+                JsonObject().put("orderNumber", "#${it.getLong("orderId")}").put("amount", money(it.getLong("amount"))).put("state", it.getString("state"))
+                    .put("availableAt", it.getLong("availableAt")).put("createdAt", it.getLong("createdAt"))
+            },
+            count, window,
+            mapOf(
+                "codes" to JsonArray(
                     codes.map {
                         JsonObject().put("code", it.getString("code")).put("discount", money(it.getLong("discount"))).put("unit", it.getString("unit"))
                             .put("commissionPercent", money(it.getLong("commissionPercent"))).put("usedCount", it.getInteger("usedCount")).put("status", it.getString("status"))
                     }
-                )
-            )
-            .put(
-                "totals",
-                JsonObject().put("earned", money(earned)).put("reversed", money(reversed)).put("pending", money(pending)).put("paidOut", money(paidOut))
-                    .put("available", money(payable - paidOut)).put("currency", config().currency)
-            )
-            .put(
-                "earnings",
-                JsonArray(
-                    earningRows.map {
-                        JsonObject().put("orderNumber", "#${it.getLong("orderId")}").put("amount", money(it.getLong("amount"))).put("state", it.getString("state"))
-                            .put("availableAt", it.getLong("availableAt")).put("createdAt", it.getLong("createdAt"))
-                    }
-                )
-            )
-            .put("earningCount", count)
-            .put("totalPage", total)
-            .put(
-                "payouts",
-                JsonArray(
+                ),
+                "totals" to JsonObject().put("earned", money(earned)).put("reversed", money(reversed)).put("pending", money(pending)).put("paidOut", money(paidOut))
+                    .put("available", money(payable - paidOut)).put("currency", config().currency),
+                "payouts" to JsonArray(
                     payoutRows.map {
                         JsonObject().put("amount", money(it.getLong("amount"))).put("method", it.getString("method")).put("state", it.getString("state")).put("paidAt", it.getLong("paidAt"))
                             .put("createdAt", it.getLong("createdAt"))
                     }
                 )
             )
+        )
     }
 
     companion object {

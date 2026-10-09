@@ -1,4 +1,4 @@
-// Development-mode probe. The host exposes it in /api/siteInfo (`developmentMode`); the answer is
+// Development-mode probe. The host exposes it in GET /api/v1/site-info (`developmentMode`); the answer is
 // cached (client: per page life, server: a few seconds) so a request cookie costs one tiny GET.
 const TTL = 5000;
 let cached = null;
@@ -7,7 +7,7 @@ let cached = null;
 export function developmentMode(api, event, now = Date.now) {
   const t = now();
   if (cached && t - cached.at < TTL) return cached.promise;
-  const promise = Promise.resolve(api.get({ path: '/api/siteInfo', request: event }))
+  const promise = Promise.resolve(api.get({ path: '/site-info', request: event }))
     .then((body) => body?.developmentMode === true)
     .catch(() => false);
   cached = { at: t, promise };

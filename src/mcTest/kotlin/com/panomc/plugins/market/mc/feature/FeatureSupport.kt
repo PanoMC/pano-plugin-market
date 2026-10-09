@@ -139,8 +139,10 @@ fun panoConfig(
     settings: MarketMcSettings = MarketMcSettings(),
     texts: Map<String, Map<String, String>> = emptyMap(),
     storeUrl: String? = "https://shop.example.com",
-    creditName: String? = "Credits"
-) = MarketConfigMessage(true, null, hash, settings, texts, storeUrl, creditName, "USD", 7L)
+    creditName: String? = "Credits",
+    productUrlTemplate: String? = null,
+    registerUrl: String? = null
+) = MarketConfigMessage(true, null, hash, settings, texts, storeUrl, creditName, "USD", 7L, productUrlTemplate, registerUrl)
 
 /** One [MarketFeatures] over the shipped resources in [dir] (config.yml is written there, like on a first start). */
 class FeatureRig(

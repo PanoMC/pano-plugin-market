@@ -2,7 +2,7 @@
 // Ids TH-01 .. TH-10 are the numbers of the spec. Every scenario that settles on a page fails on a console error or a page error.
 import fs from 'node:fs';
 import { newContext } from '../lib/browser.mjs';
-import { must } from '../lib/api.mjs';
+import { must, MARKET_API, PANEL_MARKET_API } from '../lib/api.mjs';
 import { category, run } from '../lib/bootstrap.mjs';
 import { assert, assertEqual, open, rawPlaceholders } from '../lib/ui.mjs';
 import {
@@ -205,7 +205,7 @@ export const scenarios = [
 
       page.on('request', (r) => {
         const url = new URL(r.url());
-        if (url.pathname.endsWith('/api/market/store/products') && url.searchParams.has('search'))
+        if (url.pathname.endsWith(`${MARKET_API}/store/products`) && url.searchParams.has('search'))
           searches.push(url.searchParams.get('search'));
       });
 
@@ -275,7 +275,7 @@ export const scenarios = [
       // response, which the client reuses instead of asking again.
       let blocked = 0;
       await page.route(
-        (url) => url.pathname === '/api/market/store',
+        (url) => url.pathname === `${MARKET_API}/store`,
         (route) => {
           blocked++;
           return route.abort('connectionrefused');
@@ -296,7 +296,7 @@ export const scenarios = [
       const retry = page.getByRole('button', { name: /retry|try again/i });
       assert((await retry.count()) >= 1, 'the error card offers a retry button');
 
-      await page.unroute((url) => url.pathname === '/api/market/store');
+      await page.unroute((url) => url.pathname === `${MARKET_API}/store`);
       await retry.first().click(); // reloads the page: the server render works again
       await waitForCards(page, 1);
       assertEqual(
@@ -494,7 +494,7 @@ export const scenarios = [
           variantImage_2: png(200, 0, 50),
         },
       );
-      const detail = must(await admin.get(`/api/market/products/${item.slug}`), 'public product')
+      const detail = must(await admin.get(`${MARKET_API}/products/${item.slug}`), 'public product')
         .json.product;
       const variant = Object.fromEntries(detail.variants.map((v) => [v.name, v]));
 
@@ -748,7 +748,7 @@ export const scenarios = [
       const { env, admin, browser } = ctx;
       const item = await product(admin, 'Sale Sword', { price: '20.00' });
       const created = must(
-        await admin.post('/api/panel/market/discounts', {
+        await admin.post(`${PANEL_MARKET_API}/discounts`, {
           name: `TH-09 ${item.name}`,
           value: 25,
           unit: 'PERCENT',
@@ -812,7 +812,7 @@ export const scenarios = [
         );
         await check(true);
       } finally {
-        await admin.request('DELETE', `/api/panel/market/discounts/${created.json.id}`);
+        await admin.request('DELETE', `${PANEL_MARKET_API}/discounts/${created.json.id}`);
       }
     },
   },
@@ -835,7 +835,7 @@ export const scenarios = [
         },
         { image: png(10, 120, 200) },
       );
-      const detail = must(await admin.get(`/api/market/products/${item.slug}`), 'public product')
+      const detail = must(await admin.get(`${MARKET_API}/products/${item.slug}`), 'public product')
         .json.product;
       const page = await html({ url: env.themeUrl ?? env.url }, `/store/${item.slug}`);
       const raw = page.text;
@@ -893,7 +893,7 @@ export const scenarios = [
       const image = meta('property', 'og:image');
       assert(
         image &&
-          image.endsWith(`/api/market/products/image/${detail.imageFileName}`) &&
+          image.endsWith(`${MARKET_API}/products/image/${detail.imageFileName}`) &&
           /^https?:\/\//.test(image),
         `og:image is the absolute product image URL (${image})`,
       );

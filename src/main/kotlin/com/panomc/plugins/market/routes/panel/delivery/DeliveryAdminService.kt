@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.delivery
 
+import com.panomc.platform.model.PageRequest
 import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NoPermission
 import com.panomc.platform.error.NotFound
@@ -38,7 +39,6 @@ import com.panomc.plugins.market.service.DeliveryService
 import com.panomc.plugins.market.service.EntitlementService
 import com.panomc.plugins.market.service.platform.ServerRoster
 import com.panomc.plugins.market.util.OrderStatus
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.coAwait
@@ -445,7 +445,7 @@ class DeliveryAdminService(
 
     class Page(val rows: List<JsonObject>, val total: Long)
 
-    suspend fun list(filter: Filter, window: Paging.Window): Page {
+    suspend fun list(filter: Filter, window: PageRequest): Page {
         val where = ArrayList<String>()
         val args = ArrayList<Any?>()
 
@@ -468,7 +468,7 @@ class DeliveryAdminService(
         return db.tx { pool ->
         val total = pool.preparedQuery("SELECT COUNT(*) AS c FROM ${table("market_delivery")} d $clause").execute(Tuple.from(args)).coAwait().first().getLong("c")
         val names = roster.snapshot(pool).names
-        val pageArgs = ArrayList<Any?>(args).also { it += window.pageSize; it += window.offset }
+        val pageArgs = ArrayList<Any?>(args).also { it += window.size; it += window.offset }
         val rows = pool.preparedQuery(
             "SELECT d.*, i.`productName` AS itemProductName FROM ${table("market_delivery")} d LEFT JOIN ${table("market_order_item")} i ON i.`id` = d.`orderItemId` " +
                 "$clause ORDER BY d.`id` DESC LIMIT ? OFFSET ?"

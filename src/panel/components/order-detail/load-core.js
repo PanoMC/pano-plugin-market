@@ -1,4 +1,5 @@
 // SDK-free core of the OrderDetail load() (13 §6): the host calls are injected, so it is unit tested.
+import { failureOf } from '../../utils/api.js';
 import { guard } from '../../utils/guard.js';
 import { loadContextWith } from '../../utils/list-core.js';
 import { PLUGIN_ID } from '../../utils/plugin.js';
@@ -20,7 +21,7 @@ export async function loadOrderDetailWith(deps, event) {
     deps.get({ path: orderPath(id), request: event }),
     loadContextWith(deps, event),
   ]);
-  if (!body || typeof body !== 'object') return fail('NETWORK_ERROR', id, ctx);
-  if (body.error) return fail(body.error, id, ctx);
+  const failure = failureOf(body);
+  if (failure) return fail(failure, id, ctx);
   return { data: { id, detail: body, ctx, error: null } };
 }

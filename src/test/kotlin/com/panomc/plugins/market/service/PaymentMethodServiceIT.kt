@@ -49,6 +49,8 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import com.panomc.plugins.market.support.ErrorBodies
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * `PaymentMethodService` on a real MariaDB (MK-046): schema driven save with the mask / blank / null secret protocol,
@@ -144,7 +146,7 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
 
     private suspend fun row(id: String = "gate") = w.paymentMethods.getByMethodId(id, pool)
 
-    private fun fieldErrors(e: Error): JsonObject = JsonObject(e.encode(emptyMap())).getJsonObject("fieldErrors")
+    private fun fieldErrors(e: Error): JsonObject = ErrorBodies.details(e).getJsonObject("fieldErrors")
 
     private suspend fun entry(id: String = "gate"): JsonObject = service.list().first { it.getString("id") == id }
 
@@ -505,7 +507,7 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
         lookup.remove("gate")
 
         val e = assertThrows<ProviderUnavailable> { runBlocking { service.save("gate", settings(), null) } }
-        assertEquals("UNAVAILABLE", JsonObject(e.encode(emptyMap())).getString("state"))
+        assertEquals("UNAVAILABLE", ErrorBodies.details(e).getString("state"))
         assertThrows<ProviderUnavailable> { runBlocking { service.toggle("gate", true) } }
         assertThrows<ProviderUnavailable> { runBlocking { service.toggle("gate", false) } }
         assertThrows<ProviderUnavailable> { runBlocking { service.reveal("gate", 1, { true }, { }) } }
@@ -666,7 +668,7 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
         assertEquals(5, failures)
 
         val locked = assertThrows<TooManyRequests> { runBlocking { service.reveal("gate", 7, { true }, { failures++ }) } }
-        assertEquals(600, JsonObject(locked.encode(emptyMap())).getLong("retryAfter"))
+        assertEquals(600, ErrorBodies.details(locked).getLong("retryAfter"))
         assertEquals(5, failures, "a locked attempt is not counted again and the password is not even asked")
 
         // another admin is not locked
@@ -740,12 +742,12 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
         g.failAction = ProviderException(ProviderErrorCode.AUTHENTICATION, "401 from gateway")
         val e = assertThrows<PaymentProviderError> { runBlocking { service.runAction("gate", "test-connection", JsonObject()) } }
 
-        assertEquals("AUTHENTICATION", JsonObject(e.encode(emptyMap())).getString("code"))
+        assertEquals("AUTHENTICATION", ErrorBodies.details(e).getString("code"))
         assertEquals("AUTHENTICATION", row()!!.lastError)
 
         g.failAction = IllegalStateException("boom")
         val internal = assertThrows<PaymentProviderError> { runBlocking { service.runAction("gate", "test-connection", JsonObject()) } }
-        assertEquals("INTERNAL", JsonObject(internal.encode(emptyMap())).getString("code"))
+        assertEquals("INTERNAL", ErrorBodies.details(internal).getString("code"))
     }
 
     @Test
@@ -772,7 +774,7 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
         assertEquals("AVAILABLE", e.getString("availability"))
         assertNotNull(e.getValue("spiVersion"))
         assertEquals("Gate", e.getJsonObject("descriptor").getJsonObject("name").getString("default"))
-        assertEquals("/api/market/payment-providers/gate/logo", e.getJsonObject("descriptor").getString("logoUrl"))
+        assertEquals("${MarketPaths.SITE_ROOT}/payment-providers/gate/logo", e.getJsonObject("descriptor").getString("logoUrl"))
         assertEquals("#112233", e.getJsonObject("descriptor").getString("color"))
         assertEquals("global", e.getJsonObject("descriptor").getString("region"))
         assertEquals("UNVERIFIED", e.getJsonObject("descriptor").getString("verification"))
@@ -780,9 +782,9 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
         assertEquals(2, e.getJsonObject("schema").getJsonArray("actions").size())
         assertTrue(e.getJsonObject("capabilities").getBoolean("needsPublicUrl"))
         assertEquals("PER_PAYMENT", e.getJsonObject("capabilities").getString("webhookSetup"))
-        assertEquals("https://shop.example/api/market/payments/gate/webhook", e.getJsonObject("webhookUrls").getString("default"))
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/payments/gate/webhook", e.getJsonObject("webhookUrls").getString("default"))
         val callback = e.getJsonObject("schema").getJsonArray("fields").map { it as JsonObject }.first { it.getString("key") == "callback" }
-        assertEquals("https://shop.example/api/market/payments/gate/webhook", callback.getJsonObject("readonly").getString("value"))
+        assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/payments/gate/webhook", callback.getJsonObject("readonly").getString("value"))
         assertTrue(e.containsKey("lastInboundAt") && e.containsKey("lastError") && e.containsKey("lastErrorAt") && e.containsKey("productMetaSchema"))
         assertEquals(setOf("enabled", "position", "customLabel", "customDescription", "feeMode", "feePercent", "feeFixed", "minAmount", "maxAmount", "currencies", "testMode", "readOnly"), e.getJsonObject("config").fieldNames())
     }

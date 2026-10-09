@@ -278,7 +278,7 @@
     withChargeback,
   } from '../../utils/settings-extra.js';
 
-  // settings = GET /settings; extra = GET /servers ({ servers[] }) for the action editors, null when
+  // settings = GET /settings; extra = GET /servers ({ items[] }) for the action editors, null when
   // that request failed (the editors then accept any server id the form cannot check).
   let { settings: initial = {}, extra = null, extraError = null } = $props();
 
@@ -295,7 +295,7 @@
   let serverMark = $state.raw(null);
 
   const user = $derived($page.data?.user);
-  const serverList = $derived(Array.isArray(extra?.servers) ? extra.servers : null);
+  const serverList = $derived(Array.isArray(extra?.items) ? extra.items : null);
   const addable = $derived(
     addableActionTypes(user).filter((t) => CHARGEBACK_ACTION_TYPES.includes(t)),
   );

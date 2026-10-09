@@ -1,7 +1,7 @@
 // Helpers of the checkout scenarios 16 to 36 (14 section 20.3). Nothing here is a scenario: the runner skips every `lib` directory.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { must } from '../../lib/api.mjs';
+import { must, MARKET_API, PANEL_MARKET_API, listOf } from '../../lib/api.mjs';
 import { grantUserNode } from '../../lib/bootstrap.mjs';
 import { assert, hydrated, open } from '../../lib/ui.mjs';
 import { verifiedBuyer } from './helpers.mjs';
@@ -94,20 +94,22 @@ export const statusBlock = (page) => page.locator('[role="status"]').first();
 /** A panel read of an order by its public id (the panel route takes the numeric id, found through the list). */
 export async function panelOrder(admin, publicId) {
   const list = must(
-    await admin.get(`/api/panel/market/orders?search=${encodeURIComponent(publicId)}&page=1`),
+    await admin.get(`${PANEL_MARKET_API}/orders?search=${encodeURIComponent(publicId)}&page=1`),
     `panel order search ${publicId}`,
   ).json;
-  const row = (list.orders ?? []).find((o) => o.publicId === publicId) ?? (list.orders ?? [])[0];
+  const row =
+    listOf(list, 'orders').find((o) => o.publicId === publicId) ?? listOf(list, 'orders')[0];
 
   assert(row, `the panel lists the order ${publicId}`);
 
-  return must(await admin.get(`/api/panel/market/orders/${row.id}`), `panel order ${row.id}`).json;
+  return must(await admin.get(`${PANEL_MARKET_API}/orders/${row.id}`), `panel order ${row.id}`)
+    .json;
 }
 
 /** The buyer-side view of an order through the API. */
 export async function orderView(api, publicId, token) {
   const res = await api.get(
-    `/api/market/orders/${publicId}${token ? `?token=${encodeURIComponent(token)}` : ''}`,
+    `${MARKET_API}/orders/${publicId}${token ? `?token=${encodeURIComponent(token)}` : ''}`,
   );
 
   return res.json?.order ?? null;
@@ -218,7 +220,7 @@ export async function holdAtGateway(page, gateway, { refresh = true } = {}) {
 /** Writes the settings of a fake provider (its URL and secret stay; `extra` is laid over them). */
 export async function setFakeSettings(admin, gateway, extra, id = 'fake') {
   must(
-    await admin.post(`/api/panel/market/payment-methods/${id}`, {
+    await admin.post(`${PANEL_MARKET_API}/payment-methods/${id}`, {
       settings: { gatewayUrl: gateway.baseUrl, secret: gateway.secret, ...extra },
     }),
     `fake settings ${JSON.stringify(extra)}`,
@@ -247,12 +249,12 @@ export const withStartKind = (admin, gateway, kind, fn) =>
 
 /** Panel settings of the credits section (partial update). */
 export async function setCreditSettings(admin, patch) {
-  must(await admin.post('/api/panel/market/settings/credits', patch), 'credit settings');
+  must(await admin.post(`${PANEL_MARKET_API}/settings/credits`, patch), 'credit settings');
 }
 
 /** The checkout config as a visitor sees it. */
 export async function checkoutConfig(api, query = '') {
-  return must(await api.get(`/api/market/checkout/config${query}`), 'checkout config').json;
+  return must(await api.get(`${MARKET_API}/checkout/config${query}`), 'checkout config').json;
 }
 
 /** The plain address of the shipping scenarios. */
@@ -280,7 +282,7 @@ export async function withSettingsAndWait(admin, patch, restore, fn) {
 /** The bank transfer method configured and switched on for the length of `fn`, switched off afterwards. */
 export async function withBankTransfer(admin, fn) {
   must(
-    await admin.post('/api/panel/market/payment-methods/bank-transfer', {
+    await admin.post(`${PANEL_MARKET_API}/payment-methods/bank-transfer`, {
       settings: {
         accounts: JSON.stringify([
           {
@@ -296,14 +298,16 @@ export async function withBankTransfer(admin, fn) {
     'configure bank transfer',
   );
   must(
-    await admin.post('/api/panel/market/payment-methods/bank-transfer/toggle', { enabled: true }),
+    await admin.post(`${PANEL_MARKET_API}/payment-methods/bank-transfer/toggle`, { enabled: true }),
     'enable bank transfer',
   );
 
   try {
     return await fn();
   } finally {
-    await admin.post('/api/panel/market/payment-methods/bank-transfer/toggle', { enabled: false });
+    await admin.post(`${PANEL_MARKET_API}/payment-methods/bank-transfer/toggle`, {
+      enabled: false,
+    });
   }
 }
 
@@ -334,12 +338,12 @@ export async function signedIn(browser, account, options = {}) {
   });
 }
 
-/** Counts the `POST /api/market/checkout` requests of a page (an order is only asked for by this one request). */
+/** Counts the `POST /api/plugins/pano-plugin-market/checkout` requests of a page (an order is only asked for by this one request). */
 export function countCheckoutPosts(page, env) {
   const seen = [];
 
   page.on('request', (request) => {
-    if (request.method() === 'POST' && request.url() === `${env.url}/api/market/checkout`)
+    if (request.method() === 'POST' && request.url() === `${env.url}${MARKET_API}/checkout`)
       seen.push({ key: request.headers()['idempotency-key'], body: request.postData() });
   });
 
@@ -348,9 +352,9 @@ export function countCheckoutPosts(page, env) {
 
 /** Order public ids of a signed-in buyer, newest first. */
 export async function myOrders(api) {
-  const res = must(await api.get('/api/market/me/orders?page=1'), 'my orders').json;
+  const res = must(await api.get(`${MARKET_API}/me/orders?page=1`), 'my orders').json;
 
-  return res.orders ?? [];
+  return listOf(res, 'orders');
 }
 
 /**

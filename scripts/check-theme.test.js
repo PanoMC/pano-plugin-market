@@ -35,13 +35,22 @@ describe('check-theme rules 1 and 3 fail without --strict', () => {
   test('style= outside the allow-list fails', () => {
     const r = run({ 'components/A.svelte': '<div style="width: 3px"></div>\n' });
     expect(r.code).not.toBe(0);
-    expect(r.out).toContain('style= attribute outside');
+    expect(r.out).toContain('[style-attr]');
+    expect(r.out).toContain('styleAttrAllow');
   });
 
   test('style= in an allow-listed file passes', () => {
     expect(run({ 'components/GoalWidget.svelte': '<div style="width: 3px"></div>\n' }).code).toBe(
       0,
     );
+  });
+
+  test('a <style> block fails', () => {
+    const r = run({
+      'components/A.svelte': '<div class="p-2"></div>\n<style>.a { color: red; }</style>\n',
+    });
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain('[style-block-scope]');
   });
 
   test('{@html} outside the allow-list fails', () => {
@@ -58,5 +67,34 @@ describe('check-theme rules 1 and 3 fail without --strict', () => {
 
   test('an allow-listed {@html} file with {@html} passes', () => {
     expect(run({ 'pages/ProductPage.svelte': '<div>{@html body}</div>\n' }).code).toBe(0);
+  });
+});
+
+describe('check-theme rule 7: market API paths', () => {
+  test('relative call paths and full plugin urls pass', () => {
+    const files = {
+      'lib/a.js': "export const A = call('GET', '/store/products');\n",
+      'components/B.svelte':
+        '<img src="{base}/api/plugins/pano-plugin-market/products/image/a.png" alt="" />\n',
+    };
+    expect(run(files).code).toBe(0);
+  });
+
+  test('an old /api/market path fails, in code and in markup', () => {
+    const code = run({ 'lib/a.js': "export const A = '/api/market/store';\n" });
+    expect(code.code).not.toBe(0);
+    expect(code.out).toContain("'/api/market/store' is not a market API path");
+    const markup = run({
+      'components/B.svelte': '<img src="{base}/api/market/products/image/a.png" alt="" />\n',
+    });
+    expect(markup.code).not.toBe(0);
+  });
+
+  test('comments may name the old path', () => {
+    expect(run({ 'lib/a.js': "// was '/api/market/store'\nexport const A = 1;\n" }).code).toBe(0);
+  });
+
+  test('a path of another api version prefix of the plugin is not a market path either', () => {
+    expect(run({ 'lib/a.js': "export const A = '/api/v1/store';\n" }).code).not.toBe(0);
   });
 });

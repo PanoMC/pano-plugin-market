@@ -121,7 +121,9 @@ describe('productJsonLd', () => {
       slug: 'vip',
       origin: ORIGIN,
     });
-    expect(ld.image).toEqual([`${ORIGIN}/api/market/products/image/a%20b.png`]);
+    expect(ld.image).toEqual([
+      `${ORIGIN}/api/plugins/pano-plugin-market/products/image/a%20b.png`,
+    ]);
     expect(productJsonLd({ product: base, slug: 'vip', origin: ORIGIN }).image).toBeUndefined();
   });
 
@@ -195,7 +197,7 @@ describe('productMeta', () => {
       type: 'product',
       canonical: `${ORIGIN}/store/vip`,
       description: 'Meta',
-      image: `${ORIGIN}/api/market/products/image/p.png`,
+      image: `${ORIGIN}/api/plugins/pano-plugin-market/products/image/p.png`,
     });
     expect(meta.jsonLd['@type']).toBe('Product');
   });

@@ -27,6 +27,8 @@
     }
   },
   "storeUrl": "https://example.com/store",
+  "productUrlTemplate": "https://example.com/store/{slug}",
+  "registerUrl": "https://example.com/register",
   "creditName": "Gems",
   "currency": "USD",
   "serverId": 4

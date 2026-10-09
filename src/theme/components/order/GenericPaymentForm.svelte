@@ -1,15 +1,17 @@
-<form class="vstack gap-3" onsubmit={submit} novalidate>
+<form class="market-generic-payment-form vstack gap-3" onsubmit={submit} novalidate>
   {#each fields as field (field.key)}
     {#if isVisible(field, values, fields)}
       {@const fid = controlId(field.key)}
       {@const code = errors[field.key]}
       {#if field.type === 'NOTICE'}
-        <div class={['alert', 'mb-0', noticeClass(field)]} role="status">
+        <div
+          class={['market-generic-payment-form__alert', 'alert', 'mb-0', noticeClass(field)]}
+          role="status">
           {field.label}
         </div>
       {:else if field.type === 'READONLY'}
         <div>
-          <div class="form-label mb-1">{field.label}</div>
+          <div class="market-generic-payment-form__label form-label mb-1">{field.label}</div>
           <div class="text-break" id={fid}>{readonlyValue(field)}</div>
           {#if field.help}
             <div class="form-text">{field.help}</div>
@@ -19,7 +21,7 @@
         <div class="form-check form-switch">
           <input
             id={fid}
-            class="form-check-input"
+            class="market-generic-payment-form__check form-check-input"
             type="checkbox"
             role="switch"
             disabled={busy}
@@ -32,7 +34,7 @@
         </div>
       {:else}
         <div>
-          <label class="form-label" for={fid}>
+          <label class="market-generic-payment-form__label-2 form-label" for={fid}>
             {field.label}
             {#if field.required}
               <span class="text-danger" aria-hidden="true">*</span>
@@ -41,7 +43,7 @@
           {#if field.type === 'TEXTAREA'}
             <textarea
               id={fid}
-              class={['form-control', code && 'is-invalid']}
+              class={['market-generic-payment-form__input', 'form-control', code && 'is-invalid']}
               rows="4"
               maxlength={TEXTAREA_MAX}
               placeholder={field.placeholder || undefined}
@@ -54,7 +56,7 @@
           {:else if field.type === 'SELECT'}
             <select
               id={fid}
-              class={['form-select', code && 'is-invalid']}
+              class={['market-generic-payment-form__select', 'form-select', code && 'is-invalid']}
               disabled={busy}
               aria-required={field.required ? 'true' : undefined}
               aria-invalid={code ? 'true' : undefined}
@@ -71,7 +73,7 @@
           {:else}
             <input
               id={fid}
-              class={['form-control', code && 'is-invalid']}
+              class={['market-generic-payment-form__input-2', 'form-control', code && 'is-invalid']}
               type={INPUT_TYPES[field.type] ?? 'text'}
               inputmode={field.type === 'NUMBER' ? 'numeric' : undefined}
               maxlength={TEXT_MAX}
@@ -101,11 +103,16 @@
   {/each}
 
   {#if alertKey}
-    <div class="alert alert-danger mb-0" role="alert">{$_(alertKey, { values: { seconds } })}</div>
+    <div class="market-generic-payment-form__alert-2 alert alert-danger mb-0" role="alert">
+      {$_(alertKey, { values: { seconds } })}
+    </div>
   {/if}
 
   <div>
-    <button type="submit" class="btn btn-primary" disabled={busy || waiting}>
+    <button
+      type="submit"
+      class="market-generic-payment-form__action btn btn-primary"
+      disabled={busy || waiting}>
       {#if busy}
         <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
       {/if}
@@ -116,7 +123,7 @@
 
 <script>
   import { untrack } from 'svelte';
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import {
     TEXTAREA_MAX,
     TEXT_MAX,
@@ -127,6 +134,9 @@
     readonlyValue,
     validateForm,
   } from '../../lib/paymentPanel.js';
+
+  const market = plugin('market');
+  const { _ } = market;
 
   const INPUT_TYPES = { TEXT: 'text', URL: 'text', NUMBER: 'text', PASSWORD: 'password' };
 

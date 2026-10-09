@@ -402,8 +402,8 @@ class ShipmentTrackingJobIT : ShippingTrackingITBase() {
 
         val rows = webhooks.rows()
 
-        assertEquals(1, rows.count { it.event == "shipment.shipped" }, "shipped once")
-        assertEquals(1, rows.count { it.event == "shipment.delivered" }, "delivered once")
+        assertEquals(1, rows.count { it.event == "market.shipment.shipped" }, "shipped once")
+        assertEquals(1, rows.count { it.event == "market.shipment.delivered" }, "delivered once")
         assertTrue(rows.all { it.endpointId == endpoint.id })
 
         w.clock.advance(10 * day)

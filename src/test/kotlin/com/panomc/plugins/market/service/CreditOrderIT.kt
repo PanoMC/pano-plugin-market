@@ -40,6 +40,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * The object graph of the credit tests (17 section 5.3): the real [CreditService] as the hold of checkout and as the settlement of every order transition,
@@ -239,10 +240,10 @@ class CreditOrderIT : MarketDaoITBase() {
         } ?: error("expected $code, nothing was thrown")
         val body = JsonObject(e.encode())
 
-        assertEquals(code, body.getString("error"), "error code of the wire body ${e.encode()}")
+        assertEquals(code, body.getJsonObject("error").getString("code"), "error code of the wire body ${e.encode()}")
         assertEquals(status, e.getStatusCode())
 
-        return body
+        return ErrorBodies.details(e)
     }
 
     private suspend fun pay(order: MarketOrder, method: String = "fake", credits: Long? = null) = c.payments.pay(order, PayRequest(method, credits, null), PayCaller(), pool)

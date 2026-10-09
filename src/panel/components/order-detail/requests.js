@@ -1,13 +1,13 @@
 // Request builders of the order detail page (13 §6.2, §6.4, §9.3, §6.1). Pure: no Svelte, no SDK
-// import. Each returns `{ method, path, body }` (path relative to the market API root) or, for forms,
+// import. Each returns `{ method, path, body }` (path relative to the plugin's panel API) or, for forms,
 // `{ error: { field: true } }` / `{ request }`.
-import { marketPath } from '../../utils/api.js';
+import { PANEL_URL } from '../../utils/api.js';
 
 export const NOTE_MAX = 255;
 export const ORDER_NOTE_MAX = 2000;
 export const DISPUTE_REASON_MAX = 255;
 
-const req = (method, path, body = {}) => ({ method, path: marketPath(path), body });
+const req = (method, path, body = {}) => ({ method, path, body });
 
 const clean = (text) => String(text ?? '').trim();
 const optional = (body, key, value) => {
@@ -211,7 +211,7 @@ export function noteRequest(orderId, note) {
   return { request: req('PUT', `/orders/${orderId}/note`, { note: text }) };
 }
 
-export const orderPath = (orderId) => marketPath(`/orders/${orderId}`);
-export const paymentEventsPath = (paymentId) => marketPath(`/payments/${paymentId}/events`);
+export const orderPath = (orderId) => `/orders/${orderId}`;
+export const paymentEventsPath = (paymentId) => `/payments/${paymentId}/events`;
 export const shipmentLabelPath = (base, shipmentId, generic) =>
-  `${base}/api/panel/market/shipments/${shipmentId}/label${generic ? '?generic=true' : ''}`;
+  `${PANEL_URL}/shipments/${shipmentId}/label${generic ? '?generic=true' : ''}`;

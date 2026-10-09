@@ -2,7 +2,6 @@
 // script loader, the bank transfer notice and the "pay another way" request. No SDK, no DOM (the script loader
 // takes its `document`): unit-tested. Nothing here trusts a URL or a script the server sent: scripts and iframes
 // are https only, a redirect / attempt page passes the checks of paymentStart.js.
-import { get as readStore } from 'svelte/store';
 import {
   billingRequirements,
   effectiveBillingInfo,
@@ -304,7 +303,15 @@ export function viewItems(source) {
   try {
     if (Array.isArray(source)) return source;
     if (typeof source?.subscribe === 'function') {
-      const items = readStore(source);
+      // The store contract (subscribe calls back synchronously) read by hand: this file is reached from a
+      // controller (profileModel), and controllers import no framework code.
+      let items;
+      const stop = source.subscribe((value) => {
+        items = value;
+      });
+
+      if (typeof stop === 'function') stop();
+      else if (typeof stop?.unsubscribe === 'function') stop.unsubscribe();
 
       return Array.isArray(items) ? items : [];
     }

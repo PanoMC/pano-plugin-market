@@ -1,4 +1,5 @@
 // Display model of the order detail page (13 §6.1). Pure: no Svelte, no SDK import.
+import { PANEL_URL } from '../../utils/api.js';
 
 const EPS = 0.005;
 const num = (value) => {
@@ -233,7 +234,7 @@ export function addressLines(address, { billing = false } = {}) {
 export function invoiceUrl(base, orderId, invoice) {
   const query = new URLSearchParams({ type: String(invoice?.type ?? '') });
   if (invoice?.refundId) query.set('refundId', String(invoice.refundId));
-  return `${base}/api/panel/market/orders/${orderId}/invoice?${query.toString()}`;
+  return `${PANEL_URL}/orders/${orderId}/invoice?${query.toString()}`;
 }
 
 /** Remaining collected gateway money = default dispute amount. */

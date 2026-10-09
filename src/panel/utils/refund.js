@@ -1,6 +1,6 @@
 // Pure logic of the RefundModal (13 §6.3, 07 §7, 21 §3). No Svelte, no SDK import: the modal builds
 // its requests, validation and outcome handling from here so every rule is unit tested.
-import { idempotencyKeyFor, marketPath } from './api.js';
+import { idempotencyKeyFor } from './api.js';
 import { isStaleError } from '../components/order-detail/actions.js';
 
 export const REFUND_REASON_MAX = 255;
@@ -141,16 +141,14 @@ export function previewPath(orderId, form, refundable = []) {
   const base = `/orders/${orderId}/refund-preview`;
   if (form.mode === 'AMOUNT') {
     return amountError(form.amount, null) === null
-      ? marketPath(`${base}?amount=${encodeURIComponent(String(form.amount))}`)
+      ? `${base}?amount=${encodeURIComponent(String(form.amount))}`
       : null;
   }
   if (form.mode === 'ITEMS') {
     const built = itemsPayload(refundable, form.quantities);
-    return built.ok
-      ? marketPath(`${base}?items=${encodeURIComponent(JSON.stringify(built.items))}`)
-      : null;
+    return built.ok ? `${base}?items=${encodeURIComponent(JSON.stringify(built.items))}` : null;
   }
-  return marketPath(base);
+  return base;
 }
 
 /**
@@ -328,7 +326,7 @@ export function buildRefundRequest(order, form, preview, refundable = [], allowe
   if (requiresSplitAck(order, preview, form) && form.ack !== true) error.ack = true;
 
   if (Object.keys(error).length > 0) return { error };
-  return { request: { method: 'POST', path: marketPath(`/orders/${order.id}/refunds`), body } };
+  return { request: { method: 'POST', path: `/orders/${order.id}/refunds`, body } };
 }
 
 /** One key per unchanged body (retry, double click); a changed body gets a new key (13 §3.3). */

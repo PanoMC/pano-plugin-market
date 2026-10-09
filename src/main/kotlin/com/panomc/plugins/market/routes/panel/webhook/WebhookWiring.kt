@@ -1,45 +1,39 @@
 package com.panomc.plugins.market.routes.panel.webhook
 
+import com.panomc.platform.api.webhook.RenderedBody
+import com.panomc.platform.api.webhook.WebhookDiscordRenderer
+import com.panomc.platform.api.webhook.WebhookEventType
+import com.panomc.platform.api.webhook.webhookPublisher
 import com.panomc.platform.config.ConfigManager
 import com.panomc.platform.db.DatabaseManager
-import com.panomc.platform.hosted.HostedEnvConfig
+import com.panomc.platform.webhook.WebhookEndpointService
 import com.panomc.plugins.market.MarketPlugin
-import com.panomc.plugins.market.core.time.SystemClock
 import com.panomc.plugins.market.core.webhook.DiscordLabelSource
 import com.panomc.plugins.market.core.webhook.DiscordLabels
 import com.panomc.plugins.market.core.webhook.DiscordRenderer
-import com.panomc.plugins.market.core.webhook.TargetPolicy
+import com.panomc.plugins.market.core.webhook.WebhookEvents
+import com.panomc.plugins.market.core.webhook.WebhookSamples
 import com.panomc.plugins.market.db.MarketTables
-import com.panomc.plugins.market.db.dao.MarketWebhookDeliveryDao
-import com.panomc.plugins.market.db.dao.MarketWebhookEndpointDao
-import com.panomc.plugins.market.db.model.MarketWebhookEndpoint
-import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.i18n.MarketI18n
-import com.panomc.plugins.market.routes.api.checkout.abuseWiring
-import com.panomc.plugins.market.routes.api.order.webhookService
+import com.panomc.plugins.market.routes.api.order.deliveryService
 import com.panomc.plugins.market.routes.panel.invoice.marketI18n
-import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.runtime.beans
-import com.panomc.plugins.market.service.OutboundHttp
-import com.panomc.plugins.market.service.RenderedBody
-import com.panomc.plugins.market.service.WebhookBodyRenderer
-import io.vertx.core.Vertx
+import com.panomc.plugins.market.service.SqlLegacyWebhookTables
+import com.panomc.plugins.market.service.WebhookEndpointImporter
+import com.panomc.plugins.market.service.WebhookImport
 import io.vertx.core.json.JsonObject
-import io.vertx.sqlclient.Pool
 
 /**
- * The `format = DISCORD` renderer of [com.panomc.plugins.market.service.WebhookService] (08 section 16): the endpoint's custom template (or the built-in
+ * The `format = DISCORD` renderer of core's webhook sender (08 section 16): the endpoint's custom template (or the built-in
  * one) over the variables of the event's envelope. A custom template that does not parse falls back to the built-in one and the row records
  * `lastError = TEMPLATE_ERROR` without failing.
  */
-class DiscordWebhookRenderer(private val labels: DiscordLabelSource) : WebhookBodyRenderer {
-    override suspend fun render(endpoint: MarketWebhookEndpoint, event: String, envelope: JsonObject): String =
-        renderChecked(endpoint, event, envelope).body
-
-    override suspend fun renderChecked(endpoint: MarketWebhookEndpoint, event: String, envelope: JsonObject): RenderedBody {
+class DiscordWebhookRenderer(private val labels: DiscordLabelSource) : WebhookDiscordRenderer {
+    /** [event] is the name without the source, as market published it (`order.paid`). */
+    override suspend fun render(event: String, envelope: JsonObject, template: String?): RenderedBody {
         val vars = DiscordRenderer.vars(event, envelope, labels.labels(event))
-        val rendered = DiscordRenderer.renderChecked(endpoint.template, vars)
+        val rendered = DiscordRenderer.renderChecked(template, vars)
 
         return RenderedBody(rendered.body, if (rendered.templateError) TEMPLATE_ERROR else null)
     }
@@ -72,10 +66,7 @@ class I18nDiscordLabels(private val i18n: MarketI18n, private val locale: () -> 
 private var cachedLabels: Pair<MarketPlugin, DiscordLabelSource>? = null
 
 @Volatile
-private var cachedRenderer: Pair<MarketPlugin, WebhookBodyRenderer>? = null
-
-@Volatile
-private var cachedAdmin: Pair<MarketPlugin, WebhookAdminService>? = null
+private var cachedRenderer: Pair<MarketPlugin, WebhookDiscordRenderer>? = null
 
 private object WebhookWiringHolder
 
@@ -93,7 +84,7 @@ internal fun discordLabelSource(plugin: MarketPlugin): DiscordLabelSource {
     }
 }
 
-internal fun discordWebhookRenderer(plugin: MarketPlugin): WebhookBodyRenderer {
+internal fun discordWebhookRenderer(plugin: MarketPlugin): WebhookDiscordRenderer {
     cachedRenderer?.takeIf { it.first === plugin }?.let { return it.second }
 
     return synchronized(WebhookWiringHolder) {
@@ -101,26 +92,34 @@ internal fun discordWebhookRenderer(plugin: MarketPlugin): WebhookBodyRenderer {
     }
 }
 
-/** The panel service of the webhook routes, built once per plugin instance. */
-internal fun webhookAdminService(plugin: MarketPlugin): WebhookAdminService {
-    cachedAdmin?.takeIf { it.first === plugin }?.let { return it.second }
-
-    return synchronized(WebhookWiringHolder) {
-        cachedAdmin?.takeIf { it.first === plugin }?.second ?: buildAdmin(plugin).also { cachedAdmin = plugin to it }
-    }
+/**
+ * The store's events as core knows them (doc 06 section 4.4, `WebhookPublisher.register`): the ten subscribable names with their samples, the four `action.*`
+ * events of the product `WEBHOOK` action as `subscribable = false`, the Discord renderer for the endpoints with `format = DISCORD`, and the listener for the
+ * end of an action's direct delivery. Core prefixes `market.` and drops all of it when the plugin stops, so this runs at every start; calling it again replaces
+ * the earlier call.
+ */
+internal fun registerStoreWebhooks(plugin: MarketPlugin) {
+    plugin.webhookPublisher().register(
+        plugin, storeWebhookEvents(), discordWebhookRenderer(plugin), deliveryService(plugin).outcomeListener
+    )
 }
 
-private fun buildAdmin(plugin: MarketPlugin): WebhookAdminService {
+/** The events the market declares, in the order the panel lists them. */
+internal fun storeWebhookEvents(): List<WebhookEventType> =
+    WebhookEvents.SUBSCRIBABLE.map { WebhookEventType(it, WebhookSamples.of(it), subscribable = true) } +
+        WebhookEvents.ACTION_EVENTS.map { WebhookEventType(it, null, subscribable = false) }
+
+/** The import of the old market webhook endpoints into core's (doc 06 section 4.4 step 1): the market's tables, the market's cipher, core's `importEndpoint`. */
+internal fun webhookImport(plugin: MarketPlugin): WebhookImport {
     val context = plugin.beans
     val databaseManager = { context.getBean(DatabaseManager::class.java) }
-    val version = plugin.applicationContext.getBean(com.panomc.platform.PluginManager::class.java).getPlugin(plugin.pluginId).descriptor.version
 
-    return WebhookAdminService(
-        db = MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock), clock = SystemClock,
-        endpoints = context.getBean(MarketWebhookEndpointDao::class.java), deliveries = context.getBean(MarketWebhookDeliveryDao::class.java),
-        webhooks = webhookService(plugin), cipher = paymentWiring(plugin).cipher, outbound = OutboundHttp.create(context.getBean(Vertx::class.java), version),
-        allowPrivate = { TargetPolicy.effectiveAllowPrivate(currentConfig(plugin).allowPrivateWebhookTargets, HostedEnvConfig.current.isHosted) },
-        prefix = { MarketTables.prefixOverride ?: databaseManager().getTablePrefix() },
-        rateLimit = { userId -> abuseWiring(plugin).rateLimits.panelAction(userId) }
+    return WebhookImport(
+        SqlLegacyWebhookTables({ databaseManager().getSqlClient() }, { MarketTables.prefixOverride ?: databaseManager().getTablePrefix() }),
+        paymentWiring(plugin).cipher,
+        WebhookEndpointImporter { name, url, events, format, signing, secret, headers, template, enabled, maxAttempts ->
+            plugin.applicationContext.getBean(WebhookEndpointService::class.java)
+                .importEndpoint(name, url, events, format, signing, secret, headers, template, enabled, maxAttempts)
+        }
     )
 }

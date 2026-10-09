@@ -3,8 +3,9 @@ import { get } from 'svelte/store';
 import './sdkMocks.js';
 import { COUNT_KEY, STORAGE_KEY } from '../cartModel.js';
 import { lineKey } from '../lineKey.js';
+import { createEnv } from './controllerEnv.js';
 
-const { createCartStore } = await import('../../stores/cart.js');
+const { createCartStore } = await import('../cartEngine.js');
 
 function fakeStorage(initial = {}) {
   const data = new Map(Object.entries(initial));
@@ -112,9 +113,16 @@ describe('initial state', () => {
     expect(env.local.data.size).toBe(1);
   });
 
-  test('the shared instance starts in NONE after import', async () => {
-    const mod = await import('../../stores/cart.js');
-    expect(get(mod.cart).mode).toBe('NONE');
+  test('the shared instance (the market/cart controller) starts in NONE', async () => {
+    const env = createEnv({ browser: false });
+    try {
+      const state = env.use('cart').get();
+      expect(state.mode).toBe('NONE');
+      expect(state.count).toBe(0);
+      expect(state.replaceRequest).toBeNull();
+    } finally {
+      env.dispose();
+    }
   });
 });
 
@@ -289,7 +297,7 @@ describe('guest quotes', () => {
     expect(await store.requestQuote()).toEqual(quote);
     expect(calls[0]).toMatchObject({
       method: 'POST',
-      path: '/api/market/checkout/quote',
+      path: '/checkout/quote',
       body: { items: [{ productId: 1, quantity: 2 }], currency: 'EUR', locale: 'tr' },
     });
     expect(state().quote).toEqual(quote);
@@ -517,9 +525,7 @@ describe('server mode', () => {
     const promise = store.init();
     expect(state()).toMatchObject({ mode: 'SERVER', status: 'LOADING' });
     await promise;
-    expect(calls).toEqual([
-      { method: 'GET', path: '/api/market/me/cart', query: { currency: 'EUR' } },
-    ]);
+    expect(calls).toEqual([{ method: 'GET', path: '/me/cart', query: { currency: 'EUR' } }]);
     expect(state()).toMatchObject({ mode: 'SERVER', status: 'IDLE', count: 2, quoteStale: false });
     expect(state().lines[0]).toMatchObject({ itemId: 100, productId: 1, quantity: 2 });
     expect(state().lines[0].meta.name).toBe('VIP');
@@ -546,7 +552,7 @@ describe('server mode', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
       method: 'POST',
-      path: '/api/market/me/cart/merge',
+      path: '/me/cart/merge',
       body: { items: [{ productId: 1, quantity: 3, fieldValues: { a: 'b' } }] },
     });
     expect(JSON.stringify(calls[0].body)).not.toContain('meta');
@@ -579,7 +585,7 @@ describe('server mode', () => {
     expect(state()).toMatchObject({ mode: 'SERVER', status: 'ERROR', error: 'NETWORK', count: 1 });
     expect(JSON.parse(env.local.data.get(STORAGE_KEY)).items).toHaveLength(1);
     await store.retry();
-    expect(calls[1].path).toBe('/api/market/me/cart/merge');
+    expect(calls[1].path).toBe('/me/cart/merge');
     expect(state()).toMatchObject({ status: 'IDLE', error: null });
     expect(JSON.parse(env.local.data.get(STORAGE_KEY)).items).toEqual([]);
   });
@@ -598,7 +604,7 @@ describe('server mode', () => {
     expect(await store.add({ productId: 1, quantity: 2 }, { name: 'A' })).toBe(true);
     expect(calls[1]).toMatchObject({
       method: 'POST',
-      path: '/api/market/me/cart/items',
+      path: '/me/cart/items',
       body: { productId: 1, quantity: 2 },
     });
     expect(state()).toMatchObject({ status: 'IDLE', count: 2 });
@@ -641,13 +647,13 @@ describe('server mode', () => {
     await store.setQuantity(lineKey(sl(2)), 4);
     expect(calls[1]).toMatchObject({
       method: 'PUT',
-      path: '/api/market/me/cart/items/101',
+      path: '/me/cart/items/101',
       body: { quantity: 4 },
     });
     await store.remove(lineKey(sl(2)));
-    expect(calls[2]).toMatchObject({ method: 'DELETE', path: '/api/market/me/cart/items/101' });
+    expect(calls[2]).toMatchObject({ method: 'DELETE', path: '/me/cart/items/101' });
     await store.clear();
-    expect(calls[3]).toMatchObject({ method: 'DELETE', path: '/api/market/me/cart' });
+    expect(calls[3]).toMatchObject({ method: 'DELETE', path: '/me/cart' });
     expect(state().count).toBe(0);
   });
 
@@ -696,7 +702,7 @@ describe('server mode', () => {
     await tick();
     await store.confirmReplace();
     expect(await result).toBe(true);
-    expect(calls[1]).toMatchObject({ method: 'PUT', path: '/api/market/me/cart' });
+    expect(calls[1]).toMatchObject({ method: 'PUT', path: '/me/cart' });
     expect(calls[1].body).toEqual({
       items: [{ productId: 50, quantity: 1 }],
       couponCode: 'SAVE',
@@ -812,9 +818,9 @@ describe('server mode', () => {
       expect(await store.putCart({ couponCode: 'X' })).toBe(false);
       expect(writes(calls)).toEqual([]);
       expect(calls.map((c) => c.path)).toEqual([
-        '/api/market/me/cart/merge',
-        '/api/market/me/cart/merge',
-        '/api/market/me/cart/merge',
+        '/me/cart/merge',
+        '/me/cart/merge',
+        '/me/cart/merge',
       ]);
     });
 
@@ -932,7 +938,7 @@ describe('login and logout', () => {
     await store.add({ productId: 1 }, { name: 'A' });
     env.user = { id: 3, username: 'Alex' };
     await store.init();
-    expect(calls[0].path).toBe('/api/market/me/cart/merge');
+    expect(calls[0].path).toBe('/me/cart/merge');
     expect(state().mode).toBe('SERVER');
   });
 

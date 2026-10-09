@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import com.panomc.plugins.market.util.MarketPaths
 
 class SettingsSchemaTest {
     private fun t(s: String) = LocalizedText.of(s)
@@ -118,7 +119,7 @@ class SettingsSchemaTest {
     fun `wire format omits HIDDEN fields and resolves readonly values`() {
         val json = schema.toJson { v ->
             when (v) {
-                is ReadonlyValue.WebhookUrl -> "https://shop.example/api/market/payments/x/webhook" + (if (v.channel == "default") "" else "/${v.channel}")
+                is ReadonlyValue.WebhookUrl -> "https://shop.example${MarketPaths.SITE_ROOT}/payments/x/webhook" + (if (v.channel == "default") "" else "/${v.channel}")
                 is ReadonlyValue.SiteBaseUrl -> "https://shop.example"
                 else -> null
             }
@@ -151,11 +152,11 @@ class SettingsSchemaTest {
         assertFalse(byKey.getValue("merchantId").containsKey("readonly"))
 
         assertEquals(
-            """{"kind":"WEBHOOK_URL","channel":"default","value":"https://shop.example/api/market/payments/x/webhook"}""",
+            """{"kind":"WEBHOOK_URL","channel":"default","value":"https://shop.example${MarketPaths.SITE_ROOT}/payments/x/webhook"}""",
             byKey.getValue("callbackUrl").getJsonObject("readonly").encode()
         )
         assertEquals(
-            "https://shop.example/api/market/payments/x/webhook/subscription",
+            "https://shop.example${MarketPaths.SITE_ROOT}/payments/x/webhook/subscription",
             byKey.getValue("subscriptionHook").getJsonObject("readonly").getString("value")
         )
         assertEquals("""{"kind":"RETURN_URL_PREFIX"}""", byKey.getValue("returnPrefix").getJsonObject("readonly").encode())

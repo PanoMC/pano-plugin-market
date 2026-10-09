@@ -59,7 +59,7 @@ function revokeOrders(orders, now) {
 }
 
 /**
- * `health` = GET /health (SET holders only, else null), `servers` = GET /servers `servers[]`,
+ * `health` = GET /health (SET holders only, else null), `servers` = GET /servers `items[]`,
  * `ctx` = GET /context. `options`: `reviewCount` (orders in REVIEW), `orders` (recent order rows
  * that may carry revokeFailed / revokePending), `can(...keys)` (permission test; default allows),
  * `now`. Every item: `{ key, variant, icon, title, body?, ... , links[] }`; `title` / `body` are

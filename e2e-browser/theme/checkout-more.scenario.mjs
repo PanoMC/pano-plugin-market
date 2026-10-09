@@ -1,6 +1,6 @@
 // Theme browser scenarios 23 to 29 of 14 section 20.3 (shipping, credits, free order, double submit, stock, unavailable methods, rate limit), vanilla theme.
 // Ids TH-23 .. TH-29 are the numbers of the spec.
-import { must } from '../lib/api.mjs';
+import { must, MARKET_API, PANEL_MARKET_API, listOf } from '../lib/api.mjs';
 import { coupon, grantCredits } from '../lib/bootstrap.mjs';
 import { newContext } from '../lib/browser.mjs';
 import { assert, assertEqual } from '../lib/ui.mjs';
@@ -45,7 +45,7 @@ async function pickMethod(page, id) {
 /** Adds `quantity` units of `item` to the server cart of a signed-in buyer (the page then opens on a ready cart). */
 async function putInCart(api, item, quantity = 1) {
   must(
-    await api.post('/api/market/me/cart/items', { productId: item.id, quantity }),
+    await api.post(`${MARKET_API}/me/cart/items`, { productId: item.id, quantity }),
     `cart item ${item.name}`,
   );
 }
@@ -56,18 +56,21 @@ async function putInCart(api, item, quantity = 1) {
  */
 async function withShipping(admin, fn) {
   const n = unique();
-  const zones = must(await admin.get('/api/panel/market/shipping/zones'), 'zones').json.zones;
+  const zones = listOf(
+    must(await admin.get(`${PANEL_MARKET_API}/shipping/zones`), 'zones').json,
+    'zones',
+  );
   const others = zones.filter((z) => z.status === 'ACTIVE').map((z) => z.id);
 
   for (const id of others)
     must(
-      await admin.put(`/api/panel/market/shipping/zones/${id}`, { status: 'INACTIVE' }),
+      await admin.put(`${PANEL_MARKET_API}/shipping/zones/${id}`, { status: 'INACTIVE' }),
       'zone off',
     );
 
   try {
     const zoneId = must(
-      await admin.post('/api/panel/market/shipping/zones', {
+      await admin.post(`${PANEL_MARKET_API}/shipping/zones`, {
         name: `E2E zone ${n}`,
         countries: ['DE', 'TR'],
         status: 'ACTIVE',
@@ -91,7 +94,7 @@ async function withShipping(admin, fn) {
 
         if (free !== null) body.freeShippingThreshold = free;
         methodIds.push(
-          must(await admin.post('/api/panel/market/shipping/methods', body), name).json.id,
+          must(await admin.post(`${PANEL_MARKET_API}/shipping/methods`, body), name).json.id,
         );
       }
 
@@ -100,12 +103,12 @@ async function withShipping(admin, fn) {
       return await fn({ zoneId, standard: methodIds[0], express: methodIds[1], n });
     } finally {
       for (const id of methodIds)
-        await admin.request('DELETE', `/api/panel/market/shipping/methods/${id}`);
-      await admin.request('DELETE', `/api/panel/market/shipping/zones/${zoneId}`);
+        await admin.request('DELETE', `${PANEL_MARKET_API}/shipping/methods/${id}`);
+      await admin.request('DELETE', `${PANEL_MARKET_API}/shipping/zones/${zoneId}`);
     }
   } finally {
     for (const id of others)
-      await admin.put(`/api/panel/market/shipping/zones/${id}`, { status: 'ACTIVE' });
+      await admin.put(`${PANEL_MARKET_API}/shipping/zones/${id}`, { status: 'ACTIVE' });
   }
 }
 
@@ -345,7 +348,7 @@ export const scenarios = [
       await page.getByText(text('theme.order.state.paid')).first().waitFor({ timeout: 60000 });
       const paid = await orderView(rich, full);
       assertEqual(paid.status, 'COMPLETED', 'the credit order is completed at once');
-      const balance = must(await rich.get('/api/market/me/credits'), 'credits').json;
+      const balance = must(await rich.get(`${MARKET_API}/me/credits`), 'credits').json;
       assertEqual(
         Number(balance.balance ?? balance.credits?.balance),
         15,
@@ -362,7 +365,10 @@ export const scenarios = [
       const quotes = [];
 
       page2.on('request', (request) => {
-        if (request.method() === 'POST' && request.url() === `${env.url}/api/market/checkout/quote`)
+        if (
+          request.method() === 'POST' &&
+          request.url() === `${env.url}${MARKET_API}/checkout/quote`
+        )
           quotes.push(JSON.parse(request.postData() || '{}'));
       });
 
@@ -400,7 +406,7 @@ export const scenarios = [
         'COMPLETED',
         'the mixed order is completed',
       );
-      const left = must(await some.get('/api/market/me/credits'), 'credits').json;
+      const left = must(await some.get(`${MARKET_API}/me/credits`), 'credits').json;
       assertEqual(Number(left.balance ?? left.credits?.balance), 0, 'all 4 credits were used');
       assert(
         [...gateway.payments.values()].some((p) => p.amount === '6.00'),
@@ -515,8 +521,8 @@ export const scenarios = [
       const replay = await payBuyer(buyer, admin, 'rpl');
       const key = idem();
       const body = { items: [{ productId: vip.id, quantity: 1 }], paymentMethodId: 'fake' };
-      const one = must(await replay.post('/api/market/checkout', body, key), 'first checkout');
-      const two = must(await replay.post('/api/market/checkout', body, key), 'replayed checkout');
+      const one = must(await replay.post(`${MARKET_API}/checkout`, body, key), 'first checkout');
+      const two = must(await replay.post(`${MARKET_API}/checkout`, body, key), 'replayed checkout');
 
       assertEqual(
         two.json.order.publicId,
@@ -538,7 +544,7 @@ export const scenarios = [
       await waitQuoted(page2);
       await pickMethod(page2, 'fake');
 
-      await page2.route(`${env.url}/api/market/checkout`, async (route) => {
+      await page2.route(`${env.url}${MARKET_API}/checkout`, async (route) => {
         if (route.request().method() !== 'POST' || aborted) return route.continue();
 
         aborted = true;
@@ -596,7 +602,7 @@ export const scenarios = [
 
       // the last unit goes elsewhere after the buyer saw the quote
       must(
-        await admin.post(`/api/panel/market/products/${scarce.id}/stock`, {
+        await admin.post(`${PANEL_MARKET_API}/products/${scarce.id}/stock`, {
           mode: 'SET',
           value: 0,
         }),
@@ -696,7 +702,7 @@ export const scenarios = [
       // limited to USD (the provider itself takes any currency), the store sells in EUR
       const setCurrencies = async (currencies) =>
         must(
-          await admin.post('/api/panel/market/payment-methods/fake', { config: { currencies } }),
+          await admin.post(`${PANEL_MARKET_API}/payment-methods/fake`, { config: { currencies } }),
           `fake currencies ${JSON.stringify(currencies)}`,
         );
       const account3 = await payBuyer(buyer, admin, 'cur');
@@ -816,7 +822,7 @@ export const scenarios = [
           // another tab (here: the API) uses the one allowed checkout of this minute
           must(
             await second.post(
-              '/api/market/checkout',
+              `${MARKET_API}/checkout`,
               { items: [{ productId: free.id, quantity: 1 }] },
               idem(),
             ),

@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * `CartService` on a real MariaDB (MK-070): get-or-create, identical lines merge, structural validation, the 50 line
@@ -46,8 +47,8 @@ class CartServiceIT : MarketDaoITBase() {
         val e = runCatching { block() }.exceptionOrNull()
         assertTrue(e is InvalidCart, "expected INVALID_CART, got $e")
         val body = JsonObject((e as InvalidCart).encode(emptyMap()))
-        assertEquals("INVALID_CART", body.getString("error"))
-        return body.getJsonObject("lineErrors").map.mapValues { (_, v) -> (v as List<*>).map { it.toString() } }
+        assertEquals("INVALID_CART", body.getJsonObject("error").getString("code"))
+        return ErrorBodies.details(e).getJsonObject("lineErrors").map.mapValues { (_, v) -> (v as List<*>).map { it.toString() } }
     }
 
     private suspend fun rows(userId: Long) = w.cartItems.getByCartId(w.carts.getByUserId(userId, pool)!!.id, pool)

@@ -1,5 +1,11 @@
 package com.panomc.plugins.market.routes.user.gift
 
+import com.panomc.plugins.market.error.StoreUnavailable
+import com.panomc.plugins.market.error.StoreDisabled
+import com.panomc.platform.error.NotLoggedIn
+import com.panomc.platform.error.NotFound
+import com.panomc.platform.schema.EndpointDoc
+import com.panomc.platform.error.BadRequest
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.config.ConfigManager
 import com.panomc.platform.db.DatabaseManager
@@ -31,8 +37,8 @@ import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 
@@ -65,7 +71,14 @@ private const val MAX_RAW_CODE = 256
  */
 @Endpoint
 class RedeemGiftAPI(private val plugin: MarketPlugin) : MarketUserApi() {
-    override val paths = listOf(Path("/api/market/me/gifts/redeem", RouteType.POST))
+    override val paths = listOf(Path("/me/gifts/redeem", RouteType.POST))
+
+    override val doc = EndpointDoc(
+        summary = "Redeems a gift code and answers the order it creates.",
+        tag = "me",
+        response = objectSchema().requiredProperty("order", objectSchema()),
+        errors = listOf(BadRequest::class, NotFound::class, NotLoggedIn::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 

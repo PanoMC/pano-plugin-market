@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.user.subscription
 
+import com.panomc.platform.model.PageRequest
 import com.panomc.plugins.market.core.subscription.SubscriptionEndReason
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.db.dao.MarketSubscriptionDao
@@ -11,7 +12,6 @@ import com.panomc.plugins.market.db.model.SubscriptionStatus
 import com.panomc.plugins.market.permission.FieldGating
 import com.panomc.plugins.market.spi.payment.PaymentCapabilities
 import com.panomc.plugins.market.util.MoneyUtil
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.coAwait
@@ -27,7 +27,7 @@ class SubscriptionFilter(
 )
 
 /** A page of the panel list: the rows as JSON, the number of rows that match and the number of pages. */
-class SubscriptionPage(val rows: List<JsonObject>, val count: Long, val totalPage: Long)
+class SubscriptionPage(val rows: List<JsonObject>, val count: Long)
 
 /**
  * What the buyer and the panel read of a subscription (09 section 13, 04 sections 4 and 7). Read only; `storedMethod` and `providerData` are never part of a
@@ -90,7 +90,7 @@ class SubscriptionViews(
      * `GET /subscriptions` (`P:OV`): filtered, newest first. `PENDING` rows only when `status` asks for them. [searchEmail] is the PII tier of 11 section 14.5
      * (`OM` or `PAY`): below it the search never matches the e-mail, so the list is no oracle for a buyer's address.
      */
-    suspend fun panelList(filter: SubscriptionFilter, window: Paging.Window, client: SqlClient, searchEmail: Boolean = false): SubscriptionPage {
+    suspend fun panelList(filter: SubscriptionFilter, window: PageRequest, client: SqlClient, searchEmail: Boolean = false): SubscriptionPage {
         val where = ArrayList<String>()
         val params = ArrayList<Any?>()
 
@@ -118,10 +118,10 @@ class SubscriptionViews(
         val condition = where.joinToString(" AND ")
         val count = client.preparedQuery("SELECT COUNT(*) AS c FROM ${table("market_subscription")} WHERE $condition").execute(Tuple.from(params)).coAwait().first().getLong("c")
         val ids = client.preparedQuery(
-            "SELECT `id` FROM ${table("market_subscription")} WHERE $condition ORDER BY `createdAt` DESC, `id` DESC LIMIT ${window.pageSize} OFFSET ${window.offset}"
+            "SELECT `id` FROM ${table("market_subscription")} WHERE $condition ORDER BY `createdAt` DESC, `id` DESC LIMIT ${window.size} OFFSET ${window.offset}"
         ).execute(Tuple.from(params)).coAwait().map { it.getLong("id") }
 
-        return SubscriptionPage(ids.mapNotNull { subscriptions.getById(it, client) }.map { panelRow(it) }, count, Paging.totalPages(count, window.pageSize))
+        return SubscriptionPage(ids.mapNotNull { subscriptions.getById(it, client) }.map { panelRow(it) }, count)
     }
 
     /** A row of the panel list (09 section 13). */

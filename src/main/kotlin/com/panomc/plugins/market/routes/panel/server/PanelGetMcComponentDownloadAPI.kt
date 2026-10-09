@@ -12,8 +12,8 @@ import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.service.McComponentDownload
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
@@ -25,7 +25,7 @@ import io.vertx.json.schema.common.dsl.Schemas.stringSchema
  */
 @Endpoint
 class PanelGetMcComponentDownloadAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/mc-component/download", RouteType.GET))
+    override val paths = listOf(Path("/mc-component/download", RouteType.GET))
 
     /** Empty = a holder of any market node (04 section 9). */
     override val nodes: Set<MarketNode> = emptySet()

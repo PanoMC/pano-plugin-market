@@ -43,5 +43,9 @@ data class MarketConfigMessage(
     val storeUrl: String? = null,
     val creditName: String? = null,
     val currency: String? = null,
-    val serverId: Long? = null
+    val serverId: Long? = null,
+    /** Absolute product URL with a `{slug}` placeholder (front-end URL map); absent from older Pano builds. */
+    val productUrlTemplate: String? = null,
+    /** Absolute register page (front-end URL map); absent from older Pano builds. */
+    val registerUrl: String? = null
 ) : PlatformMessageResponse

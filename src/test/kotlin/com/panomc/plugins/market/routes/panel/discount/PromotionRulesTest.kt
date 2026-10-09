@@ -142,25 +142,25 @@ class PromotionRulesTest {
     fun `the routes are endpoints under the market panel base on the discounts node, with the paths of 04 section 6`() {
         val dir = "src/main/kotlin/com/panomc/plugins/market/routes/panel"
         val expected = listOf(
-            Triple("discount/PanelGetDiscountsAPI", "/api/panel/market/discounts", "GET"),
-            Triple("discount/PanelCreateDiscountAPI", "/api/panel/market/discounts", "POST"),
-            Triple("discount/PanelUpdateDiscountAPI", "/api/panel/market/discounts/:id", "PUT"),
-            Triple("discount/PanelDeleteDiscountAPI", "/api/panel/market/discounts/:id", "DELETE"),
-            Triple("coupon/PanelGetCouponsAPI", "/api/panel/market/coupons", "GET"),
-            Triple("coupon/PanelCreateCouponAPI", "/api/panel/market/coupons", "POST"),
-            Triple("coupon/PanelUpdateCouponAPI", "/api/panel/market/coupons/:id", "PUT"),
-            Triple("coupon/PanelDeleteCouponAPI", "/api/panel/market/coupons/:id", "DELETE"),
-            Triple("coupon/PanelGetCouponRedemptionsAPI", "/api/panel/market/coupons/:id/redemptions", "GET"),
-            Triple("creatorcode/PanelGetCreatorCodesAPI", "/api/panel/market/creator-codes", "GET"),
-            Triple("creatorcode/PanelCreateCreatorCodeAPI", "/api/panel/market/creator-codes", "POST"),
-            Triple("creatorcode/PanelUpdateCreatorCodeAPI", "/api/panel/market/creator-codes/:id", "PUT"),
-            Triple("creatorcode/PanelDeleteCreatorCodeAPI", "/api/panel/market/creator-codes/:id", "DELETE"),
-            Triple("creatorcode/PanelGetCreatorCodeRedemptionsAPI", "/api/panel/market/creator-codes/:id/redemptions", "GET"),
-            Triple("gift/PanelGetGiftsAPI", "/api/panel/market/gifts", "GET"),
-            Triple("gift/PanelCreateGiftAPI", "/api/panel/market/gifts", "POST"),
-            Triple("gift/PanelUpdateGiftAPI", "/api/panel/market/gifts/:id", "PUT"),
-            Triple("gift/PanelDeleteGiftAPI", "/api/panel/market/gifts/:id", "DELETE"),
-            Triple("gift/PanelGetGiftRedemptionsAPI", "/api/panel/market/gifts/:id/redemptions", "GET")
+            Triple("discount/PanelGetDiscountsAPI", "/discounts", "GET"),
+            Triple("discount/PanelCreateDiscountAPI", "/discounts", "POST"),
+            Triple("discount/PanelUpdateDiscountAPI", "/discounts/:id", "PUT"),
+            Triple("discount/PanelDeleteDiscountAPI", "/discounts/:id", "DELETE"),
+            Triple("coupon/PanelGetCouponsAPI", "/coupons", "GET"),
+            Triple("coupon/PanelCreateCouponAPI", "/coupons", "POST"),
+            Triple("coupon/PanelUpdateCouponAPI", "/coupons/:id", "PUT"),
+            Triple("coupon/PanelDeleteCouponAPI", "/coupons/:id", "DELETE"),
+            Triple("coupon/PanelGetCouponRedemptionsAPI", "/coupons/:id/redemptions", "GET"),
+            Triple("creatorcode/PanelGetCreatorCodesAPI", "/creator-codes", "GET"),
+            Triple("creatorcode/PanelCreateCreatorCodeAPI", "/creator-codes", "POST"),
+            Triple("creatorcode/PanelUpdateCreatorCodeAPI", "/creator-codes/:id", "PUT"),
+            Triple("creatorcode/PanelDeleteCreatorCodeAPI", "/creator-codes/:id", "DELETE"),
+            Triple("creatorcode/PanelGetCreatorCodeRedemptionsAPI", "/creator-codes/:id/redemptions", "GET"),
+            Triple("gift/PanelGetGiftsAPI", "/gifts", "GET"),
+            Triple("gift/PanelCreateGiftAPI", "/gifts", "POST"),
+            Triple("gift/PanelUpdateGiftAPI", "/gifts/:id", "PUT"),
+            Triple("gift/PanelDeleteGiftAPI", "/gifts/:id", "DELETE"),
+            Triple("gift/PanelGetGiftRedemptionsAPI", "/gifts/:id/redemptions", "GET")
         )
 
         for ((file, path, method) in expected) {
@@ -188,7 +188,7 @@ class PromotionRulesTest {
     fun `the redeem route is a user route`() {
         val source = File("src/main/kotlin/com/panomc/plugins/market/routes/user/gift/RedeemGiftAPI.kt").readText()
 
-        assertTrue(source.contains("Path(\"/api/market/me/gifts/redeem\", RouteType.POST)"))
+        assertTrue(source.contains("Path(\"/me/gifts/redeem\", RouteType.POST)"))
         assertTrue(source.contains(") : MarketUserApi()"))
         assertTrue(source.contains("@Endpoint"))
     }

@@ -1,6 +1,6 @@
 // Orders for the panel scenarios, made through the storefront API like a buyer would (no SQL).
 import crypto from 'node:crypto';
-import { must } from '../../lib/api.mjs';
+import { must, MARKET_API, PANEL_MARKET_API } from '../../lib/api.mjs';
 import { completePayment } from '../../lib/gateway.mjs';
 import { grantCredits, grantUserNode } from '../../lib/bootstrap.mjs';
 import { sleep } from './panel.mjs';
@@ -14,7 +14,7 @@ const payUrlOf = (json) => json.payment?.url ?? json.payment?.payUrl ?? json.pay
 export async function awaitStatus(api, publicId, status, tries = 60) {
   let last;
   for (let i = 0; i < tries; i++) {
-    last = (await api.get(`/api/market/orders/${publicId}`)).json?.order;
+    last = (await api.get(`${MARKET_API}/orders/${publicId}`)).json?.order;
     if (last?.status === status) return last;
     await sleep(500);
   }
@@ -23,8 +23,8 @@ export async function awaitStatus(api, publicId, status, tries = 60) {
 
 /** A checkout through the storefront API; returns `{ publicId, number, payUrl, json }`. */
 export async function checkout(api, body) {
-  const res = must(await api.post('/api/market/checkout', body, idem()), 'checkout');
-  const view = (await api.get(`/api/market/orders/${res.json.order.publicId}`)).json?.order;
+  const res = must(await api.post(`${MARKET_API}/checkout`, body, idem()), 'checkout');
+  const view = (await api.get(`${MARKET_API}/orders/${res.json.order.publicId}`)).json?.order;
 
   return {
     publicId: res.json.order.publicId,
@@ -72,7 +72,7 @@ export async function gatewayOrder({ admin, buyer }, cat, { label = 'gw', produc
 /** Configures and enables the bank transfer method (a live-capable method: the fake provider is a test-mode method only). */
 export async function enableBankTransfer(admin) {
   must(
-    await admin.post('/api/panel/market/payment-methods/bank-transfer', {
+    await admin.post(`${PANEL_MARKET_API}/payment-methods/bank-transfer`, {
       settings: {
         accounts: JSON.stringify([
           {
@@ -88,7 +88,7 @@ export async function enableBankTransfer(admin) {
     'configure bank transfer',
   );
   must(
-    await admin.post('/api/panel/market/payment-methods/bank-transfer/toggle', { enabled: true }),
+    await admin.post(`${PANEL_MARKET_API}/payment-methods/bank-transfer/toggle`, { enabled: true }),
     'enable bank transfer',
   );
 }

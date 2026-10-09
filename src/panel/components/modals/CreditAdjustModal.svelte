@@ -117,10 +117,10 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { showToast } from '@panomc/sdk/toasts';
   import { _, showErrorToast, showSuccessToast } from '../../../i18n';
-  import { call, errorKey, marketPath, newIdempotency, resetIdempotency } from '../../utils/api.js';
+  import { call, errorKey, newIdempotency, resetIdempotency } from '../../utils/api.js';
   import {
     NOTE_MAX,
     adjustOutcome,
@@ -186,7 +186,7 @@
     const tag = ++lookupTag;
     lookup = { status: 'LOADING', userId: null, balance: null };
     const result = await call(
-      ApiUtil.get({ path: marketPath(`/players/${encodeURIComponent(name)}/summary`) }),
+      api.panel.get({ path: `/players/${encodeURIComponent(name)}/summary` }),
     );
     if (tag !== lookupTag) return;
     if (!result.ok) {
@@ -218,8 +218,8 @@
     let result;
     try {
       result = await call(
-        ApiUtil.post({
-          path: marketPath(request.path),
+        api.panel.post({
+          path: request.path,
           body: request.body,
           headers: request.headers,
         }),

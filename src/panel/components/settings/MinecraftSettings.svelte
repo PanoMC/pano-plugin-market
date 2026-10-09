@@ -305,14 +305,14 @@
 
 <script>
   import { untrack } from 'svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { CardHeader, NoContent } from '@panomc/sdk/components/panel';
   import { _, showSuccessToast } from '../../../i18n';
   import ServerOverrideModal from '../modals/ServerOverrideModal.svelte';
   import SettingRow from './SettingRow.svelte';
   import SwitchRow from './SwitchRow.svelte';
   import { fetchSettings, reportFailure, saveSection } from './save.js';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import {
     ADMIN_COMMANDS,
     SECTION_KEYS,
@@ -337,7 +337,7 @@
   } from '../../utils/minecraft-settings.js';
   import { toastError } from '../../utils/toast.js';
 
-  // settings = GET /settings, extra = GET /servers ({ servers[] }), null when that request failed.
+  // settings = GET /settings, extra = GET /servers ({ items[] }), null when that request failed.
   let { settings: initial = {}, extra = null, extraError = null } = $props();
 
   const KEYS = SECTION_KEYS.minecraft;
@@ -346,7 +346,7 @@
 
   let overrideModal = $state(null);
   let settings = $state.raw(start);
-  const startServers = untrack(() => extra?.servers);
+  const startServers = untrack(() => extra?.items);
   let servers = $state.raw(Array.isArray(startServers) ? startServers : null);
   let draft = $state(seedValues(start, KEYS));
   let submitted = $state(false);
@@ -381,8 +381,8 @@
   }
 
   async function refreshServers() {
-    const result = await call(ApiUtil.get({ path: marketPath('/servers') }));
-    if (result.ok && Array.isArray(result.body?.servers)) servers = result.body.servers;
+    const result = await call(api.panel.get({ path: '/servers' }));
+    if (result.ok && Array.isArray(result.body?.items)) servers = result.body.items;
   }
 
   function openOverride(row) {
@@ -396,8 +396,8 @@
     clearing = row.id;
     try {
       const result = await call(
-        ApiUtil.put({
-          path: marketPath(`/servers/${encodeURIComponent(row.id)}/settings`),
+        api.panel.put({
+          path: `/servers/${encodeURIComponent(row.id)}/settings`,
           body: clearOverrideRequest(),
         }),
       );

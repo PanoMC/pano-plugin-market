@@ -6,7 +6,7 @@ import realApi, { NETWORK_ERROR, networkErrorBody, buildQueryParams } from '@pan
 import { get } from 'svelte/store';
 import { _ as i18n } from '@panomc/sdk/utils/language';
 import { showToast } from '@panomc/sdk/toasts';
-import { createSeam } from './core.js';
+import { createSeam, scopedPluginApi } from './core.js';
 import { developmentMode } from './dev.js';
 
 let last = 0;
@@ -30,5 +30,8 @@ const seam = createSeam({
   notify,
 });
 
-export { realApi as real, seam as ApiUtil, NETWORK_ERROR, networkErrorBody, buildQueryParams };
+/** The plugin-scoped client (`@panomc/sdk/plugin-api` is built on it), answered by the seam like every other call. */
+export const createPluginApi = (pluginId) => scopedPluginApi(seam, pluginId);
+
+export { notify, realApi as real, seam as ApiUtil, NETWORK_ERROR, networkErrorBody, buildQueryParams };
 export default seam;

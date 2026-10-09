@@ -142,7 +142,7 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import ProductSelector from '../ProductSelector.svelte';
   import CategoryChecklist from '../discounts/CategoryChecklist.svelte';
   import ErrorText from '../discounts/ErrorText.svelte';
@@ -150,7 +150,7 @@
   import UnitValueFields from '../discounts/UnitValueFields.svelte';
   import ValidityFields from '../discounts/ValidityFields.svelte';
   import { _, showSuccessToast } from '../../../i18n';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { buildDiscountBody, datesToForm, limitToForm, unitOf } from '../../utils/discounts.js';
   import { hideModal } from '../order-detail/send.js';
   import { toastError } from '../../utils/toast.js';
@@ -231,8 +231,8 @@
     try {
       response =
         isEdit && discount
-          ? await call(ApiUtil.put({ path: marketPath(`/discounts/${discount.id}`), body: result.body }))
-          : await call(ApiUtil.post({ path: marketPath('/discounts'), body: result.body }));
+          ? await call(api.panel.put({ path: `/discounts/${discount.id}`, body: result.body }))
+          : await call(api.panel.post({ path: '/discounts', body: result.body }));
     } finally {
       saving = false;
     }

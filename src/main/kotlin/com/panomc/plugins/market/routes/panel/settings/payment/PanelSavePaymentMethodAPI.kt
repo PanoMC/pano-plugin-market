@@ -18,8 +18,8 @@ import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 
@@ -34,8 +34,8 @@ class PanelSavePaymentMethodAPI(private val plugin: MarketPlugin) : MarketPanelA
     override val nodes: Set<MarketNode> = setOf(MarketNode.SETTINGS)
 
     override val paths = listOf(
-        Path("/api/panel/market/payment-methods/sort", RouteType.POST),
-        Path("/api/panel/market/payment-methods/:id", RouteType.POST)
+        Path("/payment-methods/sort", RouteType.POST),
+        Path("/payment-methods/:id", RouteType.POST)
     )
 
     private val authProvider by lazy { plugin.applicationContext.getBean(AuthProvider::class.java) }

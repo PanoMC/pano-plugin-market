@@ -41,7 +41,7 @@ export async function startGateway(port) {
     const t = Math.floor(Date.now() / 1000);
     const v1 = crypto.createHmac('sha256', GATEWAY_SECRET).update(`${t}.${body}`).digest('hex');
 
-    // The signed event goes to the provider's webhook route, `/api/market/payments/<provider>/webhook` (the `notifyUrl` of a payment is the
+    // The signed event goes to the provider's webhook route, `/api/plugins/pano-plugin-market/payments/<provider>/webhook` (the `notifyUrl` of a payment is the
     // provider's NOTIFY route, which takes a form body). Before E2E-15 this posted the JSON to the notify route, which refused it with 400 and left
     // every order to the status query of the return page; a subscription needs the webhook, because the stored method only travels in it.
     const hook = payment.notifyUrl.replace(/\/notify\/[^/?#]+$/, '/webhook');

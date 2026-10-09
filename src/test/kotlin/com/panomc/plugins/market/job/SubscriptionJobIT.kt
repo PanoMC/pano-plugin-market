@@ -217,7 +217,7 @@ internal class SubscriptionJobIT : RenewalITBase() {
 
         val mail = sql("SELECT `params` FROM `pano_market_mail_outbox` WHERE `kind` = 'SUBSCRIPTION_PAYMENT_FAILED'").single()
 
-        assertEquals("/store/order/${renewalOrder.publicId}", JsonObject(mail.getString("params")).getString("payUrl"))
+        assertEquals("https://shop.example/store/order/${renewalOrder.publicId}", JsonObject(mail.getString("params")).getString("payUrl"))
 
         // the buyer pays by hand with a new card, inside the grace: ACTIVE again, the period starts where the old one ended
         rw.payments.pay(renewalOrder, PayRequest("fake", null, null), PayCaller(), pool)

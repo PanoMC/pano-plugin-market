@@ -9,12 +9,19 @@ import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import com.panomc.plugins.market.util.MarketPaths
 
-/** One HTTP answer of the instance. Bodies are never logged (they can carry tokens); [error] is the `error` code of an error answer. */
+/** One HTTP answer of the instance. Bodies are never logged (they can carry tokens); [error] is the `error.code` of an error answer. */
 class E2eResponse(val status: Int, val headers: Map<String, List<String>>, val body: ByteArray, val request: String = "") {
     val text: String by lazy { String(body, Charsets.UTF_8) }
     val json: JsonObject? by lazy { runCatching { JsonObject(text) }.getOrNull() }
-    val error: String? get() = json?.getString("error")
+    val error: String? get() = (json?.getValue("error") as? JsonObject)?.getString("code")
+
+    /** `error.details` of an error answer (04 section 3: every extra of the error: `retryAfter`, `lineErrors`, `fieldErrors`, `bodyValidationError`, ...); empty when there is none. */
+    val details: JsonObject get() = ((json?.getValue("error") as? JsonObject)?.getValue("details") as? JsonObject) ?: JsonObject()
+
+    /** `error.fields` of an error answer (`{field: CODE}`); empty when there is none. */
+    val fields: JsonObject get() = ((json?.getValue("error") as? JsonObject)?.getValue("fields") as? JsonObject) ?: JsonObject()
 
     fun header(name: String): String? = headers.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value?.firstOrNull()
 
@@ -134,12 +141,12 @@ class E2eClient(val baseUrl: String, val label: String = "anon") {
 
     /** Keeps the connection of a race actor warm so the gated requests go out on an open socket (17 section 8.4). */
     fun warm() {
-        get("/api/market/checkout/config", log = false)
+        get("${MarketPaths.SITE_ROOT}/checkout/config", log = false)
     }
 
     /** `POST /api/auth/login` as the panel does; keeps the cookies and the CSRF token. */
     fun login(usernameOrEmail: String, password: String, panel: Boolean = false): E2eResponse {
-        val answer = post("/api/auth/login", JsonObject().put("usernameOrEmail", usernameOrEmail).put("password", password).apply { if (panel) put("panel", true) })
+        val answer = post("/api/v1/auth/login", JsonObject().put("usernameOrEmail", usernameOrEmail).put("password", password).apply { if (panel) put("panel", true) })
         answer.json?.getString("csrfToken")?.let { csrfToken = it }
         return answer
     }

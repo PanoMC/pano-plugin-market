@@ -3,7 +3,6 @@ import { placeholders } from './icu.js';
 import { compareLocales, keyResolves, usedKeys } from './i18n-rules.js';
 import { classTokens, hardcodedTexts, parseTags, splitSvelte, topLevelGlobals } from './scan.js';
 import { checkJsFile, checkSvelteFile } from './static-rules.js';
-import { isAllowedThemeClass } from './bootstrap-classes.js';
 
 const allowlist = {
   entries: [
@@ -12,8 +11,7 @@ const allowlist = {
   ],
   allowedTexts: ['ID'],
 };
-const svelte = (file, src, isTheme = false) =>
-  checkSvelteFile(file, src, { allowlist, isTheme }).map((v) => v.rule);
+const svelte = (file, src) => checkSvelteFile(file, src, { allowlist }).map((v) => v.rule);
 
 describe('icu placeholders', () => {
   test('plain, plural and nested', () => {
@@ -91,21 +89,8 @@ describe('static rules', () => {
     expect(svelte('a.svelte', '<p>ID: #{a}</p>')).toEqual([]);
     expect(hardcodedTexts('{#if a}<i class="x"></i>{:else}{b}{/if}')).toEqual([]);
   });
-  test('theme style and class rules', () => {
-    expect(svelte('t.svelte', '<style>a{}</style>', true)).toContain('theme-style');
-    expect(svelte('t.svelte', '<div class="card shadow-sm {x}">{a}</div>', true)).toEqual([]);
-    expect(svelte('t.svelte', '<div class="card my-custom">{a}</div>', true)).toEqual([
-      'theme-class',
-    ]);
-    expect(svelte('t.svelte', '<div class={a ? "d-flex gap-2" : "bogus"}>{a}</div>', true)).toEqual(
-      ['theme-class'],
-    );
-    expect(
-      isAllowedThemeClass('fa-solid') &&
-        isAllowedThemeClass('text-bg-primary') &&
-        isAllowedThemeClass('col-md-6'),
-    ).toBe(true);
-    expect(isAllowedThemeClass('cursor-pointer')).toBe(false);
+  test('the class and style rules of the theme side are the kit lint (styles.test.js), not a static rule', () => {
+    expect(svelte('t.svelte', '<style>a{}</style><div class="my-custom">{a}</div>')).toEqual([]);
   });
   test('storage at module top level', () => {
     expect(checkJsFile('a.js', "const v = localStorage.getItem('k');").map((v) => v.rule)).toEqual([

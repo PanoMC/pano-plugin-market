@@ -1,5 +1,14 @@
 package com.panomc.plugins.market.routes.api.checkout
 
+import com.panomc.plugins.market.error.StoreUnavailable
+import com.panomc.plugins.market.error.StoreDisabled
+import com.panomc.plugins.market.error.StoreBusy
+import com.panomc.plugins.market.error.OutOfStock
+import com.panomc.plugins.market.routes.base.MarketSchemas
+import com.panomc.plugins.market.error.IdempotencyConflict
+import com.panomc.platform.schema.EndpointDoc
+import com.panomc.plugins.market.error.EmptyCart
+import com.panomc.plugins.market.error.BuyerBlocked
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.config.ConfigManager
 import com.panomc.platform.db.DatabaseManager
@@ -23,8 +32,8 @@ import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 import java.math.BigDecimal
@@ -38,7 +47,14 @@ import java.util.Locale
  */
 @Endpoint
 class CheckoutAPI(private val plugin: MarketPlugin) : MarketPublicMutationApi() {
-    override val paths = listOf(Path("/api/market/checkout", RouteType.POST))
+    override val paths = listOf(Path("/checkout", RouteType.POST))
+
+    override val doc = EndpointDoc(
+        summary = "Creates an order from a cart and starts its payment. Needs an Idempotency-Key header; the order token is returned only here.",
+        tag = "checkout",
+        response = MarketSchemas.checkoutResult,
+        errors = listOf(BadRequest::class, EmptyCart::class, InvalidCart::class, OutOfStock::class, IdempotencyConflict::class, BuyerBlocked::class, StoreUnavailable::class, StoreDisabled::class, StoreBusy::class)
+    )
 
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 

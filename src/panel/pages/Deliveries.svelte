@@ -206,7 +206,6 @@
       path: '/deliveries',
       params: DELIVERY_PARAMS,
       nodes: ['OV'],
-      emptyKey: 'deliveries',
       title: 'pages.deliveries.title',
     });
   }
@@ -214,7 +213,7 @@
 
 <script>
   import FilterSelect from '../components/FilterSelect.svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import {
     CardHeader,
     CardFilters,
@@ -232,7 +231,7 @@
   import StatusBadge from '../components/StatusBadge.svelte';
   import DeliveryFiltersModal from '../components/modals/DeliveryFiltersModal.svelte';
   import { sectionsFor } from '../navigation.js';
-  import { call, errorKey, marketPath } from '../utils/api.js';
+  import { call, errorKey } from '../utils/api.js';
   import {
     MODAL_FILTERS,
     PHASES,
@@ -247,6 +246,7 @@
     whenCell,
   } from '../utils/deliveries.js';
   import { gotoList } from '../utils/list.js';
+  import { pageOf } from '../utils/page.js';
   import { currentLocale } from '../utils/locale.js';
 
   let { data } = $props();
@@ -256,10 +256,11 @@
 
   const user = $derived($page.data?.user);
   const filters = $derived(normalizeFilters(data.filters));
-  const deliveries = $derived(data.deliveries ?? []);
-  const deliveryCount = $derived(data.deliveryCount ?? data.count ?? 0);
-  const totalPage = $derived(data.totalPage ?? 1);
-  const currentPage = $derived(data.page ?? 1);
+  const list = $derived(pageOf(data));
+  const deliveries = $derived(list.items);
+  const deliveryCount = $derived(list.totalItems);
+  const totalPage = $derived(list.totalPages);
+  const currentPage = $derived(list.number);
   const currentTab = $derived(activeTab(filters.status));
   const modalFilterCount = $derived(activeModalFilters(filters).length);
 
@@ -293,7 +294,7 @@
 
   // Stale rows (DELIVERY_NOT_RETRYABLE / DELIVERY_NOT_CANCELLABLE) toast the code and refresh.
   async function run(path, successKey) {
-    const result = await call(ApiUtil.post({ path: marketPath(path), body: {} }));
+    const result = await call(api.panel.post({ path, body: {} }));
     if (!result.ok) {
       showErrorToast($_(errorKey(result.error)));
       if (result.error !== 'NETWORK_ERROR') await invalidateAll();

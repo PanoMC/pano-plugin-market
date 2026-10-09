@@ -1,9 +1,10 @@
 package com.panomc.plugins.market.routes.panel.discount
 
+import com.panomc.platform.model.PageRequest
+import com.panomc.platform.model.Paging
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.db.model.PluginActivityLog
-import com.panomc.platform.error.PageNotFound
 import com.panomc.platform.model.Result
 import com.panomc.platform.model.Successful
 import com.panomc.plugins.market.MarketPlugin
@@ -35,18 +36,16 @@ import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.api.checkout.PlatformUserDirectory
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
-import com.panomc.plugins.market.routes.base.parsePagingRequest
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.plugins.market.service.RedemptionService
 import com.panomc.plugins.market.util.MoneyUtil
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
@@ -118,25 +117,13 @@ internal fun promotionLog(promotion: Promotion, action: PromotionAction, userId:
 
 enum class PromotionAction { CREATE, UPDATE, DELETE }
 
-/** The plural list key and the count key of the answer of a list (`gifts` / `giftCount`, ...). */
-internal fun listKeys(promotion: Promotion): Pair<String, String> = when (promotion) {
-    Promotion.DISCOUNT -> "discounts" to "discountCount"
-    Promotion.COUPON -> "coupons" to "couponCount"
-    Promotion.CREATOR_CODE -> "creatorCodes" to "creatorCodeCount"
-    Promotion.GIFT -> "gifts" to "giftCount"
+/** The items of a `RedemptionRow` list as 04 section 6 pins it. */
+internal fun redemptionItems(page: com.panomc.plugins.market.service.RedemptionPage): List<Map<String, Any?>> = page.rows.map {
+    linkedMapOf(
+        "orderId" to it.orderId, "playerUsername" to it.playerUsername, "amount" to MoneyUtil.toDecimal(it.amount), "currency" to it.currency,
+        "state" to it.state.name, "createdAt" to it.createdAt
+    )
 }
-
-/** The body of a `RedemptionRow` list as 04 section 6 pins it. */
-internal fun redemptionJson(page: com.panomc.plugins.market.service.RedemptionPage, window: Paging.Window): Map<String, Any?> = mapOf(
-    "redemptions" to page.rows.map {
-        linkedMapOf(
-            "orderId" to it.orderId, "playerUsername" to it.playerUsername, "amount" to MoneyUtil.toDecimal(it.amount), "currency" to it.currency,
-            "state" to it.state.name, "createdAt" to it.createdAt
-        )
-    },
-    "redemptionCount" to page.total,
-    "totalPage" to Paging.totalPages(page.total, window.pageSize)
-)
 
 /**
  * Shared parts of the promotion routes: all `P:DISC` (04 section 6; the umbrella permission is accepted by the base class), the acting user and the
@@ -149,27 +136,18 @@ abstract class PromotionAdminRoute(protected val plugin: MarketPlugin, protected
 
     protected fun idOf(context: RoutingContext): Long = parseId(context.pathParam("id"), "id")
 
-    protected fun window(context: RoutingContext): Paging.Window = parsePagingRequest(
-        context.request().getParam("page")?.let { number(it, "page") }, context.request().getParam("pageSize")?.let { number(it, "pageSize") }
-    )
-
-    private fun number(raw: String, name: String): Long = raw.trim().toLongOrNull() ?: throw RequestValueException(name, "MUST_BE_A_NUMBER")
+    protected fun window(context: RoutingContext): PageRequest = Paging.request(context)
 
     protected fun listValidation(schemaRepository: SchemaRepository): ValidationHandler {
-        var builder = ValidationHandlerBuilder.create(schemaRepository)
+        var builder = Paging.params(ValidationHandlerBuilder.create(schemaRepository))
 
-        for (name in listOf("page", "pageSize", "search", "status")) builder = builder.queryParameter(optionalParam(name, stringSchema()))
-
-        return builder.build()
-    }
-
-    protected fun pagingValidation(schemaRepository: SchemaRepository): ValidationHandler {
-        var builder = ValidationHandlerBuilder.create(schemaRepository)
-
-        for (name in listOf("page", "pageSize")) builder = builder.queryParameter(optionalParam(name, stringSchema()))
+        for (name in listOf("search", "status")) builder = builder.queryParameter(optionalParam(name, stringSchema()))
 
         return builder.build()
     }
+
+    protected fun pagingValidation(schemaRepository: SchemaRepository): ValidationHandler =
+        Paging.params(ValidationHandlerBuilder.create(schemaRepository)).build()
 
     protected fun bodyValidation(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository)
@@ -188,17 +166,12 @@ abstract class PromotionAdminRoute(protected val plugin: MarketPlugin, protected
         databaseManager.panelActivityLogDao.add(promotionLog(promotion, action, userId, username, plugin.pluginId, label), client)
     }
 
-    /** The list of this promotion: `<plural>`, `<singular>Count`, `totalPage`; 404 `PAGE_NOT_FOUND` beyond the last page. */
+    /** The list of this promotion: the core page shape; 404 `PAGE_NOT_FOUND` beyond the last page. */
     protected suspend fun listAnswer(context: RoutingContext): Result {
         val window = window(context)
         val page = admin.list(promotion, window, context.request().getParam("search"), context.request().getParam("status"))
-        val totalPages = Paging.totalPages(page.total, window.pageSize)
 
-        if (Paging.isBeyondLast(window.page, totalPages)) throw PageNotFound()
-
-        val (plural, count) = listKeys(promotion)
-
-        return Successful(mapOf(plural to page.rows, count to page.total, "totalPage" to totalPages))
+        return Successful(Paging.response(page.rows, page.total, window))
     }
 
     protected suspend fun createAnswer(context: RoutingContext): Result {
@@ -229,8 +202,6 @@ abstract class PromotionAdminRoute(protected val plugin: MarketPlugin, protected
         val window = window(context)
         val page = admin.redemptionList(promotion, idOf(context), window)
 
-        if (Paging.isBeyondLast(window.page, Paging.totalPages(page.total, window.pageSize))) throw PageNotFound()
-
-        return Successful(redemptionJson(page, window))
+        return Successful(Paging.response(redemptionItems(page), page.total, window))
     }
 }

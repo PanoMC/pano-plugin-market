@@ -405,4 +405,4 @@ class CheckoutRaceIT : MarketDaoITBase() {
 }
 
 /** The error body of a failure as JSON (the extras of a market error). */
-private fun JsonObjectOf(failure: Throwable): io.vertx.core.json.JsonObject = io.vertx.core.json.JsonObject((failure as Error).encode())
+private fun JsonObjectOf(failure: Throwable): io.vertx.core.json.JsonObject = com.panomc.plugins.market.support.ErrorBodies.details(failure)

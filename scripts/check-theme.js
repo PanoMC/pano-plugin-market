@@ -1,6 +1,9 @@
-// Theme static checks of 14 §20.2. Usage: check-theme.js [--strict] [--root dir]
-// Rules 1 (style= allow-list) and 3 (exactly the three {@html} files) are enforced like every other
-// rule: a violation fails the run, with or without --strict.
+// Market-specific theme checks (14 §20.2). Usage: check-theme.js [--strict] [--root dir]
+// What every plugin must obey (the import rules for views, helpers and controllers, the two-Svelte-copies rule) is
+// enforced by the build of @panomc/plugin-kit (V1-V5); only the rules of this plugin's own theme code stay here:
+//   1 style= allow-list and no <style> block (the kit's style lint at badge level, the three STYLE_ATTR_FILES), 2 Svelte 5 syntax, 3 exactly the three {@html} files, 5 theme.* text keys,
+//   6 no browser global at module top level, 7 the API paths of the plugin (relative to /api/plugins/<id>).
+// A violation fails the run, with or without --strict.
 import path from 'node:path';
 import {
   LANGS,
@@ -15,18 +18,14 @@ import {
 } from './lib/common.js';
 import { compareLocales, usedKeys } from './lib/i18n-rules.js';
 import { htmlSinks, parseTags, splitSvelte, topLevelGlobals } from './lib/scan.js';
+import { STYLE_ATTR_FILES, STYLE_RULES, lintStyles } from './lib/styles.js';
 
-export const STYLE_ATTR_FILES = ['CategoryNode', 'PaymentMethodPicker', 'GoalWidget'];
+export { STYLE_ATTR_FILES };
 export const HTML_FILES = ['ProductPage', 'LegalModal', 'PaymentInstructions'];
-export const SDK_IMPORTS = [
-  '@panomc/sdk',
-  '@panomc/sdk/utils/api',
-  '@panomc/sdk/utils/language',
-  '@panomc/sdk/toasts',
-  '@panomc/sdk/svelte',
-  '@panomc/sdk/components/theme',
-  '@panomc/sdk/utils/component',
-];
+// The site API of the market, as markup and links write it.
+// lib/paths.js owns the constant and is the one file that spells the prefix out in pieces.
+const PATHS_FILE = 'src/theme/lib/paths.js';
+export const SITE_API_ROOT = '/api/plugins/pano-plugin-market';
 
 const args = parseArgs();
 const root = args.root ? path.resolve(args.root) : defaultRoot;
@@ -46,12 +45,9 @@ for (const file of files) {
     report.add(rule, name, lineOf(source, index), message, opts);
   let code = source;
   if (file.endsWith('.svelte')) {
-    const { markup, scripts, styles } = splitSvelte(source);
-    for (const st of styles) add('1', st.index, '<style> block in src/theme');
+    const { markup, scripts } = splitSvelte(source);
     for (const tag of parseTags(markup)) {
       const html = /^[a-z]/.test(tag.name) && !tag.name.includes(':') && !tag.name.includes('.');
-      if (/(?:^|\s)style\s*=/.test(tag.attrs) && !STYLE_ATTR_FILES.includes(baseName(file)))
-        add('1', tag.index, `style= attribute outside ${STYLE_ATTR_FILES.join(' / ')}`);
       if (html && /(?:^|\s)on:[\w-]+/.test(tag.attrs))
         add('2', tag.index, `on: directive on <${tag.name}>`);
       if (tag.name === 'slot') add('2', tag.index, '<slot>');
@@ -87,15 +83,30 @@ for (const file of files) {
     ]))
       add('6', h.index, `${h.name} at module top level`);
   }
-  // 4. SDK import allow-list
-  for (const m of code.matchAll(/(?:from\s+|import\s*\(\s*)['"](@panomc\/sdk[^'"]*)['"]/g))
-    if (!SDK_IMPORTS.includes(m[1]))
-      report.add('4', name, 0, `import of '${m[1]}' is not on the allow-list`);
+  // 7. API paths: calls take paths relative to the plugin ('/store/products'), links and images use the full
+  // /api/plugins/pano-plugin-market/... form; any other '/api/' literal is a leftover of the old API
+  if (name !== PATHS_FILE)
+    for (const m of source.matchAll(
+      /(['"`}])(\/api\/(?!plugins\/pano-plugin-market\/)[^'"`\s]*)/g,
+    )) {
+      const lineStart = source.lastIndexOf('\n', m.index) + 1;
+      if (/^\s*(\/\/|\*|\/\*)/.test(source.slice(lineStart, m.index + 1))) continue;
+      add(
+        '7',
+        m.index,
+        `'${m[2]}' is not a market API path (calls: '/store/products'; links: ${SITE_API_ROOT}/...)`,
+      );
+    }
   // 5b. theme.* keys referenced by literals
   for (const { key, index } of usedKeys(source))
     if (key.startsWith('theme.') && !theme.has(key))
       add('5', index, `$_('${key}') missing in src/locales/theme/en-US.json`);
 }
+
+// 1. style= and <style>: the kit's style lint at badge level (style-block-scope, style-attr; the class rules are check-static's)
+for (const f of await lintStyles(root))
+  if (STYLE_RULES.includes(f.rule))
+    report.add('1', f.file, f.line, `[${f.rule}] ${f.message}`, { pending: f.level === 'warn' });
 
 // 3b. "exactly" the three files: each allow-listed file that exists must really use {@html}
 for (const file of files) {

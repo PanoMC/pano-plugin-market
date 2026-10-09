@@ -1,8 +1,13 @@
 {#if axes.length}
-  <div id={ID_VARIANT} tabindex="-1" class="vstack gap-2" aria-invalid={error ? 'true' : undefined}>
+  <div
+    id={ID_VARIANT}
+    tabindex="-1"
+    class="market-variant-picker vstack gap-2"
+    aria-invalid={error ? 'true' : undefined}>
     {#each axes as axis, axisIndex (axis.key)}
       <fieldset>
-        <legend class="form-label fs-6 mb-1">{axis.label || axis.key}</legend>
+        <legend class="market-variant-picker__label form-label fs-6 mb-1"
+          >{axis.label || axis.key}</legend>
         <div class="d-flex flex-wrap gap-2">
           {#each axis.values as value, valueIndex (value.key)}
             {@const inputId = `mp-axis-${axisIndex}-${valueIndex}`}
@@ -23,8 +28,9 @@
               disabled={!selectable}
               onchange={() =>
                 onselect(selectValue(product.variants, axes, selection, axis.key, value.key))} />
-            <label class="btn btn-outline-primary btn-sm" for={inputId}
-              >{value.label || value.key}</label>
+            <label
+              class="market-variant-picker__action btn btn-outline-primary btn-sm"
+              for={inputId}>{value.label || value.key}</label>
           {/each}
         </div>
       </fieldset>
@@ -34,11 +40,12 @@
     {/if}
   </div>
 {:else if product.variants?.length}
-  <div>
-    <label class="form-label" for={ID_VARIANT}>{$_('theme.product.variant-label')}</label>
+  <div class="market-variant-picker">
+    <label class="market-variant-picker__variant-label form-label" for={ID_VARIANT}
+      >{$_('theme.product.variant-label')}</label>
     <select
       id={ID_VARIANT}
-      class={['form-select', error && 'is-invalid']}
+      class={['market-variant-picker__select', 'form-select', error && 'is-invalid']}
       value={variantId == null ? '' : String(variantId)}
       aria-invalid={error ? 'true' : undefined}
       onchange={(event) =>
@@ -57,9 +64,12 @@
 {/if}
 
 <script>
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { isValueSelectable, selectValue, usableAxes } from '../../lib/variants.js';
   import { ID_VARIANT } from './productModel.js';
+
+  const market = plugin('market');
+  const _ = market._;
 
   /**
    * Variant choice (14 §9.2). `selection` is { axisKey: valueKey } for axis buttons, `variantId` the select's

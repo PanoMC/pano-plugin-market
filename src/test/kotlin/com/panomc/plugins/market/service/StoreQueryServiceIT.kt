@@ -93,8 +93,8 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         val product = fx.product(slug = "vip", price = 5000)
         raw(product, "description" to "<p>long text</p>", "shortDescription" to "short")
 
-        val card = store().getJsonArray("products").getJsonObject(0)
-        val listed = list().getJsonArray("products").getJsonObject(0)
+        val card = store().getJsonArray("items").getJsonObject(0)
+        val listed = list().getJsonArray("items").getJsonObject(0)
 
         for (c in listOf(card, listed)) {
             assertFalse(c.containsKey("description"), "a card never carries the description")
@@ -118,15 +118,15 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         fx.product(slug = "a")
         val body = store()
 
-        // the keys of the pre-v2 GET /store (golden set) are all still present
-        for (key in listOf("settings", "categories", "products", "bestsellers", "comparisons")) assertTrue(body.containsKey(key), "top-level $key")
+        // the keys of GET /store on the core page shape (04 section 4): the first page as items + page, the rest as extra keys
+        for (key in listOf("settings", "categories", "items", "page", "bestsellers", "comparisons")) assertTrue(body.containsKey(key), "top-level $key")
         for (key in listOf(
             "storeName", "storeDescription", "currency", "currencySymbol", "creditsEnabled", "creditName", "removeCents", "showBestsellers",
             "showFeaturedProducts", "showComparisons"
         )) assertTrue(body.getJsonObject("settings").containsKey(key), "settings.$key")
         // ... and the additions of 04 section 3
         assertEquals(
-            setOf("settings", "categories", "products", "bestsellers", "comparisons", "productCount", "totalPage", "featured", "comparisonProducts"),
+            setOf("items", "page", "settings", "categories", "bestsellers", "comparisons", "featured", "comparisonProducts"),
             body.fieldNames()
         )
         val settings = body.getJsonObject("settings")
@@ -164,16 +164,16 @@ class StoreQueryServiceIT : MarketDaoITBase() {
     @Test
     fun `paging beyond the last page is PAGE_NOT_FOUND and page one of an empty store is fine`(): Unit = runBlocking {
         val empty = list()
-        assertEquals(0, empty.getJsonArray("products").size())
-        assertEquals(0L, empty.getLong("totalPage"))
+        assertEquals(0, empty.getJsonArray("items").size())
+        assertEquals(0L, empty.getJsonObject("page").getLong("totalPages"))
         assertThrows(PageNotFound::class.java) { runBlocking { list(ProductListQuery(page = 2)) } }
 
         repeat(5) { fx.product(slug = "p$it", name = "P$it") }
 
         val last = list(ProductListQuery(page = 3, pageSize = 2))
-        assertEquals(1, last.getJsonArray("products").size())
-        assertEquals(5L, last.getLong("productCount"))
-        assertEquals(3L, last.getLong("totalPage"))
+        assertEquals(1, last.getJsonArray("items").size())
+        assertEquals(5L, last.getJsonObject("page").getLong("totalItems"))
+        assertEquals(3L, last.getJsonObject("page").getLong("totalPages"))
         assertThrows(PageNotFound::class.java) { runBlocking { list(ProductListQuery(page = 4, pageSize = 2)) } }
     }
 
@@ -184,9 +184,9 @@ class StoreQueryServiceIT : MarketDaoITBase() {
 
         val body = store()
 
-        assertEquals(2, body.getJsonArray("products").size())
-        assertEquals(5L, body.getLong("productCount"))
-        assertEquals(3L, body.getLong("totalPage"))
+        assertEquals(2, body.getJsonArray("items").size())
+        assertEquals(5L, body.getJsonObject("page").getLong("totalItems"))
+        assertEquals(3L, body.getJsonObject("page").getLong("totalPages"))
     }
 
     // ------------------------------------------------------------------------------------------------ visibility
@@ -198,12 +198,12 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         fx.product(slug = "in-parent", categoryId = parent.id)
         fx.product(slug = "in-child", categoryId = child.id)
         fx.product(slug = "free")
-        assertEquals(listOf("free", "in-child", "in-parent"), names(list().getJsonArray("products")).sorted())
+        assertEquals(listOf("free", "in-child", "in-parent"), names(list().getJsonArray("items")).sorted())
 
         Fixtures.setColumns(pool, "market_category", parent.id, mapOf("status" to "INACTIVE"))
 
-        assertEquals(listOf("free"), names(list().getJsonArray("products")))
-        assertEquals(listOf("free"), names(store().getJsonArray("products")))
+        assertEquals(listOf("free"), names(list().getJsonArray("items")))
+        assertEquals(listOf("free"), names(store().getJsonArray("items")))
         assertEquals(0, store().getJsonArray("categories").size())
         assertThrows(NotFound::class.java) { runBlocking { page("in-parent") } }
         assertThrows(NotFound::class.java) { runBlocking { page("in-child") } }
@@ -221,7 +221,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         raw(inactive, "status" to "INACTIVE")
         raw(deleted, "deletedAt" to w.clock.now())
 
-        assertEquals(listOf("live"), names(list().getJsonArray("products")))
+        assertEquals(listOf("live"), names(list().getJsonArray("items")))
         for (slug in listOf("archived", "inactive", "deleted", "nothing-here")) assertThrows(NotFound::class.java, { runBlocking { page(slug) } }, slug)
         assertEquals("live", page("live").getString("slug"))
     }
@@ -236,7 +236,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         raw(early, "durationType" to "TEMPORARY", "durationStart" to now + 1000)
         raw(late, "durationType" to "TEMPORARY", "durationExpiry" to now - 1000)
 
-        assertEquals(listOf("open"), names(list().getJsonArray("products")))
+        assertEquals(listOf("open"), names(list().getJsonArray("items")))
         assertThrows(NotFound::class.java) { runBlocking { page("early") } }
         assertThrows(NotFound::class.java) { runBlocking { page("late") } }
     }
@@ -265,7 +265,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         config = MarketConfig(currencyMode = CurrencyMode.SINGLE, additionalCurrencies = listOf("USD"))
         fx.product(slug = "x", price = 10000)
 
-        val card = list(ProductListQuery(currency = "USD")).getJsonArray("products").getJsonObject(0)
+        val card = list(ProductListQuery(currency = "USD")).getJsonArray("items").getJsonObject(0)
 
         assertEquals("TRY", card.getString("currency"))
         assertEquals(100.0, card.getDouble("price"))
@@ -278,12 +278,12 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         val product = fx.product(slug = "x", price = 10000, creditPrice = 4000)
         raw(product, "compareAtPrice" to 20000L)
 
-        val base = list().getJsonArray("products").getJsonObject(0)
+        val base = list().getJsonArray("items").getJsonObject(0)
         assertEquals("TRY", base.getString("currency"))
         assertEquals(100.0, base.getDouble("price"))
         assertEquals(200.0, base.getDouble("compareAtPrice"))
 
-        val shown = list(ProductListQuery(currency = "USD")).getJsonArray("products").getJsonObject(0)
+        val shown = list(ProductListQuery(currency = "USD")).getJsonArray("items").getJsonObject(0)
         assertEquals("USD", shown.getString("currency"))
         assertEquals(2.5, shown.getDouble("price"))
         assertEquals(5.0, shown.getDouble("compareAtPrice"), "the stored was-price is converted like the price")
@@ -303,7 +303,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         config = MarketConfig(currencyMode = CurrencyMode.DISPLAY, additionalCurrencies = listOf("USD"))
         fx.product(slug = "x", price = 10000)
 
-        val card = list(ProductListQuery(currency = "USD")).getJsonArray("products").getJsonObject(0)
+        val card = list(ProductListQuery(currency = "USD")).getJsonArray("items").getJsonObject(0)
 
         assertEquals("TRY", card.getString("currency"))
         assertEquals(100.0, card.getDouble("price"))
@@ -319,7 +319,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         fx.product(slug = "converted", price = 10000)
         w.prices.upsert(MarketProductPrice(productId = explicit.id, variantId = 0, currency = "USD", price = 300), pool)
 
-        val cards = list(ProductListQuery(currency = "USD", sort = ProductSort.PRICE_DESC)).getJsonArray("products")
+        val cards = list(ProductListQuery(currency = "USD", sort = ProductSort.PRICE_DESC)).getJsonArray("items")
 
         assertEquals(listOf("explicit", "converted"), names(cards))
         assertEquals(3.0, cards.getJsonObject(0).getDouble("price"))
@@ -336,12 +336,12 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         fx.product(slug = "bare", price = 10000)
         w.prices.upsert(MarketProductPrice(productId = explicit.id, variantId = 0, currency = "USD", price = 300), pool)
 
-        assertEquals(listOf("explicit"), names(list(ProductListQuery(currency = "USD")).getJsonArray("products")))
-        assertEquals(listOf("explicit"), names(store("USD").getJsonArray("products")))
+        assertEquals(listOf("explicit"), names(list(ProductListQuery(currency = "USD")).getJsonArray("items")))
+        assertEquals(listOf("explicit"), names(store("USD").getJsonArray("items")))
         assertEquals(3.0, page("explicit", "USD").getDouble("price"))
         assertThrows(NotFound::class.java) { runBlocking { page("bare", "USD") } }
         // in the base currency both are listed
-        assertEquals(listOf("bare", "explicit"), names(list().getJsonArray("products")).sorted())
+        assertEquals(listOf("bare", "explicit"), names(list().getJsonArray("items")).sorted())
     }
 
     // ------------------------------------------------------------------------------------------------ sale
@@ -352,7 +352,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         val d = fx.discount(value = 2000)
         Fixtures.setColumns(pool, "market_discount", d.id, mapOf("expiryDate" to w.clock.now() + 3_600_000))
 
-        val card = list().getJsonArray("products").getJsonObject(0)
+        val card = list().getJsonArray("items").getJsonObject(0)
 
         assertEquals(80.0, card.getDouble("price"))
         assertEquals(100.0, card.getDouble("compareAtPrice"))
@@ -367,13 +367,13 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         fx.product(slug = "x", price = 10000)
         val d = fx.discount(value = 1500, unit = DiscountUnit.FIXED)
 
-        val fixed = list().getJsonArray("products").getJsonObject(0)
+        val fixed = list().getJsonArray("items").getJsonObject(0)
         assertEquals(85.0, fixed.getDouble("price"))
         assertEquals(15.0, fixed.getJsonObject("sale").getDouble("amountOff"))
         assertNull(fixed.getJsonObject("sale").getValue("percent"))
 
         Fixtures.setColumns(pool, "market_discount", d.id, mapOf("showBadge" to false))
-        val quiet = list().getJsonArray("products").getJsonObject(0)
+        val quiet = list().getJsonArray("items").getJsonObject(0)
         assertEquals(85.0, quiet.getDouble("price"), "the sale still applies")
         assertNull(quiet.getValue("sale"), "no badge without showBadge")
     }
@@ -390,7 +390,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         Fixtures.setColumns(pool, "market_discount", inactive.id, mapOf("status" to "INACTIVE"))
         Fixtures.setColumns(pool, "market_discount", cart.id, mapOf("minPaymentAmount" to 50000))
 
-        val card = list().getJsonArray("products").getJsonObject(0)
+        val card = list().getJsonArray("items").getJsonObject(0)
 
         assertEquals(100.0, card.getDouble("price"))
         assertNull(card.getValue("compareAtPrice"))
@@ -406,7 +406,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         fx.product(slug = "none", name = "c", stock = 0)
         fx.product(slug = "unlimited", name = "d", stock = null)
 
-        val cards = list(ProductListQuery(sort = ProductSort.NEWEST)).getJsonArray("products").map { it as JsonObject }.associateBy { it.getString("slug") }
+        val cards = list(ProductListQuery(sort = ProductSort.NEWEST)).getJsonArray("items").map { it as JsonObject }.associateBy { it.getString("slug") }
 
         assertEquals(5, cards.getValue("few").getInteger("stock"))
         assertTrue(cards.getValue("few").getBoolean("inStock"))
@@ -428,7 +428,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         fx.variant(product, name = "Large", price = 9000, stock = 0, position = 1, optionValues = "{\"size\":\"l\"}")
         raw(product, "variantOptions" to "[{\"key\":\"size\",\"label\":\"Size\",\"values\":[{\"key\":\"s\",\"label\":\"S\"},{\"key\":\"l\",\"label\":\"L\"}]}]")
 
-        val card = list().getJsonArray("products").getJsonObject(0)
+        val card = list().getJsonArray("items").getJsonObject(0)
         assertEquals(50.0, card.getDouble("price"))
         assertTrue(card.getBoolean("priceFrom"))
         assertTrue(card.getBoolean("hasVariants"))
@@ -451,7 +451,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         raw(product, "hasVariants" to true)
         fx.product(slug = "y")
 
-        assertEquals(listOf("y"), names(list().getJsonArray("products")))
+        assertEquals(listOf("y"), names(list().getJsonArray("items")))
         assertThrows(NotFound::class.java) { runBlocking { page("x") } }
     }
 
@@ -468,7 +468,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         raw(twoServers, "serverChoices" to "[1,2]")
         raw(oneServer, "serverChoices" to "[1]")
 
-        val cards = list().getJsonArray("products").map { it as JsonObject }.associateBy { it.getString("slug") }
+        val cards = list().getJsonArray("items").map { it as JsonObject }.associateBy { it.getString("slug") }
 
         assertFalse(cards.getValue("plain").getBoolean("needsOptions"))
         assertTrue(cards.getValue("field").getBoolean("needsOptions"))
@@ -493,7 +493,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         raw(b, "priority" to 9, "shortDescription" to "A mighty SWORD too", "soldCount" to 7)
         raw(c, "kind" to "CREDIT_PACK", "creditAmount" to 1000L, "soldCount" to 3)
 
-        fun slugs(q: ProductListQuery) = runBlocking { names(list(q).getJsonArray("products")) }
+        fun slugs(q: ProductListQuery) = runBlocking { names(list(q).getJsonArray("items")) }
 
         assertEquals(listOf("beta", "alpha", "gamma"), slugs(ProductListQuery()), "priority desc, then name")
         assertEquals(listOf("beta", "gamma", "alpha"), slugs(ProductListQuery(sort = ProductSort.PRICE_ASC)))
@@ -543,11 +543,11 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         fx.product(slug = "other")
         entitlement(user.id, bought)
 
-        val cards = list(viewer = StoreViewer(user.id)).getJsonArray("products").map { it as JsonObject }.associateBy { it.getString("slug") }
+        val cards = list(viewer = StoreViewer(user.id)).getJsonArray("items").map { it as JsonObject }.associateBy { it.getString("slug") }
 
         assertEquals(true, cards.getValue("bought").getBoolean("owned"))
         assertEquals(false, cards.getValue("other").getBoolean("owned"))
-        assertNull(list().getJsonArray("products").getJsonObject(0).getValue("owned"))
+        assertNull(list().getJsonArray("items").getJsonObject(0).getValue("owned"))
     }
 
     @Test
@@ -559,7 +559,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         val expired = entitlement(user.id, product)
         Fixtures.setColumns(pool, "market_entitlement", expired, mapOf("expiresAt" to w.clock.now() - 1))
 
-        assertEquals(false, list(viewer = StoreViewer(user.id)).getJsonArray("products").getJsonObject(0).getBoolean("owned"))
+        assertEquals(false, list(viewer = StoreViewer(user.id)).getJsonArray("items").getJsonObject(0).getBoolean("owned"))
     }
 
     @Test
@@ -664,7 +664,7 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         fx.bundle(sword to 2, apple to 1, slug = "kit")
         fx.bundle(apple to 1, slug = "snack")
 
-        val cards = list().getJsonArray("products").map { it as JsonObject }.associateBy { it.getString("slug") }
+        val cards = list().getJsonArray("items").map { it as JsonObject }.associateBy { it.getString("slug") }
 
         assertFalse(cards.getValue("kit").getBoolean("inStock"), "the sword has 1 unit, the bundle needs 2")
         assertTrue(cards.getValue("snack").getBoolean("inStock"))
@@ -675,8 +675,8 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         fx.product(slug = "fine", price = 1000)
         fx.product(slug = "absurd", price = 2_000_000_000_000L)
 
-        assertEquals(listOf("fine"), names(list().getJsonArray("products")))
-        assertEquals(1L, store().getLong("productCount"))
+        assertEquals(listOf("fine"), names(list().getJsonArray("items")))
+        assertEquals(1L, store().getJsonObject("page").getLong("totalItems"))
         assertThrows(NotFound::class.java) { runBlocking { page("absurd") } }
     }
 

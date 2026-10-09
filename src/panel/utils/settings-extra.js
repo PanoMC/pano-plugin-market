@@ -236,13 +236,6 @@ export function validateSecurity(values) {
   return errors;
 }
 
-/** Turning the private-target switch on is a danger confirmation (13 §17 security). */
-export function needsPrivateTargetConfirm(baseline, values) {
-  return (
-    baseline?.allowPrivateWebhookTargets !== true && values?.allowPrivateWebhookTargets === true
-  );
-}
-
 // ---------------------------------------------------------------------------------------------
 // Mail
 // ---------------------------------------------------------------------------------------------

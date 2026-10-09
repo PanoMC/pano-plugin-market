@@ -257,6 +257,10 @@ class McGameService(
     private val marketVersion: () -> String,
     /** The site's base URL (`storeUrl` of `MARKET_CONFIG`; the component appends `/store/<slug>` and `/register`), `null` while the platform has none. */
     private val storeUrl: () -> String?,
+    /** `market.product` with `{slug}` left in (the front-end URL map); `null` = the page has no address, the component keeps appending to [storeUrl]. */
+    private val productUrlTemplate: () -> String? = { null },
+    /** `auth.register` (the front-end URL map); `null` = the component keeps appending `/register` to [storeUrl]. */
+    private val registerUrl: () -> String? = { null },
     /** The locale a manual or in-game order of [username] is stored with (06 section 14.3); `null` = the checkout's default. */
     private val orderLocale: suspend (username: String) -> String? = { null },
     /** The strings of `MARKET_CONFIG.texts` for one locale (19 section 7.1); empty while the market locale files hold no in-game group. */
@@ -293,7 +297,7 @@ class McGameService(
 
         return MarketConfigEventResponse(
             accepted = true, configHash = hash, settings = view.settings, texts = view.texts, storeUrl = view.storeUrl, creditName = view.creditName,
-            currency = view.currency, serverId = server.id
+            currency = view.currency, serverId = server.id, productUrlTemplate = view.productUrlTemplate, registerUrl = view.registerUrl
         )
     }
 
@@ -305,6 +309,8 @@ class McGameService(
         val values: Map<String, Any?>,
         val texts: Map<String, Map<String, String>>,
         val storeUrl: String?,
+        val productUrlTemplate: String?,
+        val registerUrl: String?,
         val creditName: String,
         val currency: String,
         val serverId: Long
@@ -320,6 +326,7 @@ class McGameService(
 
         return ConfigView(
             settings = viewOf(values), values = values, texts = rendered, storeUrl = storeUrl()?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() },
+            productUrlTemplate = productUrlTemplate()?.trim()?.takeIf { it.isNotEmpty() }, registerUrl = registerUrl()?.trim()?.takeIf { it.isNotEmpty() },
             creditName = creditName(c), currency = c.currency, serverId = serverId
         )
     }
@@ -332,7 +339,8 @@ class McGameService(
     private fun hashOf(view: ConfigView): String {
         val canonical = canonical(
             mapOf(
-                "settings" to view.values, "texts" to view.texts, "storeUrl" to view.storeUrl, "creditName" to view.creditName, "currency" to view.currency,
+                "settings" to view.values, "texts" to view.texts, "storeUrl" to view.storeUrl, "productUrlTemplate" to view.productUrlTemplate, "registerUrl" to view.registerUrl,
+                "creditName" to view.creditName, "currency" to view.currency,
                 "serverId" to view.serverId
             )
         )
@@ -558,7 +566,7 @@ class McGameService(
             // a category that is not visible (any more): an empty page, the menu shows "nothing here"
             return answer(MarketQueryData(categories = rootCategories(client), products = emptyList(), page = 1, totalPage = 1))
         }
-        val cards = (listing.getJsonArray("products") ?: JsonArray()).map { it as JsonObject }
+        val cards = (listing.getJsonArray("items") ?: JsonArray()).map { it as JsonObject }
         val rows = if (cards.isEmpty()) emptyMap() else products.getByIds(cards.map { it.getLong("id") }, client).associateBy { it.id }
         val web = cards.associate { card -> card.getLong("id") to needsWeb(card, rows[card.getLong("id")], server.id) }
         val verdicts = purchasableOf(user, cards.filter { web[it.getLong("id")] == false && it.getBoolean("inStock") == true }.mapNotNull { rows[it.getLong("id")] }, server.id, client)
@@ -580,7 +588,7 @@ class McGameService(
         }
 
         return answer(
-            MarketQueryData(categories = rootCategories(client), products = list, page = page, totalPage = listing.getLong("totalPage")?.toInt()?.coerceAtLeast(1) ?: 1)
+            MarketQueryData(categories = rootCategories(client), products = list, page = page, totalPage = listing.getJsonObject("page")?.getInteger("totalPages")?.coerceAtLeast(1) ?: 1)
         )
     }
 
@@ -999,12 +1007,12 @@ class McGameService(
     private fun refusal(e: PanoError): Pair<String, Map<String, Any?>>? {
         if (e.getStatusCode() >= 500) return null
 
-        val body = JsonObject(e.encode())
+        // the envelope of 04 section 3: `{ error: { code, message?, details?, fields? } }`; the extras the component reads are `details` (and the message)
+        val envelope = JsonObject(e.encode()).getJsonObject("error") ?: return null
+        val code = envelope.getString("code") ?: return null
+        val extras = (envelope.getJsonObject("details")?.map ?: emptyMap<String, Any?>()).toMutableMap()
 
-        body.remove("result")
-
-        val code = body.remove("error") as? String ?: return null
-        val extras = body.map.toMutableMap()
+        envelope.getString("message")?.let { extras["message"] = it }
 
         return when (code) {
             "PRODUCT_REQUIREMENT_NOT_MET" -> "REQUIREMENT_NOT_MET" to extras

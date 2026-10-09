@@ -18,14 +18,14 @@ import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.handler.BodyHandler
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 
 /** `POST /api/panel/market/products` (04 section 5, `P:CAT`): multipart form, see `ProductRequestParser`. */
 @Endpoint
 class PanelCreateProductAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/products", RouteType.POST))
+    override val paths = listOf(Path("/products", RouteType.POST))
 
     override val nodes = setOf(MarketNode.CATALOG)
 

@@ -567,11 +567,9 @@
 {/snippet}
 
 <script module>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
+  import { failureOf } from '../utils/api.js';
   import { loadContext } from '../utils/context.js';
-  import { marketPath } from '../utils/api.js';
-
-  const failed = (res) => !res || typeof res !== 'object' || res.error;
 
   /**
    * GET /shipping/methods (the method is found by `?id`), GET /shipping/zones, GET /shipping/carriers and
@@ -591,16 +589,16 @@
 
     const id = searchParams.get('id');
     const [methodsRes, zonesRes, carriersRes, ctx] = await Promise.all([
-      ApiUtil.get({ path: marketPath('/shipping/methods'), request: event }),
-      ApiUtil.get({ path: marketPath('/shipping/zones'), request: event }),
-      ApiUtil.get({ path: marketPath('/shipping/carriers'), request: event }),
+      api.panel.get({ path: '/shipping/methods', request: event }),
+      api.panel.get({ path: '/shipping/zones', request: event }),
+      api.panel.get({ path: '/shipping/carriers', request: event }),
       loadContext(event),
     ]);
 
-    const broken = [methodsRes, zonesRes, carriersRes].find(failed);
-    if (broken) return { data: { id, error: broken?.error || 'NETWORK_ERROR' } };
+    const failure = [methodsRes, zonesRes, carriersRes].map(failureOf).find(Boolean);
+    if (failure) return { data: { id, error: failure } };
 
-    const methods = Array.isArray(methodsRes.methods) ? methodsRes.methods : [];
+    const methods = Array.isArray(methodsRes.items) ? methodsRes.items : [];
     const method = id ? (methods.find((m) => String(m.id) === String(id)) ?? null) : null;
     if (id && !method) return { data: { id, error: 'NOT_FOUND' } };
 
@@ -608,8 +606,8 @@
       data: {
         id,
         method,
-        zones: Array.isArray(zonesRes.zones) ? zonesRes.zones : [],
-        carriers: carriersRes.carriers ?? carriersRes.providers ?? [],
+        zones: Array.isArray(zonesRes.items) ? zonesRes.items : [],
+        carriers: carriersRes.items ?? [],
         ctx,
       },
     };
@@ -760,14 +758,14 @@
     }
     let cancelled = false;
     servicesState = { status: 'loading', list: [] };
-    call(
-      ApiUtil.get({ path: marketPath(`/shipping/carriers/${encodeURIComponent(id)}/services`) }),
-    ).then((result) => {
-      if (cancelled) return;
-      servicesState = result.ok
-        ? { status: 'ok', list: Array.isArray(result.body.services) ? result.body.services : [] }
-        : { status: 'failed', list: [] };
-    });
+    call(api.panel.get({ path: `/shipping/carriers/${encodeURIComponent(id)}/services` })).then(
+      (result) => {
+        if (cancelled) return;
+        servicesState = result.ok
+          ? { status: 'ok', list: Array.isArray(result.body.services) ? result.body.services : [] }
+          : { status: 'failed', list: [] };
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -868,8 +866,8 @@
     let result;
     try {
       result = isEdit
-        ? await call(ApiUtil.put({ path: marketPath(`/shipping/methods/${data.method.id}`), body }))
-        : await call(ApiUtil.post({ path: marketPath('/shipping/methods'), body }));
+        ? await call(api.panel.put({ path: `/shipping/methods/${data.method.id}`, body }))
+        : await call(api.panel.post({ path: '/shipping/methods', body }));
     } finally {
       saving = false;
     }

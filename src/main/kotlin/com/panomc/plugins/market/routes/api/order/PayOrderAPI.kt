@@ -1,5 +1,12 @@
 package com.panomc.plugins.market.routes.api.order
 
+import com.panomc.plugins.market.error.StoreUnavailable
+import com.panomc.plugins.market.error.StoreDisabled
+import com.panomc.plugins.market.error.OrderNotPayable
+import com.panomc.plugins.market.error.OrderNotCancellable
+import com.panomc.platform.error.NotFound
+import com.panomc.plugins.market.routes.base.MarketSchemas
+import com.panomc.platform.schema.EndpointDoc
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.error.BadRequest
@@ -18,9 +25,9 @@ import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters.param
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.Parameters.param
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
@@ -58,7 +65,14 @@ internal fun parsePayRequest(body: JsonObject): PayRequest {
  */
 @Endpoint
 class PayOrderAPI(private val plugin: MarketPlugin) : MarketPublicMutationApi() {
-    override val paths = listOf(Path("/api/market/orders/:publicId/pay", RouteType.POST))
+    override val paths = listOf(Path("/orders/:publicId/pay", RouteType.POST))
+
+    override val doc = EndpointDoc(
+        summary = "Starts a payment for a pending order with the chosen method.",
+        tag = "orders",
+        response = MarketSchemas.paymentAnswer,
+        errors = listOf(NotFound::class, BadRequest::class, OrderNotPayable::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 
@@ -91,7 +105,14 @@ class PayOrderAPI(private val plugin: MarketPlugin) : MarketPublicMutationApi() 
 /** `POST /api/market/orders/:publicId/payment/continue` (04 section 3, 06 section 9.3): `values{}`, the second step of an `EMBEDDED` form. */
 @Endpoint
 class ContinueOrderPaymentAPI(private val plugin: MarketPlugin) : MarketPublicMutationApi() {
-    override val paths = listOf(Path("/api/market/orders/:publicId/payment/continue", RouteType.POST))
+    override val paths = listOf(Path("/orders/:publicId/payment/continue", RouteType.POST))
+
+    override val doc = EndpointDoc(
+        summary = "Continues the open payment attempt of an order.",
+        tag = "orders",
+        response = MarketSchemas.paymentAnswer,
+        errors = listOf(NotFound::class, OrderNotPayable::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 
@@ -125,7 +146,14 @@ class ContinueOrderPaymentAPI(private val plugin: MarketPlugin) : MarketPublicMu
 /** `POST /api/market/orders/:publicId/cancel` (04 section 3, 06 section 11 O7; owner only, `PUB-M`): `{}`; 409 `ORDER_NOT_CANCELLABLE`. */
 @Endpoint
 class CancelOrderAPI(private val plugin: MarketPlugin) : MarketPublicMutationApi() {
-    override val paths = listOf(Path("/api/market/orders/:publicId/cancel", RouteType.POST))
+    override val paths = listOf(Path("/orders/:publicId/cancel", RouteType.POST))
+
+    override val doc = EndpointDoc(
+        summary = "Cancels a pending order.",
+        tag = "orders",
+        response = MarketSchemas.empty(),
+        errors = listOf(NotFound::class, OrderNotCancellable::class, StoreUnavailable::class, StoreDisabled::class)
+    )
 
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 

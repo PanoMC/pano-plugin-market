@@ -1,17 +1,20 @@
 {#if supported}
   <button
     type="button"
-    class="btn btn-sm btn-outline-secondary"
+    class="market-copy-button market-copy-button__action btn btn-sm btn-outline-secondary"
     aria-label={label || $_('theme.common.copy')}
     onclick={copy}>
     <i class={copied ? 'fa-solid fa-check' : 'fa-regular fa-copy'} aria-hidden="true"></i>
   </button>
-  <span class="visually-hidden" aria-live="polite">{copied ? $_('theme.common.copied') : ''}</span>
+  <span class="market-copy-button visually-hidden" aria-live="polite"
+    >{copied ? $_('theme.common.copied') : ''}</span>
 {/if}
 
 <script>
   import { onMount } from 'svelte';
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
+
+  const { _ } = plugin('market');
 
   let { text = '', label = '' } = $props();
 

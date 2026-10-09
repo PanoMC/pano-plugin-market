@@ -15,7 +15,7 @@ import com.panomc.plugins.market.service.CloneSuffix
 import com.panomc.plugins.market.util.ImageUtil
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import java.io.File
 
@@ -26,7 +26,7 @@ import java.io.File
  */
 @Endpoint
 class PanelCloneProductAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/products/:id/clone", RouteType.POST))
+    override val paths = listOf(Path("/products/:id/clone", RouteType.POST))
 
     override val nodes = setOf(MarketNode.CATALOG)
 

@@ -1,5 +1,5 @@
 {#if modules.length}
-  <div class="vstack gap-3">
+  <div class="market-store-modules vstack gap-3">
     {#if modules.includes('goals')}<GoalWidget data={widgets} />{/if}
     {#if modules.includes('topSupporters')}
       <TopSupportersWidget data={widgets} currency={settings?.currency ?? ''} />
@@ -14,7 +14,7 @@
   import RecentBuyersWidget from './RecentBuyersWidget.svelte';
   import { storeModules } from './widgetsModel.js';
 
-  /** settings: store settings (`modules.*` flags, `currency`); widgets: the payload of /api/market/widgets. */
+  /** settings: store settings (`modules.*` flags, `currency`); widgets: the payload of GET /widgets. */
   let { settings = {}, widgets = {} } = $props();
 
   const modules = $derived(storeModules(settings, widgets));

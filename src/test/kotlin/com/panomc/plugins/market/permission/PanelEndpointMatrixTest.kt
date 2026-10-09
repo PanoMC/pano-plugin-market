@@ -24,7 +24,6 @@ class PanelEndpointMatrixTest {
         DELETE /products/:id
         DELETE /shipping/methods/:id
         DELETE /shipping/zones/:id
-        DELETE /webhooks/:id
         GET /blocks
         GET /categories
         GET /categories/image/:fileName
@@ -78,10 +77,6 @@ class PanelEndpointMatrixTest {
         GET /stats
         GET /subscriptions
         GET /subscriptions/:id
-        GET /webhook-deliveries
-        GET /webhook-deliveries/:id
-        GET /webhooks
-        GET /webhooks/:id/deliveries
         POST /blocks
         POST /categories
         POST /categories/sort
@@ -145,9 +140,6 @@ class PanelEndpointMatrixTest {
         POST /shipping/zones/sort
         POST /subscriptions/:id/cancel
         POST /subscriptions/:id/retry
-        POST /webhook-deliveries/:id/redeliver
-        POST /webhooks
-        POST /webhooks/:id/test
         PUT /categories/:id
         PUT /comparisons/:id
         PUT /coupons/:id
@@ -167,7 +159,6 @@ class PanelEndpointMatrixTest {
         PUT /shipments/:id
         PUT /shipping/methods/:id
         PUT /shipping/zones/:id
-        PUT /webhooks/:id
     """.trimIndent().lines().map { it.trim() }.filter { it.isNotEmpty() }
 
     private val rows = PanelEndpointMatrix.readTsv()
@@ -249,10 +240,10 @@ class PanelEndpointMatrixTest {
 
     @Test
     fun `secrets and settings need SET`() {
-        val settings = rows.filter { it.path.startsWith("/settings") || it.path.startsWith("/payment-") || it.path.startsWith("/shipping/") || it.path.startsWith("/webhook") || it.path == "/health" }
+        val settings = rows.filter { it.path.startsWith("/settings") || it.path.startsWith("/payment-") || it.path.startsWith("/shipping/") || it.path == "/health" }
 
-        assertTrue(settings.size >= 40)
-        // GET /payment-events is the OV event list (11 14.3); the provider, method, carrier, webhook and settings routes are SET.
+        assertTrue(settings.size >= 30)
+        // GET /payment-events is the OV event list (11 14.3); the provider, method, carrier and settings routes are SET.
         for (row in settings.filter { it.path != "/payment-events" && it.path != "/payment-events/:eventId/replay" }) assertEquals("P:SET", row.auth, row.key)
     }
 
@@ -282,7 +273,7 @@ class PanelEndpointMatrixTest {
         assertEquals(
             mapOf(
                 "P:ANY" to 5, "P:CAT" to 22, "P:CAT,PAY" to 1, "P:DISC" to 19, "P:PAY,DISC" to 3, "P:PAY" to 25, "P:OV" to 11, "P:OV,PAY" to 1,
-                "P:OM,PAY" to 2, "P:OM" to 20, "P:STATS" to 1, "P:SET" to 45
+                "P:OM,PAY" to 2, "P:OM" to 20, "P:STATS" to 1, "P:SET" to 36
             ),
             rows.groupingBy { it.auth }.eachCount()
         )

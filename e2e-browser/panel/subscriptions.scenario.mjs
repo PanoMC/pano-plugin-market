@@ -1,6 +1,6 @@
 // Scenario 70 of 13 section 25.4: subscriptions in the panel (cancel at period end sets the badge, Retry Charge only for a MERCHANT subscription that is PAST_DUE).
 import fs from 'node:fs';
-import { must } from '../lib/api.mjs';
+import { must, PANEL_MARKET_API, listOf } from '../lib/api.mjs';
 import { grantUserNode, product, actions } from '../lib/bootstrap.mjs';
 import { payByWebhookOnly } from '../lib/gateway.mjs';
 import { rewind } from '../lib/db.mjs';
@@ -25,20 +25,25 @@ export async function subscribe(ctx, plan, label) {
   await awaitStatus(api, placed.publicId, 'COMPLETED');
   const subscriptionId = await waitFor('the subscription to exist', async () => {
     const list = must(
-      await admin.get(`/api/panel/market/subscriptions?search=${encodeURIComponent(api.username)}`),
+      await admin.get(
+        `${PANEL_MARKET_API}/subscriptions?search=${encodeURIComponent(api.username)}`,
+      ),
       'subscriptions',
     ).json;
-    return list.subscriptions?.[0]?.id ?? null;
+    return listOf(list, 'subscriptions')[0]?.id ?? null;
   });
 
   return { api, subscriptionId };
 }
 
 export const subscriptionOf = async (admin, username) =>
-  must(
-    await admin.get(`/api/panel/market/subscriptions?search=${encodeURIComponent(username)}`),
+  listOf(
+    must(
+      await admin.get(`${PANEL_MARKET_API}/subscriptions?search=${encodeURIComponent(username)}`),
+      'subscriptions',
+    ).json,
     'subscriptions',
-  ).json.subscriptions?.[0];
+  )[0];
 
 export const scenarios = [
   {

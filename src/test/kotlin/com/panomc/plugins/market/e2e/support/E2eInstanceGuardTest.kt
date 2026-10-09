@@ -12,8 +12,8 @@ import java.io.File
 class E2eInstanceGuardTest {
     @Test
     fun `accepts the isolated instance`() {
-        E2eInstanceGuard.checkEnvironment("http://127.0.0.1:18188", "pano_market_e2e", null)
-        E2eInstanceGuard.checkEnvironment("http://127.0.0.1:18288", "pano_market_e2e_d", null)
+        E2eInstanceGuard.checkEnvironment("http://127.0.0.1:18400", "pano_market_e2e_slota", null)
+        E2eInstanceGuard.checkEnvironment("http://127.0.0.1:18500", "pano_market_e2e_slotb", null)
         E2eInstanceGuard.checkTestMode(JsonObject().put("settings", JsonObject().put("testMode", true)))
     }
 
@@ -44,16 +44,16 @@ class E2eInstanceGuardTest {
         for (name in listOf("pano", "pano_market_it_1_1", "pano_market_e2e;drop", "PANO_MARKET_E2E", "", null)) {
             assertThrows(E2eGuardViolation::class.java) { E2eInstanceGuard.checkDatabase(name) }
         }
-        assertThrows(E2eGuardViolation::class.java) { E2eInstanceGuard.checkEnvironment("http://127.0.0.1:18188", "pano", null) }
+        assertThrows(E2eGuardViolation::class.java) { E2eInstanceGuard.checkEnvironment("http://127.0.0.1:18400", "pano", null) }
     }
 
     @Test
     fun `reads the database name of the instance config and refuses pano there too`(@TempDir dir: File) {
         File(dir, "config.conf").writeText("server {\n    name = \"x\"\n}\ndatabase {\n    type = \"mariadb\"\n    name = \"pano\"\n    username = \"root\"\n}\n")
         assertEquals("pano", E2eInstanceGuard.databaseNameOf(dir.path))
-        assertThrows(E2eGuardViolation::class.java) { E2eInstanceGuard.checkEnvironment("http://127.0.0.1:18188", "pano_market_e2e", dir.path) }
-        File(dir, "config.conf").writeText("database {\n    name = \"pano_market_e2e\"\n}\n")
-        E2eInstanceGuard.checkEnvironment("http://127.0.0.1:18188", "pano_market_e2e", dir.path)
+        assertThrows(E2eGuardViolation::class.java) { E2eInstanceGuard.checkEnvironment("http://127.0.0.1:18400", "pano_market_e2e_slota", dir.path) }
+        File(dir, "config.conf").writeText("database {\n    name = \"pano_market_e2e_slota\"\n}\n")
+        E2eInstanceGuard.checkEnvironment("http://127.0.0.1:18400", "pano_market_e2e_slota", dir.path)
         assertNull(E2eInstanceGuard.databaseNameOf(File(dir, "missing").path))
     }
 }

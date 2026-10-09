@@ -19,14 +19,14 @@ import io.vertx.json.schema.SchemaRepository
 /** `GET /api/panel/market/shipping/zones` (`P:SET`): every zone with `rateCount` and `shadowedBy`. */
 @Endpoint
 class PanelGetShippingZonesAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin) {
-    override val paths = listOf(Path("/api/panel/market/shipping/zones", RouteType.GET))
+    override val paths = listOf(Path("/shipping/zones", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = noBodyValidation(schemaRepository)
 
     override suspend fun handleAuthorized(context: RoutingContext): Result {
         context.response().putHeader("Cache-Control", "no-store")
 
-        return Successful(mapOf("zones" to JsonArray(service.listZones())))
+        return Successful(mapOf("items" to JsonArray(service.listZones())))
     }
 }
 
@@ -37,9 +37,9 @@ class PanelGetShippingZonesAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin
 @Endpoint
 class PanelSaveShippingZoneAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin) {
     override val paths = listOf(
-        Path("/api/panel/market/shipping/zones/sort", RouteType.POST),
-        Path("/api/panel/market/shipping/zones", RouteType.POST),
-        Path("/api/panel/market/shipping/zones/:id", RouteType.PUT)
+        Path("/shipping/zones/sort", RouteType.POST),
+        Path("/shipping/zones", RouteType.POST),
+        Path("/shipping/zones/:id", RouteType.PUT)
     )
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = bodyValidation(schemaRepository)
@@ -73,7 +73,7 @@ class PanelSaveShippingZoneAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin
 /** `DELETE /shipping/zones/:id`: removes the zone and its rate rows. */
 @Endpoint
 class PanelDeleteShippingZoneAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin) {
-    override val paths = listOf(Path("/api/panel/market/shipping/zones/:id", RouteType.DELETE))
+    override val paths = listOf(Path("/shipping/zones/:id", RouteType.DELETE))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = noBodyValidation(schemaRepository)
 

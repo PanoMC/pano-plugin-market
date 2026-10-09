@@ -137,14 +137,14 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { page } from '@panomc/sdk/svelte';
   import ErrorText from '../discounts/ErrorText.svelte';
   import LimitField from '../discounts/LimitField.svelte';
   import UnitValueFields from '../discounts/UnitValueFields.svelte';
   import ValidityFields from '../discounts/ValidityFields.svelte';
   import { _, showSuccessToast } from '../../../i18n';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import {
     buildCreatorBody,
     datesToForm,
@@ -200,7 +200,7 @@
     const tag = ++lookupTag;
     lookup = 'LOADING';
     const response = await call(
-      ApiUtil.get({ path: marketPath(`/players/${encodeURIComponent(name)}/summary`) }),
+      api.panel.get({ path: `/players/${encodeURIComponent(name)}/summary` }),
     );
     if (tag !== lookupTag) return;
     if (!response.ok) {
@@ -255,12 +255,12 @@
       response =
         isEdit && creatorCode
           ? await call(
-              ApiUtil.put({
-                path: marketPath(`/creator-codes/${creatorCode.id}`),
+              api.panel.put({
+                path: `/creator-codes/${creatorCode.id}`,
                 body: result.body,
               }),
             )
-          : await call(ApiUtil.post({ path: marketPath('/creator-codes'), body: result.body }));
+          : await call(api.panel.post({ path: '/creator-codes', body: result.body }));
     } finally {
       saving = false;
     }

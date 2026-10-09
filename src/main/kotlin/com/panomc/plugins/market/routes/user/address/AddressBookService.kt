@@ -191,6 +191,6 @@ class AddressBookService(
             return Input(text("label"), isDefault, address)
         }
 
-        fun renderAll(list: List<JsonObject>): JsonObject = JsonObject().put("addresses", JsonArray(list))
+        fun renderAll(list: List<JsonObject>): JsonObject = JsonObject().put("items", JsonArray(list))
     }
 }

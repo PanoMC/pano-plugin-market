@@ -1,5 +1,5 @@
 {#if data.state === 'ERROR'}
-  <div class="vstack gap-3">
+  <div class="market-creator-page vstack gap-3">
     {#if data.pills}
       <ProfilePills summary={data.summary} current="creator" />
     {/if}
@@ -9,20 +9,20 @@
       onretry={() => location.reload()} />
   </div>
 {:else}
-  <div class="vstack gap-4">
+  <div class="market-creator-page vstack gap-4">
     {#if data.pills}
       <ProfilePills summary={data.summary} current="creator" />
     {/if}
 
     <section aria-labelledby="market-creator-totals">
-      <h2 class="visually-hidden" id="market-creator-totals">
+      <h2 class="market-creator-page__title visually-hidden" id="market-creator-totals">
         {$_('theme.profile.creator.title')}
       </h2>
       <div class="row g-3">
         {#each totalCards as card (card.id)}
           <div class="col-md-4">
             <div class="card h-100">
-              <div class="card-body">
+              <div class="market-creator-page__body card-body">
                 <div class="small text-body-secondary mb-1">{$_(card.key)}</div>
                 <div class="h4 mb-0">{formatMoney(card.value, data.totals.currency)}</div>
               </div>
@@ -33,10 +33,12 @@
     </section>
 
     <section aria-labelledby="market-creator-codes">
-      <h2 class="h5 mb-3" id="market-creator-codes">{$_('theme.profile.creator.codes-title')}</h2>
+      <h2 class="market-creator-page__codes-title h5 mb-3" id="market-creator-codes">
+        {$_('theme.profile.creator.codes-title')}
+      </h2>
       {#if data.codes.length}
         <div class="table-responsive">
-          <table class="table align-middle">
+          <table class="market-creator-page__table table align-middle">
             <caption class="visually-hidden">{$_('theme.profile.creator.codes-title')}</caption>
             <thead>
               <tr>
@@ -70,7 +72,7 @@
                   </td>
                   <td class="text-end">{row.usedCount}</td>
                   <td>
-                    <span class={['badge', row.badge.className]}>
+                    <span class={['market-creator-page__badge', 'badge', row.badge.className]}>
                       {row.badge.key ? $_(row.badge.key) : row.badge.raw}
                     </span>
                   </td>
@@ -85,7 +87,7 @@
     </section>
 
     <section aria-labelledby="market-creator-earnings">
-      <h2 class="h5 mb-3" id="market-creator-earnings">
+      <h2 class="market-creator-page__earnings-title h5 mb-3" id="market-creator-earnings">
         {$_('theme.profile.creator.earnings-title')}
       </h2>
 
@@ -97,7 +99,7 @@
             <LoadingBlock rows={5} />
           {:else if earnings.earnings.length}
             <div class={['table-responsive', loading && 'opacity-50']}>
-              <table class="table align-middle">
+              <table class="market-creator-page__table-2 table align-middle">
                 <caption class="visually-hidden"
                   >{$_('theme.profile.creator.earnings-title')}</caption>
                 <thead>
@@ -116,7 +118,8 @@
                         {formatMoney(row.amount, data.totals.currency)}
                       </td>
                       <td>
-                        <span class={['badge', row.badge.className]}>
+                        <span
+                          class={['market-creator-page__badge-2', 'badge', row.badge.className]}>
                           {row.badge.key ? $_(row.badge.key) : row.badge.raw}
                         </span>
                       </td>
@@ -133,7 +136,7 @@
           {/if}
 
           <div class="mt-3">
-            <Pager {page} totalPage={earnings.totalPage} onpage={onPage} />
+            <Pager {page} totalPages={earnings.totalPages} onpage={onPage} />
           </div>
         </div>
       {/if}
@@ -141,13 +144,13 @@
 
     {#if data.payouts.length}
       <section aria-labelledby="market-creator-payouts">
-        <h2 class="h5 mb-3" id="market-creator-payouts">
+        <h2 class="market-creator-page__payouts-title h5 mb-3" id="market-creator-payouts">
           {$_('theme.profile.creator.payouts-title')}
         </h2>
-        <ul class="list-group">
+        <ul class="market-creator-page__list list-group">
           {#each data.payouts as payout, index (index)}
             <li
-              class="list-group-item d-flex flex-wrap align-items-center justify-content-between gap-2">
+              class="market-creator-page__item list-group-item d-flex flex-wrap align-items-center justify-content-between gap-2">
               <div>
                 <span class="fw-semibold">{formatMoney(payout.amount, data.totals.currency)}</span>
                 <span class="text-body-secondary">
@@ -158,7 +161,7 @@
                 {#if payout.paidAt}
                   <span class="small text-body-secondary">{formatDate(payout.paidAt)}</span>
                 {/if}
-                <span class={['badge', payout.badge.className]}>
+                <span class={['market-creator-page__badge-3', 'badge', badgeClass(payout.badge.className)]}>
                   {payout.badge.key ? $_(payout.badge.key) : payout.badge.raw}
                 </span>
               </div>
@@ -171,15 +174,23 @@
 {/if}
 
 <script module>
+  // page metadata (doc 01 section 2): the build registers this view as a page, no register.js entry
+  export const view = { path: '/profile/creator', systemLayout: 'ProfileLayout' };
+
   import { error, redirect } from '@panomc/sdk/svelte';
   import { parseListQuery } from '../../lib/profileModel.js';
   import { CREATOR_PATH, resolveCreatorLoad } from '../../lib/subscriptionModel.js';
-  import { call } from '../../utils/api.js';
-  import { has, loginUrl } from '../../utils/host.js';
+  import { plugin } from '@panomc/sdk/controllers';
 
-  const SUMMARY_PATH = '/api/market/me/summary';
+  const SUMMARY_PATH = '/me/summary';
 
   export async function load(event) {
+    const market = plugin('market');
+    // a server load is made for its request; the browser has one host for the whole page
+    const via = typeof window === 'undefined' ? { event } : undefined;
+    const { call } = market.require('api', via).actions;
+    const { has, loginUrl } = market.require('host', via).actions;
+
     const returnTo = `${event.url.pathname}${event.url.search}`;
     const { session } = await event.parent();
 
@@ -221,9 +232,8 @@
 </script>
 
 <script>
-  import { getContext, onMount, untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { NoContent } from '@panomc/sdk/components/theme';
-  import { _ } from '../../../i18n.js';
   import CopyButton from '../../components/common/CopyButton.svelte';
   import ErrorAlert from '../../components/common/ErrorAlert.svelte';
   import LoadingBlock from '../../components/common/LoadingBlock.svelte';
@@ -234,12 +244,14 @@
   import { listSearch } from '../../lib/profileModel.js';
   import { createSequencer } from '../../lib/storeFilter.js';
   import { readEarnings } from '../../lib/subscriptionModel.js';
-  import { bindSession, hostSession } from '../../stores/session.js';
-  import { formatDate, formatMoney } from '../../utils/format.js';
+  import { badgeClass } from '../../lib/classes.js';
+
+  const market = plugin('market');
+  const _ = market._;
+  const { call } = market.require('api').actions;
+  const { formatDate, formatMoney } = market.require('format').actions;
 
   let { data } = $props();
-
-  bindSession(hostSession(getContext));
 
   // The page is re-mounted whenever load() runs again (14 F2), so the loaded data only seeds the state.
   const init = untrack(() => data);
@@ -247,7 +259,7 @@
   let page = $state(init.page ?? 1);
   let earnings = $state(
     init.state === 'READY'
-      ? { earnings: init.earnings, earningCount: init.earningCount, totalPage: init.totalPage }
+      ? { earnings: init.earnings, earningCount: init.earningCount, totalPages: init.totalPages }
       : readEarnings(null),
   );
   let earningsError = $state('');

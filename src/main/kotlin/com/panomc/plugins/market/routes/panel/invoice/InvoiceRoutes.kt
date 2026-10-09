@@ -18,9 +18,9 @@ import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.RequestPredicate
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.numberSchema
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
@@ -102,7 +102,7 @@ abstract class InvoiceRoute(protected val plugin: MarketPlugin, override val nod
 /** `GET /api/panel/market/orders/:id/invoice` (`P:OM` or `P:PAY`: the document holds billing data): the PDF; 404; 500 `INVOICE_RENDER_FAILED`. */
 @Endpoint
 class PanelGetOrderInvoiceAPI(plugin: MarketPlugin) : InvoiceRoute(plugin, setOf(MarketNode.ORDERS_MANAGE, MarketNode.PAYMENTS)) {
-    override val paths = listOf(Path("/api/panel/market/orders/:id/invoice", RouteType.GET))
+    override val paths = listOf(Path("/orders/:id/invoice", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository)
@@ -125,7 +125,7 @@ class PanelGetOrderInvoiceAPI(plugin: MarketPlugin) : InvoiceRoute(plugin, setOf
 /** `POST /api/panel/market/orders/:id/invoice/regenerate` (`P:OM`): `{documents: [{type, number}]}`; 409 `INVOICE_NOT_ISSUABLE {reason}`. */
 @Endpoint
 class PanelRegenerateOrderInvoiceAPI(plugin: MarketPlugin) : InvoiceRoute(plugin, setOf(MarketNode.ORDERS_MANAGE)) {
-    override val paths = listOf(Path("/api/panel/market/orders/:id/invoice/regenerate", RouteType.POST))
+    override val paths = listOf(Path("/orders/:id/invoice/regenerate", RouteType.POST))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = noBody(schemaRepository)
 
@@ -142,7 +142,7 @@ class PanelRegenerateOrderInvoiceAPI(plugin: MarketPlugin) : InvoiceRoute(plugin
 /** `GET /api/panel/market/settings/invoice/preview` (`P:SET`): the sample PDF under the current seller settings; q `locale?`, `type?`. */
 @Endpoint
 class PanelGetInvoicePreviewAPI(plugin: MarketPlugin) : InvoiceRoute(plugin, setOf(MarketNode.SETTINGS)) {
-    override val paths = listOf(Path("/api/panel/market/settings/invoice/preview", RouteType.GET))
+    override val paths = listOf(Path("/settings/invoice/preview", RouteType.GET))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository)
@@ -165,7 +165,7 @@ class PanelGetInvoicePreviewAPI(plugin: MarketPlugin) : InvoiceRoute(plugin, set
 /** `PUT /api/panel/market/settings/invoice-sequence` (`P:SET`): `series*`, `nextNumber*` (only upwards); `{}`; 400 `INVALID_INVOICE_SEQUENCE {minimum}`. */
 @Endpoint
 class PanelUpdateInvoiceSequenceAPI(plugin: MarketPlugin) : InvoiceRoute(plugin, setOf(MarketNode.SETTINGS)) {
-    override val paths = listOf(Path("/api/panel/market/settings/invoice-sequence", RouteType.PUT))
+    override val paths = listOf(Path("/settings/invoice-sequence", RouteType.PUT))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository)

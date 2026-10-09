@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * Manual orders from the panel on a real MariaDB (MK-094; 06 section 14.3, 05 section 12, 04 section 7 `POST /orders` and `/orders/quote`, P-19 twin):
@@ -107,7 +108,7 @@ class ManualOrderIT : MarketDaoITBase() {
         assertEquals(code, e.getErrorCode(), "error code, body ${e.encode()}")
         assertEquals(status, e.getStatusCode())
 
-        return JsonObject(e.encode())
+        return ErrorBodies.details(e)
     }
 
     // ==================================================================================================== P-19 twin

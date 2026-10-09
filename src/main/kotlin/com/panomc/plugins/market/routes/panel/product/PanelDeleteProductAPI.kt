@@ -13,13 +13,13 @@ import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 
 /** `DELETE /api/panel/market/products/:id` (`P:CAT`): soft delete when referenced, otherwise a hard delete (01 section 13). */
 @Endpoint
 class PanelDeleteProductAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/products/:id", RouteType.DELETE))
+    override val paths = listOf(Path("/products/:id", RouteType.DELETE))
 
     override val nodes = setOf(MarketNode.CATALOG)
 

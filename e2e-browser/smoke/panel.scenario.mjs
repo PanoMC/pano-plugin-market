@@ -1,7 +1,7 @@
 // UI-07 to UI-09 of 17 section 10 (T6 browser smoke, panel side), served by the instance at /panel. Every scenario fails on a console error.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { Api, must } from '../lib/api.mjs';
+import { Api, must, MARKET_API, PANEL_MARKET_API, listOf } from '../lib/api.mjs';
 import { newContext } from '../lib/browser.mjs';
 import { completePayment } from '../lib/gateway.mjs';
 import {
@@ -30,7 +30,7 @@ async function mixedOrder({ env, admin, buyer, gateway }, cat) {
 
   const res = must(
     await api.post(
-      '/api/market/checkout',
+      `${MARKET_API}/checkout`,
       { items: [{ productId: cat.vip.id, quantity: 1 }], paymentMethodId: 'fake', useCredits: 3 },
       { 'Idempotency-Key': crypto.randomUUID() },
     ),
@@ -45,13 +45,13 @@ async function mixedOrder({ env, admin, buyer, gateway }, cat) {
   await completePayment(payUrl); // the fake gateway page: marks paid, sends the signed webhook, returns the buyer
 
   for (let i = 0; i < 60; i++) {
-    const view = await api.get(`/api/market/orders/${publicId}`);
+    const view = await api.get(`${MARKET_API}/orders/${publicId}`);
     if (view.json?.order?.status === 'COMPLETED')
       return { api, publicId, number: view.json.order.number };
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
-  const last = await api.get(`/api/market/orders/${publicId}`);
+  const last = await api.get(`${MARKET_API}/orders/${publicId}`);
   throw new Error(`UI-07: the mixed order did not complete: status ${last.json?.order?.status}`);
 }
 
@@ -80,8 +80,7 @@ export const scenarios = [
       await page.locator('#product-price').fill('5.00');
       await page.getByRole('tab', { name: 'Variants' }).click();
       await page.locator('#product-has-variants').check();
-      await page.getByRole('button', { name: 'Actions' }).first().click();
-      await page.getByRole('button', { name: 'Add Option' }).click();
+      await page.getByRole('button', { name: 'Add Option' }).click(); // a single header action is a plain button, not a menu
       await page.getByLabel('Option name, e.g. Size').fill('Size');
       await page.getByRole('button', { name: 'Add Value' }).click();
       await page.getByLabel('Value, e.g. Large').first().fill('Small');
@@ -95,15 +94,15 @@ export const scenarios = [
       let created;
       for (let i = 0; i < 60 && !created; i++) {
         const found = must(
-          await admin.get(`/api/panel/market/products?search=${encodeURIComponent(name)}`),
+          await admin.get(`${PANEL_MARKET_API}/products?search=${encodeURIComponent(name)}`),
           'find the new product',
         ).json;
-        created = (found.products ?? [])[0];
+        created = listOf(found, 'products')[0];
         if (!created) await new Promise((resolve) => setTimeout(resolve, 500));
       }
       assert(created, 'UI-07: the product created in the editor exists');
       const detail = must(
-        await admin.get(`/api/panel/market/products/${created.id}`),
+        await admin.get(`${PANEL_MARKET_API}/products/${created.id}`),
         'product detail',
       ).json;
       assertEqual(
@@ -212,7 +211,7 @@ scenarios.push(
       );
       const url = await webhook.inputValue();
       assert(
-        url.endsWith('/api/market/payments/fake/webhook'),
+        url.endsWith(`${MARKET_API}/payments/fake/webhook`),
         `UI-08: the webhook URL points at the provider route (${url})`,
       );
       await page.locator('.modal.show').getByRole('button', { name: 'Copy' }).click();
@@ -226,10 +225,10 @@ scenarios.push(
 
       // the toggle: off, then on again (the provider's own enable switch, checked against the API)
       const stateOf = async () =>
-        must(
-          await admin.get('/api/panel/market/payment-providers'),
+        listOf(
+          must(await admin.get(`${PANEL_MARKET_API}/payment-providers`), 'providers').json,
           'providers',
-        ).json.providers.find((p) => p.id === 'fake').config.enabled;
+        ).find((p) => p.id === 'fake').config.enabled;
       const toggle = card.getByLabel(/Enable Fake gateway/);
       assertEqual(await stateOf(), true, 'UI-08: the provider starts enabled');
       await toggle.uncheck();
@@ -289,24 +288,39 @@ scenarios.push(
         'UI-09: no refund entry on the order detail',
       );
 
-      // the settings page is refused, not rendered
-      await panelOpen(page, env, '/market/settings');
-      await page.waitForTimeout(1500);
+      // the settings page is refused, not rendered: the panel hides a page the user may not open behind its 404 page
+      // (panel-ui `(plugin-ui)/[...path]/+layout.svelte` throws 404 when the registered page's permission is missing)
+      // the panel's error page does not set the booted flag (the page is the server-rendered 404), so wait for its text, not for hydration
+      await page.goto(`${env.url}/panel/market/settings`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 240000,
+      });
+      await page.getByText('Enderman blocked this page from loading.').waitFor({ timeout: 60000 });
       const text = await page.locator('body').innerText();
       assert(
         !text.includes('Payment Methods') && !text.includes('Test Mode'),
         'UI-09: the settings page shows no settings',
       );
       assert(
-        text.includes('You do not have permission'),
-        'UI-09: the settings page says the user lacks the permission',
+        text.includes('Enderman blocked this page from loading.'),
+        "UI-09: the settings page answers the panel's 404 page",
       );
 
+      // the refused page is a real 404 document: the browser's own line for it is the one expected console entry
+      pc.errors.splice(
+        0,
+        pc.errors.length,
+        ...pc.errors.filter((e) => !/status of 404.*\/panel\/market\/settings\]?$/.test(e)),
+      );
       pc.expectNoErrors('UI-09');
       await pc.close();
     },
   },
 );
+
+// The status filter is a select at this width, so its entries are options (hidden while the list is closed): a role-based locator that includes hidden nodes.
+const pendingOption = (page, name) =>
+  page.getByRole('option', { name, exact: true, includeHidden: true }).first();
 
 scenarios.push({
   id: 'UI-10',
@@ -324,10 +338,10 @@ scenarios.push({
     const api = await buyer('lang');
     await grantUserNode(admin, api.userId, 'pano.panel.access.panel');
     await grantUserNode(admin, api.userId, node('view.market.orders'));
-    await api.post('/api/panel/dismissWhatsNew', { version: '1' });
+    await api.post('/api/v1/panel/dismissWhatsNew', { version: '1' });
 
     for (const lang of ['tr', 'en-US', 'ru']) {
-      must(await api.put('/api/profile', { localeCode: lang }), `switch the account to ${lang}`);
+      must(await api.put('/api/v1/profile', { localeCode: lang }), `switch the account to ${lang}`);
       const theme = read('theme', lang).theme.store;
       const panel = read('panel', lang).pages.orders;
 
@@ -374,11 +388,12 @@ scenarios.push({
       });
       const panelPage = await staff.page();
       await panelOpen(panelPage, env, '/market/orders', (p) =>
-        p.getByText(panel.tab.pending, { exact: true }).first().waitFor({ timeout: 60000 }),
+        pendingOption(p, panel.tab.pending).waitFor({ state: 'attached', timeout: 60000 }),
       );
       const panelText = await panelPage.locator('body').innerText();
       assert(
-        panelText.includes(panel.tab.all) && panelText.includes(panel.tab.pending),
+        panelText.includes(panel.tab.all) &&
+          (await pendingOption(panelPage, panel.tab.pending).count()) > 0,
         `UI-10 ${lang}: the orders page is in the language`,
       );
       const panelKeys = await rawKeys(panelPage);

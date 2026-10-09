@@ -961,7 +961,9 @@ describe('legal text', () => {
 describe('settings page', () => {
   test('?section= resolves to a known section, general otherwise', () => {
     expect(resolveSection('billing')).toBe('billing');
-    expect(resolveSection('webhook-deliveries')).toBe('webhook-deliveries');
+    expect(resolveSection('webhooks')).toBe('webhooks');
+    // the deliveries section moved to the platform page with the rest of the webhooks
+    expect(resolveSection('webhook-deliveries')).toBe('general');
     expect(resolveSection('nope')).toBe('general');
     expect(resolveSection(null)).toBe('general');
     expect(resolveSection(undefined)).toBe('general');
@@ -985,13 +987,8 @@ describe('settings page', () => {
       'shipping-carriers': '/shipping/carriers',
       'shipping-zones': '/shipping/zones',
       'shipping-methods': ['/shipping/methods', '/shipping/carriers'],
-      webhooks: '/webhooks',
-      'webhook-deliveries': '/webhook-deliveries',
     };
     for (const [key, path] of Object.entries(extra)) expect(extraPathFor(key)).toEqual(path);
-    expect(extraPathFor('webhook-deliveries', new URLSearchParams('endpointId=7'))).toBe(
-      '/webhooks/7/deliveries',
-    );
     for (const key of PAGE_SECTIONS.filter((k) => !(k in extra)))
       expect(extraPathFor(key)).toBeNull();
   });

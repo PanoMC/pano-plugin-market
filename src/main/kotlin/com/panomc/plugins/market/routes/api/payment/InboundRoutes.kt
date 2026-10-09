@@ -1,6 +1,10 @@
 package com.panomc.plugins.market.routes.api.payment
 
+import com.panomc.platform.error.NotFound
+import com.panomc.platform.schema.EndpointDoc
+import com.panomc.plugins.market.util.MarketLinks
 import com.panomc.platform.annotation.Endpoint
+import com.panomc.platform.model.BrowserAccess
 import com.panomc.platform.model.MaintenanceAccess
 import com.panomc.platform.model.Path
 import com.panomc.platform.model.Result
@@ -18,8 +22,8 @@ import io.vertx.core.http.HttpMethod
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.handler.BodyHandler
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Parameters
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Parameters
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
@@ -34,6 +38,9 @@ abstract class MarketInboundApi : MarketApi() {
 
     override val maintenanceAccess: MaintenanceAccess = MaintenanceAccess.ALWAYS
 
+    /** A gateway's server call and the buyer coming back from a 3-D Secure page carry no CSRF token; the signature or the attempt token is the proof. */
+    override val csrfExempt: Boolean = true
+
     override fun isAllowedInDemo(method: HttpMethod): Boolean = true
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler? = null
@@ -41,8 +48,8 @@ abstract class MarketInboundApi : MarketApi() {
     /** Raw bytes for JSON and form bodies, multipart attributes without any upload to disk, 1 MB (02 section 7.1). */
     override fun bodyHandler(): Handler<RoutingContext>? = BodyHandler.create(false).setBodyLimit(BODY_LIMIT_BYTES)
 
-    /** A gateway is not a browser: no CORS answer, no preflight. */
-    override fun corsHandler(): Handler<RoutingContext>? = null
+    /** A gateway and the buyer coming back from it post from another origin (doc 05 section 4): the Origin gate lets these routes through. */
+    override val browserAccess: BrowserAccess = BrowserAccess.ANY_ORIGIN
 
     override suspend fun marketChecks(context: RoutingContext) = Unit
 
@@ -58,8 +65,8 @@ internal object InboundRouteSupport {
     val TOKEN = Regex("^[0-9a-f]{40}$")
 
     /** The two return routes, written once: [PaymentReturnAPI] registers them and the route glue tests mount them. */
-    const val RETURN_STEP_PATH = "/api/market/payments/:providerId/return/:attemptToken/step/:name"
-    const val RETURN_OUTCOME_PATH = "/api/market/payments/:providerId/return/:attemptToken/:outcome"
+    const val RETURN_STEP_PATH = "/payments/:providerId/return/:attemptToken/step/:name"
+    const val RETURN_OUTCOME_PATH = "/payments/:providerId/return/:attemptToken/:outcome"
 
     private val OUTCOMES = mapOf("success" to ReturnOutcome.SUCCESS, "cancel" to ReturnOutcome.CANCEL, "pending" to ReturnOutcome.PENDING, "result" to ReturnOutcome.RESULT)
 
@@ -134,8 +141,14 @@ internal object InboundRouteSupport {
 @Endpoint
 class PaymentWebhookAPI(private val plugin: MarketPlugin) : MarketInboundApi() {
     override val paths = listOf(
-        Path("/api/market/payments/:providerId/webhook", RouteType.ROUTE),
-        Path("/api/market/payments/:providerId/webhook/:channel", RouteType.ROUTE)
+        Path("/payments/:providerId/webhook", RouteType.ROUTE),
+        Path("/payments/:providerId/webhook/:channel", RouteType.ROUTE)
+    )
+
+    override val doc = EndpointDoc(
+        summary = "Where a payment gateway posts its events; the provider reads and answers it.",
+        tag = "payments",
+        binary = true
     )
 
     override suspend fun handleMarket(context: RoutingContext): Result? {
@@ -151,8 +164,14 @@ class PaymentWebhookAPI(private val plugin: MarketPlugin) : MarketInboundApi() {
 @Endpoint
 class PaymentNotifyAPI(private val plugin: MarketPlugin) : MarketInboundApi() {
     override val paths = listOf(
-        Path("/api/market/payments/:providerId/notify/:attemptToken", RouteType.ROUTE),
-        Path("/api/market/payments/:providerId/notify/:attemptToken/:channel", RouteType.ROUTE)
+        Path("/payments/:providerId/notify/:attemptToken", RouteType.ROUTE),
+        Path("/payments/:providerId/notify/:attemptToken/:channel", RouteType.ROUTE)
+    )
+
+    override val doc = EndpointDoc(
+        summary = "Where a payment gateway notifies one payment attempt; the provider reads and answers it.",
+        tag = "payments",
+        binary = true
     )
 
     override suspend fun handleMarket(context: RoutingContext): Result? {
@@ -175,6 +194,12 @@ class PaymentReturnAPI(private val plugin: MarketPlugin) : MarketInboundApi() {
         Path(InboundRouteSupport.RETURN_OUTCOME_PATH, RouteType.ROUTE)
     )
 
+    override val doc = EndpointDoc(
+        summary = "Where a gateway sends the buyer back; it redirects to the order page.",
+        tag = "payments",
+        binary = true
+    )
+
     override suspend fun handleMarket(context: RoutingContext): Result? {
         val call = InboundRouteSupport.returnCallOf(context) ?: return InboundRouteSupport.notFound(context).let { null }
 
@@ -190,7 +215,14 @@ class PaymentReturnAPI(private val plugin: MarketPlugin) : MarketInboundApi() {
  */
 @Endpoint
 class GetPaymentAttemptPageAPI(private val plugin: MarketPlugin) : MarketApi() {
-    override val paths = listOf(Path("/api/market/payments/attempts/:attemptToken/page", RouteType.GET))
+    override val paths = listOf(Path("/payments/attempts/:attemptToken/page", RouteType.GET))
+
+    override val doc = EndpointDoc(
+        summary = "The hosted page of a payment attempt, for providers that show instructions.",
+        tag = "payments",
+        binary = true,
+        errors = listOf(NotFound::class)
+    )
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler =
         ValidationHandlerBuilder.create(schemaRepository)
@@ -209,10 +241,11 @@ class GetPaymentAttemptPageAPI(private val plugin: MarketPlugin) : MarketApi() {
 
             is AttemptPageResult.ToOrderPage -> {
                 val base = com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring(plugin).site().baseUrl.trimEnd('/')
+                val store = MarketLinks.platform.store() ?: base.ifEmpty { "/" }
 
                 InboundRouteSupport.send(
                     context,
-                    HttpReply.redirect(if (page.publicId.isNullOrEmpty()) "$base/store" else "$base/store/order/${page.publicId}").also {
+                    HttpReply.redirect(if (page.publicId.isNullOrEmpty()) store else MarketLinks.platform.order(page.publicId) ?: store).also {
                         it.headers = it.headers + ("Referrer-Policy" to "no-referrer")
                     }
                 )

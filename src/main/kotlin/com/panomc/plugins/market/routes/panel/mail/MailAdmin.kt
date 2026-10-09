@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.mail
 
+import com.panomc.platform.model.PageRequest
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.abuse.PiiMask
@@ -35,7 +36,6 @@ import com.panomc.plugins.market.mail.MailSendResult
 import com.panomc.plugins.market.mail.OutboundMail
 import com.panomc.plugins.market.service.MailOutboxService
 import com.panomc.plugins.market.service.platform.UserDirectory
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.sqlclient.SqlClient
@@ -222,7 +222,7 @@ class MailAdmin(
      * `GET /mails`: newest first; [status] / [kind] / [orderId] narrow it. Recipients are masked (`j***@e***.com`) unless [seeRecipients] (OM or PAY), and
      * the masked address is also removed from `lastError`, which a mail server may fill with the address it refused.
      */
-    suspend fun list(status: MailStatus?, kind: MailKind?, orderId: Long?, window: Paging.Window, seeRecipients: Boolean, client: SqlClient): MailPage {
+    suspend fun list(status: MailStatus?, kind: MailKind?, orderId: Long?, window: PageRequest, seeRecipients: Boolean, client: SqlClient): MailPage {
         val where = ArrayList<String>()
         val values = Tuple.tuple()
 
@@ -232,7 +232,7 @@ class MailAdmin(
 
         val clause = if (where.isEmpty()) "" else " WHERE " + where.joinToString(" AND ")
         val total = client.preparedQuery("SELECT COUNT(*) AS c FROM ${table()}$clause").execute(values).coAwait().first().getLong("c")
-        val page = Tuple.tuple().also { t -> (0 until values.size()).forEach { t.addValue(values.getValue(it)) } }.addValue(window.pageSize).addValue(window.offset)
+        val page = Tuple.tuple().also { t -> (0 until values.size()).forEach { t.addValue(values.getValue(it)) } }.addValue(window.size).addValue(window.offset)
         val rows = client.preparedQuery(
             "SELECT `id`, `kind`, `orderId`, `recipient`, `status`, `attempts`, `lastError`, `createdAt`, `sentAt` FROM ${table()}$clause ORDER BY `id` DESC LIMIT ? OFFSET ?"
         ).execute(page).coAwait().map { r ->

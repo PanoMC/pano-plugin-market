@@ -78,11 +78,15 @@ abstract class MarketDbTestBase {
     /** Creates the market schema in the empty database: `MarketSchema.ensure(pool, "pano_")`, the code the plugin runs. */
     protected open suspend fun installSchema() {
         LateBound.call("com.panomc.plugins.market.db.MarketSchema", "ensure", pool, prefix)
+        // core's webhook tables (the platform migration creates them in production); the market's rows live there since MK-15
+        pool.query(com.panomc.platform.db.implementation.WebhookEndpointDaoImpl.createTableQuery("${prefix}webhook_endpoint")).execute().coAwait()
+        pool.query(com.panomc.platform.db.implementation.WebhookDeliveryDaoImpl.createTableQuery("${prefix}webhook_delivery")).execute().coAwait()
     }
 
     /** Back to a fresh install: every `pano_market_*` table truncated and the seeded rows restored. */
     protected open suspend fun resetState() {
         MarketTestDb.resetMarketTables(pool, baseline)
+        MarketTestDb.resetTables(pool, listOf("${prefix}webhook_endpoint", "${prefix}webhook_delivery"))
     }
 
     /** `InvariantChecker.assertAll(pool)` once that class exists (17 section 7). */

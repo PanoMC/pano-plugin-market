@@ -2,12 +2,12 @@
 // The isolated instance runs the real fake provider; where the scenario needs a state the instance cannot be in (only built-ins, an
 // UNAVAILABLE plugin, a schema with visibleWhen / optional secrets / every field type) the panel's own GET /payment-providers answer is
 // rewritten in the browser (page.route), the panel renders and posts exactly as it would for such a provider.
-import { must } from '../lib/api.mjs';
+import { must, PANEL_MARKET_API, listOf } from '../lib/api.mjs';
 import { assert, assertEqual } from '../lib/ui.mjs';
 import { signedIn, openMarket, waitFor, modalsClosed, sleep } from './lib/panel.mjs';
 
 const BUILT_INS = new Set(['bank-transfer', 'credits', 'free']);
-const LIST = '**/api/panel/market/payment-providers';
+const LIST = `**${PANEL_MARKET_API}/payment-providers`;
 
 /** Rewrites the answer of the provider list with `edit(json)` for every request of the page. */
 async function rewriteProviders(page, edit) {
@@ -23,6 +23,18 @@ async function openPayments(page, env, query = '') {
   await openMarket(page, env, `/market/settings?section=payments${query}`, (p) =>
     p.getByText(/^\d+ Payment Methods$/).waitFor({ timeout: 60000 }),
   );
+}
+
+/**
+ * Opens the payment methods through a client-side navigation (another settings section, then the "Payment Methods" link): a hard load
+ * fetches the list on the panel's server, where `page.route` cannot see it; the client-side load is the browser's own request.
+ */
+async function openPaymentsClientSide(page, env) {
+  await openMarket(page, env, '/market/settings?section=general', (p) =>
+    p.getByRole('link', { name: 'Payment Methods', exact: true }).waitFor({ timeout: 60000 }),
+  );
+  await page.getByRole('link', { name: 'Payment Methods', exact: true }).click();
+  await page.getByText(/^\d+ Payment Methods$/).waitFor({ timeout: 60000 });
 }
 
 const cardOf = (page, id) => page.locator('.card', { has: page.locator(`#pm-toggle-${id}`) });
@@ -73,10 +85,11 @@ export const scenarios = [
       await page.route(LIST, async (route) => {
         const response = await route.fetch();
         const json = await response.json();
-        json.providers = json.providers.filter((p) => BUILT_INS.has(p.id));
+        const key = 'items' in json ? 'items' : 'providers';
+        json[key] = json[key].filter((p) => BUILT_INS.has(p.id));
         await route.fulfill({ response, json });
       });
-      await openPayments(page, env);
+      await openPaymentsClientSide(page, env);
       await page.getByText('No Payment Plugins Installed').waitFor({ timeout: 15000 });
       await page.unroute(LIST);
       await openPayments(page, env);
@@ -194,7 +207,7 @@ export const scenarios = [
       const fresh = await signedIn(ctx.browser, admin);
       const page2 = fresh.page;
       await rewriteProviders(page2, (json) => {
-        for (const provider of json.providers) {
+        for (const provider of listOf(json, 'providers')) {
           if (provider.id === 'fake-eur') provider.state = 'UNAVAILABLE';
           if (provider.id !== 'fake') continue;
           const schema = provider.schema;
@@ -244,7 +257,7 @@ export const scenarios = [
         }
       });
       const saves2 = watchSaves(page2, 'fake');
-      await openPayments(page2, env);
+      await openPaymentsClientSide(page2, env);
 
       // an UNAVAILABLE provider: the switch is off and disabled, the dialog is read-only
       const row = cardOf(page2, 'fake-eur');
@@ -313,10 +326,10 @@ export const scenarios = [
       const refusal = fresh.pc.errors.slice(mark2).filter((e) => /status of 4\d\d/.test(e));
       assertEqual(refusal.length, 1, 'PANEL-64: the refused save logged one 4xx');
       fresh.pc.errors.splice(fresh.pc.errors.indexOf(refusal[0]), 1);
-      const stored = must(
-        await admin.get('/api/panel/market/payment-providers'),
+      const stored = listOf(
+        must(await admin.get(`${PANEL_MARKET_API}/payment-providers`), 'providers').json,
         'providers',
-      ).json.providers.find((p) => p.id === 'fake');
+      ).find((p) => p.id === 'fake');
       assertEqual(stored.settings.secret, '********', 'PANEL-64: the stored secret is untouched');
       assertEqual(
         stored.settings.gatewayUrl,

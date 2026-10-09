@@ -35,10 +35,8 @@ class OrderChange(val order: MarketOrder, val from: OrderStatus, val moved: Bool
  * A re-reserve that a checkout code refused (06 section 7.4: a coupon, creator code or gift of the released order is gone or used up). The code and
  * extras are the checkout error's; the HTTP status is 409, because the order is not wrong, the world moved (04 section 7 `POST /orders/:id/review`).
  */
-class ReReserveRefused(private val inner: Error) : Error(409) {
+class ReReserveRefused(private val inner: Error) : Error("RE_RESERVE_REFUSED", 409) {
     override fun encode(extras: Map<String, Any?>): String = inner.encode(extras)
-
-    val code: String get() = inner.getErrorCode()
 }
 
 /**

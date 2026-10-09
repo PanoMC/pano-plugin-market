@@ -121,6 +121,35 @@ export function fieldPairs(fieldValues, labels = {}, yesNo = { true: 'yes', fals
     }));
 }
 
+/** The id of the cart offcanvas of a theme (`CartOffcanvas`, mounted by the `theme:top` hook). */
+export const OFFCANVAS_ID = 'marketCartOffcanvas';
+
+/** Key of the URL map (doc 05 section 10.2) and its default path on the site. */
+export const CHECKOUT_URL_KEY = 'market.checkout';
+export const DEFAULT_CHECKOUT_URL = '/store/checkout';
+
+/**
+ * True while the page holds the cart offcanvas, i.e. inside a theme. A widget on a foreign page has none (the offcanvas is a
+ * `theme:top` hook injection), so NavCart links to the checkout there instead. Asked at click time, never at mount: the hook
+ * may mount after the navbar.
+ */
+export const hasOffcanvasHost = (doc) => !!doc?.getElementById?.(OFFCANVAS_ID);
+
+/**
+ * Where the cart button leads without an offcanvas: `urls['market.checkout']` of the page context (the URL map of
+ * `PanoWidgets.configure`), else `/store/checkout`; a site path is made absolute with the site URL (`context.base`) when the
+ * page knows it. Absolute targets stay as they are.
+ */
+export function checkoutHref(context) {
+  const target = String(context?.urls?.[CHECKOUT_URL_KEY] || DEFAULT_CHECKOUT_URL);
+
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith('//')) return target;
+
+  const base = String(context?.base || '').replace(/\/+$/, '');
+
+  return target.startsWith('/') && base ? base + target : target;
+}
+
 /** NavCart is drawn only with items or on /store pages. */
 export const navVisible = (count, pathname) =>
   count > 0 || /^\/store(\/|$)/.test(String(pathname || ''));

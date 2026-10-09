@@ -128,26 +128,55 @@ export function matches(needle, ...texts) {
   );
 }
 
-/**
- * Slices `items` for the request (`page`, `pageSize`) like Paging.totalPages of the backend:
- * returns { rows, count, totalPage }. A page past the end throws { error: 'PAGE_NOT_FOUND' }
- * (as the real endpoints do), page 1 of an empty list is fine.
- */
-export function paginate(items, query, defaultPageSize = 20) {
-  const pageSize = Math.max(1, parseInt(query.pageSize) || defaultPageSize);
-  const page = Math.max(1, parseInt(query.page) || 1);
-  const count = items.length;
-  // Paging.totalPages: 0 for an empty list, and only a page past a non-empty list is PAGE_NOT_FOUND.
-  const totalPage = Math.ceil(count / pageSize);
-  if (totalPage >= 1 && page > totalPage) return { error: 'PAGE_NOT_FOUND', count, totalPage };
-  return { rows: items.slice((page - 1) * pageSize, page * pageSize), count, totalPage };
+/** The error envelope of doc 04 section 3: `{ error: { code, message?, details?, fields? } }`. No `result` key. */
+export function failure(code, { message, details, fields } = {}) {
+  const error = { code };
+  if (message !== undefined) error.message = message;
+  if (details !== undefined) error.details = details;
+  if (fields !== undefined) error.fields = fields;
+  return { error };
 }
 
-/** Wraps a paginate() result: `{ result: 'ok', [key]: rows, [countKey]: count, totalPage }`. */
-export function listBody(key, countKey, items, query, defaultPageSize = 20) {
-  const p = paginate(items, query, defaultPageSize);
-  if (p.error) return { result: 'error', error: p.error };
-  return { result: 'ok', [key]: p.rows, [countKey]: p.count, totalPage: p.totalPage };
+/** Core `Paging.MAX_SIZE`: the largest `pageSize` a list accepts unless its route sets a lower one. */
+export const MAX_PAGE_SIZE = 100;
+
+/**
+ * The core page rule (Paging.parse / Paging.response, doc 04 section 4) on a list: `page` and `pageSize` are 1-based
+ * integers (`pageSize` at most `maxSize`), a value outside the range is refused, never clamped (400 `INVALID_FIELDS`,
+ * `fields: { page | pageSize: 'OUT_OF_RANGE' }`), a page past the last of a non-empty list is `PAGE_NOT_FOUND`, an empty
+ * list is a normal answer with `totalPages: 0`.
+ * Returns `{ rows, page: { number, size, totalItems, totalPages } }`, or `{ failure }` holding the envelope.
+ */
+export function paginate(items, query, defaultPageSize = 10, maxSize = MAX_PAGE_SIZE) {
+  const whole = (value) => {
+    const text = String(value).trim();
+    return /^[+-]?\d+$/.test(text) ? Number(text) : null;
+  };
+  const number = query.page === undefined || query.page === '' ? 1 : whole(query.page);
+  const size =
+    query.pageSize === undefined || query.pageSize === '' ? defaultPageSize : whole(query.pageSize);
+  const fields = {};
+  if (number === null || number < 1) fields.page = 'OUT_OF_RANGE';
+  if (size === null || size < 1 || size > maxSize) fields.pageSize = 'OUT_OF_RANGE';
+  if (Object.keys(fields).length) return { failure: failure('INVALID_FIELDS', { fields }) };
+
+  const totalItems = items.length;
+  const totalPages = Math.ceil(totalItems / size);
+  if (number > 1 && number > totalPages) return { failure: failure('PAGE_NOT_FOUND') };
+  return {
+    rows: items.slice((number - 1) * size, number * size),
+    page: { number, size, totalItems, totalPages },
+  };
+}
+
+/**
+ * Wraps a paginate() result as a list answer: `{ items, page, ...extra }` (the extras are top-level keys beside the list,
+ * as `Paging.response` takes them), or the failure envelope.
+ */
+export function listBody(items, query, defaultPageSize = 10, extra = {}, maxSize = MAX_PAGE_SIZE) {
+  const p = paginate(items, query, defaultPageSize, maxSize);
+  if (p.failure) return p.failure;
+  return { items: p.rows, page: p.page, ...extra };
 }
 
 /** 20 alphanumeric characters, the shape of a real order public id. */

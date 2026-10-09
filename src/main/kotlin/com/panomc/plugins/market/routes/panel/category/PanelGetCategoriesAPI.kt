@@ -11,8 +11,8 @@ import com.panomc.plugins.market.db.model.MarketCategory
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
@@ -21,7 +21,7 @@ class PanelGetCategoriesAPI(
     private val plugin: MarketPlugin,
     private val marketCategoryDao: MarketCategoryDao
 ) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/categories", RouteType.GET))
+    override val paths = listOf(Path("/categories", RouteType.GET))
 
     /** A picker: readable with any market node (04 section 5). */
     override val nodes: Set<MarketNode> = emptySet()
@@ -45,13 +45,8 @@ class PanelGetCategoriesAPI(
 
         val tree = buildTree(categories, productCounts)
 
-        return Successful(
-            mapOf(
-                "categories" to tree,
-                "categoryCount" to categories.size.toLong(),
-                "totalPage" to 1
-            )
-        )
+        // not paged: one page holds the whole tree (its roots; `totalItems` counts every node)
+        return Successful(Paging.response(tree, categories.size.toLong(), PageRequest(1, maxOf(1, categories.size))))
     }
 
     // Categories whose parent is not in the (possibly search-filtered) set are promoted to roots so

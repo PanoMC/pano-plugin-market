@@ -132,7 +132,7 @@
 
 <script>
   import { onMount } from 'svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { CardHeader, NoContent } from '@panomc/sdk/components/panel';
   import { base } from '@panomc/sdk/svelte';
   import { tooltip } from '@panomc/sdk/utils/tooltip';
@@ -140,7 +140,7 @@
   import { _, showErrorToast, showSuccessToast } from '../../../i18n';
   import ConfirmModal from '../ConfirmModal.svelte';
   import LoadError from '../LoadError.svelte';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { loadContext } from '../../utils/context.js';
   import { currentLocale, fmt } from '../../utils/locale.js';
   import { movedIds, providerName } from '../../utils/payment-methods.js';
@@ -152,10 +152,10 @@
   // extra / extraError: [GET /shipping/methods, GET /shipping/carriers] loaded with the page.
   let { ctx: ctxProp = null, extra = null, extraError = null } = $props();
 
-  const carriersOf = (body) => (body && !body.error ? (body.carriers ?? body.providers ?? []) : []);
+  const carriersOf = (body) => (body && !body.error ? (body.items ?? []) : []);
 
   let confirm = $state(null);
-  let methods = $state.raw(Array.isArray(extra?.[0]?.methods) ? extra[0].methods : []);
+  let methods = $state.raw(Array.isArray(extra?.[0]?.items) ? extra[0].items : []);
   let carriers = $state.raw(carriersOf(extra?.[1]));
   let loadedCtx = $state.raw(null);
   let loading = $state(!extra && !extraError);
@@ -173,14 +173,14 @@
 
   async function fetchAll() {
     const [methodsResult, carriersResult] = await Promise.all([
-      call(ApiUtil.get({ path: marketPath('/shipping/methods') })),
-      call(ApiUtil.get({ path: marketPath('/shipping/carriers') })),
+      call(api.panel.get({ path: '/shipping/methods' })),
+      call(api.panel.get({ path: '/shipping/carriers' })),
     ]);
     if (!methodsResult.ok) return methodsResult.error;
-    methods = Array.isArray(methodsResult.body.methods) ? methodsResult.body.methods : [];
+    methods = Array.isArray(methodsResult.body.items) ? methodsResult.body.items : [];
     // names of the providers are a nicety: a failed carrier list falls back to the raw ids
     if (carriersResult.ok)
-      carriers = carriersResult.body.carriers ?? carriersResult.body.providers ?? [];
+      carriers = carriersResult.body.items ?? [];
     return null;
   }
 
@@ -213,9 +213,7 @@
     busy = true;
     let result;
     try {
-      result = await call(
-        ApiUtil.post({ path: marketPath('/shipping/methods/sort'), body: { ids } }),
-      );
+      result = await call(api.panel.post({ path: '/shipping/methods/sort', body: { ids } }));
     } finally {
       busy = false;
     }
@@ -236,9 +234,7 @@
       }),
       confirmLabel: $_('common.delete'),
       onConfirm: async () => {
-        const result = await call(
-          ApiUtil.delete({ path: marketPath(`/shipping/methods/${method.id}`) }),
-        );
+        const result = await call(api.panel.delete({ path: `/shipping/methods/${method.id}` }));
         if (!result.ok && result.error !== 'NOT_FOUND') {
           toastError($_, result);
           return false;

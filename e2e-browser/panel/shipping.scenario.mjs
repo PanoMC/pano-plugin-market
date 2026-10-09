@@ -1,7 +1,7 @@
 // Scenario 69 of 13 section 25.4: shipping in the panel (a zone and a method with overlapping weight ranges is refused, a valid method is saved, a manual
 // shipment of part of an order makes the order PARTIAL).
 import fs from 'node:fs';
-import { must } from '../lib/api.mjs';
+import { must, PANEL_MARKET_API, listOf } from '../lib/api.mjs';
 import { run } from '../lib/bootstrap.mjs';
 import { assert, assertEqual } from '../lib/ui.mjs';
 import { paidShippableOrder, physicalProduct, withOtherZonesOff } from './lib/shipping.mjs';
@@ -49,8 +49,10 @@ export const scenarios = [
             .first()
             .waitFor({ timeout: 15000 });
           await modalsClosed(page);
-          const zones = must(await admin.get('/api/panel/market/shipping/zones'), 'zones').json
-            .zones;
+          const zones = listOf(
+            must(await admin.get(`${PANEL_MARKET_API}/shipping/zones`), 'zones').json,
+            'zones',
+          );
           const zone = zones.find((z) => z.name === zoneName);
           assert(zone, 'PANEL-69: the zone is stored');
           zoneId = zone.id;
@@ -92,10 +94,10 @@ export const scenarios = [
           );
           assertEqual(posts.length, 0, 'PANEL-69: overlapping ranges send no request');
           assertEqual(
-            must(
-              await admin.get('/api/panel/market/shipping/methods'),
+            listOf(
+              must(await admin.get(`${PANEL_MARKET_API}/shipping/methods`), 'methods').json,
               'methods',
-            ).json.methods.filter((m) => m.name === methodName).length,
+            ).filter((m) => m.name === methodName).length,
             0,
             'PANEL-69: nothing stored for the overlapping ranges',
           );
@@ -108,10 +110,10 @@ export const scenarios = [
             .first()
             .waitFor({ timeout: 15000 });
           await page.getByText(methodName).first().waitFor({ timeout: 60000 });
-          const method = must(
-            await admin.get('/api/panel/market/shipping/methods'),
+          const method = listOf(
+            must(await admin.get(`${PANEL_MARKET_API}/shipping/methods`), 'methods').json,
             'methods',
-          ).json.methods.find((m) => m.name === methodName);
+          ).find((m) => m.name === methodName);
           assert(method, 'PANEL-69: the method is stored');
           methodId = method.id;
           const rates = (method.rates ?? []).filter((r) => r.zoneId === zoneId);
@@ -136,7 +138,7 @@ export const scenarios = [
 
           // --- an active method exists, so GET /context reports shippingEnabled and the orders list shows its shipping status column (13 section 3.1)
           assertEqual(
-            must(await admin.get('/api/panel/market/context'), 'context').json.shippingEnabled,
+            must(await admin.get(`${PANEL_MARKET_API}/context`), 'context').json.shippingEnabled,
             true,
             'PANEL-69: the context reports shippingEnabled with an active method',
           );
@@ -180,13 +182,13 @@ export const scenarios = [
 
           await waitFor('the order to be PARTIAL', async () => {
             const view = must(
-              await admin.get(`/api/panel/market/orders/${order.number}`),
+              await admin.get(`${PANEL_MARKET_API}/orders/${order.number}`),
               'order',
             ).json;
             return view.order.shippingStatus === 'PARTIAL';
           });
           const view = must(
-            await admin.get(`/api/panel/market/orders/${order.number}`),
+            await admin.get(`${PANEL_MARKET_API}/orders/${order.number}`),
             'order',
           ).json;
           assertEqual(view.shipments.length, 1, 'PANEL-69: one shipment');
@@ -196,8 +198,8 @@ export const scenarios = [
           );
         });
       } finally {
-        if (methodId) await admin.delete(`/api/panel/market/shipping/methods/${methodId}`);
-        if (zoneId) await admin.delete(`/api/panel/market/shipping/zones/${zoneId}`);
+        if (methodId) await admin.delete(`${PANEL_MARKET_API}/shipping/methods/${methodId}`);
+        if (zoneId) await admin.delete(`${PANEL_MARKET_API}/shipping/zones/${zoneId}`);
       }
 
       pc.expectNoErrors('PANEL-69');

@@ -1,17 +1,21 @@
-<form class="vstack gap-2" novalidate onsubmit={submit} aria-labelledby="market-gift-title">
-  <h2 class="h5 mb-0" id="market-gift-title">
+<form
+  class="market-gift-redeem-form vstack gap-2"
+  novalidate
+  onsubmit={submit}
+  aria-labelledby="market-gift-title">
+  <h2 class="market-gift-redeem-form__title h5 mb-0" id="market-gift-title">
     <i class="fa-solid fa-gift me-2" aria-hidden="true"></i>{$_(
       'theme.profile.purchases.redeem-title',
     )}
   </h2>
 
-  <label class="form-label visually-hidden" for="market-gift-code">
+  <label class="market-gift-redeem-form__label form-label visually-hidden" for="market-gift-code">
     {$_('theme.profile.purchases.redeem-label')}
   </label>
   <div class="input-group">
     <input
       id="market-gift-code"
-      class={['form-control', { 'is-invalid': !!invalidKey }]}
+      class={['market-gift-redeem-form__input', 'form-control', { 'is-invalid': !!invalidKey }]}
       type="text"
       maxlength={GIFT_CODE_MAX}
       autocomplete="off"
@@ -24,7 +28,10 @@
       bind:value={code}
       bind:this={input}
       oninput={() => (invalidKey = '')} />
-    <button type="submit" class="btn btn-primary" disabled={busy || locked || !normalized}>
+    <button
+      type="submit"
+      class="market-gift-redeem-form__action btn btn-primary"
+      disabled={busy || locked || !normalized}>
       {#if busy}
         <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
       {/if}
@@ -41,16 +48,21 @@
     </div>
   {/if}
   {#if alertKey}
-    <div class="alert alert-danger py-2 mb-0" role="alert">{$_(alertKey)}</div>
+    <div class="market-gift-redeem-form__alert alert alert-danger py-2 mb-0" role="alert">
+      {$_(alertKey)}
+    </div>
   {/if}
 </form>
 
 <script>
+  import { plugin } from '@panomc/sdk/controllers';
   import { goto } from '@panomc/sdk/svelte';
-  import { _ } from '../../../i18n.js';
   import { GIFT_CODE_MAX, giftOutcome, normalizeGiftCode } from '../../lib/profileModel.js';
-  import { now } from '../../stores/clock.js';
-  import { post } from '../../utils/api.js';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { post } = market.require('api').actions;
+  const clock = market.require('clock');
 
   /** Redeems a gift code (14 §12.2); on success it opens the zero-total order. */
   let code = $state('');
@@ -61,10 +73,11 @@
   let input = $state();
 
   const normalized = $derived(normalizeGiftCode(code));
+  const now = $derived(clock.state.now ?? 0);
   const lockedLeft = $derived(
-    lockedUntil > 0 && $now > 0 ? Math.max(0, Math.ceil((lockedUntil - $now) / 1000)) : 0,
+    lockedUntil > 0 && now > 0 ? Math.max(0, Math.ceil((lockedUntil - now) / 1000)) : 0,
   );
-  const locked = $derived(lockedUntil > 0 && ($now === 0 || lockedLeft > 0));
+  const locked = $derived(lockedUntil > 0 && (now === 0 || lockedLeft > 0));
 
   async function submit(event) {
     event.preventDefault();
@@ -75,7 +88,7 @@
     invalidKey = '';
     alertKey = '';
 
-    const res = await post('/api/market/me/gifts/redeem', { body: { code: normalized } });
+    const res = await post('/me/gifts/redeem', { body: { code: normalized } });
     const outcome = giftOutcome(res);
 
     if (outcome.kind === 'GOTO') {

@@ -98,9 +98,9 @@
 </div>
 
 <script>
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _, showSuccessToast } from '../../../i18n';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import {
     BLOCK_TYPES,
     REASON_MAX,
@@ -171,9 +171,7 @@
     saving = true;
     let result;
     try {
-      result = await call(
-        ApiUtil.post({ path: marketPath('/blocks'), body: buildBlockBody(model) }),
-      );
+      result = await call(api.panel.post({ path: '/blocks', body: buildBlockBody(model) }));
     } finally {
       saving = false;
     }

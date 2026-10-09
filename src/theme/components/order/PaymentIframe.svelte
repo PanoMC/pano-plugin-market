@@ -1,14 +1,18 @@
 {#if failed}
-  <div class="alert alert-warning mb-0" role="alert">{$_('theme.order.payment-ui-error')}</div>
+  <div class="market-payment-iframe market-payment-iframe__alert alert alert-warning mb-0" role="alert">
+    {$_('theme.order.payment-ui-error')}
+  </div>
 {:else if !ready}
-  <div class="d-flex align-items-center gap-2 text-body-secondary" role="status">
+  <div
+    class="market-payment-iframe d-flex align-items-center gap-2 text-body-secondary"
+    role="status">
     <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
     <span>{$_('theme.order.payment-ui-loading')}</span>
   </div>
 {:else}
   <iframe
     bind:this={frame}
-    class="w-100 border-0 rounded"
+    class="market-payment-iframe w-100 border-0 rounded"
     src={iframe.url}
     height={iframeHeight(iframe.heightPx)}
     allow={iframeAllow(iframe.allow)}
@@ -19,7 +23,7 @@
 
 <script>
   import { onMount, untrack } from 'svelte';
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import {
     iframeAllow,
     iframeHeight,
@@ -28,6 +32,9 @@
     resizerOptions,
     scriptsPlan,
   } from '../../lib/paymentPanel.js';
+
+  const market = plugin('market');
+  const { _ } = market;
 
   /**
    * Gateway page in an iframe (14 §11.4 `IFRAME`). The scripts of `iframe.scripts` (https only, once each) load

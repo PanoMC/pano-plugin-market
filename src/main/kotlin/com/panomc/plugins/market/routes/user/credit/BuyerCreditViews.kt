@@ -1,11 +1,11 @@
 package com.panomc.plugins.market.routes.user.credit
 
-import com.panomc.platform.error.PageNotFound
+import com.panomc.platform.model.PageRequest
+import com.panomc.plugins.market.routes.base.pageJson
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.service.BuyerLedgerEntry
 import com.panomc.plugins.market.service.CreditService
 import com.panomc.plugins.market.util.MoneyUtil
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.coAwait
@@ -22,19 +22,14 @@ class BuyerCreditViews(
     private val credits: CreditService,
     private val prefix: String
 ) {
-    /** `GET /me/credits`: `balance`, `creditName`, `entries[{id, type, amount (signed), balanceAfter, note, orderPublicId, createdAt}]`, `entryCount`, `totalPage`. */
-    suspend fun credits(userId: Long, window: Paging.Window, sqlClient: SqlClient): JsonObject {
-        val ledger = credits.ledgerOf(userId, window.offset, window.pageSize, sqlClient)
-        val totalPage = Paging.totalPages(ledger.entryCount, window.pageSize)
+    /** `GET /me/credits`: `balance`, `creditName`, `items[{id, type, amount (signed), balanceAfter, note, orderPublicId, createdAt}]` (the ledger entries) and `page`. */
+    suspend fun credits(userId: Long, window: PageRequest, sqlClient: SqlClient): JsonObject {
+        val ledger = credits.ledgerOf(userId, window.offset, window.size, sqlClient)
 
-        if (Paging.isBeyondLast(window.page, totalPage)) throw PageNotFound()
-
-        return JsonObject()
-            .put("balance", MoneyUtil.toDecimal(credits.balance(userId, sqlClient)))
-            .put("creditName", config().creditName)
-            .put("entries", JsonArray(ledger.entries.map { entry(it) }))
-            .put("entryCount", ledger.entryCount)
-            .put("totalPage", totalPage)
+        return pageJson(
+            ledger.entries.map { entry(it) }, ledger.entryCount, window,
+            mapOf("balance" to MoneyUtil.toDecimal(credits.balance(userId, sqlClient)), "creditName" to config().creditName)
+        )
     }
 
     /**

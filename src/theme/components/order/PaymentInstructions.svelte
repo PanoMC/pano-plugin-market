@@ -1,5 +1,5 @@
-<div class="card">
-  <div class="card-body vstack gap-3">
+<div class="market-payment-instructions card">
+  <div class="market-payment-instructions__body card-body vstack gap-3">
     {#if instructions.body}
       <div>{@html instructions.body}</div>
     {/if}
@@ -20,14 +20,21 @@
 
     {#if notify}
       <form class="vstack gap-3 border-top pt-3" onsubmit={submit} novalidate>
-        <h3 class="h6 mb-0">{$_('theme.order.transfer-made')}</h3>
+        <h3 class="market-payment-instructions__title h6 mb-0">
+          {$_('theme.order.transfer-made')}
+        </h3>
 
         <div>
-          <label class="form-label" for="market-order-transfer-sender"
-            >{$_('theme.order.transfer-sender')}</label>
+          <label
+            class="market-payment-instructions__label form-label"
+            for="market-order-transfer-sender">{$_('theme.order.transfer-sender')}</label>
           <input
             id="market-order-transfer-sender"
-            class={['form-control', errors.senderName && 'is-invalid']}
+            class={[
+              'market-payment-instructions__input',
+              'form-control',
+              errors.senderName && 'is-invalid',
+            ]}
             type="text"
             maxlength={NOTE_MAX}
             autocomplete="off"
@@ -40,11 +47,16 @@
         </div>
 
         <div>
-          <label class="form-label" for="market-order-transfer-note"
-            >{$_('theme.order.transfer-note')}</label>
+          <label
+            class="market-payment-instructions__transfer-note form-label"
+            for="market-order-transfer-note">{$_('theme.order.transfer-note')}</label>
           <input
             id="market-order-transfer-note"
-            class={['form-control', errors.note && 'is-invalid']}
+            class={[
+              'market-payment-instructions__input-2',
+              'form-control',
+              errors.note && 'is-invalid',
+            ]}
             type="text"
             maxlength={NOTE_MAX}
             autocomplete="off"
@@ -57,11 +69,16 @@
         </div>
 
         {#if alertKey}
-          <div class="alert alert-warning mb-0" role="alert">{$_(alertKey)}</div>
+          <div class="market-payment-instructions__alert alert alert-warning mb-0" role="alert">
+            {$_(alertKey)}
+          </div>
         {/if}
 
         <div>
-          <button type="submit" class="btn btn-primary" disabled={busy}>
+          <button
+            type="submit"
+            class="market-payment-instructions__action btn btn-primary"
+            disabled={busy}>
             {#if busy}
               <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
             {/if}
@@ -74,7 +91,7 @@
 </div>
 
 <script>
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import {
     NOTE_MAX,
     instructionRows,
@@ -83,8 +100,11 @@
     showNotifyForm,
   } from '../../lib/paymentPanel.js';
   import { tokenHeaders } from '../../stores/orderTokens.js';
-  import { call } from '../../utils/api.js';
   import CopyButton from '../common/CopyButton.svelte';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { call } = market.require('api').actions;
 
   /**
    * Offline payment (14 §11.4 `INSTRUCTIONS`): the sanitised body (the one {@html} of the payment panel, the
@@ -117,14 +137,10 @@
 
     busy = true;
 
-    const res = await call(
-      'POST',
-      `/api/market/orders/${encodeURIComponent(id)}/bank-transfer/notify`,
-      {
-        body: built.body,
-        headers: tokenHeaders(id, token),
-      },
-    );
+    const res = await call('POST', `/orders/${encodeURIComponent(id)}/bank-transfer/notify`, {
+      body: built.body,
+      headers: tokenHeaders(id, token),
+    });
 
     busy = false;
 

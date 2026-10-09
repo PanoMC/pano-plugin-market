@@ -1,8 +1,5 @@
 package com.panomc.plugins.market.routes.base
 
-import com.panomc.platform.Main.Companion.applicationContext
-import com.panomc.platform.auth.AuthProvider
-import com.panomc.platform.error.InvalidCsrfToken
 import com.panomc.platform.model.Api
 import com.panomc.platform.model.Result
 import io.vertx.ext.web.RoutingContext
@@ -23,7 +20,7 @@ abstract class MarketApi : Api() {
     }
 
     /**
-     * The market part of [onBeforeHandle] (runtime gate, store switch, and for subclasses the CSRF proof): everything
+     * The market part of [onBeforeHandle] (runtime gate and store switch): everything
      * after the platform's own checks, callable by a test without the host.
      */
     internal open suspend fun marketChecks(context: RoutingContext) {
@@ -39,28 +36,8 @@ abstract class MarketApi : Api() {
 }
 
 /**
- * Base of the public mutating routes (quote, checkout as a guest, ...), auth class `PUB-M`: as [MarketApi], and when
- * the request is authenticated by a session cookie the CSRF proof must hold (`INVALID_CSRF_TOKEN`, 11 section 8.7).
+ * Base of the public mutating routes (quote, checkout as a guest, ...), auth class `PUB-M`: as [MarketApi]. The CSRF proof of a session cookie is
+ * checked by the platform's `Api` wrapper (doc 05 section 4) and the Origin gate keeps a foreign page from posting without a session, so this class
+ * has nothing of its own to check; it stays as the marker of the class `PUB-M`.
  */
-abstract class MarketPublicMutationApi : MarketApi() {
-    private val authProvider by lazy { applicationContext.getBean(AuthProvider::class.java) }
-
-    /** Whether the request carries a valid session. Overridable so a test can stand in for the host. */
-    protected open suspend fun isLoggedIn(context: RoutingContext): Boolean = authProvider.isLoggedIn(context)
-
-    /** Whether the request carries the CSRF proof. Overridable so a test can stand in for the host. */
-    protected open fun isCsrfSafe(context: RoutingContext): Boolean = authProvider.isCsrfSafe(context)
-
-    override suspend fun marketChecks(context: RoutingContext) {
-        super.marketChecks(context)
-
-        val method = context.request().method()
-
-        // A guest has no ambient credential: skip the session lookup for the safe methods and for guests.
-        if (!MarketGate.isSafeMethod(method) &&
-            MarketGate.csrfViolation(method, isLoggedIn(context), isCsrfSafe(context))
-        ) {
-            throw InvalidCsrfToken()
-        }
-    }
-}
+abstract class MarketPublicMutationApi : MarketApi()

@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.db
 
+import com.panomc.platform.model.PageRequest
 import com.panomc.platform.error.NoPermission
 import com.panomc.plugins.market.db.impl.MarketComparisonDaoImpl
 import com.panomc.plugins.market.db.impl.MarketOrderDaoImpl
@@ -11,7 +12,6 @@ import com.panomc.plugins.market.db.model.SubscriptionStatus
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.routes.user.subscription.SubscriptionFilter
 import com.panomc.plugins.market.routes.user.subscription.SubscriptionViews
-import com.panomc.plugins.market.util.Paging
 import com.panomc.plugins.market.db.model.MarketComparison
 import com.panomc.plugins.market.db.model.MarketOrder
 import com.panomc.plugins.market.permission.FieldGating
@@ -167,12 +167,12 @@ class FieldGatingIT : MarketDaoITBase() {
         val john = subscription("john@example.com", username = "Steve", gatewayId = "sub_john")
         subscription("mary@example.org", username = "Alex", gatewayId = "sub_mary")
 
-        suspend fun count(search: String, tier: Boolean) = views.panelList(SubscriptionFilter(search = search), Paging.Window(1, 10), pool, searchEmail = tier).count
+        suspend fun count(search: String, tier: Boolean) = views.panelList(SubscriptionFilter(search = search), PageRequest(1, 10), pool, searchEmail = tier).count
 
         assertEquals(0L, count("john@example", false))
         assertEquals(1L, count("john@example", true))
-        assertEquals(listOf(john), views.panelList(SubscriptionFilter(search = "john@example"), Paging.Window(1, 10), pool, searchEmail = true).rows.map { it.getLong("id") })
-        assertEquals(0L, views.panelList(SubscriptionFilter(search = "john@example"), Paging.Window(1, 10), pool).count, "the default is the masked tier")
+        assertEquals(listOf(john), views.panelList(SubscriptionFilter(search = "john@example"), PageRequest(1, 10), pool, searchEmail = true).rows.map { it.getLong("id") })
+        assertEquals(0L, views.panelList(SubscriptionFilter(search = "john@example"), PageRequest(1, 10), pool).count, "the default is the masked tier")
 
         // an existing and an unknown address give the same answer below the tier
         assertEquals(count("zzz@nowhere", false), count("mary@example", false))

@@ -6,7 +6,7 @@
 {:else if gone}
   <StoreStateCard icon="fa-solid fa-receipt fa-3x" text={$_('theme.order.not-found')} />
 {:else}
-  <div class="vstack gap-4" aria-busy={loading ? 'true' : 'false'}>
+  <div class="market-order-page vstack gap-4" aria-busy={loading ? 'true' : 'false'}>
     <OrderStatusBlock {view} {order} {extras} {left} {loginHref} />
 
     {#if offline}
@@ -15,7 +15,10 @@
 
     {#if pollStatus === 'STOPPED'}
       <div>
-        <button type="button" class="btn btn-outline-secondary btn-sm" onclick={refreshStatus}>
+        <button
+          type="button"
+          class="market-order-page__action btn btn-outline-secondary btn-sm"
+          onclick={refreshStatus}>
           <i class="fa-solid fa-rotate-right me-1" aria-hidden="true"></i>{$_(
             'theme.order.refresh-status',
           )}
@@ -33,14 +36,18 @@
 
     {#if view.panels.items && order.items?.length}
       <section class="vstack gap-2" aria-labelledby="market-order-items-title">
-        <h2 class="h5 mb-0" id="market-order-items-title">{$_('theme.order.items')}</h2>
+        <h2 class="market-order-page__title h5 mb-0" id="market-order-items-title">
+          {$_('theme.order.items')}
+        </h2>
         <OrderItems items={order.items} currency={order.currency} {removeCents} />
       </section>
     {/if}
 
     {#if view.panels.totals}
       <section class="vstack gap-2" aria-labelledby="market-order-totals-title">
-        <h2 class="h5 mb-0" id="market-order-totals-title">{$_('theme.order.totals.title')}</h2>
+        <h2 class="market-order-page__title-2 h5 mb-0" id="market-order-totals-title">
+          {$_('theme.order.totals.title')}
+        </h2>
         <OrderTotals {order} {pricesIncludeVat} {removeCents} />
       </section>
     {/if}
@@ -48,7 +55,9 @@
     {#if !view.limited && (view.panels.shipments || order.shippingAddress || order.billingInfo || order.email)}
       <section class="vstack gap-2" aria-labelledby="market-order-shipping-title">
         {#if view.panels.shipments && order.shipments?.length}
-          <h2 class="h5 mb-0" id="market-order-shipping-title">{$_('theme.order.shipments')}</h2>
+          <h2 class="market-order-page__shipments h5 mb-0" id="market-order-shipping-title">
+            {$_('theme.order.shipments')}
+          </h2>
         {/if}
         <ShipmentList
           shipments={order.shipments ?? []}
@@ -65,49 +74,44 @@
 {/if}
 
 <script module>
-  import { get } from 'svelte/store';
-  import { currentLanguage } from '@panomc/sdk/utils/language';
+  // page metadata (doc 01 section 2): the build registers this view as a page, no register.js entry. The data of the page
+  // comes from the `market/order` controller (`controller` below, doc 02 section 4); this function only turns its
+  // `notFound` into a 404 and hands the settings it fetched to `market/settings`.
+  export const view = { path: '/store/order/[id]', controller: 'order' };
+
+  import { plugin } from '@panomc/sdk/controllers';
   import { error } from '@panomc/sdk/svelte';
-  import { resolveSlug } from '../components/product/productModel.js';
-  import { parseOrderId, parseReturnHint, resolveOrderLoad } from '../lib/orderState.js';
-  import { ensureSettings, setSettings } from '../stores/storeSettings.js';
-  import { call } from '../utils/api.js';
-  import { has } from '../utils/host.js';
 
   export async function load(event) {
-    const id = parseOrderId(resolveSlug(event.params?.id, has('decoded-route-params')));
-
-    if (!id) throw error(404);
-
-    const locale = get(currentLanguage)?.code;
-
-    // The SSR load never forwards the access token (14 §11.2): it asks for the limited view only; the browser
-    // re-fetches with X-Order-Token after mount. A session owner is recognised by the cookie as usual.
-    const [res, settings] = await Promise.all([
-      call('GET', `/api/market/orders/${encodeURIComponent(id)}`, { event, query: { locale } }),
-      ensureSettings(event),
-    ]);
-
-    const result = resolveOrderLoad({
-      id,
-      token: event.url.searchParams.get('token'),
-      returnHint: parseReturnHint(event.url.searchParams.get('return')),
-      res,
-      settings,
-      features: { meta: has('page-meta') },
+    const market = plugin('market');
+    const result = await market.load('order', {
+      // a server load is made for its request; the browser has one host for the whole page
+      event: typeof window === 'undefined' ? event : undefined,
+      params: { ...event.params, url: event.url },
     });
+
+    if (!result) throw error(503, 'market/order is not available');
 
     if (result.notFound) throw error(404);
 
-    if (result.data.state === 'READY' && settings) setSettings(settings);
+    const settings = result.data.settings;
+
+    if (
+      result.data.state === 'READY' &&
+      settings &&
+      Object.keys(settings).length > 0 &&
+      typeof window !== 'undefined'
+    )
+      market.use('settings')?.actions.set(settings);
 
     return result;
   }
 </script>
 
 <script>
-  import { getContext, onMount, untrack } from 'svelte';
-  import { _ } from '../../i18n.js';
+  import { onMount, untrack } from 'svelte';
+  import { get } from 'svelte/store';
+  import { currentLanguage } from '@panomc/sdk/utils/language';
   import ErrorAlert from '../components/common/ErrorAlert.svelte';
   import OrderActions from '../components/order/OrderActions.svelte';
   import OrderItems from '../components/order/OrderItems.svelte';
@@ -126,15 +130,16 @@
     viewState,
   } from '../lib/orderState.js';
   import { createPoller, signatureOfOrder } from '../lib/polling.js';
-  import { now } from '../stores/clock.js';
   import * as orderTokens from '../stores/orderTokens.js';
-  import { bindSession, hostSession } from '../stores/session.js';
-  import { storeSettings } from '../stores/storeSettings.js';
-  import { loginUrl } from '../utils/host.js';
+
+  const market = plugin('market');
+  const _ = market._;
+  const clock = market.require('clock');
+  const storeSettings = market.require('settings');
+  const { call } = market.require('api').actions;
+  const { loginUrl } = market.require('host').actions;
 
   let { data } = $props();
-
-  bindSession(hostSession(getContext));
 
   // The page is re-mounted whenever load() runs again (14 F2), so the loaded data only seeds the state.
   const init = untrack(() => data);
@@ -155,13 +160,15 @@
   let expiryPolled = false;
   let poller = null;
 
-  const nowMs = $derived($now);
+  const nowMs = $derived(clock.state.now);
   const view = $derived(viewState(order, init.returnHint, nowMs, mountedAt));
   const extras = $derived(orderExtras(order));
   const left = $derived(expiryLeft(order, nowMs));
-  const removeCents = $derived((settings?.removeCents ?? $storeSettings?.removeCents) === true);
+  const removeCents = $derived(
+    (settings?.removeCents ?? storeSettings.state.settings?.removeCents) === true,
+  );
   const pricesIncludeVat = $derived(
-    (settings?.pricesIncludeVat ?? $storeSettings?.pricesIncludeVat) === true,
+    (settings?.pricesIncludeVat ?? storeSettings.state.settings?.pricesIncludeVat) === true,
   );
   const loginHref = $derived(loginUrl(`/store/order/${id}`));
 
@@ -174,7 +181,7 @@
   async function fetchOrder() {
     loading = true;
 
-    const res = await call('GET', `/api/market/orders/${encodeURIComponent(id)}`, {
+    const res = await call('GET', `/orders/${encodeURIComponent(id)}`, {
       query: { locale: get(currentLanguage)?.code },
       headers: orderTokens.tokenHeaders(id, token),
     });
@@ -241,7 +248,7 @@
       viewState: () => viewState(currentOrder, init.returnHint, Date.now(), mountedAt).state,
       inPage,
       fetchStatus: () =>
-        call('GET', `/api/market/orders/${encodeURIComponent(id)}/status`, {
+        call('GET', `/orders/${encodeURIComponent(id)}/status`, {
           headers: orderTokens.tokenHeaders(id, token),
         }),
       refetch: fetchOrder,

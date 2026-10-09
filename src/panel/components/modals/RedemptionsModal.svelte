@@ -93,9 +93,10 @@
 <script>
   import { NoContent, Pagination } from '@panomc/sdk/components/panel';
   import { base, page } from '@panomc/sdk/svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { _ } from '../../../i18n';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
+  import { pageOf } from '../../utils/page.js';
   import { redemptionBadge, redemptionsPath } from '../../utils/discounts.js';
   import { currentLocale, fmt } from '../../utils/locale.js';
   import { can } from '../../utils/permissions.js';
@@ -126,7 +127,7 @@
     loading = true;
     error = null;
     const path = redemptionsPath(target.kind, target.id, pageNum);
-    const result = path ? await call(ApiUtil.get({ path: marketPath(path) })) : { ok: false, error: 'BAD_REQUEST' };
+    const result = path ? await call(api.panel.get({ path })) : { ok: false, error: 'BAD_REQUEST' };
     if (mine !== tag) return;
     loading = false;
     if (!result.ok) {
@@ -136,8 +137,9 @@
       redemptions = [];
       return;
     }
-    redemptions = result.body.redemptions ?? [];
-    totalPage = result.body.totalPage ?? 1;
+    const loaded = pageOf(result.body);
+    redemptions = loaded.items;
+    totalPage = loaded.totalPages;
     currentPage = pageNum;
   }
 

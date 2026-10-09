@@ -1,11 +1,11 @@
-<div class="card" id="market-checkout-summary-card">
-  <div class="card-body vstack gap-3">
+<div class="market-order-summary card" id="market-checkout-summary-card">
+  <div class="market-order-summary__body card-body vstack gap-3">
     <div class="d-flex justify-content-between align-items-baseline gap-2">
-      <h2 class="h5 mb-0">{$_('theme.checkout.summary.title')}</h2>
+      <h2 class="market-order-summary__title h5 mb-0">{$_('theme.checkout.summary.title')}</h2>
       {#if !topup}
         <button
           type="button"
-          class="btn btn-link btn-sm p-0"
+          class="market-order-summary__action btn btn-link btn-sm p-0"
           data-bs-toggle="offcanvas"
           data-bs-target="#marketCartOffcanvas"
           aria-controls="marketCartOffcanvas">
@@ -15,18 +15,18 @@
     </div>
 
     {#if quote}
-      <ul class="list-group list-group-flush">
+      <ul class="market-order-summary__list list-group list-group-flush">
         {#each lines as line (line.lineKey)}
-          <li class="list-group-item px-0">
+          <li class="market-order-summary__item list-group-item px-0">
             <div class="d-flex gap-2 align-items-start">
               <div class="flex-shrink-0 bg-body-tertiary rounded overflow-hidden">
                 {#if line.imageFileName}
                   <img
-                    src="{base}/api/market/products/image/{line.imageFileName}?thumbnail=true"
+                    src="{base}/api/plugins/pano-plugin-market/products/image/{line.imageFileName}?thumbnail=true"
                     width="40"
                     height="40"
                     alt=""
-                    class="object-fit-cover d-block" />
+                    class="market-order-summary__image object-fit-cover d-block" />
                 {:else}
                   <span class="d-flex align-items-center justify-content-center ratio ratio-1x1">
                     <i class="fa-solid fa-box text-body-secondary" aria-hidden="true"></i>
@@ -76,7 +76,7 @@
 
       {#each alerts as alert (alert.code + (alert.level ?? ''))}
         <div
-          class={['alert', alert.cls, 'mb-0']}
+          class={['market-order-summary__alert', 'alert', alertClass(alert.cls), 'mb-0']}
           role={alert.level === 'error' ? 'alert' : 'status'}>
           {$_(alert.messageKey, { values: alertValues(alert) })}
         </div>
@@ -118,7 +118,7 @@
 
 <script>
   import { base } from '@panomc/sdk/svelte';
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import {
     chargedInCurrency,
     lineErrors,
@@ -126,9 +126,13 @@
     summaryLines,
     summaryRows,
   } from '../../lib/summaryModel.js';
-  import { formatCredits, formatMoney } from '../../utils/format.js';
   import LoadingBlock from '../common/LoadingBlock.svelte';
   import CodeInput from './CodeInput.svelte';
+  import { alertClass } from '../../lib/classes.js';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { formatCredits, formatMoney } = market.require('format').actions;
 
   /**
    * The quote at a glance: lines, the two code inputs and the totals list. Every amount is the quote's number

@@ -25,7 +25,7 @@ import {
 /** Paging.DEFAULT_PAGE_SIZE of the backend. */
 export const PAGE_SIZE = 10;
 const HOUR = 3600000;
-const BASE = '/api/panel/market';
+const BASE = '/plugins/pano-plugin-market/panel';
 const cache = new Map();
 const memo = (name, volume, build) => {
   const key = `${name}:${volume}`;
@@ -42,7 +42,6 @@ const SYMBOLS = { TRY: '\u20BA', USD: '$', EUR: '€', GBP: '£' };
 /** GET /context (marketContextBody, with `productMetaSchemas` as a CAT holder gets it). */
 export function contextBody() {
   return {
-    result: 'ok',
     currency: 'USD',
     currencySymbol: SYMBOLS.USD,
     statsCurrency: 'USD',
@@ -110,7 +109,7 @@ function ordersBody({ query, volume }) {
         ...o.items.map((i) => i.productName),
       ),
   );
-  return listBody('orders', 'orderCount', list, query, PAGE_SIZE);
+  return listBody(list, query, PAGE_SIZE);
 }
 
 // ---------------------------------------------------------------------------------- deliveries
@@ -182,7 +181,7 @@ export function deliveryRows(volume) {
                     ? { amount: 500 * item.quantity }
                     : {
                         webhook: {
-                          url: 'https://discord.example.com/api/webhooks/1234567890/store-feed',
+                          url: 'https://discord.example.com/hooks/1234567890/store-feed',
                           event: 'order.delivered',
                         },
                       };
@@ -240,7 +239,7 @@ function deliveriesBody({ query, volume }) {
         matches(term, d.playerUsername, d.idempotencyKey) ||
         (/^\d+$/.test(term) && d.orderId === Number(term))),
   );
-  return listBody('deliveries', 'deliveryCount', list, query, PAGE_SIZE);
+  return listBody(list, query, PAGE_SIZE);
 }
 
 /** GET /servers (McServerView.toJson): the option source of the deliveries filter. */
@@ -249,8 +248,7 @@ function serversBody({ volume }) {
   const count = (id, statuses) =>
     waiting.filter((d) => d.serverId === id && statuses.includes(d.status)).length;
   return {
-    result: 'ok',
-    servers: SERVERS.map((server, i) => ({
+    items: SERVERS.map((server, i) => ({
       id: server.id,
       name: server.name,
       type: i === 3 ? 'BUNGEECORD' : 'PAPER',
@@ -444,7 +442,7 @@ function shipmentsBody({ query, volume }) {
         s.orderPublicId === term ||
         (/^\d+$/.test(term) && s.orderId === Number(term))),
   );
-  return listBody('shipments', 'shipmentCount', list, query, PAGE_SIZE);
+  return listBody(list, query, PAGE_SIZE);
 }
 
 // ------------------------------------------------------------------------------- subscriptions
@@ -551,7 +549,7 @@ function subscriptionsBody({ query, volume }) {
       (!present(query.providerId) || s.providerId === query.providerId) &&
       matches(query.search, s.playerUsername, s.productName),
   );
-  return listBody('subscriptions', 'subscriptionCount', list, query, PAGE_SIZE);
+  return listBody(list, query, PAGE_SIZE);
 }
 
 // ------------------------------------------------------------------------------ payment events
@@ -641,7 +639,7 @@ export function paymentEventRows(volume) {
           'user-agent': ['Stripe/1.0 (+https://stripe.com/docs/webhooks)'],
           'stripe-signature': ['[REDACTED]'],
         },
-        url: `/api/market/payments/${provider.providerId}/webhook/[REDACTED]`,
+        url: `/api/plugins/pano-plugin-market/payments/${provider.providerId}/webhook/[REDACTED]`,
       };
     });
   });
@@ -653,7 +651,7 @@ function paymentEventsBody({ query, volume }) {
     (e) =>
       statuses.has(e.status) && (!present(query.providerId) || e.providerId === query.providerId),
   );
-  return listBody('events', 'eventCount', list, query, PAGE_SIZE);
+  return listBody(list, query, PAGE_SIZE);
 }
 
 // ------------------------------------------------------------------------- products, categories
@@ -667,7 +665,7 @@ function productsBody({ query, volume }) {
       (!present(query.kind) || p.kind === query.kind) &&
       (!present(query.categoryId) || String(p.categoryId) === String(query.categoryId)),
   );
-  return listBody('products', 'productCount', list, query, PAGE_SIZE);
+  return listBody(list, query, PAGE_SIZE);
 }
 
 /** GET /products/simple (ProductJson.simple): every product, by name. */
@@ -682,7 +680,7 @@ function simpleProductsBody({ volume }) {
       status,
     }))
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.id - b.id));
-  return { result: 'ok', products };
+  return { items: products };
 }
 
 /** GET /categories: the tree (`children`), a category whose parent is filtered out becomes a root. */
@@ -701,7 +699,16 @@ function categoriesBody({ query, volume }) {
     .filter((c) => c.parentId === null || !ids.has(c.parentId))
     .sort((a, b) => a.position - b.position)
     .map(node);
-  return { result: 'ok', categories, categoryCount: flat.length, totalPage: 1 };
+  // the whole tree in one page (PanelGetCategoriesAPI)
+  return {
+    items: categories,
+    page: {
+      number: 1,
+      size: Math.max(1, flat.length),
+      totalItems: flat.length,
+      totalPages: flat.length ? 1 : 0,
+    },
+  };
 }
 
 // -------------------------------------------------------------------------------------- export

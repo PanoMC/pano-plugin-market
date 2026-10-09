@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.util.StoreLinks
 import com.panomc.platform.error.BadRequest
 import com.panomc.plugins.market.core.order.BillingSnapshot
 import com.panomc.plugins.market.core.order.OrderActor
@@ -119,6 +120,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
 import java.math.BigDecimal
+import com.panomc.plugins.market.util.MarketPaths
 
 /** A panel alert for an order that waits for a human (06 section 11, O3 / O9). The notification itself is the platform's; this is the seam. */
 fun interface PanelAlerts {
@@ -379,7 +381,9 @@ class PaymentService(
     /** The mails of an attempt's transitions (MK-142, 12 section 4.1): bank transfer instructions and "order received", queued in the transition's transaction. */
     private val mails: PaymentMails = PaymentMails.NONE,
     /** The in-game purchase announcement of a paid order (08 section 8.1, 19 section 9): runs after the commit of the transition that stamped the order paid. */
-    private val announcer: PaidOrderAnnouncer = PaidOrderAnnouncer.NONE
+    private val announcer: PaidOrderAnnouncer = PaidOrderAnnouncer.NONE,
+    /** The pages of the front-end a gateway returns the buyer to (the URL map, doc 05 section 10.2); `null` = the default paths under the site address. */
+    private val links: StoreLinks? = null
 ) : PaymentStarter {
 
     private val paidGuards: List<PaidGuard> = listOf(RecipientLimitGuard(orders, products, entitlements, clock)) + extraPaidGuards
@@ -663,7 +667,7 @@ class PaymentService(
         return out
     }
 
-    private fun attemptPageOf(attempt: MarketPayment): String = "/api/market/payments/attempts/${attempt.token}/page"
+    private fun attemptPageOf(attempt: MarketPayment): String = MarketPaths.site("/payments/attempts/${attempt.token}/page")
 
     /** A `continuePayment` result replaces the stored start of a `PENDING` attempt. */
     private suspend fun rewriteStart(conn: SqlConnection, attempt: MarketPayment, facts: AttemptFacts) {
@@ -779,11 +783,12 @@ class PaymentService(
 
     private fun urlsFor(attempt: MarketPayment, publicId: String, providerId: String): AttemptUrls {
         val base = site().baseUrl.trimEnd('/')
-        val root = "$base/api/market/payments/$providerId"
+        val root = "$base${MarketPaths.site("/payments/$providerId")}"
+        val pages = links ?: StoreLinks.ofBase(base)
 
         return AttemptUrls(
             success = "$root/return/${attempt.token}/success", cancel = "$root/return/${attempt.token}/cancel", pending = "$root/return/${attempt.token}/pending",
-            result = "$root/return/${attempt.token}/result", notify = "$root/notify/${attempt.token}", orderPage = "$base/store/order/$publicId"
+            result = "$root/return/${attempt.token}/result", notify = "$root/notify/${attempt.token}", orderPage = pages.orderPage(publicId, base)
         )
     }
 
@@ -1839,7 +1844,7 @@ class PaymentService(
                 PaymentMethodOption(
                     id = row.methodId, label = row.customLabel?.takeIf { it.isNotBlank() } ?: descriptor.displayName.resolve(locale),
                     description = row.customDescription?.takeIf { it.isNotBlank() } ?: descriptor.description.resolve(locale), hint = descriptor.checkoutHint?.resolve(locale),
-                    icon = descriptor.icon, logoUrl = if (descriptor.logo != null) "/api/market/payment-providers/${row.methodId}/logo" else null, color = descriptor.color,
+                    icon = descriptor.icon, logoUrl = if (descriptor.logo != null) MarketPaths.site("/payment-providers/${row.methodId}/logo") else null, color = descriptor.color,
                     feeAmount = tender?.paymentFee ?: 0L, available = reason == null, unavailableReason = reason, providerCode = null,
                     pricing = resolved.caps.priceAuthority.let { if (it == com.panomc.plugins.market.spi.payment.PriceAuthority.MARKET) "MARKET" else it.name },
                     recurring = null, testMode = resolved.testMode, notices = descriptor.storefrontNotices.map { it.label.resolve(locale) to it.url },

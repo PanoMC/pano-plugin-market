@@ -104,7 +104,6 @@ class MarketSchedulerIT : MarketDaoITBase() {
         assertEquals(5_000L, MarketScheduler.TICK_MS)
         assertEquals(30_000L, MarketScheduler.ORDER_EXPIRY_MS)
         assertEquals(15_000L, MarketScheduler.MAIL_OUTBOX_MS)
-        assertEquals(MarketScheduler.TICK_MS, MarketScheduler.WEBHOOK_MS)
     }
 
     // ==================================================================================== a job can not stop the tick

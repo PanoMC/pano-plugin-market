@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { get, writable } from 'svelte/store';
+import { get } from 'svelte/store';
 import './sdkMocks.js';
 
-const { bindDraftToSession, createCheckoutDraft, defaultDraft, ownerKeyOf, parseDraft, DRAFT_KEY } =
-  await import('../../stores/checkoutDraft.js');
-const session = await import('../../stores/session.js');
+import { createCheckoutDraft } from '../../controllers/_checkoutDraftEngine.js';
+import { DRAFT_KEY, defaultDraft, ownerKeyOf, parseDraft } from '../checkoutDraftModel.js';
+// the logout clear from any page is the eager market/checkoutDraft controller: see controllers.test.js
 
 function fakeStorage(initial = {}) {
   const data = new Map(Object.entries(initial));
@@ -171,31 +171,6 @@ describe('createCheckoutDraft', () => {
     draft.patch({ couponCode: 'STEVE' });
     draft.sessionChanged('u:2'); // another user
     expect(get(draft).couponCode).toBe('');
-  });
-
-  test('logout while the checkout page is not mounted still clears the stored draft', () => {
-    globalThis.window = {};
-    try {
-      session.resetSession();
-      const sessionStore = writable({ user: { id: 1, username: 'Steve' } });
-      bindDraftToSession(draft);
-
-      // the buyer typed on the checkout page, then left it (detach flushes to the storage)
-      draft.restore(ownerKeyOf({ id: 1, username: 'Steve' }));
-      draft.patch({ guest: { username: 'Steve', email: 's@x.io' }, couponCode: 'SAVE' });
-      draft.detach();
-      expect(JSON.parse(storage.getItem(DRAFT_KEY)).guest.email).toBe('s@x.io');
-
-      // a navbar on another page binds the session and the buyer logs out there
-      session.bindSession(sessionStore);
-      sessionStore.set({});
-
-      expect(storage.data.has(DRAFT_KEY)).toBe(false);
-      expect(draft.restore('').guest.email).toBe('');
-    } finally {
-      delete globalThis.window;
-      session.resetSession();
-    }
   });
 
   test('restore under another user drops the stored draft', () => {

@@ -1,5 +1,5 @@
 // ISO 3166-1 alpha-2 country codes for the billing country select (14 §10.5). Pure: no SDK, no DOM.
-// Labels are produced by the caller (`countryName(code)` of utils/format.js); this module only holds the
+// Labels are produced by the caller (`countryName(code)` of the market/format controller); this module only holds the
 // codes and sorts / filters them.
 
 export const COUNTRY_CODES = Object.freeze(

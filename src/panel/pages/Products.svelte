@@ -239,7 +239,6 @@
       path: '/products',
       params: PRODUCT_PARAMS,
       nodes: ['CAT'],
-      emptyKey: 'products',
       title: 'pages.products.title',
     });
   }
@@ -255,7 +254,7 @@
     Pagination,
     SearchInput,
   } from '@panomc/sdk/components/panel';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { base, goto, navigating, page } from '@panomc/sdk/svelte';
   import { _, showErrorToast, showSuccessToast } from '../../i18n';
   import MarketLayout from '../layouts/MarketLayout.svelte';
@@ -274,8 +273,9 @@
     typeBadges,
   } from '../components/products/filters.js';
   import { sectionsFor } from '../navigation.js';
-  import { call, errorKey, errorParams, marketPath } from '../utils/api.js';
+  import { call, errorKey, errorParams, PANEL_URL } from '../utils/api.js';
   import { gotoList } from '../utils/list.js';
+  import { pageOf } from '../utils/page.js';
   import { fmt } from '../utils/locale.js';
 
   let { data } = $props();
@@ -286,10 +286,11 @@
 
   const user = $derived($page.data?.user);
   const filters = $derived(normalizeFilters(data.filters));
-  const products = $derived(data.products ?? []);
-  const productCount = $derived(data.productCount ?? data.count ?? 0);
-  const totalPage = $derived(data.totalPage ?? 1);
-  const currentPage = $derived(data.page ?? 1);
+  const list = $derived(pageOf(data));
+  const products = $derived(list.items);
+  const productCount = $derived(list.totalItems);
+  const totalPage = $derived(list.totalPages);
+  const currentPage = $derived(list.number);
   const currency = $derived(data.ctx?.currency ?? null);
 
   // The URL is the source of truth; load() re-runs on every navigation. A filter or search change
@@ -315,7 +316,7 @@
   }
 
   function imageUrl(fileName) {
-    return `${base}/api/panel/market/products/image/${encodeURIComponent(fileName)}?thumbnail=true`;
+    return `${PANEL_URL}/products/image/${encodeURIComponent(fileName)}?thumbnail=true`;
   }
 
   function editProduct(id) {
@@ -325,7 +326,7 @@
   async function cloneProduct(id) {
     if (busy) return;
     busy = true;
-    const result = await call(ApiUtil.post({ path: marketPath(`/products/${id}/clone`) }));
+    const result = await call(api.panel.post({ path: `/products/${id}/clone` }));
     busy = false;
     if (!result.ok) {
       showErrorToast($_(errorKey(result.error)), errorParams(result.error, result.body));
@@ -339,7 +340,7 @@
   async function adjustStock(product) {
     if (busy) return;
     busy = true;
-    const result = await call(ApiUtil.get({ path: marketPath(`/products/${product.id}`) }));
+    const result = await call(api.panel.get({ path: `/products/${product.id}` }));
     busy = false;
     if (!result.ok) {
       showErrorToast($_(errorKey(result.error)), errorParams(result.error, result.body));
@@ -361,7 +362,7 @@
       confirmLabel: $_('common.delete'),
       variant: 'danger',
       onConfirm: async () => {
-        const result = await call(ApiUtil.delete({ path: marketPath(`/products/${product.id}`) }));
+        const result = await call(api.panel.delete({ path: `/products/${product.id}` }));
         if (!result.ok) {
           showErrorToast($_(errorKey(result.error)), errorParams(result.error, result.body));
           return false;

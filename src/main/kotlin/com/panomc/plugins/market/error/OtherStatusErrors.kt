@@ -7,73 +7,73 @@ import com.panomc.platform.model.Error
 // ---- 403
 
 /** The body never says which subject (IP, account, e-mail) matched (11 section 18). */
-class BuyerBlocked : Error(403)
+class BuyerBlocked : Error("BUYER_BLOCKED", 403)
 
 // ---- 409
 
 /** [lines]: the lines that are out of stock. */
-class OutOfStock(lines: List<Any?> = emptyList()) : Error(409, extras = mapOf("lines" to lines))
+class OutOfStock(lines: List<Any?> = emptyList()) : Error("OUT_OF_STOCK", 409, extras = mapOf("lines" to lines))
 
 class PurchaseLimitReached(productId: Long, limit: Number) :
-    Error(409, extras = mapOf("productId" to productId, "limit" to limit))
+    Error("PURCHASE_LIMIT_REACHED", 409, extras = mapOf("productId" to productId, "limit" to limit))
 
 class CooldownActive(productId: Long, retryAfter: Number) :
-    Error(409, extras = mapOf("productId" to productId, "retryAfter" to retryAfter))
+    Error("COOLDOWN_ACTIVE", 409, extras = mapOf("productId" to productId, "retryAfter" to retryAfter))
 
-class ProductRequirementNotMet(productId: Long) : Error(409, extras = mapOf("productId" to productId))
+class ProductRequirementNotMet(productId: Long) : Error("PRODUCT_REQUIREMENT_NOT_MET", 409, extras = mapOf("productId" to productId))
 
 /** [quote]: the fresh quote the client must confirm. */
-class PriceChanged(quote: Any?) : Error(409, extras = mapOf("quote" to quote))
+class PriceChanged(quote: Any?) : Error("PRICE_CHANGED", 409, extras = mapOf("quote" to quote))
 
-class OrderNotPayable : Error(409)
+class OrderNotPayable : Error("ORDER_NOT_PAYABLE", 409)
 
-class OrderNotCancellable : Error(409)
+class OrderNotCancellable : Error("ORDER_NOT_CANCELLABLE", 409)
 
-class OrderNotShippable(reason: String) : Error(409, extras = mapOf("reason" to reason))
+class OrderNotShippable(reason: String) : Error("ORDER_NOT_SHIPPABLE", 409, extras = mapOf("reason" to reason))
 
-class SubscriptionNotCancellable : Error(409)
+class SubscriptionNotCancellable : Error("SUBSCRIPTION_NOT_CANCELLABLE", 409)
 
-class SubscriptionNotResumable : Error(409)
+class SubscriptionNotResumable : Error("SUBSCRIPTION_NOT_RESUMABLE", 409)
 
-class SubscriptionNotRetryable : Error(409)
+class SubscriptionNotRetryable : Error("SUBSCRIPTION_NOT_RETRYABLE", 409)
 
-class SubscriptionNotManageable : Error(409)
+class SubscriptionNotManageable : Error("SUBSCRIPTION_NOT_MANAGEABLE", 409)
 
-class DeliveryNotRetryable : Error(409)
+class DeliveryNotRetryable : Error("DELIVERY_NOT_RETRYABLE", 409)
 
-class DeliveryNotCancellable : Error(409)
+class DeliveryNotCancellable : Error("DELIVERY_NOT_CANCELLABLE", 409)
 
-class ShipmentNotCancellable(reason: String) : Error(409, extras = mapOf("reason" to reason))
+class ShipmentNotCancellable(reason: String) : Error("SHIPMENT_NOT_CANCELLABLE", 409, extras = mapOf("reason" to reason))
 
 /** The generic "row is not in a state that allows this action" (04 section 11). */
-class InvalidState(state: String) : Error(409, extras = mapOf("state" to state))
+class InvalidState(state: String) : Error("INVALID_STATE", 409, extras = mapOf("state" to state))
 
-class IdempotencyConflict : Error(409)
+class IdempotencyConflict : Error("IDEMPOTENCY_CONFLICT", 409)
 
-class ProviderUnavailable(state: String) : Error(409, extras = mapOf("state" to state))
+class ProviderUnavailable(state: String) : Error("PROVIDER_UNAVAILABLE", 409, extras = mapOf("state" to state))
 
-class CategoryInUse : Error(409)
+class CategoryInUse : Error("CATEGORY_IN_USE", 409)
 
-class BlockAlreadyExists : Error(409)
+class BlockAlreadyExists : Error("BLOCK_ALREADY_EXISTS", 409)
 
-class CreditsDisabled : Error(409)
+class CreditsDisabled : Error("CREDITS_DISABLED", 409)
 
-class MailDisabled : Error(409)
+class MailDisabled : Error("MAIL_DISABLED", 409)
 
-class MailNotApplicable : Error(409)
+class MailNotApplicable : Error("MAIL_NOT_APPLICABLE", 409)
 
 /** [reason]: `NOT_PAID`, `EXTERNAL_PRICING`, `ZERO_TOTAL`, `TOTAL_MISMATCH`, ... (12 section 9.3). */
-class InvoiceNotIssuable(reason: String? = null) : Error(409, extras = extrasOf("reason" to reason))
+class InvoiceNotIssuable(reason: String? = null) : Error("INVOICE_NOT_ISSUABLE", 409, extras = extrasOf("reason" to reason))
 
 // ---- 429 (the bodies never say which subject triggered them, 11 section 18)
 
-class TooManyRequests(retryAfter: Number) : Error(429, extras = mapOf("retryAfter" to retryAfter))
+class TooManyRequests(retryAfter: Number) : Error("TOO_MANY_REQUESTS", 429, extras = mapOf("retryAfter" to retryAfter))
 
-class CodeAttemptsLocked(retryAfter: Number) : Error(429, extras = mapOf("retryAfter" to retryAfter))
+class CodeAttemptsLocked(retryAfter: Number) : Error("CODE_ATTEMPTS_LOCKED", 429, extras = mapOf("retryAfter" to retryAfter))
 
 // ---- 500
 
-class InvoiceRenderFailed : Error(500)
+class InvoiceRenderFailed : Error("INVOICE_RENDER_FAILED", 500)
 
 // ---- 502 (never carries the gateway's own text)
 
@@ -82,20 +82,20 @@ class InvoiceRenderFailed : Error(500)
  * is its `OrderView` and [orderToken] its access token, so the buyer can pick another method.
  */
 class PaymentProviderError(code: String, order: Any? = null, orderToken: String? = null) :
-    Error(502, extras = extrasOf("code" to code, "order" to order, "orderToken" to orderToken))
+    Error("PAYMENT_PROVIDER_ERROR", 502, extras = extrasOf("code" to code, "order" to order, "orderToken" to orderToken))
 
 class ShippingProviderError(code: String, shipmentId: Long? = null) :
-    Error(502, extras = extrasOf("code" to code, "shipmentId" to shipmentId))
+    Error("SHIPPING_PROVIDER_ERROR", 502, extras = extrasOf("code" to code, "shipmentId" to shipmentId))
 
-class MailSendFailed : Error(502)
+class MailSendFailed : Error("MAIL_SEND_FAILED", 502)
 
 // ---- 503
 
 /** `storeEnabled = false` (04 section 1). */
-class StoreDisabled : Error(503)
+class StoreDisabled : Error("STORE_DISABLED", 503)
 
 /** The runtime state is not READY (00 section 8.9). */
-class StoreUnavailable : Error(503)
+class StoreUnavailable : Error("STORE_UNAVAILABLE", 503)
 
 /** A transaction ran out of retries on a deadlock; the response carries `Retry-After: 2` (set by the base classes). */
-class StoreBusy : Error(503)
+class StoreBusy : Error("STORE_BUSY", 503)

@@ -22,34 +22,32 @@ function fakePano({ withCart = true } = {}) {
   return pano;
 }
 
-describe('registerTheme cart items', () => {
-  test('registers the nav cart (priority 50) and the offcanvas on theme:top without loading', () => {
+describe('registerTheme conditional items', () => {
+  test('the navbar cart and the offcanvas are view metadata: register.js adds neither', () => {
     const pano = fakePano();
     registerTheme(pano);
-    expect(pano.calls.rightComponents[0]).toHaveLength(1);
-    expect(pano.calls.rightComponents[0][0]).toMatchObject({ id: 'market-cart', priority: 50 });
-    expect(pano.calls.hooks).toHaveLength(1);
-    expect(pano.calls.hooks[0]).toMatchObject({ name: 'theme:top', skipLoad: true });
+    expect(pano.calls.rightComponents).toEqual([]);
+    expect(pano.calls.hooks).toEqual([]);
+    expect(pano.calls.pages).toEqual([]);
   });
 
-  test('a theme without the namespaces keeps the store page and warns', () => {
+  test('without profile-nav the profile block is injected by view id, not by component', () => {
+    const items = [];
+    const pano = fakePano();
+    pano.ui.profile.content.edit = (fn) => items.push(...fn([]));
+    registerTheme(pano);
+    expect(items).toEqual([{ id: 'market', priority: 50, view: 'market:MarketProfileBlock' }]);
+  });
+
+  test('a theme without the namespaces keeps the nav link and warns', () => {
     const warn = console.warn;
     const seen = [];
     console.warn = (...a) => seen.push(a);
     const pano = fakePano({ withCart: false });
     registerTheme(pano);
     console.warn = warn;
-    expect(pano.calls.pages.map((p) => p.path)).toEqual([
-      '/store',
-      '/store/order/[id]',
-      '/store/[slug]',
-      '/store/checkout',
-      '/profile/purchases',
-      '/profile/credits',
-      '/profile/subscriptions',
-      '/profile/creator',
-    ]);
-    // nav-cart, cart-offcanvas, profile-dropdown and profile-nav are each skipped with one warning
-    expect(seen).toHaveLength(4);
+    expect(pano.calls.pages).toEqual([]);
+    // profile-dropdown and profile-nav are each skipped with one warning
+    expect(seen).toHaveLength(2);
   });
 });

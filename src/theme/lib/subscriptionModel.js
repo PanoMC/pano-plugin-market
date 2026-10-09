@@ -1,4 +1,5 @@
 // Pure model of the subscription and creator profile pages (14 §12.4, §12.5). No SDK, no DOM.
+import { readList } from './api-result.js';
 import { messageKey } from './errorMap.js';
 import { PLUGIN_KEY_PREFIX, profileExtras, readSummary } from './profileModel.js';
 import { isSafeExternalUrl } from './paymentStart.js';
@@ -8,8 +9,8 @@ const isObject = (value) => value !== null && typeof value === 'object' && !Arra
 export const SUBSCRIPTIONS_TITLE_KEY = `${PLUGIN_KEY_PREFIX}theme.profile.subscriptions.title`;
 export const CREATOR_TITLE_KEY = `${PLUGIN_KEY_PREFIX}theme.profile.creator.title`;
 
-export const SUBSCRIPTION_PATH = '/api/market/me/subscriptions';
-export const CREATOR_PATH = '/api/market/me/creator';
+export const SUBSCRIPTION_PATH = '/me/subscriptions';
+export const CREATOR_PATH = '/me/creator';
 
 // ---- subscription rows ------------------------------------------------------------------------------------
 
@@ -79,7 +80,7 @@ export function subscriptionView(row) {
 export function readSubscriptions(res) {
   if (!res || res.ok !== true) return null;
 
-  return (Array.isArray(res.subscriptions) ? res.subscriptions : [])
+  return (Array.isArray(res.items) ? res.items : [])
     .filter((row) => isObject(row))
     .map(subscriptionView);
 }
@@ -242,10 +243,12 @@ const money = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 
 /** The earnings part of the creator page state (also used after a client-side page change). */
 export function readEarnings(res) {
+  const list = readList(res);
+
   return {
-    earnings: (Array.isArray(res?.earnings) ? res.earnings : []).filter(isObject).map(earningRow),
-    earningCount: Number(res?.earningCount) || 0,
-    totalPage: Math.max(1, Number(res?.totalPage) || 1),
+    earnings: list.items.filter(isObject).map(earningRow),
+    earningCount: list.totalItems,
+    totalPages: list.totalPages,
   };
 }
 

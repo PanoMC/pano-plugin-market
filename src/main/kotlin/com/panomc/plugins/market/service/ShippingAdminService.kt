@@ -53,6 +53,7 @@ import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.withTimeoutOrNull
 import java.math.BigDecimal
 import java.security.SecureRandom
+import com.panomc.plugins.market.util.MarketPaths
 
 /** Builds the context a shipping provider gets for the settings hooks, `listServices`, `balance` and actions. */
 fun interface ShippingContexts {
@@ -779,7 +780,7 @@ class ShippingAdminService(
             val missing = codec.missingRequired(stored)
             val info = site()
             val webhookUrl = if (row != null && (capabilities.trackingPush || capabilities.webhookSetup != WebhookSetup.NONE)) {
-                "${info.baseUrl}/api/market/shipping/$id/webhook/${row.webhookToken}"
+                "${info.baseUrl}${MarketPaths.site("/shipping/$id/webhook/${row.webhookToken}")}"
             } else null
 
             out

@@ -1,0 +1,33 @@
+{
+  "title": "Your order",
+  "heading": "Your order",
+  "order": "Order",
+  "status": "Status",
+  "total": "Total",
+  "back": "Back to the store",
+  "notFound": "We could not find this order. Check the link in your e-mail, or sign in with the account that placed it.",
+  "unavailable": "The store is not available right now. Please try again in a moment.",
+  "statusLabel": {
+    "PENDING": "Waiting for payment",
+    "REVIEW": "Under review",
+    "COMPLETED": "Paid",
+    "PARTIALLY_REFUNDED": "Partially refunded",
+    "REFUNDED": "Refunded",
+    "CHARGEBACK": "Disputed",
+    "FAILED": "Failed",
+    "CANCELLED": "Cancelled",
+    "EXPIRED": "Expired"
+  },
+  "lead": {
+    "PENDING": "We are waiting for the payment to be confirmed. This page shows the current state when you reload it.",
+    "PENDING_cancel": "The payment was cancelled. The order stays open for a while, you can pay it again from the store.",
+    "REVIEW": "Your payment arrived and the order is being checked. You will get an e-mail when it is done.",
+    "COMPLETED": "Thank you, your payment is confirmed.",
+    "PARTIALLY_REFUNDED": "Part of this order was refunded.",
+    "REFUNDED": "This order was refunded.",
+    "CHARGEBACK": "The payment of this order is disputed.",
+    "FAILED": "The payment did not go through. You can try again from the store.",
+    "CANCELLED": "This order was cancelled.",
+    "EXPIRED": "This order expired before it was paid."
+  }
+}

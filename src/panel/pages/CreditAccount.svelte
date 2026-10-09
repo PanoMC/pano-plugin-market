@@ -107,9 +107,11 @@
 <CreditAdjustModal bind:this={adjustModal} {ctx} onSaved={() => refresh()} />
 
 <script module>
-  import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
-  import { marketPath } from '../utils/api.js';
+  import { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
+  import { failureOf } from '../utils/api.js';
   import { loadContext } from '../utils/context.js';
+  import { emptyList } from '../utils/page.js';
 
   /**
    * @type {import("@sveltejs/kit").PageLoad}
@@ -121,32 +123,20 @@
     const userId = event.params.userId;
     const requested = parseInt(event.url.searchParams.get('page')) || 1;
     const fetchPage = (p) =>
-      ApiUtil.get({
+      api.panel.get({
         path:
-          marketPath(`/credits/accounts/${encodeURIComponent(userId)}`) +
+          `/credits/accounts/${encodeURIComponent(userId)}` +
           buildQueryParams({ page: p === 1 ? null : p }),
         request: event,
       });
 
     let [body, ctx] = await Promise.all([fetchPage(requested), loadContext(event)]);
-    let effectivePage = requested;
-    if (body?.error === 'PAGE_NOT_FOUND' && requested > 1) {
-      effectivePage = 1;
+    if (failureOf(body) === 'PAGE_NOT_FOUND' && requested > 1) {
       body = await fetchPage(1);
     }
-    if (!body || typeof body !== 'object' || body.error)
-      return {
-        data: {
-          userId,
-          entries: [],
-          entryCount: 0,
-          totalPage: 1,
-          page: 1,
-          error: (body && typeof body === 'object' && body.error) || 'NETWORK_ERROR',
-          ctx,
-        },
-      };
-    return { data: { ...body, userId, page: effectivePage, ctx } };
+    const failure = failureOf(body);
+    if (failure) return { data: emptyList(failure, { userId, ctx }) };
+    return { data: { ...body, userId, ctx } };
   }
 </script>
 
@@ -161,6 +151,7 @@
   import { call } from '../utils/api.js';
   import { creditBadgeClass, signedAmount } from '../utils/credits.js';
   import { fmt, currentLocale } from '../utils/locale.js';
+  import { pageOf } from '../utils/page.js';
   import { can } from '../utils/permissions.js';
 
   let { data } = $props();
@@ -176,10 +167,11 @@
   const user = $derived($page.data?.user);
   const ctx = $derived(data.ctx ?? null);
   const error = $derived(refreshError ?? data.error ?? null);
-  const entries = $derived(view.entries ?? []);
-  const entryCount = $derived(view.entryCount ?? entries.length);
-  const totalPage = $derived(view.totalPage ?? 1);
-  const currentPage = $derived(view.page ?? 1);
+  const list = $derived(pageOf(view));
+  const entries = $derived(list.items);
+  const entryCount = $derived(list.totalItems);
+  const totalPage = $derived(list.totalPages);
+  const currentPage = $derived(list.number);
   // The API names no player; a list link carries ?player=<name> as a display hint (cosmetic only,
   // every request goes by the user id of the path).
   const username = $derived(view.username ?? $page.url.searchParams.get('player') ?? null);
@@ -206,9 +198,9 @@
     if (refreshing) return;
     refreshing = true;
     const result = await call(
-      ApiUtil.get({
+      api.panel.get({
         path:
-          marketPath(`/credits/accounts/${encodeURIComponent(data.userId)}`) +
+          `/credits/accounts/${encodeURIComponent(data.userId)}` +
           buildQueryParams({ page: currentPage > 1 ? currentPage : null }),
       }),
     );
@@ -218,7 +210,7 @@
       return;
     }
     refreshError = null;
-    loaded = { ...result.body, userId: data.userId, page: currentPage };
+    loaded = { ...result.body, userId: data.userId };
   }
 
   function onPageClick(pageNum) {

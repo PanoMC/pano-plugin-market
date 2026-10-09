@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.util.concurrent.TimeUnit
+import com.panomc.plugins.market.util.MarketPaths
 
 /**
  * Abuse and limits on a real instance (17 section 9.8, 11): the checkout rate limit (L1), the durable code brute-force lock (it survives a restart of
@@ -50,7 +51,7 @@ class AbuseE2E : E2eTestBase() {
             assertEquals(429, fourth.status, "the 4th checkout within the minute")
             assertEquals("TOO_MANY_REQUESTS", fourth.error)
 
-            val retryAfter = fourth.obj().getInteger("retryAfter")
+            val retryAfter = fourth.details.getInteger("retryAfter")
 
             assertNotNull(retryAfter, "the answer carries retryAfter")
             assertTrue(retryAfter in 1..60, "retryAfter is seconds inside the minute: $retryAfter")
@@ -95,7 +96,7 @@ class AbuseE2E : E2eTestBase() {
         check(process.exitValue() == 0) { "the restart failed with ${process.exitValue()}: ${log.readLines().takeLast(5)}" }
 
         Await.until(120_000, 1000, "the store answers after the restart") {
-            runCatching { E2eClient(baseUrl, "probe").get("/api/market/store", log = false).status == 200 }.getOrDefault(false)
+            runCatching { E2eClient(baseUrl, "probe").get("${MarketPaths.SITE_ROOT}/store", log = false).status == 200 }.getOrDefault(false)
         }
     }
 
@@ -108,13 +109,13 @@ class AbuseE2E : E2eTestBase() {
 
         session.withSettings(JsonObject().put("couponLockThreshold", 3)) {
             // a valid code works before the lock
-            val before = buyer.client.post("/api/market/checkout/quote", cart(line(product)).put("couponCode", valid)).ok().obj().getJsonObject("quote")
+            val before = buyer.client.post("${MarketPaths.SITE_ROOT}/checkout/quote", cart(line(product)).put("couponCode", valid)).ok().obj().getJsonObject("quote")
 
             assertEquals(true, before.getJsonObject("coupon").getBoolean("valid"))
 
             // three different wrong codes (the same wrong code is counted once per window)
             repeat(3) { n ->
-                val answer = buyer.client.post("/api/market/checkout/quote", cart(line(product)).put("couponCode", "NOPE${System.nanoTime()}$n")).ok()
+                val answer = buyer.client.post("${MarketPaths.SITE_ROOT}/checkout/quote", cart(line(product)).put("couponCode", "NOPE${System.nanoTime()}$n")).ok()
                 val coupon = answer.obj().getJsonObject("quote").getJsonObject("coupon")
 
                 assertEquals(false, coupon.getBoolean("valid"))
@@ -125,11 +126,11 @@ class AbuseE2E : E2eTestBase() {
 
             assertEquals(429, locked.status, "locked: ${locked.error}")
             assertEquals("CODE_ATTEMPTS_LOCKED", locked.error)
-            assertNotNull(locked.obj().getInteger("retryAfter"))
-            assertTrue(locked.obj().getInteger("retryAfter") >= 1)
+            assertNotNull(locked.details.getInteger("retryAfter"))
+            assertTrue(locked.details.getInteger("retryAfter") >= 1)
 
             // the quote shows the lock without failing
-            val quote = buyer.client.post("/api/market/checkout/quote", cart(line(product)).put("couponCode", valid)).ok().obj().getJsonObject("quote")
+            val quote = buyer.client.post("${MarketPaths.SITE_ROOT}/checkout/quote", cart(line(product)).put("couponCode", valid)).ok().obj().getJsonObject("quote")
 
             assertEquals(false, quote.getJsonObject("coupon").getBoolean("valid"))
             assertEquals("CODE_ATTEMPTS_LOCKED", quote.getJsonObject("coupon").getString("reason"))
@@ -148,12 +149,12 @@ class AbuseE2E : E2eTestBase() {
             // restart are unreadable after it (finding of this slice, evidence/E2E-09.md: no secret.key exists after the first boot, a new key is
             // created at the restart), so the two methods are configured again exactly as the session bootstrap does and the wait is for ACTIVE.
             for (id in listOf("fake", "fake-eur")) {
-                admin.post("/api/panel/market/payment-methods/$id", JsonObject().put("settings", JsonObject().put("gatewayUrl", gateway.baseUrl).put("secret", gateway.secret))).ok()
-                admin.post("/api/panel/market/payment-methods/$id/toggle", JsonObject().put("enabled", true)).ok()
+                admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/$id", JsonObject().put("settings", JsonObject().put("gatewayUrl", gateway.baseUrl).put("secret", gateway.secret))).ok()
+                admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/$id/toggle", JsonObject().put("enabled", true)).ok()
             }
 
             Await.until(120_000, 1000, "the fake providers are ACTIVE after the restart") {
-                val providers = admin.get("/api/panel/market/payment-providers", log = false).obj().getJsonArray("providers").map { it as JsonObject }
+                val providers = admin.get("${MarketPaths.PANEL_ROOT}/payment-providers", log = false).obj().getJsonArray("items").map { it as JsonObject }
 
                 listOf("fake", "fake-eur").all { id -> providers.firstOrNull { it.getString("id") == id }?.getString("state") == "ACTIVE" }
             }
@@ -193,7 +194,7 @@ class AbuseE2E : E2eTestBase() {
 
         try {
             repeat(5) { n ->
-                val wrong = admin.post("/api/panel/market/payment-methods/fake/reveal", JsonObject().put("password", "definitely-wrong-$n-${System.nanoTime()}"))
+                val wrong = admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/fake/reveal", JsonObject().put("password", "definitely-wrong-$n-${System.nanoTime()}"))
 
                 statuses += wrong.status
                 assertFalse(wrong.status in 200..299, "a wrong password never reveals: ${wrong.status}")
@@ -201,11 +202,11 @@ class AbuseE2E : E2eTestBase() {
 
             assertTrue(statuses.none { it == 429 }, "the first five wrong passwords are answered as wrong passwords: $statuses")
 
-            val locked = admin.post("/api/panel/market/payment-methods/fake/reveal", JsonObject().put("password", "definitely-wrong-again"))
+            val locked = admin.post("${MarketPaths.PANEL_ROOT}/payment-methods/fake/reveal", JsonObject().put("password", "definitely-wrong-again"))
 
             assertEquals(429, locked.status, "the 6th attempt is throttled: ${locked.error}")
             assertEquals("TOO_MANY_REQUESTS", locked.error)
-            assertNotNull(locked.obj().getInteger("retryAfter"))
+            assertNotNull(locked.details.getInteger("retryAfter"))
             assertNotNull(throttleRow("REVEAL", "u:$adminId")?.getLong("lockedUntil"), "the lock is a row")
             assertFalse(locked.text.contains(gateway.secret))
         } finally {
@@ -217,12 +218,12 @@ class AbuseE2E : E2eTestBase() {
         }
 
         // settings responses show the mask, never the secret
-        val settings = admin.get("/api/panel/market/settings").ok()
+        val settings = admin.get("${MarketPaths.PANEL_ROOT}/settings").ok()
 
         assertTrue(settings.text.contains("********"), "a configured secret is shown as the mask")
         assertFalse(settings.text.contains(gateway.secret), "the settings response never carries the secret")
 
-        val providers = admin.get("/api/panel/market/payment-providers").ok()
+        val providers = admin.get("${MarketPaths.PANEL_ROOT}/payment-providers").ok()
 
         assertFalse(providers.text.contains(gateway.secret), "the provider list never carries the secret")
 

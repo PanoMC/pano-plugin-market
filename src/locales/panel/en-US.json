@@ -2600,6 +2600,8 @@
     },
     "webhooks": {
       "count": "{count} Webhooks",
+      "managed-in-platform": "Webhooks are managed in the platform settings now. Everything the store sends is listed there under the source Market.",
+      "open-platform": "Open Webhooks",
       "create": "Create Webhook",
       "send-test": "Send Test",
       "deliveries": "Deliveries",

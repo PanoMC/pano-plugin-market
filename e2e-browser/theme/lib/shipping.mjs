@@ -1,5 +1,5 @@
 // Shipping set-up of the order page scenarios (a zone, one manual method). Nothing here is a scenario: the runner skips every `lib` directory.
-import { must } from '../../lib/api.mjs';
+import { must, PANEL_MARKET_API, listOf } from '../../lib/api.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const unique = () => Date.now().toString(36).slice(-6) + Math.floor(Math.random() * 99);
@@ -10,18 +10,21 @@ const unique = () => Date.now().toString(36).slice(-6) + Math.floor(Math.random(
  */
 export async function withShipping(admin, fn) {
   const n = unique();
-  const zones = must(await admin.get('/api/panel/market/shipping/zones'), 'zones').json.zones;
+  const zones = listOf(
+    must(await admin.get(`${PANEL_MARKET_API}/shipping/zones`), 'zones').json,
+    'zones',
+  );
   const others = zones.filter((z) => z.status === 'ACTIVE').map((z) => z.id);
 
   for (const id of others)
     must(
-      await admin.put(`/api/panel/market/shipping/zones/${id}`, { status: 'INACTIVE' }),
+      await admin.put(`${PANEL_MARKET_API}/shipping/zones/${id}`, { status: 'INACTIVE' }),
       'zone off',
     );
 
   try {
     const zoneId = must(
-      await admin.post('/api/panel/market/shipping/zones', {
+      await admin.post(`${PANEL_MARKET_API}/shipping/zones`, {
         name: `E2E zone ${n}`,
         countries: ['DE'],
         status: 'ACTIVE',
@@ -32,7 +35,7 @@ export async function withShipping(admin, fn) {
 
     try {
       methodId = must(
-        await admin.post('/api/panel/market/shipping/methods', {
+        await admin.post(`${PANEL_MARKET_API}/shipping/methods`, {
           name: `E2E Post ${n}`,
           providerId: 'manual',
           rateSource: 'RULES',
@@ -46,12 +49,12 @@ export async function withShipping(admin, fn) {
       return await fn({ zoneId, methodId, n });
     } finally {
       if (methodId !== null)
-        await admin.request('DELETE', `/api/panel/market/shipping/methods/${methodId}`);
-      await admin.request('DELETE', `/api/panel/market/shipping/zones/${zoneId}`);
+        await admin.request('DELETE', `${PANEL_MARKET_API}/shipping/methods/${methodId}`);
+      await admin.request('DELETE', `${PANEL_MARKET_API}/shipping/zones/${zoneId}`);
     }
   } finally {
     for (const id of others)
-      await admin.put(`/api/panel/market/shipping/zones/${id}`, { status: 'ACTIVE' });
+      await admin.put(`${PANEL_MARKET_API}/shipping/zones/${id}`, { status: 'ACTIVE' });
   }
 }
 

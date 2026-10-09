@@ -10,7 +10,7 @@ import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 
 /**
@@ -22,12 +22,12 @@ import io.vertx.json.schema.SchemaRepository
  */
 @Endpoint
 class PanelGetServersAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/servers", RouteType.GET))
+    override val paths = listOf(Path("/servers", RouteType.GET))
 
     /** Empty = a holder of any market node (04 section 9). */
     override val nodes: Set<MarketNode> = emptySet()
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = ValidationHandlerBuilder.create(schemaRepository).build()
 
-    override suspend fun handleAuthorized(context: RoutingContext): Result = Successful(mapOf("servers" to mcSyncService(plugin).servers().map { it.toJson() }))
+    override suspend fun handleAuthorized(context: RoutingContext): Result = Successful(mapOf("items" to mcSyncService(plugin).servers().map { it.toJson() }))
 }

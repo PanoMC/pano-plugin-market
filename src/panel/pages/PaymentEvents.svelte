@@ -128,7 +128,6 @@
       path: '/payment-events',
       params: EVENT_PARAMS,
       nodes: ['OV'],
-      emptyKey: 'events',
       title: 'pages.payment-events.title',
     });
   }
@@ -136,7 +135,7 @@
 
 <script>
   import FilterSelect from '../components/FilterSelect.svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import {
     CardHeader,
     CardFilters,
@@ -151,8 +150,9 @@
   import StatusBadge from '../components/StatusBadge.svelte';
   import PaymentEventModal from '../components/modals/PaymentEventModal.svelte';
   import { sectionsFor } from '../navigation.js';
-  import { call, marketPath } from '../utils/api.js';
+  import { call } from '../utils/api.js';
   import { gotoList } from '../utils/list.js';
+  import { pageOf } from '../utils/page.js';
   import { currentLocale } from '../utils/locale.js';
   import {
     STATUS_TABS,
@@ -173,10 +173,11 @@
 
   const user = $derived($page.data?.user);
   const filters = $derived(normalizeFilters(data.filters));
-  const events = $derived(data.events ?? []);
-  const eventCount = $derived(data.eventCount ?? data.count ?? 0);
-  const totalPage = $derived(data.totalPage ?? 1);
-  const currentPage = $derived(data.page ?? 1);
+  const list = $derived(pageOf(data));
+  const events = $derived(list.items);
+  const eventCount = $derived(list.totalItems);
+  const totalPage = $derived(list.totalPages);
+  const currentPage = $derived(list.number);
   const currentTab = $derived(activeTab(filters.status));
 
   const dateText = (epoch) =>
@@ -203,7 +204,7 @@
       confirmLabel: $_('pages.payment-events.actions.replay'),
       onConfirm: async () => {
         const result = await call(
-          ApiUtil.post({ path: marketPath(`/payment-events/${event.id}/replay`), body: {} }),
+          api.panel.post({ path: `/payment-events/${event.id}/replay`, body: {} }),
         );
         if (!result.ok) {
           toastError($_, result);

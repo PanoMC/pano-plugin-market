@@ -2,20 +2,15 @@ package com.panomc.plugins.market.routes.panel.order
 
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
-import com.panomc.platform.error.PageNotFound
 import com.panomc.platform.model.*
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.permission.FieldGating
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
-import com.panomc.plugins.market.routes.base.parseId
-import com.panomc.plugins.market.routes.base.parsePagingRequest
-import com.panomc.plugins.market.util.Paging
-import io.vertx.core.json.JsonArray
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Parameters.optionalParam
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Parameters.optionalParam
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
@@ -26,16 +21,16 @@ import io.vertx.json.schema.common.dsl.Schemas.stringSchema
  */
 @Endpoint
 class PanelGetOrdersAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
-    override val paths = listOf(Path("/api/panel/market/orders", RouteType.GET))
+    override val paths = listOf(Path("/orders", RouteType.GET))
 
     override val nodes = setOf(MarketNode.ORDERS_VIEW)
 
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler {
-        var builder = ValidationHandlerBuilder.create(schemaRepository)
+        var builder = Paging.params(ValidationHandlerBuilder.create(schemaRepository))
 
-        for (name in listOf("page", "pageSize") + ORDER_FILTER_QUERY) builder = builder.queryParameter(optionalParam(name, stringSchema()))
+        for (name in ORDER_FILTER_QUERY) builder = builder.queryParameter(optionalParam(name, stringSchema()))
 
         return builder.build()
     }
@@ -45,16 +40,13 @@ class PanelGetOrdersAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
 
         fun query(name: String) = parameters.queryParameter(name)?.string
 
-        val window = parsePagingRequest(query("page")?.let { parseId(it, "page") }, query("pageSize")?.let { parseId(it, "pageSize") })
+        val window = Paging.request(context)
         val filter = parseOrderFilter(
             query("status"), query("paymentMethodId"), query("fulfillmentStatus"), query("shippingStatus"), query("from"), query("to"), query("testMode"), query("source"), query("search")
         )
         val pii = FieldGating.piiTier(context)
         val page = orderQueryService(plugin).list(filter, window, pii, databaseManager.getSqlClient())
-        val totalPage = Paging.totalPages(page.count, window.pageSize)
 
-        if (totalPage in 1..<window.page.toLong()) throw PageNotFound()
-
-        return Successful(mapOf("orders" to JsonArray(page.rows), "orderCount" to page.count, "totalPage" to totalPage))
+        return Successful(Paging.response(page.rows, page.count, window))
     }
 }

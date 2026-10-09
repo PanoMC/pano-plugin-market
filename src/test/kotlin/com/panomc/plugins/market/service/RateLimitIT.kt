@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * The limits of 11 section 11 on a real MariaDB (MK-152; A-01 and V-12 twins; 11 section 19.1 cases 6 to 10): L1 (the IP bucket is consumed before the idempotency
@@ -68,7 +69,7 @@ class RateLimitIT : MarketDaoITBase() {
         error("expected an error")
     }
 
-    private fun retryAfter(e: Error): Int = JsonObject(e.encode()).getInteger("retryAfter")
+    private fun retryAfter(e: Error): Int = ErrorBodies.details(e).getInteger("retryAfter")
 
     private fun orderBody(p: com.panomc.plugins.market.db.model.MarketProduct, vararg more: Pair<String, Any?>): JsonObject =
         h.body("items" to listOf(h.line(p)), "paymentMethodId" to "fake", *more)
@@ -153,7 +154,7 @@ class RateLimitIT : MarketDaoITBase() {
 
         val e = assertThrows(TooManyRequests::class.java) { limits.quote("203.0.113.1", null) }
 
-        assertEquals(30, JsonObject(e.encode()).getInteger("retryAfter"))
+        assertEquals(30, ErrorBodies.details(e).getInteger("retryAfter"))
         limits.quote("203.0.113.2", null)
 
         // IPv6: one /64 is one bucket
@@ -206,7 +207,7 @@ class RateLimitIT : MarketDaoITBase() {
         repeat(10) { limits.panelAction(5) }
         val l8 = assertThrows(TooManyRequests::class.java) { limits.panelAction(5) }
 
-        assertTrue(JsonObject(l8.encode()).getInteger("retryAfter") >= 1)
+        assertTrue(ErrorBodies.details(l8).getInteger("retryAfter") >= 1)
         limits.panelAction(6)
 
         repeat(60) { limits.inboundRejected("203.0.113.1", "stripe") }
@@ -398,7 +399,7 @@ class RateLimitIT : MarketDaoITBase() {
 
         assertEquals("INVALID_CART", e.getErrorCode())
         assertEquals(400, e.getStatusCode())
-        assertEquals(listOf("MAX_QUANTITY"), JsonObject(e.encode()).getJsonObject("lineErrors").getJsonArray(CartLine(limited.id, 0, 11, emptyMap(), null).lineKey).list)
+        assertEquals(listOf("MAX_QUANTITY"), ErrorBodies.details(e).getJsonObject("lineErrors").getJsonArray(CartLine(limited.id, 0, 11, emptyMap(), null).lineKey).list)
 
         h.checkout(body(limited, 10), caller = alice)
 
@@ -434,7 +435,7 @@ class RateLimitIT : MarketDaoITBase() {
 
         assertEquals("INVALID_CART", e.getErrorCode())
 
-        val errors = JsonObject(e.encode()).getJsonObject("lineErrors")
+        val errors = ErrorBodies.details(e).getJsonObject("lineErrors")
 
         assertEquals(2, errors.size(), "both lines of the subject are named")
         errors.forEach { (_, codes) -> assertEquals(listOf("MAX_QUANTITY"), (codes as io.vertx.core.json.JsonArray).list) }
@@ -462,7 +463,7 @@ class RateLimitIT : MarketDaoITBase() {
         val e = fails { h.checkout(body(2), caller = alice) }
 
         assertEquals("INVALID_CART", e.getErrorCode())
-        assertEquals(listOf("MAX_QUANTITY"), JsonObject(e.encode()).getJsonObject("lineErrors").getJsonArray(CartLine(bundle.id, 0, 2, emptyMap(), null).lineKey).list)
+        assertEquals(listOf("MAX_QUANTITY"), ErrorBodies.details(e).getJsonObject("lineErrors").getJsonArray(CartLine(bundle.id, 0, 2, emptyMap(), null).lineKey).list)
         assertEquals(0L, count("market_order"))
 
         // 1 bundle x 6 = 6 units is fine, and an online method is not touched
@@ -483,7 +484,7 @@ class RateLimitIT : MarketDaoITBase() {
         val e = fails { h.checkout(h.body("items" to listOf(h.line(bundle, 2), h.line(child, 3)), "paymentMethodId" to "fake"), caller = user("Alice")) }
 
         assertEquals("INVALID_CART", e.getErrorCode())
-        assertEquals(2, JsonObject(e.encode()).getJsonObject("lineErrors").size(), "8 + 3 = 11 units: the bundle line and the plain line are both named")
+        assertEquals(2, ErrorBodies.details(e).getJsonObject("lineErrors").size(), "8 + 3 = 11 units: the bundle line and the plain line are both named")
     }
 
     @Test

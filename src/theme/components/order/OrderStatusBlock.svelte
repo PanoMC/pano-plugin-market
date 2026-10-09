@@ -1,13 +1,22 @@
-<div class="vstack gap-2">
-  <div class={['alert', 'mb-0', VARIANT_CLASS[view.variant] ?? 'alert-secondary']} role="status">
+<div class="market-order-status-block vstack gap-2">
+  <div
+    class={[
+      'market-order-status-block__alert',
+      'alert',
+      'mb-0',
+      VARIANT_CLASS[view.variant] ?? 'alert-secondary',
+    ]}
+    role="status">
     <div class="d-flex align-items-start gap-3">
       {#if view.spinner}
         <span class="spinner-border spinner-border-sm mt-2 flex-shrink-0" aria-hidden="true"></span>
       {:else}
-        <i class={[view.icon, 'fa-lg', 'mt-2', 'flex-shrink-0']} aria-hidden="true"></i>
+        <i class={[iconClass(view.icon), 'fa-lg', 'mt-2', 'flex-shrink-0']} aria-hidden="true"></i>
       {/if}
       <div class="flex-grow-1">
-        <h2 class="h5 mb-1" tabindex="-1" bind:this={heading}>{$_(view.titleKey)}</h2>
+        <h2 class="market-order-status-block__title h5 mb-1" tabindex="-1" bind:this={heading}>
+          {$_(view.titleKey)}
+        </h2>
 
         {#if view.subKey}
           <p class="mb-1">{$_(view.subKey)}</p>
@@ -34,7 +43,8 @@
             <span>{formatDateTime(order.createdAt)}</span>
           {/if}
           {#if extras.testMode}
-            <span class="badge text-bg-warning align-self-center">{$_('theme.order.test')}</span>
+            <span class="market-order-status-block__badge badge text-bg-warning align-self-center"
+              >{$_('theme.order.test')}</span>
           {/if}
           {#if extras.isGift && extras.recipientUsername}
             <span>
@@ -46,7 +56,9 @@
         </div>
 
         {#if view.backToStore}
-          <a class="btn btn-sm btn-outline-secondary mt-2" href="{base}/store">
+          <a
+            class="market-order-status-block__action btn btn-sm btn-outline-secondary mt-2"
+            href="{base}/store">
             {$_('theme.order.back-to-store')}
           </a>
         {/if}
@@ -55,13 +67,15 @@
   </div>
 
   {#if extras.refundPending}
-    <div class="alert alert-info mb-0">{$_('theme.order.refund-pending')}</div>
+    <div class="market-order-status-block__refund-pending alert alert-info mb-0">
+      {$_('theme.order.refund-pending')}
+    </div>
   {/if}
 
   {#if extras.buyerActionUrl}
     <div>
       <a
-        class="btn btn-outline-primary"
+        class="market-order-status-block__buyer-action btn btn-outline-primary"
         href={extras.buyerActionUrl}
         target="_blank"
         rel="noopener noreferrer">
@@ -71,7 +85,7 @@
   {/if}
 
   {#if view.limited}
-    <div class="alert alert-secondary mb-0">
+    <div class="market-order-status-block__limited alert alert-secondary mb-0">
       {$_('theme.order.limited')}
       {#if loginHref}
         <a class="alert-link ms-1" href={loginHref}>{$_('theme.order.sign-in')}</a>
@@ -82,9 +96,13 @@
 
 <script>
   import { base } from '@panomc/sdk/svelte';
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { format as formatCountdown } from '../../lib/countdown.js';
-  import { formatDateTime } from '../../utils/format.js';
+  import { iconClass } from '../../lib/classes.js';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { formatDateTime } = market.require('format').actions;
 
   const VARIANT_CLASS = {
     success: 'alert-success',

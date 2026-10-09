@@ -1,6 +1,6 @@
 // Scenarios 58 to 61 of 13 section 25.4: orders list, order detail, refund, manual order (panel, admin session, fake payment provider).
 import fs from 'node:fs';
-import { must } from '../lib/api.mjs';
+import { must, PANEL_MARKET_API } from '../lib/api.mjs';
 import { actions, product } from '../lib/bootstrap.mjs';
 import { assert, assertEqual } from '../lib/ui.mjs';
 import { newContext } from '../lib/browser.mjs';
@@ -22,7 +22,7 @@ const rowOf = (page, number) =>
 
 async function openOrders(page, env, query = '') {
   await openMarket(page, env, `/market/orders${query}`, (p) =>
-    p.getByRole('button', { name: 'All', exact: true }).waitFor({ timeout: 60000 }),
+    p.getByRole('combobox', { name: 'Status', exact: true }).waitFor({ timeout: 60000 }),
   );
   // the list data is loaded before the card renders; the count text confirms it
   await page
@@ -78,7 +78,7 @@ export const scenarios = [
       );
 
       // status filter: Pending keeps only the pending one, Completed only the completed one
-      await page.getByRole('button', { name: 'Pending', exact: true }).click();
+      await page.getByRole('combobox', { name: 'Status', exact: true }).selectOption('pending');
       await page.waitForFunction(
         () => new URL(location.href).searchParams.get('status') === 'PENDING',
         null,
@@ -93,13 +93,12 @@ export const scenarios = [
         1,
         'PANEL-58: Pending shows the pending order',
       );
-      assert(
-        (
-          await page.getByRole('button', { name: 'Pending', exact: true }).getAttribute('class')
-        ).includes('active'),
-        'PANEL-58: the Pending tab is active',
+      assertEqual(
+        await page.getByRole('combobox', { name: 'Status', exact: true }).inputValue(),
+        'pending',
+        'PANEL-58: the Pending option is selected',
       );
-      await page.getByRole('button', { name: 'Completed', exact: true }).click();
+      await page.getByRole('combobox', { name: 'Status', exact: true }).selectOption('completed');
       await waitFor(
         'only the completed order',
         async () => (await rowOf(page, open.number).count()) === 0,
@@ -158,11 +157,23 @@ export const scenarios = [
         'currency',
         'orderTotal',
       ];
+      const exportSeen = [];
+      page.on('response', (r) => {
+        if (r.url().includes('/orders/export')) exportSeen.push(`${r.status()} ${r.url()}`);
+      });
+      page.on('requestfailed', (r) => {
+        if (r.url().includes('/orders/export'))
+          exportSeen.push(`failed ${r.failure()?.errorText} ${r.url()}`);
+      });
       const [download] = await Promise.all([
         page.waitForEvent('download', { timeout: 30000 }),
         modal.getByRole('button', { name: 'Download' }).click(),
       ]);
-      const file = await download.path();
+      const file = await download.path().catch(async (error) => {
+        throw new Error(
+          `PANEL-58: the export download failed (${await download.failure()}; ${error.message}); export responses: ${exportSeen.join(' | ') || 'none'}`,
+        );
+      });
       const raw = fs.readFileSync(file);
       assertEqual(
         raw.subarray(0, 3).toString('hex'),
@@ -204,7 +215,7 @@ export const scenarios = [
       const order = await bankTransferOrder(ctx, kit, { label: 'd59' });
       const { pc, page } = await signedIn(ctx.browser, admin);
 
-      const api = (await admin.get(`/api/panel/market/orders/${order.number}`)).json;
+      const api = (await admin.get(`${PANEL_MARKET_API}/orders/${order.number}`)).json;
       assertEqual(api.order.status, 'PENDING', 'PANEL-59: the bank transfer order starts PENDING');
       assertEqual(api.allowed.markPaid, true, 'PANEL-59: mark-as-paid is allowed on it');
 
@@ -240,7 +251,7 @@ export const scenarios = [
         { timeout: 30000 },
       );
       assertEqual(
-        (await admin.get(`/api/panel/market/orders/${order.number}`)).json.order.status,
+        (await admin.get(`${PANEL_MARKET_API}/orders/${order.number}`)).json.order.status,
         'COMPLETED',
         'PANEL-59: the API agrees: COMPLETED',
       );
@@ -301,11 +312,11 @@ export const scenarios = [
       await waitFor(
         'the refund to be listed',
         async () =>
-          ((await admin.get(`/api/panel/market/orders/${order.number}`)).json.refunds ?? [])
+          ((await admin.get(`${PANEL_MARKET_API}/orders/${order.number}`)).json.refunds ?? [])
             .length > 0,
       );
       await sleep(1500); // a second request, if the double click had sent one, would have landed by now
-      const detail = (await admin.get(`/api/panel/market/orders/${order.number}`)).json;
+      const detail = (await admin.get(`${PANEL_MARKET_API}/orders/${order.number}`)).json;
       assertEqual(
         detail.refunds.length,
         1,
@@ -347,7 +358,7 @@ export const scenarios = [
         'PANEL-60: the gateway keeps the refunded sum of the payment',
       );
       assertEqual(
-        (await admin.get(`/api/panel/market/orders/${order.number}`)).json.refunds.length,
+        (await admin.get(`${PANEL_MARKET_API}/orders/${order.number}`)).json.refunds.length,
         1,
         'PANEL-60: the platform lists the same single refund',
       );
@@ -386,7 +397,8 @@ export const scenarios = [
         await waitFor('the CTA after the reason', async () => !(await submit.isDisabled()));
         await submit.click();
         await page.locator('.modal.show').waitFor({ state: 'detached', timeout: 30000 });
-        const refunds = (await admin.get(`/api/panel/market/orders/${second.number}`)).json.refunds;
+        const refunds = (await admin.get(`${PANEL_MARKET_API}/orders/${second.number}`)).json
+          .refunds;
         assertEqual(refunds.length, 1, 'PANEL-60: the manual refund exists');
         assertEqual(
           gateway.refunds.length - refundsBefore,
@@ -416,7 +428,6 @@ export const scenarios = [
         p.getByPlaceholder('Player Username').waitFor({ timeout: 60000 }),
       );
       await page.getByPlaceholder('Player Username').fill(buyer.username);
-      await page.getByRole('button', { name: 'Actions' }).first().click();
       await page.getByRole('button', { name: 'Add Product' }).click();
       const modal = page.locator('.modal.show');
       await modal.getByPlaceholder('Search').first().fill(scarce.name);
@@ -443,7 +454,7 @@ export const scenarios = [
       await page.waitForURL(/\/panel\/market\/orders\/detail\//, { timeout: 30000 });
 
       const number = page.url().split('/').pop().split(/[?#]/)[0];
-      const view = (await admin.get(`/api/panel/market/orders/${number}`)).json;
+      const view = (await admin.get(`${PANEL_MARKET_API}/orders/${number}`)).json;
       assertEqual(view.order.source, 'PANEL', 'PANEL-61: the new order has source PANEL');
       assertEqual(view.items[0].quantity, 2, 'PANEL-61: both pieces were ordered');
 
@@ -509,7 +520,7 @@ async function previewSplit(modal, total) {
 /** The fake provider's own refund-support setting (credentials stay as they are). */
 async function setFakeRefundSupport({ admin, gateway }, value) {
   must(
-    await admin.post('/api/panel/market/payment-methods/fake', {
+    await admin.post(`${PANEL_MARKET_API}/payment-methods/fake`, {
       settings: { gatewayUrl: gateway.baseUrl, secret: gateway.secret, refundSupport: value },
     }),
     `fake refundSupport ${value}`,

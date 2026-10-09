@@ -10,7 +10,7 @@ import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.log.UpdatedMarketSettingsLog
 import com.panomc.plugins.market.config.SettingsRequest
-import com.panomc.plugins.market.core.webhook.TargetPolicy
+import com.panomc.platform.webhook.guard.TargetPolicy
 import com.panomc.plugins.market.error.InvalidSettings
 import com.panomc.plugins.market.routes.panel.dispute.ChargebackActionRules
 import com.panomc.plugins.market.routes.panel.product.RoutingCaller
@@ -20,8 +20,8 @@ import com.panomc.plugins.market.routes.base.MarketPanelApi
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 
 /**
@@ -34,7 +34,7 @@ class PanelUpdateSettingsAPI(
 ) : MarketPanelApi() {
     override val nodes: Set<MarketNode> = setOf(MarketNode.SETTINGS)
 
-    override val paths = listOf(Path("/api/panel/market/settings", RouteType.POST))
+    override val paths = listOf(Path("/settings", RouteType.POST))
 
     private val authProvider by lazy {
         plugin.applicationContext.getBean(AuthProvider::class.java)

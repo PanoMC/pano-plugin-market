@@ -2,7 +2,7 @@
 // The fake provider is configured per kind (`startKind`); a signed-in buyer with the PAY node pays (the fake gateway is a test-mode method).
 // The gateway's pay page is answered locally (holdAtGateway) so that every step the browser takes towards the gateway is recorded and the
 // payment stays unpaid until the scenario releases it (signed webhook), which is what the order page then polls for.
-import { must } from '../lib/api.mjs';
+import { must, MARKET_API, PANEL_MARKET_API } from '../lib/api.mjs';
 import { assert, assertEqual } from '../lib/ui.mjs';
 import { addFromCard } from './lib/helpers.mjs';
 import {
@@ -42,7 +42,7 @@ async function prepare({
   const checkouts = [];
 
   // the checkout answer is read on its way (the page navigates away from the document as soon as it has it)
-  await page.route(`${env.url}/api/market/checkout`, async (route) => {
+  await page.route(`${env.url}${MARKET_API}/checkout`, async (route) => {
     if (route.request().method() !== 'POST') return route.continue();
 
     const response = await route.fetch();
@@ -149,7 +149,7 @@ export const scenarios = [
 
         assertEqual(checkouts[0].payment.kind, 'FORM_POST', 'the start kind is FORM_POST');
         assert(
-          checkouts[0].payment.url.includes('/api/market/payments/attempts/'),
+          checkouts[0].payment.url.includes(`${MARKET_API}/payments/attempts/`),
           `the buyer is sent to the market attempt page, not to the gateway: ${checkouts[0].payment.url}`,
         );
         assertEqual(held.requests.length, 1, 'the gateway was reached once');
@@ -204,7 +204,7 @@ export const scenarios = [
         });
         const framed = [];
 
-        await page.route(`${env.url}/api/market/orders/*`, async (route) => {
+        await page.route(`${env.url}${MARKET_API}/orders/*`, async (route) => {
           if (route.request().method() !== 'GET' || /\/status$/.test(route.request().url()))
             return route.continue();
 
@@ -354,7 +354,7 @@ export const scenarios = [
           const continues = [];
 
           // the checkout navigates to the order page on the client, whose load asks for the order: that answer is what the variant changes
-          await page.route(`${env.url}/api/market/orders/*`, async (route) => {
+          await page.route(`${env.url}${MARKET_API}/orders/*`, async (route) => {
             const request = route.request();
 
             if (request.method() !== 'GET' || /\/status$/.test(request.url()))
@@ -534,7 +534,7 @@ export const scenarios = [
         const stored = await panelOrder(admin, publicId);
         const orderId = stored.order?.id ?? stored.id;
         must(
-          await admin.post(`/api/panel/market/orders/${orderId}/bank-transfer`, {
+          await admin.post(`${PANEL_MARKET_API}/orders/${orderId}/bank-transfer`, {
             decision: 'APPROVE',
           }),
           'approve the transfer',

@@ -212,7 +212,8 @@
 
 <script>
   import { onMount } from 'svelte';
-  import ApiUtil, { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { buildQueryParams } from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { NoContent, SearchInput } from '@panomc/sdk/components/panel';
   import { base, page, goto } from '@panomc/sdk/svelte';
   import { tooltip } from '@panomc/sdk/utils/tooltip';
@@ -221,7 +222,7 @@
   import LoadError from '../LoadError.svelte';
   import StatusBadge from '../StatusBadge.svelte';
   import PaymentMethodModal from '../modals/PaymentMethodModal.svelte';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { loadContext } from '../../utils/context.js';
   import { currentLocale } from '../../utils/locale.js';
   import {
@@ -245,7 +246,7 @@
   // extra / extraError: GET /payment-providers loaded with the page (utils/settings.js extraPathFor).
   let { ctx: ctxProp = null, extra = null, extraError = null } = $props();
 
-  let providers = $state.raw(Array.isArray(extra?.providers) ? extra.providers : []);
+  let providers = $state.raw(Array.isArray(extra?.items) ? extra.items : []);
   let loadedCtx = $state.raw(null);
   let loading = $state(!extra && !extraError);
   let loadError = $state(extraError);
@@ -296,9 +297,9 @@
     !icon ? 'fa-solid fa-credit-card' : /\bfa-/.test(icon) ? icon : `fa-solid fa-${icon}`;
 
   async function fetchProviders() {
-    const result = await call(ApiUtil.get({ path: marketPath('/payment-providers') }));
+    const result = await call(api.panel.get({ path: '/payment-providers' }));
     if (!result.ok) return { error: result.error };
-    return { providers: Array.isArray(result.body.providers) ? result.body.providers : [] };
+    return { providers: Array.isArray(result.body.items) ? result.body.items : [] };
   }
 
   async function load() {
@@ -336,8 +337,8 @@
     let result;
     try {
       result = await call(
-        ApiUtil.post({
-          path: marketPath(`/payment-methods/${provider.id}/toggle`),
+        api.panel.post({
+          path: `/payment-methods/${provider.id}/toggle`,
           body: { enabled: next },
         }),
       );
@@ -374,7 +375,7 @@
     busy = true;
     let result;
     try {
-      result = await call(ApiUtil.post({ path: marketPath('/payment-methods/sort'), body: { ids } }));
+      result = await call(api.panel.post({ path: '/payment-methods/sort', body: { ids } }));
     } finally {
       busy = false;
     }

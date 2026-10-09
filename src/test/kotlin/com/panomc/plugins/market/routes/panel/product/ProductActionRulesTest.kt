@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.lang.reflect.Proxy
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * `ProductActionRules` (08 section 2.2, 11 sections 8.2 and 14.4): the strict action rules with the catalogue context, the privilege rule, the webhook
@@ -60,7 +61,7 @@ class ProductActionRulesTest {
 
         assertTrue(e is InvalidProduct, "expected INVALID_PRODUCT, got $e")
 
-        return JsonObject((e as InvalidProduct).encode(emptyMap())).getJsonObject("fieldErrors").map.mapValues { it.value as String }
+        return ErrorBodies.details((e as InvalidProduct)).getJsonObject("fieldErrors").map.mapValues { it.value as String }
     }
 
     private fun command(extra: String = "", targets: String = "[1]") =
@@ -278,6 +279,6 @@ class ProductActionRulesTest {
 
         assertTrue(e is InvalidProduct, "expected INVALID_PRODUCT, got $e")
 
-        return JsonObject((e as InvalidProduct).encode(emptyMap())).getJsonObject("fieldErrors").map.mapValues { it.value as String }
+        return ErrorBodies.details((e as InvalidProduct)).getJsonObject("fieldErrors").map.mapValues { it.value as String }
     }
 }

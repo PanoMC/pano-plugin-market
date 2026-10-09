@@ -174,15 +174,14 @@ describe('modes, amount and preview request', () => {
 
   test('previewPath: FULL has no parameter, AMOUNT / ITEMS carry theirs, invalid input skips', () => {
     const rows = refundableItems([{ id: 1, kind: 'PRODUCT', quantity: 3, refundedQuantity: 0 }]);
-    expect(previewPath(7, { mode: 'FULL' })).toBe('/api/panel/market/orders/7/refund-preview');
+    expect(previewPath(7, { mode: 'FULL' })).toBe('/orders/7/refund-preview');
     expect(previewPath(7, { mode: 'AMOUNT', amount: 2.5 })).toBe(
-      '/api/panel/market/orders/7/refund-preview?amount=2.5',
+      '/orders/7/refund-preview?amount=2.5',
     );
     expect(previewPath(7, { mode: 'AMOUNT', amount: null })).toBeNull();
     const items = previewPath(7, { mode: 'ITEMS', quantities: { 1: 2 } }, rows);
     expect(items).toBe(
-      '/api/panel/market/orders/7/refund-preview?items=' +
-        encodeURIComponent('[{"orderItemId":1,"quantity":2}]'),
+      '/orders/7/refund-preview?items=' + encodeURIComponent('[{"orderItemId":1,"quantity":2}]'),
     );
     expect(previewPath(7, { mode: 'ITEMS', quantities: { 1: 9 } }, rows)).toBeNull();
   });
@@ -266,7 +265,7 @@ describe('buildRefundRequest (13 §6.3 step 7)', () => {
     const { request, error } = build(base());
     expect(error).toBeUndefined();
     expect(request.method).toBe('POST');
-    expect(request.path).toBe('/api/panel/market/orders/7/refunds');
+    expect(request.path).toBe('/orders/7/refunds');
     expect(request.body).toEqual({ revoke: true, restock: false, manual: false });
   });
 

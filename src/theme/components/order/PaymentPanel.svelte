@@ -1,7 +1,7 @@
 {#if model.show}
-  <section class="card" aria-labelledby="market-order-payment-title">
-    <div class="card-body vstack gap-3">
-      <h2 class="h5 mb-0" id="market-order-payment-title">
+  <section class="market-payment-panel card" aria-labelledby="market-order-payment-title">
+    <div class="market-payment-panel__body card-body vstack gap-3">
+      <h2 class="market-payment-panel__title h5 mb-0" id="market-order-payment-title">
         {$_(model.readonly ? 'theme.order.payment-details' : 'theme.order.payment-title')}
       </h2>
 
@@ -22,7 +22,7 @@
         {#key startSig}
           {#if model.mode === 'LINK'}
             <div>
-              <a class="btn btn-primary" href={model.start.url}>
+              <a class="market-payment-panel__action btn btn-primary" href={model.start.url}>
                 <i class="fa-solid fa-credit-card me-1" aria-hidden="true"></i>{$_(
                   'theme.order.payment-continue',
                 )}
@@ -51,7 +51,7 @@
               instructions={model.start.instructions}
               {onrefetch} />
           {:else if model.mode === 'UI_ERROR'}
-            <div class="alert alert-warning mb-0" role="alert">
+            <div class="market-payment-panel__alert alert alert-warning mb-0" role="alert">
               {$_('theme.order.payment-ui-error')}
             </div>
           {/if}
@@ -62,7 +62,7 @@
             <div>
               <button
                 type="button"
-                class="btn btn-link px-0"
+                class="market-payment-panel__payment-other btn btn-link px-0"
                 aria-expanded={methodsOpen ? 'true' : 'false'}
                 aria-controls="market-order-payment-other"
                 onclick={() => (userOpen = !methodsOpen)}>
@@ -101,7 +101,7 @@
                 {/if}
 
                 {#if alertKey}
-                  <div class="alert alert-warning mb-0" role="alert">
+                  <div class="market-payment-panel__alert-2 alert alert-warning mb-0" role="alert">
                     {$_(alertKey, { values: { seconds: waitLeft } })}
                   </div>
                 {/if}
@@ -109,7 +109,7 @@
                 <div>
                   <button
                     type="button"
-                    class="btn btn-primary"
+                    class="market-payment-panel__payment-pay btn btn-primary"
                     disabled={!canPay({
                       order,
                       methodId: chosen,
@@ -135,7 +135,7 @@
 <script>
   import { base } from '@panomc/sdk/svelte';
   import { onMount, untrack } from 'svelte';
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import {
     billingStep,
     canPay,
@@ -153,15 +153,18 @@
     startSignature,
   } from '../../lib/paymentPanel.js';
   import { selectedMethod } from '../../lib/paymentModel.js';
-  import { now } from '../../stores/clock.js';
   import { tokenHeaders } from '../../stores/orderTokens.js';
-  import { call } from '../../utils/api.js';
   import BillingSection from '../checkout/BillingSection.svelte';
   import CreditsSection from '../checkout/CreditsSection.svelte';
   import PaymentMethodPicker from '../checkout/PaymentMethodPicker.svelte';
   import PaymentEmbedded from './PaymentEmbedded.svelte';
   import PaymentIframe from './PaymentIframe.svelte';
   import PaymentInstructions from './PaymentInstructions.svelte';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { call } = market.require('api').actions;
+  const clock = market.require('clock');
 
   /**
    * Payment part of the order page (14 §11.4): the start UI of the newest attempt (a link, an iframe, an embedded
@@ -198,7 +201,7 @@
   let billingInfo = $state(emptyBilling());
   let billingErrors = $state({});
 
-  const nowMs = $derived($now);
+  const nowMs = $derived(clock.state.now);
   const model = $derived(panelModel({ order, view, now: nowMs, override, context }));
   const startSig = $derived(startSignature(model.start));
   const uiFailed = $derived(failedSig !== '' && failedSig === startSig);
@@ -245,11 +248,10 @@
     continuing = true;
 
     try {
-      const res = await call(
-        'POST',
-        `/api/market/orders/${encodeURIComponent(id)}/payment/continue`,
-        { body: { values }, headers: tokenHeaders(id, token) },
-      );
+      const res = await call('POST', `/orders/${encodeURIComponent(id)}/payment/continue`, {
+        body: { values },
+        headers: tokenHeaders(id, token),
+      });
 
       if (res.ok) {
         if (res.payment) await follow(res.payment);
@@ -291,7 +293,7 @@
 
     paying = true;
 
-    const res = await call('POST', `/api/market/orders/${encodeURIComponent(id)}/pay`, {
+    const res = await call('POST', `/orders/${encodeURIComponent(id)}/pay`, {
       body: payBody({
         methodId: chosen,
         useCredits: payCredits({ useCredits, credits, method: chosenMethod }),

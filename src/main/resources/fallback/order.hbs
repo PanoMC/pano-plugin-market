@@ -1,0 +1,11 @@
+{{pageTitle m.title}}
+<h1 class="pano-fb-title">{{m.heading}}</h1>
+{{#if found}}
+<p class="pano-fb-lead">{{lead}}</p>
+<p class="pano-fb-lead"><strong>{{m.order}}</strong> {{publicId}}</p>
+<p class="pano-fb-lead"><strong>{{m.status}}</strong> {{statusLabel}}</p>
+{{#if total}}<p class="pano-fb-lead"><strong>{{m.total}}</strong> {{total}}</p>{{/if}}
+{{else}}
+<p class="pano-fb-message" role="alert">{{m.notFound}}</p>
+{{/if}}
+{{#if backUrl}}<a class="pano-fb-button" href="{{backUrl}}">{{m.back}}</a>{{/if}}

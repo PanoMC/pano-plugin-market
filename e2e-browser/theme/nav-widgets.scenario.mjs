@@ -6,7 +6,7 @@
 // (sdk core/js/variables.js) bounce the browser to the instance's own port, i.e. to the bundled theme; `patchBundle` switches that dev bounce off
 // for the page, otherwise the plugin would never see the vite host. A half that needs a capability the host does not announce FAILS the scenario with
 // that reason, it is never skipped silently and never counted as a pass.
-import { must } from '../lib/api.mjs';
+import { must, MARKET_API, PANEL_MARKET_API } from '../lib/api.mjs';
 import { actions, grantCredits, product as panelProduct, run } from '../lib/bootstrap.mjs';
 import { newContext } from '../lib/browser.mjs';
 import { assert, assertEqual, open } from '../lib/ui.mjs';
@@ -115,7 +115,7 @@ export const scenarios = [
 
       // the second buyer holds a creator code and a subscription
       must(
-        await admin.post('/api/panel/market/creator-codes', {
+        await admin.post(`${PANEL_MARKET_API}/creator-codes`, {
           creator: rich.username,
           creatorUserId: rich.userId,
           code: `N47${unique()}`.toUpperCase(),
@@ -128,7 +128,7 @@ export const scenarios = [
       );
       await paidOrder(rich, [{ productId: sub.id, quantity: 1 }]);
       await waitUntil(
-        async () => ((await rich.get('/api/market/me/summary')).json?.subscriptionCount ?? 0) > 0,
+        async () => ((await rich.get(`${MARKET_API}/me/summary`)).json?.subscriptionCount ?? 0) > 0,
         30000,
         'the subscription of the second buyer',
       );
@@ -139,7 +139,7 @@ export const scenarios = [
 
       await waitUntil(
         async () =>
-          String((await rich.get('/api/market/me/summary')).json?.creditBalance) === richBalance,
+          String((await rich.get(`${MARKET_API}/me/summary`)).json?.creditBalance) === richBalance,
         30000,
         'the credit of the subscription delivered to the second buyer',
       );
@@ -389,7 +389,7 @@ export const scenarios = [
       };
       const set = async (patch) => {
         must(
-          await admin.post('/api/panel/market/settings', patch),
+          await admin.post(`${PANEL_MARKET_API}/settings`, patch),
           `settings ${JSON.stringify(patch)}`,
         );
         await sleep(1500);
@@ -399,7 +399,7 @@ export const scenarios = [
         await withBankTransfer(admin, async () => {
           const goalName = `Goal48 ${unique()}`;
           const goal = must(
-            await admin.post('/api/panel/market/goals', {
+            await admin.post(`${PANEL_MARKET_API}/goals`, {
               name: goalName,
               metric: 'ORDERS',
               target: 2,
@@ -422,7 +422,7 @@ export const scenarios = [
 
               must(
                 await admin.post(
-                  `/api/panel/market/orders/${await orderRowId(admin, placed.publicId)}/bank-transfer`,
+                  `${PANEL_MARKET_API}/orders/${await orderRowId(admin, placed.publicId)}/bank-transfer`,
                   { decision: 'APPROVE' },
                 ),
                 'approve the transfer',
@@ -561,7 +561,7 @@ export const scenarios = [
             await ctx.close();
           } finally {
             await admin
-              .request('DELETE', `/api/panel/market/goals/${goal.json.id}`)
+              .request('DELETE', `${PANEL_MARKET_API}/goals/${goal.json.id}`)
               .catch(() => {});
             await set({
               moduleRecentBuyers: true,

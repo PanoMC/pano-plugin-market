@@ -16,7 +16,3 @@ class UpdatedMarketLegalTextLog(userId: Long, username: String, pluginId: String
 /** `PUT /servers/:id/settings`: the per-server override of the `mc*` keys changed (the values are not logged). */
 class UpdatedMarketServerSettingsLog(userId: Long, username: String, pluginId: String, serverId: Long) :
     PluginActivityLog(userId = userId, pluginId = pluginId, details = JsonObject().put("username", username).put("serverId", serverId))
-
-/** `POST /webhook-deliveries/:id/redeliver`: the delivery [deliveryId] went back to `PENDING`. */
-class RedeliveredMarketWebhookLog(userId: Long, username: String, pluginId: String, deliveryId: Long) :
-    PluginActivityLog(userId = userId, pluginId = pluginId, details = JsonObject().put("username", username).put("deliveryId", deliveryId))

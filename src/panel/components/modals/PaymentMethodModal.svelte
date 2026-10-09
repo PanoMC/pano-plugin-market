@@ -396,7 +396,7 @@
 
 <script>
   import { tick } from 'svelte';
-  import ApiUtil from '@panomc/sdk/utils/api';
+  import { api } from '@panomc/sdk/plugin-api';
   import { tooltip } from '@panomc/sdk/utils/tooltip';
   import { _ as rawI18n } from '@panomc/sdk/utils/language';
   import { _, showSuccessToast } from '../../../i18n';
@@ -405,7 +405,7 @@
   import MoneyInput from '../MoneyInput.svelte';
   import PluginHook from '../PluginHook.svelte';
   import SchemaForm from '../schema/SchemaForm.svelte';
-  import { call, marketPath } from '../../utils/api.js';
+  import { call } from '../../utils/api.js';
   import { currentLocale } from '../../utils/locale.js';
   import {
     actionBlocked,
@@ -517,8 +517,8 @@
     let result;
     try {
       result = await call(
-        ApiUtil.post({
-          path: marketPath(`/payment-methods/${provider.id}`),
+        api.panel.post({
+          path: `/payment-methods/${provider.id}`,
           body: {
             settings: buildSettingsPayload(provider.schema, working),
             config: buildConfig(form, { capabilities: caps, original: provider.config ?? {} }),
@@ -581,8 +581,8 @@
     let result;
     try {
       result = await call(
-        ApiUtil.post({
-          path: marketPath(`/payment-methods/${current.id}/actions/${encodeURIComponent(action.id)}`),
+        api.panel.post({
+          path: `/payment-methods/${current.id}/actions/${encodeURIComponent(action.id)}`,
           body: { input: {} },
         }),
       );

@@ -44,6 +44,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * Shipping at checkout on a real MariaDB (MK-132; 10 sections 3 to 6 and 16 tests 27 to 40, SH-01 and SH-02 of 17 section 9.7):
@@ -208,7 +209,7 @@ class ShippingCheckoutIT : MarketDaoITBase() {
         assertEquals(code, e.getErrorCode(), "error code, body ${e.encode()}")
         assertEquals(400, e.getStatusCode(), "status of $code")
 
-        return JsonObject(e.encode())
+        return ErrorBodies.details(e)
     }
 
     private suspend fun order(result: CheckoutResult) = w.orders.getByPublicId(result.order.getString("publicId"), pool)!!
@@ -1075,7 +1076,7 @@ class ShippingCheckoutIT : MarketDaoITBase() {
         val shirt = shirt()
         val vip = digital()
 
-        assertEquals("PHYSICAL_NOT_SUPPORTED", ShippingService.giftCodeRefusal(listOf(vip, shirt))!!.let { JsonObject(it.encode()).getString("reason") })
+        assertEquals("PHYSICAL_NOT_SUPPORTED", ShippingService.giftCodeRefusal(listOf(vip, shirt))!!.let { ErrorBodies.details(it).getString("reason") })
         assertEquals(400, ShippingService.giftCodeRefusal(listOf(shirt))!!.getStatusCode())
         assertEquals("INVALID_GIFT_CODE", ShippingService.giftCodeRefusal(listOf(shirt))!!.getErrorCode())
         assertNull(ShippingService.giftCodeRefusal(listOf(vip)))
@@ -1180,7 +1181,7 @@ class ShippingCheckoutIT : MarketDaoITBase() {
 
         val missing = assertThrows(com.panomc.plugins.market.error.ShippingAddressRequired::class.java) { runBlocking { book.create(alice.id, input(mapOf("country" to "DE"))) } }
 
-        assertEquals(setOf("firstName", "lastName", "phone", "city", "line1", "postalCode"), JsonObject(missing.encode()).getJsonArray("fields").map { it.toString() }.toSet())
+        assertEquals(setOf("firstName", "lastName", "phone", "city", "line1", "postalCode"), ErrorBodies.details(missing).getJsonArray("fields").map { it.toString() }.toSet())
         assertThrows(com.panomc.plugins.market.error.ShippingAddressRequired::class.java) { runBlocking { book.create(alice.id, input(de + ("country" to "ZZ"))) } }
         assertThrows(RequestValueException::class.java) { runBlocking { book.create(alice.id, input(de, label = "x".repeat(65))) } }
         assertThrows(RequestValueException::class.java) { AddressBookService.parse(JsonObject().put("city", 5)) }

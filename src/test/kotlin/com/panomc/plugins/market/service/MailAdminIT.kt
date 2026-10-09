@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.platform.model.PageRequest
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.delivery.ProductAction
@@ -39,7 +40,6 @@ import com.panomc.plugins.market.support.FakeMailGateway
 import com.panomc.plugins.market.support.Fixtures
 import com.panomc.plugins.market.support.TestUser
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonObject
 import io.vertx.sqlclient.SqlClient
 import kotlinx.coroutines.runBlocking
@@ -645,24 +645,24 @@ class MailAdminIT : MarketDaoITBase() {
 
         Fixtures.setColumns(pool, "market_mail_outbox", first, mapOf("status" to "FAILED", "attempts" to 10, "lastError" to "550 mailbox john.smith@example.com unavailable"))
 
-        val all = admin.list(null, null, null, Paging.Window(1, 10), seeRecipients = true, client = pool)
+        val all = admin.list(null, null, null, PageRequest(1, 10), seeRecipients = true, client = pool)
 
         assertEquals(3, all.total)
         assertEquals(listOf(third, second, first), all.rows.map { it.getLong("id") })
         assertEquals("john.smith@example.com", all.rows[2].getString("recipient"))
         assertEquals(setOf("id", "kind", "orderId", "recipient", "status", "attempts", "lastError", "createdAt", "sentAt"), all.rows[0].fieldNames().toSet())
 
-        val masked = admin.list(null, null, null, Paging.Window(1, 10), seeRecipients = false, client = pool)
+        val masked = admin.list(null, null, null, PageRequest(1, 10), seeRecipients = false, client = pool)
 
         assertEquals("j***@e***.com", masked.rows[2].getString("recipient"))
         assertFalse(masked.rows[2].getString("lastError").contains("john.smith"), "the address is also gone from the error text: ${masked.rows[2].getString("lastError")}")
         assertTrue(masked.rows.none { it.getString("recipient").contains("alice") })
 
-        assertEquals(listOf(first), admin.list(MailStatus.FAILED, null, null, Paging.Window(1, 10), true, pool).rows.map { it.getLong("id") })
-        assertEquals(listOf(third, first), admin.list(null, MailKind.ORDER_CONFIRMATION, null, Paging.Window(1, 10), true, pool).rows.map { it.getLong("id") })
-        assertEquals(listOf(third), admin.list(null, null, other.order.id, Paging.Window(1, 10), true, pool).rows.map { it.getLong("id") })
+        assertEquals(listOf(first), admin.list(MailStatus.FAILED, null, null, PageRequest(1, 10), true, pool).rows.map { it.getLong("id") })
+        assertEquals(listOf(third, first), admin.list(null, MailKind.ORDER_CONFIRMATION, null, PageRequest(1, 10), true, pool).rows.map { it.getLong("id") })
+        assertEquals(listOf(third), admin.list(null, null, other.order.id, PageRequest(1, 10), true, pool).rows.map { it.getLong("id") })
 
-        val page2 = admin.list(null, null, null, Paging.Window(2, 2), true, pool)
+        val page2 = admin.list(null, null, null, PageRequest(2, 2), true, pool)
 
         assertEquals(3, page2.total)
         assertEquals(listOf(first), page2.rows.map { it.getLong("id") })

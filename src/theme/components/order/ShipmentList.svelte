@@ -1,13 +1,14 @@
 {#if showShipments && shipments.length}
-  <div class="vstack gap-3">
+  <div class="market-shipment-list vstack gap-3">
     {#each shipments as shipment, index (shipment.id ?? index)}
       <div class="card">
-        <div class="card-body vstack gap-2">
+        <div class="market-shipment-list__body card-body vstack gap-2">
           <div class="d-flex flex-wrap align-items-center gap-2">
             {#if shipment.carrierName}
               <span class="fw-semibold">{shipment.carrierName}</span>
             {/if}
-            <span class={['badge', shipmentBadge(shipment.status).cls]}>
+            <span
+              class={['market-shipment-list__badge', 'badge', shipmentBadge(shipment.status).cls]}>
               {$_(shipmentBadge(shipment.status).labelKey)}
             </span>
           </div>
@@ -55,10 +56,10 @@
 {/if}
 
 {#if owner && (shippingLines.length || billingLines.length || email)}
-  <div class="row g-3 mt-0">
+  <div class="market-shipment-list row g-3 mt-0">
     {#if shippingLines.length}
       <div class="col-md-6">
-        <h3 class="h6">{$_('theme.order.shipping-address')}</h3>
+        <h3 class="market-shipment-list__title h6">{$_('theme.order.shipping-address')}</h3>
         <address class="mb-0">
           {#each shippingLines as line, index (index)}{line}<br />{/each}
           {countryName(shippingAddress.country)}
@@ -67,7 +68,7 @@
     {/if}
     {#if billingLines.length}
       <div class="col-md-6">
-        <h3 class="h6">{$_('theme.order.billing-info')}</h3>
+        <h3 class="market-shipment-list__billing-info h6">{$_('theme.order.billing-info')}</h3>
         <address class="mb-0">
           {#each billingLines as line, index (index)}{line}<br />{/each}
           {countryName(billingInfo.country)}
@@ -84,10 +85,13 @@
 {/if}
 
 <script>
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { addressLines, safeTrackingUrl, shipmentBadge } from '../../lib/orderState.js';
-  import { countryName, formatDateTime } from '../../utils/format.js';
   import CopyButton from '../common/CopyButton.svelte';
+
+  const market = plugin('market');
+  const { _ } = market;
+  const { countryName, formatDateTime } = market.require('format').actions;
 
   /**
    * Shipments of an OrderView and, for the owner, the shipping address, billing info and e-mail (14 §11.4).

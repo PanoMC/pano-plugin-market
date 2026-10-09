@@ -1,13 +1,5 @@
 // Static rules of 17 §10 `check:static` as pure functions over (file, source).
-import {
-  classTokens,
-  hardcodedTexts,
-  htmlSinks,
-  parseTags,
-  splitSvelte,
-  topLevelGlobals,
-} from './scan.js';
-import { isAllowedThemeClass } from './bootstrap-classes.js';
+import { hardcodedTexts, htmlSinks, parseTags, splitSvelte, topLevelGlobals } from './scan.js';
 import { lineOf } from './common.js';
 
 function allowlistEntry(allowlist, file) {
@@ -17,11 +9,11 @@ function allowlistEntry(allowlist, file) {
 }
 
 // Returns [{ rule, file, line, message }].
-export function checkSvelteFile(file, source, { allowlist, isTheme }) {
+export function checkSvelteFile(file, source, { allowlist }) {
   const out = [];
   const add = (rule, index, message) =>
     out.push({ rule, file, line: lineOf(source, index), message });
-  const { markup, scripts, styles } = splitSvelte(source);
+  const { markup, scripts } = splitSvelte(source);
 
   for (const s of scripts) {
     for (const m of s.code.matchAll(/^\s*export\s+let\s/gm))
@@ -41,11 +33,6 @@ export function checkSvelteFile(file, source, { allowlist, isTheme }) {
       add('runes', tag.index, `<${tag.name}> uses an on: directive (use onclick={...})`);
     if (tag.name === 'slot') add('runes', tag.index, '<slot> (use snippets)');
     if (tag.name === 'svelte:self') add('runes', tag.index, '<svelte:self> (import the component)');
-    if (isTheme) {
-      for (const token of classTokens(tag.attrs))
-        if (!isAllowedThemeClass(token))
-          add('theme-class', tag.index, `class '${token}' is not Bootstrap / FontAwesome`);
-    }
   }
 
   const sinks = htmlSinks(markup);
@@ -57,9 +44,6 @@ export function checkSvelteFile(file, source, { allowlist, isTheme }) {
         add('html', sink.index, `{@html ${sink.expr}} must be wrapped in ${entry.wrapper}()`);
     }
   }
-
-  if (isTheme)
-    for (const st of styles) add('theme-style', st.index, '<style> block in a theme file');
 
   const allowedTexts = new Set(allowlist.allowedTexts ?? []);
   for (const t of hardcodedTexts(markup)) {

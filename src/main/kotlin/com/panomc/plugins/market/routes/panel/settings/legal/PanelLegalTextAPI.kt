@@ -17,8 +17,8 @@ import com.panomc.plugins.market.service.LegalTextService
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
-import io.vertx.ext.web.validation.builder.Bodies
-import io.vertx.ext.web.validation.builder.ValidationHandlerBuilder
+import com.panomc.platform.schema.dsl.Bodies
+import com.panomc.platform.schema.dsl.ValidationHandlerBuilder
 import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 
@@ -31,8 +31,8 @@ class PanelLegalTextAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
     override val nodes: Set<MarketNode> = setOf(MarketNode.SETTINGS)
 
     override val paths = listOf(
-        Path("/api/panel/market/settings/legal", RouteType.GET),
-        Path("/api/panel/market/settings/legal", RouteType.POST)
+        Path("/settings/legal", RouteType.GET),
+        Path("/settings/legal", RouteType.POST)
     )
 
     private val service: LegalTextService by lazy { legalTextService(plugin) }
@@ -60,7 +60,7 @@ class PanelLegalTextAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
                 )
             }
 
-            return Successful(mapOf("texts" to texts))
+            return Successful(mapOf("items" to texts))
         }
 
         val body = context.body().asJsonObject() ?: JsonObject()

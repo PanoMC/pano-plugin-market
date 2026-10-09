@@ -76,5 +76,29 @@ for (const bundle of ['client', 'server']) {
     );
 }
 
+// The package of the open front-end (doc 02 section 5, doc 03 section 4): the fallback sheet holds a class only a script
+// builds (`text-bg-success` comes from the status tables, not from markup), the three badges are held, and the build did not
+// run in the PANO_VIEW_IMPORTS migration mode.
+const fallback = path.join(outDir, 'client/fallback.css');
+if (!fs.existsSync(fallback)) report.add('package', rel(fallback), 0, 'missing');
+else if (!fs.readFileSync(fallback, 'utf8').includes('.text-bg-success'))
+  report.add('package', rel(fallback), 0, 'does not contain .text-bg-success');
+
+const indexFile = path.join(outDir, 'pano-plugin.json');
+if (!fs.existsSync(indexFile)) report.add('package', rel(indexFile), 0, 'missing');
+else {
+  const index = JSON.parse(fs.readFileSync(indexFile, 'utf8'));
+  for (const badge of ['controllers', 'samples', 'semanticClasses'])
+    if (index.badges?.[badge] !== true)
+      report.add('package', rel(indexFile), 0, `badges.${badge} is not held`);
+  if (index.viewImports)
+    report.add(
+      'package',
+      rel(indexFile),
+      0,
+      `built in migration mode (viewImports: ${index.viewImports})`,
+    );
+}
+
 report.note(`verified ${rel(outDir)}`);
 process.exit(report.finish());

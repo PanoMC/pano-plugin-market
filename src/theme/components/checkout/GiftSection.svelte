@@ -1,11 +1,11 @@
-<div class="card">
-  <div class="card-body">
-    <h2 class="h5">{$_('theme.checkout.gift')}</h2>
+<div class="market-gift-section card">
+  <div class="market-gift-section__body card-body">
+    <h2 class="market-gift-section__title h5">{$_('theme.checkout.gift')}</h2>
 
     <div class="form-check form-switch">
       <input
         id={switchId}
-        class="form-check-input"
+        class="market-gift-section__check form-check-input"
         type="checkbox"
         role="switch"
         checked={isGift}
@@ -25,13 +25,13 @@
     {#if isGift}
       <div class="vstack gap-3 mt-3">
         <div>
-          <label class="form-label" for={recipientId}>
+          <label class="market-gift-section__label form-label" for={recipientId}>
             {$_('theme.checkout.gift-recipient')}
             <span class="text-danger" aria-hidden="true">*</span>
           </label>
           <input
             id={recipientId}
-            class={['form-control', errors.recipient && 'is-invalid']}
+            class={['market-gift-section__input', 'form-control', errors.recipient && 'is-invalid']}
             type="text"
             maxlength="32"
             autocomplete="off"
@@ -57,10 +57,11 @@
         </div>
 
         <div>
-          <label class="form-label" for={messageId}>{$_('theme.checkout.gift-message')}</label>
+          <label class="market-gift-section__gift-message form-label" for={messageId}
+            >{$_('theme.checkout.gift-message')}</label>
           <textarea
             id={messageId}
-            class={['form-control', errors.message && 'is-invalid']}
+            class={['market-gift-section__input-2', 'form-control', errors.message && 'is-invalid']}
             rows="3"
             maxlength={GIFT_MESSAGE_MAX}
             aria-invalid={errors.message ? 'true' : undefined}
@@ -83,9 +84,12 @@
 </div>
 
 <script>
-  import { _ } from '../../../i18n.js';
+  import { plugin } from '@panomc/sdk/controllers';
   import { fieldErrorKey, fieldId } from '../../lib/checkoutModel.js';
   import { GIFT_MESSAGE_MAX } from '../../lib/validation.js';
+
+  const market = plugin('market');
+  const { _ } = market;
 
   /**
    * isGift / recipient / message: the draft values; errors: {recipient?, message?} message codes;

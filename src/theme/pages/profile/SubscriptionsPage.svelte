@@ -1,9 +1,11 @@
-<div class="vstack gap-4">
+<div class="market-subscriptions-page vstack gap-4">
   {#if data.pills}
     <ProfilePills summary={data.summary} current="subscriptions" />
   {/if}
 
-  <h2 class="h5 mb-0">{$_('theme.profile.subscriptions.title')}</h2>
+  <h2 class="market-subscriptions-page__title h5 mb-0">
+    {$_('theme.profile.subscriptions.title')}
+  </h2>
 
   {#if data.state === 'ERROR' && !subscriptions}
     <ErrorAlert message={$_(messageKey(data.code))} onretry={reload} />
@@ -27,14 +29,22 @@
 </div>
 
 <script module>
+  // page metadata (doc 01 section 2): the build registers this view as a page, no register.js entry
+  export const view = { path: '/profile/subscriptions', systemLayout: 'ProfileLayout' };
+
   import { redirect } from '@panomc/sdk/svelte';
   import { SUBSCRIPTION_PATH, resolveSubscriptionsLoad } from '../../lib/subscriptionModel.js';
-  import { call } from '../../utils/api.js';
-  import { has, loginUrl } from '../../utils/host.js';
+  import { plugin } from '@panomc/sdk/controllers';
 
-  const SUMMARY_PATH = '/api/market/me/summary';
+  const SUMMARY_PATH = '/me/summary';
 
   export async function load(event) {
+    const market = plugin('market');
+    // a server load is made for its request; the browser has one host for the whole page
+    const via = typeof window === 'undefined' ? { event } : undefined;
+    const { call } = market.require('api', via).actions;
+    const { has, loginUrl } = market.require('host', via).actions;
+
     const returnTo = `${event.url.pathname}${event.url.search}`;
     const { session } = await event.parent();
 
@@ -63,9 +73,8 @@
 </script>
 
 <script>
-  import { getContext, onMount, untrack } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { NoContent } from '@panomc/sdk/components/theme';
-  import { _ } from '../../../i18n.js';
   import ErrorAlert from '../../components/common/ErrorAlert.svelte';
   import LoadingBlock from '../../components/common/LoadingBlock.svelte';
   import ProfilePills from '../../components/profile/ProfilePills.svelte';
@@ -73,11 +82,12 @@
   import { messageKey } from '../../lib/errorMap.js';
   import { createSequencer } from '../../lib/storeFilter.js';
   import { readSubscriptions, replaceSubscription } from '../../lib/subscriptionModel.js';
-  import { bindSession, hostSession } from '../../stores/session.js';
+
+  const market = plugin('market');
+  const _ = market._;
+  const { call } = market.require('api').actions;
 
   let { data } = $props();
-
-  bindSession(hostSession(getContext));
 
   // The page is re-mounted whenever load() runs again (14 F2), so the loaded data only seeds the state.
   const init = untrack(() => data);

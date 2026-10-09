@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.platform.model.PageRequest
 import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NotFound
 import com.panomc.platform.model.Error
@@ -18,7 +19,6 @@ import com.panomc.plugins.market.service.platform.UserDirectory
 import com.panomc.plugins.market.support.Fixtures
 import com.panomc.plugins.market.support.Race
 import com.panomc.plugins.market.support.TestWiring
-import com.panomc.plugins.market.util.Paging
 import io.vertx.core.json.JsonObject
 import io.vertx.sqlclient.SqlClient
 import kotlinx.coroutines.runBlocking
@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import com.panomc.plugins.market.support.ErrorBodies
 
 /**
  * The discounts panel on a real MariaDB (MK-113; 04 section 6, 01 sections 3 and 13): create, partial update, soft and hard delete and the lists
@@ -78,7 +79,7 @@ class PromotionAdminIT : MarketDaoITBase() {
 
     private fun body(json: String) = JsonObject(json)
 
-    private fun window(page: Int = 1, size: Int = 10) = Paging.Window(page, size)
+    private fun window(page: Int = 1, size: Int = 10) = PageRequest(page, size)
 
     private suspend fun row(promotion: Promotion, id: Long): Map<String, Any?> {
         val r = sql("SELECT * FROM `pano_${promotion.table}` WHERE `id` = ?", id).single()
@@ -90,7 +91,7 @@ class PromotionAdminIT : MarketDaoITBase() {
         try {
             block()
         } catch (e: BadRequest) {
-            val errors = JsonObject(e.encode()).getJsonObject("fieldErrors") ?: error("a 400 without fieldErrors: ${e.encode()}")
+            val errors = ErrorBodies.details(e).getJsonObject("fieldErrors") ?: error("a 400 without fieldErrors: ${e.encode()}")
 
             return errors.map.mapValues { it.value.toString() }
         }
@@ -584,7 +585,7 @@ class PromotionAdminIT : MarketDaoITBase() {
         )) {
             val e = fails(InvalidGiftCode::class.java) { admin.create(Promotion.GIFT, body(json)) }
 
-            assertEquals("PHYSICAL_NOT_SUPPORTED", JsonObject(e.encode()).getString("reason"), json)
+            assertEquals("PHYSICAL_NOT_SUPPORTED", ErrorBodies.details(e).getString("reason"), json)
         }
 
         assertEquals(0, count("market_gift"))

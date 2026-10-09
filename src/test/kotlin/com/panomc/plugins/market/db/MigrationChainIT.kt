@@ -82,7 +82,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         runChain()
         val migrated = SchemaSnapshot.take(pool)
         val fresh = freshSchema()
-        assertEquals(53, migrated.tables.size)
+        assertEquals(51, migrated.tables.size)
         assertEquals(fresh.tables, migrated.tables)
         assertEquals(fresh.columns, migrated.columns)
         assertEquals(fresh.keys, migrated.keys)
@@ -407,7 +407,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
 
     private val step9Tables = listOf("subscription", "subscription_renewal", "block", "throttle", "goal", "shipping_zone", "shipping_method", "shipping_rate", "shipping_carrier", "shipment", "shipment_item", "shipment_event").map { "pano_market_$it" }.toSet()
 
-    private val step8Tables = listOf("delivery", "server_state", "webhook_endpoint", "webhook_delivery", "mail_outbox").map { "pano_market_$it" }.toSet()
+    private val step8Tables = listOf("delivery", "server_state", "mail_outbox").map { "pano_market_$it" }.toSet()
 
     private suspend fun systemAccounts(): List<String> =
         sql("SELECT `systemKey` FROM `pano_market_credit_account` WHERE `type` = 'SYSTEM' ORDER BY `id`").map { it.getString("systemKey") }
@@ -505,7 +505,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         assertEquals(7, migration.from)
         assertEquals(8, migration.to)
         assertTrue(migration.isMigratable(7) && !migration.isMigratable(6))
-        assertEquals(5, migration.handlers.size)
+        assertEquals(3, migration.handlers.size)
         assertTrue(MarketMigration7to8.statements().map { it("pano_") }.all { it.startsWith("CREATE TABLE IF NOT EXISTS") })
     }
 
@@ -521,7 +521,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         assertEquals(before, dump(columns))
         val after = columnsOfCurrentTables()
         assertTrue(step8Tables.all { it in after.keys })
-        for (t in listOf("delivery", "server_state", "webhook_endpoint", "webhook_delivery", "mail_outbox")) assertEquals(0L, count("market_$t"), t)
+        for (t in listOf("delivery", "server_state", "mail_outbox")) assertEquals(0L, count("market_$t"), t)
         val schema = SchemaSnapshot.take(pool)
         MarketMigration7to8().migrate(pool)
         assertEquals(schema, SchemaSnapshot.take(pool))

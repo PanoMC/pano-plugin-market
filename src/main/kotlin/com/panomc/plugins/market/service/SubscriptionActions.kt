@@ -34,6 +34,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
+import com.panomc.plugins.market.util.MarketPaths
 
 /** What a cancel answers (09 section 10.1): the subscription, or the address where only the buyer can cancel (`BuyerActionRequired`). */
 sealed class CancelOutcome {
@@ -74,7 +75,7 @@ class PortalPages(private val clock: Clock, private val ids: Ids = SecureIds(), 
 
     companion object {
         const val TOKEN_BYTES = 16
-        const val PATH = "/api/market/me/subscriptions/portal-pages/"
+        const val PATH = "${MarketPaths.SITE_ROOT}/me/subscriptions/portal-pages/"
     }
 }
 
