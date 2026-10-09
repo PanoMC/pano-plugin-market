@@ -215,9 +215,9 @@ class CurrencyRateIT : MarketDaoITBase() {
         fx.product(slug = "x", price = 20000)
 
         service.update(listOf(entry("USD", CurrencyRateMode.MANUAL, "0.05")), pool)
-        assertEquals(10.0, store.products(ProductListQuery(currency = "USD"), StoreViewer.GUEST, pool).getJsonArray("products").getJsonObject(0).getDouble("price"))
+        assertEquals(10.0, store.products(ProductListQuery(currency = "USD"), StoreViewer.GUEST, pool).getJsonArray("items").getJsonObject(0).getDouble("price"))
 
         service.update(listOf(entry("USD", CurrencyRateMode.MANUAL, "0.1")), pool)
-        assertEquals(20.0, store.products(ProductListQuery(currency = "USD"), StoreViewer.GUEST, pool).getJsonArray("products").getJsonObject(0).getDouble("price"))
+        assertEquals(20.0, store.products(ProductListQuery(currency = "USD"), StoreViewer.GUEST, pool).getJsonArray("items").getJsonObject(0).getDouble("price"))
     }
 }
