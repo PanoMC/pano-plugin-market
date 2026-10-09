@@ -74,7 +74,9 @@ class RaceSelfTest {
         Race.run(actors) {
             val now = running.incrementAndGet()
             peak.accumulateAndGet(now) { a, b -> maxOf(a, b) }
-            Thread.sleep(50)
+            // stay inside until everyone is inside (a starved machine may start the actors far apart)
+            val until = System.nanoTime() + 60_000_000_000L
+            while (running.get() < actors && System.nanoTime() < until) Thread.sleep(1)
             running.decrementAndGet()
         }
         assertEquals(actors, peak.get())

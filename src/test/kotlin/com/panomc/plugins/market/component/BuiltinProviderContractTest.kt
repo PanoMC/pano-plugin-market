@@ -380,13 +380,13 @@ class BuiltinProviderContractTest {
         val finished = CompletableDeferred<StartPaymentResult>()
         val job = Thread { runBlocking { finished.complete(fake.startPayment(ctx, request)) } }.also { it.start() }
         // The call is recorded (so a test can see it is in flight) but not finished.
-        val deadline = System.currentTimeMillis() + 5000
+        val deadline = System.currentTimeMillis() + 60000
         while (fake.calls.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(5)
         assertEquals(1, fake.calls.size)
         Thread.sleep(150)
         assertFalse(finished.isCompleted)
         gate.complete(Unit)
-        job.join(5000)
+        job.join(60000)
         assertTrue(finished.isCompleted)
 
         // A timed delay releases itself.

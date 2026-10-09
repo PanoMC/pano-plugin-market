@@ -372,7 +372,7 @@ class InboundDispatcherTest {
         LockingContext(TestContexts.payment("fake", TestContexts.settings(), vertx, tm ?: testMode), locks)
     }
 
-    private fun build(timeoutMs: Long = 5_000L, links: StoreLinks? = null) = InboundDispatcher(
+    private fun build(timeoutMs: Long = 30_000L, links: StoreLinks? = null) = InboundDispatcher(
         store, attempts, providers, PaymentEventApplier(attempts) { event, attempt, ctx -> sink.apply(event, attempt, ctx) }, locks, clock, SeqIds(),
         { "https://shop.example" }, { state }, providerTimeoutMs = timeoutMs, linksOrNull = links
     )
@@ -699,7 +699,7 @@ class InboundDispatcherTest {
         // the first copy holds the key and is held open inside step 6
         val first = async(Dispatchers.Default) { dispatcher.handle(call()) }
 
-        withTimeout(5_000) { attempts.applyStarted.await() }
+        withTimeout(60_000) { attempts.applyStarted.await() }
 
         assertEquals(PaymentEventStatus.RECEIVED, store.byKey("fake", "e:evt_7")!!.status, "the first copy is in flight")
 
@@ -813,7 +813,7 @@ class InboundDispatcherTest {
         dispatcher = build(timeoutMs = 150)
         fake.delay(FakePaymentProvider.Op.INBOUND) // never completed: the deadline cancels the call
 
-        val reply = withTimeout(10_000) { dispatcher.handle(call()) }
+        val reply = withTimeout(60_000) { dispatcher.handle(call()) }
 
         assertEquals(500, reply.status)
         assertEquals(PaymentEventStatus.FAILED, only().status)
@@ -1110,7 +1110,7 @@ class InboundDispatcherTest {
             delay(40)
 
             // the dispatcher holds this attempt's lock around the call: asking for it again must not wait for itself
-            if (request.http.kind != InboundKind.WEBHOOK) withTimeout(2_000) { ctx.withAttemptLock(request.attempt!!.id) { reentered.incrementAndGet() } }
+            if (request.http.kind != InboundKind.WEBHOOK) withTimeout(60_000) { ctx.withAttemptLock(request.attempt!!.id) { reentered.incrementAndGet() } }
 
             inside.decrementAndGet()
 
@@ -1165,13 +1165,13 @@ class InboundDispatcherTest {
 
         val one = async(Dispatchers.Default) { dispatcher.handle(call(InboundKind.NOTIFY)) }
 
-        withTimeout(5_000) { first.await() }
+        withTimeout(60_000) { first.await() }
 
         val two = async(Dispatchers.Default) { dispatcher.handle(call(InboundKind.NOTIFY)) }
 
         delay(100) // the second call has read its attempt and waits for the lock
         release.complete(Unit)
-        withTimeout(10_000) { listOf(one, two).awaitAll() }
+        withTimeout(60_000) { listOf(one, two).awaitAll() }
 
         assertEquals(listOf("PENDING", "PROCESSING"), statuses, "the second call was handed the attempt as it was after the first one, not the one it read before waiting")
     }

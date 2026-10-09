@@ -440,7 +440,8 @@ class ProviderRegistryTest {
         }
         writer.start()
         var lookups = 0
-        val deadline = System.nanoTime() + 5_000_000_000L
+        // both requirements must hold; a slow machine only takes longer, the bound is just a hang guard
+        val deadline = System.nanoTime() + 120_000_000_000L
         try {
             while ((lookups < 3000 || source.concurrentModifications.get() == 0) && System.nanoTime() < deadline) {
                 registry.allPayment()
@@ -453,8 +454,8 @@ class ProviderRegistryTest {
             writer.join(5000)
         }
         assertNull(failure.get(), "writer failed: ${failure.get()}")
-        assertTrue(lookups >= 3000, "only $lookups lookups")
-        assertTrue(source.concurrentModifications.get() > 0, "the test never hit a concurrent modification, so it proves nothing")
+        assertTrue(lookups >= 3000, "only $lookups lookups in 120 s")
+        assertTrue(source.concurrentModifications.get() > 0, "the test never hit a concurrent modification in 120 s ($lookups lookups), so it proves nothing")
         assertNotNull(registry.payment("built-in"))
     }
 

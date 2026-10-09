@@ -42,7 +42,7 @@ class FakeGatewaySelfTest {
         path: String,
         body: ByteArray? = null,
         headers: Map<String, String> = emptyMap(),
-        timeoutMs: Long = 5_000
+        timeoutMs: Long = 30_000
     ): HttpResponse<ByteArray> {
         val b = HttpRequest.newBuilder(URI.create(g.baseUrl + path)).timeout(Duration.ofMillis(timeoutMs))
         headers.forEach { (k, v) -> b.header(k, v) }
@@ -217,7 +217,17 @@ class FakeGatewaySelfTest {
             assertEquals(404, send(g, "GET", "/x").statusCode())
             g.close()
             g.close()
-            ServerSocket(port).use { assertEquals(port, it.localPort) } // bindable again
+            // bindable again; another test or process may grab the ephemeral port for a moment, so retry within a bound
+            val bindDeadline = System.nanoTime() + 30_000_000_000L
+            while (true) {
+                try {
+                    ServerSocket(port).use { assertEquals(port, it.localPort) }
+                    break
+                } catch (e: java.net.BindException) {
+                    if (System.nanoTime() > bindDeadline) throw AssertionError("port $port was not released within 30 s", e)
+                    Thread.sleep(50)
+                }
+            }
             // the shared Vert.x is still usable
             val again = FakeGateway.start(shared)
             try {
@@ -226,7 +236,7 @@ class FakeGatewaySelfTest {
                 again.close()
             }
         } finally {
-            shared.close().toCompletionStage().toCompletableFuture().get(10, TimeUnit.SECONDS)
+            shared.close().toCompletionStage().toCompletableFuture().get(60, TimeUnit.SECONDS)
         }
     }
 

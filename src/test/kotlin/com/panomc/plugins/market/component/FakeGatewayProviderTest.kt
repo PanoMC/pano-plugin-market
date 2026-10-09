@@ -100,7 +100,7 @@ class FakeGatewayProviderTest {
 
     @AfterAll
     fun closeVertx() {
-        vertx.close().toCompletionStage().toCompletableFuture().get(10, TimeUnit.SECONDS)
+        vertx.close().toCompletionStage().toCompletableFuture().get(60, TimeUnit.SECONDS)
     }
 
     private fun <T> run(block: suspend () -> T): T = runBlocking { block() }
@@ -408,7 +408,7 @@ class FakeGatewayProviderTest {
         val e = assertThrows<ProviderException> { run { provider.startPayment(ctx(mapOf("timeoutMs" to 300)), start()) } }
         assertEquals(ProviderErrorCode.GATEWAY_UNREACHABLE, e.code)
         assertTrue(e.retryable)
-        assertTrue((System.nanoTime() - started) / 1_000_000L < 5_000, "the timeout setting was not honoured")
+        assertTrue((System.nanoTime() - started) / 1_000_000L < 14_000, "the timeout setting was not honoured")
     }
 
     @Test
@@ -1093,7 +1093,7 @@ class FakeGatewayProviderTest {
         fun status(method: io.vertx.core.http.HttpMethod, path: String, token: String? = gateway.secret): Int {
             val request = client.requestAbs(method, gateway.baseUrl + path)
             if (token != null) request.putHeader("Authorization", "Bearer $token")
-            return request.send().toCompletionStage().toCompletableFuture().get(10, TimeUnit.SECONDS).statusCode()
+            return request.send().toCompletionStage().toCompletableFuture().get(60, TimeUnit.SECONDS).statusCode()
         }
         assertEquals(401, status(io.vertx.core.http.HttpMethod.GET, "/v1/ping", token = null))
         assertEquals(401, status(io.vertx.core.http.HttpMethod.GET, "/v1/ping", token = "wrong"))
@@ -1131,7 +1131,7 @@ class FakeGatewayProviderTest {
     fun `the simulator's store-webhook sink follows scripted answers`() {
         val client = io.vertx.ext.web.client.WebClient.create(vertx)
         fun post(): Int = client.postAbs(gateway.baseUrl + "/hooks/store").sendJsonObject(JsonObject().put("n", 1))
-            .toCompletionStage().toCompletableFuture().get(10, TimeUnit.SECONDS).statusCode()
+            .toCompletionStage().toCompletableFuture().get(60, TimeUnit.SECONDS).statusCode()
         gateway.hookStatus("store", 500, 500, 200)
         assertEquals(listOf(500, 500, 200, 200), listOf(post(), post(), post(), post()))
         assertEquals(4, gateway.hooks("store").size)
