@@ -2,13 +2,20 @@
   <!-- z-1: the sticky default (1020) would sit above open dropdown menus (1000) -->
   <div class="nav flex-column nav-pills sticky-md-top z-1">
     {#each visible as item (item.key)}
-      <a
-        class="nav-link"
-        class:active={current === item.key}
-        aria-current={current === item.key ? 'page' : undefined}
-        href="{base}{item.href}">
-        {$_(item.label)}
-      </a>
+      {#if item.passive}
+        <!-- a feature this build ships switched off, shown in development mode only -->
+        <span class="nav-link disabled" aria-disabled="true" data-passive={item.key}>
+          {$_(item.label)}
+        </span>
+      {:else}
+        <a
+          class="nav-link"
+          class:active={current === item.key}
+          aria-current={current === item.key ? 'page' : undefined}
+          href="{base}{item.href}">
+          {$_(item.label)}
+        </a>
+      {/if}
     {/each}
   </div>
 {/if}

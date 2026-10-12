@@ -23,7 +23,15 @@
   import { api } from '@panomc/sdk/plugin-api';
   import { failureOf } from '../utils/api.js';
   import { loadContext } from '../utils/context.js';
-  import { extraPathFor, resolveSection } from '../utils/settings.js';
+  import { extraPathFor, resolveSection as knownSection } from '../utils/settings.js';
+  import { settingsFeature } from '../navigation.js';
+  import { featureOn } from '../utils/features.js';
+
+  /** A section whose feature this build ships switched off opens as `general`. */
+  const resolveSection = (value) => {
+    const section = knownSection(value);
+    return featureOn(settingsFeature(section)) ? section : 'general';
+  };
 
   /**
    * GET /settings, GET /context and the section's own extra data (13 §17) in parallel.

@@ -1,6 +1,7 @@
 import { viewComponent } from '@panomc/sdk';
 import { ANY_NODE, NODE, perm } from './utils/permissions.js';
 import { guardedLoad } from './utils/guard.js';
+import { ensureFeatures, featureOn } from './utils/features.js';
 import { PLUGIN_ID } from './utils/plugin.js';
 import { setPano } from './utils/runtime.js';
 
@@ -11,14 +12,15 @@ const ALL_KEYS = Object.keys(NODE);
 
 // 13 §2.3. `nodes` = keys of which any one opens the page (the umbrella node always does).
 // Component paths are under ./pages/. Static-vs-param collisions are avoided by construction
-// (detail/[id], account/[userId], creator/[id]).
+// (detail/[id], account/[userId], creator/[id]). A fourth entry is the build switch of the page
+// (utils/features.js): while it is off the page answers NOT_FOUND.
 export const PAGES = [
   ['/market', () => import('./pages/Overview.svelte'), ALL_KEYS],
   ['/market/orders', () => import('./pages/Orders.svelte'), ['OV']],
   ['/market/orders/detail/[id]', () => import('./pages/OrderDetail.svelte'), ['OV']],
   ['/market/orders/create-order', () => import('./pages/CreateOrder.svelte'), ['PAY']],
   ['/market/deliveries', () => import('./pages/Deliveries.svelte'), ['OV']],
-  ['/market/shipments', () => import('./pages/Shipments.svelte'), ['OV']],
+  ['/market/shipments', () => import('./pages/Shipments.svelte'), ['OV'], 'physicalShipping'],
   ['/market/subscriptions', () => import('./pages/Subscriptions.svelte'), ['OV']],
   ['/market/subscriptions/detail/[id]', () => import('./pages/SubscriptionDetail.svelte'), ['OV']],
   ['/market/payment-events', () => import('./pages/PaymentEvents.svelte'), ['OV']],
@@ -39,24 +41,38 @@ export const PAGES = [
   ['/market/credits/account/[userId]', () => import('./pages/CreditAccount.svelte'), ['PAY']],
   ['/market/blocks', () => import('./pages/Blocks.svelte'), ['OM']],
   ['/market/settings', () => import('./pages/Settings.svelte'), ['SET']],
-  ['/market/settings/shipping-method', () => import('./pages/ShippingMethodForm.svelte'), ['SET']],
+  [
+    '/market/settings/shipping-method',
+    () => import('./pages/ShippingMethodForm.svelte'),
+    ['SET'],
+    'physicalShipping',
+  ],
 ];
 
 const nodesFor = (keys) => (keys === ALL_KEYS ? ANY_NODE : perm(...keys));
 
 // Every page load starts with the can() guard (13 §2.1): the page gets { error: 'NO_PERMISSION' }
 // instead of data-less chrome, whatever its own load does.
-export function guarded(importer, keys) {
+// The context loader is imported on first use: it pulls in the SDK's API client.
+const loadContext = (event) => import('./utils/context.js').then((m) => m.loadContext(event));
+
+export function guarded(importer, keys, feature = null, context = loadContext) {
   return async () => {
     const module = await importer();
-    return { ...module, load: guardedLoad(module.load, keys) };
+    // The switches are read once, before the first page renders its navigation.
+    const load = async (event) => {
+      await ensureFeatures(() => context(event));
+      if (feature && !featureOn(feature)) return { data: { error: 'NOT_FOUND' } };
+      return typeof module.load === 'function' ? module.load(event) : { data: {} };
+    };
+    return { ...module, load: guardedLoad(load, keys) };
   };
 }
 
-function register(pano, anyOf, { path, importer, keys, ...extra }) {
+function register(pano, anyOf, { path, importer, keys, feature = null, ...extra }) {
   const registration = {
     path,
-    component: viewComponent(guarded(importer, keys)),
+    component: viewComponent(guarded(importer, keys, feature)),
     ...extra,
   };
   // Without the host feature `permission-any-of` a registration takes one node only; an any-of list
@@ -71,7 +87,9 @@ export function registerPanel(pano) {
   startDevPreview(pano);
   const anyOf = pano.features?.has?.('permission-any-of') === true;
 
-  for (const [path, importer, keys] of PAGES) register(pano, anyOf, { path, importer, keys });
+  for (const [path, importer, keys, feature] of PAGES) {
+    register(pano, anyOf, { path, importer, keys, feature });
+  }
 
   // 13 §24 market tab on the player page (X-9), else a card on the player overview.
   const playerKeys = ['OV', 'PAY'];

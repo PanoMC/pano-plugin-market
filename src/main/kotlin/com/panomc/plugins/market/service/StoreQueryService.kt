@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.feature.MarketFeature
+import com.panomc.plugins.market.feature.MarketFeatures
 import com.panomc.platform.error.NotFound
 import com.panomc.platform.model.PageRequest
 import com.panomc.platform.model.Paging
@@ -605,6 +607,8 @@ class StoreQueryService(
         val categoryIds = reachable.map { it.id }.toSet()
         val visible = products.getVisibleProducts(sqlClient)
             .filter { it.deletedAt == null && it.status == MarketStatus.ACTIVE }
+            // a physical product is not sold while the build ships without physical shipping
+            .filter { !it.physical || MarketFeatures.enabled(MarketFeature.PHYSICAL_SHIPPING) }
             .filter { within(it, now) }
             .filter { it.categoryId == null || it.categoryId in categoryIds }
 

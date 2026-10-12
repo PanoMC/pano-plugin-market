@@ -92,7 +92,8 @@ class RuleProduct(
     val fields: List<RuleField> = emptyList(),
     val serverChoices: List<Long> = emptyList(),
     val buyerChoiceServer: Boolean = false,
-    val children: List<RuleChild> = emptyList()
+    val children: List<RuleChild> = emptyList(),
+    val physical: Boolean = false
 ) {
     /** `status = ACTIVE`, not deleted, category chain active, inside the `TEMPORARY` window (06 section 6.3). */
     fun sellable(now: Long): Boolean {
@@ -139,7 +140,9 @@ class RuleContext(
     val owned: List<OwnedEntitlement> = emptyList(),
     val subscribedProductIds: Set<Long> = emptySet(),
     /** `creditsEnabled && creditTopUpEnabled` (07 section 8, 14.1): a `CREDIT_PACK` line is unavailable while this is false. */
-    val creditPacksEnabled: Boolean = true
+    val creditPacksEnabled: Boolean = true,
+    /** The build ships physical shipping: a physical line is unavailable while this is false. */
+    val physicalShippingEnabled: Boolean = true
 )
 
 /** A failing code with the product it belongs to (a bundle line reports the code of a child with the child's id). */
@@ -243,6 +246,9 @@ object LineRules {
 
         // credit packs are sold only while the credit system and its top-up are on (07 section 8 and 14.1)
         if (product.kind == ProductKind.CREDIT_PACK && !ctx.creditPacksEnabled) return s.block(LineCode.PRODUCT_UNAVAILABLE)
+
+        // a physical product is not sold by a build that ships without physical shipping
+        if (product.physical && !ctx.physicalShippingEnabled) return s.block(LineCode.PRODUCT_UNAVAILABLE)
 
         // a bundle is as available as its weakest child (06 section 6.3, last paragraph)
         for (child in product.children) {

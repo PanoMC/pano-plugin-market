@@ -2,6 +2,7 @@ package com.panomc.plugins.market.routes.base
 
 import com.panomc.platform.model.PanelApi
 import com.panomc.platform.model.Result
+import com.panomc.plugins.market.feature.MarketFeature
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.permission.MarketPermissions
 import io.vertx.ext.web.RoutingContext
@@ -21,6 +22,9 @@ abstract class MarketPanelApi : PanelApi() {
     /** Only `GET /health` and `GET /context` answer while the market is not READY. */
     protected open val exemptFromRuntimeGate: Boolean = false
 
+    /** The feature this route belongs to; while the build has it off the route answers 404. */
+    protected open val feature: MarketFeature? = null
+
     override suspend fun onBeforeHandle(context: RoutingContext) {
         super.onBeforeHandle(context)
 
@@ -29,6 +33,8 @@ abstract class MarketPanelApi : PanelApi() {
 
     /** The market part of [onBeforeHandle], after the platform's checks; callable by a test without the host. */
     internal fun marketChecks() {
+        MarketGate.requireFeature(feature)
+
         if (!exemptFromRuntimeGate) MarketGate.requireReady()
     }
 

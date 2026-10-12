@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.user.address
 
+import com.panomc.plugins.market.feature.MarketFeature
 import io.vertx.json.schema.common.dsl.Schemas.intSchema
 import com.panomc.plugins.market.error.StoreUnavailable
 import com.panomc.plugins.market.error.StoreDisabled
@@ -61,6 +62,8 @@ private fun idAndBodyValidation(schemaRepository: SchemaRepository): ValidationH
 /** `GET /api/market/me/addresses` (`USER`): `{items: Address & {id, label, isDefault}[]}`, the default one first. */
 @Endpoint
 class GetAddressesAPI(private val plugin: MarketPlugin) : MarketUserApi() {
+    override val feature: MarketFeature? = MarketFeature.PHYSICAL_SHIPPING
+
     override val paths = listOf(Path("/me/addresses", RouteType.GET))
 
     override val doc = EndpointDoc(
@@ -81,6 +84,8 @@ class GetAddressesAPI(private val plugin: MarketPlugin) : MarketUserApi() {
 /** `POST /api/market/me/addresses` (`USER`): an `Address` plus `label?`, `isDefault?`; `{id}`. 400 `SHIPPING_ADDRESS_REQUIRED {fields}` for an address that is not complete; at most 10 per user. */
 @Endpoint
 class CreateAddressAPI(private val plugin: MarketPlugin) : MarketUserApi() {
+    override val feature: MarketFeature? = MarketFeature.PHYSICAL_SHIPPING
+
     override val paths = listOf(Path("/me/addresses", RouteType.POST))
 
     override val doc = EndpointDoc(
@@ -104,6 +109,8 @@ class CreateAddressAPI(private val plugin: MarketPlugin) : MarketUserApi() {
 /** `PUT /api/market/me/addresses/:id` (`USER`): replaces the address; `{}`; 404 for the address of another user. */
 @Endpoint
 class UpdateAddressAPI(private val plugin: MarketPlugin) : MarketUserApi() {
+    override val feature: MarketFeature? = MarketFeature.PHYSICAL_SHIPPING
+
     override val paths = listOf(Path("/me/addresses/:id", RouteType.PUT))
 
     override val doc = EndpointDoc(
@@ -130,6 +137,8 @@ class UpdateAddressAPI(private val plugin: MarketPlugin) : MarketUserApi() {
 /** `DELETE /api/market/me/addresses/:id` (`USER`): `{}`; 404 for the address of another user. */
 @Endpoint
 class DeleteAddressAPI(private val plugin: MarketPlugin) : MarketUserApi() {
+    override val feature: MarketFeature? = MarketFeature.PHYSICAL_SHIPPING
+
     override val paths = listOf(Path("/me/addresses/:id", RouteType.DELETE))
 
     override val doc = EndpointDoc(

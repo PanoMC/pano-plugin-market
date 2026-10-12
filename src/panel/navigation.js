@@ -1,5 +1,6 @@
 // Areas and sections of the market panel (13 §2.2). Pure: no Svelte, no SDK import.
 import { NODE, can } from './utils/permissions.js';
+import { featureState } from './utils/features.js';
 
 const ALL_KEYS = Object.keys(NODE);
 
@@ -13,19 +14,28 @@ export const AREAS = [
   { key: 'settings', label: 'nav-settings', nodes: ['SET'] },
 ];
 
-const section = (area, key, href, nodes) => ({
+// `feature` = the build switch the section belongs to (utils/features.js); none = always there.
+const section = (area, key, href, nodes, feature = null) => ({
   area,
   key,
   href,
   label: `nav-section-${key}`,
   nodes,
+  feature,
 });
+
+/** Build switch of a settings section. */
+const SETTINGS_FEATURES = {
+  'shipping-methods': 'physicalShipping',
+  'shipping-zones': 'physicalShipping',
+  'shipping-carriers': 'shippingCarriers',
+};
 
 /** Level 2, declared once: { area, key, href, label, nodes } in nav order. */
 export const SECTIONS = [
   section('orders', 'orders', '/market/orders', ['OV']),
   section('orders', 'deliveries', '/market/deliveries', ['OV']),
-  section('orders', 'shipments', '/market/shipments', ['OV']),
+  section('orders', 'shipments', '/market/shipments', ['OV'], 'physicalShipping'),
   section('orders', 'subscriptions', '/market/subscriptions', ['OV']),
   section('orders', 'payment-events', '/market/payment-events', ['OV']),
   section('catalog', 'products', '/market/products', ['CAT']),
@@ -57,12 +67,24 @@ export const SECTIONS = [
     'mail',
     'minecraft',
     'health',
-  ].map((key) => section('settings', key, `/market/settings?section=${key}`, ['SET'])),
+  ].map((key) =>
+    section('settings', key, `/market/settings?section=${key}`, ['SET'], SETTINGS_FEATURES[key]),
+  ),
 ];
 
-/** Sections of an area the user may open. */
+/** The build switch of a settings section key, or null. */
+export const settingsFeature = (key) => SETTINGS_FEATURES[key] ?? null;
+
+/**
+ * Sections of an area the user may open. A section whose feature is switched off is left out; in
+ * development mode it stays as `passive: true` (shown, not a link).
+ */
 export function sectionsFor(area, user) {
-  return SECTIONS.filter((s) => s.area === area && can(user, ...s.nodes));
+  return SECTIONS.filter((s) => s.area === area && can(user, ...s.nodes)).flatMap((s) => {
+    const state = featureState(s.feature);
+    if (state === 'off') return [];
+    return [state === 'passive' ? { ...s, passive: true } : s];
+  });
 }
 
 /** First href of an area for this user (the first section that passes can()); null when hidden. */
@@ -70,7 +92,7 @@ export function firstHref(area, user) {
   const def = AREAS.find((a) => a.key === area);
   if (!def || !can(user, ...def.nodes)) return null;
   if (area === 'overview') return '/market';
-  return sectionsFor(area, user)[0]?.href ?? null;
+  return sectionsFor(area, user).find((s) => !s.passive)?.href ?? null;
 }
 
 /** Level-1 items visible to the user, each with its per-user `href`. */

@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.db.impl
 
+import com.panomc.plugins.market.feature.MarketFeature
+import com.panomc.plugins.market.feature.MarketFeatures
 import com.panomc.platform.annotation.Dao
 import com.panomc.plugins.market.db.MarketSchema
 import com.panomc.plugins.market.db.dao.MarketProductDao
@@ -367,6 +369,9 @@ class MarketProductDaoImpl : MarketProductDao() {
         kind: ProductKind?,
         categoryId: Long?
     ) {
+        // physical products are kept but not listed while the build ships without physical shipping
+        if (!MarketFeatures.enabled(MarketFeature.PHYSICAL_SHIPPING)) query.append(" AND ${alias}`physical` = 0")
+
         if (!search.isNullOrBlank()) {
             query.append(" AND (${alias}`name` LIKE ? OR ${alias}`slug` LIKE ?)")
             val searchParam = "%$search%"

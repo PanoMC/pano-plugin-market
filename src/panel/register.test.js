@@ -146,6 +146,22 @@ describe('every page load starts with the can() guard', () => {
     expect(loaded).toBe(2);
   });
 
+  test('a page of a switched-off feature answers NOT_FOUND and its load never runs', async () => {
+    const { resetFeatures } = await import('./utils/features.js');
+    resetFeatures();
+    const off = async () => ({ features: { physicalShipping: false } });
+    const module = await guarded(importer, ['PAY'], 'physicalShipping', off)();
+    expect(await module.load(event({ admin: true }))).toEqual({ data: { error: 'NOT_FOUND' } });
+    // the guard still comes first
+    expect(await module.load(event({ admin: false, permissions: [] }))).toEqual({
+      data: { error: 'NO_PERMISSION' },
+    });
+    const other = await guarded(importer, ['PAY'], null, off)();
+    expect(await other.load(event({ admin: true }))).toEqual({ data: { ok: true } });
+    expect(loaded).toBe(1);
+    resetFeatures();
+  });
+
   test('a page without its own load still gets the guard and a default', async () => {
     const module = await guarded(async () => ({ default: {} }), ['OV'])();
     expect(await module.load(event({ admin: true }))).toEqual({ data: {} });

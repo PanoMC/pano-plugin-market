@@ -556,6 +556,18 @@ val mergeLocales by tasks.registering {
     }
 }
 
+// Writes the `marketFeature.*` values of gradle.properties into the jar (MarketFeatures.RESOURCE): the switch of a
+// feature is decided when the jar is built. Every test task forces all of them on below.
+val marketFeatureKeys = listOf("physicalShipping", "shippingCarriers")
+val marketFeatureValues = marketFeatureKeys.associateWith { (project.findProperty("marketFeature.$it") as String?)?.trim() ?: "true" }
+
+val generateMarketFeatures by tasks.registering(WriteProperties::class) {
+    destinationFile.set(layout.buildDirectory.file("generated/marketFeatures/market-features.properties"))
+    marketFeatureValues.forEach { (key, value) -> property(key, value) }
+}
+
+sourceSets.main { resources.srcDir(generateMarketFeatures.map { it.destinationFile.get().asFile.parentFile }) }
+
 tasks.named("processResources") {
     dependsOn(mergeLocales)
     if (!noui) {
@@ -718,6 +730,8 @@ val shadedTest by tasks.registering(Test::class) {
 tasks.named("check") { dependsOn(shadedTest) }
 
 tasks.withType<Test>().configureEach {
+    // the switched-off features keep their tests: every test JVM runs with all of them on (a test turns one off itself)
+    marketFeatureKeys.forEach { systemProperty("market.feature.$it", "true") }
     javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
     testLogging {
         events("failed", "skipped")

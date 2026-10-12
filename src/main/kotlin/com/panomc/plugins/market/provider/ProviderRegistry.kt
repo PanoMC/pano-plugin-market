@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.provider
 
+import com.panomc.plugins.market.feature.MarketFeature
+import com.panomc.plugins.market.feature.MarketFeatures
 import com.panomc.platform.PluginEventManager
 import com.panomc.plugins.market.spi.MarketExtension
 import com.panomc.plugins.market.spi.MarketSpi
@@ -115,7 +117,12 @@ class ProviderRegistry(
             listing.add(ProviderListing(kind, id, ProviderState(ProviderAvailability.AVAILABLE, spiVersion, pluginId), resolved))
         }
 
+        // A build without physical shipping has no shipping provider at all; one without carriers keeps the built-in (manual) one.
+        if (kind == ProviderKind.SHIPPING && !MarketFeatures.enabled(MarketFeature.PHYSICAL_SHIPPING)) return Evaluation(listing)
+
         for (builtIn in builtIns(kind)) consider(builtIn, ProviderOrigin.BUILT_IN, null, MarketSpi.VERSION, true)
+
+        if (kind == ProviderKind.SHIPPING && !MarketFeatures.enabled(MarketFeature.SHIPPING_CARRIERS)) return Evaluation(listing)
 
         for (pe in started()) {
             val spi = try {

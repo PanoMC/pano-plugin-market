@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.job
 
+import com.panomc.plugins.market.feature.MarketFeature
+import com.panomc.plugins.market.feature.MarketFeatures
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
@@ -277,14 +279,19 @@ internal object MarketJobs {
         val expiry = OrderExpiryJob(SystemClock, db, locks, orderDao, paymentDao, orderService(plugin), payments, sqlClient)
         val reconcile = PaymentReconcileJob(SystemClock, payments, orderDao, paymentDao, sqlClient)
 
-        return listOf(
+        return listOfNotNull(
             MarketScheduler.Job("order-expiry", MarketScheduler.ORDER_EXPIRY_MS) { expiry.runOnce() },
             MarketScheduler.Job("payment-reconcile", MarketScheduler.PAYMENT_RECONCILE_MS) { reconcile.runOnce() },
             inboundRetry(inboundEventRetryJob(plugin)),
             delivery(DeliveryJob(deliveryService(plugin), SystemClock, servers = mcSyncService(plugin))),
             entitlementExpiry(entitlementExpiryJob(plugin)),
             refundReconcile(refundReconcileJob(plugin)),
-            shipmentTracking(ShipmentTrackingJob(SystemClock, context.getBean(MarketShipmentDao::class.java), shippingService(plugin), sqlClient)),
+            // carrier tracking has nothing to ask while the build ships without carriers
+            if (MarketFeatures.enabled(MarketFeature.SHIPPING_CARRIERS)) {
+                shipmentTracking(ShipmentTrackingJob(SystemClock, context.getBean(MarketShipmentDao::class.java), shippingService(plugin), sqlClient))
+            } else {
+                null
+            },
             subscription(subscriptionJob(plugin)),
             mailOutbox(MailWiring.job(plugin)),
             housekeepingTask(housekeepingJob(plugin)),

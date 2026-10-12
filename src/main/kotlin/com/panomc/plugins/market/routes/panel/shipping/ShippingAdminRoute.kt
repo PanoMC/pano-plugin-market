@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.shipping
 
+import com.panomc.plugins.market.feature.MarketFeature
 import com.panomc.platform.auth.AuthProvider
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.db.model.PluginActivityLog
@@ -21,6 +22,8 @@ import io.vertx.json.schema.common.dsl.Schemas.objectSchema
 /** Base of the shipping configuration routes (`P:SET`, 04 section 8): the service, the actor and the activity log. */
 abstract class ShippingAdminRoute(protected val plugin: MarketPlugin) : MarketPanelApi() {
     override val nodes: Set<MarketNode> = setOf(MarketNode.SETTINGS)
+
+    override val feature: MarketFeature? = MarketFeature.PHYSICAL_SHIPPING
 
     private val authProvider by lazy { plugin.applicationContext.getBean(AuthProvider::class.java) }
 

@@ -669,4 +669,14 @@ class LineRulesTest {
         // a path required twice is listed once
         assertEquals(1, RequiredBuyerFields.of(BillingInfoMode.REQUIRED, setOf(BuyerField.COUNTRY, BuyerField.FIRST_NAME), false, null, false).count { it == "billingInfo.country" })
     }
+
+    @Test
+    fun `a physical line is unavailable while the build ships without physical shipping`() {
+        val physical = RuleProduct(id = 41, physical = true)
+        val off = RuleContext(now, true, false, { false }, physicalShippingEnabled = false)
+
+        assertEquals(listOf(LineCode.PRODUCT_UNAVAILABLE), one(line(physical), off).errors)
+        assertEquals(emptyList<String>(), one(line(physical)).errors, "on by default")
+        assertEquals(emptyList<String>(), one(line(product()), off).errors, "a digital line is not touched")
+    }
 }

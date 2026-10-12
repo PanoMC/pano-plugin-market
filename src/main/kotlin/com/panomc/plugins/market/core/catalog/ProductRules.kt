@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.core.catalog
 
+import com.panomc.plugins.market.feature.MarketFeature
+import com.panomc.plugins.market.feature.MarketFeatures
 import com.panomc.plugins.market.db.model.BillingMode
 import com.panomc.plugins.market.db.model.MarketProduct
 import com.panomc.plugins.market.db.model.PeriodUnit
@@ -152,6 +154,8 @@ object ProductRules {
 
     private fun shipping(p: MarketProduct, e: MutableMap<String, String>) {
         if (p.physical && (p.kind != ProductKind.STANDARD || p.billingMode != BillingMode.ONE_TIME)) e["physical"] = "PHYSICAL_NOT_ALLOWED"
+        // the build ships without physical products: nothing new becomes one
+        if (p.physical && !MarketFeatures.enabled(MarketFeature.PHYSICAL_SHIPPING)) e["physical"] = "PHYSICAL_NOT_ALLOWED"
 
         if (p.physical && p.weightGrams == null) e["weightGrams"] = "REQUIRED"
         p.weightGrams?.let { if (it < 1 || it > 1_000_000) e["weightGrams"] = "OUT_OF_RANGE" }

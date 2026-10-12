@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.core.catalog
 
+import com.panomc.plugins.market.feature.MarketFeatures
+import com.panomc.plugins.market.feature.MarketFeature
 import com.panomc.plugins.market.db.model.MarketProduct
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -444,5 +446,14 @@ class ProductRulesTest {
         val result = errors(base("name" to "", "price" to "-1", "kind" to "CREDIT_PACK", "billingMode" to "TIMED", "physical" to true))
 
         assertTrue(result.keys.containsAll(listOf("name", "price", "creditAmount", "billingMode", "periodUnit", "periodCount", "physical", "weightGrams")), result.toString())
+    }
+
+    @Test
+    fun `a build without physical shipping takes no physical product`() {
+        MarketFeatures.with(MarketFeature.PHYSICAL_SHIPPING to false) {
+            assertCode("PHYSICAL_NOT_ALLOWED", "physical", base("physical" to true, "weightGrams" to 100))
+            ok(base())
+        }
+        ok(base("physical" to true, "weightGrams" to 100))
     }
 }

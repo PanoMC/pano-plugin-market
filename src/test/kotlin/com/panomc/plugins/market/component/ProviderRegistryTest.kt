@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.component
 
+import com.panomc.plugins.market.feature.MarketFeatures
+import com.panomc.plugins.market.feature.MarketFeature
 import com.panomc.platform.PluginEventManager
 import com.panomc.platform.api.PanoPlugin
 import com.panomc.plugins.market.provider.ExtensionSource
@@ -559,5 +561,24 @@ class ProviderRegistryTest {
             writer.join(10_000)
         }
         assertNull(failure.get(), "writer failed: ${failure.get()}")
+    }
+
+    @Test
+    fun `shipping providers follow the feature switches of the build`() {
+        val world = World()
+        world.plugin("carrier-plugin", Ext(shipping = { listOf(Ship("acme")) }))
+        val registry = world.registry(builtInShipping = listOf(Ship("manual")))
+
+        assertEquals(listOf("manual", "acme"), registry.allShipping().map { it.id })
+
+        MarketFeatures.with(MarketFeature.SHIPPING_CARRIERS to false) {
+            assertEquals(listOf("manual"), registry.allShipping().map { it.id }, "carriers off: the built-in one stays")
+            assertEquals(1, registry.listing(ProviderKind.SHIPPING).size)
+        }
+
+        MarketFeatures.with(MarketFeature.PHYSICAL_SHIPPING to false) {
+            assertTrue(registry.allShipping().isEmpty(), "no shipping at all")
+            assertTrue(registry.listing(ProviderKind.SHIPPING).isEmpty())
+        }
     }
 }

@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.routes.panel.product
 
+import com.panomc.plugins.market.feature.MarketFeature
+import com.panomc.plugins.market.feature.MarketFeatures
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.db.DatabaseManager
@@ -37,7 +39,12 @@ class PanelGetSimpleProductsAPI(private val plugin: MarketPlugin) : MarketPanelA
     override suspend fun handleAuthorized(context: RoutingContext): Result =
         Successful(
             mapOf(
-                "items" to JsonArray(products.getAllSimple(databaseManager.getSqlClient()).map { ProductJson.simple(it) })
+                // a physical product is not offered while the build ships without physical shipping
+                "items" to JsonArray(
+                    products.getAllSimple(databaseManager.getSqlClient())
+                        .filter { !it.physical || MarketFeatures.enabled(MarketFeature.PHYSICAL_SHIPPING) }
+                        .map { ProductJson.simple(it) }
+                )
             )
         )
 }

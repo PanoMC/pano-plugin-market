@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.feature.MarketFeature
+import com.panomc.plugins.market.feature.MarketFeatures
 import com.panomc.plugins.market.core.abuse.AbuseLimits
 import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NotLoggedIn
@@ -535,7 +537,8 @@ class CheckoutService(
             owned = facts.owned,
             subscribedProductIds = facts.subscribed,
             // a redeemed pack is not a purchase: `creditTopUpEnabled` is irrelevant for it, only the credit system has to be on (07 sections 8.1 and 10)
-            creditPacksEnabled = c.creditsEnabled && (profile == PricingProfile.GIFT_CODE || c.creditTopUpEnabled)
+            creditPacksEnabled = c.creditsEnabled && (profile == PricingProfile.GIFT_CODE || c.creditTopUpEnabled),
+            physicalShippingEnabled = MarketFeatures.enabled(MarketFeature.PHYSICAL_SHIPPING)
         )
         val rules = LineRules.evaluate(ruleLines, ruleContext).let { if (manual != null) manualRules(it, manual.request.force) else it }
 
@@ -2198,7 +2201,8 @@ class CheckoutService(
                 },
                 serverChoices = longArray(p.serverChoices),
                 buyerChoiceServer = buyerChoice(p.actions) || childrenBuyerChoice(p),
-                children = childRules
+                children = childRules,
+                physical = p.physical
             )
         }
 

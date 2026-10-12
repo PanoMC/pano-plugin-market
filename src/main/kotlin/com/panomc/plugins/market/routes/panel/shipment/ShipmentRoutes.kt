@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.shipment
 
+import com.panomc.plugins.market.feature.MarketFeature
 import com.panomc.platform.model.Paging
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.auth.AuthProvider
@@ -33,6 +34,8 @@ import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
 /** Base of the fulfilment routes: `OV` reads, `OM` mutations (04 section 9); the address of an order needs `OM` or `PAY` (11 section 14.5). */
 abstract class ShipmentRoute(protected val plugin: MarketPlugin, override val nodes: Set<MarketNode>) : MarketPanelApi() {
+    override val feature: MarketFeature? = MarketFeature.PHYSICAL_SHIPPING
+
     private val authProvider by lazy { plugin.applicationContext.getBean(AuthProvider::class.java) }
 
     private val databaseManager by lazy { plugin.applicationContext.getBean(DatabaseManager::class.java) }
@@ -237,6 +240,8 @@ class PanelCancelShipmentAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf
 /** `POST /shipments/:id/track` (`P:OM`): asks the carrier now. */
 @Endpoint
 class PanelTrackShipmentAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_MANAGE)) {
+    override val feature: MarketFeature? = MarketFeature.SHIPPING_CARRIERS
+
     override val paths = listOf(Path("/shipments/:id/track", RouteType.POST))
 
     override fun getValidationHandler(schemaRepository: SchemaRepository): ValidationHandler = optionalBody(schemaRepository)

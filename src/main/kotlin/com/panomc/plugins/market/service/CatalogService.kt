@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.feature.MarketFeature
+import com.panomc.plugins.market.feature.MarketFeatures
 import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.config.MarketConfig
@@ -658,13 +660,16 @@ class CatalogService(
         StockResult(currentStock(conn, productId, target))
     }
 
+    /** A physical product stays in the database but is not shown while the build ships without physical shipping. */
+    private fun visibleInBuild(product: MarketProduct) = !product.physical || MarketFeatures.enabled(MarketFeature.PHYSICAL_SHIPPING)
+
     private suspend fun currentStock(conn: SqlClient, productId: Long, variantId: Long?): Int? =
         if (variantId == null) products.getById(productId, conn)?.stock else variants.getById(variantId, conn)?.stock
 
     // ----- reads -------------------------------------------------------------------------------------------------
 
     suspend fun get(id: Long): ProductView = db.tx { conn ->
-        val product = products.getById(id, conn)?.takeIf { it.deletedAt == null } ?: throw NotFound()
+        val product = products.getById(id, conn)?.takeIf { it.deletedAt == null && visibleInBuild(it) } ?: throw NotFound()
         val liveVariants = variants.getByProductId(id, false, conn)
         val liveIds = liveVariants.map { it.id }.toSet()
 

@@ -25,7 +25,7 @@ class ContextHealthBodyTest {
             "currency", "currencySymbol", "statsCurrency", "statsCurrencySymbol", "currencyMode", "additionalCurrencies",
             "currencies", "creditsEnabled", "creditName", "creditValue", "allowMixedCreditPayment", "vatPercent",
             "showVatInPrice", "testMode", "storeTimeZone", "revokeOnRefund", "revokeOnChargeback", "billingInfoMode",
-            "invoiceEnabled", "mailEnabled", "shippingEnabled", "storeUrl", "runtimeState", "productMetaSchemas"
+            "invoiceEnabled", "mailEnabled", "shippingEnabled", "features", "featurePreview", "storeUrl", "runtimeState", "productMetaSchemas"
         )
 
         assertEquals(documented.toSet(), body.keys)

@@ -235,28 +235,32 @@
                 </div>
               </li>
 
-              <li class="list-group-item">
-                <div class="row g-0 align-items-center">
-                  <label class="col-6" for="product-physical">
-                    {$_('pages.create-product.physical')}
-                  </label>
-                  <div class="col-6 d-flex justify-content-end">
-                    <div class="form-check form-switch m-0">
-                      <input
-                        class="form-check-input"
-                        type="checkbox"
-                        role="switch"
-                        id="product-physical"
-                        data-field="physical"
-                        disabled={product.kind !== 'STANDARD' || product.billingMode !== 'ONE_TIME'}
-                        bind:checked={product.physical} />
+              {#if featureState('physicalShipping') !== 'off'}
+                <li class="list-group-item">
+                  <div class="row g-0 align-items-center">
+                    <label class="col-6" for="product-physical">
+                      {$_('pages.create-product.physical')}
+                    </label>
+                    <div class="col-6 d-flex justify-content-end">
+                      <div class="form-check form-switch m-0">
+                        <input
+                          class="form-check-input"
+                          type="checkbox"
+                          role="switch"
+                          id="product-physical"
+                          data-field="physical"
+                          disabled={!featureOn('physicalShipping') ||
+                            product.kind !== 'STANDARD' ||
+                            product.billingMode !== 'ONE_TIME'}
+                          bind:checked={product.physical} />
+                      </div>
                     </div>
                   </div>
-                </div>
-                {#if errors.physical}
-                  <div class="invalid-feedback d-block">{$_(fieldErrorKey(errors.physical))}</div>
-                {/if}
-              </li>
+                  {#if errors.physical}
+                    <div class="invalid-feedback d-block">{$_(fieldErrorKey(errors.physical))}</div>
+                  {/if}
+                </li>
+              {/if}
 
               <li class="list-group-item">
                 <div class="row g-0 align-items-center">
@@ -458,6 +462,7 @@
   import ProvidersTab from '../components/product/ProvidersTab.svelte';
   import SeoTab from '../components/product/SeoTab.svelte';
   import ShippingTab from '../components/product/ShippingTab.svelte';
+  import { featureOn, featureState } from '../utils/features.js';
   import VariantsTab from '../components/product/VariantsTab.svelte';
   import {
     KINDS,
@@ -478,7 +483,6 @@
     visibleTabs,
   } from '../components/product/model.js';
   import { call, errorKey } from '../utils/api.js';
-
 
   let { data } = $props();
 
@@ -776,9 +780,7 @@
       confirmLabel: $_('common.delete'),
       variant: 'danger',
       onConfirm: async () => {
-        const result = await call(
-          api.panel.delete({ path: `/products/${product.dbId}` }),
-        );
+        const result = await call(api.panel.delete({ path: `/products/${product.dbId}` }));
         if (!result.ok) {
           showErrorToast($_('pages.create-product.delete-error'));
           return false;

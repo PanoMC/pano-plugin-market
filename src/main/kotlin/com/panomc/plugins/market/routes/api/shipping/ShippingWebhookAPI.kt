@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.routes.api.shipping
 
+import com.panomc.plugins.market.feature.MarketFeature
+import com.panomc.plugins.market.feature.MarketFeatures
 import com.panomc.platform.schema.EndpointDoc
 import com.panomc.platform.annotation.Endpoint
 import com.panomc.platform.model.Path
@@ -466,6 +468,9 @@ class ShippingWebhookAPI(private val plugin: MarketPlugin) : MarketInboundApi() 
     )
 
     override suspend fun handleMarket(context: RoutingContext): Result? {
+        // Carriers are off in this build: the address answers like an unknown one, no provider code runs.
+        if (!MarketFeatures.enabled(MarketFeature.SHIPPING_CARRIERS)) return InboundRouteSupport.notFound(context).let { null }
+
         val token = context.pathParam("installToken")?.takeIf { InboundRouteSupport.TOKEN.matches(it) } ?: return InboundRouteSupport.notFound(context).let { null }
         val call = InboundRouteSupport.callOf(context, InboundKind.WEBHOOK) ?: return InboundRouteSupport.notFound(context).let { null }
 

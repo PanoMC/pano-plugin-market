@@ -2,6 +2,7 @@ package com.panomc.plugins.market.routes.base
 
 import com.panomc.platform.model.Api
 import com.panomc.platform.model.Result
+import com.panomc.plugins.market.feature.MarketFeature
 import io.vertx.ext.web.RoutingContext
 
 /**
@@ -12,6 +13,9 @@ import io.vertx.ext.web.RoutingContext
 abstract class MarketApi : Api() {
     /** `false` for the few public routes that stay up when `storeEnabled = false`. */
     protected open val requiresStoreEnabled: Boolean = true
+
+    /** The feature this route belongs to; while the build has it off the route answers 404. */
+    protected open val feature: MarketFeature? = null
 
     override suspend fun onBeforeHandle(context: RoutingContext) {
         super.onBeforeHandle(context)
@@ -24,6 +28,7 @@ abstract class MarketApi : Api() {
      * after the platform's own checks, callable by a test without the host.
      */
     internal open suspend fun marketChecks(context: RoutingContext) {
+        MarketGate.requireFeature(feature)
         MarketGate.requireReady()
 
         if (requiresStoreEnabled) MarketGate.requireStoreEnabled()

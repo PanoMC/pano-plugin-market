@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.routes.panel.settings
 
+import com.panomc.plugins.market.feature.MarketFeature
+import com.panomc.plugins.market.feature.MarketFeatures
 import com.panomc.plugins.market.util.StoreLinks
 import com.panomc.plugins.market.util.MarketLinks
 import com.panomc.plugins.market.core.money.Currencies
@@ -50,7 +52,11 @@ data class MarketContextInput(
     val mailEnabled: Boolean,
     val shippingEnabled: Boolean,
     val storeUrl: String,
-    val runtimeState: String
+    val runtimeState: String,
+    /** `MarketFeatures.asMap()`: what this build ships switched on. */
+    val features: Map<String, Boolean> = MarketFeatures.asMap(),
+    /** The platform runs in development mode: the panel shows a switched-off feature as passive instead of hiding it. */
+    val featurePreview: Boolean = false
 )
 
 /** The common picks, offered first. */
@@ -86,6 +92,8 @@ fun marketContextBody(input: MarketContextInput, includeProductMeta: Boolean): M
         "invoiceEnabled" to input.invoiceEnabled,
         "mailEnabled" to input.mailEnabled,
         "shippingEnabled" to input.shippingEnabled,
+        "features" to input.features,
+        "featurePreview" to input.featurePreview,
         "storeUrl" to input.storeUrl,
         "runtimeState" to input.runtimeState
     )
@@ -120,13 +128,18 @@ class PanelGetContextAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
 
         val input = marketContextInput(
             config, storeUrl = marketStoreUrl(websiteUrl, if (websiteUrl.isBlank()) StoreLinks.NONE else MarketLinks.platform), mailEnabled = MarketRuntime.capabilities.mail, shippingEnabled = shippingEnabled(), runtimeState = MarketRuntime.state.name
-        )
+        ).copy(featurePreview = developmentMode())
 
         return Successful(marketContextBody(input, includeProductMeta = has(context, MarketNode.CATALOG)))
     }
 
+    private fun developmentMode(): Boolean =
+        runCatching { plugin.applicationContext.getBean(ConfigManager::class.java).config.developmentMode }.getOrDefault(false)
+
     /** `true` when at least one shipping method is `ACTIVE` and not deleted (13 section 3.1); `false` while the database is not reachable (the context must still answer). */
-    private suspend fun shippingEnabled(): Boolean = try {
+    private suspend fun shippingEnabled(): Boolean = MarketFeatures.enabled(MarketFeature.PHYSICAL_SHIPPING) && hasActiveShippingMethod()
+
+    private suspend fun hasActiveShippingMethod(): Boolean = try {
         val methods = plugin.beans.getBean(MarketShippingMethodDao::class.java)
         val databaseManager = plugin.applicationContext.getBean(DatabaseManager::class.java)
 

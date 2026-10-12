@@ -1,5 +1,7 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.feature.MarketFeature
+import com.panomc.plugins.market.feature.MarketFeatures
 import com.panomc.plugins.market.core.money.Currencies
 import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NotFound
@@ -372,6 +374,11 @@ class CartService(
         val values = storedValues(item)
 
         if (product == null || product.deletedAt != null) return CartLineView(item, values, 0, listOf(CartValidator.PRODUCT_UNAVAILABLE))
+
+        // a physical product is not sold by a build that ships without physical shipping
+        if (product.physical && !MarketFeatures.enabled(MarketFeature.PHYSICAL_SHIPPING)) {
+            return CartLineView(item, values, 0, listOf(CartValidator.PRODUCT_UNAVAILABLE))
+        }
 
         if (item.variantId != 0L && (variant == null || variant.deletedAt != null || variant.productId != product.id)) {
             return CartLineView(item, values, 0, listOf(CartValidator.VARIANT_UNAVAILABLE))

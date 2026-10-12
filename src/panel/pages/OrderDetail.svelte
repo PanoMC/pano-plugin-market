@@ -22,7 +22,7 @@
           type="button"
           class="btn btn-link"
           data-bs-toggle="dropdown"
-        data-bs-popper-config={POPPER_FIXED}
+          data-bs-popper-config={POPPER_FIXED}
           aria-expanded="false"
           title={$_('common.actions')}
           aria-label={$_('common.actions')}>
@@ -83,16 +83,18 @@
             onCancel={cancelDelivery}
             onRerunAll={() => rerunModal?.open()}
             onRevokeAll={revokeAll} />
-          <ShipmentsCard
-            {detail}
-            {user}
-            onCreate={EXTERNAL_MODALS.createShipment
-              ? () => externalRefs.createShipment?.open()
-              : null}
-            onView={(shipment) => shipmentModal?.open(shipment.id)}
-            onTrack={trackShipment}
-            onRetry={retryShipment}
-            onCancel={cancelShipment} />
+          {#if featureOn('physicalShipping')}
+            <ShipmentsCard
+              {detail}
+              {user}
+              onCreate={EXTERNAL_MODALS.createShipment
+                ? () => externalRefs.createShipment?.open()
+                : null}
+              onView={(shipment) => shipmentModal?.open(shipment.id)}
+              onTrack={trackShipment}
+              onRetry={retryShipment}
+              onCancel={cancelShipment} />
+          {/if}
           <DisputesCard {detail} {user} onResolve={resolveDispute} />
           <MailsCard {detail} {user} onRetry={retryMail} />
           <TimelineCard {detail} />
@@ -106,7 +108,7 @@
           {#if 'billingInfo' in detail.order}
             <AddressCard address={detail.order.billingInfo} billing />
           {/if}
-          {#if 'shippingAddress' in detail.order}
+          {#if featureOn('physicalShipping') && 'shippingAddress' in detail.order}
             <AddressCard address={detail.order.shippingAddress} />
           {/if}
           <SubscriptionCard subscription={detail.subscription} />
@@ -193,6 +195,7 @@
   import PaymentsCard from '../components/order-detail/PaymentsCard.svelte';
   import RefundsCard from '../components/order-detail/RefundsCard.svelte';
   import ShipmentsCard from '../components/order-detail/ShipmentsCard.svelte';
+  import { featureOn } from '../utils/features.js';
   import SubscriptionCard from '../components/order-detail/SubscriptionCard.svelte';
   import TimelineCard from '../components/order-detail/TimelineCard.svelte';
   import TotalsCard from '../components/order-detail/TotalsCard.svelte';

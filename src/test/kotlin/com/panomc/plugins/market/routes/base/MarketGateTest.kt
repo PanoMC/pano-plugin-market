@@ -1,5 +1,8 @@
 package com.panomc.plugins.market.routes.base
 
+import com.panomc.platform.error.NotFound
+import com.panomc.plugins.market.feature.MarketFeatures
+import com.panomc.plugins.market.feature.MarketFeature
 import com.panomc.platform.error.BadRequest
 import com.panomc.platform.error.NoPermission
 import com.panomc.plugins.market.error.MarketBusyException
@@ -331,5 +334,20 @@ class MarketGateTest {
 
         assertEquals(1, allowed.authorizeCalls)
         assertTrue(allowed.reachedHandler)
+    }
+
+    @Test
+    fun `a route of a switched-off feature answers 404, any other is untouched`() {
+        MarketGate.requireFeature(null)
+        MarketGate.requireFeature(MarketFeature.PHYSICAL_SHIPPING)
+
+        MarketFeatures.with(MarketFeature.PHYSICAL_SHIPPING to false) {
+            val e = assertThrows(NotFound::class.java) { MarketGate.requireFeature(MarketFeature.PHYSICAL_SHIPPING) }
+
+            assertEquals(404, e.getStatusCode())
+            // carriers cannot be on without shipping
+            assertThrows(NotFound::class.java) { MarketGate.requireFeature(MarketFeature.SHIPPING_CARRIERS) }
+            MarketGate.requireFeature(null)
+        }
     }
 }

@@ -1,11 +1,14 @@
 package com.panomc.plugins.market.routes.base
 
 import com.panomc.platform.error.BadRequest
+import com.panomc.platform.error.NotFound
 import com.panomc.plugins.market.error.MarketBusyException
 import com.panomc.plugins.market.error.RequestValueException
 import com.panomc.plugins.market.error.StoreBusy
 import com.panomc.plugins.market.error.StoreDisabled
 import com.panomc.plugins.market.error.StoreUnavailable
+import com.panomc.plugins.market.feature.MarketFeature
+import com.panomc.plugins.market.feature.MarketFeatures
 import com.panomc.plugins.market.runtime.MarketRuntime
 import io.vertx.ext.web.RoutingContext
 
@@ -31,6 +34,11 @@ object MarketGate {
     /** `storeEnabled = false`: 503 `STORE_DISABLED` on the store, buyer and public-mutation routes (04 section 1). */
     fun requireStoreEnabled(enabled: Boolean = storeEnabled()) {
         if (!enabled) throw StoreDisabled()
+    }
+
+    /** A route of a [MarketFeature] this build has off answers as if it did not exist: 404 `NOT_FOUND`. `null` = no feature. */
+    fun requireFeature(feature: MarketFeature?) {
+        if (feature != null && !MarketFeatures.enabled(feature)) throw NotFound()
     }
 
     /** The error a route failure becomes: the exceptions of this package map to their catalogue errors. */
