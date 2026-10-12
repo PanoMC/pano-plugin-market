@@ -49,6 +49,8 @@ class PlatformMailGateway(
         when (mailManager.sendMail(sqlClient(), null, MarketMail(message.content), toOptions(message))) {
             MailResult.SENT -> MailSendResult.SENT
             MailResult.DISABLED -> MailSendResult.DISABLED
+            // Pano Mail did not take the message (limit used up, sending paused): a delivery failure, the outbox retries.
+            else -> throw IllegalStateException("MAIL_NOT_ACCEPTED: the platform did not take the message")
         }
 
     companion object {
