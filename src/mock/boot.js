@@ -4,8 +4,7 @@
 import { get } from 'svelte/store';
 import { mount, tick } from 'svelte';
 import { invalidateAll } from '@panomc/sdk/svelte';
-import { real, notify } from './seam.js';
-import { developmentMode } from './dev.js';
+import { notify } from './seam.js';
 import { gate, readVolume, SAVED_NOTHING } from './core.js';
 import { PREVIEW_HOOK } from '../theme/lib/api.js';
 
@@ -60,9 +59,38 @@ async function isDevelopment(pano) {
   if (!isLocalAddress() && !readVolume()) return false;
   const hit = cached();
   if (hit !== null) return hit;
-  const flag = await developmentMode(real);
+  const flag = await probeDevelopmentMode();
   remember(flag);
   return flag;
+}
+
+/**
+ * One GET /api/v1/site-info for `developmentMode`, by XMLHttpRequest instead of `fetch`. This runs while
+ * the host's own `load` is on the (async) call stack, and SvelteKit's development build warns about every
+ * `window.fetch` made from there ("use the fetch that is passed to your load function"). There is no such
+ * fetch to use here: the probe is no part of a load, it only starts during one. Never throws; unknown = false.
+ */
+function probeDevelopmentMode() {
+  return new Promise((resolve) => {
+    try {
+      const request = new XMLHttpRequest();
+
+      request.open('GET', '/api/v1/site-info');
+      request.withCredentials = true;
+      request.setRequestHeader('Accept', 'application/json');
+      request.onload = () => {
+        try {
+          resolve(JSON.parse(request.responseText)?.developmentMode === true);
+        } catch {
+          resolve(false);
+        }
+      };
+      request.onerror = () => resolve(false);
+      request.send();
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
 export async function startDevPreview(pano) {
