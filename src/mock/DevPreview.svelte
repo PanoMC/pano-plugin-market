@@ -1,57 +1,6 @@
-<style>
-  .market-mock-fab {
-    position: fixed;
-    right: 0;
-    bottom: 96px;
-    z-index: 2147483000;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    height: 44px;
-    min-width: 44px;
-    padding: 0 12px;
-    border: 0;
-    border-radius: 22px 0 0 22px;
-    color: #fff;
-    background: #6c757d;
-    box-shadow: 0 2px 10px rgb(0 0 0 / 35%);
-    justify-content: center;
-  }
-  .market-mock-fab-open {
-    right: min(340px, calc(100vw - 60px));
-    z-index: 2147483002;
-    border-radius: 22px;
-  }
-  .market-mock-fab-on {
-    background: #d63384;
-  }
-  .market-mock-badge {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    white-space: nowrap;
-  }
-  .market-mock-drawer {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 2147483001;
-    width: min(340px, 100vw);
-    padding: 16px;
-    overflow-y: auto;
-    color: var(--bs-body-color, #212529);
-    background: var(--bs-body-bg, #fff);
-    border-left: 1px solid var(--bs-border-color, #dee2e6);
-    box-shadow: -4px 0 24px rgb(0 0 0 / 25%);
-  }
-</style>
-
 <button
   type="button"
-  class="market-mock-fab"
-  class:market-mock-fab-on={active}
-  class:market-mock-fab-open={open}
+  style={fabStyle}
   title={$_('mock.fab-title')}
   aria-label={$_('mock.fab-title')}
   aria-expanded={open}
@@ -61,12 +10,11 @@
     <path
       d="M9 2h6v2h-1v5.2l5.6 9.3A2 2 0 0 1 17.9 21H6.1a2 2 0 0 1-1.7-2.5L10 9.2V4H9V2zm3 9.6L8.2 18h7.6L12 11.6z" />
   </svg>
-  {#if active}<span class="market-mock-badge" data-market-mock="badge">{$_('mock.badge')}</span
-    >{/if}
+  {#if active}<span style={BADGE_STYLE} data-market-mock="badge">{$_('mock.badge')}</span>{/if}
 </button>
 
 {#if open}
-  <aside class="market-mock-drawer" data-market-mock="drawer" aria-label={$_('mock.title')}>
+  <aside style={DRAWER_STYLE} data-market-mock="drawer" aria-label={$_('mock.title')}>
     <div class="d-flex align-items-center justify-content-between mb-2">
       <h5 class="mb-0">{$_('mock.title')}</h5>
       <button
@@ -122,8 +70,9 @@
 {/if}
 
 <!-- Development-only floating button + drawer of the market preview mode (fake data). Mounted by
-  boot.js on document.body only when the platform runs in development mode. Self-contained styling
-  (inline / scoped), so it looks the same in the panel and in every theme. -->
+  boot.js on document.body only when the platform runs in development mode. Styled with inline
+  styles only: a component style block depends on the host loading the plugin's stylesheet, and
+  without it the button and the drawer dropped to the end of the page. -->
 <script>
   import { onMount } from 'svelte';
   import { _ } from '../i18n.js';
@@ -136,6 +85,25 @@
   let pages = $state([]);
 
   const active = $derived(volume !== null);
+
+  const FAB_STYLE =
+    'position: fixed; bottom: 96px; display: flex; align-items: center; justify-content: center; gap: 6px; ' +
+    'height: 44px; min-width: 44px; padding: 0 12px; border: 0; color: #fff; box-shadow: 0 2px 10px rgb(0 0 0 / 35%);';
+  const BADGE_STYLE =
+    'font-size: 10px; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap;';
+  const DRAWER_STYLE =
+    'position: fixed; top: 0; right: 0; bottom: 0; z-index: 2147483001; width: min(340px, 100vw); padding: 16px; ' +
+    'overflow-y: auto; color: var(--bs-body-color, #212529); background: var(--bs-body-bg, #fff); ' +
+    'border-left: 1px solid var(--bs-border-color, #dee2e6); box-shadow: -4px 0 24px rgb(0 0 0 / 25%);';
+
+  /** The button sits on the right edge; with the drawer open it moves to the drawer's left edge. */
+  const fabStyle = $derived(
+    FAB_STYLE +
+      (open
+        ? ' right: min(340px, calc(100vw - 60px)); z-index: 2147483002; border-radius: 22px;'
+        : ' right: 0; z-index: 2147483000; border-radius: 22px 0 0 22px;') +
+      ` background: ${active ? '#d63384' : '#6c757d'};`,
+  );
   const panelPages = $derived(pages.filter((p) => p.side === 'panel'));
   const storePages = $derived(pages.filter((p) => p.side === 'theme'));
 
