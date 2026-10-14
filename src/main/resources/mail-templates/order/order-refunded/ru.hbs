@@ -5,13 +5,27 @@ buttonLabel: {{#if claimUrl}}Получить возврат{{else}}Открыт
 buttonUrl: {{#if claimUrl}}{{claimUrl}}{{else}}{{orderUrl}}{{/if}}
 footer: Вы получили это письмо из-за заказа в магазине {{storeName}}.{{#if creditNoteAttached}} Кредит-нота приложена к этому письму в формате PDF.{{/if}}
 ---
-{{{testBanner}}}
+{{#if testMode}}
+<table align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:16px;border-radius:0.5rem;background-color:rgb(254,243,199);padding:8px"><tbody><tr><td><p style="font-size:13px;line-height:20px;margin:0;text-align:center;font-weight:600;color:rgb(146,64,14)">ТЕСТОВЫЙ ЗАКАЗ - реальная оплата не производилась</p></td></tr></tbody></table>
+{{/if}}
 <h2 style="text-align:center">Возврат выполнен</h2>
 <p>Здравствуйте, {{username}}!</p>
 <p>Мы вернули {{amount}} по вашему заказу {{orderNumber}} в магазине {{storeName}}.</p>
 <p>В зависимости от банка деньги могут поступить через несколько дней.</p>
-{{{itemsTable}}}
-{{{detailsTable}}}
+{{#if items}}
+<table align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)"><tbody>
+{{#each items}}
+<tr><td style="padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83){{#if child}};padding-left:20px{{/if}}">{{quantity}} &#215; {{name}}{{#if variant}} <span style="color:rgb(106,114,130)">({{variant}})</span>{{/if}}</td> <td align="right" style="padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap">{{total}}</td></tr>
+{{/each}}
+</tbody></table>
+{{/if}}
+<table align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px"><tbody>
+<tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Номер заказа</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">{{orderNumber}}</td></tr>
+<tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Сумма возврата</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">{{amount}}</td></tr>
+{{#if refundToMethod}}<tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Возвращено на способ оплаты</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">{{refundToMethod}}</td></tr>{{/if}}
+{{#if refundToCredits}}<tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Возвращено кредитами</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">{{refundToCredits}}</td></tr>{{/if}}
+{{#if refundReason}}<tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Причина</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">{{refundReason}}</td></tr>{{/if}}
+</tbody></table>
 {{#if claimUrl}}
 {{#if orderUrl}}<p style="font-size:14px;line-height:20px;margin:8px 0 16px 0;text-align:center"><a href="{{orderUrl}}" style="color:rgb(54,65,83)" target="_blank">Открыть заказ</a></p>{{/if}}
 {{/if}}

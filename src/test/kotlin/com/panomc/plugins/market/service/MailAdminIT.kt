@@ -110,7 +110,7 @@ class MailAdminIT : MarketDaoITBase() {
         gateway = FakeMailGateway()
         outbox = MailOutboxService({ w.config }, w.clock, w.mailOutbox, w.orderEvents)
 
-        val builder = MailContentBuilder(i18n, format, { w.config }, { MailSite("Blocky Network", "https://shop.example") })
+        val builder = MailContentBuilder(format, { w.config }, { MailSite("Blocky Network", "https://shop.example") })
         val composer = MailComposer(
             builder, w.orders, w.orderItems, w.refunds, w.refundItems, null, null, { w.config }, w.subscriptions, w.entitlements, w.shipments, w.shipmentItems, w.products,
             { w.clock.now() }
@@ -308,7 +308,7 @@ class MailAdminIT : MarketDaoITBase() {
         val failed = failedMail.message
 
         assertTrue(failedMail.rendered.text.contains("Update payment: https://shop.example/profile"), "no pay link in the params: the profile")
-        assertTrue(failed.details.any { it.label == "Amount" && it.value == "€15.00" }, failed.details.joinToString { "${it.label}=${it.value}" })
+        assertEquals("€15.00", failed.values["amount"], failed.values.toString())
     }
 
     @Test
@@ -401,8 +401,8 @@ class MailAdminIT : MarketDaoITBase() {
 
         assertTrue(shipMail.rendered.text.contains("Track shipment: https://track.example/TRK123"), shipMail.rendered.text)
         assertEquals(listOf("VIP"), ship.items.map { it.name })
-        assertTrue(ship.details.any { it.label == "Carrier" && it.value == "Aras Kargo" })
-        assertTrue(ship.details.any { it.label == "Shipping to" && it.value == "Hans Meier, Strasse 1" })
+        assertEquals("Aras Kargo", ship.values["carrier"])
+        assertEquals("Hans Meier, Strasse 1", ship.values["shipTo"])
         assertTrue(mails.containsKey("Your order #${placed.order.id} was delivered"))
     }
 

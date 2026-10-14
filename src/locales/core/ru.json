@@ -184,37 +184,6 @@
     "group-separator": " ",
     "money": "{amount} {symbol}"
   },
-  "mail": {
-    "blocks": {
-      "order-number": "Номер заказа",
-      "order-date": "Дата заказа",
-      "payment-method": "Способ оплаты",
-      "recipient": "Получатель подарка",
-      "subtotal": "Промежуточный итог",
-      "discount": "Скидка",
-      "shipping": "Доставка",
-      "payment-fee": "Комиссия за оплату",
-      "vat": "НДС",
-      "vat-included": "НДС (включён)",
-      "total": "Итого",
-      "paid-with-credits": "Оплачено кредитами",
-      "test-banner": "ТЕСТОВЫЙ ЗАКАЗ - реальная оплата не производилась",
-      "pay-before": "Оплатить до",
-      "refund-amount": "Сумма возврата",
-      "refund-to-method": "Возвращено на способ оплаты",
-      "refund-to-credits": "Возвращено кредитами",
-      "refund-reason": "Причина",
-      "product": "Товар",
-      "valid-until": "Действует до",
-      "renews-on": "Продление",
-      "amount": "Сумма",
-      "carrier": "Перевозчик",
-      "tracking-number": "Номер отслеживания",
-      "estimated-delivery": "Ожидаемая доставка",
-      "delivered-on": "Дата доставки",
-      "ship-to": "Адрес доставки"
-    }
-  },
   "notifications": {
     "MARKET_ORDER_REVIEW": "Заказ #{orderId} ждёт вашей проверки.",
     "MARKET_ORDER_ALERT": "{code, select, BANK_TRANSFER_NOTIFIED {Заказ #{orderId}: покупатель сообщил, что банковский перевод выполнен. Проверьте счёт и подтвердите платёж.} other {Заказ #{orderId} требует внимания ({code}).}}",

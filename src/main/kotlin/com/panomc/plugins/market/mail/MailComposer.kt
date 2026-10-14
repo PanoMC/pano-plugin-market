@@ -29,7 +29,6 @@ import com.panomc.plugins.market.db.model.PricingMode
 import com.panomc.plugins.market.db.model.SubscriptionMode
 import com.panomc.plugins.market.db.model.SubscriptionStatus
 import com.panomc.plugins.market.i18n.MarketFormat
-import com.panomc.plugins.market.i18n.MarketI18n
 import com.panomc.plugins.market.pdf.InvoiceMailAttachments
 import com.panomc.plugins.market.util.HtmlSanitizer
 import com.panomc.plugins.market.util.MarketStatus
@@ -74,12 +73,11 @@ class MailInput(
  * Builds the [MarketMailMessage] of the order mails (12 section 5) from loaded rows, with no database and no host class: the
  * kinds of 12 section 4.1: the order kinds (MK-142) and the subscription, expiry-reminder and shipment kinds (MK-146).
  *
- * The sentences live in the plugin's mail templates (`mail-templates/order/<variant>/<locale>.hbs`); this class supplies the
- * values they read (formatted for [MailInput.locale], cut to 255 characters), the flags that pick their conditional sentences
- * and the structured blocks, whose labels come from the `mail.blocks.*` keys of [MarketI18n].
+ * Every text, the table labels too, lives in the plugin's mail templates (`mail-templates/order/<variant>/<locale>.hbs`); this
+ * class supplies only the values they read (formatted for [MailInput.locale], cut to 255 characters; a table row that is not
+ * shown is an empty string), the flags that pick their conditional sentences and rows, and the rows of the `items` list.
  */
 class MailContentBuilder(
-    private val i18n: MarketI18n,
     private val format: MarketFormat,
     private val config: () -> MarketConfig,
     private val site: () -> MailSite,
@@ -113,9 +111,7 @@ class MailContentBuilder(
 
     // ----- the kinds ---------------------------------------------------------------------------------------------------
 
-    private suspend fun received(i: MailInput) = message(
-        i, items = items(i, withPrices = true), totals = totals(i), details = orderDetails(i, paid = false)
-    )
+    private suspend fun received(i: MailInput) = message(i, totals(i) + orderDetails(i, paid = false), items = items(i, withPrices = true))
 
     private suspend fun bankTransfer(i: MailInput): MarketMailMessage {
         val expiresAt = long(i.params, "expiresAt")
@@ -127,16 +123,10 @@ class MailContentBuilder(
 
             if (label.isEmpty() || value.isEmpty()) null else MailRow(cut(label), cut(value))
         }
-        val details = ArrayList<MailRow>()
-
-        details += MailRow(label(i, "order-number"), orderNumber(i))
-        details += MailRow(label(i, "total"), totalLabel(i))
-
-        if (expiresAt != null) details += MailRow(label(i, "pay-before"), format.dateTime(expiresAt, i.locale))
 
         return message(
-            i, mapOf("expiresAt" to (expiresAt?.let { format.dateTime(it, i.locale) } ?: "")),
-            items = items(i, withPrices = true), totals = totals(i), details = details, instructionsHtml = html, instructionFields = fields
+            i, totals(i) + ("expiresAt" to (expiresAt?.let { format.dateTime(it, i.locale) } ?: "")),
+            items = items(i, withPrices = true), instructionsHtml = html, instructionFields = fields
         )
     }
 
@@ -144,8 +134,8 @@ class MailContentBuilder(
         val address = shippingAddress(i.order).takeIf { i.order.requiresShipping && it.isNotEmpty() }?.let { cut(it) }.orEmpty()
 
         return message(
-            i, mapOf("shippingAddress" to address, "invoiceAttached" to i.invoiceAttached),
-            items = items(i, withPrices = true), totals = totals(i), details = orderDetails(i, paid = true)
+            i, mapOf("shippingAddress" to address, "invoiceAttached" to i.invoiceAttached) + totals(i) + orderDetails(i, paid = true),
+            items = items(i, withPrices = true)
         )
     }
 
@@ -161,15 +151,11 @@ class MailContentBuilder(
         val refund = checkNotNull(i.refund) { "ORDER_REFUNDED needs its refund row" }
         val currency = refund.currency.ifBlank { i.order.currency }
         val amount = format.money(refund.amount, currency, i.locale)
-        val details = ArrayList<MailRow>()
-
-        details += MailRow(label(i, "order-number"), orderNumber(i))
-        details += MailRow(label(i, "refund-amount"), amount, strong = true)
-
-        if (refund.gatewayAmount > 0) details += MailRow(label(i, "refund-to-method"), format.money(refund.gatewayAmount, currency, i.locale))
-        if (refund.creditAmount > 0) details += MailRow(label(i, "refund-to-credits"), format.credits(refund.creditAmount, i.locale))
-
-        refund.reason?.trim()?.takeIf { it.isNotEmpty() }?.let { details += MailRow(label(i, "refund-reason"), cut(it)) }
+        val details = mapOf(
+            "refundToMethod" to if (refund.gatewayAmount > 0) format.money(refund.gatewayAmount, currency, i.locale) else "",
+            "refundToCredits" to if (refund.creditAmount > 0) format.credits(refund.creditAmount, i.locale) else "",
+            "refundReason" to refund.reason?.trim()?.takeIf { it.isNotEmpty() }?.let { cut(it) }.orEmpty()
+        )
 
         val byId = i.items.associateBy { it.id }
         val lines = i.refundItems.mapNotNull { r ->
@@ -180,7 +166,7 @@ class MailContentBuilder(
         val claim = refund.buyerActionUrl?.takeIf { isWebUrl(it) }.orEmpty()
 
         return message(
-            i, mapOf("amount" to amount, "claimUrl" to claim, "creditNoteAttached" to i.invoiceAttached), items = lines, details = details
+            i, mapOf("amount" to amount, "claimUrl" to claim, "creditNoteAttached" to i.invoiceAttached) + details, items = lines
         )
     }
 
@@ -190,13 +176,12 @@ class MailContentBuilder(
     private suspend fun expiryReminder(i: MailInput): MarketMailMessage {
         val expiresAt = long(i.params, "expiresAt") ?: i.entitlement?.expiresAt ?: error("EXPIRY_REMINDER has no expiry date")
         val name = cut(entitlementProductName(i))
-        val details = listOf(
-            MailRow(label(i, "product"), name),
-            MailRow(label(i, "valid-until"), format.dateTime(expiresAt, i.locale), strong = true)
-        )
 
         return message(
-            i, mapOf("productName" to name, "date" to format.date(expiresAt, i.locale), "renewUrl" to productUrl(i).orEmpty()), details = details
+            i, mapOf(
+                "productName" to name, "date" to format.date(expiresAt, i.locale), "validUntil" to format.dateTime(expiresAt, i.locale),
+                "renewUrl" to productUrl(i).orEmpty()
+            )
         )
     }
 
@@ -210,16 +195,10 @@ class MailContentBuilder(
         val v = subscriptionValues(i, sub, periodEnd)
         val manual = sub.mode == SubscriptionMode.MANUAL
         val method = sub.storedMethodLabel?.trim()?.takeIf { it.isNotEmpty() && !manual }?.let { cut(it) }.orEmpty()
-        val details = listOf(
-            MailRow(label(i, "product"), v.getValue("productName").toString()),
-            MailRow(label(i, "renews-on"), format.date(periodEnd, i.locale)),
-            MailRow(label(i, "amount"), v.getValue("amount").toString(), strong = true)
-        )
         val pay = if (manual) siteUrl(i.params.getString("payUrl")) ?: productUrl(i) else null
 
         return message(
-            i, v + mapOf("manual" to manual, "paymentMethod" to method, "payUrl" to pay.orEmpty(), "manageUrl" to site().links.profile().orEmpty()),
-            details = details
+            i, v + mapOf("manual" to manual, "paymentMethod" to method, "payUrl" to pay.orEmpty(), "manageUrl" to site().links.profile().orEmpty())
         )
     }
 
@@ -228,14 +207,10 @@ class MailContentBuilder(
         val sub = checkNotNull(i.subscription) { "SUBSCRIPTION_PAYMENT_FAILED needs its subscription row" }
         val grace = long(i.params, "graceEndsAt") ?: sub.graceEndsAt
         val v = subscriptionValues(i, sub, null)
-        val details = listOf(
-            MailRow(label(i, "product"), v.getValue("productName").toString()),
-            MailRow(label(i, "amount"), v.getValue("amount").toString(), strong = true)
-        )
         val target = siteUrl(i.params.getString("payUrl")) ?: site().links.profile()
 
         return message(
-            i, v + mapOf("graceEndsAt" to (grace?.let { format.date(it, i.locale) } ?: ""), "payUrl" to target.orEmpty()), details = details
+            i, v + mapOf("graceEndsAt" to (grace?.let { format.date(it, i.locale) } ?: ""), "payUrl" to target.orEmpty())
         )
     }
 
@@ -268,20 +243,17 @@ class MailContentBuilder(
         val tracking = (i.params.getString("trackingNumber") ?: shipment?.trackingNumber)?.trim()?.takeIf { it.isNotEmpty() }
         val trackUrl = (i.params.getString("trackingUrl") ?: shipment?.trackingUrl)?.trim()?.takeIf { isWebUrl(it) }
         val estimate = shipment?.estimatedDeliveryAt?.let { format.date(it, i.locale) } ?: i.params.getString("estimatedDelivery")?.trim()?.takeIf { it.isNotEmpty() }
-        val details = ArrayList<MailRow>()
-
-        details += MailRow(label(i, "order-number"), orderNumber(i))
-        if (carrier != null) details += MailRow(label(i, "carrier"), cut(carrier))
-        if (tracking != null) details += MailRow(label(i, "tracking-number"), cut(tracking), strong = true)
-        if (estimate != null) details += MailRow(label(i, "estimated-delivery"), cut(estimate))
-
         val address = addressLines(i)
 
-        if (address.isNotEmpty()) details += MailRow(label(i, "ship-to"), cut(address.joinToString(", ")))
-
         return message(
-            i, mapOf("partial" to (i.params.getBoolean("isPartial", false) == true), "trackingUrl" to trackUrl.orEmpty()),
-            items = shipmentLines(i), details = details
+            i, mapOf(
+                "partial" to (i.params.getBoolean("isPartial", false) == true), "trackingUrl" to trackUrl.orEmpty(),
+                "carrier" to carrier?.let { cut(it) }.orEmpty(),
+                "trackingNumber" to tracking?.let { cut(it) }.orEmpty(),
+                "estimatedDelivery" to estimate?.let { cut(it) }.orEmpty(),
+                "shipTo" to if (address.isEmpty()) "" else cut(address.joinToString(", "))
+            ),
+            items = shipmentLines(i)
         )
     }
 
@@ -290,13 +262,9 @@ class MailContentBuilder(
         val shipment = i.shipment
         val carrier = (i.params.getString("carrierName") ?: shipment?.carrierName)?.trim()?.takeIf { it.isNotEmpty() }
         val delivered = shipment?.deliveredAt?.let { format.date(it, i.locale) } ?: i.params.getString("deliveredAt")?.trim()?.takeIf { it.isNotEmpty() }
-        val details = ArrayList<MailRow>()
-
-        details += MailRow(label(i, "order-number"), orderNumber(i))
-        if (carrier != null) details += MailRow(label(i, "carrier"), cut(carrier))
-        if (delivered != null) details += MailRow(label(i, "delivered-on"), cut(delivered))
-
-        return message(i, items = shipmentLines(i), details = details)
+        return message(
+            i, mapOf("carrier" to carrier?.let { cut(it) }.orEmpty(), "deliveredOn" to delivered?.let { cut(it) }.orEmpty()), items = shipmentLines(i)
+        )
     }
 
     // ----- pieces of the new kinds -------------------------------------------------------------------------------------
@@ -361,14 +329,12 @@ class MailContentBuilder(
 
     /**
      * The message every kind shares: the variant of [MailInput.kind], the common values (`storeName`, `orderNumber`, `username`, `orderUrl`)
-     * plus [values], the test-order flag and its banner label, and the blocks.
+     * plus [values], the test-order flag, the `items` rows and the bank-transfer instructions.
      */
-    private suspend fun message(
+    private fun message(
         i: MailInput,
         values: Map<String, Any?> = emptyMap(),
         items: List<MailItem> = emptyList(),
-        totals: List<MailRow> = emptyList(),
-        details: List<MailRow> = emptyList(),
         instructionsHtml: String? = null,
         instructionFields: List<MailRow> = emptyList()
     ): MarketMailMessage {
@@ -383,17 +349,11 @@ class MailContentBuilder(
             variant = MarketMailMessage.variantOf(i.kind),
             values = common + values,
             testMode = i.order.testMode,
-            testBannerLabel = if (i.order.testMode) label(i, "test-banner") else "",
             items = items,
-            totals = totals,
-            details = details,
             instructionsHtml = instructionsHtml,
             instructionFields = instructionFields
         )
     }
-
-    /** A label of the structured blocks (`mail.blocks.<key>`). */
-    private suspend fun label(i: MailInput, key: String): String = i18n.t(i.locale, "mail.blocks.$key")
 
     private fun storeName(): String = cut(config().storeName.ifBlank { site().websiteName })
 
@@ -414,52 +374,43 @@ class MailContentBuilder(
             )
         }
 
-    /** 12 section 5: each row only when non-zero, in order; `pricingMode <> MARKET` shows the total only; a credits-only order shows credits. */
-    private suspend fun totals(i: MailInput): List<MailRow> {
+    /**
+     * 12 section 5: the totals rows the template shows, each an empty string when it is not shown: every row only when non-zero;
+     * `pricingMode <> MARKET` shows the total only; a credits-only order shows the total as credits. `discount` is negative;
+     * `vatIncluded` picks the "VAT (included)" label; `paidWithCredits` only when credits and money were mixed.
+     */
+    private suspend fun totals(i: MailInput): Map<String, Any?> {
         val o = i.order
-        val rows = ArrayList<MailRow>()
+        val market = o.pricingMode == PricingMode.MARKET
 
-        suspend fun row(key: String, amount: Long, negative: Boolean = false) {
-            if (amount == 0L) return
+        suspend fun money(amount: Long, negative: Boolean = false): String =
+            if (!market || amount == 0L) "" else format.money(if (negative) -amount else amount, o.currency, i.locale)
 
-            rows += MailRow(label(i, key), format.money(if (negative) -amount else amount, o.currency, i.locale))
-        }
-
-        if (o.pricingMode == PricingMode.MARKET) {
-            row("subtotal", o.subtotal)
-            row("discount", o.discountTotal + o.couponDiscount + o.creatorDiscount + o.upgradeDiscount, negative = true)
-            row("shipping", o.shippingTotal)
-            row("payment-fee", o.paymentFee)
-
-            if (o.vatTotal != 0L) {
-                rows += MailRow(label(i, if (o.pricesIncludeVat) "vat-included" else "vat"), format.money(o.vatTotal, o.currency, i.locale))
-            }
-        }
-
-        rows += MailRow(label(i, "total"), totalLabel(i), strong = true)
-
-        if (o.pricingMode == PricingMode.MARKET && o.creditAmount > 0 && o.gatewayAmount > 0) {
-            rows += MailRow(label(i, "paid-with-credits"), format.credits(o.creditAmount, i.locale))
-        }
-
-        return rows
+        return linkedMapOf(
+            "subtotal" to money(o.subtotal),
+            "discount" to money(o.discountTotal + o.couponDiscount + o.creatorDiscount + o.upgradeDiscount, negative = true),
+            "shipping" to money(o.shippingTotal),
+            "paymentFee" to money(o.paymentFee),
+            "vat" to money(o.vatTotal),
+            "vatIncluded" to o.pricesIncludeVat,
+            "total" to totalLabel(i),
+            "paidWithCredits" to if (market && o.creditAmount > 0 && o.gatewayAmount > 0) format.credits(o.creditAmount, i.locale) else ""
+        )
     }
 
     /** The grand total: money, or credits when the order was paid with credits alone. */
     private suspend fun totalLabel(i: MailInput): String =
         if (i.order.creditAmount > 0 && i.order.gatewayAmount == 0L) format.credits(i.order.creditAmount, i.locale) else format.money(i.order.totalPrice, i.order.currency, i.locale)
 
-    private suspend fun orderDetails(i: MailInput, paid: Boolean): List<MailRow> {
+    /** The details rows of an order: its date (paid or placed), payment method and, for a paid gift, the recipient. */
+    private suspend fun orderDetails(i: MailInput, paid: Boolean): Map<String, Any?> {
         val o = i.order
-        val rows = ArrayList<MailRow>()
 
-        rows += MailRow(label(i, "order-number"), orderNumber(i))
-        rows += MailRow(label(i, "order-date"), format.dateTime(if (paid) o.paidAt ?: o.createdAt else o.createdAt, i.locale))
-
-        if (o.paymentLabel.isNotBlank()) rows += MailRow(label(i, "payment-method"), cut(o.paymentLabel))
-        if (paid && o.isGift && o.recipientUsername.isNotBlank()) rows += MailRow(label(i, "recipient"), cut(o.recipientUsername))
-
-        return rows
+        return linkedMapOf(
+            "orderDate" to format.dateTime(if (paid) o.paidAt ?: o.createdAt else o.createdAt, i.locale),
+            "paymentMethod" to o.paymentLabel.takeIf { it.isNotBlank() }?.let { cut(it) }.orEmpty(),
+            "recipient" to if (paid && o.isGift && o.recipientUsername.isNotBlank()) cut(o.recipientUsername) else ""
+        )
     }
 
     /** The order page (12 section 4.4), with the access token for a guest order; none without a site URL. */

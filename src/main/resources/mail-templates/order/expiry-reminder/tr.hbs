@@ -5,9 +5,14 @@ buttonLabel: Yenile
 buttonUrl: {{renewUrl}}
 footer: Bu e-postayı {{storeName}} mağazasındaki bir sipariş nedeniyle alıyorsunuz.
 ---
-{{{testBanner}}}
+{{#if testMode}}
+<table align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:16px;border-radius:0.5rem;background-color:rgb(254,243,199);padding:8px"><tbody><tr><td><p style="font-size:13px;line-height:20px;margin:0;text-align:center;font-weight:600;color:rgb(146,64,14)">TEST SİPARİŞİ - gerçek bir ödeme alınmadı</p></td></tr></tbody></table>
+{{/if}}
 <h2 style="text-align:center">Satın aldığınız ürünün süresi dolmak üzere</h2>
 <p>Merhaba {{username}},</p>
 <p>{{storeName}} mağazasından aldığınız {{productName}} {{date}} tarihine kadar geçerli. Ardından erişiminizi kaybedersiniz.</p>
 <p>Kesinti yaşamamak için süresi dolmadan yenileyin.</p>
-{{{detailsTable}}}
+<table align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px"><tbody>
+<tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Ürün</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">{{productName}}</td></tr>
+<tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Geçerlilik sonu</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">{{validUntil}}</td></tr>
+</tbody></table>

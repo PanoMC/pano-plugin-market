@@ -184,37 +184,6 @@
     "group-separator": ",",
     "money": "{symbol}{amount}"
   },
-  "mail": {
-    "blocks": {
-      "order-number": "Order number",
-      "order-date": "Order date",
-      "payment-method": "Payment method",
-      "recipient": "Gift for",
-      "subtotal": "Subtotal",
-      "discount": "Discount",
-      "shipping": "Shipping",
-      "payment-fee": "Payment fee",
-      "vat": "VAT",
-      "vat-included": "VAT (included)",
-      "total": "Total",
-      "paid-with-credits": "Paid with credits",
-      "test-banner": "TEST ORDER - no real payment was made",
-      "pay-before": "Pay before",
-      "refund-amount": "Refund amount",
-      "refund-to-method": "Returned to your payment method",
-      "refund-to-credits": "Returned as credits",
-      "refund-reason": "Reason",
-      "product": "Product",
-      "valid-until": "Valid until",
-      "renews-on": "Renews on",
-      "amount": "Amount",
-      "carrier": "Carrier",
-      "tracking-number": "Tracking number",
-      "estimated-delivery": "Estimated delivery",
-      "delivered-on": "Delivered on",
-      "ship-to": "Shipping to"
-    }
-  },
   "notifications": {
     "MARKET_ORDER_REVIEW": "Order #{orderId} is waiting for your review.",
     "MARKET_ORDER_ALERT": "{code, select, BANK_TRANSFER_NOTIFIED {Order #{orderId}: the buyer says the bank transfer was made. Check your account, then approve the payment.} other {Order #{orderId} needs attention ({code}).}}",

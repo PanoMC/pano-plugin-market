@@ -178,7 +178,7 @@ class MailEnqueueIT : MarketDaoITBase() {
     private val format by lazy { MarketFormat(i18n, { "UTC" }, { "" }) }
 
     private fun composer(attachments: InvoiceMailAttachments? = null) = MailComposer(
-        MailContentBuilder(i18n, format, { w.config }, { MailSite("Blocky Network", "https://shop.example") }),
+        MailContentBuilder(format, { w.config }, { MailSite("Blocky Network", "https://shop.example") }),
         w.orders, w.orderItems, w.refunds, w.refundItems, if (attachments != null) w.invoices else null, attachments, { w.config }
     )
 
@@ -352,7 +352,7 @@ class MailEnqueueIT : MarketDaoITBase() {
 
         assertEquals("Payment instructions for order #${order.id}", MailRendering.render(content, "en-US").subject)
         assertTrue(content.instructionFields.any { it.value == "TR000000000000000000000001" })
-        assertTrue(content.details.any { it.label == "Pay before" })
+        assertTrue(content.values["expiresAt"].toString().isNotEmpty(), "the pay-before row")
 
         // the buyer says "I paid" (PENDING -> PROCESSING): the order was acknowledged by the instructions already
         payments.applyEvent(order.id, a.id, PaymentAttemptEvent.Pending)
@@ -481,7 +481,7 @@ class MailEnqueueIT : MarketDaoITBase() {
         val content = composer().compose(queued, pool)
 
         assertEquals("Your order #${placed.order.id} has been delivered", MailRendering.render(content, "en-US").subject)
-        assertTrue(content.totals.isEmpty(), "no totals in the delivered mail")
+        assertFalse(content.values.containsKey("total"), "no totals in the delivered mail")
     }
 
     @Test
@@ -842,7 +842,7 @@ class MailEnqueueIT : MarketDaoITBase() {
         val content = composer().compose(queued, pool)
 
         assertEquals("Refund for order #${paid.order.id}", MailRendering.render(content, "en-US").subject)
-        assertEquals("€4.00", content.details.single { it.label == "Refund amount" }.value)
+        assertEquals("€4.00", content.values["amount"])
         assertEquals("", content.values["claimUrl"], "no claim link, so no second link")
         assertFalse(composer().isObsolete(queued, pool))
     }

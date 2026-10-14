@@ -5,14 +5,43 @@ buttonLabel: View order
 buttonUrl: {{orderUrl}}
 footer: You are receiving this e-mail because of an order at {{storeName}}.
 ---
-{{{testBanner}}}
+{{#if testMode}}
+<table align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:16px;border-radius:0.5rem;background-color:rgb(254,243,199);padding:8px"><tbody><tr><td><p style="font-size:13px;line-height:20px;margin:0;text-align:center;font-weight:600;color:rgb(146,64,14)">TEST ORDER - no real payment was made</p></td></tr></tbody></table>
+{{/if}}
 <h2 style="text-align:center">Complete your payment</h2>
 <p>Hi {{username}},</p>
 <p>Thank you for your order {{orderNumber}} at {{storeName}}. Please transfer the total using the details below so we can complete your order.</p>
 {{#if expiresAt}}
 <p>Your order is reserved until {{expiresAt}}. After that it is cancelled automatically.</p>
 {{/if}}
-{{{itemsTable}}}
-{{{totalsTable}}}
-{{{detailsTable}}}
-{{{bankInstructions}}}
+{{#if items}}
+<table align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)"><tbody>
+{{#each items}}
+<tr><td style="padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83){{#if child}};padding-left:20px{{/if}}">{{quantity}} &#215; {{name}}{{#if variant}} <span style="color:rgb(106,114,130)">({{variant}})</span>{{/if}}</td> <td align="right" style="padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap">{{total}}</td></tr>
+{{/each}}
+</tbody></table>
+{{/if}}
+<table align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:16px"><tbody>
+{{#if subtotal}}<tr><td style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)">Subtotal</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap">{{subtotal}}</td></tr>{{/if}}
+{{#if discount}}<tr><td style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)">Discount</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap">{{discount}}</td></tr>{{/if}}
+{{#if shipping}}<tr><td style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)">Shipping</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap">{{shipping}}</td></tr>{{/if}}
+{{#if paymentFee}}<tr><td style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)">Payment fee</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap">{{paymentFee}}</td></tr>{{/if}}
+{{#if vat}}<tr><td style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)">{{#if vatIncluded}}VAT (included){{else}}VAT{{/if}}</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap">{{vat}}</td></tr>{{/if}}
+<tr><td style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);font-weight:700;font-size:16px">Total</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap;font-weight:700;font-size:16px">{{total}}</td></tr>
+{{#if paidWithCredits}}<tr><td style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)">Paid with credits</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap">{{paidWithCredits}}</td></tr>{{/if}}
+</tbody></table>
+<table align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px"><tbody>
+<tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Order number</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">{{orderNumber}}</td></tr>
+<tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Total</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">{{total}}</td></tr>
+{{#if expiresAt}}<tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Pay before</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">{{expiresAt}}</td></tr>{{/if}}
+</tbody></table>
+{{#if instructions}}
+<div style="font-size:15px;line-height:22px;color:rgb(54,65,83);margin-top:16px;margin-bottom:16px">{{{instructions}}}</div>
+{{/if}}
+{{#if instructionFields}}
+<table align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-top:8px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(240,253,244);padding:16px"><tbody>
+{{#each instructionFields}}
+<tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">{{label}}</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;font-weight:600;color:rgb(31,41,55)">{{value}}</td></tr>
+{{/each}}
+</tbody></table>
+{{/if}}

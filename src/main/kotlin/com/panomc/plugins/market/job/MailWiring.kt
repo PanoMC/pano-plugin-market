@@ -79,7 +79,7 @@ internal object MailWiring {
             // no site address: no buttons, as before the front-end URL map existed
             MailSite(platformConfig().websiteName, websiteUrl, if (websiteUrl.isEmpty()) StoreLinks.NONE else MarketLinks.platform)
         }
-        val builder = MailContentBuilder(i18n, format, config, site)
+        val builder = MailContentBuilder(format, config, site)
         val orders = context.getBean(MarketOrderDao::class.java)
         val orderItems = context.getBean(MarketOrderItemDao::class.java)
         val refunds = context.getBean(MarketRefundDao::class.java)

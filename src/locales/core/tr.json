@@ -184,37 +184,6 @@
     "group-separator": ".",
     "money": "{amount} {symbol}"
   },
-  "mail": {
-    "blocks": {
-      "order-number": "Sipariş numarası",
-      "order-date": "Sipariş tarihi",
-      "payment-method": "Ödeme yöntemi",
-      "recipient": "Hediye alıcısı",
-      "subtotal": "Ara toplam",
-      "discount": "İndirim",
-      "shipping": "Kargo",
-      "payment-fee": "Ödeme komisyonu",
-      "vat": "KDV",
-      "vat-included": "KDV (dahil)",
-      "total": "Toplam",
-      "paid-with-credits": "Kredi ile ödenen",
-      "test-banner": "TEST SİPARİŞİ - gerçek bir ödeme alınmadı",
-      "pay-before": "Son ödeme zamanı",
-      "refund-amount": "İade tutarı",
-      "refund-to-method": "Ödeme yönteminize iade edilen",
-      "refund-to-credits": "Kredi olarak iade edilen",
-      "refund-reason": "Neden",
-      "product": "Ürün",
-      "valid-until": "Geçerlilik sonu",
-      "renews-on": "Yenilenme tarihi",
-      "amount": "Tutar",
-      "carrier": "Kargo firması",
-      "tracking-number": "Takip numarası",
-      "estimated-delivery": "Tahmini teslimat",
-      "delivered-on": "Teslim tarihi",
-      "ship-to": "Teslimat adresi"
-    }
-  },
   "notifications": {
     "MARKET_ORDER_REVIEW": "#{orderId} numaralı sipariş incelemenizi bekliyor.",
     "MARKET_ORDER_ALERT": "{code, select, BANK_TRANSFER_NOTIFIED {#{orderId} numaralı sipariş: alıcı havaleyi yaptığını bildirdi. Hesabınızı kontrol edip ödemeyi onaylayın.} other {#{orderId} numaralı sipariş ilgi bekliyor ({code}).}}",

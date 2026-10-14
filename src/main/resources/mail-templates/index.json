@@ -8,9 +8,9 @@
         "ru": "Письма магазина"
       },
       "description": {
-        "en-US": "Sent to buyers about their orders, subscriptions and shipments. One variant per mail kind; the store settings decide which kinds are sent. Tables (items, totals, details, bank details) are filled in by the store.",
-        "tr": "Alıcılara siparişleri, abonelikleri ve kargoları hakkında gönderilir. Her e-posta türünün kendi varyantı vardır; hangi türlerin gönderileceğine mağaza ayarları karar verir. Tablolar (ürünler, tutarlar, ayrıntılar, havale bilgileri) mağaza tarafından doldurulur.",
-        "ru": "Отправляются покупателям о заказах, подписках и доставке. Свой вариант для каждого типа письма; какие типы отправлять, решают настройки магазина. Таблицы (товары, итоги, подробности, реквизиты) заполняет магазин."
+        "en-US": "Sent to buyers about their orders, subscriptions and shipments. One variant per mail kind; the store settings decide which kinds are sent. Every text, the table labels too, is in the template; the store fills in the values (items, amounts, dates, bank details).",
+        "tr": "Alıcılara siparişleri, abonelikleri ve kargoları hakkında gönderilir. Her e-posta türünün kendi varyantı vardır; hangi türlerin gönderileceğine mağaza ayarları karar verir. Tablo başlıkları dahil tüm metinler şablondadır; değerleri (ürünler, tutarlar, tarihler, banka bilgileri) mağaza doldurur.",
+        "ru": "Отправляются покупателям о заказах, подписках и доставке. Свой вариант для каждого типа письма; какие типы отправлять, решают настройки магазина. Все тексты, включая подписи таблиц, находятся в шаблоне; значения (товары, суммы, даты, реквизиты) подставляет магазин."
       },
       "variants": [
         {
@@ -62,16 +62,6 @@
               "sample": false
             },
             {
-              "name": "testBanner",
-              "type": "html",
-              "label": {
-                "en-US": "Test order banner",
-                "tr": "Test siparişi bandı",
-                "ru": "Баннер тестового заказа"
-              },
-              "sample": ""
-            },
-            {
               "name": "orderUrl",
               "type": "url",
               "label": {
@@ -82,34 +72,183 @@
               "sample": "https://example.com/store/order/K7M2Q9X4B8D6T3W5Z1RV"
             },
             {
-              "name": "itemsTable",
-              "type": "html",
+              "name": "items",
+              "type": "list",
               "label": {
                 "en-US": "Items",
                 "tr": "Ürünler",
                 "ru": "Товары"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€15.00</td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">2 &#215; Starter Bundle</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€20.00</td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);padding-left:20px\">2 &#215; Diamond Sword</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr></tbody></table>"
+              "sample": [
+                {
+                  "name": "Gold Rank",
+                  "variant": "30 days",
+                  "quantity": "1",
+                  "total": "€15.00",
+                  "child": false
+                },
+                {
+                  "name": "Starter Bundle",
+                  "variant": "",
+                  "quantity": "2",
+                  "total": "€20.00",
+                  "child": false
+                },
+                {
+                  "name": "Diamond Sword",
+                  "variant": "",
+                  "quantity": "2",
+                  "total": "",
+                  "child": true
+                }
+              ],
+              "fields": [
+                {
+                  "name": "name",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Product name",
+                    "tr": "Ürün adı",
+                    "ru": "Название товара"
+                  }
+                },
+                {
+                  "name": "variant",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Variant (empty when none)",
+                    "tr": "Varyant (yoksa boş)",
+                    "ru": "Вариант (пусто, если нет)"
+                  }
+                },
+                {
+                  "name": "quantity",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Quantity",
+                    "tr": "Adet",
+                    "ru": "Количество"
+                  }
+                },
+                {
+                  "name": "total",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Line total (empty for bundle parts and when no prices are shown)",
+                    "tr": "Satır toplamı (paket içeriğinde ve fiyatsız e-postalarda boş)",
+                    "ru": "Сумма строки (пусто для частей набора и в письмах без цен)"
+                  }
+                },
+                {
+                  "name": "child",
+                  "type": "boolean",
+                  "label": {
+                    "en-US": "Part of a bundle",
+                    "tr": "Paket içeriği",
+                    "ru": "Часть набора"
+                  }
+                }
+              ]
             },
             {
-              "name": "totalsTable",
-              "type": "html",
+              "name": "subtotal",
+              "type": "text",
               "label": {
-                "en-US": "Totals",
-                "tr": "Tutarlar",
-                "ru": "Итоги"
+                "en-US": "Subtotal (empty when not shown)",
+                "tr": "Ara toplam (gösterilmiyorsa boş)",
+                "ru": "Промежуточный итог (пусто, если не показывается)"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-bottom:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">Subtotal</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€40.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">Discount</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">-€5.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">VAT (included)</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€5.83</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);font-weight:700;font-size:16px\">Total</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap;font-weight:700;font-size:16px\">€35.00</td></tr></tbody></table>"
+              "sample": "€40.00"
             },
             {
-              "name": "detailsTable",
-              "type": "html",
+              "name": "discount",
+              "type": "text",
               "label": {
-                "en-US": "Details",
-                "tr": "Ayrıntılar",
-                "ru": "Подробности"
+                "en-US": "Discount (negative, empty when none)",
+                "tr": "İndirim (eksi, yoksa boş)",
+                "ru": "Скидка (со знаком минус, пусто, если нет)"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order number</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">#1042</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order date</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Oct 14, 2026 21:30</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Payment method</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Credit card</td></tr></tbody></table>"
+              "sample": "-€5.00"
+            },
+            {
+              "name": "shipping",
+              "type": "text",
+              "label": {
+                "en-US": "Shipping (empty when none)",
+                "tr": "Kargo (yoksa boş)",
+                "ru": "Доставка (пусто, если нет)"
+              },
+              "sample": ""
+            },
+            {
+              "name": "paymentFee",
+              "type": "text",
+              "label": {
+                "en-US": "Payment fee (empty when none)",
+                "tr": "Ödeme komisyonu (yoksa boş)",
+                "ru": "Комиссия за оплату (пусто, если нет)"
+              },
+              "sample": ""
+            },
+            {
+              "name": "vat",
+              "type": "text",
+              "label": {
+                "en-US": "VAT (empty when none)",
+                "tr": "KDV (yoksa boş)",
+                "ru": "НДС (пусто, если нет)"
+              },
+              "sample": "€5.83"
+            },
+            {
+              "name": "vatIncluded",
+              "type": "boolean",
+              "label": {
+                "en-US": "VAT is included in the prices",
+                "tr": "KDV fiyatlara dahil",
+                "ru": "НДС включён в цены"
+              },
+              "sample": true
+            },
+            {
+              "name": "total",
+              "type": "text",
+              "label": {
+                "en-US": "Total (money, or credits when paid with credits only)",
+                "tr": "Toplam (para ya da yalnızca kredi ile ödendiyse kredi)",
+                "ru": "Итого (деньги или кредиты, если оплачено только кредитами)"
+              },
+              "sample": "€35.00"
+            },
+            {
+              "name": "paidWithCredits",
+              "type": "text",
+              "label": {
+                "en-US": "Paid with credits (empty when none)",
+                "tr": "Kredi ile ödenen (yoksa boş)",
+                "ru": "Оплачено кредитами (пусто, если нет)"
+              },
+              "sample": ""
+            },
+            {
+              "name": "orderDate",
+              "type": "text",
+              "label": {
+                "en-US": "Order date",
+                "tr": "Sipariş tarihi",
+                "ru": "Дата заказа"
+              },
+              "sample": "Oct 14, 2026 21:30"
+            },
+            {
+              "name": "paymentMethod",
+              "type": "text",
+              "label": {
+                "en-US": "Payment method (empty when unknown)",
+                "tr": "Ödeme yöntemi (bilinmiyorsa boş)",
+                "ru": "Способ оплаты (пусто, если неизвестен)"
+              },
+              "sample": "Credit card"
             }
           ]
         },
@@ -162,16 +301,6 @@
               "sample": false
             },
             {
-              "name": "testBanner",
-              "type": "html",
-              "label": {
-                "en-US": "Test order banner",
-                "tr": "Test siparişi bandı",
-                "ru": "Баннер тестового заказа"
-              },
-              "sample": ""
-            },
-            {
               "name": "orderUrl",
               "type": "url",
               "label": {
@@ -202,34 +331,193 @@
               "sample": true
             },
             {
-              "name": "itemsTable",
-              "type": "html",
+              "name": "items",
+              "type": "list",
               "label": {
                 "en-US": "Items",
                 "tr": "Ürünler",
                 "ru": "Товары"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€15.00</td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">2 &#215; Starter Bundle</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€20.00</td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);padding-left:20px\">2 &#215; Diamond Sword</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr></tbody></table>"
+              "sample": [
+                {
+                  "name": "Gold Rank",
+                  "variant": "30 days",
+                  "quantity": "1",
+                  "total": "€15.00",
+                  "child": false
+                },
+                {
+                  "name": "Starter Bundle",
+                  "variant": "",
+                  "quantity": "2",
+                  "total": "€20.00",
+                  "child": false
+                },
+                {
+                  "name": "Diamond Sword",
+                  "variant": "",
+                  "quantity": "2",
+                  "total": "",
+                  "child": true
+                }
+              ],
+              "fields": [
+                {
+                  "name": "name",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Product name",
+                    "tr": "Ürün adı",
+                    "ru": "Название товара"
+                  }
+                },
+                {
+                  "name": "variant",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Variant (empty when none)",
+                    "tr": "Varyant (yoksa boş)",
+                    "ru": "Вариант (пусто, если нет)"
+                  }
+                },
+                {
+                  "name": "quantity",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Quantity",
+                    "tr": "Adet",
+                    "ru": "Количество"
+                  }
+                },
+                {
+                  "name": "total",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Line total (empty for bundle parts and when no prices are shown)",
+                    "tr": "Satır toplamı (paket içeriğinde ve fiyatsız e-postalarda boş)",
+                    "ru": "Сумма строки (пусто для частей набора и в письмах без цен)"
+                  }
+                },
+                {
+                  "name": "child",
+                  "type": "boolean",
+                  "label": {
+                    "en-US": "Part of a bundle",
+                    "tr": "Paket içeriği",
+                    "ru": "Часть набора"
+                  }
+                }
+              ]
             },
             {
-              "name": "totalsTable",
-              "type": "html",
+              "name": "subtotal",
+              "type": "text",
               "label": {
-                "en-US": "Totals",
-                "tr": "Tutarlar",
-                "ru": "Итоги"
+                "en-US": "Subtotal (empty when not shown)",
+                "tr": "Ara toplam (gösterilmiyorsa boş)",
+                "ru": "Промежуточный итог (пусто, если не показывается)"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-bottom:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">Subtotal</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€40.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">Discount</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">-€5.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">VAT (included)</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€5.83</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);font-weight:700;font-size:16px\">Total</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap;font-weight:700;font-size:16px\">€35.00</td></tr></tbody></table>"
+              "sample": "€40.00"
             },
             {
-              "name": "detailsTable",
-              "type": "html",
+              "name": "discount",
+              "type": "text",
               "label": {
-                "en-US": "Details",
-                "tr": "Ayrıntılar",
-                "ru": "Подробности"
+                "en-US": "Discount (negative, empty when none)",
+                "tr": "İndirim (eksi, yoksa boş)",
+                "ru": "Скидка (со знаком минус, пусто, если нет)"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order number</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">#1042</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order date</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Oct 14, 2026 21:30</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Payment method</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Credit card</td></tr></tbody></table>"
+              "sample": "-€5.00"
+            },
+            {
+              "name": "shipping",
+              "type": "text",
+              "label": {
+                "en-US": "Shipping (empty when none)",
+                "tr": "Kargo (yoksa boş)",
+                "ru": "Доставка (пусто, если нет)"
+              },
+              "sample": ""
+            },
+            {
+              "name": "paymentFee",
+              "type": "text",
+              "label": {
+                "en-US": "Payment fee (empty when none)",
+                "tr": "Ödeme komisyonu (yoksa boş)",
+                "ru": "Комиссия за оплату (пусто, если нет)"
+              },
+              "sample": ""
+            },
+            {
+              "name": "vat",
+              "type": "text",
+              "label": {
+                "en-US": "VAT (empty when none)",
+                "tr": "KDV (yoksa boş)",
+                "ru": "НДС (пусто, если нет)"
+              },
+              "sample": "€5.83"
+            },
+            {
+              "name": "vatIncluded",
+              "type": "boolean",
+              "label": {
+                "en-US": "VAT is included in the prices",
+                "tr": "KDV fiyatlara dahil",
+                "ru": "НДС включён в цены"
+              },
+              "sample": true
+            },
+            {
+              "name": "total",
+              "type": "text",
+              "label": {
+                "en-US": "Total (money, or credits when paid with credits only)",
+                "tr": "Toplam (para ya da yalnızca kredi ile ödendiyse kredi)",
+                "ru": "Итого (деньги или кредиты, если оплачено только кредитами)"
+              },
+              "sample": "€35.00"
+            },
+            {
+              "name": "paidWithCredits",
+              "type": "text",
+              "label": {
+                "en-US": "Paid with credits (empty when none)",
+                "tr": "Kredi ile ödenen (yoksa boş)",
+                "ru": "Оплачено кредитами (пусто, если нет)"
+              },
+              "sample": ""
+            },
+            {
+              "name": "orderDate",
+              "type": "text",
+              "label": {
+                "en-US": "Order date",
+                "tr": "Sipariş tarihi",
+                "ru": "Дата заказа"
+              },
+              "sample": "Oct 14, 2026 21:30"
+            },
+            {
+              "name": "paymentMethod",
+              "type": "text",
+              "label": {
+                "en-US": "Payment method (empty when unknown)",
+                "tr": "Ödeme yöntemi (bilinmiyorsa boş)",
+                "ru": "Способ оплаты (пусто, если неизвестен)"
+              },
+              "sample": "Credit card"
+            },
+            {
+              "name": "recipient",
+              "type": "text",
+              "label": {
+                "en-US": "Gift recipient (empty when not a gift)",
+                "tr": "Hediye alıcısı (hediye değilse boş)",
+                "ru": "Получатель подарка (пусто, если не подарок)"
+              },
+              "sample": ""
             }
           ]
         },
@@ -282,16 +570,6 @@
               "sample": false
             },
             {
-              "name": "testBanner",
-              "type": "html",
-              "label": {
-                "en-US": "Test order banner",
-                "tr": "Test siparişi bandı",
-                "ru": "Баннер тестового заказа"
-              },
-              "sample": ""
-            },
-            {
               "name": "orderUrl",
               "type": "url",
               "label": {
@@ -302,14 +580,83 @@
               "sample": "https://example.com/store/order/K7M2Q9X4B8D6T3W5Z1RV"
             },
             {
-              "name": "itemsTable",
-              "type": "html",
+              "name": "items",
+              "type": "list",
               "label": {
                 "en-US": "Items",
                 "tr": "Ürünler",
                 "ru": "Товары"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">2 &#215; Starter Bundle</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);padding-left:20px\">2 &#215; Diamond Sword</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr></tbody></table>"
+              "sample": [
+                {
+                  "name": "Gold Rank",
+                  "variant": "30 days",
+                  "quantity": "1",
+                  "total": "",
+                  "child": false
+                },
+                {
+                  "name": "Starter Bundle",
+                  "variant": "",
+                  "quantity": "2",
+                  "total": "",
+                  "child": false
+                },
+                {
+                  "name": "Diamond Sword",
+                  "variant": "",
+                  "quantity": "2",
+                  "total": "",
+                  "child": true
+                }
+              ],
+              "fields": [
+                {
+                  "name": "name",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Product name",
+                    "tr": "Ürün adı",
+                    "ru": "Название товара"
+                  }
+                },
+                {
+                  "name": "variant",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Variant (empty when none)",
+                    "tr": "Varyant (yoksa boş)",
+                    "ru": "Вариант (пусто, если нет)"
+                  }
+                },
+                {
+                  "name": "quantity",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Quantity",
+                    "tr": "Adet",
+                    "ru": "Количество"
+                  }
+                },
+                {
+                  "name": "total",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Line total (empty for bundle parts and when no prices are shown)",
+                    "tr": "Satır toplamı (paket içeriğinde ve fiyatsız e-postalarda boş)",
+                    "ru": "Сумма строки (пусто для частей набора и в письмах без цен)"
+                  }
+                },
+                {
+                  "name": "child",
+                  "type": "boolean",
+                  "label": {
+                    "en-US": "Part of a bundle",
+                    "tr": "Paket içeriği",
+                    "ru": "Часть набора"
+                  }
+                }
+              ]
             }
           ]
         },
@@ -362,16 +709,6 @@
               "sample": false
             },
             {
-              "name": "testBanner",
-              "type": "html",
-              "label": {
-                "en-US": "Test order banner",
-                "tr": "Test siparişi bandı",
-                "ru": "Баннер тестового заказа"
-              },
-              "sample": ""
-            },
-            {
               "name": "giftMessage",
               "type": "text",
               "label": {
@@ -392,14 +729,83 @@
               "sample": "https://example.com/store"
             },
             {
-              "name": "itemsTable",
-              "type": "html",
+              "name": "items",
+              "type": "list",
               "label": {
                 "en-US": "Items",
                 "tr": "Ürünler",
                 "ru": "Товары"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">2 &#215; Starter Bundle</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);padding-left:20px\">2 &#215; Diamond Sword</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr></tbody></table>"
+              "sample": [
+                {
+                  "name": "Gold Rank",
+                  "variant": "30 days",
+                  "quantity": "1",
+                  "total": "",
+                  "child": false
+                },
+                {
+                  "name": "Starter Bundle",
+                  "variant": "",
+                  "quantity": "2",
+                  "total": "",
+                  "child": false
+                },
+                {
+                  "name": "Diamond Sword",
+                  "variant": "",
+                  "quantity": "2",
+                  "total": "",
+                  "child": true
+                }
+              ],
+              "fields": [
+                {
+                  "name": "name",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Product name",
+                    "tr": "Ürün adı",
+                    "ru": "Название товара"
+                  }
+                },
+                {
+                  "name": "variant",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Variant (empty when none)",
+                    "tr": "Varyant (yoksa boş)",
+                    "ru": "Вариант (пусто, если нет)"
+                  }
+                },
+                {
+                  "name": "quantity",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Quantity",
+                    "tr": "Adet",
+                    "ru": "Количество"
+                  }
+                },
+                {
+                  "name": "total",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Line total (empty for bundle parts and when no prices are shown)",
+                    "tr": "Satır toplamı (paket içeriğinde ve fiyatsız e-postalarda boş)",
+                    "ru": "Сумма строки (пусто для частей набора и в письмах без цен)"
+                  }
+                },
+                {
+                  "name": "child",
+                  "type": "boolean",
+                  "label": {
+                    "en-US": "Part of a bundle",
+                    "tr": "Paket içeriği",
+                    "ru": "Часть набора"
+                  }
+                }
+              ]
             }
           ]
         },
@@ -452,16 +858,6 @@
               "sample": false
             },
             {
-              "name": "testBanner",
-              "type": "html",
-              "label": {
-                "en-US": "Test order banner",
-                "tr": "Test siparişi bandı",
-                "ru": "Баннер тестового заказа"
-              },
-              "sample": ""
-            },
-            {
               "name": "orderUrl",
               "type": "url",
               "label": {
@@ -482,44 +878,212 @@
               "sample": "Oct 17, 2026 21:30"
             },
             {
-              "name": "itemsTable",
-              "type": "html",
+              "name": "items",
+              "type": "list",
               "label": {
                 "en-US": "Items",
                 "tr": "Ürünler",
                 "ru": "Товары"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€15.00</td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">2 &#215; Starter Bundle</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€20.00</td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);padding-left:20px\">2 &#215; Diamond Sword</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr></tbody></table>"
+              "sample": [
+                {
+                  "name": "Gold Rank",
+                  "variant": "30 days",
+                  "quantity": "1",
+                  "total": "€15.00",
+                  "child": false
+                },
+                {
+                  "name": "Starter Bundle",
+                  "variant": "",
+                  "quantity": "2",
+                  "total": "€20.00",
+                  "child": false
+                },
+                {
+                  "name": "Diamond Sword",
+                  "variant": "",
+                  "quantity": "2",
+                  "total": "",
+                  "child": true
+                }
+              ],
+              "fields": [
+                {
+                  "name": "name",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Product name",
+                    "tr": "Ürün adı",
+                    "ru": "Название товара"
+                  }
+                },
+                {
+                  "name": "variant",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Variant (empty when none)",
+                    "tr": "Varyant (yoksa boş)",
+                    "ru": "Вариант (пусто, если нет)"
+                  }
+                },
+                {
+                  "name": "quantity",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Quantity",
+                    "tr": "Adet",
+                    "ru": "Количество"
+                  }
+                },
+                {
+                  "name": "total",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Line total (empty for bundle parts and when no prices are shown)",
+                    "tr": "Satır toplamı (paket içeriğinde ve fiyatsız e-postalarda boş)",
+                    "ru": "Сумма строки (пусто для частей набора и в письмах без цен)"
+                  }
+                },
+                {
+                  "name": "child",
+                  "type": "boolean",
+                  "label": {
+                    "en-US": "Part of a bundle",
+                    "tr": "Paket içeriği",
+                    "ru": "Часть набора"
+                  }
+                }
+              ]
             },
             {
-              "name": "totalsTable",
-              "type": "html",
+              "name": "subtotal",
+              "type": "text",
               "label": {
-                "en-US": "Totals",
-                "tr": "Tutarlar",
-                "ru": "Итоги"
+                "en-US": "Subtotal (empty when not shown)",
+                "tr": "Ara toplam (gösterilmiyorsa boş)",
+                "ru": "Промежуточный итог (пусто, если не показывается)"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-bottom:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">Subtotal</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€40.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">Discount</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">-€5.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">VAT (included)</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€5.83</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);font-weight:700;font-size:16px\">Total</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap;font-weight:700;font-size:16px\">€35.00</td></tr></tbody></table>"
+              "sample": "€40.00"
             },
             {
-              "name": "detailsTable",
-              "type": "html",
+              "name": "discount",
+              "type": "text",
               "label": {
-                "en-US": "Details",
-                "tr": "Ayrıntılar",
-                "ru": "Подробности"
+                "en-US": "Discount (negative, empty when none)",
+                "tr": "İndirim (eksi, yoksa boş)",
+                "ru": "Скидка (со знаком минус, пусто, если нет)"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order number</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">#1042</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Total</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">€35.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Pay before</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Oct 17, 2026 21:30</td></tr></tbody></table>"
+              "sample": "-€5.00"
             },
             {
-              "name": "bankInstructions",
+              "name": "shipping",
+              "type": "text",
+              "label": {
+                "en-US": "Shipping (empty when none)",
+                "tr": "Kargo (yoksa boş)",
+                "ru": "Доставка (пусто, если нет)"
+              },
+              "sample": ""
+            },
+            {
+              "name": "paymentFee",
+              "type": "text",
+              "label": {
+                "en-US": "Payment fee (empty when none)",
+                "tr": "Ödeme komisyonu (yoksa boş)",
+                "ru": "Комиссия за оплату (пусто, если нет)"
+              },
+              "sample": ""
+            },
+            {
+              "name": "vat",
+              "type": "text",
+              "label": {
+                "en-US": "VAT (empty when none)",
+                "tr": "KDV (yoksa boş)",
+                "ru": "НДС (пусто, если нет)"
+              },
+              "sample": "€5.83"
+            },
+            {
+              "name": "vatIncluded",
+              "type": "boolean",
+              "label": {
+                "en-US": "VAT is included in the prices",
+                "tr": "KDV fiyatlara dahil",
+                "ru": "НДС включён в цены"
+              },
+              "sample": true
+            },
+            {
+              "name": "total",
+              "type": "text",
+              "label": {
+                "en-US": "Total (money, or credits when paid with credits only)",
+                "tr": "Toplam (para ya da yalnızca kredi ile ödendiyse kredi)",
+                "ru": "Итого (деньги или кредиты, если оплачено только кредитами)"
+              },
+              "sample": "€35.00"
+            },
+            {
+              "name": "paidWithCredits",
+              "type": "text",
+              "label": {
+                "en-US": "Paid with credits (empty when none)",
+                "tr": "Kredi ile ödenen (yoksa boş)",
+                "ru": "Оплачено кредитами (пусто, если нет)"
+              },
+              "sample": ""
+            },
+            {
+              "name": "instructions",
               "type": "html",
               "label": {
-                "en-US": "Bank transfer details",
-                "tr": "Havale bilgileri",
-                "ru": "Реквизиты перевода"
+                "en-US": "Payment instructions (written in the payment method)",
+                "tr": "Ödeme talimatı (ödeme yönteminde yazılan)",
+                "ru": "Инструкция по оплате (из настроек способа оплаты)"
               },
-              "sample": "<div style=\"font-size:15px;line-height:22px;color:rgb(54,65,83);margin-top:16px;margin-bottom:16px\">Transfer the total to the account below.<br>Use the reference as the description.</div><table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:8px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(240,253,244);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">IBAN</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;font-weight:600;color:rgb(31,41,55)\">TR33 0006 1005 1978 6457 8413 26</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Reference</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;font-weight:600;color:rgb(31,41,55)\">ORDER-1042</td></tr></tbody></table>"
+              "sample": "<p>Transfer the total to the account below and use the reference as the description.</p>"
+            },
+            {
+              "name": "instructionFields",
+              "type": "list",
+              "label": {
+                "en-US": "Bank details (from the payment method)",
+                "tr": "Banka bilgileri (ödeme yönteminden)",
+                "ru": "Банковские реквизиты (из способа оплаты)"
+              },
+              "sample": [
+                {
+                  "label": "IBAN",
+                  "value": "TR33 0006 1005 1978 6457 8413 26"
+                },
+                {
+                  "label": "Reference",
+                  "value": "ORDER-1042"
+                }
+              ],
+              "fields": [
+                {
+                  "name": "label",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Label",
+                    "tr": "Etiket",
+                    "ru": "Название"
+                  }
+                },
+                {
+                  "name": "value",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Value",
+                    "tr": "Değer",
+                    "ru": "Значение"
+                  }
+                }
+              ]
             }
           ]
         },
@@ -572,16 +1136,6 @@
               "sample": false
             },
             {
-              "name": "testBanner",
-              "type": "html",
-              "label": {
-                "en-US": "Test order banner",
-                "tr": "Test siparişi bandı",
-                "ru": "Баннер тестового заказа"
-              },
-              "sample": ""
-            },
-            {
               "name": "orderUrl",
               "type": "url",
               "label": {
@@ -622,24 +1176,99 @@
               "sample": true
             },
             {
-              "name": "itemsTable",
-              "type": "html",
+              "name": "items",
+              "type": "list",
               "label": {
                 "en-US": "Refunded items",
                 "tr": "İade edilen ürünler",
                 "ru": "Возвращённые товары"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€15.00</td></tr></tbody></table>"
+              "sample": [
+                {
+                  "name": "Gold Rank",
+                  "variant": "30 days",
+                  "quantity": "1",
+                  "total": "€15.00",
+                  "child": false
+                }
+              ],
+              "fields": [
+                {
+                  "name": "name",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Product name",
+                    "tr": "Ürün adı",
+                    "ru": "Название товара"
+                  }
+                },
+                {
+                  "name": "variant",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Variant (empty when none)",
+                    "tr": "Varyant (yoksa boş)",
+                    "ru": "Вариант (пусто, если нет)"
+                  }
+                },
+                {
+                  "name": "quantity",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Quantity",
+                    "tr": "Adet",
+                    "ru": "Количество"
+                  }
+                },
+                {
+                  "name": "total",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Line total (empty for bundle parts and when no prices are shown)",
+                    "tr": "Satır toplamı (paket içeriğinde ve fiyatsız e-postalarda boş)",
+                    "ru": "Сумма строки (пусто для частей набора и в письмах без цен)"
+                  }
+                },
+                {
+                  "name": "child",
+                  "type": "boolean",
+                  "label": {
+                    "en-US": "Part of a bundle",
+                    "tr": "Paket içeriği",
+                    "ru": "Часть набора"
+                  }
+                }
+              ]
             },
             {
-              "name": "detailsTable",
-              "type": "html",
+              "name": "refundToMethod",
+              "type": "text",
               "label": {
-                "en-US": "Details",
-                "tr": "Ayrıntılar",
-                "ru": "Подробности"
+                "en-US": "Returned to the payment method (empty when none)",
+                "tr": "Ödeme yöntemine iade edilen (yoksa boş)",
+                "ru": "Возвращено на способ оплаты (пусто, если нет)"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order number</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">#1042</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Refund amount</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">€15.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Returned to your payment method</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">€10.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Returned as credits</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">50.00 Coins</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Reason</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Bought by mistake</td></tr></tbody></table>"
+              "sample": "€10.00"
+            },
+            {
+              "name": "refundToCredits",
+              "type": "text",
+              "label": {
+                "en-US": "Returned as credits (empty when none)",
+                "tr": "Kredi olarak iade edilen (yoksa boş)",
+                "ru": "Возвращено кредитами (пусто, если нет)"
+              },
+              "sample": "50.00 Coins"
+            },
+            {
+              "name": "refundReason",
+              "type": "text",
+              "label": {
+                "en-US": "Reason (empty when none)",
+                "tr": "Neden (yoksa boş)",
+                "ru": "Причина (пусто, если нет)"
+              },
+              "sample": "Bought by mistake"
             }
           ]
         },
@@ -690,16 +1319,6 @@
                 "ru": "Тестовый заказ"
               },
               "sample": false
-            },
-            {
-              "name": "testBanner",
-              "type": "html",
-              "label": {
-                "en-US": "Test order banner",
-                "tr": "Test siparişi bandı",
-                "ru": "Баннер тестового заказа"
-              },
-              "sample": ""
             },
             {
               "name": "productName",
@@ -770,16 +1389,6 @@
                 "ru": "Ссылка на управление подпиской"
               },
               "sample": "https://example.com/profile"
-            },
-            {
-              "name": "detailsTable",
-              "type": "html",
-              "label": {
-                "en-US": "Details",
-                "tr": "Ayrıntılar",
-                "ru": "Подробности"
-              },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Product</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Gold Rank</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Renews on</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Nov 13, 2026</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Amount</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">€15.00</td></tr></tbody></table>"
             }
           ]
         },
@@ -832,16 +1441,6 @@
               "sample": false
             },
             {
-              "name": "testBanner",
-              "type": "html",
-              "label": {
-                "en-US": "Test order banner",
-                "tr": "Test siparişi bandı",
-                "ru": "Баннер тестового заказа"
-              },
-              "sample": ""
-            },
-            {
               "name": "productName",
               "type": "text",
               "label": {
@@ -880,16 +1479,6 @@
                 "ru": "Ссылка на обновление оплаты"
               },
               "sample": "https://example.com/profile"
-            },
-            {
-              "name": "detailsTable",
-              "type": "html",
-              "label": {
-                "en-US": "Details",
-                "tr": "Ayrıntılar",
-                "ru": "Подробности"
-              },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Product</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Gold Rank</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Amount</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">€15.00</td></tr></tbody></table>"
             }
           ]
         },
@@ -940,16 +1529,6 @@
                 "ru": "Тестовый заказ"
               },
               "sample": false
-            },
-            {
-              "name": "testBanner",
-              "type": "html",
-              "label": {
-                "en-US": "Test order banner",
-                "tr": "Test siparişi bandı",
-                "ru": "Баннер тестового заказа"
-              },
-              "sample": ""
             },
             {
               "name": "productName",
@@ -1030,16 +1609,6 @@
                 "ru": "Тестовый заказ"
               },
               "sample": false
-            },
-            {
-              "name": "testBanner",
-              "type": "html",
-              "label": {
-                "en-US": "Test order banner",
-                "tr": "Test siparişi bandı",
-                "ru": "Баннер тестового заказа"
-              },
-              "sample": ""
             },
             {
               "name": "productName",
@@ -1202,16 +1771,6 @@
               "sample": false
             },
             {
-              "name": "testBanner",
-              "type": "html",
-              "label": {
-                "en-US": "Test order banner",
-                "tr": "Test siparişi bandı",
-                "ru": "Баннер тестового заказа"
-              },
-              "sample": ""
-            },
-            {
               "name": "productName",
               "type": "text",
               "label": {
@@ -1242,14 +1801,14 @@
               "sample": "https://example.com/store/gold-rank"
             },
             {
-              "name": "detailsTable",
-              "type": "html",
+              "name": "validUntil",
+              "type": "text",
               "label": {
-                "en-US": "Details",
-                "tr": "Ayrıntılar",
-                "ru": "Подробности"
+                "en-US": "Valid until (date and time)",
+                "tr": "Geçerlilik sonu (tarih ve saat)",
+                "ru": "Действует до (дата и время)"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Product</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Gold Rank</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Valid until</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Nov 13, 2026 21:30</td></tr></tbody></table>"
+              "sample": "Nov 13, 2026 21:30"
             }
           ]
         },
@@ -1302,16 +1861,6 @@
               "sample": false
             },
             {
-              "name": "testBanner",
-              "type": "html",
-              "label": {
-                "en-US": "Test order banner",
-                "tr": "Test siparişi bandı",
-                "ru": "Баннер тестового заказа"
-              },
-              "sample": ""
-            },
-            {
               "name": "orderUrl",
               "type": "url",
               "label": {
@@ -1342,24 +1891,116 @@
               "sample": "https://track.example/AR123456789"
             },
             {
-              "name": "itemsTable",
-              "type": "html",
+              "name": "items",
+              "type": "list",
               "label": {
                 "en-US": "Items in this parcel",
                 "tr": "Bu paketteki ürünler",
-                "ru": "Товары в посылке"
+                "ru": "Товары в этой посылке"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">2 &#215; Poster <span style=\"color:rgb(106,114,130)\">(A2)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr></tbody></table>"
+              "sample": [
+                {
+                  "name": "Server T-shirt",
+                  "variant": "M",
+                  "quantity": "1",
+                  "total": "",
+                  "child": false
+                },
+                {
+                  "name": "Poster",
+                  "variant": "A2",
+                  "quantity": "2",
+                  "total": "",
+                  "child": false
+                }
+              ],
+              "fields": [
+                {
+                  "name": "name",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Product name",
+                    "tr": "Ürün adı",
+                    "ru": "Название товара"
+                  }
+                },
+                {
+                  "name": "variant",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Variant (empty when none)",
+                    "tr": "Varyant (yoksa boş)",
+                    "ru": "Вариант (пусто, если нет)"
+                  }
+                },
+                {
+                  "name": "quantity",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Quantity",
+                    "tr": "Adet",
+                    "ru": "Количество"
+                  }
+                },
+                {
+                  "name": "total",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Line total (empty for bundle parts and when no prices are shown)",
+                    "tr": "Satır toplamı (paket içeriğinde ve fiyatsız e-postalarda boş)",
+                    "ru": "Сумма строки (пусто для частей набора и в письмах без цен)"
+                  }
+                },
+                {
+                  "name": "child",
+                  "type": "boolean",
+                  "label": {
+                    "en-US": "Part of a bundle",
+                    "tr": "Paket içeriği",
+                    "ru": "Часть набора"
+                  }
+                }
+              ]
             },
             {
-              "name": "detailsTable",
-              "type": "html",
+              "name": "carrier",
+              "type": "text",
               "label": {
-                "en-US": "Details",
-                "tr": "Ayrıntılar",
-                "ru": "Подробности"
+                "en-US": "Carrier (empty when unknown)",
+                "tr": "Kargo firması (bilinmiyorsa boş)",
+                "ru": "Перевозчик (пусто, если неизвестен)"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order number</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">#1042</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Carrier</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Aras Kargo</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Tracking number</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">AR123456789</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Estimated delivery</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Oct 17, 2026</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Shipping to</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Steve Miner, 12 Cube Street, 34000 Istanbul, Turkey</td></tr></tbody></table>"
+              "sample": "Aras Kargo"
+            },
+            {
+              "name": "trackingNumber",
+              "type": "text",
+              "label": {
+                "en-US": "Tracking number (empty when none)",
+                "tr": "Takip numarası (yoksa boş)",
+                "ru": "Номер отслеживания (пусто, если нет)"
+              },
+              "sample": "AR123456789"
+            },
+            {
+              "name": "estimatedDelivery",
+              "type": "text",
+              "label": {
+                "en-US": "Estimated delivery (empty when unknown)",
+                "tr": "Tahmini teslimat (bilinmiyorsa boş)",
+                "ru": "Ожидаемая доставка (пусто, если неизвестна)"
+              },
+              "sample": "Oct 17, 2026"
+            },
+            {
+              "name": "shipTo",
+              "type": "text",
+              "label": {
+                "en-US": "Shipping address (empty when unknown)",
+                "tr": "Teslimat adresi (bilinmiyorsa boş)",
+                "ru": "Адрес доставки (пусто, если неизвестен)"
+              },
+              "sample": "Steve Miner, 12 Cube Street, 34000 Istanbul, Turkey"
             }
           ]
         },
@@ -1412,16 +2053,6 @@
               "sample": false
             },
             {
-              "name": "testBanner",
-              "type": "html",
-              "label": {
-                "en-US": "Test order banner",
-                "tr": "Test siparişi bandı",
-                "ru": "Баннер тестового заказа"
-              },
-              "sample": ""
-            },
-            {
               "name": "orderUrl",
               "type": "url",
               "label": {
@@ -1432,24 +2063,96 @@
               "sample": "https://example.com/store/order/K7M2Q9X4B8D6T3W5Z1RV"
             },
             {
-              "name": "itemsTable",
-              "type": "html",
+              "name": "items",
+              "type": "list",
               "label": {
                 "en-US": "Items in this parcel",
                 "tr": "Bu paketteki ürünler",
-                "ru": "Товары в посылке"
+                "ru": "Товары в этой посылке"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">2 &#215; Poster <span style=\"color:rgb(106,114,130)\">(A2)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr></tbody></table>"
+              "sample": [
+                {
+                  "name": "Server T-shirt",
+                  "variant": "M",
+                  "quantity": "1",
+                  "total": "",
+                  "child": false
+                },
+                {
+                  "name": "Poster",
+                  "variant": "A2",
+                  "quantity": "2",
+                  "total": "",
+                  "child": false
+                }
+              ],
+              "fields": [
+                {
+                  "name": "name",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Product name",
+                    "tr": "Ürün adı",
+                    "ru": "Название товара"
+                  }
+                },
+                {
+                  "name": "variant",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Variant (empty when none)",
+                    "tr": "Varyant (yoksa boş)",
+                    "ru": "Вариант (пусто, если нет)"
+                  }
+                },
+                {
+                  "name": "quantity",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Quantity",
+                    "tr": "Adet",
+                    "ru": "Количество"
+                  }
+                },
+                {
+                  "name": "total",
+                  "type": "text",
+                  "label": {
+                    "en-US": "Line total (empty for bundle parts and when no prices are shown)",
+                    "tr": "Satır toplamı (paket içeriğinde ve fiyatsız e-postalarda boş)",
+                    "ru": "Сумма строки (пусто для частей набора и в письмах без цен)"
+                  }
+                },
+                {
+                  "name": "child",
+                  "type": "boolean",
+                  "label": {
+                    "en-US": "Part of a bundle",
+                    "tr": "Paket içeriği",
+                    "ru": "Часть набора"
+                  }
+                }
+              ]
             },
             {
-              "name": "detailsTable",
-              "type": "html",
+              "name": "carrier",
+              "type": "text",
               "label": {
-                "en-US": "Details",
-                "tr": "Ayrıntılar",
-                "ru": "Подробности"
+                "en-US": "Carrier (empty when unknown)",
+                "tr": "Kargo firması (bilinmiyorsa boş)",
+                "ru": "Перевозчик (пусто, если неизвестен)"
               },
-              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order number</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">#1042</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Carrier</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Aras Kargo</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Delivered on</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Oct 16, 2026</td></tr></tbody></table>"
+              "sample": "Aras Kargo"
+            },
+            {
+              "name": "deliveredOn",
+              "type": "text",
+              "label": {
+                "en-US": "Delivered on (empty when unknown)",
+                "tr": "Teslim tarihi (bilinmiyorsa boş)",
+                "ru": "Дата доставки (пусто, если неизвестна)"
+              },
+              "sample": "Oct 16, 2026"
             }
           ]
         },

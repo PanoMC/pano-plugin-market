@@ -5,7 +5,9 @@ buttonLabel: Pay now
 buttonUrl: {{payUrl}}
 footer: You are receiving this e-mail because of an order at {{storeName}}.
 ---
-{{{testBanner}}}
+{{#if testMode}}
+<table align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:16px;border-radius:0.5rem;background-color:rgb(254,243,199);padding:8px"><tbody><tr><td><p style="font-size:13px;line-height:20px;margin:0;text-align:center;font-weight:600;color:rgb(146,64,14)">TEST ORDER - no real payment was made</p></td></tr></tbody></table>
+{{/if}}
 <h2 style="text-align:center">Your subscription renews soon</h2>
 <p>Hi {{username}},</p>
 {{#if manual}}
@@ -16,5 +18,9 @@ footer: You are receiving this e-mail because of an order at {{storeName}}.
 <p>It will be charged to: {{paymentMethod}}.</p>
 {{/if}}
 {{/if}}
-{{{detailsTable}}}
+<table align="center" width="100%" border="0" cellpadding="0" cellspacing="0" role="presentation" style="margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px"><tbody>
+<tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Product</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">{{productName}}</td></tr>
+<tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Renews on</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">{{date}}</td></tr>
+<tr><td style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)">Amount</td> <td align="right" style="padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)">{{amount}}</td></tr>
+</tbody></table>
 {{#if manageUrl}}<p style="font-size:14px;line-height:20px;margin:8px 0 16px 0;text-align:center"><a href="{{manageUrl}}" style="color:rgb(54,65,83)" target="_blank">Manage subscription</a></p>{{/if}}
