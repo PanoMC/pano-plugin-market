@@ -1,0 +1,18 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}Реквизиты для оплаты заказа {{orderNumber}}
+preheader: Переведите сумму, чтобы завершить заказ.
+buttonLabel: Открыть заказ
+buttonUrl: {{orderUrl}}
+footer: Вы получили это письмо из-за заказа в магазине {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Завершите оплату</h2>
+<p>Здравствуйте, {{username}}!</p>
+<p>Спасибо за заказ {{orderNumber}} в магазине {{storeName}}. Пожалуйста, переведите итоговую сумму по реквизитам ниже, чтобы мы могли завершить заказ.</p>
+{{#if expiresAt}}
+<p>Заказ зарезервирован до {{expiresAt}}. После этого он будет отменён автоматически.</p>
+{{/if}}
+{{{itemsTable}}}
+{{{totalsTable}}}
+{{{detailsTable}}}
+{{{bankInstructions}}}

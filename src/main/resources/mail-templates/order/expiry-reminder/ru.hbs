@@ -1,0 +1,13 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{productName}} истекает {{date}}
+preheader: Продлите, чтобы сохранить доступ.
+buttonLabel: Продлить
+buttonUrl: {{renewUrl}}
+footer: Вы получили это письмо из-за заказа в магазине {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Срок вашей покупки скоро истекает</h2>
+<p>Здравствуйте, {{username}}!</p>
+<p>Ваш {{productName}} из магазина {{storeName}} действует до {{date}}. После этого доступ будет потерян.</p>
+<p>Продлите до окончания срока, чтобы ничего не прервалось.</p>
+{{{detailsTable}}}

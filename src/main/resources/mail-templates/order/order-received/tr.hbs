@@ -1,0 +1,15 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{orderNumber}} numaralı siparişinizi aldık
+preheader: Ödemeniz doğrulanıyor.
+buttonLabel: Siparişi görüntüle
+buttonUrl: {{orderUrl}}
+footer: Bu e-postayı {{storeName}} mağazasındaki bir sipariş nedeniyle alıyorsunuz.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Siparişinizi aldık</h2>
+<p>Merhaba {{username}},</p>
+<p>{{storeName}} mağazasındaki {{orderNumber}} numaralı siparişiniz için teşekkürler. Ödemenizi doğruluyoruz; tamamlanır tamamlanmaz size yeniden e-posta göndereceğiz.</p>
+<p>Ödemeniz ekibimiz tarafından elle kontrol edilmeliyse bu biraz daha uzun sürebilir.</p>
+{{{itemsTable}}}
+{{{totalsTable}}}
+{{{detailsTable}}}

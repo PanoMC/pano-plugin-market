@@ -68,7 +68,7 @@ class MarketRuntimeTest {
         }
 
         val caps = MarketRuntime.probeHostCapabilities(loader)
-        assertEquals(exists(MarketRuntime.MAIL_OPTIONS_CLASS), caps.mail)
+        assertEquals(exists(MarketRuntime.MAIL_OPTIONS_CLASS) && exists(MarketRuntime.TEMPLATE_MAIL_CLASS), caps.mail)
         assertEquals(exists(MarketRuntime.NOTIFICATION_REGISTRY_CLASS), caps.notifications)
         assertEquals(if (caps.mail) "OK" else "HOST_TOO_OLD", caps.mailStatus)
     }

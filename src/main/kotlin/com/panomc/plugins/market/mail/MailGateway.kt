@@ -5,6 +5,7 @@ import com.panomc.platform.mail.MailFile
 import com.panomc.platform.mail.MailManager
 import com.panomc.platform.mail.MailOptions
 import com.panomc.platform.mail.MailResult
+import com.panomc.platform.mail.TemplateMail
 import com.panomc.plugins.market.db.model.MarketMailOutbox
 import io.vertx.sqlclient.SqlClient
 
@@ -15,7 +16,7 @@ class MailAttachment(val name: String, val contentType: String, val data: ByteAr
 class OutboundMail(
     val recipient: String,
     val locale: String,
-    val content: MailContent,
+    val message: MarketMailMessage,
     val replyTo: String? = null,
     val attachments: List<MailAttachment> = emptyList()
 )
@@ -33,9 +34,10 @@ interface MailGateway {
 }
 
 /**
- * The only class of market that references `MailOptions` (12 section 3.2): built only when the host probe found the
- * class (`MarketRuntime.capabilities.mail`), else [UnavailableMailGateway] stands in. `userId` is always null: recipient
- * and locale are fixed on the row and a deleted user must not turn into `NotExists`.
+ * The only class of market that references `MailOptions` (12 section 3.2): built only when the host probe found it and the
+ * mail templates (`MarketRuntime.capabilities.mail`), else [UnavailableMailGateway] stands in. `userId` is always null:
+ * recipient and locale are fixed on the row and a deleted user must not turn into `NotExists`. The platform renders the
+ * `pano-plugin-market/order` template of the row's locale (subject, HTML and the plain-text alternative).
  */
 class PlatformMailGateway(
     private val mailManager: MailManager,
@@ -46,7 +48,7 @@ class PlatformMailGateway(
     fun isEnabled(): Boolean = configManager.config.email.enabled
 
     override suspend fun send(message: OutboundMail): MailSendResult =
-        when (mailManager.sendMail(sqlClient(), null, MarketMail(message.content), toOptions(message))) {
+        when (mailManager.sendTemplate(sqlClient(), null, MarketTemplateMail(message.message), toOptions(message))) {
             MailResult.SENT -> MailSendResult.SENT
             MailResult.DISABLED -> MailSendResult.DISABLED
             // Pano Mail did not take the message (limit used up, sending paused): a delivery failure, the outbox retries.
@@ -54,15 +56,22 @@ class PlatformMailGateway(
         }
 
     companion object {
-        /** `MailOptions(email = recipient, locale, subject, text = toText(), replyTo, attachments)` (12 section 3.2). */
+        /** `MailOptions(email = recipient, locale, replyTo, attachments)`; subject and text come from the template. */
         fun toOptions(message: OutboundMail): MailOptions = MailOptions(
             email = message.recipient,
             locale = message.locale,
-            subject = message.content.subject,
-            text = message.content.toText(),
             replyTo = message.replyTo?.takeIf { it.isNotBlank() },
             attachments = message.attachments.map { MailFile(it.name, it.contentType, it.data) }
         )
+    }
+}
+
+/** The platform side of one [MarketMailMessage]: mail `pano-plugin-market` / `order`, the message's variant and variables. */
+class MarketTemplateMail(val message: MarketMailMessage) : TemplateMail(OWNER, MarketMailMessage.KEY, message.variant) {
+    override suspend fun variables(locale: String, system: MailManager.Companion.SystemParameters): Map<String, Any?> = message.variables()
+
+    companion object {
+        const val OWNER = "pano-plugin-market"
     }
 }
 
@@ -90,8 +99,8 @@ interface MailComposition {
     /** Relevance check of 12 section 4.3.5: `true` => the row is `SKIPPED (OBSOLETE)`. Not asked for forced resends. */
     suspend fun isObsolete(row: MarketMailOutbox, sqlClient: SqlClient): Boolean
 
-    /** Builds the final content of [row]; an exception ends the row `FAILED (RENDER_ERROR)`. */
-    suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient): MailContent
+    /** Builds the final message of [row]; an exception ends the row `FAILED (RENDER_ERROR)`. */
+    suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient): MarketMailMessage
 
     /** Invoice / credit-note attachments of [row] (12 section 4.4); a failure is reported, not thrown. */
     suspend fun attachments(row: MarketMailOutbox, sqlClient: SqlClient): MailAttachments = MailAttachments.NONE
@@ -105,6 +114,6 @@ object UnwiredMailComposition : MailComposition {
     /** Not obsolete, so the row reaches [compose], which fails it closed (a throw here would be retried as transient). */
     override suspend fun isObsolete(row: MarketMailOutbox, sqlClient: SqlClient): Boolean = false
 
-    override suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient): MailContent =
+    override suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient): MarketMailMessage =
         throw IllegalStateException("the mail composer is not wired (MK-142)")
 }

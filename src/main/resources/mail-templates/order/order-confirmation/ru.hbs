@@ -1,0 +1,18 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}Ваш заказ {{orderNumber}} подтверждён
+preheader: Спасибо за покупку в магазине {{storeName}}.
+buttonLabel: Открыть заказ
+buttonUrl: {{orderUrl}}
+footer: Вы получили это письмо из-за заказа в магазине {{storeName}}.{{#if invoiceAttached}} Счёт приложен к этому письму в формате PDF.{{/if}}
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Заказ подтверждён</h2>
+<p>Здравствуйте, {{username}}!</p>
+<p>Спасибо за покупку! Ваш заказ {{orderNumber}} в магазине {{storeName}} подтверждён.</p>
+<p>Цифровые товары автоматически доставляются на ваш аккаунт Minecraft.</p>
+{{#if shippingAddress}}
+<p>Мы отправим ваш заказ по адресу: {{shippingAddress}}</p>
+{{/if}}
+{{{itemsTable}}}
+{{{totalsTable}}}
+{{{detailsTable}}}

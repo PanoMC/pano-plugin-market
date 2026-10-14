@@ -1,0 +1,17 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}Payment failed for {{productName}}
+preheader: We could not charge your payment method.
+buttonLabel: Update payment
+buttonUrl: {{payUrl}}
+footer: You are receiving this e-mail because of an order at {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Payment failed</h2>
+<p>Hi {{username}},</p>
+{{#if graceEndsAt}}
+<p>We could not charge {{amount}} for your subscription to {{productName}} at {{storeName}}. Your access continues until {{graceEndsAt}}.</p>
+{{else}}
+<p>We could not charge {{amount}} for your subscription to {{productName}} at {{storeName}}.</p>
+{{/if}}
+<p>Please update your payment to keep the subscription.</p>
+{{{detailsTable}}}

@@ -1,0 +1,13 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{productName}} expires on {{date}}
+preheader: Renew to keep your access.
+buttonLabel: Renew
+buttonUrl: {{renewUrl}}
+footer: You are receiving this e-mail because of an order at {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Your purchase is about to expire</h2>
+<p>Hi {{username}},</p>
+<p>Your {{productName}} from {{storeName}} is valid until {{date}}. After that you lose access to it.</p>
+<p>Renew before it expires so nothing is interrupted.</p>
+{{{detailsTable}}}

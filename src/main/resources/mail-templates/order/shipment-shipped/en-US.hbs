@@ -1,0 +1,19 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}Your order {{orderNumber}} is on its way
+preheader: Your parcel has been handed to the carrier.
+buttonLabel: {{#if trackingUrl}}Track shipment{{else}}View order{{/if}}
+buttonUrl: {{#if trackingUrl}}{{trackingUrl}}{{else}}{{orderUrl}}{{/if}}
+footer: You are receiving this e-mail because of an order at {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Your order is on its way</h2>
+<p>Hi {{username}},</p>
+<p>Good news! Your order {{orderNumber}} at {{storeName}} has been shipped.</p>
+{{#if partial}}
+<p>This parcel holds part of your order. The rest follows in another shipment.</p>
+{{/if}}
+{{{itemsTable}}}
+{{{detailsTable}}}
+{{#if trackingUrl}}
+{{#if orderUrl}}<p style="font-size:14px;line-height:20px;margin:8px 0 16px 0;text-align:center"><a href="{{orderUrl}}" style="color:rgb(54,65,83)" target="_blank">View order</a></p>{{/if}}
+{{/if}}

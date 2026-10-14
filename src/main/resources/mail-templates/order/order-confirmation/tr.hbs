@@ -1,0 +1,18 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{orderNumber}} numaralı siparişiniz onaylandı
+preheader: {{storeName}} mağazasından alışveriş yaptığınız için teşekkürler.
+buttonLabel: Siparişi görüntüle
+buttonUrl: {{orderUrl}}
+footer: Bu e-postayı {{storeName}} mağazasındaki bir sipariş nedeniyle alıyorsunuz.{{#if invoiceAttached}} Faturanız bu e-postaya PDF olarak eklenmiştir.{{/if}}
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Sipariş onaylandı</h2>
+<p>Merhaba {{username}},</p>
+<p>Satın alımınız için teşekkürler! {{storeName}} mağazasındaki {{orderNumber}} numaralı siparişiniz onaylandı.</p>
+<p>Dijital ürünler Minecraft hesabınıza otomatik olarak teslim edilir.</p>
+{{#if shippingAddress}}
+<p>Siparişinizi şu adrese göndereceğiz: {{shippingAddress}}</p>
+{{/if}}
+{{{itemsTable}}}
+{{{totalsTable}}}
+{{{detailsTable}}}

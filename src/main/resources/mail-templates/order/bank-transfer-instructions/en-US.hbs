@@ -1,0 +1,18 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}Payment instructions for order {{orderNumber}}
+preheader: Transfer the amount to complete your order.
+buttonLabel: View order
+buttonUrl: {{orderUrl}}
+footer: You are receiving this e-mail because of an order at {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Complete your payment</h2>
+<p>Hi {{username}},</p>
+<p>Thank you for your order {{orderNumber}} at {{storeName}}. Please transfer the total using the details below so we can complete your order.</p>
+{{#if expiresAt}}
+<p>Your order is reserved until {{expiresAt}}. After that it is cancelled automatically.</p>
+{{/if}}
+{{{itemsTable}}}
+{{{totalsTable}}}
+{{{detailsTable}}}
+{{{bankInstructions}}}

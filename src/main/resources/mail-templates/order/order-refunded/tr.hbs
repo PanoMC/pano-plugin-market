@@ -1,0 +1,17 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{orderNumber}} numaralı sipariş için iade
+preheader: Siparişiniz için iade yapıldı.
+buttonLabel: {{#if claimUrl}}İadeyi talep et{{else}}Siparişi görüntüle{{/if}}
+buttonUrl: {{#if claimUrl}}{{claimUrl}}{{else}}{{orderUrl}}{{/if}}
+footer: Bu e-postayı {{storeName}} mağazasındaki bir sipariş nedeniyle alıyorsunuz.{{#if creditNoteAttached}} Alacak dekontu bu e-postaya PDF olarak eklenmiştir.{{/if}}
+---
+{{{testBanner}}}
+<h2 style="text-align:center">İade yapıldı</h2>
+<p>Merhaba {{username}},</p>
+<p>{{storeName}} mağazasındaki {{orderNumber}} numaralı siparişiniz için {{amount}} iade ettik.</p>
+<p>Bankanıza bağlı olarak paranın hesabınıza yansıması birkaç gün sürebilir.</p>
+{{{itemsTable}}}
+{{{detailsTable}}}
+{{#if claimUrl}}
+{{#if orderUrl}}<p style="font-size:14px;line-height:20px;margin:8px 0 16px 0;text-align:center"><a href="{{orderUrl}}" style="color:rgb(54,65,83)" target="_blank">Siparişi görüntüle</a></p>{{/if}}
+{{/if}}

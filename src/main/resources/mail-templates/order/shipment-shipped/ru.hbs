@@ -1,0 +1,19 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}Ваш заказ {{orderNumber}} в пути
+preheader: Посылка передана перевозчику.
+buttonLabel: {{#if trackingUrl}}Отследить посылку{{else}}Открыть заказ{{/if}}
+buttonUrl: {{#if trackingUrl}}{{trackingUrl}}{{else}}{{orderUrl}}{{/if}}
+footer: Вы получили это письмо из-за заказа в магазине {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Ваш заказ в пути</h2>
+<p>Здравствуйте, {{username}}!</p>
+<p>Отличные новости! Ваш заказ {{orderNumber}} в магазине {{storeName}} отправлен.</p>
+{{#if partial}}
+<p>В этой посылке часть вашего заказа. Остальное придёт отдельной отправкой.</p>
+{{/if}}
+{{{itemsTable}}}
+{{{detailsTable}}}
+{{#if trackingUrl}}
+{{#if orderUrl}}<p style="font-size:14px;line-height:20px;margin:8px 0 16px 0;text-align:center"><a href="{{orderUrl}}" style="color:rgb(54,65,83)" target="_blank">Открыть заказ</a></p>{{/if}}
+{{/if}}

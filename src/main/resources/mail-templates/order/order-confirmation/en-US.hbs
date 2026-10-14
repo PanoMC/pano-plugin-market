@@ -1,0 +1,18 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}Your order {{orderNumber}} is confirmed
+preheader: Thank you for your purchase at {{storeName}}.
+buttonLabel: View order
+buttonUrl: {{orderUrl}}
+footer: You are receiving this e-mail because of an order at {{storeName}}.{{#if invoiceAttached}} Your invoice is attached to this e-mail as a PDF.{{/if}}
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Order confirmed</h2>
+<p>Hi {{username}},</p>
+<p>Thank you for your purchase! Your order {{orderNumber}} at {{storeName}} is confirmed.</p>
+<p>Digital items are delivered to the Minecraft account automatically.</p>
+{{#if shippingAddress}}
+<p>We will ship your order to: {{shippingAddress}}</p>
+{{/if}}
+{{{itemsTable}}}
+{{{totalsTable}}}
+{{{detailsTable}}}

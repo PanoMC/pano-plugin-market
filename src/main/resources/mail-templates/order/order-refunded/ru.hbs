@@ -1,0 +1,17 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}Возврат по заказу {{orderNumber}}
+preheader: Возврат по вашему заказу выполнен.
+buttonLabel: {{#if claimUrl}}Получить возврат{{else}}Открыть заказ{{/if}}
+buttonUrl: {{#if claimUrl}}{{claimUrl}}{{else}}{{orderUrl}}{{/if}}
+footer: Вы получили это письмо из-за заказа в магазине {{storeName}}.{{#if creditNoteAttached}} Кредит-нота приложена к этому письму в формате PDF.{{/if}}
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Возврат выполнен</h2>
+<p>Здравствуйте, {{username}}!</p>
+<p>Мы вернули {{amount}} по вашему заказу {{orderNumber}} в магазине {{storeName}}.</p>
+<p>В зависимости от банка деньги могут поступить через несколько дней.</p>
+{{{itemsTable}}}
+{{{detailsTable}}}
+{{#if claimUrl}}
+{{#if orderUrl}}<p style="font-size:14px;line-height:20px;margin:8px 0 16px 0;text-align:center"><a href="{{orderUrl}}" style="color:rgb(54,65,83)" target="_blank">Открыть заказ</a></p>{{/if}}
+{{/if}}

@@ -185,7 +185,7 @@
     "money": "{amount} {symbol}"
   },
   "mail": {
-    "common": {
+    "blocks": {
       "order-number": "Sipariş numarası",
       "order-date": "Sipariş tarihi",
       "payment-method": "Ödeme yöntemi",
@@ -199,17 +199,11 @@
       "total": "Toplam",
       "paid-with-credits": "Kredi ile ödenen",
       "test-banner": "TEST SİPARİŞİ - gerçek bir ödeme alınmadı",
-      "footer": "Bu e-postayı {storeName} mağazasındaki bir sipariş nedeniyle alıyorsunuz.",
-      "view-order": "Siparişi görüntüle",
-      "visit-store": "Mağazayı ziyaret et",
-      "invoice-attached": "Faturanız bu e-postaya PDF olarak eklenmiştir.",
-      "gift-from": "Gönderen",
       "pay-before": "Son ödeme zamanı",
       "refund-amount": "İade tutarı",
       "refund-to-method": "Ödeme yönteminize iade edilen",
       "refund-to-credits": "Kredi olarak iade edilen",
       "refund-reason": "Neden",
-      "hello": "Merhaba {username},",
       "product": "Ürün",
       "valid-until": "Geçerlilik sonu",
       "renews-on": "Yenilenme tarihi",
@@ -218,134 +212,7 @@
       "tracking-number": "Takip numarası",
       "estimated-delivery": "Tahmini teslimat",
       "delivered-on": "Teslim tarihi",
-      "shipment-items": "Bu paketteki ürünler",
-      "manage-subscription": "Aboneliği yönet",
-      "payment-method-stored": "Ödeme yöntemi",
       "ship-to": "Teslimat adresi"
-    },
-    "order-received": {
-      "subject": "{orderNumber} numaralı siparişinizi aldık",
-      "preheader": "Ödemeniz doğrulanıyor.",
-      "heading": "Siparişinizi aldık",
-      "body": "{storeName} mağazasındaki {orderNumber} numaralı siparişiniz için teşekkürler. Ödemenizi doğruluyoruz; tamamlanır tamamlanmaz size yeniden e-posta göndereceğiz.",
-      "body-2": "Ödemeniz ekibimiz tarafından elle kontrol edilmeliyse bu biraz daha uzun sürebilir.",
-      "button": "Siparişi görüntüle"
-    },
-    "bank-transfer-instructions": {
-      "subject": "{orderNumber} numaralı sipariş için ödeme bilgileri",
-      "preheader": "Siparişi tamamlamak için tutarı havale edin.",
-      "heading": "Ödemenizi tamamlayın",
-      "body": "{storeName} mağazasındaki {orderNumber} numaralı siparişiniz için teşekkürler. Siparişinizi tamamlayabilmemiz için lütfen toplam tutarı aşağıdaki bilgilere havale edin.",
-      "body-2": "Siparişiniz {expiresAt} tarihine kadar ayrılmıştır. Bundan sonra otomatik olarak iptal edilir.",
-      "button": "Siparişi görüntüle"
-    },
-    "order-confirmation": {
-      "subject": "{orderNumber} numaralı siparişiniz onaylandı",
-      "preheader": "{storeName} mağazasından alışveriş yaptığınız için teşekkürler.",
-      "heading": "Sipariş onaylandı",
-      "body": "Satın alımınız için teşekkürler! {storeName} mağazasındaki {orderNumber} numaralı siparişiniz onaylandı.",
-      "body-2": "Dijital ürünler Minecraft hesabınıza otomatik olarak teslim edilir.",
-      "shipping-address": "Siparişinizi şu adrese göndereceğiz: {address}",
-      "button": "Siparişi görüntüle"
-    },
-    "gift-received": {
-      "subject": "{username} size {websiteName} üzerinden bir hediye gönderdi",
-      "preheader": "Sizi bir hediye bekliyor.",
-      "heading": "Bir hediye aldınız!",
-      "body": "{username}, {storeName} mağazasından size bir hediye gönderdi. Hediye Minecraft hesabınıza otomatik olarak teslim edilir.",
-      "body-2": "Bir şey eksikse sunucuya girin ve birkaç dakika sonra tekrar kontrol edin.",
-      "button": "Mağazayı ziyaret et"
-    },
-    "order-delivered": {
-      "subject": "{orderNumber} numaralı siparişiniz teslim edildi",
-      "preheader": "Siparişinizdeki her şey teslim edildi.",
-      "heading": "Sipariş teslim edildi",
-      "body": "{storeName} mağazasındaki {orderNumber} numaralı siparişinizin tüm ürünleri teslim edildi. İyi eğlenceler!",
-      "button": "Siparişi görüntüle"
-    },
-    "order-refunded": {
-      "subject": "{orderNumber} numaralı sipariş için iade",
-      "preheader": "Siparişiniz için iade yapıldı.",
-      "heading": "İade yapıldı",
-      "body": "{storeName} mağazasındaki {orderNumber} numaralı siparişiniz için {amount} iade ettik.",
-      "body-2": "Bankanıza bağlı olarak paranın hesabınıza yansıması birkaç gün sürebilir.",
-      "credit-note-attached": "Alacak dekontu bu e-postaya PDF olarak eklenmiştir.",
-      "button": "Siparişi görüntüle",
-      "button-claim": "İadeyi talep et"
-    },
-    "expiry-reminder": {
-      "subject": "{productName} {date} tarihinde sona eriyor",
-      "preheader": "Erişiminizi korumak için yenileyin.",
-      "heading": "Satın aldığınız ürünün süresi dolmak üzere",
-      "body": "{storeName} mağazasından aldığınız {productName} {date} tarihine kadar geçerli. Ardından erişiminizi kaybedersiniz.",
-      "body-2": "Kesinti yaşamamak için süresi dolmadan yenileyin.",
-      "button": "Yenile"
-    },
-    "subscription-reminder": {
-      "subject": "{productName} {date} tarihinde yenileniyor",
-      "preheader": "Aboneliğiniz yakında yenilenecek.",
-      "heading": "Aboneliğiniz yakında yenilenecek",
-      "body": "{storeName} mağazasındaki {productName} aboneliğiniz {date} tarihinde yenilenecek. O gün {amount} tahsil edeceğiz.",
-      "body-method": "Tahsilat şu yönteme yapılacak: {method}.",
-      "body-manual": "{storeName} mağazasındaki {productName} aboneliğiniz {date} tarihinde sona erecek. Sürdürmek için o tarihten önce {amount} ödeyin.",
-      "button": "Şimdi öde"
-    },
-    "subscription-payment-failed": {
-      "subject": "{productName} için ödeme başarısız",
-      "preheader": "Ödeme yönteminizden tahsilat yapılamadı.",
-      "heading": "Ödeme başarısız",
-      "body": "{storeName} mağazasındaki {productName} aboneliğiniz için {amount} tahsil edilemedi. Erişiminiz {graceEndsAt} tarihine kadar devam ediyor.",
-      "body-no-grace": "{storeName} mağazasındaki {productName} aboneliğiniz için {amount} tahsil edilemedi.",
-      "body-2": "Aboneliği sürdürmek için lütfen ödeme bilginizi güncelleyin.",
-      "button": "Ödemeyi güncelle"
-    },
-    "subscription-cancelled": {
-      "subject": "{productName} yenilenmeyecek",
-      "preheader": "Aboneliğiniz iptal edildi.",
-      "heading": "Abonelik iptal edildi",
-      "body": "{storeName} mağazasındaki {productName} aboneliğiniz yenilenmeyecek. Erişiminiz {accessUntil} tarihine kadar sürer.",
-      "body-no-date": "{storeName} mağazasındaki {productName} aboneliğiniz yenilenmeyecek. Erişiminiz mevcut dönemin sonuna kadar sürer."
-    },
-    "subscription-ended": {
-      "subject": "{productName} sona erdi",
-      "preheader": "Aboneliğiniz sona erdi.",
-      "heading": "Abonelik sona erdi",
-      "body": "{storeName} mağazasındaki {productName} aboneliğiniz sona erdi.",
-      "button": "Mağazayı ziyaret et",
-      "reason": {
-        "BUYER_CANCEL": "Aboneliği siz iptal ettiğiniz için sona erdi.",
-        "ADMIN_CANCEL": "Mağaza ekibi tarafından iptal edildi.",
-        "PAYMENT_FAILED": "Ödeme tahsil edilemediği için sona erdi.",
-        "GATEWAY_ENDED": "Ödeme sağlayıcısı tarafından sonlandırıldı.",
-        "COMPLETED": "Son faturalandırma dönemine ulaştı.",
-        "REFUND": "Sipariş iade edildiği için sona erdi.",
-        "CHARGEBACK": "Ödemeye itiraz edildiği için sona erdi.",
-        "PROVIDER_UNAVAILABLE": "Ödeme yöntemi artık kullanılamadığı için sona erdi.",
-        "OTHER": "Bunu beklemiyorsanız mağazayla iletişime geçin."
-      }
-    },
-    "shipment-shipped": {
-      "subject": "{orderNumber} numaralı siparişiniz yola çıktı",
-      "preheader": "Paketiniz kargo firmasına teslim edildi.",
-      "heading": "Siparişiniz yola çıktı",
-      "body": "Güzel haber! {storeName} mağazasındaki {orderNumber} numaralı siparişiniz kargoya verildi.",
-      "partial-note": "Bu paket siparişinizin bir bölümünü içeriyor. Kalanı başka bir gönderiyle gelecek.",
-      "button": "Siparişi görüntüle",
-      "button-track": "Gönderiyi takip et"
-    },
-    "shipment-delivered": {
-      "subject": "{orderNumber} numaralı siparişiniz teslim edildi",
-      "preheader": "Paketiniz ulaştı.",
-      "heading": "Paketiniz teslim edildi",
-      "body": "{storeName} mağazasındaki {orderNumber} numaralı siparişinizin paketi teslim edildi.",
-      "button": "Siparişi görüntüle"
-    },
-    "test": {
-      "subject": "{storeName} test e-postası",
-      "preheader": "Mağazanız e-posta gönderebiliyor.",
-      "heading": "Çalışıyor",
-      "body": "Bu, {websiteName} sitesindeki {storeName} mağazasından gönderilen bir test e-postasıdır. Bunu okuyabiliyorsanız web sitenizin e-posta ayarları çalışıyor demektir.",
-      "footer": "Bu e-postayı, {websiteName} yöneticilerinden biri test gönderdiği için alıyorsunuz."
     }
   },
   "notifications": {

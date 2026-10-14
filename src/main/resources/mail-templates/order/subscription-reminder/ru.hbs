@@ -1,0 +1,20 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{productName}} продлевается {{date}}
+preheader: Ваша подписка скоро продлится.
+buttonLabel: Оплатить
+buttonUrl: {{payUrl}}
+footer: Вы получили это письмо из-за заказа в магазине {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Ваша подписка скоро продлится</h2>
+<p>Здравствуйте, {{username}}!</p>
+{{#if manual}}
+<p>Ваша подписка на {{productName}} в магазине {{storeName}} заканчивается {{date}}. Чтобы сохранить её, оплатите {{amount}} до этой даты.</p>
+{{else}}
+<p>Ваша подписка на {{productName}} в магазине {{storeName}} продлится {{date}}. Тогда мы спишем {{amount}}.</p>
+{{#if paymentMethod}}
+<p>Списание будет с: {{paymentMethod}}.</p>
+{{/if}}
+{{/if}}
+{{{detailsTable}}}
+{{#if manageUrl}}<p style="font-size:14px;line-height:20px;margin:8px 0 16px 0;text-align:center"><a href="{{manageUrl}}" style="color:rgb(54,65,83)" target="_blank">Управление подпиской</a></p>{{/if}}

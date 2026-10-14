@@ -1,0 +1,17 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}Refund for order {{orderNumber}}
+preheader: A refund for your order was processed.
+buttonLabel: {{#if claimUrl}}Claim refund{{else}}View order{{/if}}
+buttonUrl: {{#if claimUrl}}{{claimUrl}}{{else}}{{orderUrl}}{{/if}}
+footer: You are receiving this e-mail because of an order at {{storeName}}.{{#if creditNoteAttached}} The credit note is attached to this e-mail as a PDF.{{/if}}
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Refund processed</h2>
+<p>Hi {{username}},</p>
+<p>We refunded {{amount}} for your order {{orderNumber}} at {{storeName}}.</p>
+<p>Depending on your bank, it can take a few days until the money shows up.</p>
+{{{itemsTable}}}
+{{{detailsTable}}}
+{{#if claimUrl}}
+{{#if orderUrl}}<p style="font-size:14px;line-height:20px;margin:8px 0 16px 0;text-align:center"><a href="{{orderUrl}}" style="color:rgb(54,65,83)" target="_blank">View order</a></p>{{/if}}
+{{/if}}

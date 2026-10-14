@@ -1,0 +1,20 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{productName}} завершён
+preheader: Ваша подписка завершена.
+buttonLabel: Перейти в магазин
+buttonUrl: {{storeUrl}}
+footer: Вы получили это письмо из-за заказа в магазине {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Подписка завершена</h2>
+<p>Здравствуйте, {{username}}!</p>
+<p>Ваша подписка на {{productName}} в магазине {{storeName}} завершена.</p>
+{{#if reasonBuyerCancel}}<p>Она завершена, потому что вы её отменили.</p>{{/if}}
+{{#if reasonAdminCancel}}<p>Она отменена командой магазина.</p>{{/if}}
+{{#if reasonPaymentFailed}}<p>Она завершена, потому что не удалось получить оплату.</p>{{/if}}
+{{#if reasonGatewayEnded}}<p>Она завершена платёжным провайдером.</p>{{/if}}
+{{#if reasonCompleted}}<p>Достигнут последний расчётный период.</p>{{/if}}
+{{#if reasonRefund}}<p>Она завершена, потому что заказ возвращён.</p>{{/if}}
+{{#if reasonChargeback}}<p>Она завершена, потому что платёж оспорен.</p>{{/if}}
+{{#if reasonProviderUnavailable}}<p>Она завершена, потому что способ оплаты больше недоступен.</p>{{/if}}
+{{#if reasonOther}}<p>Если вы этого не ожидали, свяжитесь с магазином.</p>{{/if}}

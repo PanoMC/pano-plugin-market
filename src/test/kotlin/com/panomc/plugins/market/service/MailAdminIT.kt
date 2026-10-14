@@ -38,6 +38,7 @@ import com.panomc.plugins.market.service.platform.DirectoryUser
 import com.panomc.plugins.market.service.platform.UserDirectory
 import com.panomc.plugins.market.support.FakeMailGateway
 import com.panomc.plugins.market.support.Fixtures
+import com.panomc.plugins.market.support.rendered
 import com.panomc.plugins.market.support.TestUser
 import com.panomc.plugins.market.support.TestWiring
 import io.vertx.core.json.JsonObject
@@ -222,9 +223,10 @@ class MailAdminIT : MarketDaoITBase() {
 
         val mail = gateway.sent.single()
 
-        assertTrue(mail.content.subject.startsWith("VIP expires on "), mail.content.subject)
-        assertEquals("Renew", mail.content.buttonLabel)
-        assertEquals("https://shop.example/store/${placed.product.slug}", mail.content.buttonUrl)
+        val rendered = mail.rendered
+
+        assertTrue(rendered.subject.startsWith("VIP expires on "), rendered.subject)
+        assertTrue(rendered.text.contains("Renew: https://shop.example/store/${placed.product.slug}"), rendered.text)
     }
 
     @Test
@@ -255,7 +257,7 @@ class MailAdminIT : MarketDaoITBase() {
         assertEquals("OBSOLETE", row(second.id).lastError)
         assertEquals(MailStatus.SENT, row(third.id).status)
         assertEquals(1, gateway.sent.size)
-        assertNull(gateway.sent.single().content.buttonUrl)
+        assertEquals("", gateway.sent.single().message.values["renewUrl"])
 
         // an expiry that has already passed is obsolete too
         val late = timed(owner("Late"), days = 10)
@@ -296,16 +298,16 @@ class MailAdminIT : MarketDaoITBase() {
         assertEquals(MailStatus.SKIPPED, row(ids[0]!!).status, "SUBSCRIPTION_REMINDER needs an ACTIVE subscription")
         assertEquals(listOf(MailStatus.SENT, MailStatus.SENT, MailStatus.SENT), ids.drop(1).map { row(it!!).status })
 
-        val subjects = gateway.sent.map { it.content.subject }
+        val subjects = gateway.sent.map { it.rendered.subject }
 
         assertTrue(subjects.contains("Payment failed for Gold Rank"), subjects.toString())
         assertTrue(subjects.contains("Gold Rank will not renew"), subjects.toString())
         assertTrue(subjects.contains("Gold Rank has ended"), subjects.toString())
 
-        val failed = gateway.sent.first { it.content.subject.startsWith("Payment failed") }.content
+        val failedMail = gateway.sent.first { it.rendered.subject.startsWith("Payment failed") }
+        val failed = failedMail.message
 
-        assertEquals("Update payment", failed.buttonLabel)
-        assertEquals("https://shop.example/profile", failed.buttonUrl, "no pay link in the params: the profile")
+        assertTrue(failedMail.rendered.text.contains("Update payment: https://shop.example/profile"), "no pay link in the params: the profile")
         assertTrue(failed.details.any { it.label == "Amount" && it.value == "€15.00" }, failed.details.joinToString { "${it.label}=${it.value}" })
     }
 
@@ -318,7 +320,7 @@ class MailAdminIT : MarketDaoITBase() {
 
         assertEquals(1, job.runOnce())
         assertEquals(MailStatus.SENT, row(id).status)
-        assertTrue(gateway.sent.single().content.paragraphs.any { it.contains("We will charge €15.00") })
+        assertTrue(gateway.sent.single().rendered.text.contains("We will charge €15.00"))
 
         // a paid renewal moved the cycle past the reminded period
         val again = enqueue(MailKind.SUBSCRIPTION_REMINDER, MailRefType.SUBSCRIPTION, sub.id, "1", placed, "steve@example.com")!!
@@ -351,10 +353,9 @@ class MailAdminIT : MarketDaoITBase() {
 
         assertEquals(2, job.runOnce())
 
-        val reminder = gateway.sent.single().content
+        val reminder = gateway.sent.single().rendered
 
-        assertEquals("Pay now", reminder.buttonLabel)
-        assertEquals("https://shop.example/store/order/RENEWALPUBLICID0001", reminder.buttonUrl)
+        assertTrue(reminder.text.contains("Pay now: https://shop.example/store/order/RENEWALPUBLICID0001"), reminder.text)
         assertEquals("OBSOLETE", row(failed).lastError, "the subscription is ACTIVE, not PAST_DUE")
     }
 
@@ -394,11 +395,11 @@ class MailAdminIT : MarketDaoITBase() {
         assertEquals(2, job.runOnce())
         assertEquals(listOf(MailStatus.SENT, MailStatus.SENT), listOf(shipped, delivered).map { row(it).status })
 
-        val mails = gateway.sent.associateBy { it.content.subject }
-        val ship = mails.getValue("Your order #${placed.order.id} is on its way").content
+        val mails = gateway.sent.associateBy { it.rendered.subject }
+        val shipMail = mails.getValue("Your order #${placed.order.id} is on its way")
+        val ship = shipMail.message
 
-        assertEquals("Track shipment", ship.buttonLabel)
-        assertEquals("https://track.example/TRK123", ship.buttonUrl)
+        assertTrue(shipMail.rendered.text.contains("Track shipment: https://track.example/TRK123"), shipMail.rendered.text)
         assertEquals(listOf("VIP"), ship.items.map { it.name })
         assertTrue(ship.details.any { it.label == "Carrier" && it.value == "Aras Kargo" })
         assertTrue(ship.details.any { it.label == "Shipping to" && it.value == "Hans Meier, Strasse 1" })
@@ -433,7 +434,7 @@ class MailAdminIT : MarketDaoITBase() {
         assertEquals(true, JsonObject(queued.params).getBoolean("forced"))
         assertEquals(1, job.runOnce())
         assertEquals(MailStatus.SENT, row(id).status)
-        assertEquals("Your order #${placed.order.id} is confirmed", gateway.sent.single().content.subject)
+        assertEquals("Your order #${placed.order.id} is confirmed", gateway.sent.single().rendered.subject)
 
         // a second resend resets the same row: PENDING, attempts 0, no error, sent again
         val again = admin.resend(placed.order.id, "ORDER_CONFIRMATION", null, null, pool)
@@ -678,7 +679,7 @@ class MailAdminIT : MarketDaoITBase() {
         val plain = gateway.sent.single()
 
         assertEquals("admin@example.com", plain.recipient)
-        assertEquals("Test e-mail from Blocky Store", plain.content.subject)
+        assertEquals("Test e-mail from Blocky Store", plain.rendered.subject)
         assertEquals(emptyList<MarketMailOutbox>(), w.mailOutbox.getDue(MailStatus.PENDING, Long.MAX_VALUE, 10, pool), "a test mail never touches the outbox")
 
         // every kind has a sample that renders and goes out marked as a test
@@ -688,8 +689,10 @@ class MailAdminIT : MarketDaoITBase() {
             val mail = gateway.sent.last()
 
             assertEquals("someone@example.com", mail.recipient, kind.name)
-            assertTrue(mail.content.subject.startsWith("[TEST] "), "$kind: ${mail.content.subject}")
-            assertFalse(mail.content.subject.contains("mail."), "$kind: ${mail.content.subject}")
+            val subject = mail.rendered.subject
+
+            assertTrue(subject.startsWith("[TEST] "), "$kind: $subject")
+            assertFalse(subject.contains("{"), "$kind: $subject")
         }
 
         assertEquals(1 + MailKind.entries.size, gateway.sent.size)

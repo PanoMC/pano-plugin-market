@@ -1,0 +1,17 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}Не удалось оплатить {{productName}}
+preheader: Не удалось списать оплату.
+buttonLabel: Обновить оплату
+buttonUrl: {{payUrl}}
+footer: Вы получили это письмо из-за заказа в магазине {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Платёж не прошёл</h2>
+<p>Здравствуйте, {{username}}!</p>
+{{#if graceEndsAt}}
+<p>Не удалось списать {{amount}} за подписку на {{productName}} в магазине {{storeName}}. Доступ сохраняется до {{graceEndsAt}}.</p>
+{{else}}
+<p>Не удалось списать {{amount}} за подписку на {{productName}} в магазине {{storeName}}.</p>
+{{/if}}
+<p>Обновите способ оплаты, чтобы сохранить подписку.</p>
+{{{detailsTable}}}

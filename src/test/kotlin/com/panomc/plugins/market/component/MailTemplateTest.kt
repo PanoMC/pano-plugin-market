@@ -1,7 +1,7 @@
 package com.panomc.plugins.market.component
 
-import com.github.jknack.handlebars.Handlebars
-import com.google.gson.Gson
+import com.panomc.platform.mail.template.MailTemplateContent
+import com.panomc.platform.mail.template.MailTemplateService
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.db.model.MailKind
 import com.panomc.plugins.market.db.model.MarketOrder
@@ -19,12 +19,12 @@ import com.panomc.plugins.market.db.model.OrderItemKind
 import com.panomc.plugins.market.db.model.PricingMode
 import com.panomc.plugins.market.i18n.MarketFormat
 import com.panomc.plugins.market.i18n.MarketI18n
-import com.panomc.plugins.market.mail.MailContent
 import com.panomc.plugins.market.mail.MailContentBuilder
 import com.panomc.plugins.market.mail.MailInput
 import com.panomc.plugins.market.mail.MailSite
-import com.panomc.plugins.market.mail.MarketMail
+import com.panomc.plugins.market.mail.MarketMailMessage
 import com.panomc.plugins.market.support.FakeClock
+import com.panomc.plugins.market.support.MailRendering
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -32,7 +32,6 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -41,15 +40,15 @@ import com.panomc.plugins.market.util.MarketTargets
 import java.io.File
 
 /**
- * The order mails of `MailContentBuilder` (MK-142; 12 sections 3.1 and 5): every kind renders in tr, en-US and ru against golden files
- * (subject, preheader, plain text and the HTML of the real `market-mail.hbs` after the Gson round trip `MailManager` does), with no
- * unresolved `{{ }}` or `{var}` and a translated subject. Pure: the real bundled locale files, no database, no host.
+ * The order mails (MK-142; 12 sections 3.1 and 5) on the platform's unified mail templates: `MailContentBuilder` builds the variant and
+ * the variables of every kind, the plugin's `mail-templates/order/<variant>/<locale>.hbs` hold the sentences, and the host's real
+ * `MailTemplateService` renders them into the shared layout (see [MailRendering]). Every kind renders in tr, en-US and ru against golden
+ * files (subject, plain text, HTML) with no unresolved `{{ }}` or `{var}`. Pure: no database, no host.
  *
  * Golden files live next to this class in `golden/mail`. A changed golden is a reviewed change: run with `GOLDEN_UPDATE=1` to rewrite them
  * and read the diff; a missing golden fails the run (it never writes silently).
  */
 class MailTemplateTest {
-    private val handlebars = Handlebars()
     private val locales = listOf("tr", "en-US", "ru")
     private val clock = FakeClock()
     private val i18n = MarketI18n(MarketI18n.loadBundles(MailTemplateTest::class.java.classLoader), { emptyMap() }, clock)
@@ -162,25 +161,28 @@ class MailTemplateTest {
         )
     }
 
+
     // ----- rendering ---------------------------------------------------------------------------------------------------
 
-    /** What `MailManager.sendMail` hands to the template. */
-    private fun html(content: MailContent): String {
-        val map = JsonObject(Gson().toJson(MarketMail(content).parameters())).map.toMutableMap()
-        map["websiteUrl"] = site.websiteUrl
-        map["websiteLogo"] = "cid:logo"
-        map["websiteName"] = site.websiteName
+    private fun render(message: MarketMailMessage, locale: String): MailTemplateService.RenderedMail =
+        MailRendering.render(message, locale, site.websiteName, site.websiteUrl)
 
-        return MarketMail(content).getTemplate(handlebars).apply(map)
-    }
+    private suspend fun build(name: String, locale: String = "en-US"): MarketMailMessage = builder().build(scenarios(locale).first { it.name == name }.input)
 
-    private fun golden(content: MailContent): String =
-        "=== subject\n${content.subject}\n=== preheader\n${content.preheader}\n=== text\n${content.toText().replace("\r\n", "\n")}\n=== html\n${html(content)}\n"
+    private suspend fun rendered(name: String, locale: String = "en-US"): MailTemplateService.RenderedMail = render(build(name, locale), locale)
+
+    private fun golden(r: MailTemplateService.RenderedMail): String = "=== subject\n${r.subject}\n=== text\n${r.text}\n=== html\n${r.html}\n"
 
     private val goldenDir = File("src/test/kotlin/com/panomc/plugins/market/component/golden/mail")
     private val update = System.getenv("GOLDEN_UPDATE") == "1"
 
     private val unresolved = Regex("\\{\\{|\\}\\}|\\{[A-Za-z][A-Za-z0-9_]*\\}")
+
+    /** The main button of a rendered mail as the plain-text alternative names it (`label: url`), or null. */
+    private fun button(r: MailTemplateService.RenderedMail, label: String): String? =
+        r.text.lines().firstOrNull { it.startsWith("$label: ") }?.removePrefix("$label: ")
+
+    private fun hasButton(r: MailTemplateService.RenderedMail): Boolean = r.html.contains("background-color:rgb(85,197,90)")
 
     // ----- tests -------------------------------------------------------------------------------------------------------
 
@@ -193,17 +195,15 @@ class MailTemplateTest {
             for (s in scenarios(locale)) {
                 seen += s.input.kind
 
-                val content = builder().build(s.input)
-                val text = content.toText()
-                val rendered = html(content)
+                val r = render(builder().build(s.input), locale)
 
-                for ((what, value) in listOf("subject" to content.subject, "preheader" to content.preheader, "heading" to content.heading, "text" to text, "html" to rendered)) {
+                for ((what, value) in listOf("subject" to r.subject, "text" to r.text, "html" to r.html)) {
                     assertFalse(unresolved.containsMatchIn(value), "${s.name} / $locale: unresolved placeholder in $what: ${unresolved.find(value)?.value}")
-                    assertFalse(listOf("mail.common.", "mail.order-", "mail.gift-", "mail.bank-", "mail.expiry-", "mail.subscription-", "mail.shipment-", "mail.test.").any { value.contains(it) }, "${s.name} / $locale: a missing key leaked into $what")
+                    assertFalse(value.contains("mail.blocks."), "${s.name} / $locale: a missing key leaked into $what")
                 }
 
                 val file = File(goldenDir, "${s.name}.$locale.golden")
-                val actual = golden(content)
+                val actual = golden(r)
 
                 if (update) {
                     goldenDir.mkdirs()
@@ -227,127 +227,134 @@ class MailTemplateTest {
             val subjects = locales.map { locale ->
                 val s = scenarios(locale).first { it.input.kind == kind }
 
-                builder().build(s.input).subject
+                render(builder().build(s.input), locale).subject
             }
 
             assertEquals(3, subjects.toSet().size, "$kind: one subject per language: $subjects")
-            subjects.forEach { assertFalse(it.contains("mail."), "$kind subject is a key: $it") }
         }
     }
 
     @Test
     fun `an order id is the order number and the payer name fills the subject of a gift`(): Unit = runBlocking {
-        val gift = scenarios("en-US").first { it.name == "gift-received" }
-        val confirmed = scenarios("en-US").first { it.name == "order-confirmation" }
-
-        assertEquals("Steve sent you a gift on Blocky Network", builder().build(gift.input).subject)
-        assertEquals("Your order #1042 is confirmed", builder().build(confirmed.input).subject)
+        assertEquals("Steve sent you a gift on Blocky Network", rendered("gift-received").subject)
+        assertEquals("Your order #1042 is confirmed", rendered("order-confirmation").subject)
     }
 
     @Test
     fun `confirmation totals follow 12 section 5 rows in order, the discount is negative and the VAT row says included`(): Unit = runBlocking {
-        val content = builder().build(scenarios("en-US").first { it.name == "order-confirmation" }.input)
+        val message = build("order-confirmation")
 
-        assertEquals(listOf("Subtotal", "Discount", "VAT (included)", "Total"), content.totals.map { it.label })
-        assertEquals(listOf("₺400.00", "-₺50.00", "₺58.33", "₺350.00"), content.totals.map { it.value })
-        assertTrue(content.totals.last().strong)
-        assertEquals(listOf("1", "2", "2"), content.items.map { it.quantity })
-        assertEquals(listOf(false, false, true), content.items.map { it.child })
-        assertEquals("", content.items[2].total, "a bundle child carries no price")
-        assertEquals("₺150.00", content.items[0].total)
-        assertEquals("30 days", content.items[0].variant)
-        assertTrue(content.footerNote!!.contains("invoice is attached"))
-        assertEquals("View order", content.buttonLabel)
-        assertEquals("https://shop.example/store/order/K7M2Q9X4B8D6T3W5Z1RV", content.buttonUrl, "an order of a logged-in user never carries the token")
+        assertEquals("order-confirmation", message.variant)
+        assertEquals(listOf("Subtotal", "Discount", "VAT (included)", "Total"), message.totals.map { it.label })
+        assertEquals(listOf("₺400.00", "-₺50.00", "₺58.33", "₺350.00"), message.totals.map { it.value })
+        assertTrue(message.totals.last().strong)
+        assertEquals(listOf("1", "2", "2"), message.items.map { it.quantity })
+        assertEquals(listOf(false, false, true), message.items.map { it.child })
+        assertEquals("", message.items[2].total, "a bundle child carries no price")
+        assertEquals("₺150.00", message.items[0].total)
+        assertEquals("30 days", message.items[0].variant)
+        assertEquals(true, message.values["invoiceAttached"])
+
+        val r = render(message, "en-US")
+
+        assertTrue(r.text.contains("invoice is attached"))
+        assertEquals("https://shop.example/store/order/K7M2Q9X4B8D6T3W5Z1RV", button(r, "View order"), "an order of a logged-in user never carries the token")
     }
 
     @Test
     fun `a guest order link carries the token, a test order is prefixed and bannered, a physical order names its address`(): Unit = runBlocking {
-        val content = builder().build(scenarios("en-US").first { it.name == "order-confirmation-physical-test" }.input)
+        val message = build("order-confirmation-physical-test")
+        val r = render(message, "en-US")
 
-        assertTrue(content.buttonUrl!!.endsWith("?token=0f1e2d3c4b5a69788796a5b4c3d2e1f001122334"))
-        assertTrue(content.subject.startsWith("[TEST] "))
-        assertTrue(content.testMode)
-        assertEquals("TEST ORDER - no real payment was made", content.testModeLabel)
-        assertTrue(content.paragraphs.any { it.contains("12 Cube Street") && it.contains("Istanbul") }, "shipping address paragraph: ${content.paragraphs}")
-        assertEquals(listOf("Subtotal", "Discount", "Shipping", "VAT", "Total", "Paid with credits"), content.totals.map { it.label })
-        assertEquals("100.00 Coins", content.totals.last().value)
-        assertFalse(content.footerNote!!.contains("attached"))
+        assertTrue(message.values["orderUrl"].toString().endsWith("?token=0f1e2d3c4b5a69788796a5b4c3d2e1f001122334"))
+        assertTrue(r.subject.startsWith("[TEST] "))
+        assertTrue(message.testMode)
+        assertTrue(r.html.contains("TEST ORDER - no real payment was made"))
+        assertTrue(r.text.contains("We will ship your order to: Steve Miner, 12 Cube Street, 34000 Istanbul, TR"), r.text)
+        assertEquals(listOf("Subtotal", "Discount", "Shipping", "VAT", "Total", "Paid with credits"), message.totals.map { it.label })
+        assertEquals("100.00 Coins", message.totals.last().value)
+        assertFalse(r.text.contains("attached"))
+
+        val plain = rendered("order-confirmation")
+
+        assertFalse(plain.subject.startsWith("[TEST]"))
+        assertFalse(plain.html.contains("TEST ORDER"))
+        assertFalse(plain.text.contains("We will ship"), "no address sentence for a digital order")
     }
 
     @Test
     fun `an order paid with credits only shows the total as credits`(): Unit = runBlocking {
-        val content = builder().build(scenarios("en-US").first { it.name == "order-confirmation-credits" }.input)
-        val total = content.totals.single { it.strong }
+        val message = build("order-confirmation-credits")
+        val total = message.totals.single { it.strong }
 
         assertEquals("350.00 Coins", total.value)
-        assertFalse(content.totals.any { it.label == "Paid with credits" })
+        assertFalse(message.totals.any { it.label == "Paid with credits" })
     }
 
     @Test
     fun `an order that is not priced by the market shows only its total`(): Unit = runBlocking {
-        val input = MailInput(MailKind.ORDER_CONFIRMATION, "en-US", order(pricing = PricingMode.EXTERNAL), items)
-        val content = builder().build(input)
+        val message = builder().build(MailInput(MailKind.ORDER_CONFIRMATION, "en-US", order(pricing = PricingMode.EXTERNAL), items))
 
-        assertEquals(listOf("Total"), content.totals.map { it.label })
+        assertEquals(listOf("Total"), message.totals.map { it.label })
     }
 
     @Test
     fun `a gift mail shows no prices and no totals and quotes the message`(): Unit = runBlocking {
-        val content = builder().build(scenarios("en-US").first { it.name == "gift-received" }.input)
+        val message = build("gift-received")
+        val r = render(message, "en-US")
 
-        assertEquals("Have fun on the server!", content.quote)
-        assertTrue(content.items.all { it.total.isEmpty() })
-        assertTrue(content.totals.isEmpty())
-        assertEquals("https://shop.example/store", content.buttonUrl, "the gift links to the store, never an order or a token")
-        assertEquals("Visit store", content.buttonLabel)
-        assertTrue(content.paragraphs.none { it.startsWith("Hi ") }, "no greeting by the payer's name to the recipient")
+        assertEquals("Have fun on the server!", message.values["giftMessage"])
+        assertTrue(r.html.contains("<blockquote style=\"font-style:italic\">Have fun on the server!</blockquote>"))
+        assertTrue(message.items.all { it.total.isEmpty() })
+        assertTrue(message.totals.isEmpty())
+        assertEquals("https://shop.example/store", button(r, "Visit store"), "the gift links to the store, never an order or a token")
+        assertFalse(r.text.contains("Hi Steve"), "no greeting by the payer's name to the recipient")
     }
 
     @Test
     fun `a refund mail lists the amount and where the money went, claims through a safe url only`(): Unit = runBlocking {
-        val s = scenarios("en-US").first { it.name == "order-refunded" }
-        val content = builder().build(s.input)
+        val message = build("order-refunded")
+        val r = render(message, "en-US")
 
-        assertEquals("Refund for order #1042", content.subject)
-        assertEquals(
-            listOf("Order number", "Refund amount", "Returned to your payment method", "Returned as credits", "Reason"), content.details.map { it.label }
-        )
-        assertEquals(listOf("#1042", "₺150.00", "₺100.00", "50.00 Coins", "Bought by mistake"), content.details.map { it.value })
-        assertEquals("Claim refund", content.buttonLabel)
-        assertEquals("https://pay.example/claim/abc?x=1&y=2", content.buttonUrl)
-        assertEquals("View order", content.secondaryLabel)
-        assertEquals(1, content.items.size)
-        assertEquals("₺150.00", content.items[0].total)
-        assertTrue(content.footerNote!!.contains("credit note is attached"))
+        assertEquals("Refund for order #1042", r.subject)
+        assertEquals(listOf("Order number", "Refund amount", "Returned to your payment method", "Returned as credits", "Reason"), message.details.map { it.label })
+        assertEquals(listOf("#1042", "₺150.00", "₺100.00", "50.00 Coins", "Bought by mistake"), message.details.map { it.value })
+        assertEquals("https://pay.example/claim/abc?x=1&y=2", button(r, "Claim refund"))
+        assertTrue(r.html.contains(">View order</a>"), "the order is the second link")
+        assertEquals(1, message.items.size)
+        assertEquals("₺150.00", message.items[0].total)
+        assertTrue(r.text.contains("credit note is attached"))
 
         val unsafe = MailInput(MailKind.ORDER_REFUNDED, "en-US", order(), items, refund = MarketRefund(id = 9, orderId = 1042, amount = 500, gatewayAmount = 500, currency = "TRY", buyerActionUrl = "javascript:alert(1)"))
         val safe = builder().build(unsafe)
+        val safeR = render(safe, "en-US")
 
-        assertEquals("View order", safe.buttonLabel, "a javascript: claim url is never a button")
-        assertNull(safe.secondaryLabel)
+        assertEquals("", safe.values["claimUrl"])
+        assertEquals("https://shop.example/store/order/K7M2Q9X4B8D6T3W5Z1RV", button(safeR, "View order"), "a javascript: claim url is never a button")
+        assertFalse(safeR.html.contains("javascript:"))
         assertEquals(listOf("Order number", "Refund amount", "Returned to your payment method"), safe.details.map { it.label }, "no credits row without credits")
     }
 
     @Test
     fun `a credit only refund names no payment method row`(): Unit = runBlocking {
         val refund = MarketRefund(id = 9, orderId = 1042, amount = 2_000, gatewayAmount = 0, creditAmount = 2_000, currency = "TRY")
-        val content = builder().build(MailInput(MailKind.ORDER_REFUNDED, "en-US", order(), items, refund = refund))
+        val message = builder().build(MailInput(MailKind.ORDER_REFUNDED, "en-US", order(), items, refund = refund))
 
-        assertEquals(listOf("Order number", "Refund amount", "Returned as credits"), content.details.map { it.label })
+        assertEquals(listOf("Order number", "Refund amount", "Returned as credits"), message.details.map { it.label })
     }
 
     @Test
     fun `bank transfer instructions keep their fields, sanitise the html again and name the deadline`(): Unit = runBlocking {
-        val content = builder().build(scenarios("en-US").first { it.name == "bank-transfer-instructions" }.input)
+        val message = build("bank-transfer-instructions")
+        val r = render(message, "en-US")
 
-        assertEquals(listOf("IBAN", "Reference"), content.instructionFields.map { it.label })
-        assertEquals("TR33 0006 1005 1978 6457 8413 26", content.instructionFields[0].value)
-        assertFalse(content.instructionsHtml!!.contains("<script"), "the stored body is sanitised again: ${content.instructionsHtml}")
-        assertTrue(content.instructionsHtml!!.contains("Use the reference below."))
-        assertTrue(content.details.any { it.label == "Pay before" })
-        assertTrue(content.paragraphs.any { it.contains("reserved until") })
-        assertNull(content.quote)
+        assertEquals(listOf("IBAN", "Reference"), message.instructionFields.map { it.label })
+        assertEquals("TR33 0006 1005 1978 6457 8413 26", message.instructionFields[0].value)
+        assertFalse(message.instructionsHtml!!.contains("<script"), "the stored body is sanitised again: ${message.instructionsHtml}")
+        assertTrue(message.instructionsHtml!!.contains("Use the reference below."))
+        assertFalse(r.html.contains("<script"))
+        assertTrue(message.details.any { it.label == "Pay before" })
+        assertTrue(r.text.contains("reserved until"))
     }
 
     @Test
@@ -355,38 +362,33 @@ class MailTemplateTest {
         site = MailSite("Blocky Network", "")
 
         val params = JsonObject().put("instructions", JsonObject().put("body", "Pay by transfer").put("fields", JsonArray()))
-        val content = builder().build(MailInput(MailKind.BANK_TRANSFER_INSTRUCTIONS, "en-US", order(status = OrderStatus.PENDING), items, params))
+        val message = builder().build(MailInput(MailKind.BANK_TRANSFER_INSTRUCTIONS, "en-US", order(status = OrderStatus.PENDING), items, params))
+        val r = render(message, "en-US")
 
-        assertTrue(content.details.none { it.label == "Pay before" })
-        assertTrue(content.paragraphs.none { it.contains("reserved until") })
-        assertNull(content.buttonUrl)
-        assertNull(content.buttonLabel)
+        assertTrue(message.details.none { it.label == "Pay before" })
+        assertFalse(r.text.contains("reserved until"))
+        assertEquals("", message.values["orderUrl"])
+        assertFalse(hasButton(r))
     }
 
     @Test
     fun `dynamic strings are cut to 255 characters and escaped by the template`(): Unit = runBlocking {
         val long = "x".repeat(400)
         val o = MarketOrder(id = 5, playerUsername = "<b>Steve</b>", totalPrice = 100, currency = "TRY", status = OrderStatus.COMPLETED, createdAt = createdAt, publicId = "P", paidAt = paidAt, email = "a@b.example", locale = "en-US")
-        val content = builder().build(MailInput(MailKind.ORDER_CONFIRMATION, "en-US", o, listOf(item(1, long, 1, 100))))
+        val message = builder().build(MailInput(MailKind.ORDER_CONFIRMATION, "en-US", o, listOf(item(1, long, 1, 100))))
 
-        assertEquals(255, content.items[0].name.length)
+        assertEquals(255, message.items[0].name.length)
 
-        val rendered = html(content)
+        val html = render(message, "en-US").html
 
-        assertFalse(rendered.contains("<b>Steve</b>"))
-        assertTrue(rendered.contains("&lt;b&gt;Steve&lt;/b&gt;"))
+        assertFalse(html.contains("<b>Steve</b>"))
+        assertTrue(html.contains("&lt;b&gt;Steve&lt;/b&gt;"))
     }
 
     @Test
     fun `an unknown locale falls back to the language and then to en-US`(): Unit = runBlocking {
-        val input = scenarios("tr-TR").first { it.name == "order-delivered" }.input
-        val content = builder().build(input)
-
-        assertEquals("#1042 numaralı siparişiniz teslim edildi", content.subject)
-
-        val other = builder().build(MailInput(MailKind.ORDER_DELIVERED, "de-DE", order(), items))
-
-        assertEquals("Your order #1042 has been delivered", other.subject)
+        assertEquals("#1042 numaralı siparişiniz teslim edildi", rendered("order-delivered", "tr-TR").subject)
+        assertEquals("Your order #1042 has been delivered", render(builder().build(MailInput(MailKind.ORDER_DELIVERED, "de-DE", order(), items)), "de-DE").subject)
     }
 
     @Test
@@ -408,125 +410,138 @@ class MailTemplateTest {
     @Test
     fun `an expiry reminder names the product and the end, and renews through the product page only while the product exists`(): Unit = runBlocking {
         val s = scenarios("en-US").first { it.name == "expiry-reminder" }
-        val content = builder().build(s.input)
+        val message = builder().build(s.input)
+        val r = render(message, "en-US")
 
-        assertEquals("Gold Rank expires on Jun 27, 2026", content.subject)
-        assertEquals(listOf("Product", "Valid until"), content.details.map { it.label })
-        assertEquals("Renew", content.buttonLabel)
-        assertEquals("https://shop.example/store/gold-rank", content.buttonUrl)
+        assertEquals("Gold Rank expires on Jun 27, 2026", r.subject)
+        assertEquals(listOf("Product", "Valid until"), message.details.map { it.label })
+        assertEquals("https://shop.example/store/gold-rank", button(r, "Renew"))
 
         val gone = builder().build(MailInput(MailKind.EXPIRY_REMINDER, "en-US", order(), items, s.input.params, entitlement = s.input.entitlement, productSlug = null))
 
-        assertNull(gone.buttonUrl, "a deleted or archived product leaves no renew button")
-        assertNull(gone.buttonLabel)
+        assertEquals("", gone.values["renewUrl"])
+        assertFalse(hasButton(render(gone, "en-US")), "a deleted or archived product leaves no renew button")
 
         val bad = builder().build(MailInput(MailKind.EXPIRY_REMINDER, "en-US", order(), items, s.input.params, entitlement = s.input.entitlement, productSlug = "../admin"))
 
-        assertNull(bad.buttonUrl, "a slug with a path in it is never linked")
+        assertEquals("", bad.values["renewUrl"], "a slug with a path in it is never linked")
         assertThrows(IllegalStateException::class.java) { runBlocking { builder().build(MailInput(MailKind.EXPIRY_REMINDER, "en-US", order(), items, JsonObject(), entitlement = MarketEntitlement(id = 1))) } }
     }
 
     @Test
     fun `a subscription reminder asks a manual subscriber to pay and tells an automatic one what will be charged`(): Unit = runBlocking {
-        val auto = builder().build(scenarios("en-US").first { it.name == "subscription-reminder-gateway" }.input)
-        val manual = builder().build(scenarios("en-US").first { it.name == "subscription-reminder-manual" }.input)
+        val auto = rendered("subscription-reminder-gateway")
+        val manual = rendered("subscription-reminder-manual")
 
         assertEquals("Gold Rank renews on Jun 27, 2026", auto.subject)
-        assertTrue(auto.paragraphs.any { it.contains("We will charge ₺150.00") })
-        assertTrue(auto.paragraphs.any { it.contains("Visa **** 4242") }, "the stored method is named: ${auto.paragraphs}")
-        assertNull(auto.buttonUrl, "an automatic renewal has nothing to pay")
-        assertEquals("https://shop.example/profile", auto.secondaryUrl)
-        assertEquals("Manage subscription", auto.secondaryLabel)
+        assertTrue(auto.text.contains("We will charge ₺150.00"))
+        assertTrue(auto.text.contains("It will be charged to: Visa **** 4242."), "the stored method is named: ${auto.text}")
+        assertFalse(hasButton(auto), "an automatic renewal has nothing to pay")
+        assertTrue(auto.html.contains("href=\"https://shop.example/profile\""))
+        assertTrue(auto.html.contains(">Manage subscription</a>"))
 
-        assertTrue(manual.paragraphs.any { it.contains("Please pay ₺150.00") })
-        assertEquals("Pay now", manual.buttonLabel)
-        assertEquals("https://shop.example/store/order/PAYLINK0000000000000", manual.buttonUrl, "the renewal order's pay link, made absolute")
+        assertTrue(manual.text.contains("Please pay ₺150.00"))
+        assertFalse(manual.text.contains("It will be charged to"))
+        assertEquals("https://shop.example/store/order/PAYLINK0000000000000", button(manual, "Pay now"), "the renewal order's pay link, made absolute")
 
-        val noLink = builder().build(MailInput(MailKind.SUBSCRIPTION_REMINDER, "en-US", order(), items, JsonObject().put("periodEnd", 1_780_000_000_000L), subscription = manual.let { scenarios("en-US").first { s -> s.name == "subscription-reminder-manual" }.input.subscription }, productSlug = "gold-rank"))
+        val manualSub = scenarios("en-US").first { s -> s.name == "subscription-reminder-manual" }.input.subscription
+        val noLink = builder().build(MailInput(MailKind.SUBSCRIPTION_REMINDER, "en-US", order(), items, JsonObject().put("periodEnd", 1_780_000_000_000L), subscription = manualSub, productSlug = "gold-rank"))
 
-        assertEquals("https://shop.example/store/gold-rank", noLink.buttonUrl, "without a pay link the product page is the target")
+        assertEquals("https://shop.example/store/gold-rank", noLink.values["payUrl"], "without a pay link the product page is the target")
 
-        val evil = builder().build(MailInput(MailKind.SUBSCRIPTION_REMINDER, "en-US", order(), items, JsonObject().put("periodEnd", 1_780_000_000_000L).put("payUrl", "javascript:alert(1)"), subscription = scenarios("en-US").first { it.name == "subscription-reminder-manual" }.input.subscription))
+        val evil = builder().build(MailInput(MailKind.SUBSCRIPTION_REMINDER, "en-US", order(), items, JsonObject().put("periodEnd", 1_780_000_000_000L).put("payUrl", "javascript:alert(1)"), subscription = manualSub))
 
-        assertNull(evil.buttonUrl, "a stored link that is neither a site path nor http(s) is no button")
+        assertEquals("", evil.values["payUrl"], "a stored link that is neither a site path nor http(s) is no button")
     }
 
     @Test
     fun `a failed payment shows the grace date and links the renewal order, else the profile`(): Unit = runBlocking {
         val failed = scenarios("en-US").first { it.name == "subscription-payment-failed" }.input
-        val content = builder().build(failed)
+        val message = builder().build(failed)
+        val r = render(message, "en-US")
 
-        assertEquals("Payment failed for Gold Rank", content.subject)
-        assertTrue(content.paragraphs.any { it.contains("until Jun 30, 2026") }, content.paragraphs.toString())
-        assertEquals(listOf("Product", "Amount"), content.details.map { it.label })
-        assertEquals("Update payment", content.buttonLabel)
-        assertEquals("https://shop.example/profile", content.buttonUrl)
+        assertEquals("Payment failed for Gold Rank", r.subject)
+        assertTrue(r.text.contains("until Jun 30, 2026"), r.text)
+        assertEquals(listOf("Product", "Amount"), message.details.map { it.label })
+        assertEquals("https://shop.example/profile", button(r, "Update payment"))
 
         val withOrder = builder().build(MailInput(MailKind.SUBSCRIPTION_PAYMENT_FAILED, "en-US", order(), items, JsonObject().put("payUrl", "/store/order/RENEWAL00000000000000"), subscription = failed.subscription))
 
-        assertEquals("https://shop.example/store/order/RENEWAL00000000000000", withOrder.buttonUrl)
+        assertEquals("https://shop.example/store/order/RENEWAL00000000000000", withOrder.values["payUrl"])
 
         val noGrace = builder().build(MailInput(MailKind.SUBSCRIPTION_PAYMENT_FAILED, "en-US", order(), items, JsonObject(), subscription = MarketSubscription(id = 1, productName = "Gold Rank", price = 100, currency = "TRY")))
+        val noGraceText = render(noGrace, "en-US").text
 
-        assertTrue(noGrace.paragraphs.none { it.contains("until") }, "no grace date, no 'until': ${noGrace.paragraphs}")
+        assertFalse(noGraceText.contains("continues until"), "no grace date, no 'until': $noGraceText")
     }
 
     @Test
     fun `an ended subscription says why, an unknown reason falls back to the neutral sentence`(): Unit = runBlocking {
-        val ended = scenarios("en-US").first { it.name == "subscription-ended" }.input
-        val content = builder().build(ended)
+        val r = rendered("subscription-ended")
 
-        assertTrue(content.paragraphs.any { it.contains("payment could not be collected") })
-        assertEquals("https://shop.example/store", content.buttonUrl)
+        assertTrue(r.text.contains("payment could not be collected"))
+        assertFalse(r.text.contains("contact the store"), "one reason sentence only")
+        assertEquals("https://shop.example/store", button(r, "Visit store"))
 
         for (reason in listOf("SOMETHING_NEW", "bad reason!", "")) {
             val other = builder().build(MailInput(MailKind.SUBSCRIPTION_ENDED, "en-US", order(), items, JsonObject().put("endReason", reason), subscription = MarketSubscription(id = 1, productName = "Gold Rank")))
 
-            assertTrue(other.paragraphs.any { it.contains("contact the store") }, "$reason: ${other.paragraphs}")
+            assertEquals(true, other.values["reasonOther"], reason)
+            assertTrue(render(other, "en-US").text.contains("contact the store"), reason)
         }
 
-        for (reason in listOf("BUYER_CANCEL", "ADMIN_CANCEL", "PAYMENT_FAILED", "GATEWAY_ENDED", "COMPLETED", "REFUND", "CHARGEBACK", "PROVIDER_UNAVAILABLE", "OTHER")) {
-            for (locale in locales) assertTrue(i18n.has(locale, "mail.subscription-ended.reason.$reason"), "$reason in $locale")
+        for (reason in MailContentBuilder.END_REASONS) {
+            val message = builder().build(MailInput(MailKind.SUBSCRIPTION_ENDED, "en-US", order(), items, JsonObject().put("endReason", reason), subscription = MarketSubscription(id = 1, productName = "Gold Rank")))
+
+            assertEquals(1, MailContentBuilder.END_REASONS.count { message.values[MailContentBuilder.reasonFlag(it)] == true }, reason)
+
+            for (locale in locales) {
+                val text = render(message, locale).text
+                val base = render(MarketMailMessage("subscription-ended", message.values.filterKeys { !it.startsWith("reason") }), locale).text
+
+                assertTrue(text.length > base.length, "$reason in $locale has a sentence of its own")
+            }
         }
     }
 
     @Test
     fun `a cancelled subscription keeps access until the paid period ends`(): Unit = runBlocking {
-        val content = builder().build(scenarios("en-US").first { it.name == "subscription-cancelled" }.input)
+        val r = rendered("subscription-cancelled")
 
-        assertEquals("Gold Rank will not renew", content.subject)
-        assertTrue(content.paragraphs.any { it.contains("until Jun 27, 2026") })
-        assertNull(content.buttonUrl)
-        assertEquals("https://shop.example/profile", content.secondaryUrl)
+        assertEquals("Gold Rank will not renew", r.subject)
+        assertTrue(r.text.contains("until Jun 27, 2026"))
+        assertFalse(hasButton(r))
+        assertTrue(r.html.contains("href=\"https://shop.example/profile\""))
 
         val open = builder().build(MailInput(MailKind.SUBSCRIPTION_CANCELLED, "en-US", order(), items, JsonObject(), subscription = MarketSubscription(id = 1, productName = "Gold Rank")))
 
-        assertTrue(open.paragraphs.any { it.contains("end of the current period") })
+        assertTrue(render(open, "en-US").text.contains("end of the current period"))
     }
 
     @Test
     fun `a shipped mail names carrier, tracking number, estimate and parcel lines and tracks through a safe link only`(): Unit = runBlocking {
         val shipped = scenarios("en-US").first { it.name == "shipment-shipped" }.input
-        val content = builder().build(shipped)
+        val message = builder().build(shipped)
+        val r = render(message, "en-US")
 
-        assertEquals("Your order #1042 is on its way", content.subject)
-        assertEquals(listOf("Order number", "Carrier", "Tracking number", "Estimated delivery", "Shipping to"), content.details.map { it.label })
-        assertEquals("AR123456789", content.details[2].value)
-        assertEquals("Steve Miner, 12 Cube Street, 34000 Istanbul, Turkey", content.details[4].value)
-        assertEquals(listOf("Gold Rank", "Starter Bundle"), content.items.map { it.name })
-        assertEquals(listOf("1", "2"), content.items.map { it.quantity })
-        assertTrue(content.items.all { it.total.isEmpty() }, "a parcel shows no prices")
-        assertTrue(content.paragraphs.any { it.contains("part of your order") }, "the partial note")
-        assertEquals("Track shipment", content.buttonLabel)
-        assertEquals("https://track.example/AR123456789?a=1&b=2", content.buttonUrl)
-        assertEquals("View order", content.secondaryLabel)
-        assertEquals("https://shop.example/store/order/K7M2Q9X4B8D6T3W5Z1RV?token=0f1e2d3c4b5a69788796a5b4c3d2e1f001122334", content.secondaryUrl, "a guest order's link carries the token")
+        assertEquals("Your order #1042 is on its way", r.subject)
+        assertEquals(listOf("Order number", "Carrier", "Tracking number", "Estimated delivery", "Shipping to"), message.details.map { it.label })
+        assertEquals("AR123456789", message.details[2].value)
+        assertEquals("Steve Miner, 12 Cube Street, 34000 Istanbul, Turkey", message.details[4].value)
+        assertEquals(listOf("Gold Rank", "Starter Bundle"), message.items.map { it.name })
+        assertEquals(listOf("1", "2"), message.items.map { it.quantity })
+        assertTrue(message.items.all { it.total.isEmpty() }, "a parcel shows no prices")
+        assertTrue(r.text.contains("part of your order"), "the partial note")
+        assertEquals("https://track.example/AR123456789?a=1&b=2", button(r, "Track shipment"))
+        assertTrue(r.html.contains("href=\"https://shop.example/store/order/K7M2Q9X4B8D6T3W5Z1RV?token&#x3D;0f1e2d3c4b5a69788796a5b4c3d2e1f001122334\""), "a guest order's link carries the token")
 
         val unsafe = MarketShipment(id = 8, orderId = 1042, status = ShipmentStatus.IN_TRANSIT, carrierName = "X", trackingUrl = "javascript:alert(1)")
         val safe = builder().build(MailInput(MailKind.SHIPMENT_SHIPPED, "en-US", shipped.order, items, JsonObject(), shipment = unsafe))
+        val safeR = render(safe, "en-US")
 
-        assertEquals("View order", safe.buttonLabel, "a javascript: tracking url is never a button")
-        assertNull(safe.secondaryLabel)
+        assertTrue(button(safeR, "View order")!!.startsWith("https://shop.example/store/order/"), "a javascript: tracking url is never a button")
+        assertFalse(safeR.html.contains("javascript:"))
+        assertFalse(safeR.text.contains("part of your order"))
         assertEquals(listOf("Order number", "Carrier"), safe.details.map { it.label }, "no tracking row without a number")
     }
 
@@ -534,33 +549,34 @@ class MailTemplateTest {
     fun `a shipped mail without a shipment row still renders from the params the shipping service queued`(): Unit = runBlocking {
         val params = JsonObject().put("carrierName", "Yurtici").put("trackingNumber", "YT1").put("trackingUrl", "https://t.example/YT1").put("estimatedDelivery", "Jun 29, 2026")
             .put("items", JsonArray().add(JsonObject().put("name", "Poster").put("variantName", "A2").put("quantity", 3)))
-        val content = builder().build(MailInput(MailKind.SHIPMENT_SHIPPED, "en-US", order(), items, params))
+        val message = builder().build(MailInput(MailKind.SHIPMENT_SHIPPED, "en-US", order(), items, params))
 
-        assertEquals(listOf("Poster"), content.items.map { it.name })
-        assertEquals("A2", content.items[0].variant)
-        assertEquals("3", content.items[0].quantity)
-        assertEquals("Jun 29, 2026", content.details.single { it.label == "Estimated delivery" }.value)
-        assertEquals("https://t.example/YT1", content.buttonUrl)
+        assertEquals(listOf("Poster"), message.items.map { it.name })
+        assertEquals("A2", message.items[0].variant)
+        assertEquals("3", message.items[0].quantity)
+        assertEquals("Jun 29, 2026", message.details.single { it.label == "Estimated delivery" }.value)
+        assertEquals("https://t.example/YT1", message.values["trackingUrl"])
     }
 
     @Test
     fun `a delivered mail names carrier and delivery date and links the order`(): Unit = runBlocking {
-        val content = builder().build(scenarios("en-US").first { it.name == "shipment-delivered" }.input)
+        val message = build("shipment-delivered")
+        val r = render(message, "en-US")
 
-        assertEquals("Your order #1042 was delivered", content.subject)
-        assertEquals(listOf("Order number", "Carrier", "Delivered on"), content.details.map { it.label })
-        assertEquals("View order", content.buttonLabel)
-        assertEquals(2, content.items.size)
+        assertEquals("Your order #1042 was delivered", r.subject)
+        assertEquals(listOf("Order number", "Carrier", "Delivered on"), message.details.map { it.label })
+        assertTrue(button(r, "View order")!!.startsWith("https://shop.example/store/order/"))
+        assertEquals(2, message.items.size)
     }
 
     @Test
     fun `a test order marks the new kinds like the old ones and a missing row is no mail`(): Unit = runBlocking {
         val testOrder = order(testMode = true)
         val sub = MarketSubscription(id = 1, productName = "Gold Rank", price = 100, currency = "TRY", currentPeriodEnd = 1_780_000_000_000L)
-        val content = builder().build(MailInput(MailKind.SUBSCRIPTION_REMINDER, "en-US", testOrder, items, JsonObject(), subscription = sub))
+        val message = builder().build(MailInput(MailKind.SUBSCRIPTION_REMINDER, "en-US", testOrder, items, JsonObject(), subscription = sub))
 
-        assertTrue(content.subject.startsWith("[TEST] "))
-        assertTrue(content.testMode)
+        assertTrue(render(message, "en-US").subject.startsWith("[TEST] "))
+        assertTrue(message.testMode)
 
         assertThrows(IllegalStateException::class.java) { runBlocking { builder().build(MailInput(MailKind.SUBSCRIPTION_ENDED, "en-US", order(), items)) } }
         assertThrows(IllegalStateException::class.java) { runBlocking { builder().build(MailInput(MailKind.SUBSCRIPTION_CANCELLED, "en-US", order(), items)) } }
@@ -568,11 +584,77 @@ class MailTemplateTest {
 
     @Test
     fun `the plain test mail is translated and mentions no order`(): Unit = runBlocking {
-        val subjects = locales.map { builder().test(it).subject }
+        val subjects = locales.map { render(builder().test(it), it).subject }
 
         assertEquals(3, subjects.toSet().size)
-        assertEquals("Test e-mail from Blocky Store", builder().test("en-US").subject)
+        assertEquals("Test e-mail from Blocky Store", render(builder().test("en-US"), "en-US").subject)
+        assertEquals(MarketMailMessage.TEST_VARIANT, builder().test("en-US").variant)
         assertTrue(builder().test("en-US").items.isEmpty())
+        assertFalse(render(builder().test("en-US"), "en-US").text.contains("#"))
+    }
+
+    // ----- the bundled templates ---------------------------------------------------------------------------------------
+
+    @Test
+    fun `index json declares one variant per kind plus the test mail, each with a template in every language`() {
+        val mail = MailRendering.index.mails.single()
+
+        assertEquals(MarketMailMessage.KEY, mail.key)
+        assertEquals(
+            (MailKind.entries.map { MarketMailMessage.variantOf(it) } + MarketMailMessage.TEST_VARIANT).toSet(), mail.variants.map { it.key }.toSet(),
+            "every MailKind has a variant and nothing else is declared"
+        )
+
+        for (variant in mail.variants) for (locale in locales) {
+            val file = File("src/main/resources/mail-templates/${mail.key}/${variant.key}/$locale.hbs")
+
+            assertTrue(file.isFile, "missing ${file.path}")
+
+            val content = MailTemplateContent.parse(file.readText())
+
+            assertTrue(content.subject.isNotBlank(), "${file.path}: subject")
+            assertTrue(content.preheader.isNotBlank(), "${file.path}: preheader")
+            assertTrue(content.footer.isNotBlank(), "${file.path}: footer")
+        }
+    }
+
+    @Test
+    fun `every variant renders with its declared samples and passes the panel's validation in every language`() {
+        val mail = MailRendering.index.mails.single()
+
+        for (variant in mail.variants) for (locale in locales) {
+            val content = MailTemplateContent.parse(File("src/main/resources/mail-templates/${mail.key}/${variant.key}/$locale.hbs").readText())
+            val system = MailRendering.system(locale)
+            val validation = MailRendering.service.validate(content, variant.sampleVariables(), system)
+
+            assertTrue(validation.valid, "${variant.key} / $locale: ${validation.fields} ${validation.message}")
+
+            val r = MailRendering.service.render(content, MailTemplateService.Layout(MailRendering.service.defaultLayout(), false, "test"), variant.sampleVariables(), system)
+
+            assertTrue(r.subject.isNotBlank())
+            assertFalse(unresolved.containsMatchIn(r.subject + r.text + r.html), "${variant.key} / $locale: ${unresolved.find(r.subject + r.text + r.html)?.value}")
+        }
+    }
+
+    @Test
+    fun `every declared variable is one the builder sends, and the html ones are declared as html`(): Unit = runBlocking {
+        val mail = MailRendering.index.mails.single()
+        val html = setOf("testBanner", "itemsTable", "totalsTable", "detailsTable", "bankInstructions")
+
+        for (s in scenarios("en-US")) {
+            val message = builder().build(s.input)
+            val variant = mail.variant(message.variant)!!
+            val sent = message.variables().keys
+
+            for (v in variant.variables) {
+                assertTrue(v.name in sent, "${s.name}: ${v.name} is declared but never sent")
+                assertEquals(v.name in html, v.type.id == "html", "${s.name}: ${v.name} has type ${v.type.id}")
+            }
+        }
+
+        val test = mail.variant(MarketMailMessage.TEST_VARIANT)!!
+
+        assertTrue(test.variables.all { it.name in builder().test("en-US").variables().keys })
     }
 
     // ----- the front-end URL map (doc 05 section 10.2) -----------------------------------------------------------------
@@ -586,14 +668,9 @@ class MailTemplateTest {
 
         site = MailSite("Blocky Network", "https://api.example.com", moved.links)
 
-        val confirmation = builder().build(scenarios("en-US").first { it.name == "order-confirmation" }.input)
-
-        assertEquals("https://play.example.com/shop/purchase/K7M2Q9X4B8D6T3W5Z1RV", confirmation.buttonUrl)
-
-        val shipped = builder().build(scenarios("en-US").first { it.name == "shipment-shipped" }.input)
-
+        assertEquals("https://play.example.com/shop/purchase/K7M2Q9X4B8D6T3W5Z1RV", build("order-confirmation").values["orderUrl"])
         assertEquals(
-            "https://play.example.com/shop/purchase/K7M2Q9X4B8D6T3W5Z1RV?token=0f1e2d3c4b5a69788796a5b4c3d2e1f001122334", shipped.secondaryUrl,
+            "https://play.example.com/shop/purchase/K7M2Q9X4B8D6T3W5Z1RV?token=0f1e2d3c4b5a69788796a5b4c3d2e1f001122334", build("shipment-shipped").values["orderUrl"],
             "the token of a guest order is added to the renamed page"
         )
     }
@@ -605,20 +682,16 @@ class MailTemplateTest {
         site = MailSite("Blocky Network", "https://api.example.com", moved.links)
 
         // the order page has a fallback page of Pano on the website address
-        val confirmation = builder().build(scenarios("en-US").first { it.name == "order-confirmation" }.input)
-
-        assertEquals("https://api.example.com/_pano/market.order?id=K7M2Q9X4B8D6T3W5Z1RV", confirmation.buttonUrl)
+        assertEquals("https://api.example.com/_pano/market.order?id=K7M2Q9X4B8D6T3W5Z1RV", build("order-confirmation").values["orderUrl"])
 
         // no store page: the gift mail has no button, as a mail without a site address has none
-        val gift = builder().build(scenarios("en-US").first { it.name == "gift-received" }.input)
+        val gift = build("gift-received")
 
-        assertNull(gift.buttonUrl)
-        assertNull(gift.buttonLabel)
+        assertEquals("", gift.values["storeUrl"])
+        assertFalse(hasButton(render(gift, "en-US")))
 
         // no product page: the renew button is left out
-        val reminder = builder().build(scenarios("en-US").first { it.name == "expiry-reminder" }.input)
-
-        assertNull(reminder.buttonUrl)
+        assertEquals("", build("expiry-reminder").values["renewUrl"])
     }
 
     @Test
@@ -627,26 +700,24 @@ class MailTemplateTest {
         moved.inputs.overrides = mapOf(MarketTargets.PRODUCT to "/shop/item/{slug}", MarketTargets.STORE to "/shop", "user.profile" to "/me")
         site = MailSite("Blocky Network", "https://api.example.com", moved.links)
 
-        assertEquals("https://play.example.com/shop/item/gold-rank", builder().build(scenarios("en-US").first { it.name == "expiry-reminder" }.input).buttonUrl)
-        assertEquals("https://play.example.com/shop", builder().build(scenarios("en-US").first { it.name == "gift-received" }.input).buttonUrl)
+        assertEquals("https://play.example.com/shop/item/gold-rank", build("expiry-reminder").values["renewUrl"])
+        assertEquals("https://play.example.com/shop", build("gift-received").values["storeUrl"])
     }
 
     @Test
     fun `a pay link that older mail rows kept as a path is still made absolute`(): Unit = runBlocking {
         site = MailSite("Blocky Network", "https://shop.example")
 
-        val reminder = scenarios("en-US").first { it.name == "subscription-reminder-manual" }.input
-        val content = builder().build(reminder)
-
-        assertEquals("https://shop.example/store/order/PAYLINK0000000000000", content.buttonUrl)
+        assertEquals("https://shop.example/store/order/PAYLINK0000000000000", build("subscription-reminder-manual").values["payUrl"])
     }
 
     @Test
-    fun `the three languages say different things for every key of the kinds this slice owns`() {
+    fun `the three languages hold every label of the mail blocks`() {
         val bundles = MarketI18n.loadBundles(MailTemplateTest::class.java.classLoader)
         val keys = bundles.getValue("en-US").keys.filter { it.startsWith("mail.") }
 
-        assertTrue(keys.size > 40, "the mail keys are bundled: ${keys.size}")
+        assertTrue(keys.size > 20, "the block labels are bundled: ${keys.size}")
+        assertTrue(keys.all { it.startsWith("mail.blocks.") }, "only block labels are left in the locale files: ${keys.filterNot { it.startsWith("mail.blocks.") }}")
 
         for (key in keys) {
             val tr = bundles.getValue("tr")[key]
@@ -654,13 +725,9 @@ class MailTemplateTest {
             val en = bundles.getValue("en-US").getValue(key)
 
             assertTrue(tr != null && ru != null, "$key exists in all three locales")
-            assertFalse(en.contains(Regex("\\{[^A-Za-z}]")), "$key holds no ICU syntax: $en")
-            assertEquals(placeholders(en), placeholders(tr!!), "$key: tr uses the same placeholders as en-US")
-            assertEquals(placeholders(en), placeholders(ru!!), "$key: ru uses the same placeholders as en-US")
+            assertFalse(en.contains("{"), "$key holds no placeholder: $en")
         }
 
-        assertNotEquals(bundles.getValue("en-US")["mail.order-confirmation.subject"], bundles.getValue("tr")["mail.order-confirmation.subject"])
+        assertNotEquals(bundles.getValue("en-US")["mail.blocks.total"], bundles.getValue("tr")["mail.blocks.total"])
     }
-
-    private fun placeholders(text: String): Set<String> = Regex("\\{([A-Za-z][A-Za-z0-9_]*)\\}").findAll(text).map { it.groupValues[1] }.toSet()
 }

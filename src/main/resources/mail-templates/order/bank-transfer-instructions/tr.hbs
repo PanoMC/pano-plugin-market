@@ -1,0 +1,18 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{orderNumber}} numaralı sipariş için ödeme bilgileri
+preheader: Siparişi tamamlamak için tutarı havale edin.
+buttonLabel: Siparişi görüntüle
+buttonUrl: {{orderUrl}}
+footer: Bu e-postayı {{storeName}} mağazasındaki bir sipariş nedeniyle alıyorsunuz.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Ödemenizi tamamlayın</h2>
+<p>Merhaba {{username}},</p>
+<p>{{storeName}} mağazasındaki {{orderNumber}} numaralı siparişiniz için teşekkürler. Siparişinizi tamamlayabilmemiz için lütfen toplam tutarı aşağıdaki bilgilere havale edin.</p>
+{{#if expiresAt}}
+<p>Siparişiniz {{expiresAt}} tarihine kadar ayrılmıştır. Bundan sonra otomatik olarak iptal edilir.</p>
+{{/if}}
+{{{itemsTable}}}
+{{{totalsTable}}}
+{{{detailsTable}}}
+{{{bankInstructions}}}

@@ -308,7 +308,7 @@ class MailAdmin(
 
         val locale = defaultLocale()
         val content = if (kind == null) builder.test(locale) else builder.build(MailSamples.input(kind, locale, config(), clock.now()))
-        val message = OutboundMail(recipient = to, locale = locale, content = content, replyTo = config().mailReplyTo.takeIf { it.isNotBlank() })
+        val message = OutboundMail(recipient = to, locale = locale, message = content, replyTo = config().mailReplyTo.takeIf { it.isNotBlank() })
         val result = try {
             withTimeout(SEND_TIMEOUT_MS) { gateway.send(message) }
         } catch (e: CancellationException) {

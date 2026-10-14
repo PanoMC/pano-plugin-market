@@ -1,0 +1,20 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{productName}} {{date}} tarihinde yenileniyor
+preheader: Aboneliğiniz yakında yenilenecek.
+buttonLabel: Şimdi öde
+buttonUrl: {{payUrl}}
+footer: Bu e-postayı {{storeName}} mağazasındaki bir sipariş nedeniyle alıyorsunuz.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Aboneliğiniz yakında yenilenecek</h2>
+<p>Merhaba {{username}},</p>
+{{#if manual}}
+<p>{{storeName}} mağazasındaki {{productName}} aboneliğiniz {{date}} tarihinde sona erecek. Sürdürmek için o tarihten önce {{amount}} ödeyin.</p>
+{{else}}
+<p>{{storeName}} mağazasındaki {{productName}} aboneliğiniz {{date}} tarihinde yenilenecek. O gün {{amount}} tahsil edeceğiz.</p>
+{{#if paymentMethod}}
+<p>Tahsilat şu yönteme yapılacak: {{paymentMethod}}.</p>
+{{/if}}
+{{/if}}
+{{{detailsTable}}}
+{{#if manageUrl}}<p style="font-size:14px;line-height:20px;margin:8px 0 16px 0;text-align:center"><a href="{{manageUrl}}" style="color:rgb(54,65,83)" target="_blank">Aboneliği yönet</a></p>{{/if}}

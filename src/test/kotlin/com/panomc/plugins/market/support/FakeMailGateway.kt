@@ -3,9 +3,9 @@ package com.panomc.plugins.market.support
 import com.panomc.plugins.market.db.model.MarketMailOutbox
 import com.panomc.plugins.market.mail.MailAttachments
 import com.panomc.plugins.market.mail.MailComposition
-import com.panomc.plugins.market.mail.MailContent
 import com.panomc.plugins.market.mail.MailGateway
 import com.panomc.plugins.market.mail.MailSendResult
+import com.panomc.plugins.market.mail.MarketMailMessage
 import com.panomc.plugins.market.mail.OutboundMail
 import io.vertx.sqlclient.SqlClient
 import kotlinx.coroutines.awaitCancellation
@@ -111,9 +111,9 @@ class FakeMailComposition : MailComposition {
         return row.id in obsoleteIds
     }
 
-    override suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient): MailContent {
+    override suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient): MarketMailMessage {
         composeFailures[row.id]?.let { throw it }
-        return MailContent(subject = "Subject ${row.kind.name}", preheader = "pre", heading = "Heading ${row.kind.name}", paragraphs = listOf("Row ${row.id}"))
+        return MarketMailMessage(MarketMailMessage.variantOf(row.kind), mapOf("orderNumber" to "Row ${row.id}"))
     }
 
     override suspend fun attachments(row: MarketMailOutbox, sqlClient: SqlClient): MailAttachments =

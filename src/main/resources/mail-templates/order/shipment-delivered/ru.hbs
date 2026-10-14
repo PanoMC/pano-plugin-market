@@ -1,0 +1,13 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}Ваш заказ {{orderNumber}} доставлен
+preheader: Посылка прибыла.
+buttonLabel: Открыть заказ
+buttonUrl: {{orderUrl}}
+footer: Вы получили это письмо из-за заказа в магазине {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Посылка доставлена</h2>
+<p>Здравствуйте, {{username}}!</p>
+<p>Посылка по вашему заказу {{orderNumber}} в магазине {{storeName}} доставлена.</p>
+{{{itemsTable}}}
+{{{detailsTable}}}

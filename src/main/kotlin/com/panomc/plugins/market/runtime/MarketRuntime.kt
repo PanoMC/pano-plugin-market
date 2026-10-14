@@ -34,6 +34,9 @@ object MarketRuntime {
     )
 
     const val MAIL_OPTIONS_CLASS = "com.panomc.platform.mail.MailOptions"
+
+    /** The unified mail templates the market mails are rendered with (the host must have both to send). */
+    const val TEMPLATE_MAIL_CLASS = "com.panomc.platform.mail.TemplateMail"
     const val NOTIFICATION_REGISTRY_CLASS = "com.panomc.platform.notification.NotificationTypeRegistry"
 
     @Volatile
@@ -93,7 +96,7 @@ object MarketRuntime {
             false
         }
 
-        return HostCapabilities(present(MAIL_OPTIONS_CLASS), present(NOTIFICATION_REGISTRY_CLASS)).also { capabilities = it }
+        return HostCapabilities(present(MAIL_OPTIONS_CLASS) && present(TEMPLATE_MAIL_CLASS), present(NOTIFICATION_REGISTRY_CLASS)).also { capabilities = it }
     }
 
     /** Test seam: back to the initial value. */

@@ -1,0 +1,15 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}We received your order {{orderNumber}}
+preheader: Your payment is being confirmed.
+buttonLabel: View order
+buttonUrl: {{orderUrl}}
+footer: You are receiving this e-mail because of an order at {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">We received your order</h2>
+<p>Hi {{username}},</p>
+<p>Thank you for your order {{orderNumber}} at {{storeName}}. We are confirming your payment and will e-mail you again as soon as it is complete.</p>
+<p>If your payment needs a manual check by our team, this can take a little longer.</p>
+{{{itemsTable}}}
+{{{totalsTable}}}
+{{{detailsTable}}}

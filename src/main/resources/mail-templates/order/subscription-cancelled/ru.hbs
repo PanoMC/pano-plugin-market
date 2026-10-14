@@ -1,0 +1,14 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{productName}} не будет продлён
+preheader: Ваша подписка отменена.
+footer: Вы получили это письмо из-за заказа в магазине {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Подписка отменена</h2>
+<p>Здравствуйте, {{username}}!</p>
+{{#if accessUntil}}
+<p>Ваша подписка на {{productName}} в магазине {{storeName}} не будет продлена. Доступ сохраняется до {{accessUntil}}.</p>
+{{else}}
+<p>Ваша подписка на {{productName}} в магазине {{storeName}} не будет продлена. Доступ сохраняется до конца текущего периода.</p>
+{{/if}}
+{{#if manageUrl}}<p style="font-size:14px;line-height:20px;margin:8px 0 16px 0;text-align:center"><a href="{{manageUrl}}" style="color:rgb(54,65,83)" target="_blank">Управление подпиской</a></p>{{/if}}

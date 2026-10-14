@@ -1,0 +1,14 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{productName}} yenilenmeyecek
+preheader: Aboneliğiniz iptal edildi.
+footer: Bu e-postayı {{storeName}} mağazasındaki bir sipariş nedeniyle alıyorsunuz.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Abonelik iptal edildi</h2>
+<p>Merhaba {{username}},</p>
+{{#if accessUntil}}
+<p>{{storeName}} mağazasındaki {{productName}} aboneliğiniz yenilenmeyecek. Erişiminiz {{accessUntil}} tarihine kadar sürer.</p>
+{{else}}
+<p>{{storeName}} mağazasındaki {{productName}} aboneliğiniz yenilenmeyecek. Erişiminiz mevcut dönemin sonuna kadar sürer.</p>
+{{/if}}
+{{#if manageUrl}}<p style="font-size:14px;line-height:20px;margin:8px 0 16px 0;text-align:center"><a href="{{manageUrl}}" style="color:rgb(54,65,83)" target="_blank">Aboneliği yönet</a></p>{{/if}}

@@ -1,0 +1,14 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{productName}} will not renew
+preheader: Your subscription was cancelled.
+footer: You are receiving this e-mail because of an order at {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Subscription cancelled</h2>
+<p>Hi {{username}},</p>
+{{#if accessUntil}}
+<p>Your subscription to {{productName}} at {{storeName}} will not renew. You keep your access until {{accessUntil}}.</p>
+{{else}}
+<p>Your subscription to {{productName}} at {{storeName}} will not renew. You keep your access until the end of the current period.</p>
+{{/if}}
+{{#if manageUrl}}<p style="font-size:14px;line-height:20px;margin:8px 0 16px 0;text-align:center"><a href="{{manageUrl}}" style="color:rgb(54,65,83)" target="_blank">Manage subscription</a></p>{{/if}}

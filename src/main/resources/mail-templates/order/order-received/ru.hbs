@@ -1,0 +1,15 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}Мы получили ваш заказ {{orderNumber}}
+preheader: Ваш платёж проверяется.
+buttonLabel: Открыть заказ
+buttonUrl: {{orderUrl}}
+footer: Вы получили это письмо из-за заказа в магазине {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Мы получили ваш заказ</h2>
+<p>Здравствуйте, {{username}}!</p>
+<p>Спасибо за заказ {{orderNumber}} в магазине {{storeName}}. Мы подтверждаем ваш платёж и напишем вам снова, как только он будет завершён.</p>
+<p>Если платёж требует ручной проверки нашей командой, это может занять чуть больше времени.</p>
+{{{itemsTable}}}
+{{{totalsTable}}}
+{{{detailsTable}}}

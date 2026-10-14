@@ -1,0 +1,15 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{username}} sent you a gift on {{websiteName}}
+preheader: A gift is waiting for you.
+buttonLabel: Visit store
+buttonUrl: {{storeUrl}}
+footer: You are receiving this e-mail because of an order at {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">You received a gift!</h2>
+<p>{{username}} sent you a gift at {{storeName}}. It is delivered to your Minecraft account automatically.</p>
+<p>If something is missing, join the server and check again in a few minutes.</p>
+{{#if giftMessage}}
+<blockquote style="font-style:italic">{{giftMessage}}</blockquote>
+{{/if}}
+{{{itemsTable}}}

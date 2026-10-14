@@ -1,0 +1,12 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}Your order {{orderNumber}} has been delivered
+preheader: Everything from your order has been delivered.
+buttonLabel: View order
+buttonUrl: {{orderUrl}}
+footer: You are receiving this e-mail because of an order at {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Order delivered</h2>
+<p>Hi {{username}},</p>
+<p>All items of your order {{orderNumber}} at {{storeName}} have been delivered. Enjoy!</p>
+{{{itemsTable}}}

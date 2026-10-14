@@ -1,0 +1,1479 @@
+{
+  "mails": [
+    {
+      "key": "order",
+      "name": {
+        "en-US": "Store mails",
+        "tr": "Mağaza e-postaları",
+        "ru": "Письма магазина"
+      },
+      "description": {
+        "en-US": "Sent to buyers about their orders, subscriptions and shipments. One variant per mail kind; the store settings decide which kinds are sent. Tables (items, totals, details, bank details) are filled in by the store.",
+        "tr": "Alıcılara siparişleri, abonelikleri ve kargoları hakkında gönderilir. Her e-posta türünün kendi varyantı vardır; hangi türlerin gönderileceğine mağaza ayarları karar verir. Tablolar (ürünler, tutarlar, ayrıntılar, havale bilgileri) mağaza tarafından doldurulur.",
+        "ru": "Отправляются покупателям о заказах, подписках и доставке. Свой вариант для каждого типа письма; какие типы отправлять, решают настройки магазина. Таблицы (товары, итоги, подробности, реквизиты) заполняет магазин."
+      },
+      "variants": [
+        {
+          "key": "order-received",
+          "name": {
+            "en-US": "Order received",
+            "tr": "Sipariş alındı",
+            "ru": "Заказ получен"
+          },
+          "variables": [
+            {
+              "name": "storeName",
+              "type": "text",
+              "label": {
+                "en-US": "Store name",
+                "tr": "Mağaza adı",
+                "ru": "Название магазина"
+              },
+              "sample": "Blocky Store"
+            },
+            {
+              "name": "orderNumber",
+              "type": "text",
+              "label": {
+                "en-US": "Order number",
+                "tr": "Sipariş numarası",
+                "ru": "Номер заказа"
+              },
+              "sample": "#1042"
+            },
+            {
+              "name": "username",
+              "type": "text",
+              "label": {
+                "en-US": "Buyer (Minecraft name)",
+                "tr": "Alıcı (Minecraft adı)",
+                "ru": "Покупатель (ник Minecraft)"
+              },
+              "sample": "Steve"
+            },
+            {
+              "name": "testMode",
+              "type": "boolean",
+              "label": {
+                "en-US": "Test order",
+                "tr": "Test siparişi",
+                "ru": "Тестовый заказ"
+              },
+              "sample": false
+            },
+            {
+              "name": "testBanner",
+              "type": "html",
+              "label": {
+                "en-US": "Test order banner",
+                "tr": "Test siparişi bandı",
+                "ru": "Баннер тестового заказа"
+              },
+              "sample": ""
+            },
+            {
+              "name": "orderUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Order page link",
+                "tr": "Sipariş sayfası bağlantısı",
+                "ru": "Ссылка на страницу заказа"
+              },
+              "sample": "https://example.com/store/order/K7M2Q9X4B8D6T3W5Z1RV"
+            },
+            {
+              "name": "itemsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Items",
+                "tr": "Ürünler",
+                "ru": "Товары"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€15.00</td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">2 &#215; Starter Bundle</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€20.00</td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);padding-left:20px\">2 &#215; Diamond Sword</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr></tbody></table>"
+            },
+            {
+              "name": "totalsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Totals",
+                "tr": "Tutarlar",
+                "ru": "Итоги"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-bottom:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">Subtotal</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€40.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">Discount</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">-€5.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">VAT (included)</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€5.83</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);font-weight:700;font-size:16px\">Total</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap;font-weight:700;font-size:16px\">€35.00</td></tr></tbody></table>"
+            },
+            {
+              "name": "detailsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Details",
+                "tr": "Ayrıntılar",
+                "ru": "Подробности"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order number</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">#1042</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order date</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Oct 14, 2026 21:30</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Payment method</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Credit card</td></tr></tbody></table>"
+            }
+          ]
+        },
+        {
+          "key": "order-confirmation",
+          "name": {
+            "en-US": "Order confirmed",
+            "tr": "Sipariş onaylandı",
+            "ru": "Заказ подтверждён"
+          },
+          "variables": [
+            {
+              "name": "storeName",
+              "type": "text",
+              "label": {
+                "en-US": "Store name",
+                "tr": "Mağaza adı",
+                "ru": "Название магазина"
+              },
+              "sample": "Blocky Store"
+            },
+            {
+              "name": "orderNumber",
+              "type": "text",
+              "label": {
+                "en-US": "Order number",
+                "tr": "Sipariş numarası",
+                "ru": "Номер заказа"
+              },
+              "sample": "#1042"
+            },
+            {
+              "name": "username",
+              "type": "text",
+              "label": {
+                "en-US": "Buyer (Minecraft name)",
+                "tr": "Alıcı (Minecraft adı)",
+                "ru": "Покупатель (ник Minecraft)"
+              },
+              "sample": "Steve"
+            },
+            {
+              "name": "testMode",
+              "type": "boolean",
+              "label": {
+                "en-US": "Test order",
+                "tr": "Test siparişi",
+                "ru": "Тестовый заказ"
+              },
+              "sample": false
+            },
+            {
+              "name": "testBanner",
+              "type": "html",
+              "label": {
+                "en-US": "Test order banner",
+                "tr": "Test siparişi bandı",
+                "ru": "Баннер тестового заказа"
+              },
+              "sample": ""
+            },
+            {
+              "name": "orderUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Order page link",
+                "tr": "Sipariş sayfası bağlantısı",
+                "ru": "Ссылка на страницу заказа"
+              },
+              "sample": "https://example.com/store/order/K7M2Q9X4B8D6T3W5Z1RV"
+            },
+            {
+              "name": "shippingAddress",
+              "type": "text",
+              "label": {
+                "en-US": "Shipping address (physical orders)",
+                "tr": "Teslimat adresi (fiziksel siparişler)",
+                "ru": "Адрес доставки (физические заказы)"
+              },
+              "sample": "Steve Miner, 12 Cube Street, 34000 Istanbul, TR"
+            },
+            {
+              "name": "invoiceAttached",
+              "type": "boolean",
+              "label": {
+                "en-US": "Invoice PDF attached",
+                "tr": "Fatura PDF ekli",
+                "ru": "Счёт PDF приложен"
+              },
+              "sample": true
+            },
+            {
+              "name": "itemsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Items",
+                "tr": "Ürünler",
+                "ru": "Товары"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€15.00</td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">2 &#215; Starter Bundle</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€20.00</td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);padding-left:20px\">2 &#215; Diamond Sword</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr></tbody></table>"
+            },
+            {
+              "name": "totalsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Totals",
+                "tr": "Tutarlar",
+                "ru": "Итоги"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-bottom:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">Subtotal</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€40.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">Discount</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">-€5.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">VAT (included)</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€5.83</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);font-weight:700;font-size:16px\">Total</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap;font-weight:700;font-size:16px\">€35.00</td></tr></tbody></table>"
+            },
+            {
+              "name": "detailsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Details",
+                "tr": "Ayrıntılar",
+                "ru": "Подробности"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order number</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">#1042</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order date</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Oct 14, 2026 21:30</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Payment method</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Credit card</td></tr></tbody></table>"
+            }
+          ]
+        },
+        {
+          "key": "order-delivered",
+          "name": {
+            "en-US": "Order delivered",
+            "tr": "Sipariş teslim edildi",
+            "ru": "Заказ доставлен"
+          },
+          "variables": [
+            {
+              "name": "storeName",
+              "type": "text",
+              "label": {
+                "en-US": "Store name",
+                "tr": "Mağaza adı",
+                "ru": "Название магазина"
+              },
+              "sample": "Blocky Store"
+            },
+            {
+              "name": "orderNumber",
+              "type": "text",
+              "label": {
+                "en-US": "Order number",
+                "tr": "Sipariş numarası",
+                "ru": "Номер заказа"
+              },
+              "sample": "#1042"
+            },
+            {
+              "name": "username",
+              "type": "text",
+              "label": {
+                "en-US": "Buyer (Minecraft name)",
+                "tr": "Alıcı (Minecraft adı)",
+                "ru": "Покупатель (ник Minecraft)"
+              },
+              "sample": "Steve"
+            },
+            {
+              "name": "testMode",
+              "type": "boolean",
+              "label": {
+                "en-US": "Test order",
+                "tr": "Test siparişi",
+                "ru": "Тестовый заказ"
+              },
+              "sample": false
+            },
+            {
+              "name": "testBanner",
+              "type": "html",
+              "label": {
+                "en-US": "Test order banner",
+                "tr": "Test siparişi bandı",
+                "ru": "Баннер тестового заказа"
+              },
+              "sample": ""
+            },
+            {
+              "name": "orderUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Order page link",
+                "tr": "Sipariş sayfası bağlantısı",
+                "ru": "Ссылка на страницу заказа"
+              },
+              "sample": "https://example.com/store/order/K7M2Q9X4B8D6T3W5Z1RV"
+            },
+            {
+              "name": "itemsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Items",
+                "tr": "Ürünler",
+                "ru": "Товары"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">2 &#215; Starter Bundle</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);padding-left:20px\">2 &#215; Diamond Sword</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr></tbody></table>"
+            }
+          ]
+        },
+        {
+          "key": "gift-received",
+          "name": {
+            "en-US": "Gift received",
+            "tr": "Hediye alındı",
+            "ru": "Получен подарок"
+          },
+          "variables": [
+            {
+              "name": "storeName",
+              "type": "text",
+              "label": {
+                "en-US": "Store name",
+                "tr": "Mağaza adı",
+                "ru": "Название магазина"
+              },
+              "sample": "Blocky Store"
+            },
+            {
+              "name": "orderNumber",
+              "type": "text",
+              "label": {
+                "en-US": "Order number",
+                "tr": "Sipariş numarası",
+                "ru": "Номер заказа"
+              },
+              "sample": "#1042"
+            },
+            {
+              "name": "username",
+              "type": "text",
+              "label": {
+                "en-US": "Buyer (Minecraft name)",
+                "tr": "Alıcı (Minecraft adı)",
+                "ru": "Покупатель (ник Minecraft)"
+              },
+              "sample": "Steve"
+            },
+            {
+              "name": "testMode",
+              "type": "boolean",
+              "label": {
+                "en-US": "Test order",
+                "tr": "Test siparişi",
+                "ru": "Тестовый заказ"
+              },
+              "sample": false
+            },
+            {
+              "name": "testBanner",
+              "type": "html",
+              "label": {
+                "en-US": "Test order banner",
+                "tr": "Test siparişi bandı",
+                "ru": "Баннер тестового заказа"
+              },
+              "sample": ""
+            },
+            {
+              "name": "giftMessage",
+              "type": "text",
+              "label": {
+                "en-US": "Gift message",
+                "tr": "Hediye mesajı",
+                "ru": "Сообщение к подарку"
+              },
+              "sample": "Have fun on the server!"
+            },
+            {
+              "name": "storeUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Store link",
+                "tr": "Mağaza bağlantısı",
+                "ru": "Ссылка на магазин"
+              },
+              "sample": "https://example.com/store"
+            },
+            {
+              "name": "itemsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Items",
+                "tr": "Ürünler",
+                "ru": "Товары"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">2 &#215; Starter Bundle</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);padding-left:20px\">2 &#215; Diamond Sword</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr></tbody></table>"
+            }
+          ]
+        },
+        {
+          "key": "bank-transfer-instructions",
+          "name": {
+            "en-US": "Bank transfer instructions",
+            "tr": "Havale bilgileri",
+            "ru": "Реквизиты для перевода"
+          },
+          "variables": [
+            {
+              "name": "storeName",
+              "type": "text",
+              "label": {
+                "en-US": "Store name",
+                "tr": "Mağaza adı",
+                "ru": "Название магазина"
+              },
+              "sample": "Blocky Store"
+            },
+            {
+              "name": "orderNumber",
+              "type": "text",
+              "label": {
+                "en-US": "Order number",
+                "tr": "Sipariş numarası",
+                "ru": "Номер заказа"
+              },
+              "sample": "#1042"
+            },
+            {
+              "name": "username",
+              "type": "text",
+              "label": {
+                "en-US": "Buyer (Minecraft name)",
+                "tr": "Alıcı (Minecraft adı)",
+                "ru": "Покупатель (ник Minecraft)"
+              },
+              "sample": "Steve"
+            },
+            {
+              "name": "testMode",
+              "type": "boolean",
+              "label": {
+                "en-US": "Test order",
+                "tr": "Test siparişi",
+                "ru": "Тестовый заказ"
+              },
+              "sample": false
+            },
+            {
+              "name": "testBanner",
+              "type": "html",
+              "label": {
+                "en-US": "Test order banner",
+                "tr": "Test siparişi bandı",
+                "ru": "Баннер тестового заказа"
+              },
+              "sample": ""
+            },
+            {
+              "name": "orderUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Order page link",
+                "tr": "Sipariş sayfası bağlantısı",
+                "ru": "Ссылка на страницу заказа"
+              },
+              "sample": "https://example.com/store/order/K7M2Q9X4B8D6T3W5Z1RV"
+            },
+            {
+              "name": "expiresAt",
+              "type": "text",
+              "label": {
+                "en-US": "Reserved until",
+                "tr": "Ayrılma sonu",
+                "ru": "Зарезервирован до"
+              },
+              "sample": "Oct 17, 2026 21:30"
+            },
+            {
+              "name": "itemsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Items",
+                "tr": "Ürünler",
+                "ru": "Товары"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€15.00</td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">2 &#215; Starter Bundle</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€20.00</td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);padding-left:20px\">2 &#215; Diamond Sword</td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr></tbody></table>"
+            },
+            {
+              "name": "totalsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Totals",
+                "tr": "Tutarlar",
+                "ru": "Итоги"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-bottom:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">Subtotal</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€40.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">Discount</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">-€5.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83)\">VAT (included)</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€5.83</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);font-weight:700;font-size:16px\">Total</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap;font-weight:700;font-size:16px\">€35.00</td></tr></tbody></table>"
+            },
+            {
+              "name": "detailsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Details",
+                "tr": "Ayrıntılar",
+                "ru": "Подробности"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order number</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">#1042</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Total</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">€35.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Pay before</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Oct 17, 2026 21:30</td></tr></tbody></table>"
+            },
+            {
+              "name": "bankInstructions",
+              "type": "html",
+              "label": {
+                "en-US": "Bank transfer details",
+                "tr": "Havale bilgileri",
+                "ru": "Реквизиты перевода"
+              },
+              "sample": "<div style=\"font-size:15px;line-height:22px;color:rgb(54,65,83);margin-top:16px;margin-bottom:16px\">Transfer the total to the account below.<br>Use the reference as the description.</div><table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:8px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(240,253,244);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">IBAN</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;font-weight:600;color:rgb(31,41,55)\">TR33 0006 1005 1978 6457 8413 26</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Reference</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:14px;line-height:20px;font-weight:600;color:rgb(31,41,55)\">ORDER-1042</td></tr></tbody></table>"
+            }
+          ]
+        },
+        {
+          "key": "order-refunded",
+          "name": {
+            "en-US": "Order refunded",
+            "tr": "Sipariş iade edildi",
+            "ru": "Возврат по заказу"
+          },
+          "variables": [
+            {
+              "name": "storeName",
+              "type": "text",
+              "label": {
+                "en-US": "Store name",
+                "tr": "Mağaza adı",
+                "ru": "Название магазина"
+              },
+              "sample": "Blocky Store"
+            },
+            {
+              "name": "orderNumber",
+              "type": "text",
+              "label": {
+                "en-US": "Order number",
+                "tr": "Sipariş numarası",
+                "ru": "Номер заказа"
+              },
+              "sample": "#1042"
+            },
+            {
+              "name": "username",
+              "type": "text",
+              "label": {
+                "en-US": "Buyer (Minecraft name)",
+                "tr": "Alıcı (Minecraft adı)",
+                "ru": "Покупатель (ник Minecraft)"
+              },
+              "sample": "Steve"
+            },
+            {
+              "name": "testMode",
+              "type": "boolean",
+              "label": {
+                "en-US": "Test order",
+                "tr": "Test siparişi",
+                "ru": "Тестовый заказ"
+              },
+              "sample": false
+            },
+            {
+              "name": "testBanner",
+              "type": "html",
+              "label": {
+                "en-US": "Test order banner",
+                "tr": "Test siparişi bandı",
+                "ru": "Баннер тестового заказа"
+              },
+              "sample": ""
+            },
+            {
+              "name": "orderUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Order page link",
+                "tr": "Sipariş sayfası bağlantısı",
+                "ru": "Ссылка на страницу заказа"
+              },
+              "sample": "https://example.com/store/order/K7M2Q9X4B8D6T3W5Z1RV"
+            },
+            {
+              "name": "amount",
+              "type": "text",
+              "label": {
+                "en-US": "Amount",
+                "tr": "Tutar",
+                "ru": "Сумма"
+              },
+              "sample": "€15.00"
+            },
+            {
+              "name": "claimUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Claim refund link (when the payment method needs it)",
+                "tr": "İade talep bağlantısı (ödeme yöntemi gerektirirse)",
+                "ru": "Ссылка для получения возврата (если нужна)"
+              },
+              "sample": ""
+            },
+            {
+              "name": "creditNoteAttached",
+              "type": "boolean",
+              "label": {
+                "en-US": "Credit note PDF attached",
+                "tr": "Alacak dekontu PDF ekli",
+                "ru": "Кредит-нота PDF приложена"
+              },
+              "sample": true
+            },
+            {
+              "name": "itemsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Refunded items",
+                "tr": "İade edilen ürünler",
+                "ru": "Возвращённые товары"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\">€15.00</td></tr></tbody></table>"
+            },
+            {
+              "name": "detailsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Details",
+                "tr": "Ayrıntılar",
+                "ru": "Подробности"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order number</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">#1042</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Refund amount</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">€15.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Returned to your payment method</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">€10.00</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Returned as credits</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">50.00 Coins</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Reason</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Bought by mistake</td></tr></tbody></table>"
+            }
+          ]
+        },
+        {
+          "key": "subscription-reminder",
+          "name": {
+            "en-US": "Subscription renews soon",
+            "tr": "Abonelik yakında yenilenecek",
+            "ru": "Подписка скоро продлится"
+          },
+          "variables": [
+            {
+              "name": "storeName",
+              "type": "text",
+              "label": {
+                "en-US": "Store name",
+                "tr": "Mağaza adı",
+                "ru": "Название магазина"
+              },
+              "sample": "Blocky Store"
+            },
+            {
+              "name": "orderNumber",
+              "type": "text",
+              "label": {
+                "en-US": "Order number",
+                "tr": "Sipariş numarası",
+                "ru": "Номер заказа"
+              },
+              "sample": "#1042"
+            },
+            {
+              "name": "username",
+              "type": "text",
+              "label": {
+                "en-US": "Buyer (Minecraft name)",
+                "tr": "Alıcı (Minecraft adı)",
+                "ru": "Покупатель (ник Minecraft)"
+              },
+              "sample": "Steve"
+            },
+            {
+              "name": "testMode",
+              "type": "boolean",
+              "label": {
+                "en-US": "Test order",
+                "tr": "Test siparişi",
+                "ru": "Тестовый заказ"
+              },
+              "sample": false
+            },
+            {
+              "name": "testBanner",
+              "type": "html",
+              "label": {
+                "en-US": "Test order banner",
+                "tr": "Test siparişi bandı",
+                "ru": "Баннер тестового заказа"
+              },
+              "sample": ""
+            },
+            {
+              "name": "productName",
+              "type": "text",
+              "label": {
+                "en-US": "Product",
+                "tr": "Ürün",
+                "ru": "Товар"
+              },
+              "sample": "Gold Rank"
+            },
+            {
+              "name": "amount",
+              "type": "text",
+              "label": {
+                "en-US": "Amount",
+                "tr": "Tutar",
+                "ru": "Сумма"
+              },
+              "sample": "€15.00"
+            },
+            {
+              "name": "date",
+              "type": "text",
+              "label": {
+                "en-US": "Date",
+                "tr": "Tarih",
+                "ru": "Дата"
+              },
+              "sample": "Nov 13, 2026"
+            },
+            {
+              "name": "manual",
+              "type": "boolean",
+              "label": {
+                "en-US": "Paid by hand (no automatic charge)",
+                "tr": "Elle ödenen (otomatik tahsilat yok)",
+                "ru": "Оплачивается вручную"
+              },
+              "sample": false
+            },
+            {
+              "name": "paymentMethod",
+              "type": "text",
+              "label": {
+                "en-US": "Stored payment method",
+                "tr": "Kayıtlı ödeme yöntemi",
+                "ru": "Сохранённый способ оплаты"
+              },
+              "sample": "Visa **** 4242"
+            },
+            {
+              "name": "payUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Pay link (manual subscriptions)",
+                "tr": "Ödeme bağlantısı (elle ödenen abonelikler)",
+                "ru": "Ссылка на оплату (ручная подписка)"
+              },
+              "sample": "https://example.com/store/order/PAYLINK0000000000000"
+            },
+            {
+              "name": "manageUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Manage subscription link",
+                "tr": "Aboneliği yönetme bağlantısı",
+                "ru": "Ссылка на управление подпиской"
+              },
+              "sample": "https://example.com/profile"
+            },
+            {
+              "name": "detailsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Details",
+                "tr": "Ayrıntılar",
+                "ru": "Подробности"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Product</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Gold Rank</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Renews on</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Nov 13, 2026</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Amount</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">€15.00</td></tr></tbody></table>"
+            }
+          ]
+        },
+        {
+          "key": "subscription-payment-failed",
+          "name": {
+            "en-US": "Subscription payment failed",
+            "tr": "Abonelik ödemesi başarısız",
+            "ru": "Платёж по подписке не прошёл"
+          },
+          "variables": [
+            {
+              "name": "storeName",
+              "type": "text",
+              "label": {
+                "en-US": "Store name",
+                "tr": "Mağaza adı",
+                "ru": "Название магазина"
+              },
+              "sample": "Blocky Store"
+            },
+            {
+              "name": "orderNumber",
+              "type": "text",
+              "label": {
+                "en-US": "Order number",
+                "tr": "Sipariş numarası",
+                "ru": "Номер заказа"
+              },
+              "sample": "#1042"
+            },
+            {
+              "name": "username",
+              "type": "text",
+              "label": {
+                "en-US": "Buyer (Minecraft name)",
+                "tr": "Alıcı (Minecraft adı)",
+                "ru": "Покупатель (ник Minecraft)"
+              },
+              "sample": "Steve"
+            },
+            {
+              "name": "testMode",
+              "type": "boolean",
+              "label": {
+                "en-US": "Test order",
+                "tr": "Test siparişi",
+                "ru": "Тестовый заказ"
+              },
+              "sample": false
+            },
+            {
+              "name": "testBanner",
+              "type": "html",
+              "label": {
+                "en-US": "Test order banner",
+                "tr": "Test siparişi bandı",
+                "ru": "Баннер тестового заказа"
+              },
+              "sample": ""
+            },
+            {
+              "name": "productName",
+              "type": "text",
+              "label": {
+                "en-US": "Product",
+                "tr": "Ürün",
+                "ru": "Товар"
+              },
+              "sample": "Gold Rank"
+            },
+            {
+              "name": "amount",
+              "type": "text",
+              "label": {
+                "en-US": "Amount",
+                "tr": "Tutar",
+                "ru": "Сумма"
+              },
+              "sample": "€15.00"
+            },
+            {
+              "name": "graceEndsAt",
+              "type": "text",
+              "label": {
+                "en-US": "Access kept until",
+                "tr": "Erişim sonu",
+                "ru": "Доступ сохраняется до"
+              },
+              "sample": "Nov 16, 2026"
+            },
+            {
+              "name": "payUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Update payment link",
+                "tr": "Ödemeyi güncelleme bağlantısı",
+                "ru": "Ссылка на обновление оплаты"
+              },
+              "sample": "https://example.com/profile"
+            },
+            {
+              "name": "detailsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Details",
+                "tr": "Ayrıntılar",
+                "ru": "Подробности"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Product</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Gold Rank</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Amount</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">€15.00</td></tr></tbody></table>"
+            }
+          ]
+        },
+        {
+          "key": "subscription-cancelled",
+          "name": {
+            "en-US": "Subscription cancelled",
+            "tr": "Abonelik iptal edildi",
+            "ru": "Подписка отменена"
+          },
+          "variables": [
+            {
+              "name": "storeName",
+              "type": "text",
+              "label": {
+                "en-US": "Store name",
+                "tr": "Mağaza adı",
+                "ru": "Название магазина"
+              },
+              "sample": "Blocky Store"
+            },
+            {
+              "name": "orderNumber",
+              "type": "text",
+              "label": {
+                "en-US": "Order number",
+                "tr": "Sipariş numarası",
+                "ru": "Номер заказа"
+              },
+              "sample": "#1042"
+            },
+            {
+              "name": "username",
+              "type": "text",
+              "label": {
+                "en-US": "Buyer (Minecraft name)",
+                "tr": "Alıcı (Minecraft adı)",
+                "ru": "Покупатель (ник Minecraft)"
+              },
+              "sample": "Steve"
+            },
+            {
+              "name": "testMode",
+              "type": "boolean",
+              "label": {
+                "en-US": "Test order",
+                "tr": "Test siparişi",
+                "ru": "Тестовый заказ"
+              },
+              "sample": false
+            },
+            {
+              "name": "testBanner",
+              "type": "html",
+              "label": {
+                "en-US": "Test order banner",
+                "tr": "Test siparişi bandı",
+                "ru": "Баннер тестового заказа"
+              },
+              "sample": ""
+            },
+            {
+              "name": "productName",
+              "type": "text",
+              "label": {
+                "en-US": "Product",
+                "tr": "Ürün",
+                "ru": "Товар"
+              },
+              "sample": "Gold Rank"
+            },
+            {
+              "name": "accessUntil",
+              "type": "text",
+              "label": {
+                "en-US": "Access until",
+                "tr": "Erişim sonu",
+                "ru": "Доступ до"
+              },
+              "sample": "Nov 13, 2026"
+            },
+            {
+              "name": "manageUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Manage subscription link",
+                "tr": "Aboneliği yönetme bağlantısı",
+                "ru": "Ссылка на управление подпиской"
+              },
+              "sample": "https://example.com/profile"
+            }
+          ]
+        },
+        {
+          "key": "subscription-ended",
+          "name": {
+            "en-US": "Subscription ended",
+            "tr": "Abonelik sona erdi",
+            "ru": "Подписка завершена"
+          },
+          "variables": [
+            {
+              "name": "storeName",
+              "type": "text",
+              "label": {
+                "en-US": "Store name",
+                "tr": "Mağaza adı",
+                "ru": "Название магазина"
+              },
+              "sample": "Blocky Store"
+            },
+            {
+              "name": "orderNumber",
+              "type": "text",
+              "label": {
+                "en-US": "Order number",
+                "tr": "Sipariş numarası",
+                "ru": "Номер заказа"
+              },
+              "sample": "#1042"
+            },
+            {
+              "name": "username",
+              "type": "text",
+              "label": {
+                "en-US": "Buyer (Minecraft name)",
+                "tr": "Alıcı (Minecraft adı)",
+                "ru": "Покупатель (ник Minecraft)"
+              },
+              "sample": "Steve"
+            },
+            {
+              "name": "testMode",
+              "type": "boolean",
+              "label": {
+                "en-US": "Test order",
+                "tr": "Test siparişi",
+                "ru": "Тестовый заказ"
+              },
+              "sample": false
+            },
+            {
+              "name": "testBanner",
+              "type": "html",
+              "label": {
+                "en-US": "Test order banner",
+                "tr": "Test siparişi bandı",
+                "ru": "Баннер тестового заказа"
+              },
+              "sample": ""
+            },
+            {
+              "name": "productName",
+              "type": "text",
+              "label": {
+                "en-US": "Product",
+                "tr": "Ürün",
+                "ru": "Товар"
+              },
+              "sample": "Gold Rank"
+            },
+            {
+              "name": "storeUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Store link",
+                "tr": "Mağaza bağlantısı",
+                "ru": "Ссылка на магазин"
+              },
+              "sample": "https://example.com/store"
+            },
+            {
+              "name": "reasonBuyerCancel",
+              "type": "boolean",
+              "label": {
+                "en-US": "Ended: cancelled by the buyer",
+                "tr": "Bitiş: alıcı iptal etti",
+                "ru": "Завершение: отменил покупатель"
+              },
+              "sample": true
+            },
+            {
+              "name": "reasonAdminCancel",
+              "type": "boolean",
+              "label": {
+                "en-US": "Ended: cancelled by the store",
+                "tr": "Bitiş: mağaza iptal etti",
+                "ru": "Завершение: отменил магазин"
+              },
+              "sample": false
+            },
+            {
+              "name": "reasonPaymentFailed",
+              "type": "boolean",
+              "label": {
+                "en-US": "Ended: payment failed",
+                "tr": "Bitiş: ödeme alınamadı",
+                "ru": "Завершение: оплата не прошла"
+              },
+              "sample": false
+            },
+            {
+              "name": "reasonGatewayEnded",
+              "type": "boolean",
+              "label": {
+                "en-US": "Ended: by the payment provider",
+                "tr": "Bitiş: ödeme sağlayıcısı sonlandırdı",
+                "ru": "Завершение: платёжным провайдером"
+              },
+              "sample": false
+            },
+            {
+              "name": "reasonCompleted",
+              "type": "boolean",
+              "label": {
+                "en-US": "Ended: last billing period reached",
+                "tr": "Bitiş: son dönem tamamlandı",
+                "ru": "Завершение: последний период"
+              },
+              "sample": false
+            },
+            {
+              "name": "reasonRefund",
+              "type": "boolean",
+              "label": {
+                "en-US": "Ended: order refunded",
+                "tr": "Bitiş: sipariş iade edildi",
+                "ru": "Завершение: заказ возвращён"
+              },
+              "sample": false
+            },
+            {
+              "name": "reasonChargeback",
+              "type": "boolean",
+              "label": {
+                "en-US": "Ended: payment disputed",
+                "tr": "Bitiş: ödemeye itiraz edildi",
+                "ru": "Завершение: платёж оспорен"
+              },
+              "sample": false
+            },
+            {
+              "name": "reasonProviderUnavailable",
+              "type": "boolean",
+              "label": {
+                "en-US": "Ended: payment method unavailable",
+                "tr": "Bitiş: ödeme yöntemi kullanılamıyor",
+                "ru": "Завершение: способ оплаты недоступен"
+              },
+              "sample": false
+            },
+            {
+              "name": "reasonOther",
+              "type": "boolean",
+              "label": {
+                "en-US": "Ended: other reason",
+                "tr": "Bitiş: diğer neden",
+                "ru": "Завершение: другая причина"
+              },
+              "sample": false
+            }
+          ]
+        },
+        {
+          "key": "expiry-reminder",
+          "name": {
+            "en-US": "Purchase expires soon",
+            "tr": "Ürün süresi doluyor",
+            "ru": "Срок покупки истекает"
+          },
+          "variables": [
+            {
+              "name": "storeName",
+              "type": "text",
+              "label": {
+                "en-US": "Store name",
+                "tr": "Mağaza adı",
+                "ru": "Название магазина"
+              },
+              "sample": "Blocky Store"
+            },
+            {
+              "name": "orderNumber",
+              "type": "text",
+              "label": {
+                "en-US": "Order number",
+                "tr": "Sipariş numarası",
+                "ru": "Номер заказа"
+              },
+              "sample": "#1042"
+            },
+            {
+              "name": "username",
+              "type": "text",
+              "label": {
+                "en-US": "Buyer (Minecraft name)",
+                "tr": "Alıcı (Minecraft adı)",
+                "ru": "Покупатель (ник Minecraft)"
+              },
+              "sample": "Steve"
+            },
+            {
+              "name": "testMode",
+              "type": "boolean",
+              "label": {
+                "en-US": "Test order",
+                "tr": "Test siparişi",
+                "ru": "Тестовый заказ"
+              },
+              "sample": false
+            },
+            {
+              "name": "testBanner",
+              "type": "html",
+              "label": {
+                "en-US": "Test order banner",
+                "tr": "Test siparişi bandı",
+                "ru": "Баннер тестового заказа"
+              },
+              "sample": ""
+            },
+            {
+              "name": "productName",
+              "type": "text",
+              "label": {
+                "en-US": "Product",
+                "tr": "Ürün",
+                "ru": "Товар"
+              },
+              "sample": "Gold Rank"
+            },
+            {
+              "name": "date",
+              "type": "text",
+              "label": {
+                "en-US": "Date",
+                "tr": "Tarih",
+                "ru": "Дата"
+              },
+              "sample": "Nov 13, 2026"
+            },
+            {
+              "name": "renewUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Product page link (renew)",
+                "tr": "Ürün sayfası bağlantısı (yenile)",
+                "ru": "Ссылка на товар (продлить)"
+              },
+              "sample": "https://example.com/store/gold-rank"
+            },
+            {
+              "name": "detailsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Details",
+                "tr": "Ayrıntılar",
+                "ru": "Подробности"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Product</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Gold Rank</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Valid until</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Nov 13, 2026 21:30</td></tr></tbody></table>"
+            }
+          ]
+        },
+        {
+          "key": "shipment-shipped",
+          "name": {
+            "en-US": "Shipment on its way",
+            "tr": "Kargo yola çıktı",
+            "ru": "Посылка в пути"
+          },
+          "variables": [
+            {
+              "name": "storeName",
+              "type": "text",
+              "label": {
+                "en-US": "Store name",
+                "tr": "Mağaza adı",
+                "ru": "Название магазина"
+              },
+              "sample": "Blocky Store"
+            },
+            {
+              "name": "orderNumber",
+              "type": "text",
+              "label": {
+                "en-US": "Order number",
+                "tr": "Sipariş numarası",
+                "ru": "Номер заказа"
+              },
+              "sample": "#1042"
+            },
+            {
+              "name": "username",
+              "type": "text",
+              "label": {
+                "en-US": "Buyer (Minecraft name)",
+                "tr": "Alıcı (Minecraft adı)",
+                "ru": "Покупатель (ник Minecraft)"
+              },
+              "sample": "Steve"
+            },
+            {
+              "name": "testMode",
+              "type": "boolean",
+              "label": {
+                "en-US": "Test order",
+                "tr": "Test siparişi",
+                "ru": "Тестовый заказ"
+              },
+              "sample": false
+            },
+            {
+              "name": "testBanner",
+              "type": "html",
+              "label": {
+                "en-US": "Test order banner",
+                "tr": "Test siparişi bandı",
+                "ru": "Баннер тестового заказа"
+              },
+              "sample": ""
+            },
+            {
+              "name": "orderUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Order page link",
+                "tr": "Sipariş sayfası bağlantısı",
+                "ru": "Ссылка на страницу заказа"
+              },
+              "sample": "https://example.com/store/order/K7M2Q9X4B8D6T3W5Z1RV"
+            },
+            {
+              "name": "partial",
+              "type": "boolean",
+              "label": {
+                "en-US": "Partial shipment",
+                "tr": "Kısmi gönderi",
+                "ru": "Частичная отправка"
+              },
+              "sample": false
+            },
+            {
+              "name": "trackingUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Tracking link",
+                "tr": "Takip bağlantısı",
+                "ru": "Ссылка отслеживания"
+              },
+              "sample": "https://track.example/AR123456789"
+            },
+            {
+              "name": "itemsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Items in this parcel",
+                "tr": "Bu paketteki ürünler",
+                "ru": "Товары в посылке"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">2 &#215; Poster <span style=\"color:rgb(106,114,130)\">(A2)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr></tbody></table>"
+            },
+            {
+              "name": "detailsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Details",
+                "tr": "Ayrıntılar",
+                "ru": "Подробности"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order number</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">#1042</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Carrier</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Aras Kargo</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Tracking number</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">AR123456789</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Estimated delivery</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Oct 17, 2026</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Shipping to</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Steve Miner, 12 Cube Street, 34000 Istanbul, Turkey</td></tr></tbody></table>"
+            }
+          ]
+        },
+        {
+          "key": "shipment-delivered",
+          "name": {
+            "en-US": "Shipment delivered",
+            "tr": "Kargo teslim edildi",
+            "ru": "Посылка доставлена"
+          },
+          "variables": [
+            {
+              "name": "storeName",
+              "type": "text",
+              "label": {
+                "en-US": "Store name",
+                "tr": "Mağaza adı",
+                "ru": "Название магазина"
+              },
+              "sample": "Blocky Store"
+            },
+            {
+              "name": "orderNumber",
+              "type": "text",
+              "label": {
+                "en-US": "Order number",
+                "tr": "Sipariş numarası",
+                "ru": "Номер заказа"
+              },
+              "sample": "#1042"
+            },
+            {
+              "name": "username",
+              "type": "text",
+              "label": {
+                "en-US": "Buyer (Minecraft name)",
+                "tr": "Alıcı (Minecraft adı)",
+                "ru": "Покупатель (ник Minecraft)"
+              },
+              "sample": "Steve"
+            },
+            {
+              "name": "testMode",
+              "type": "boolean",
+              "label": {
+                "en-US": "Test order",
+                "tr": "Test siparişi",
+                "ru": "Тестовый заказ"
+              },
+              "sample": false
+            },
+            {
+              "name": "testBanner",
+              "type": "html",
+              "label": {
+                "en-US": "Test order banner",
+                "tr": "Test siparişi bandı",
+                "ru": "Баннер тестового заказа"
+              },
+              "sample": ""
+            },
+            {
+              "name": "orderUrl",
+              "type": "url",
+              "label": {
+                "en-US": "Order page link",
+                "tr": "Sipariş sayfası bağlantısı",
+                "ru": "Ссылка на страницу заказа"
+              },
+              "sample": "https://example.com/store/order/K7M2Q9X4B8D6T3W5Z1RV"
+            },
+            {
+              "name": "itemsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Items in this parcel",
+                "tr": "Bu paketteki ürünler",
+                "ru": "Товары в посылке"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:24px;margin-bottom:8px;border-top-style:solid;border-top-width:1px;border-color:rgb(229,231,235)\"><tbody><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">1 &#215; Gold Rank <span style=\"color:rgb(106,114,130)\">(30 days)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr><tr><td style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83)\">2 &#215; Poster <span style=\"color:rgb(106,114,130)\">(A2)</span></td> <td align=\"right\" style=\"padding-top:10px;padding-bottom:10px;border-bottom-style:solid;border-bottom-width:1px;border-color:rgb(243,244,246);font-size:14px;line-height:20px;color:rgb(54,65,83);white-space:nowrap\"></td></tr></tbody></table>"
+            },
+            {
+              "name": "detailsTable",
+              "type": "html",
+              "label": {
+                "en-US": "Details",
+                "tr": "Ayrıntılar",
+                "ru": "Подробности"
+              },
+              "sample": "<table align=\"center\" width=\"100%\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"margin-top:16px;margin-bottom:16px;border-radius:0.5rem;background-color:rgb(249,250,251);padding:16px\"><tbody><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Order number</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">#1042</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Carrier</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Aras Kargo</td></tr><tr><td style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(106,114,130)\">Delivered on</td> <td align=\"right\" style=\"padding-top:4px;padding-bottom:4px;font-size:13px;line-height:20px;color:rgb(31,41,55)\">Oct 16, 2026</td></tr></tbody></table>"
+            }
+          ]
+        },
+        {
+          "key": "test",
+          "name": {
+            "en-US": "Test e-mail (settings check)",
+            "tr": "Test e-postası (ayar kontrolü)",
+            "ru": "Тестовое письмо (проверка настроек)"
+          },
+          "variables": [
+            {
+              "name": "storeName",
+              "type": "text",
+              "label": {
+                "en-US": "Store name",
+                "tr": "Mağaza adı",
+                "ru": "Название магазина"
+              },
+              "sample": "Blocky Store"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

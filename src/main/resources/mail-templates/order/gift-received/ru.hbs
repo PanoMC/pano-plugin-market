@@ -1,0 +1,15 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{username}} отправил(а) вам подарок на {{websiteName}}
+preheader: Вас ждёт подарок.
+buttonLabel: Перейти в магазин
+buttonUrl: {{storeUrl}}
+footer: Вы получили это письмо из-за заказа в магазине {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Вы получили подарок!</h2>
+<p>{{username}} отправил(а) вам подарок в магазине {{storeName}}. Он автоматически доставляется на ваш аккаунт Minecraft.</p>
+<p>Если чего-то не хватает, зайдите на сервер и проверьте снова через несколько минут.</p>
+{{#if giftMessage}}
+<blockquote style="font-style:italic">{{giftMessage}}</blockquote>
+{{/if}}
+{{{itemsTable}}}

@@ -1,0 +1,13 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{productName}} {{date}} tarihinde sona eriyor
+preheader: Erişiminizi korumak için yenileyin.
+buttonLabel: Yenile
+buttonUrl: {{renewUrl}}
+footer: Bu e-postayı {{storeName}} mağazasındaki bir sipariş nedeniyle alıyorsunuz.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Satın aldığınız ürünün süresi dolmak üzere</h2>
+<p>Merhaba {{username}},</p>
+<p>{{storeName}} mağazasından aldığınız {{productName}} {{date}} tarihine kadar geçerli. Ardından erişiminizi kaybedersiniz.</p>
+<p>Kesinti yaşamamak için süresi dolmadan yenileyin.</p>
+{{{detailsTable}}}

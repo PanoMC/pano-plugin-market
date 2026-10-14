@@ -1,0 +1,20 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{productName}} has ended
+preheader: Your subscription has ended.
+buttonLabel: Visit store
+buttonUrl: {{storeUrl}}
+footer: You are receiving this e-mail because of an order at {{storeName}}.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Subscription ended</h2>
+<p>Hi {{username}},</p>
+<p>Your subscription to {{productName}} at {{storeName}} has ended.</p>
+{{#if reasonBuyerCancel}}<p>It ended because you cancelled it.</p>{{/if}}
+{{#if reasonAdminCancel}}<p>It was cancelled by the store team.</p>{{/if}}
+{{#if reasonPaymentFailed}}<p>It ended because the payment could not be collected.</p>{{/if}}
+{{#if reasonGatewayEnded}}<p>It was ended by the payment provider.</p>{{/if}}
+{{#if reasonCompleted}}<p>It reached its last billing period.</p>{{/if}}
+{{#if reasonRefund}}<p>It ended because the order was refunded.</p>{{/if}}
+{{#if reasonChargeback}}<p>It ended because the payment was disputed.</p>{{/if}}
+{{#if reasonProviderUnavailable}}<p>It ended because the payment method is no longer available.</p>{{/if}}
+{{#if reasonOther}}<p>If you did not expect this, contact the store.</p>{{/if}}

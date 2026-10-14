@@ -14,18 +14,18 @@ class PlatformMailGatewayTest {
     private fun message(replyTo: String? = "support@shop.example") = OutboundMail(
         recipient = "guest@example.com",
         locale = "tr",
-        content = MailContent(subject = "Siparisiniz alindi", preheader = "p", heading = "Tesekkurler", paragraphs = listOf("Merhaba")),
+        message = MarketMailMessage("order-received", mapOf("orderNumber" to "#1")),
         replyTo = replyTo,
         attachments = listOf(MailAttachment("INV-2026-000001.pdf", "application/pdf", byteArrayOf(37, 80, 68, 70)))
     )
 
     @Test
-    fun `the options carry the recipient, the locale, the translated subject, the text part, the reply-to and the files`() {
+    fun `the options carry the recipient, the locale, the reply-to and the files, the template renders subject and text`() {
         val o = PlatformMailGateway.toOptions(message())
         assertEquals("guest@example.com", o.email)
         assertEquals("tr", o.locale)
-        assertEquals("Siparisiniz alindi", o.subject)
-        assertEquals(message().content.toText(), o.text)
+        assertNull(o.subject, "the subject comes from the template of the locale")
+        assertNull(o.text, "the platform derives the plain-text part from the rendered template")
         assertEquals("support@shop.example", o.replyTo)
         val file = o.attachments.single()
         assertEquals("INV-2026-000001.pdf", file.name)
@@ -36,7 +36,7 @@ class PlatformMailGatewayTest {
     @Test
     fun `a blank reply-to is not sent and no attachment gives an empty list`() {
         val o = PlatformMailGateway.toOptions(
-            OutboundMail("a@example.com", "en-US", MailContent(subject = "s", preheader = "p", heading = "h"), replyTo = "  ")
+            OutboundMail("a@example.com", "en-US", MarketMailMessage("order-received"), replyTo = "  ")
         )
         assertNull(o.replyTo)
         assertTrue(o.attachments.isEmpty())

@@ -29,6 +29,8 @@ import com.panomc.plugins.market.i18n.MarketI18n
 import com.panomc.plugins.market.job.MailOutboxJob
 import com.panomc.plugins.market.mail.MailComposer
 import com.panomc.plugins.market.mail.MailContentBuilder
+import com.panomc.plugins.market.support.MailRendering
+import com.panomc.plugins.market.support.rendered
 import com.panomc.plugins.market.mail.MailSite
 import com.panomc.plugins.market.pdf.InvoiceDocuments
 import com.panomc.plugins.market.pdf.InvoiceMailAttachments
@@ -285,10 +287,12 @@ class MailEnqueueIT : MarketDaoITBase() {
         // composed for the recipient: the sender's name in the subject, the message quoted, no prices, a link to the store without a token
         val content = composer().compose(mails[1], pool)
 
-        assertTrue(content.subject.endsWith("sent you a gift on Blocky Network"), content.subject)
-        assertEquals("Enjoy the rank!", content.quote)
+        val subject = MailRendering.render(content, "en-US").subject
+
+        assertTrue(subject.endsWith("sent you a gift on Blocky Network"), subject)
+        assertEquals("Enjoy the rank!", content.values["giftMessage"])
         assertTrue(content.items.all { it.total.isEmpty() })
-        assertEquals("https://shop.example/store", content.buttonUrl)
+        assertEquals("https://shop.example/store", content.values["storeUrl"])
     }
 
     @Test
@@ -346,7 +350,7 @@ class MailEnqueueIT : MarketDaoITBase() {
 
         val content = composer().compose(queued, pool)
 
-        assertEquals("Payment instructions for order #${order.id}", content.subject)
+        assertEquals("Payment instructions for order #${order.id}", MailRendering.render(content, "en-US").subject)
         assertTrue(content.instructionFields.any { it.value == "TR000000000000000000000001" })
         assertTrue(content.details.any { it.label == "Pay before" })
 
@@ -411,7 +415,7 @@ class MailEnqueueIT : MarketDaoITBase() {
         assertEquals(MailStatus.SKIPPED, byKind.getValue(MailKind.ORDER_RECEIVED).status)
         assertEquals("OBSOLETE", byKind.getValue(MailKind.ORDER_RECEIVED).lastError)
         assertEquals(MailStatus.SENT, byKind.getValue(MailKind.ORDER_CONFIRMATION).status)
-        assertEquals(listOf("Your order #${order.id} is confirmed"), gateway.sent.map { it.content.subject })
+        assertEquals(listOf("Your order #${order.id} is confirmed"), gateway.sent.map { it.rendered.subject })
     }
 
     // ================================================================================== the outbox job sends what the transitions queued
@@ -432,11 +436,11 @@ class MailEnqueueIT : MarketDaoITBase() {
 
         assertEquals("steve@example.com", sent.recipient)
         assertEquals("en-US", sent.locale)
-        assertEquals("Your order #${order.id} is confirmed", sent.content.subject)
-        assertTrue(sent.content.items.single().name.isNotEmpty())
-        assertEquals("https://shop.example/store/order/${order.publicId}?token=${order.accessToken}", sent.content.buttonUrl, "a guest order link carries the token")
+        assertEquals("Your order #${order.id} is confirmed", sent.rendered.subject)
+        assertTrue(sent.message.items.single().name.isNotEmpty())
+        assertEquals("https://shop.example/store/order/${order.publicId}?token=${order.accessToken}", sent.message.values["orderUrl"], "a guest order link carries the token")
         assertEquals(MailStatus.SENT, rows(order.id).single().status)
-        assertFalse(sent.content.toText().contains("{"), "no placeholder is left in the text")
+        assertFalse(sent.rendered.text.contains("{"), "no placeholder is left in the text")
     }
 
     // ================================================================================== ORDER_DELIVERED
@@ -476,7 +480,7 @@ class MailEnqueueIT : MarketDaoITBase() {
 
         val content = composer().compose(queued, pool)
 
-        assertEquals("Your order #${placed.order.id} has been delivered", content.subject)
+        assertEquals("Your order #${placed.order.id} has been delivered", MailRendering.render(content, "en-US").subject)
         assertTrue(content.totals.isEmpty(), "no totals in the delivered mail")
     }
 
@@ -837,9 +841,9 @@ class MailEnqueueIT : MarketDaoITBase() {
 
         val content = composer().compose(queued, pool)
 
-        assertEquals("Refund for order #${paid.order.id}", content.subject)
+        assertEquals("Refund for order #${paid.order.id}", MailRendering.render(content, "en-US").subject)
         assertEquals("€4.00", content.details.single { it.label == "Refund amount" }.value)
-        assertNull(content.secondaryLabel)
+        assertEquals("", content.values["claimUrl"], "no claim link, so no second link")
         assertFalse(composer().isObsolete(queued, pool))
     }
 
@@ -900,18 +904,18 @@ class MailEnqueueIT : MarketDaoITBase() {
 
         job(gateway, composer(InvoiceMailAttachments(w.invoices, documents) { w.config.mailAttachInvoice })).runOnce()
 
-        val confirmation = gateway.sent.single { it.content.subject.contains("is confirmed") }
-        val refund = gateway.sent.single { it.content.subject.startsWith("Refund for order") }
+        val confirmation = gateway.sent.single { it.rendered.subject.contains("is confirmed") }
+        val refund = gateway.sent.single { it.rendered.subject.startsWith("Refund for order") }
 
         assertEquals(2, gateway.sent.size)
         assertEquals(1, confirmation.attachments.size)
         assertTrue(confirmation.attachments.single().name.matches(Regex("INV-\\d{4}-\\d{6}\\.pdf")), confirmation.attachments.single().name)
         assertEquals("application/pdf", confirmation.attachments.single().contentType)
         assertEquals("%PDF", String(confirmation.attachments.single().data.copyOfRange(0, 4)))
-        assertTrue(confirmation.content.footerNote!!.contains("invoice is attached"), confirmation.content.footerNote)
+        assertTrue(confirmation.rendered.text.contains("invoice is attached"), confirmation.rendered.text)
         assertEquals(1, refund.attachments.size)
         assertTrue(refund.attachments.single().name.matches(Regex("CN-\\d{4}-\\d{6}\\.pdf")), refund.attachments.single().name)
-        assertTrue(refund.content.footerNote!!.contains("credit note is attached"), refund.content.footerNote)
+        assertTrue(refund.rendered.text.contains("credit note is attached"), refund.rendered.text)
 
         // the switch off: the same rows, no attachment and no promise in the footer
         for (row in rows(paid.order.id)) outbox.enqueue(pool, row.kind, row.refType, row.refId, "again", row.orderId, row.userId, row.recipient, row.locale)
@@ -924,7 +928,7 @@ class MailEnqueueIT : MarketDaoITBase() {
 
         assertEquals(2, quiet.sent.size)
         assertTrue(quiet.sent.all { it.attachments.isEmpty() })
-        assertTrue(quiet.sent.none { it.content.footerNote!!.contains("attached") })
+        assertTrue(quiet.sent.none { it.rendered.text.contains("attached") })
     }
 
     // ================================================================================== a row without its reference is never sent (MK-146 owns the other kinds)

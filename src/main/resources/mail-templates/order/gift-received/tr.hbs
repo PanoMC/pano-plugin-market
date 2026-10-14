@@ -1,0 +1,15 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{username}} size {{websiteName}} üzerinden bir hediye gönderdi
+preheader: Sizi bir hediye bekliyor.
+buttonLabel: Mağazayı ziyaret et
+buttonUrl: {{storeUrl}}
+footer: Bu e-postayı {{storeName}} mağazasındaki bir sipariş nedeniyle alıyorsunuz.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Bir hediye aldınız!</h2>
+<p>{{username}}, {{storeName}} mağazasından size bir hediye gönderdi. Hediye Minecraft hesabınıza otomatik olarak teslim edilir.</p>
+<p>Bir şey eksikse sunucuya girin ve birkaç dakika sonra tekrar kontrol edin.</p>
+{{#if giftMessage}}
+<blockquote style="font-style:italic">{{giftMessage}}</blockquote>
+{{/if}}
+{{{itemsTable}}}

@@ -71,9 +71,12 @@ class MailInput(
 )
 
 /**
- * Builds the [MailContent] block model of the order mails (12 section 5) from loaded rows, with no database and no host class: the
+ * Builds the [MarketMailMessage] of the order mails (12 section 5) from loaded rows, with no database and no host class: the
  * kinds of 12 section 4.1: the order kinds (MK-142) and the subscription, expiry-reminder and shipment kinds (MK-146).
- * Locale keys are `mail.<kind-key>.*` and `mail.common.*`; every string is final (translated, formatted, cut to 255 characters).
+ *
+ * The sentences live in the plugin's mail templates (`mail-templates/order/<variant>/<locale>.hbs`); this class supplies the
+ * values they read (formatted for [MailInput.locale], cut to 255 characters), the flags that pick their conditional sentences
+ * and the structured blocks, whose labels come from the `mail.blocks.*` keys of [MarketI18n].
  */
 class MailContentBuilder(
     private val i18n: MarketI18n,
@@ -84,156 +87,116 @@ class MailContentBuilder(
 ) {
     fun supports(kind: MailKind): Boolean = kind in KINDS
 
-    suspend fun build(input: MailInput): MailContent {
+    suspend fun build(input: MailInput): MarketMailMessage {
         require(supports(input.kind)) { "the mail kind ${input.kind} has no composer yet" }
 
-        val vars = vars(input)
-
         return when (input.kind) {
-            MailKind.ORDER_RECEIVED -> received(input, vars)
-            MailKind.BANK_TRANSFER_INSTRUCTIONS -> bankTransfer(input, vars)
-            MailKind.ORDER_CONFIRMATION -> confirmation(input, vars)
-            MailKind.GIFT_RECEIVED -> gift(input, vars)
-            MailKind.ORDER_DELIVERED -> delivered(input, vars)
-            MailKind.ORDER_REFUNDED -> refunded(input, vars)
-            MailKind.EXPIRY_REMINDER -> expiryReminder(input, vars)
-            MailKind.SUBSCRIPTION_REMINDER -> subscriptionReminder(input, vars)
-            MailKind.SUBSCRIPTION_PAYMENT_FAILED -> subscriptionPaymentFailed(input, vars)
-            MailKind.SUBSCRIPTION_CANCELLED -> subscriptionCancelled(input, vars)
-            MailKind.SUBSCRIPTION_ENDED -> subscriptionEnded(input, vars)
-            MailKind.SHIPMENT_SHIPPED -> shipmentShipped(input, vars)
-            MailKind.SHIPMENT_DELIVERED -> shipmentDelivered(input, vars)
+            MailKind.ORDER_RECEIVED -> received(input)
+            MailKind.BANK_TRANSFER_INSTRUCTIONS -> bankTransfer(input)
+            MailKind.ORDER_CONFIRMATION -> confirmation(input)
+            MailKind.GIFT_RECEIVED -> gift(input)
+            MailKind.ORDER_DELIVERED -> delivered(input)
+            MailKind.ORDER_REFUNDED -> refunded(input)
+            MailKind.EXPIRY_REMINDER -> expiryReminder(input)
+            MailKind.SUBSCRIPTION_REMINDER -> subscriptionReminder(input)
+            MailKind.SUBSCRIPTION_PAYMENT_FAILED -> subscriptionPaymentFailed(input)
+            MailKind.SUBSCRIPTION_CANCELLED -> subscriptionCancelled(input)
+            MailKind.SUBSCRIPTION_ENDED -> subscriptionEnded(input)
+            MailKind.SHIPMENT_SHIPPED -> shipmentShipped(input)
+            MailKind.SHIPMENT_DELIVERED -> shipmentDelivered(input)
         }
     }
 
     /** The plain test mail of the panel ("send test" without a kind): proves the e-mail settings, mentions no order. */
-    suspend fun test(locale: String): MailContent {
-        val vars = mapOf("websiteName" to cut(site().websiteName), "storeName" to cut(config().storeName.ifBlank { site().websiteName }))
-
-        return MailContent(
-            subject = i18n.t(locale, "mail.test.subject", vars), preheader = i18n.t(locale, "mail.test.preheader", vars), heading = i18n.t(locale, "mail.test.heading", vars),
-            paragraphs = listOf(i18n.t(locale, "mail.test.body", vars)), footerNote = i18n.t(locale, "mail.test.footer", vars)
-        )
-    }
+    fun test(@Suppress("UNUSED_PARAMETER") locale: String): MarketMailMessage =
+        MarketMailMessage(MarketMailMessage.TEST_VARIANT, mapOf("storeName" to storeName()))
 
     // ----- the kinds ---------------------------------------------------------------------------------------------------
 
-    private suspend fun received(i: MailInput, vars: Map<String, Any?>): MailContent = shell(
-        i, vars, "order-received",
-        paragraphs = listOf(t(i, "mail.order-received.body", vars), t(i, "mail.order-received.body-2", vars)),
-        items = items(i, withPrices = true), totals = totals(i), details = orderDetails(i, paid = false),
-        button = viewOrder(i, "mail.order-received.button")
+    private suspend fun received(i: MailInput) = message(
+        i, items = items(i, withPrices = true), totals = totals(i), details = orderDetails(i, paid = false)
     )
 
-    private suspend fun bankTransfer(i: MailInput, vars: Map<String, Any?>): MailContent {
-        val expiresAt = i.params.getValue("expiresAt")?.let { (it as? Number)?.toLong() }
-        val withExpiry = if (expiresAt != null) vars + ("expiresAt" to format.dateTime(expiresAt, i.locale)) else vars
+    private suspend fun bankTransfer(i: MailInput): MarketMailMessage {
+        val expiresAt = long(i.params, "expiresAt")
         val body = i.params.getJsonObject("instructions")
         val html = body?.getString("body")?.takeIf { it.isNotBlank() }?.let { sanitizeHtml(it) }?.takeIf { it.isNotBlank() }
         val fields = (body?.getJsonArray("fields") ?: JsonArray()).filterIsInstance<JsonObject>().mapNotNull { f ->
             val label = f.getString("label")?.trim().orEmpty()
             val value = f.getString("value")?.trim().orEmpty()
 
-            if (label.isEmpty() || value.isEmpty()) null else MailContent.Row(cut(label), cut(value))
+            if (label.isEmpty() || value.isEmpty()) null else MailRow(cut(label), cut(value))
         }
-        val details = ArrayList<MailContent.Row>()
+        val details = ArrayList<MailRow>()
 
-        details += MailContent.Row(t(i, "mail.common.order-number", vars), vars.getValue("orderNumber").toString())
-        details += MailContent.Row(t(i, "mail.common.total", vars), totalLabel(i))
+        details += MailRow(label(i, "order-number"), orderNumber(i))
+        details += MailRow(label(i, "total"), totalLabel(i))
 
-        if (expiresAt != null) details += MailContent.Row(t(i, "mail.common.pay-before", vars), format.dateTime(expiresAt, i.locale))
+        if (expiresAt != null) details += MailRow(label(i, "pay-before"), format.dateTime(expiresAt, i.locale))
 
-        val paragraphs = ArrayList<String>()
-
-        paragraphs += t(i, "mail.bank-transfer-instructions.body", withExpiry)
-
-        if (expiresAt != null) paragraphs += t(i, "mail.bank-transfer-instructions.body-2", withExpiry)
-
-        return shell(
-            i, withExpiry, "bank-transfer-instructions", paragraphs = paragraphs, items = items(i, withPrices = true), totals = totals(i), details = details,
-            instructionsHtml = html, instructionFields = fields, button = viewOrder(i, "mail.bank-transfer-instructions.button")
+        return message(
+            i, mapOf("expiresAt" to (expiresAt?.let { format.dateTime(it, i.locale) } ?: "")),
+            items = items(i, withPrices = true), totals = totals(i), details = details, instructionsHtml = html, instructionFields = fields
         )
     }
 
-    private suspend fun confirmation(i: MailInput, vars: Map<String, Any?>): MailContent {
-        val paragraphs = arrayListOf(t(i, "mail.order-confirmation.body", vars), t(i, "mail.order-confirmation.body-2", vars))
-        val address = shippingAddress(i.order)
+    private suspend fun confirmation(i: MailInput): MarketMailMessage {
+        val address = shippingAddress(i.order).takeIf { i.order.requiresShipping && it.isNotEmpty() }?.let { cut(it) }.orEmpty()
 
-        if (i.order.requiresShipping && address.isNotEmpty()) {
-            paragraphs += t(i, "mail.order-confirmation.shipping-address", vars + ("address" to cut(address)))
-        }
-
-        return shell(
-            i, vars, "order-confirmation", paragraphs = paragraphs, items = items(i, withPrices = true), totals = totals(i),
-            details = orderDetails(i, paid = true), button = viewOrder(i, "mail.order-confirmation.button"),
-            footerExtra = if (i.invoiceAttached) t(i, "mail.common.invoice-attached", vars) else null
+        return message(
+            i, mapOf("shippingAddress" to address, "invoiceAttached" to i.invoiceAttached),
+            items = items(i, withPrices = true), totals = totals(i), details = orderDetails(i, paid = true)
         )
     }
 
-    private suspend fun gift(i: MailInput, vars: Map<String, Any?>): MailContent {
-        val message = i.order.giftMessage?.trim()?.takeIf { it.isNotEmpty() }?.let { cut(it) }
-        val store = site().links.store()
+    private suspend fun gift(i: MailInput): MarketMailMessage {
+        val message = i.order.giftMessage?.trim()?.takeIf { it.isNotEmpty() }?.let { cut(it) }.orEmpty()
 
-        return shell(
-            i, vars, "gift-received", paragraphs = listOf(t(i, "mail.gift-received.body", vars), t(i, "mail.gift-received.body-2", vars)),
-            quote = message, items = items(i, withPrices = false), button = store?.let { t(i, "mail.gift-received.button", vars) to it }
-        )
+        return message(i, mapOf("giftMessage" to message, "storeUrl" to site().links.store().orEmpty()), items = items(i, withPrices = false))
     }
 
-    private suspend fun delivered(i: MailInput, vars: Map<String, Any?>): MailContent = shell(
-        i, vars, "order-delivered", paragraphs = listOf(t(i, "mail.order-delivered.body", vars)), items = items(i, withPrices = false),
-        button = viewOrder(i, "mail.order-delivered.button")
-    )
+    private suspend fun delivered(i: MailInput) = message(i, items = items(i, withPrices = false))
 
-    private suspend fun refunded(i: MailInput, vars: Map<String, Any?>): MailContent {
+    private suspend fun refunded(i: MailInput): MarketMailMessage {
         val refund = checkNotNull(i.refund) { "ORDER_REFUNDED needs its refund row" }
         val currency = refund.currency.ifBlank { i.order.currency }
         val amount = format.money(refund.amount, currency, i.locale)
-        val withAmount = vars + ("amount" to amount)
-        val details = ArrayList<MailContent.Row>()
+        val details = ArrayList<MailRow>()
 
-        details += MailContent.Row(t(i, "mail.common.order-number", withAmount), vars.getValue("orderNumber").toString())
-        details += MailContent.Row(t(i, "mail.common.refund-amount", withAmount), amount, strong = true)
+        details += MailRow(label(i, "order-number"), orderNumber(i))
+        details += MailRow(label(i, "refund-amount"), amount, strong = true)
 
-        if (refund.gatewayAmount > 0) details += MailContent.Row(t(i, "mail.common.refund-to-method", withAmount), format.money(refund.gatewayAmount, currency, i.locale))
-        if (refund.creditAmount > 0) details += MailContent.Row(t(i, "mail.common.refund-to-credits", withAmount), format.credits(refund.creditAmount, i.locale))
+        if (refund.gatewayAmount > 0) details += MailRow(label(i, "refund-to-method"), format.money(refund.gatewayAmount, currency, i.locale))
+        if (refund.creditAmount > 0) details += MailRow(label(i, "refund-to-credits"), format.credits(refund.creditAmount, i.locale))
 
-        refund.reason?.trim()?.takeIf { it.isNotEmpty() }?.let { details += MailContent.Row(t(i, "mail.common.refund-reason", withAmount), cut(it)) }
+        refund.reason?.trim()?.takeIf { it.isNotEmpty() }?.let { details += MailRow(label(i, "refund-reason"), cut(it)) }
 
         val byId = i.items.associateBy { it.id }
         val lines = i.refundItems.mapNotNull { r ->
             val item = byId[r.orderItemId] ?: return@mapNotNull null
 
-            MailContent.Item(cut(item.productName), item.variantName?.takeIf { it.isNotBlank() }?.let { cut(it) }, r.quantity.toString(), format.money(r.amount, currency, i.locale), false)
+            MailItem(cut(item.productName), item.variantName?.takeIf { it.isNotBlank() }?.let { cut(it) }, r.quantity.toString(), format.money(r.amount, currency, i.locale), false)
         }
-        val claim = refund.buyerActionUrl?.takeIf { isWebUrl(it) }
-        val view = viewOrder(i, "mail.order-refunded.button")
-        val paragraphs = listOf(t(i, "mail.order-refunded.body", withAmount), t(i, "mail.order-refunded.body-2", withAmount))
+        val claim = refund.buyerActionUrl?.takeIf { isWebUrl(it) }.orEmpty()
 
-        return shell(
-            i, withAmount, "order-refunded", paragraphs = paragraphs, items = lines, details = details,
-            button = if (claim != null) t(i, "mail.order-refunded.button-claim", withAmount) to claim else view,
-            secondary = if (claim != null) view else null,
-            footerExtra = if (i.invoiceAttached) t(i, "mail.order-refunded.credit-note-attached", withAmount) else null
+        return message(
+            i, mapOf("amount" to amount, "claimUrl" to claim, "creditNoteAttached" to i.invoiceAttached), items = lines, details = details
         )
     }
-
 
     // ----- subscription, expiry and shipment kinds (MK-146) --------------------------------------------------------------
 
     /** 12 section 5 `EXPIRY_REMINDER`: product, valid until, a "Renew" button to the product page (left out when the product is gone). */
-    private suspend fun expiryReminder(i: MailInput, vars: Map<String, Any?>): MailContent {
+    private suspend fun expiryReminder(i: MailInput): MarketMailMessage {
         val expiresAt = long(i.params, "expiresAt") ?: i.entitlement?.expiresAt ?: error("EXPIRY_REMINDER has no expiry date")
         val name = cut(entitlementProductName(i))
-        val v = vars + ("productName" to name) + ("date" to format.date(expiresAt, i.locale))
         val details = listOf(
-            MailContent.Row(t(i, "mail.common.product", v), name),
-            MailContent.Row(t(i, "mail.common.valid-until", v), format.dateTime(expiresAt, i.locale), strong = true)
+            MailRow(label(i, "product"), name),
+            MailRow(label(i, "valid-until"), format.dateTime(expiresAt, i.locale), strong = true)
         )
 
-        return shell(
-            i, v, "expiry-reminder", paragraphs = listOf(t(i, "mail.expiry-reminder.body", v), t(i, "mail.expiry-reminder.body-2", v)), details = details,
-            button = productUrl(i)?.let { t(i, "mail.expiry-reminder.button", v) to it }
+        return message(
+            i, mapOf("productName" to name, "date" to format.date(expiresAt, i.locale), "renewUrl" to productUrl(i).orEmpty()), details = details
         )
     }
 
@@ -241,136 +204,109 @@ class MailContentBuilder(
      * `SUBSCRIPTION_REMINDER`: `MANUAL` = "pay to keep it" with the pay link (the renewal order) or else the product page; `GATEWAY` / `MERCHANT` = the
      * upcoming-charge notice with the stored method. The amount is the subscription's price (the row), the date the period end the reminder was queued for.
      */
-    private suspend fun subscriptionReminder(i: MailInput, vars: Map<String, Any?>): MailContent {
+    private suspend fun subscriptionReminder(i: MailInput): MarketMailMessage {
         val sub = checkNotNull(i.subscription) { "SUBSCRIPTION_REMINDER needs its subscription row" }
         val periodEnd = long(i.params, "periodEnd") ?: sub.currentPeriodEnd ?: error("SUBSCRIPTION_REMINDER has no period end")
-        val v = subscriptionVars(i, sub, vars, periodEnd)
+        val v = subscriptionValues(i, sub, periodEnd)
         val manual = sub.mode == SubscriptionMode.MANUAL
-        val paragraphs = ArrayList<String>()
-
-        paragraphs += t(i, if (manual) "mail.subscription-reminder.body-manual" else "mail.subscription-reminder.body", v)
-
-        val method = sub.storedMethodLabel?.trim()?.takeIf { it.isNotEmpty() }
-
-        if (!manual && method != null) paragraphs += t(i, "mail.subscription-reminder.body-method", v + ("method" to cut(method)))
-
+        val method = sub.storedMethodLabel?.trim()?.takeIf { it.isNotEmpty() && !manual }?.let { cut(it) }.orEmpty()
         val details = listOf(
-            MailContent.Row(t(i, "mail.common.product", v), v.getValue("productName").toString()),
-            MailContent.Row(t(i, "mail.common.renews-on", v), format.date(periodEnd, i.locale)),
-            MailContent.Row(t(i, "mail.common.amount", v), v.getValue("amount").toString(), strong = true)
+            MailRow(label(i, "product"), v.getValue("productName").toString()),
+            MailRow(label(i, "renews-on"), format.date(periodEnd, i.locale)),
+            MailRow(label(i, "amount"), v.getValue("amount").toString(), strong = true)
         )
-        val pay = if (manual) (siteUrl(i.params.getString("payUrl")) ?: productUrl(i))?.let { t(i, "mail.subscription-reminder.button", v) to it } else null
+        val pay = if (manual) siteUrl(i.params.getString("payUrl")) ?: productUrl(i) else null
 
-        return shell(i, v, "subscription-reminder", paragraphs = paragraphs, details = details, button = pay, secondary = manage(i, v))
+        return message(
+            i, v + mapOf("manual" to manual, "paymentMethod" to method, "payUrl" to pay.orEmpty(), "manageUrl" to site().links.profile().orEmpty()),
+            details = details
+        )
     }
 
     /** `SUBSCRIPTION_PAYMENT_FAILED`: the grace date, the amount, a button to the failed renewal order (else the profile). */
-    private suspend fun subscriptionPaymentFailed(i: MailInput, vars: Map<String, Any?>): MailContent {
+    private suspend fun subscriptionPaymentFailed(i: MailInput): MarketMailMessage {
         val sub = checkNotNull(i.subscription) { "SUBSCRIPTION_PAYMENT_FAILED needs its subscription row" }
         val grace = long(i.params, "graceEndsAt") ?: sub.graceEndsAt
-        val v = subscriptionVars(i, sub, vars, null) + (if (grace != null) mapOf("graceEndsAt" to format.date(grace, i.locale)) else emptyMap())
+        val v = subscriptionValues(i, sub, null)
         val details = listOf(
-            MailContent.Row(t(i, "mail.common.product", v), v.getValue("productName").toString()),
-            MailContent.Row(t(i, "mail.common.amount", v), v.getValue("amount").toString(), strong = true)
+            MailRow(label(i, "product"), v.getValue("productName").toString()),
+            MailRow(label(i, "amount"), v.getValue("amount").toString(), strong = true)
         )
         val target = siteUrl(i.params.getString("payUrl")) ?: site().links.profile()
 
-        return shell(
-            i, v, "subscription-payment-failed",
-            paragraphs = listOf(t(i, if (grace != null) "mail.subscription-payment-failed.body" else "mail.subscription-payment-failed.body-no-grace", v), t(i, "mail.subscription-payment-failed.body-2", v)),
-            details = details, button = target?.let { t(i, "mail.subscription-payment-failed.button", v) to it }
+        return message(
+            i, v + mapOf("graceEndsAt" to (grace?.let { format.date(it, i.locale) } ?: ""), "payUrl" to target.orEmpty()), details = details
         )
     }
 
     /** `SUBSCRIPTION_CANCELLED`: access continues until `accessUntil`; a "Manage subscription" link. */
-    private suspend fun subscriptionCancelled(i: MailInput, vars: Map<String, Any?>): MailContent {
+    private suspend fun subscriptionCancelled(i: MailInput): MarketMailMessage {
         val sub = checkNotNull(i.subscription) { "SUBSCRIPTION_CANCELLED needs its subscription row" }
         val until = long(i.params, "accessUntil") ?: long(i.params, "endsAt") ?: sub.currentPeriodEnd
-        val v = subscriptionVars(i, sub, vars, until)
 
-        return shell(
-            i, v, "subscription-cancelled", paragraphs = listOf(t(i, if (until != null) "mail.subscription-cancelled.body" else "mail.subscription-cancelled.body-no-date", v + ("accessUntil" to (until?.let { format.date(it, i.locale) } ?: "")))),
-            secondary = manage(i, v)
+        return message(
+            i, subscriptionValues(i, sub, until) + mapOf(
+                "accessUntil" to (until?.let { format.date(it, i.locale) } ?: ""), "manageUrl" to site().links.profile().orEmpty()
+            )
         )
     }
 
-    /** `SUBSCRIPTION_ENDED`: the sentence of `mail.subscription-ended.reason.<END_REASON>`, `OTHER` for a reason without a text. */
-    private suspend fun subscriptionEnded(i: MailInput, vars: Map<String, Any?>): MailContent {
+    /** `SUBSCRIPTION_ENDED`: one `reason<EndReason>` flag picks the sentence; a reason without a sentence of its own is `reasonOther`. */
+    private suspend fun subscriptionEnded(i: MailInput): MarketMailMessage {
         val sub = checkNotNull(i.subscription) { "SUBSCRIPTION_ENDED needs its subscription row" }
-        val v = subscriptionVars(i, sub, vars, null)
-        val reason = (i.params.getString("endReason") ?: sub.endReason)?.trim().orEmpty()
-        val key = "mail.subscription-ended.reason.$reason".takeIf { reason.matches(REASON) && i18n.has(i.locale, it) } ?: "mail.subscription-ended.reason.OTHER"
-        val store = site().links.store()
+        val raw = (i.params.getString("endReason") ?: sub.endReason)?.trim().orEmpty()
+        val reason = raw.takeIf { it in END_REASONS } ?: "OTHER"
+        val flags = END_REASONS.associate { reasonFlag(it) to (it == reason) }
 
-        return shell(
-            i, v, "subscription-ended", paragraphs = listOf(t(i, "mail.subscription-ended.body", v), t(i, key, v)),
-            button = store?.let { t(i, "mail.subscription-ended.button", v) to it }
-        )
+        return message(i, subscriptionValues(i, sub, null) + flags + ("storeUrl" to site().links.store().orEmpty()))
     }
 
     /** 10 section 11.1 `SHIPMENT_SHIPPED`: carrier, tracking number, estimate, parcel lines, a track button (http / https only) and the order link. */
-    private suspend fun shipmentShipped(i: MailInput, vars: Map<String, Any?>): MailContent {
+    private suspend fun shipmentShipped(i: MailInput): MarketMailMessage {
         val shipment = i.shipment
         val carrier = (i.params.getString("carrierName") ?: shipment?.carrierName)?.trim()?.takeIf { it.isNotEmpty() }
         val tracking = (i.params.getString("trackingNumber") ?: shipment?.trackingNumber)?.trim()?.takeIf { it.isNotEmpty() }
         val trackUrl = (i.params.getString("trackingUrl") ?: shipment?.trackingUrl)?.trim()?.takeIf { isWebUrl(it) }
         val estimate = shipment?.estimatedDeliveryAt?.let { format.date(it, i.locale) } ?: i.params.getString("estimatedDelivery")?.trim()?.takeIf { it.isNotEmpty() }
-        val details = ArrayList<MailContent.Row>()
+        val details = ArrayList<MailRow>()
 
-        details += MailContent.Row(t(i, "mail.common.order-number", vars), vars.getValue("orderNumber").toString())
-        if (carrier != null) details += MailContent.Row(t(i, "mail.common.carrier", vars), cut(carrier))
-        if (tracking != null) details += MailContent.Row(t(i, "mail.common.tracking-number", vars), cut(tracking), strong = true)
-        if (estimate != null) details += MailContent.Row(t(i, "mail.common.estimated-delivery", vars), cut(estimate))
+        details += MailRow(label(i, "order-number"), orderNumber(i))
+        if (carrier != null) details += MailRow(label(i, "carrier"), cut(carrier))
+        if (tracking != null) details += MailRow(label(i, "tracking-number"), cut(tracking), strong = true)
+        if (estimate != null) details += MailRow(label(i, "estimated-delivery"), cut(estimate))
 
         val address = addressLines(i)
 
-        if (address.isNotEmpty()) details += MailContent.Row(t(i, "mail.common.ship-to", vars), cut(address.joinToString(", ")))
+        if (address.isNotEmpty()) details += MailRow(label(i, "ship-to"), cut(address.joinToString(", ")))
 
-        val paragraphs = arrayListOf(t(i, "mail.shipment-shipped.body", vars))
-
-        if (i.params.getBoolean("isPartial", false) == true) paragraphs += t(i, "mail.shipment-shipped.partial-note", vars)
-
-        val view = viewOrder(i, "mail.shipment-shipped.button")
-
-        return shell(
-            i, vars, "shipment-shipped", paragraphs = paragraphs, items = shipmentLines(i), details = details,
-            button = if (trackUrl != null) t(i, "mail.shipment-shipped.button-track", vars) to trackUrl else view,
-            secondary = if (trackUrl != null) viewOrder(i, "mail.common.view-order") else null
+        return message(
+            i, mapOf("partial" to (i.params.getBoolean("isPartial", false) == true), "trackingUrl" to trackUrl.orEmpty()),
+            items = shipmentLines(i), details = details
         )
     }
 
     /** `SHIPMENT_DELIVERED`: carrier, delivered date, parcel lines, the order link. */
-    private suspend fun shipmentDelivered(i: MailInput, vars: Map<String, Any?>): MailContent {
+    private suspend fun shipmentDelivered(i: MailInput): MarketMailMessage {
         val shipment = i.shipment
         val carrier = (i.params.getString("carrierName") ?: shipment?.carrierName)?.trim()?.takeIf { it.isNotEmpty() }
         val delivered = shipment?.deliveredAt?.let { format.date(it, i.locale) } ?: i.params.getString("deliveredAt")?.trim()?.takeIf { it.isNotEmpty() }
-        val details = ArrayList<MailContent.Row>()
+        val details = ArrayList<MailRow>()
 
-        details += MailContent.Row(t(i, "mail.common.order-number", vars), vars.getValue("orderNumber").toString())
-        if (carrier != null) details += MailContent.Row(t(i, "mail.common.carrier", vars), cut(carrier))
-        if (delivered != null) details += MailContent.Row(t(i, "mail.common.delivered-on", vars), cut(delivered))
+        details += MailRow(label(i, "order-number"), orderNumber(i))
+        if (carrier != null) details += MailRow(label(i, "carrier"), cut(carrier))
+        if (delivered != null) details += MailRow(label(i, "delivered-on"), cut(delivered))
 
-        return shell(
-            i, vars, "shipment-delivered", paragraphs = listOf(t(i, "mail.shipment-delivered.body", vars)), items = shipmentLines(i), details = details,
-            button = viewOrder(i, "mail.shipment-delivered.button")
-        )
+        return message(i, items = shipmentLines(i), details = details)
     }
 
     // ----- pieces of the new kinds -------------------------------------------------------------------------------------
 
-    /** `{productName}`, `{amount}` (the subscription price in its currency) and `{date}` (when [date] is given) on top of the common variables. */
-    private suspend fun subscriptionVars(i: MailInput, sub: MarketSubscription, vars: Map<String, Any?>, date: Long?): Map<String, Any?> {
+    /** `productName`, `amount` (the subscription price in its currency) and `date` (when [date] is given). */
+    private suspend fun subscriptionValues(i: MailInput, sub: MarketSubscription, date: Long?): Map<String, Any?> {
         val currency = sub.currency.ifBlank { i.order.currency }
-        val base = vars + ("productName" to cut(sub.productName)) + ("amount" to format.money(sub.price, currency, i.locale))
+        val base = mapOf("productName" to cut(sub.productName), "amount" to format.money(sub.price, currency, i.locale))
 
         return if (date != null) base + ("date" to format.date(date, i.locale)) else base
-    }
-
-    /** The "Manage subscription" link to the buyer's profile; none without a site URL. */
-    private suspend fun manage(i: MailInput, vars: Map<String, Any?>): Pair<String, String>? {
-        val profile = site().links.profile()
-
-        return profile?.let { t(i, "mail.common.manage-subscription", vars) to it }
     }
 
     /** The name of the product an entitlement reminder is about: the snapshot of its order line (never the live product). */
@@ -400,19 +336,19 @@ class MailContentBuilder(
     }
 
     /** The lines of a parcel: the `market_shipment_item` rows against the order lines, else the pre-formatted `params.items`. No prices. */
-    private fun shipmentLines(i: MailInput): List<MailContent.Item> {
+    private fun shipmentLines(i: MailInput): List<MailItem> {
         if (i.shipmentItems.isNotEmpty()) {
             val byId = i.items.associateBy { it.id }
 
             return i.shipmentItems.sortedBy { it.id }.mapNotNull { s ->
                 val line = byId[s.orderItemId] ?: return@mapNotNull null
 
-                MailContent.Item(cut(line.productName), line.variantName?.takeIf { it.isNotBlank() }?.let { cut(it) }, s.quantity.toString(), "", false)
+                MailItem(cut(line.productName), line.variantName?.takeIf { it.isNotBlank() }?.let { cut(it) }, s.quantity.toString(), "", false)
             }
         }
 
         return (i.params.getJsonArray("items") ?: JsonArray()).filterIsInstance<JsonObject>().map { o ->
-            MailContent.Item(cut(o.getString("name").orEmpty()), o.getString("variantName")?.takeIf { it.isNotBlank() }?.let { cut(it) }, (o.getValue("quantity") ?: 1).toString(), "", false)
+            MailItem(cut(o.getString("name").orEmpty()), o.getString("variantName")?.takeIf { it.isNotBlank() }?.let { cut(it) }, (o.getValue("quantity") ?: 1).toString(), "", false)
         }
     }
 
@@ -423,64 +359,53 @@ class MailContentBuilder(
 
     // ----- shared pieces -----------------------------------------------------------------------------------------------
 
-    /** The skeleton every kind shares: subject (with the test prefix), preheader, heading, greeting, banner, footer. */
-    private suspend fun shell(
+    /**
+     * The message every kind shares: the variant of [MailInput.kind], the common values (`storeName`, `orderNumber`, `username`, `orderUrl`)
+     * plus [values], the test-order flag and its banner label, and the blocks.
+     */
+    private suspend fun message(
         i: MailInput,
-        vars: Map<String, Any?>,
-        key: String,
-        paragraphs: List<String>,
-        quote: String? = null,
-        items: List<MailContent.Item> = emptyList(),
-        totals: List<MailContent.Row> = emptyList(),
-        details: List<MailContent.Row> = emptyList(),
+        values: Map<String, Any?> = emptyMap(),
+        items: List<MailItem> = emptyList(),
+        totals: List<MailRow> = emptyList(),
+        details: List<MailRow> = emptyList(),
         instructionsHtml: String? = null,
-        instructionFields: List<MailContent.Row> = emptyList(),
-        button: Pair<String, String>? = null,
-        secondary: Pair<String, String>? = null,
-        footerExtra: String? = null
-    ): MailContent {
-        val test = i.order.testMode
-        val subject = t(i, "mail.$key.subject", vars).let { if (test) "[TEST] $it" else it }
-        val greeting = if (i.kind == MailKind.GIFT_RECEIVED) emptyList() else listOf(t(i, "mail.common.hello", vars))
-        val footer = listOfNotNull(t(i, "mail.common.footer", vars), footerExtra).joinToString(" ")
+        instructionFields: List<MailRow> = emptyList()
+    ): MarketMailMessage {
+        val common = mapOf(
+            "storeName" to storeName(),
+            "orderNumber" to orderNumber(i),
+            "username" to cut(i.order.playerUsername),
+            "orderUrl" to orderUrl(i.order).orEmpty()
+        )
 
-        return MailContent(
-            subject = subject,
-            preheader = t(i, "mail.$key.preheader", vars),
-            heading = t(i, "mail.$key.heading", vars),
-            paragraphs = greeting + paragraphs,
-            testMode = test,
-            quote = quote,
+        return MarketMailMessage(
+            variant = MarketMailMessage.variantOf(i.kind),
+            values = common + values,
+            testMode = i.order.testMode,
+            testBannerLabel = if (i.order.testMode) label(i, "test-banner") else "",
             items = items,
             totals = totals,
             details = details,
             instructionsHtml = instructionsHtml,
-            instructionFields = instructionFields,
-            buttonLabel = button?.first,
-            buttonUrl = button?.second,
-            secondaryLabel = secondary?.first,
-            secondaryUrl = secondary?.second,
-            footerNote = footer,
-            testModeLabel = t(i, "mail.common.test-banner", vars)
+            instructionFields = instructionFields
         )
     }
 
-    private suspend fun t(i: MailInput, key: String, vars: Map<String, Any?>): String = i18n.t(i.locale, key, vars)
+    /** A label of the structured blocks (`mail.blocks.<key>`). */
+    private suspend fun label(i: MailInput, key: String): String = i18n.t(i.locale, "mail.blocks.$key")
 
-    /** 12 section 5: `{websiteName}`, `{storeName}`, `{orderNumber}` (= `#<order id>`), `{username}` (the payer). */
-    private fun vars(i: MailInput): Map<String, Any?> = mapOf(
-        "websiteName" to cut(site().websiteName),
-        "storeName" to cut(config().storeName.ifBlank { site().websiteName }),
-        "orderNumber" to "#${i.order.id}",
-        "username" to cut(i.order.playerUsername)
-    )
+    private fun storeName(): String = cut(config().storeName.ifBlank { site().websiteName })
 
-    /** `{n}` is plain: the template and the text alternative both add the multiplication sign. Bundle children carry no price. */
-    private suspend fun items(i: MailInput, withPrices: Boolean): List<MailContent.Item> =
-        i.items.sortedBy { it.id }.filter { it.kind != OrderItemKind.BUNDLE || true }.map { item ->
+    /** 12 section 5: the order number is `#<order id>`. */
+    private fun orderNumber(i: MailInput): String = "#${i.order.id}"
+
+    /** `{n}` is plain: the partial adds the multiplication sign. Bundle children carry no price. */
+    private suspend fun items(i: MailInput, withPrices: Boolean): List<MailItem> =
+        i.items.sortedBy { it.id }.map { item ->
             val child = item.kind == OrderItemKind.BUNDLE_CHILD || item.parentItemId != null
 
-            MailContent.Item(
+            MailItem(
                 name = cut(item.productName),
                 variant = item.variantName?.takeIf { it.isNotBlank() }?.let { cut(it) },
                 quantity = item.quantity.toString(),
@@ -490,15 +415,14 @@ class MailContentBuilder(
         }
 
     /** 12 section 5: each row only when non-zero, in order; `pricingMode <> MARKET` shows the total only; a credits-only order shows credits. */
-    private suspend fun totals(i: MailInput): List<MailContent.Row> {
+    private suspend fun totals(i: MailInput): List<MailRow> {
         val o = i.order
-        val rows = ArrayList<MailContent.Row>()
-        val vars = vars(i)
+        val rows = ArrayList<MailRow>()
 
-        suspend fun row(label: String, amount: Long, negative: Boolean = false, key: String = label) {
+        suspend fun row(key: String, amount: Long, negative: Boolean = false) {
             if (amount == 0L) return
 
-            rows += MailContent.Row(t(i, "mail.common.$key", vars), format.money(if (negative) -amount else amount, o.currency, i.locale))
+            rows += MailRow(label(i, key), format.money(if (negative) -amount else amount, o.currency, i.locale))
         }
 
         if (o.pricingMode == PricingMode.MARKET) {
@@ -508,16 +432,14 @@ class MailContentBuilder(
             row("payment-fee", o.paymentFee)
 
             if (o.vatTotal != 0L) {
-                rows += MailContent.Row(
-                    t(i, if (o.pricesIncludeVat) "mail.common.vat-included" else "mail.common.vat", vars), format.money(o.vatTotal, o.currency, i.locale)
-                )
+                rows += MailRow(label(i, if (o.pricesIncludeVat) "vat-included" else "vat"), format.money(o.vatTotal, o.currency, i.locale))
             }
         }
 
-        rows += MailContent.Row(t(i, "mail.common.total", vars), totalLabel(i), strong = true)
+        rows += MailRow(label(i, "total"), totalLabel(i), strong = true)
 
         if (o.pricingMode == PricingMode.MARKET && o.creditAmount > 0 && o.gatewayAmount > 0) {
-            rows += MailContent.Row(t(i, "mail.common.paid-with-credits", vars), format.credits(o.creditAmount, i.locale))
+            rows += MailRow(label(i, "paid-with-credits"), format.credits(o.creditAmount, i.locale))
         }
 
         return rows
@@ -527,27 +449,20 @@ class MailContentBuilder(
     private suspend fun totalLabel(i: MailInput): String =
         if (i.order.creditAmount > 0 && i.order.gatewayAmount == 0L) format.credits(i.order.creditAmount, i.locale) else format.money(i.order.totalPrice, i.order.currency, i.locale)
 
-    private suspend fun orderDetails(i: MailInput, paid: Boolean): List<MailContent.Row> {
+    private suspend fun orderDetails(i: MailInput, paid: Boolean): List<MailRow> {
         val o = i.order
-        val vars = vars(i)
-        val rows = ArrayList<MailContent.Row>()
+        val rows = ArrayList<MailRow>()
 
-        rows += MailContent.Row(t(i, "mail.common.order-number", vars), vars.getValue("orderNumber").toString())
-        rows += MailContent.Row(t(i, "mail.common.order-date", vars), format.dateTime(if (paid) o.paidAt ?: o.createdAt else o.createdAt, i.locale))
+        rows += MailRow(label(i, "order-number"), orderNumber(i))
+        rows += MailRow(label(i, "order-date"), format.dateTime(if (paid) o.paidAt ?: o.createdAt else o.createdAt, i.locale))
 
-        if (o.paymentLabel.isNotBlank()) rows += MailContent.Row(t(i, "mail.common.payment-method", vars), cut(o.paymentLabel))
-        if (paid && o.isGift && o.recipientUsername.isNotBlank()) rows += MailContent.Row(t(i, "mail.common.recipient", vars), cut(o.recipientUsername))
+        if (o.paymentLabel.isNotBlank()) rows += MailRow(label(i, "payment-method"), cut(o.paymentLabel))
+        if (paid && o.isGift && o.recipientUsername.isNotBlank()) rows += MailRow(label(i, "recipient"), cut(o.recipientUsername))
 
         return rows
     }
 
-    /** The button of every order mail (12 section 4.4): the order page, with the access token for a guest order; none without a site URL. */
-    private suspend fun viewOrder(i: MailInput, key: String): Pair<String, String>? {
-        val url = orderUrl(i.order) ?: return null
-
-        return t(i, key, vars(i)) to url
-    }
-
+    /** The order page (12 section 4.4), with the access token for a guest order; none without a site URL. */
     private fun orderUrl(order: MarketOrder): String? {
         val publicId = order.publicId?.takeIf { it.isNotBlank() } ?: return null
         val token = if (order.userId == null && !order.accessToken.isNullOrBlank()) mapOf("token" to order.accessToken) else emptyMap()
@@ -578,8 +493,16 @@ class MailContentBuilder(
     companion object {
         const val MAX_TEXT = 255
 
-        private val REASON = Regex("^[A-Z_]{1,40}$")
         private val SLUG = Regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
+
+        /** The end reasons with a sentence of their own in the `subscription-ended` template; any other reason reads `OTHER`. */
+        val END_REASONS = listOf(
+            "BUYER_CANCEL", "ADMIN_CANCEL", "PAYMENT_FAILED", "GATEWAY_ENDED", "COMPLETED", "REFUND", "CHARGEBACK", "PROVIDER_UNAVAILABLE", "OTHER"
+        )
+
+        /** `PAYMENT_FAILED` -> `reasonPaymentFailed`, the boolean variable of the template. */
+        fun reasonFlag(reason: String): String =
+            "reason" + reason.split('_').joinToString("") { part -> part.lowercase().replaceFirstChar { it.uppercase() } }
 
         /** Every kind has a composer (MK-142: the order kinds, MK-146: subscription, expiry and shipment kinds). */
         val KINDS: Set<MailKind> = MailKind.entries.toSet()
@@ -639,7 +562,7 @@ class MailComposer(
         }
     }
 
-    override suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient): MailContent {
+    override suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient): MarketMailMessage {
         val order = checkNotNull(orderOf(row, sqlClient)) { "order of mail ${row.id} is gone" }
         val items = orderItems.getByOrderIds(listOf(order.id), sqlClient)
         val refund = if (row.kind == MailKind.ORDER_REFUNDED) refundOf(row, order, sqlClient) else null

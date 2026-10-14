@@ -1,0 +1,12 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{orderNumber}} numaralı siparişiniz teslim edildi
+preheader: Siparişinizdeki her şey teslim edildi.
+buttonLabel: Siparişi görüntüle
+buttonUrl: {{orderUrl}}
+footer: Bu e-postayı {{storeName}} mağazasındaki bir sipariş nedeniyle alıyorsunuz.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Sipariş teslim edildi</h2>
+<p>Merhaba {{username}},</p>
+<p>{{storeName}} mağazasındaki {{orderNumber}} numaralı siparişinizin tüm ürünleri teslim edildi. İyi eğlenceler!</p>
+{{{itemsTable}}}

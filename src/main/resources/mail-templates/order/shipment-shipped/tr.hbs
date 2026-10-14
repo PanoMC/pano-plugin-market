@@ -1,0 +1,19 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{orderNumber}} numaralı siparişiniz yola çıktı
+preheader: Paketiniz kargo firmasına teslim edildi.
+buttonLabel: {{#if trackingUrl}}Gönderiyi takip et{{else}}Siparişi görüntüle{{/if}}
+buttonUrl: {{#if trackingUrl}}{{trackingUrl}}{{else}}{{orderUrl}}{{/if}}
+footer: Bu e-postayı {{storeName}} mağazasındaki bir sipariş nedeniyle alıyorsunuz.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Siparişiniz yola çıktı</h2>
+<p>Merhaba {{username}},</p>
+<p>Güzel haber! {{storeName}} mağazasındaki {{orderNumber}} numaralı siparişiniz kargoya verildi.</p>
+{{#if partial}}
+<p>Bu paket siparişinizin bir bölümünü içeriyor. Kalanı başka bir gönderiyle gelecek.</p>
+{{/if}}
+{{{itemsTable}}}
+{{{detailsTable}}}
+{{#if trackingUrl}}
+{{#if orderUrl}}<p style="font-size:14px;line-height:20px;margin:8px 0 16px 0;text-align:center"><a href="{{orderUrl}}" style="color:rgb(54,65,83)" target="_blank">Siparişi görüntüle</a></p>{{/if}}
+{{/if}}

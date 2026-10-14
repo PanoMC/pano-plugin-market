@@ -1,0 +1,20 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{productName}} sona erdi
+preheader: Aboneliğiniz sona erdi.
+buttonLabel: Mağazayı ziyaret et
+buttonUrl: {{storeUrl}}
+footer: Bu e-postayı {{storeName}} mağazasındaki bir sipariş nedeniyle alıyorsunuz.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Abonelik sona erdi</h2>
+<p>Merhaba {{username}},</p>
+<p>{{storeName}} mağazasındaki {{productName}} aboneliğiniz sona erdi.</p>
+{{#if reasonBuyerCancel}}<p>Aboneliği siz iptal ettiğiniz için sona erdi.</p>{{/if}}
+{{#if reasonAdminCancel}}<p>Mağaza ekibi tarafından iptal edildi.</p>{{/if}}
+{{#if reasonPaymentFailed}}<p>Ödeme tahsil edilemediği için sona erdi.</p>{{/if}}
+{{#if reasonGatewayEnded}}<p>Ödeme sağlayıcısı tarafından sonlandırıldı.</p>{{/if}}
+{{#if reasonCompleted}}<p>Son faturalandırma dönemine ulaştı.</p>{{/if}}
+{{#if reasonRefund}}<p>Sipariş iade edildiği için sona erdi.</p>{{/if}}
+{{#if reasonChargeback}}<p>Ödemeye itiraz edildiği için sona erdi.</p>{{/if}}
+{{#if reasonProviderUnavailable}}<p>Ödeme yöntemi artık kullanılamadığı için sona erdi.</p>{{/if}}
+{{#if reasonOther}}<p>Bunu beklemiyorsanız mağazayla iletişime geçin.</p>{{/if}}

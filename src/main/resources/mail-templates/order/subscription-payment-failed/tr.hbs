@@ -1,0 +1,17 @@
+---
+subject: {{#if testMode}}[TEST] {{/if}}{{productName}} için ödeme başarısız
+preheader: Ödeme yönteminizden tahsilat yapılamadı.
+buttonLabel: Ödemeyi güncelle
+buttonUrl: {{payUrl}}
+footer: Bu e-postayı {{storeName}} mağazasındaki bir sipariş nedeniyle alıyorsunuz.
+---
+{{{testBanner}}}
+<h2 style="text-align:center">Ödeme başarısız</h2>
+<p>Merhaba {{username}},</p>
+{{#if graceEndsAt}}
+<p>{{storeName}} mağazasındaki {{productName}} aboneliğiniz için {{amount}} tahsil edilemedi. Erişiminiz {{graceEndsAt}} tarihine kadar devam ediyor.</p>
+{{else}}
+<p>{{storeName}} mağazasındaki {{productName}} aboneliğiniz için {{amount}} tahsil edilemedi.</p>
+{{/if}}
+<p>Aboneliği sürdürmek için lütfen ödeme bilginizi güncelleyin.</p>
+{{{detailsTable}}}

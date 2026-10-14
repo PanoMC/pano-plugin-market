@@ -292,7 +292,7 @@ class MailOutboxJobIT : MarketDaoITBase() {
         val m = gateway.sent.single()
         assertEquals("guest@example.com", m.recipient)
         assertEquals("tr", m.locale)
-        assertEquals("Subject ORDER_CONFIRMATION", m.content.subject)
+        assertEquals("order-confirmation", m.message.variant)
         assertEquals("support@shop.example", m.replyTo)
         assertTrue(m.attachments.isEmpty())
 
@@ -587,7 +587,7 @@ class MailOutboxJobIT : MarketDaoITBase() {
 
         assertEquals(2, job.runOnce())
 
-        val m = gateway.sent.first { it.content.paragraphs == listOf("Row $withPdf") }
+        val m = gateway.sent.first { it.message.values["orderNumber"] == "Row $withPdf" }
         assertEquals("INV-1.pdf", m.attachments.single().name)
         assertEquals("application/pdf", m.attachments.single().contentType)
         assertEquals(listOf<Byte>(1, 2, 3), m.attachments.single().data.toList())
@@ -596,7 +596,7 @@ class MailOutboxJobIT : MarketDaoITBase() {
 
         assertEquals(MailStatus.SENT, row(noPdf).status)
         assertEquals("INVOICE_RENDER_FAILED", row(noPdf).lastError)
-        assertTrue(gateway.sent.first { it.content.paragraphs == listOf("Row $noPdf") }.attachments.isEmpty())
+        assertTrue(gateway.sent.first { it.message.values["orderNumber"] == "Row $noPdf" }.attachments.isEmpty())
     }
 
     @Test
@@ -621,7 +621,7 @@ class MailOutboxJobIT : MarketDaoITBase() {
         assertTrue(handled.all { it.isSuccess }, "$handled")
         assertEquals(15, handled.sumOf { it.getOrThrow() })
         assertEquals(15, gateway.calls.size)
-        assertEquals(15, gateway.calls.map { it.content.paragraphs.single() }.toSet().size)
+        assertEquals(15, gateway.calls.map { it.message.values["orderNumber"] }.toSet().size)
         assertTrue(ids.all { row(it).status == MailStatus.SENT && row(it).attempts == 1 })
         assertTrue(gateway.maxConcurrent >= 2, "the two jobs ought to have overlapped")
     }

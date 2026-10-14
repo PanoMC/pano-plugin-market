@@ -118,7 +118,7 @@ class MailOutboxJob(
         val message = OutboundMail(
             recipient = row.recipient,
             locale = row.locale,
-            content = content,
+            message = content,
             replyTo = config().mailReplyTo.takeIf { it.isNotBlank() },
             attachments = attachments.files
         )
