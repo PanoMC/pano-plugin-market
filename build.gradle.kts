@@ -11,8 +11,8 @@ buildscript {
 }
 
 plugins {
-    kotlin("jvm") version "2.2.21"
-    kotlin("kapt") version "2.2.21"
+    kotlin("jvm") version "2.4.21"
+    kotlin("kapt") version "2.4.21"
     id("com.gradleup.shadow") version "8.3.8"
     `maven-publish`
 }
@@ -227,6 +227,8 @@ dependencies {
     compileOnly(kotlin("reflect"))
 
     compileOnly("org.pf4j:pf4j:${pf4jVersion}")
+    // Vert.x types carry io.vertx.codegen.annotations.Nullable; Kotlin 2.4 needs the annotation on the compile classpath
+    compileOnly("io.vertx:vertx-codegen-api:${vertxVersion}")
     kapt("org.pf4j:pf4j:${pf4jVersion}")
     compileOnly("io.vertx:vertx-web:${vertxVersion}")
     compileOnly("io.vertx:vertx-lang-kotlin:${vertxVersion}")
