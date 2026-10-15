@@ -21,7 +21,7 @@
           "description": "Order #{order.id} of {username} was disputed",
           "won": {
             "title": "Chargeback won",
-            "description": "The dispute on order #{order.id} was decided in the store's favour"
+            "description": "The dispute on order #{order.id} was decided in the store's favor"
           }
         }
       },
@@ -35,8 +35,8 @@
           "description": "The subscription of {username} was renewed"
         },
         "cancelled": {
-          "title": "Subscription cancelled",
-          "description": "The subscription of {username} was cancelled"
+          "title": "Subscription canceled",
+          "description": "The subscription of {username} was canceled"
         },
         "expired": {
           "title": "Subscription expired",

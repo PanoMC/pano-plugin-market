@@ -1485,7 +1485,7 @@
         {
           "key": "subscription-cancelled",
           "name": {
-            "en-US": "Subscription cancelled",
+            "en-US": "Subscription canceled",
             "tr": "Abonelik iptal edildi",
             "ru": "Подписка отменена"
           },
@@ -1634,7 +1634,7 @@
               "name": "reasonBuyerCancel",
               "type": "boolean",
               "label": {
-                "en-US": "Ended: cancelled by the buyer",
+                "en-US": "Ended: canceled by the buyer",
                 "tr": "Bitiş: alıcı iptal etti",
                 "ru": "Завершение: отменил покупатель"
               },
@@ -1644,7 +1644,7 @@
               "name": "reasonAdminCancel",
               "type": "boolean",
               "label": {
-                "en-US": "Ended: cancelled by the store",
+                "en-US": "Ended: canceled by the store",
                 "tr": "Bitiş: mağaza iptal etti",
                 "ru": "Завершение: отменил магазин"
               },

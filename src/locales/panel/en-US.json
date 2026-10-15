@@ -231,7 +231,7 @@
         "YEAR": "Years"
       },
       "max-cycles": "Maximum Cycles",
-      "max-cycles-placeholder": "Empty means until cancelled",
+      "max-cycles-placeholder": "Empty means until canceled",
       "limit-stock": "Limit Stock",
       "adjust-stock": "Adjust Stock",
       "currency-prices": "Prices Per Currency",
@@ -660,7 +660,7 @@
         "revoke": "Revoke...",
         "editShippingAddress": "Edit Shipping Address...",
         "runChargebackActions": "Run Chargeback Actions",
-        "anonymize": "Anonymise...",
+        "anonymize": "Anonymize...",
         "createShipment": "Create Shipment...",
         "resendMail": "Resend E-mail...",
         "rerun": "Re-run Delivery",
@@ -698,9 +698,9 @@
           "cta": "Run Actions"
         },
         "anonymize": {
-          "title": "Anonymise this order?",
+          "title": "Anonymize this order?",
           "description": "The e-mail, addresses and IP address are blanked. This cannot be undone.",
-          "cta": "Anonymise"
+          "cta": "Anonymize"
         },
         "invoice-regenerate": {
           "title": "Regenerate the invoices?",
@@ -714,7 +714,7 @@
         },
         "refund-cancel": {
           "title": "Cancel this refund?",
-          "description": "The refund request is cancelled. Nothing is sent to the buyer.",
+          "description": "The refund request is canceled. Nothing is sent to the buyer.",
           "cta": "Cancel Refund"
         },
         "delivery-retry": {
@@ -724,17 +724,17 @@
         },
         "delivery-offer-again": {
           "title": "Offer this delivery again now?",
-          "description": "Safe: the game server recognises the same key and runs it only once.",
+          "description": "Safe: the game server recognizes the same key and runs it only once.",
           "cta": "Offer Again"
         },
         "delivery-cancel": {
           "title": "Cancel this delivery?",
-          "description": "The delivery will not run. A delivery already on the game server is cancelled when it answers.",
+          "description": "The delivery will not run. A delivery already on the game server is canceled when it answers.",
           "cta": "Cancel Delivery"
         },
         "dispute-WON": {
           "title": "Mark this dispute as won?",
-          "description": "The dispute is resolved in your favour.",
+          "description": "The dispute is resolved in your favor.",
           "cta": "Mark Won"
         },
         "dispute-LOST": {
@@ -749,7 +749,7 @@
         },
         "shipment-cancel": {
           "title": "Cancel this shipment?",
-          "description": "The shipment is cancelled at the carrier when possible.",
+          "description": "The shipment is canceled at the carrier when possible.",
           "cta": "Cancel Shipment"
         }
       },
@@ -758,18 +758,18 @@
         "rate-refreshed": "Exchange rate refreshed.",
         "note-saved": "Note saved.",
         "chargeback": "{count, plural, one {# chargeback action created.} other {# chargeback actions created.}}",
-        "anonymized": "Order anonymised.",
+        "anonymized": "Order anonymized.",
         "revoked": "{count, plural, one {# revoke delivery queued.} other {# revoke deliveries queued.}}",
         "payment-queried": "Payment status checked.",
         "refund-retried": "Refund sent again.",
-        "refund-cancelled": "Refund cancelled.",
+        "refund-cancelled": "Refund canceled.",
         "delivery-retried": "Delivery queued again.",
-        "delivery-cancelled": "Delivery cancelled.",
+        "delivery-cancelled": "Delivery canceled.",
         "dispute-resolved": "Dispute updated.",
         "mail-retried": "Mail sent again.",
         "shipment-tracked": "Shipment tracking updated.",
         "shipment-retried": "Shipment retried.",
-        "shipment-cancelled": "Shipment cancelled.",
+        "shipment-cancelled": "Shipment canceled.",
         "invoice-regenerated": "Invoices regenerated."
       }
     },
@@ -862,7 +862,7 @@
       "cancel-title": "Cancel Delivery",
       "cancel-description": "If the game server already has the delivery, it shows as cancel requested until the server answers.",
       "toast-retry": "The delivery was queued again.",
-      "toast-cancel": "The delivery was cancelled."
+      "toast-cancel": "The delivery was canceled."
     },
     "goals": {
       "title": "Goals",
@@ -955,9 +955,9 @@
       },
       "cancel": "Cancel",
       "cancel-title": "Cancel Payout",
-      "cancel-description": "The pending payout of {amount} will be cancelled and the amount becomes available again.",
+      "cancel-description": "The pending payout of {amount} will be canceled and the amount becomes available again.",
       "cancel-confirm": "Cancel Payout",
-      "toast-cancelled": "Payout cancelled."
+      "toast-cancelled": "Payout canceled."
     },
     "blocks": {
       "title": "Block List",
@@ -996,7 +996,7 @@
         "all": "All",
         "active": "Active",
         "past-due": "Past Due",
-        "cancelled": "Cancelled"
+        "cancelled": "Canceled"
       },
       "table": {
         "id": "Id",
@@ -1136,7 +1136,7 @@
         "NO_ROWS": "Add at least one row.",
         "CELL": "Fill in every highlighted value.",
         "RATES_REQUIRED": "Add at least one zone with rates.",
-        "ZONE_REQUIRED": "Tick at least one zone.",
+        "ZONE_REQUIRED": "Select at least one zone.",
         "DUPLICATE_ZONE": "A zone can appear only once.",
         "UNKNOWN_ZONE": "A zone of these rates no longer exists. Remove it.",
         "RATE_OVERLAP": "The server found overlapping ranges in a zone. Check the ranges.",
@@ -1173,11 +1173,11 @@
       },
       "cancel": {
         "title": "Cancel this shipment?",
-        "description": "The shipment is cancelled at the carrier when possible and its items become shippable again."
+        "description": "The shipment is canceled at the carrier when possible and its items become shippable again."
       },
       "force": {
         "title": "Cancel anyway?",
-        "description": "The carrier could not confirm the cancellation. The shipment is cancelled here only; cancel it at the carrier yourself, or a label may still be billed.",
+        "description": "The carrier could not confirm the cancellation. The shipment is canceled here only; cancel it at the carrier yourself, or a label may still be billed.",
         "cta": "Cancel Anyway"
       },
       "release": {
@@ -1188,7 +1188,7 @@
         "tracked": "Shipment tracking updated.",
         "retried": "Shipment retried.",
         "released": "Items released.",
-        "cancelled": "Shipment cancelled.",
+        "cancelled": "Shipment canceled.",
         "updated": "Shipment updated."
       }
     },
@@ -1516,7 +1516,7 @@
       },
       "toast": {
         "markPaid": "Order marked as paid.",
-        "cancel": "Order cancelled.",
+        "cancel": "Order canceled.",
         "markFailed": "Order marked as failed.",
         "approveTransfer": "Transfer approved.",
         "rejectTransfer": "Transfer rejected."
@@ -1600,7 +1600,7 @@
         "CASHBACK_REVERSAL": "The cashback of {amount} is taken back. {shortfall} of it is already spent and cannot be taken back.",
         "CREDIT_CLAWBACK": "Credits granted by this order are taken back: {amount}. {shortfall} of it is already spent and cannot be taken back.",
         "GATEWAY_PARTIAL_REFUND_NOT_SUPPORTED": "The payment method cannot refund part of a payment. Refund manually instead.",
-        "CREDIT_ACCOUNT_CLOSED": "The buyer's account was anonymised, so {credits} cannot be returned and are forfeited.",
+        "CREDIT_ACCOUNT_CLOSED": "The buyer's account was anonymized, so {credits} cannot be returned and are forfeited.",
         "UPGRADE_DEPENDENT": "An upgrade order ({order}) depends on this purchase. Its price was reduced by {deduction}. Choose what happens to it.",
         "OLDER_SUBSCRIPTION_PERIOD": "This is an older subscription period. Delivered items are not revoked.",
         "UNKNOWN": "The refund has a warning this panel version does not know. Reload the page."
@@ -1831,7 +1831,7 @@
       "hint-now": "The subscription ends now and its actions are revoked as configured.",
       "reason": "Reason (optional)",
       "submit": "Cancel Subscription",
-      "toast-cancelled": "The subscription was cancelled.",
+      "toast-cancelled": "The subscription was canceled.",
       "error": {
         "reason-TOO_LONG": "The reason can be at most 255 characters."
       }
@@ -2329,7 +2329,7 @@
     },
     "legal": {
       "required": "Require Acceptance At Checkout",
-      "required-hint": "Buyers must tick a box to accept the active text. Each order records the version they accepted.",
+      "required-hint": "Buyers must check a box to accept the active text. Each order records the version they accepted.",
       "locale": "Language",
       "title": "Title",
       "content": "Text",
@@ -2370,7 +2370,7 @@
       "max-attempts-hint": "How often a delivery is retried after a retryable error. Between 1 and 20.",
       "online-wait-days": "Wait For Player",
       "online-wait-days-hint": "Give up waiting for an offline player after this many days. 0 waits forever.",
-      "ack-timeout": "Acknowledgement Timeout",
+      "ack-timeout": "Acknowledgment Timeout",
       "ack-timeout-hint": "How long to wait for a server's result before the delivery is offered again. Doubles with every attempt.",
       "subscription-grace-days": "Subscription Grace Period",
       "subscription-grace-days-hint": "How long a subscription stays past due before it ends.",
@@ -2401,7 +2401,7 @@
         "ALL_TIME": "All Time"
       },
       "goal": "Community Goal",
-      "goal-hint": "A progress bar towards the active goal.",
+      "goal-hint": "A progress bar toward the active goal.",
       "open-goals": "Manage Goals",
       "sale-badges": "Sale Badges",
       "sale-badges-hint": "Strikethrough price and a sale badge on discounted products.",
@@ -2480,7 +2480,7 @@
         "store-command": "/store prints the store link and the player's last purchases.",
         "credits-command": "/credits prints the credit balance.",
         "join-notifications": "Tells players about deliveries that waited and gifts when they join.",
-        "store-menu": "A chest menu with the catalogue (Spigot, Paper and Folia).",
+        "store-menu": "A chest menu with the catalog (Spigot, Paper and Folia).",
         "admin-commands": "/panomarket commands to manage credits and purchases.",
         "placeholders": "Placeholders such as the credit balance and the top supporter.",
         "luckperms": "Runs permission deliveries through LuckPerms.",
@@ -2496,7 +2496,7 @@
         "purchases": "List purchases"
       },
       "broadcast-template": "Broadcast Text",
-      "broadcast-template-hint": "Variables: {variables}. Colour codes start with &.",
+      "broadcast-template-hint": "Variables: {variables}. Color codes start with &.",
       "broadcast-preview": "Preview",
       "vault-mode": "Vault Economy",
       "vault-mode-hint": "How credits meet the server's Vault economy.",
@@ -2873,15 +2873,15 @@
     "PRODUCT_REQUIREMENT_NOT_MET": "A product requirement is not met.",
     "PRICE_CHANGED": "The price has changed. Review it and try again.",
     "ORDER_NOT_PAYABLE": "This order can no longer be paid.",
-    "ORDER_NOT_CANCELLABLE": "This order can no longer be cancelled.",
+    "ORDER_NOT_CANCELLABLE": "This order can no longer be canceled.",
     "ORDER_NOT_SHIPPABLE": "This order cannot be shipped in its current state.",
-    "SUBSCRIPTION_NOT_CANCELLABLE": "This subscription can no longer be cancelled.",
+    "SUBSCRIPTION_NOT_CANCELLABLE": "This subscription can no longer be canceled.",
     "SUBSCRIPTION_NOT_RESUMABLE": "This subscription cannot be resumed.",
     "SUBSCRIPTION_NOT_RETRYABLE": "The charge of this subscription cannot be retried.",
     "SUBSCRIPTION_NOT_MANAGEABLE": "This subscription cannot be managed here.",
     "DELIVERY_NOT_RETRYABLE": "This delivery cannot be retried in its current state.",
-    "DELIVERY_NOT_CANCELLABLE": "This delivery cannot be cancelled in its current state.",
-    "SHIPMENT_NOT_CANCELLABLE": "This shipment cannot be cancelled in its current state.",
+    "DELIVERY_NOT_CANCELLABLE": "This delivery cannot be canceled in its current state.",
+    "SHIPMENT_NOT_CANCELLABLE": "This shipment cannot be canceled in its current state.",
     "INVALID_STATE": "The item changed in the meantime. The data was refreshed.",
     "IDEMPOTENCY_CONFLICT": "This request was already sent with different content. Reload the page and try again.",
     "PROVIDER_UNAVAILABLE": "The payment provider is not available right now.",
@@ -2911,7 +2911,7 @@
       "REFUNDED": "Refunded",
       "CHARGEBACK": "Chargeback",
       "FAILED": "Failed",
-      "CANCELLED": "Cancelled",
+      "CANCELLED": "Canceled",
       "EXPIRED": "Expired"
     },
     "payment": {
@@ -2920,7 +2920,7 @@
       "PROCESSING": "Processing",
       "SUCCEEDED": "Succeeded",
       "FAILED": "Failed",
-      "CANCELLED": "Cancelled",
+      "CANCELLED": "Canceled",
       "EXPIRED": "Expired",
       "REVIEW": "In Review"
     },
@@ -2929,7 +2929,7 @@
       "PENDING": "Pending",
       "SUCCEEDED": "Succeeded",
       "FAILED": "Failed",
-      "CANCELLED": "Cancelled"
+      "CANCELLED": "Canceled"
     },
     "delivery": {
       "PENDING": "Pending",
@@ -2941,7 +2941,7 @@
       "CONFIRMED": "Confirmed",
       "FAILED": "Failed",
       "SENT": "Sent, Waiting For The Server",
-      "CANCELLED": "Cancelled"
+      "CANCELLED": "Canceled"
     },
     "fulfillment": {
       "NONE": "None",
@@ -2968,7 +2968,7 @@
       "EXCEPTION": "Exception",
       "RETURNING": "Returning",
       "RETURNED": "Returned",
-      "CANCELLED": "Cancelled",
+      "CANCELLED": "Canceled",
       "LOST": "Lost"
     },
     "subscription": {
@@ -2976,7 +2976,7 @@
       "ACTIVE": "Active",
       "PAST_DUE": "Past Due",
       "PAUSED": "Paused",
-      "CANCELLED": "Cancelled",
+      "CANCELLED": "Canceled",
       "EXPIRED": "Expired",
       "COMPLETED": "Completed"
     },
@@ -3005,7 +3005,7 @@
       "PENDING": "Pending",
       "PAID": "Paid",
       "FAILED": "Failed",
-      "CANCELLED": "Cancelled"
+      "CANCELLED": "Canceled"
     },
     "provider": {
       "ACTIVE": "Active",
@@ -3061,7 +3061,7 @@
       "PAYMENT_STARTED": "Payment started",
       "PAYMENT_SUCCEEDED": "Payment succeeded",
       "PAYMENT_FAILED": "Payment failed",
-      "PAYMENT_CANCELLED": "Payment cancelled",
+      "PAYMENT_CANCELLED": "Payment canceled",
       "BANK_TRANSFER_NOTIFIED": "Bank transfer reported",
       "REVIEW_OPENED": "Review opened",
       "REFUND_REQUESTED": "Refund requested",
@@ -3078,7 +3078,7 @@
       "DELIVERY_REVOKED": "Delivery revoked",
       "SHIPMENT_CREATED": "Shipment created",
       "SHIPMENT_UPDATED": "Shipment updated",
-      "SHIPMENT_CANCELLED": "Shipment cancelled",
+      "SHIPMENT_CANCELLED": "Shipment canceled",
       "SUBSCRIPTION_STARTED": "Subscription started",
       "SUBSCRIPTION_RENEWED": "Subscription renewed",
       "SUBSCRIPTION_PAST_DUE": "Subscription past due",
@@ -3123,7 +3123,7 @@
       "ORDER_REFUNDED": "Order refunded",
       "SUBSCRIPTION_REMINDER": "Subscription reminder",
       "SUBSCRIPTION_PAYMENT_FAILED": "Subscription payment failed",
-      "SUBSCRIPTION_CANCELLED": "Subscription cancelled",
+      "SUBSCRIPTION_CANCELLED": "Subscription canceled",
       "SUBSCRIPTION_ENDED": "Subscription ended",
       "EXPIRY_REMINDER": "Expiry reminder",
       "SHIPMENT_SHIPPED": "Shipment shipped",
@@ -3160,7 +3160,7 @@
       "INVALID_PAYLOAD": "Invalid payload",
       "REJECTED": "Rejected by the server",
       "WEBHOOK_DEAD": "Webhook gave up",
-      "CANCELLED_BY_ADMIN": "Cancelled by an admin",
+      "CANCELLED_BY_ADMIN": "Canceled by an admin",
       "ORDER_REVOKED": "Order revoked",
       "ENTITLEMENT_ENDED": "Entitlement ended",
       "NOTHING_TO_REVOKE": "Nothing to revoke"
@@ -3256,8 +3256,8 @@
       "SKIPPED": "Skipped"
     },
     "subscription-end-reason": {
-      "BUYER_CANCEL": "Cancelled by the buyer",
-      "ADMIN_CANCEL": "Cancelled by an admin",
+      "BUYER_CANCEL": "Canceled by the buyer",
+      "ADMIN_CANCEL": "Canceled by an admin",
       "PAYMENT_FAILED": "Payment failed",
       "GATEWAY_ENDED": "Ended by the gateway",
       "COMPLETED": "Completed",
@@ -3303,7 +3303,7 @@
       "order-chargeback-won": "Chargeback Won",
       "subscription-started": "Subscription Started",
       "subscription-renewed": "Subscription Renewed",
-      "subscription-cancelled": "Subscription Cancelled",
+      "subscription-cancelled": "Subscription Canceled",
       "subscription-expired": "Subscription Expired",
       "shipment-shipped": "Shipment Shipped",
       "shipment-delivered": "Shipment Delivered",

@@ -125,7 +125,7 @@
       "NOT_FOUND": "We could not find what you asked for.",
       "NOT_LOGGED_IN": "Please sign in to continue.",
       "NO_PERMISSION": "You are not allowed to do this.",
-      "ORDER_NOT_CANCELLABLE": "This order can no longer be cancelled.",
+      "ORDER_NOT_CANCELLABLE": "This order can no longer be canceled.",
       "ORDER_NOT_PAYABLE": "This order cannot be paid right now.",
       "PAGE_NOT_FOUND": "This page does not exist.",
       "PAYMENT_METHOD_UNAVAILABLE": "This payment method is not available. Choose another one.",
@@ -141,7 +141,7 @@
       "STORE_BUSY": "The store is busy. Trying again in a moment.",
       "STORE_DISABLED": "The store is closed right now.",
       "STORE_UNAVAILABLE": "The store is not available right now.",
-      "SUBSCRIPTION_NOT_CANCELLABLE": "This subscription cannot be cancelled.",
+      "SUBSCRIPTION_NOT_CANCELLABLE": "This subscription cannot be canceled.",
       "SUBSCRIPTION_NOT_MANAGEABLE": "This subscription cannot be managed here.",
       "SUBSCRIPTION_NOT_RESUMABLE": "This subscription cannot be resumed.",
       "SUBSCRIPTION_NOT_RETRYABLE": "The payment of this subscription cannot be retried.",
@@ -339,7 +339,7 @@
       "invoice": "Download invoice",
       "cancel": "Cancel order",
       "cancel-title": "Cancel this order?",
-      "cancel-message": "The order will be cancelled and nothing will be charged. This cannot be undone.",
+      "cancel-message": "The order will be canceled and nothing will be charged. This cannot be undone.",
       "cancel-confirm": "Cancel order",
       "cancel-keep": "Keep order",
       "valid-until": "Valid until {date}",
@@ -373,12 +373,12 @@
         "processing-bank": "We are waiting for your bank transfer to arrive.",
         "confirming": "Confirming your payment...",
         "awaiting": "Waiting for your payment",
-        "cancelled-at-gateway": "You cancelled the payment. You can try again or pay another way.",
+        "cancelled-at-gateway": "You canceled the payment. You can try again or pay another way.",
         "attempt-failed": "The last payment attempt did not go through. You can try again or pay another way.",
         "refunded": "This order was refunded.",
         "chargeback": "This payment was disputed with the bank.",
         "FAILED": "This order failed.",
-        "CANCELLED": "This order was cancelled.",
+        "CANCELLED": "This order was canceled.",
         "EXPIRED": "This order expired.",
         "unknown": "The status of this order is not available."
       },
@@ -398,7 +398,7 @@
         "EXCEPTION": "Delivery problem",
         "RETURNING": "Returning",
         "RETURNED": "Returned",
-        "CANCELLED": "Cancelled",
+        "CANCELLED": "Canceled",
         "LOST": "Lost",
         "UNKNOWN": "Unknown"
       },
@@ -424,7 +424,7 @@
         "COMPLETED": "Completed",
         "PARTIALLY_REFUNDED": "Partially refunded",
         "REFUNDED": "Refunded",
-        "CANCELLED": "Cancelled",
+        "CANCELLED": "Canceled",
         "EXPIRED": "Expired",
         "CHARGEBACK": "Chargeback",
         "FAILED": "Failed"
@@ -434,7 +434,7 @@
         "PAST_DUE": "Payment overdue",
         "PAUSED": "Paused",
         "PENDING": "Pending",
-        "CANCELLED": "Cancelled",
+        "CANCELLED": "Canceled",
         "EXPIRED": "Expired",
         "COMPLETED": "Completed"
       }
@@ -558,7 +558,7 @@
           "PENDING": "Pending",
           "PAID": "Paid",
           "FAILED": "Failed",
-          "CANCELLED": "Cancelled"
+          "CANCELLED": "Canceled"
         },
         "code-status": {
           "ACTIVE": "Active",
