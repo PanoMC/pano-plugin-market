@@ -104,7 +104,7 @@ class ResumeMySubscriptionAPI(private val plugin: MarketPlugin) : MarketUserApi(
     override val paths = listOf(Path("/me/subscriptions/:id/resume", RouteType.POST))
 
     override val doc = EndpointDoc(
-        summary = "Resumes a cancelled subscription.",
+        summary = "Resumes a canceled subscription.",
         tag = "me",
         response = objectSchema().requiredProperty("subscription", objectSchema()),
         errors = listOf(NotFound::class, SubscriptionNotResumable::class, NotLoggedIn::class, StoreUnavailable::class, StoreDisabled::class)

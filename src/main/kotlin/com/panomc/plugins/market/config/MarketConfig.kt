@@ -131,7 +131,7 @@ class MarketConfig(
     val mcPlaceholders: Boolean = true,
     val mcLuckPerms: Boolean = true,
     val mcBroadcast: Boolean = false,
-    @ConfigComment("Placeholders: {player} {product} {quantity} {store}; colour codes with &.")
+    @ConfigComment("Placeholders: {player} {product} {quantity} {store}; color codes with &.")
     val mcBroadcastTemplate: String = DEFAULT_BROADCAST_TEMPLATE,
     @ConfigComment("In-game admin sub-commands switched off: give-credits, take-credits, set-credits, grant-product, purchases.")
     val mcDisabledAdminCommands: List<String> = emptyList(),

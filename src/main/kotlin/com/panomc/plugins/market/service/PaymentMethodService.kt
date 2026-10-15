@@ -313,7 +313,7 @@ class PaymentMethodService(
             is ActionResult.Message -> ActionOutcome(result.success, result.text)
             is ActionResult.SettingsPatch -> ActionOutcome(true, applyResult(id, codec, result))
             // The catalogue import is written by the catalogue slice (it needs CatalogService); nothing is stored here.
-            is ActionResult.CatalogImport -> ActionOutcome(false, LocalizedText.of("The catalogue import is not available yet.", "tr" to "Katalog içe aktarma henüz kullanılamıyor.", "ru" to "Импорт каталога пока недоступен."))
+            is ActionResult.CatalogImport -> ActionOutcome(false, LocalizedText.of("The catalog import is not available yet.", "tr" to "Katalog içe aktarma henüz kullanılamıyor.", "ru" to "Импорт каталога пока недоступен."))
         }
     }
 
