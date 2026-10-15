@@ -1,4 +1,4 @@
-import java.net.URL
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.FileSystems
 import java.nio.file.StandardCopyOption
@@ -13,7 +13,7 @@ buildscript {
 plugins {
     kotlin("jvm") version "2.4.21"
     kotlin("kapt") version "2.4.21"
-    id("com.gradleup.shadow") version "8.3.8"
+    id("com.gradleup.shadow") version "9.6.1"
     `maven-publish`
 }
 
@@ -21,12 +21,11 @@ group = "com.panomc.plugins"
 version =
     (if (project.hasProperty("version") && project.findProperty("version") != "unspecified") project.findProperty("version") else "local-build")!!
 
-val pf4jVersion: String by project
-val vertxVersion: String by project
-val gsonVersion: String by project
-val handlebarsVersion: String by project
-val springContextVersion: String by project
-val panoVersion: String by project
+val pf4jVersion = property("pf4jVersion") as String
+val vertxVersion = property("vertxVersion") as String
+val gsonVersion = property("gsonVersion") as String
+val springContextVersion = property("springContextVersion") as String
+val panoVersion = property("panoVersion") as String
 val bootstrap = (project.findProperty("bootstrap") as String?)?.toBoolean() ?: false
 // Standalone builds resolve the platform fat jar (15 section 2.1): "release" = Ivy pattern on the GitHub release
 // asset (default), "jitpack" = -PpanoSource=jitpack, or a local jar with -PpanoJar=/path/Pano-<version>.jar.
@@ -39,7 +38,7 @@ val panoReleaseToken = (project.findProperty("panoReleaseToken") as String?) ?: 
 val testTierTasks = setOf("test", "dbTest", "e2eTest", "mcTest")
 val noui = project.hasProperty("noui") ||
     gradle.startParameter.taskNames.let { names -> names.isNotEmpty() && names.all { it.substringAfterLast(':') in testTierTasks } }
-val pluginsDir: File? by rootProject.extra
+val pluginsDir = rootProject.extra.properties["pluginsDir"] as File?
 
 val os = System.getProperty("os.name").lowercase()
 val arch = System.getProperty("os.arch").lowercase()
@@ -67,7 +66,7 @@ val bunDir = File(layout.buildDirectory.asFile.get().absolutePath, "bun")
 val bunBinDir = File(bunDir, bunPlatform)
 var bunBin = if (isWindows) File(bunBinDir, "bun.exe") else File(bunBinDir, "bun")
 
-val pluginId: String by project
+val pluginId = property("pluginId") as String
 
 // api-level (pano-api migrate-v1): "panoApiLevel" of the pano-web-platform tree this plugin is built in, else "current" from
 // the pano-api-level.properties inside the Pano jar on compileClasspath. `apiLevel=` in gradle.properties lowers it.
@@ -84,17 +83,17 @@ val panoApiLevel: String? by lazy {
         }
 }
 
-val pluginName: String by project
-val pluginDescription: String? by project
-val pluginPanoVersion: String by project
-val pluginClass: String by project
-val pluginDeveloper: String by project
-val pluginLicense: String? by project
-val pluginSourceUrl: String? by project
-val pluginDependencies: String? by project
-val pluginRequires: String? by project
+val pluginName = property("pluginName") as String
+val pluginDescription = findProperty("pluginDescription") as String?
+val pluginPanoVersion = property("pluginPanoVersion") as String
+val pluginClass = property("pluginClass") as String
+val pluginDeveloper = property("pluginDeveloper") as String
+val pluginLicense = findProperty("pluginLicense") as String?
+val pluginSourceUrl = findProperty("pluginSourceUrl") as String?
+val pluginDependencies = findProperty("pluginDependencies") as String?
+val pluginRequires = findProperty("pluginRequires") as String?
 
-val organization: String? by project
+val organization = findProperty("organization") as String?
 
 repositories {
     if (!bootstrap && panoJar == null && panoSource == "release") {
@@ -123,25 +122,25 @@ repositories {
 }
 
 // Fake payment provider plugin (T3, 17 section 6): own source set, own jar, never part of the market jar.
-val fakeProvider: SourceSet by sourceSets.creating {
+val fakeProvider: SourceSet = sourceSets.create("fakeProvider") {
     compileClasspath += sourceSets.main.get().output + sourceSets.main.get().compileClasspath
 }
 
 // Minecraft-side component (19 section 2.1): the same jar is also the plugin on Spigot / Paper / Folia, BungeeCord and
 // Velocity. `mc` (Java 11) and `mcVelocity` (Java 17) are compiled into the market jar, `mcTest` (T7) is not.
 // They never see the platform or `main`; `main` never sees them (verifyJar scans both directions).
-val spigotApiVersion: String by project
-val bungeecordApiVersion: String by project
-val velocityApiVersion: String by project
-val luckPermsApiVersion: String by project
-val vaultApiVersion: String by project
-val placeholderApiVersion: String by project
-val panoMcVersion: String by project
+val spigotApiVersion = property("spigotApiVersion") as String
+val bungeecordApiVersion = property("bungeecordApiVersion") as String
+val velocityApiVersion = property("velocityApiVersion") as String
+val luckPermsApiVersion = property("luckPermsApiVersion") as String
+val vaultApiVersion = property("vaultApiVersion") as String
+val placeholderApiVersion = property("placeholderApiVersion") as String
+val panoMcVersion = property("panoMcVersion") as String
 val panoCoreJar = project.findProperty("panoCoreJar") as String? ?: System.getenv("PANO_CORE_JAR")
 
-val mc: SourceSet by sourceSets.creating
-val mcVelocity: SourceSet by sourceSets.creating
-val mcTest: SourceSet by sourceSets.creating
+val mc: SourceSet = sourceSets.create("mc")
+val mcVelocity: SourceSet = sourceSets.create("mcVelocity")
+val mcTest: SourceSet = sourceSets.create("mcTest")
 
 // pano-mc-plugin Core (pano-core-<version>.jar), resolved like the platform artifact (15 section 2.1): an explicit jar
 // (-PpanoCoreJar / PANO_CORE_JAR) wins, then the Core jar built in the umbrella checkout
@@ -173,7 +172,7 @@ extra["resolvedCoreJar"] = resolvedCoreJar
 // The release that panoMcVersion pins has to carry the pano-core asset. 1.0.0-alpha.66 does not (the asset is attached
 // by a later release, REL-03); resolving it through Ivy can only fail, so say so instead of a bare 404.
 val coreReleasesWithoutAsset = setOf("1.0.0-alpha.66")
-val checkCoreSource by tasks.registering {
+val checkCoreSource = tasks.register("checkCoreSource") {
     val usesIvy = resolvedCoreJar == null
     val pin = panoMcVersion
     doLast {
@@ -217,7 +216,7 @@ repositories {
 dependencies {
     // Platform classes for compiling (compileOnly: the host provides them at run time).
     when {
-        bootstrap -> compileOnly(project(mapOf("path" to ":Pano")))
+        bootstrap -> compileOnly(project(":Pano"))
         panoJar != null -> compileOnly(files(panoJar))
         panoSource == "jitpack" -> compileOnly("com.github.panomc:pano:v$panoVersion")
         else -> compileOnly("panomc.release:pano:$panoVersion") // no leading "v"
@@ -243,7 +242,7 @@ dependencies {
 
     // spi.testkit (ProviderContractTest, ShippingProviderContractTest) is part of the API jar and uses JUnit; it is
     // compiled against the API only, the plugin that runs the contract brings its own JUnit (02 section 9).
-    compileOnly("org.junit.jupiter:junit-jupiter-api:5.13.3")
+    compileOnly("org.junit.jupiter:junit-jupiter-api:5.14.4")
 
     // Invoice PDFs (12 section 8.1, MK-144): bundled and relocated by shadowJar (relocate block below). easytable declares
     // pdfbox 3.0.2; the higher 3.0.8 wins conflict resolution, the explicit coordinates make that visible. No BouncyCastle.
@@ -251,14 +250,14 @@ dependencies {
     implementation("com.github.vandeseer:easytable:1.0.2")
 
     // Same JUnit setup as the host (see Pano/build.gradle.kts).
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.13.3")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.13.3")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.14.4")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.14.4")
     // Gradle 9 requires the JUnit Platform launcher on the test runtime classpath explicitly.
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.13.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.14.4")
 
     // Host classes for T1/T2/T4. T0 must not need them (T0ClasspathTest).
     if (bootstrap) {
-        testImplementation(project(mapOf("path" to ":Pano")))
+        testImplementation(project(":Pano"))
         testImplementation("io.vertx:vertx-web:$vertxVersion")
         testImplementation("io.vertx:vertx-web-client:$vertxVersion")
         testImplementation("io.vertx:vertx-mysql-client:$vertxVersion")
@@ -278,7 +277,7 @@ dependencies {
         }
     }
     testImplementation(fakeProvider.output) // the fake provider is exercised in-process by T1
-    testRuntimeOnly("org.slf4j:slf4j-simple:2.0.16")
+    testRuntimeOnly("org.slf4j:slf4j-simple:2.0.20")
 }
 
 // Minecraft-side dependencies: all compileOnly, the servers provide them (Kotlin stdlib comes through the Pano plugin).
@@ -301,9 +300,9 @@ dependencies {
     "mcTestImplementation"(mc.output)
     "mcTestImplementation"(mcVelocity.output)
     "mcTestImplementation"("com.velocitypowered:velocity-api:$velocityApiVersion")
-    "mcTestImplementation"("org.junit.jupiter:junit-jupiter-api:5.13.3")
-    "mcTestRuntimeOnly"("org.junit.jupiter:junit-jupiter-engine:5.13.3")
-    "mcTestRuntimeOnly"("org.junit.platform:junit-platform-launcher:1.13.3")
+    "mcTestImplementation"("org.junit.jupiter:junit-jupiter-api:5.14.4")
+    "mcTestRuntimeOnly"("org.junit.jupiter:junit-jupiter-engine:5.14.4")
+    "mcTestRuntimeOnly"("org.junit.platform:junit-platform-launcher:1.14.4")
 }
 
 // mcVelocity and mcTest see everything mc compiles against (Core, the server APIs).
@@ -362,7 +361,7 @@ tasks {
                 val zipFile = File(bunDir, "$bunPlatform.zip")
                 zipFile.parentFile.mkdirs()
 
-                URL(bunUrl).openStream().use { input ->
+                URI(bunUrl).toURL().openStream().use { input ->
                     zipFile.outputStream().use { output ->
                         input.copyTo(output)
                     }
@@ -478,7 +477,7 @@ tasks {
 // Thin API jar for standalone plugin builds (02 section 9, 16 section 6.1): com/panomc/plugins/market/spi/** (testkit
 // included) plus the Kotlin module file for the top-level settingsSchema { } DSL. Written to build/api, not build/libs,
 // so every glob over build/libs/pano-plugin-market-*.jar (store upload, E2E instance, copyJar) sees only the plugin jar.
-val apiJar by tasks.registering(Jar::class) {
+val apiJar = tasks.register<Jar>("apiJar") {
     group = "build"
     description = "Thin SPI jar attached to every market release for standalone plugin builds."
     archiveFileName.set("$pluginId-api-$version.jar")
@@ -502,7 +501,7 @@ tasks.named("build") {
 
 // Locale sources are fragments (src/locales/{core,panel,theme}/<lang>.json); the platform wants one
 // file per language, so this deep-merges them into the git-ignored src/main/resources/locales/.
-val mergeLocales by tasks.registering {
+val mergeLocales = tasks.register("mergeLocales") {
     val srcDir = layout.projectDirectory.dir("src/locales")
     val outDir = layout.projectDirectory.dir("src/main/resources/locales")
     inputs.dir(srcDir)
@@ -563,7 +562,7 @@ val mergeLocales by tasks.registering {
 val marketFeatureKeys = listOf("physicalShipping", "shippingCarriers")
 val marketFeatureValues = marketFeatureKeys.associateWith { (project.findProperty("marketFeature.$it") as String?)?.trim() ?: "true" }
 
-val generateMarketFeatures by tasks.registering(WriteProperties::class) {
+val generateMarketFeatures = tasks.register<WriteProperties>("generateMarketFeatures") {
     destinationFile.set(layout.buildDirectory.file("generated/marketFeatures/market-features.properties"))
     marketFeatureValues.forEach { (key, value) -> property(key, value) }
 }
@@ -591,10 +590,8 @@ publishing {
 
     publications {
         create<MavenPublication>("shadow") {
-            project.extensions.configure<com.github.jengelman.gradle.plugins.shadow.ShadowExtension> {
-                artifactId = pluginId
-                component(this@create)
-            }
+            artifactId = pluginId
+            from(components["shadow"])
         }
     }
 }
@@ -636,7 +633,7 @@ tasks.named<Test>("test") {
     systemProperty("market.wireFixtures", layout.projectDirectory.dir("src/mcTest/resources/wire").asFile.absolutePath)
 }
 
-val dbTest by tasks.registering(Test::class) {
+val dbTest = tasks.register<Test>("dbTest") {
     group = "verification"
     description = "T2: DAO, schema, migration and service tests against a real MariaDB (PANO_IT_MARIADB)."
     testClassesDirs = sourceSets.test.get().output.classesDirs
@@ -662,7 +659,7 @@ val dbTest by tasks.registering(Test::class) {
 // They are on the classpath of every test task, not of `e2eTest` alone: JUnit's discovery reflects over `McE2E` in `test` and `dbTest` too and a
 // method signature naming an `mc` type would fail the whole task with NoClassDefFoundError. The market jar never carries any of this.
 val mcE2eCoreDir = layout.buildDirectory.dir("mc-e2e-core")
-val mcE2eCoreClasses by tasks.registering(Sync::class) {
+val mcE2eCoreClasses = tasks.register<Sync>("mcE2eCoreClasses") {
     // The Core jar the mc source set compiles against: the local file, or the Ivy artifact when none was found, so both paths behave the same.
     from({
         val core = resolvedCoreJar
@@ -681,7 +678,7 @@ dependencies {
     "testImplementation"(files(mcE2eCoreDir).builtBy(mcE2eCoreClasses))
 }
 
-val e2eTest by tasks.registering(Test::class) {
+val e2eTest = tasks.register<Test>("e2eTest") {
     group = "verification"
     description = "T4: end-to-end scenarios against the isolated instance (scripts/e2e-instance.sh)."
     testClassesDirs = sourceSets.test.get().output.classesDirs
@@ -717,7 +714,7 @@ tasks.register<Test>("mcTest") {
 }
 // T-PDF-5 (12 section 12): the invoice renderer run from the BUILT shadowJar in a fresh class loader, so relocated classes and
 // relocated resource paths are exercised for real. Part of `check`, never of `test` (it needs the jar).
-val shadedTest by tasks.registering(Test::class) {
+val shadedTest = tasks.register<Test>("shadedTest") {
     group = "verification"
     description = "T-PDF-5: renders an invoice with the shaded PDF stack of the built market jar."
     testClassesDirs = sourceSets.test.get().output.classesDirs
@@ -760,7 +757,7 @@ tasks.withType<Test>().configureEach {
     })
 }
 
-val fakeProviderJar by tasks.registering(Jar::class) {
+val fakeProviderJar = tasks.register<Jar>("fakeProviderJar") {
     group = "build"
     description = "Packages the T3 fake payment provider plugin (tests only; never in build/libs)."
     from(fakeProvider.output)
@@ -782,7 +779,7 @@ val fakeProviderJar by tasks.registering(Jar::class) {
 }
 
 // Part of `check`: the shipped jar must not carry host libraries, the fake provider or too-new bytecode.
-val verifyJar by tasks.registering {
+val verifyJar = tasks.register("verifyJar") {
     group = "verification"
     description = "Checks the market jar: no host or fake classes, SPI present, Java 11 bytecode."
     dependsOn(tasks.shadowJar)
