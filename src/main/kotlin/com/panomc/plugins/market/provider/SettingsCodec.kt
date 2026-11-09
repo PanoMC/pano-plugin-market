@@ -97,6 +97,7 @@ class SettingsCodec(val schema: SettingsSchema, private val cipher: SecretCipher
         val newPlain = HashMap<String, String?>() // plaintext after the save, for the dependsOn comparison
         val oldPlain = HashMap<String, String?>()
         val explicitClear = HashSet<String>()
+        val keptSecrets = LinkedHashSet<String>() // stored secrets the form did not send again
 
         for (field in formFields) {
             val key = field.key
@@ -111,6 +112,7 @@ class SettingsCodec(val schema: SettingsSchema, private val cipher: SecretCipher
                     explicitClear.add(key)
                 } else if (field.secret && raw is String && (raw.isBlank() || raw.trim() == MASK)) {
                     next = old
+                    if (old != null) keptSecrets.add(key)
                 } else {
                     when (val parsed = parse(field, raw)) {
                         is Parsed.Bad -> issues[key] = parsed.issue
@@ -119,6 +121,8 @@ class SettingsCodec(val schema: SettingsSchema, private val cipher: SecretCipher
                 }
             } else if (old == null && !field.secret) {
                 next = field.default?.let { coerceDefault(field, it) }
+            } else if (field.secret && old != null) {
+                keptSecrets.add(key)
             }
             newPlain[key] = next?.toString()
             if (next?.toString() != old?.toString()) changed.add(key)
@@ -132,6 +136,23 @@ class SettingsCodec(val schema: SettingsSchema, private val cipher: SecretCipher
             if (key in issues || !field.required || field.type == FieldType.SWITCH) continue
             val value = newPlain[key]
             if (value.isNullOrEmpty() && isVisible(field, newPlain)) issues[key] = issue(REQUIRED, "This field is required.", "Bu alan zorunludur.", "Это поле обязательно.")
+        }
+
+        // A kept secret must not follow a changed address: a stored key would be sent to wherever the new URL points. A change of
+        // any URL field to a new address, or of a field the secret depends on, needs every stored secret to be entered again in the
+        // same save. Clearing a URL is no new address.
+        val endpointChanged = formFields.any { it.type == FieldType.URL && it.key in changed && !newPlain[it.key].isNullOrEmpty() }
+        for (field in formFields) {
+            val key = field.key
+            if (key !in keptSecrets || key in issues) continue
+            if (endpointChanged || field.dependsOn.any { it in changed }) {
+                issues[key] = issue(
+                    SECRET_REENTRY_REQUIRED,
+                    "The address changed: enter this secret again.",
+                    "Adres değişti: bu gizli bilgiyi yeniden girin.",
+                    "Адрес изменился: введите этот секрет ещё раз."
+                )
+            }
         }
 
         val cleared = LinkedHashSet<String>()
@@ -373,6 +394,7 @@ class SettingsCodec(val schema: SettingsSchema, private val cipher: SecretCipher
         const val SECRET_UNREADABLE = "SECRET_UNREADABLE"
 
         const val REQUIRED = "REQUIRED"
+        const val SECRET_REENTRY_REQUIRED = "SECRET_REENTRY_REQUIRED"
         const val INVALID_TYPE = "INVALID_TYPE"
         const val INVALID_NUMBER = "INVALID_NUMBER"
         const val INVALID_OPTION = "INVALID_OPTION"

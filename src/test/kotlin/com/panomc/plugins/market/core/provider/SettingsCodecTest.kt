@@ -116,6 +116,23 @@ class SettingsCodecTest {
     // ---- secret write protocol
 
     @Test
+    fun `a changed url needs every stored secret entered again in the same save`() {
+        val stored = save(null, valid.put("baseUrl", "https://gw.example.com").put("webhookSecret", "whsec_123456")).settings
+        // the url changes while the secrets come back as the mask, blank or absent: refused, nothing stored
+        for (keep in listOf(form("apiKey" to SettingsCodec.MASK, "webhookSecret" to ""), form())) {
+            val r = save(stored, keep.put("merchantId", "AB1234").put("mode", "LIVE").put("baseUrl", "https://attacker.example"))
+            assertFalse(r.ok)
+            assertEquals(SettingsCodec.SECRET_REENTRY_REQUIRED, r.issues["apiKey"]?.code)
+            assertEquals(SettingsCodec.SECRET_REENTRY_REQUIRED, r.issues["webhookSecret"]?.code)
+        }
+        // entered again (or cleared): fine
+        val ok = save(stored, form("merchantId" to "AB1234", "mode" to "LIVE", "baseUrl" to "https://new.example.com", "apiKey" to "sk_live_new_value", "webhookSecret" to null))
+        assertTrue(ok.ok, ok.issues.toString())
+        // the same url kept: the secrets stay without being sent
+        assertTrue(save(stored, form("merchantId" to "AB1234", "mode" to "LIVE", "baseUrl" to "https://gw.example.com", "apiKey" to SettingsCodec.MASK)).ok)
+    }
+
+    @Test
     fun `the mask and a blank value keep the stored secret`() {
         val stored = first()
         val before = stored.getString("apiKey")
