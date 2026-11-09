@@ -103,7 +103,8 @@ class CodeGuardIT : MarketDaoITBase() {
     @Test
     fun `subjects are the trusted address bucket and the buyer key, or anon when there is neither`() {
         assertEquals(listOf("ip:203.0.113.7", "b:u:5"), guard.subjectsOf("203.0.113.7", "u:5"))
-        assertEquals(listOf("b:g:steve"), guard.subjectsOf(null, "g:steve"), "an untrusted address skips the IP dimension")
+        assertEquals(listOf("b:g:steve", "anon"), guard.subjectsOf(null, "g:steve"), "an untrusted address skips the IP dimension, a guest name is no identity")
+        assertEquals(listOf("b:u:5"), guard.subjectsOf(null, "u:5"), "a session is an identity of its own")
         assertEquals(listOf("ip:203.0.113.7"), guard.subjectsOf("203.0.113.7", ""))
         assertEquals(listOf("anon"), guard.subjectsOf(null, null))
         assertEquals(guard.subjectsOf("2001:db8:1:2::1", "u:5"), guard.subjectsOf("2001:db8:1:2:ffff::9", "u:5"), "one /64 is one subject")

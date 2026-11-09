@@ -2026,7 +2026,7 @@ class CheckoutService(
 
     // ----- rate limits L1, L3, L4 (11 section 11): L1 IP before the replay lookup, L1 buyer after it; L4 and L3 before the order transaction
 
-    private fun limitIp(caller: QuoteCaller) = limits.checkoutIp(caller.clientIp)
+    private fun limitIp(caller: QuoteCaller) = limits.checkoutIp(caller.clientIp, anonymous = caller.userId == null)
 
     private fun limitBuyer(buyerKey: String) = limits.checkoutBuyer(buyerKey)
 
@@ -2040,7 +2040,9 @@ class CheckoutService(
         val subject = ipSubject(caller) ?: return
         val used = throttle?.windowOf(AbuseLimits.SCOPE_CHECKOUT, subject, AbuseLimits.ORDERS_PER_IP_WINDOW_MS) ?: return
 
-        if (used.first >= AbuseLimits.MAX_ORDERS_PER_IP_PER_HOUR) throw TooManyRequests(maxOf(1L, Math.ceil((used.second - clock.now()) / 1000.0).toLong()))
+        val max = if (subject == ANON_ORDER_SUBJECT) AbuseLimits.MAX_ORDERS_PER_IP_PER_HOUR * AbuseLimits.ANON_THRESHOLD_FACTOR else AbuseLimits.MAX_ORDERS_PER_IP_PER_HOUR
+
+        if (used.first >= max) throw TooManyRequests(maxOf(1L, Math.ceil((used.second - clock.now()) / 1000.0).toLong()))
     }
 
     /** L3 increment: one order was created for this address. Never fails the checkout (the order exists). */
@@ -2054,7 +2056,9 @@ class CheckoutService(
         }
     }
 
+    /** The L3 subject: the trusted address, or one shared `anon` subject for a caller with neither a trusted address nor a session. */
     private fun ipSubject(caller: QuoteCaller): String? = IpRange.bucketKey(caller.clientIp)?.let { ThrottlePolicy.truncate("ip:$it") }
+        ?: ANON_ORDER_SUBJECT.takeIf { caller.userId == null }
 
     // ---------------------------------------------------------------------------------------------------- the cart
 
@@ -2782,6 +2786,9 @@ class CheckoutService(
     // -------------------------------------------------------------------------------------------------- helpers
 
     companion object {
+        /** L3 subject shared by every caller without a trusted address and without a session. */
+        private const val ANON_ORDER_SUBJECT = "ip:anon"
+
         const val DEFAULT_LOCALE = "en-US"
         const val CODE_ATTEMPTS_LOCKED = "CODE_ATTEMPTS_LOCKED"
 

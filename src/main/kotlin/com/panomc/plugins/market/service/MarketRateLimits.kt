@@ -21,7 +21,7 @@ import io.vertx.sqlclient.SqlClient
  * A refusal is `TooManyRequests(retryAfter)` (429, `retryAfter` at least 1 second).
  */
 class MarketRateLimits(private val config: () -> MarketConfig) {
-    private class Pair(val perMinute: Int, val ip: RateLimiter, val buyer: RateLimiter)
+    private class Pair(val perMinute: Int, val ip: RateLimiter, val buyer: RateLimiter, val anon: RateLimiter)
 
     @Volatile
     private var l1: Pair? = null
@@ -43,10 +43,19 @@ class MarketRateLimits(private val config: () -> MarketConfig) {
 
     // ---- L1: checkout, pay, continue, bank-transfer notice, gift redeem (IP first, buyer after the replay lookup)
 
-    /** L1, the IP bucket. Called before the idempotency replay lookup; a replay then consumes nothing more. */
-    fun checkoutIp(clientIp: String?) {
+    /**
+     * L1, the IP bucket. Called before the idempotency replay lookup; a replay then consumes nothing more. A caller without a trusted
+     * address and without a session ([anonymous]) shares one `anon` bucket of ten times the limit: a guest name is no identity.
+     */
+    fun checkoutIp(clientIp: String?, anonymous: Boolean = false) {
         val limiters = checkoutLimiters() ?: return
-        val bucket = IpRange.bucketKey(clientIp) ?: return
+        val bucket = IpRange.bucketKey(clientIp)
+
+        if (bucket == null) {
+            if (anonymous && !limiters.anon.tryAcquire(AbuseLimits.SUBJECT_ANON)) throw TooManyRequests(retryAfter(limiters.perMinute))
+
+            return
+        }
 
         if (!limiters.ip.tryAcquire("ip:$bucket")) throw TooManyRequests(retryAfter(limiters.perMinute))
     }
@@ -92,6 +101,8 @@ class MarketRateLimits(private val config: () -> MarketConfig) {
         val bucket = IpRange.bucketKey(clientIp)
 
         if (bucket != null && !limiters.ip.tryAcquire("ip:$bucket")) throw TooManyRequests(retryAfter(perMinute))
+        // no trusted address and no session: one shared bucket of ten times the limit
+        if (bucket == null && userId == null && !limiters.anon.tryAcquire(AbuseLimits.SUBJECT_ANON)) throw TooManyRequests(retryAfter(perMinute))
         if (userId != null && !limiters.buyer.tryAcquire("b:u:$userId")) throw TooManyRequests(retryAfter(perMinute))
     }
 
@@ -131,7 +142,9 @@ class MarketRateLimits(private val config: () -> MarketConfig) {
     private fun build(perMinute: Int): Pair {
         val refill = AbuseLimits.refillMs(perMinute)!!
 
-        return Pair(perMinute, RateLimiter(perMinute, refill), RateLimiter(perMinute, refill))
+        val anonPerMinute = perMinute * AbuseLimits.ANON_THRESHOLD_FACTOR
+
+        return Pair(perMinute, RateLimiter(perMinute, refill), RateLimiter(perMinute, refill), RateLimiter(anonPerMinute, AbuseLimits.refillMs(anonPerMinute)!!))
     }
 
     private fun retryAfter(perMinute: Int): Long = maxOf(1L, Math.ceil(60.0 / perMinute).toLong())

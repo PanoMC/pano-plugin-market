@@ -39,7 +39,10 @@ class CodeGuard(
         val ip = IpRange.bucketKey(clientIp)?.let { ThrottlePolicy.truncate("ip:$it") }
         val buyer = buyerKey?.takeIf { it.isNotBlank() }?.let { ThrottlePolicy.truncate("b:$it") }
 
-        return listOfNotNull(ip, buyer).ifEmpty { listOf(AbuseLimits.SUBJECT_ANON) }
+        // Without a trusted address a guest name is chosen by the caller and is no identity: the shared `anon` subject always counts too.
+        val anon = AbuseLimits.SUBJECT_ANON.takeIf { ip == null && (buyerKey.isNullOrBlank() || !buyerKey.startsWith("u:")) }
+
+        return listOfNotNull(ip, buyer, anon).ifEmpty { listOf(AbuseLimits.SUBJECT_ANON) }
     }
 
     /** `lockedUntil` (epoch ms) when one of [subjects] is locked in [scope], else `null`; always `null` while the mechanism is disabled. */
