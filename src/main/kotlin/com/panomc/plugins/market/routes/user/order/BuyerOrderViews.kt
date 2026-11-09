@@ -70,14 +70,15 @@ class BuyerOrderViews(private val prefix: () -> String) {
     private fun order(row: Row, userId: Long, itemNames: List<String>): JsonObject {
         val isReceived = row.getLong("recipientUserId") == userId && row.getLong("userId") != userId
 
+        // a received gift follows the RECIPIENT allow-list of the order view: no internal number, no price the giver paid
         return JsonObject()
             .put("publicId", row.getString("publicId"))
-            .put("number", row.getLong("id"))
+            .put("number", if (isReceived) null else row.getLong("id"))
             .put("status", row.getString("status"))
             .put("fulfillmentStatus", row.getString("fulfillmentStatus"))
             .put("shippingStatus", row.getString("shippingStatus"))
-            .put("total", MoneyUtil.toDecimal(row.getLong("totalPrice")))
-            .put("currency", row.getString("currency"))
+            .put("total", if (isReceived) null else MoneyUtil.toDecimal(row.getLong("totalPrice")))
+            .put("currency", if (isReceived) null else row.getString("currency"))
             .put("createdAt", row.getLong("createdAt"))
             .put("paidAt", row.getLong("paidAt"))
             .put("itemNames", JsonArray(itemNames))

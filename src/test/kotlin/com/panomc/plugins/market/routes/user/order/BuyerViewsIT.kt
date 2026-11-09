@@ -17,6 +17,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -77,16 +78,20 @@ class BuyerViewsIT : MarketDaoITBase() {
         val row = forBob.getJsonArray("items").getJsonObject(0)
 
         assertEquals(1, forBob.getJsonObject("page").getInteger("totalItems"))
-        assertEquals(gift, row.getLong("number"))
+        assertNull(row.getValue("number"), "the recipient never sees the internal order number")
         assertTrue(row.getBoolean("received"))
         assertTrue(row.getBoolean("isGift"))
         assertEquals("Bob", row.getString("recipientUsername"))
         assertEquals(listOf("VIP rank"), row.getJsonArray("itemNames").list)
-        assertEquals(19.99, row.getDouble("total"), 0.0001)
-        assertEquals("EUR", row.getString("currency"))
+        assertNull(row.getValue("total"), "nor what the giver paid")
+        assertNull(row.getValue("currency"))
         assertEquals("COMPLETED", row.getString("status"))
 
         val forAlice = list(alice).getJsonArray("items").getJsonObject(0)
+
+        assertEquals(gift, forAlice.getLong("number"))
+        assertEquals(19.99, forAlice.getDouble("total"), 0.0001)
+        assertEquals("EUR", forAlice.getString("currency"))
 
         assertFalse(forAlice.getBoolean("received"))
         assertTrue(forAlice.getBoolean("isGift"))

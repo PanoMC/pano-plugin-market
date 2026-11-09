@@ -94,7 +94,14 @@
               <tbody>
                 {#each rows as row (row.publicId)}
                   <tr>
-                    <td class="text-nowrap"><a href="{base}{row.href}">#{row.number}</a></td>
+                    <td class="text-nowrap">
+                      <a href="{base}{row.href}"
+                        >{#if row.number !== null && row.number !== undefined}#{row.number}{:else}<i
+                            class="fa-solid fa-gift"
+                            aria-label={$_('theme.profile.purchases.gift-received')}
+                          ></i>{/if}</a
+                      >
+                    </td>
                     <td class="text-nowrap">{formatDate(row.createdAt)}</td>
                     <td>
                       {row.items.names.join(', ')}
@@ -119,7 +126,11 @@
                       {/if}
                     </td>
                     <td class="text-end text-nowrap">
-                      {formatMoney(row.total, row.currency, { removeCents })}
+                      {#if row.total !== null && row.total !== undefined}
+                        {formatMoney(row.total, row.currency, { removeCents })}
+                      {:else}
+                        <span class="text-body-secondary">-</span>
+                      {/if}
                     </td>
                     <td><OrderStatusBadge status={row.status} /></td>
                   </tr>
