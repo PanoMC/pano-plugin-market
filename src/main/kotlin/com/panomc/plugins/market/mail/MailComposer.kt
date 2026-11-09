@@ -66,7 +66,9 @@ class MailInput(
     val productSlug: String? = null,
     /** The parcel of a `SHIPMENT_*` mail and its lines. */
     val shipment: MarketShipment? = null,
-    val shipmentItems: List<MarketShipmentItem> = emptyList()
+    val shipmentItems: List<MarketShipmentItem> = emptyList(),
+    /** The address the mail goes to; a guest order's access token is only put into links when it is the order's own address. */
+    val recipient: String? = null
 )
 
 /**
@@ -342,7 +344,7 @@ class MailContentBuilder(
             "storeName" to storeName(),
             "orderNumber" to orderNumber(i),
             "username" to cut(i.order.playerUsername),
-            "orderUrl" to orderUrl(i.order).orEmpty()
+            "orderUrl" to orderUrl(i.order, i.recipient).orEmpty()
         )
 
         return MarketMailMessage(
@@ -413,10 +415,14 @@ class MailContentBuilder(
         )
     }
 
-    /** The order page (12 section 4.4), with the access token for a guest order; none without a site URL. */
-    private fun orderUrl(order: MarketOrder): String? {
+    /**
+     * The order page (12 section 4.4), with the access token for a guest order; none without a site URL. The token is a bearer key to the
+     * order, so it only goes to the order's own address: a mail resent to another address (panel resend) gets the plain link.
+     */
+    private fun orderUrl(order: MarketOrder, recipient: String?): String? {
         val publicId = order.publicId?.takeIf { it.isNotBlank() } ?: return null
-        val token = if (order.userId == null && !order.accessToken.isNullOrBlank()) mapOf("token" to order.accessToken) else emptyMap()
+        val ownAddress = recipient.isNullOrBlank() || recipient.trim().equals(order.email?.trim(), ignoreCase = true)
+        val token = if (order.userId == null && ownAddress && !order.accessToken.isNullOrBlank()) mapOf("token" to order.accessToken) else emptyMap()
 
         return site().links.order(publicId, token)
     }
@@ -523,7 +529,7 @@ class MailComposer(
         val refundLines = refund?.let { refundItems.getByRefundId(it.id, sqlClient) }.orEmpty()
         val params = runCatching { JsonObject(row.params.ifBlank { "{}" }) }.getOrDefault(JsonObject())
         val attached = invoiceWillBeAttached(row, order, refund, sqlClient)
-        val base = MailInput(row.kind, row.locale, order, items, params, refund, refundLines, attached)
+        val base = MailInput(row.kind, row.locale, order, items, params, refund, refundLines, attached, recipient = row.recipient)
 
         return builder.build(
             when (row.kind) {
@@ -586,14 +592,14 @@ class MailComposer(
     }
 
     private fun MailInput.withEntitlement(entitlement: MarketEntitlement, slug: String?) = MailInput(
-        kind, locale, order, items, params, refund, refundItems, invoiceAttached, entitlement = entitlement, productSlug = slug
+        kind, locale, order, items, params, refund, refundItems, invoiceAttached, entitlement = entitlement, productSlug = slug, recipient = recipient
     )
 
     private fun MailInput.withSubscription(sub: MarketSubscription, slug: String?) = MailInput(
-        kind, locale, order, items, params, refund, refundItems, invoiceAttached, subscription = sub, productSlug = slug
+        kind, locale, order, items, params, refund, refundItems, invoiceAttached, subscription = sub, productSlug = slug, recipient = recipient
     )
 
     private fun MailInput.withShipment(shipment: MarketShipment, lines: List<MarketShipmentItem>) = MailInput(
-        kind, locale, order, items, params, refund, refundItems, invoiceAttached, shipment = shipment, shipmentItems = lines
+        kind, locale, order, items, params, refund, refundItems, invoiceAttached, shipment = shipment, shipmentItems = lines, recipient = recipient
     )
 }

@@ -272,6 +272,11 @@ class MailTemplateTest {
         val r = render(message, "en-US")
 
         assertTrue(message.values["orderUrl"].toString().endsWith("?token=0f1e2d3c4b5a69788796a5b4c3d2e1f001122334"))
+        // the token is a key to the order: sent to the order's own address (any case) it stays, resent to another address it is left out
+        val physical = scenarios("en-US").first { it.name == "order-confirmation-physical-test" }.input
+        suspend fun to(address: String) = builder().build(MailInput(physical.kind, physical.locale, physical.order, physical.items, physical.params, recipient = address)).values["orderUrl"].toString()
+        assertTrue(to("Steve@Example.com").endsWith("?token=0f1e2d3c4b5a69788796a5b4c3d2e1f001122334"))
+        assertFalse(to("someone-else@example.net").contains("token"))
         assertTrue(r.subject.startsWith("[TEST] "))
         assertTrue(message.testMode)
         assertTrue(r.html.contains("TEST ORDER - no real payment was made"))
