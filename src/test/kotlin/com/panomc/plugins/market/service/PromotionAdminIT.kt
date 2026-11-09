@@ -541,6 +541,19 @@ class PromotionAdminIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a credit gift is a credit grant - create and update ask the credit guard, other gifts never do`(): Unit = runBlocking {
+        class Denied : RuntimeException()
+        val deny: suspend () -> Unit = { throw Denied() }
+        suspend fun denied(block: suspend () -> Any?) = assertTrue(try { block(); false } catch (e: Denied) { true })
+        denied { admin.create(Promotion.GIFT, body("""{"code":"CREDIT-GUARD-1","type":"CREDIT","creditAmount":5}"""), deny) }
+        val gift = admin.create(Promotion.GIFT, body("""{"code":"CREDIT-GUARD-2","type":"CREDIT","creditAmount":5}""")).id
+        // an existing credit gift: any change (here only the redeem limit) is a credit grant too
+        denied { admin.update(Promotion.GIFT, gift, body("""{"redeemLimit":1000}"""), deny) }
+        denied { admin.update(Promotion.GIFT, gift, body("""{"creditAmount":1000000}"""), deny) }
+        assertEquals(500L, row(Promotion.GIFT, gift)["creditAmount"])
+    }
+
+    @Test
     fun `a credit gift needs 0 lt creditAmount le 1000000 with two decimals, else INVALID_CREDIT_AMOUNT`(): Unit = runBlocking {
         for (amount in listOf("0", "-5", "1000000.01", "1.234", "null", "\"12\"")) {
             val e = fails(InvalidCreditAmount::class.java) { admin.create(Promotion.GIFT, body("""{"code":"CREDIT-BAD-1","type":"CREDIT","creditAmount":$amount}""")) }

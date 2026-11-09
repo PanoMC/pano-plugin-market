@@ -33,6 +33,7 @@ import com.panomc.plugins.market.log.UpdatedMarketCreatorCodeLog
 import com.panomc.plugins.market.log.UpdatedMarketDiscountLog
 import com.panomc.plugins.market.log.UpdatedMarketGiftLog
 import com.panomc.plugins.market.permission.MarketNode
+import com.panomc.plugins.market.permission.MarketPermissions
 import com.panomc.plugins.market.routes.api.checkout.PlatformUserDirectory
 import com.panomc.plugins.market.routes.base.MarketPanelApi
 import com.panomc.plugins.market.routes.base.parseId
@@ -175,7 +176,7 @@ abstract class PromotionAdminRoute(protected val plugin: MarketPlugin, protected
     }
 
     protected suspend fun createAnswer(context: RoutingContext): Result {
-        val created = admin.create(promotion, body(context))
+        val created = admin.create(promotion, body(context), creditGuard(context))
 
         log(context, PromotionAction.CREATE, created.label)
 
@@ -183,12 +184,15 @@ abstract class PromotionAdminRoute(protected val plugin: MarketPlugin, protected
     }
 
     protected suspend fun updateAnswer(context: RoutingContext): Result {
-        val updated = admin.update(promotion, idOf(context), body(context))
+        val updated = admin.update(promotion, idOf(context), body(context), creditGuard(context))
 
         log(context, PromotionAction.UPDATE, updated.label)
 
         return Successful()
     }
+
+    /** A gift that pays out store credit is a credit grant: it needs `P:PAY` like a manual grant, on top of `P:DISC`. */
+    private fun creditGuard(context: RoutingContext): suspend () -> Unit = { MarketPermissions.require(context, setOf(MarketNode.PAYMENTS)) }
 
     protected suspend fun deleteAnswer(context: RoutingContext): Result {
         val label = admin.delete(promotion, idOf(context))

@@ -163,10 +163,12 @@ class PromotionAdminService(
     // --------------------------------------------------------------------------------------------- create / update
 
     /** `POST`: validates [body], resolves the creator and the gift product, writes the row under the code lock. Returns the new id and the log label. */
-    suspend fun create(promotion: Promotion, body: JsonObject): PromotionResult {
+    suspend fun create(promotion: Promotion, body: JsonObject, creditGuard: suspend () -> Unit = {}): PromotionResult {
         val sql = client()
         val errors = linkedMapOf<String, String>()
         val write = PromotionRules.parse(promotion, body, null, errors)
+
+        if (promotion == Promotion.GIFT && write.giftType == GiftType.CREDIT) creditGuard()
 
         checks(promotion, body, null, write, errors, sql)
 
@@ -193,11 +195,13 @@ class PromotionAdminService(
     }
 
     /** `PUT`: only the keys that are present change; a missing or soft-deleted row is 404. Counters are never in the statement. */
-    suspend fun update(promotion: Promotion, id: Long, body: JsonObject): PromotionResult {
+    suspend fun update(promotion: Promotion, id: Long, body: JsonObject, creditGuard: suspend () -> Unit = {}): PromotionResult {
         val sql = client()
         val current = stored(promotion, id, sql) ?: throw NotFound()
         val errors = linkedMapOf<String, String>()
         val write = PromotionRules.parse(promotion, body, current, errors)
+
+        if (promotion == Promotion.GIFT && write.giftType == GiftType.CREDIT) creditGuard()
 
         checks(promotion, body, current, write, errors, sql)
 
