@@ -8,13 +8,44 @@ import javax.imageio.ImageIO
 object ImageUtil {
     private const val THUMBNAIL_SIZE = 128
 
+    /** Largest image (width x height) that is ever decoded: a small file can declare a huge canvas and exhaust the heap. */
+    const val MAX_PIXELS = 40_000_000L
+
+    /**
+     * Width and height from the image header, without decoding the pixels; null when no installed reader knows the format
+     * (such a file is never decoded either) or the header cannot be read.
+     */
+    fun dimensions(file: File): Pair<Int, Int>? = try {
+        ImageIO.createImageInputStream(file)?.use { input ->
+            val readers = ImageIO.getImageReaders(input)
+            if (!readers.hasNext()) return@use null
+            val reader = readers.next()
+            try {
+                reader.setInput(input, true, true)
+                reader.getWidth(0) to reader.getHeight(0)
+            } finally {
+                reader.dispose()
+            }
+        }
+    } catch (e: Exception) {
+        null
+    }
+
+    /** False when the header declares more than [MAX_PIXELS] (or a non-positive size). */
+    fun withinPixelLimit(file: File): Boolean {
+        val (w, h) = dimensions(file) ?: return true
+        return w > 0 && h > 0 && w.toLong() * h.toLong() <= MAX_PIXELS
+    }
+
     /**
      * Sniffs the real image format from the file's magic bytes and returns the canonical extension
      * (webp/jpg/png/gif) or null. Never trust the client's Content-Type header or filename — a spoofed
      * SVG/HTML body stored with an attacker-picked extension would later be served as active content.
+     * An image whose header declares more than [MAX_PIXELS] is refused too (null).
      */
     fun detectImageExtension(file: File): String? {
         if (!file.exists()) return null
+        if (!withinPixelLimit(file)) return null
 
         val header = ByteArray(12)
         val read = file.inputStream().use { it.read(header) }
@@ -61,6 +92,7 @@ object ImageUtil {
         if (thumbnailFile.exists()) return true
 
         try {
+            if (!withinPixelLimit(originalFile)) return false
             val originalImage = ImageIO.read(originalFile) ?: return false
             val type = if (originalImage.type == 0) BufferedImage.TYPE_INT_ARGB else originalImage.type
 
