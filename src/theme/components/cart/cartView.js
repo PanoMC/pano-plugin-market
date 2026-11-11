@@ -150,10 +150,6 @@ export function checkoutHref(context) {
   return target.startsWith('/') && base ? base + target : target;
 }
 
-/** NavCart is drawn only with items or on /store pages. */
-export const navVisible = (count, pathname) =>
-  count > 0 || /^\/store(\/|$)/.test(String(pathname || ''));
-
 /**
  * Where NavCart gets its count (14 §7.3): the live cart once initialised; guests read the local cart (no
  * request); a logged-in user reads the 60 s session cache, else asks `me/summary` once.

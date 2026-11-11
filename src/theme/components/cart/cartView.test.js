@@ -9,7 +9,6 @@ import {
   hasOffcanvasHost,
   isDiscounted,
   metaRows,
-  navVisible,
   quoteRows,
   resolveNavCount,
   showCredit,
@@ -97,14 +96,6 @@ describe('errorKey', () => {
 });
 
 describe('NavCart', () => {
-  test('visibility', () => {
-    expect(navVisible(0, '/')).toBe(false);
-    expect(navVisible(0, '/store')).toBe(true);
-    expect(navVisible(0, '/store/checkout')).toBe(true);
-    expect(navVisible(0, '/storefront')).toBe(false);
-    expect(navVisible(3, '/blog')).toBe(true);
-  });
-
   test('live cart wins', () => {
     expect(resolveNavCount({ mode: 'GUEST', count: 4, user: null })).toEqual({ count: 4 });
   });

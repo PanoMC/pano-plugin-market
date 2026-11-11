@@ -25,6 +25,14 @@ describe('NavCart imports', () => {
     for (const name of used) expect(imported.has(name)).toBe(true);
   });
 
+  test('the button is server-rendered: no mount gate around it, only the badge waits for a count', () => {
+    const template = source.slice(0, source.indexOf('<script'));
+
+    expect(template).not.toMatch(/\{#if[^}]*mounted/);
+    expect(template.trimStart().startsWith('<!--') || template.trimStart().startsWith('<button')).toBe(true);
+    expect(template).toContain('{#if count > 0}');
+  });
+
   test('the click leaves the offcanvas alone and leads to the checkout only without a host', () => {
     expect(source).toContain('onclick={openCheckout}');
     expect(source).toContain('if (hasOffcanvasHost(document)) return;');

@@ -1,22 +1,21 @@
-{#if mounted && navVisible(count, pathname)}
-  <button
-    type="button"
-    class="market-nav-cart market-nav-cart__link btn btn-link nav-link position-relative"
-    data-bs-toggle="offcanvas"
-    data-bs-target="#marketCartOffcanvas"
-    aria-controls="marketCartOffcanvas"
-    aria-label={$_('theme.cart.title')}
-    onclick={openCheckout}>
-    <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i>
+<!-- Server-rendered in every state; only the count (browser storage / me/summary) arrives after mount. -->
+<button
+  type="button"
+  class="market-nav-cart market-nav-cart__link btn btn-link nav-link position-relative"
+  data-bs-toggle="offcanvas"
+  data-bs-target="#marketCartOffcanvas"
+  aria-controls="marketCartOffcanvas"
+  aria-label={$_('theme.cart.title')}
+  onclick={openCheckout}>
+  <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i>
+  {#if count > 0}
     <span
       class="market-nav-cart__badge badge rounded-pill text-bg-danger position-absolute top-0 start-100 translate-middle"
-      aria-live="polite"
-      aria-atomic="true"
-      ><span aria-hidden="true">{count}</span><span class="visually-hidden">
-        {$_('theme.cart.items-in-cart', { values: { count } })}</span
-      ></span>
-  </button>
-{/if}
+      aria-hidden="true">{count}</span>
+  {/if}
+  <span class="visually-hidden" aria-live="polite" aria-atomic="true"
+    >{count > 0 ? $_('theme.cart.items-in-cart', { values: { count } }) : ''}</span>
+</button>
 
 <script module>
   // navbar injection (doc 01 section 2): the cart button of the navbar, also placeable with <PluginBlock id="market:NavCart" />
@@ -39,7 +38,6 @@
     checkoutHref,
     countCacheValue,
     hasOffcanvasHost,
-    navVisible,
     resolveNavCount,
   } from './cartView.js';
 
@@ -52,9 +50,8 @@
   // A slot component outside the market pages: the eager `market/session` controller follows the host session by itself, so a
   // signed-in visitor counts as signed in here too and the badge shows their account cart (browser scenario TH-15).
 
-  // Rendered in the browser only (after mount): the count and the path are unknown during SSR.
+  // The count is read in the browser only (after mount): browser storage and the session are unknown during SSR.
   let mounted = $state(false);
-  let pathname = $state('');
   let fetched = $state(null);
 
   // As a widget (`<pano-market-nav-cart>`) the button has no offcanvas to open: it leads to the checkout page instead. In a theme the
@@ -89,7 +86,6 @@
   const count = $derived(fetched !== null && source.fetch ? fetched : (source.count ?? 0));
 
   onMount(() => {
-    pathname = window.location.pathname;
     mounted = true;
   });
 
