@@ -117,4 +117,4 @@ jobs:
           PANO_PROD_TOKEN: ${{ secrets.PANO_PROD_TOKEN }}
         run: |
           npm install -D git+https://github.com/PanoMC/semantic-release-pano.git
-          npx semantic-release
+          bash .github/scripts/semantic-release-retry.sh npx semantic-release
