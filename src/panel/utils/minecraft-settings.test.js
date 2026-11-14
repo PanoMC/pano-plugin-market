@@ -206,9 +206,11 @@ describe('server rows', () => {
   test('the four market states and their badge classes', () => {
     expect(stateClass('READY')).toBe('text-bg-success');
     expect(stateClass('OFFLINE')).toBe('text-bg-secondary');
+    expect(stateClass('OFFLINE', 'text-bg-primary')).toBe('text-bg-primary');
     expect(stateClass('COMPONENT_MISSING')).toBe('text-bg-danger');
     expect(stateClass('VERSION_MISMATCH')).toBe('text-bg-warning');
     expect(stateClass('SOMETHING')).toBe('text-bg-secondary');
+    expect(stateClass('SOMETHING', 'text-bg-primary')).toBe('text-bg-primary');
     expect(serverRow({ ...server, marketState: 'READY' }).needsComponent).toBe(false);
     expect(serverRow({ ...server, marketState: 'COMPONENT_MISSING' }).needsComponent).toBe(true);
     expect(serverRow({ ...server, marketState: 'WHATEVER' }).state).toBeNull();

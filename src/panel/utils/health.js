@@ -5,6 +5,16 @@ import { serverRow } from './minecraft-settings.js';
 /** A job whose last run is more than five minutes old is shown in red. */
 export const LAG_DANGER_SECONDS = 300;
 
+const RUNTIME_STATE_CLASS = {
+  READY: 'text-bg-success',
+  STARTING: 'text-bg-warning',
+  DEGRADED: 'text-bg-warning',
+  STOPPED: 'text-bg-danger',
+};
+
+/** Badge class of a runtime state; unknown states use the primary variant. */
+export const runtimeStateClass = (state) => RUNTIME_STATE_CLASS[state] ?? 'text-bg-primary';
+
 /** Queue stat cards: id (locale suffix), health key, `text-bg-*` variant (design/cards-colored.md). */
 export const QUEUE_CARDS = [
   { id: 'deliveries-pending', key: 'deliveriesPending', variant: 'secondary' },

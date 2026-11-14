@@ -77,7 +77,11 @@
             </tr>
             <tr>
               <th scope="row" class="align-middle">{$_('settings.health.status.runtime')}</th>
-              <td class="align-middle">{model.runtimeState}</td>
+              <td class="align-middle">
+                <span class="badge {runtimeStateClass(model.runtimeState)}">
+                  {model.runtimeState}
+                </span>
+              </td>
             </tr>
             <tr>
               <th scope="row" class="align-middle">{$_('settings.health.status.mail')}</th>
@@ -210,7 +214,11 @@
                 <tr>
                   <td class="align-middle">{provider.id}</td>
                   <td class="align-middle"
-                    ><StatusBadge kind="provider" value={provider.state} /></td>
+                    ><StatusBadge
+                      kind="provider"
+                      value={provider.state}
+                      secondaryClass="text-bg-primary"
+                    /></td>
                 </tr>
               {/each}
             </tbody>
@@ -249,7 +257,7 @@
                   <td class="align-middle">{server.id}</td>
                   <td class="align-middle">
                     {#if server.marketState}
-                      <span class="badge {stateClass(server.marketState)}">
+                      <span class="badge {stateClass(server.marketState, 'text-bg-primary')}">
                         {$_(`settings.minecraft.state.${server.marketState}`)}
                       </span>
                     {/if}
@@ -273,7 +281,12 @@
   import LoadError from '../LoadError.svelte';
   import StatusBadge from '../StatusBadge.svelte';
   import { call } from '../../utils/api.js';
-  import { RECHECK_CREDITS_PATH, healthModel, isHealthReport } from '../../utils/health.js';
+  import {
+    RECHECK_CREDITS_PATH,
+    healthModel,
+    isHealthReport,
+    runtimeStateClass,
+  } from '../../utils/health.js';
   import { stateClass } from '../../utils/minecraft-settings.js';
   import { toastError } from '../../utils/toast.js';
 

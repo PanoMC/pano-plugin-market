@@ -4,7 +4,7 @@ import { setColorMode } from './browser.mjs';
 export const LABEL = {
   addToCart: 'Add to Cart',
   checkout: 'Checkout',
-  cartTitle: 'Your cart',
+  cartTitle: 'Cart',
 };
 
 export function assert(condition, message) {

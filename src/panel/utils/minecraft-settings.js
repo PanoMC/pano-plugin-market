@@ -131,7 +131,10 @@ const STATE_CLASS = {
 };
 
 /** Badge class of a marketState; an unknown state is neutral. */
-export const stateClass = (state) => STATE_CLASS[state] ?? 'text-bg-secondary';
+export const stateClass = (state, secondaryClass = 'text-bg-secondary') => {
+  const className = STATE_CLASS[state];
+  return className && className !== 'text-bg-secondary' ? className : secondaryClass;
+};
 
 const hasSettings = (settings) =>
   settings !== null && typeof settings === 'object' && Object.keys(settings).length > 0;

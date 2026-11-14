@@ -6,6 +6,7 @@ import {
   healthModel,
   isHealthReport,
   lagIsDanger,
+  runtimeStateClass,
 } from './health.js';
 
 const report = {
@@ -42,6 +43,14 @@ const report = {
 };
 
 describe('health model', () => {
+  test('runtime state badges use the state-specific color', () => {
+    expect(runtimeStateClass('READY')).toBe('text-bg-success');
+    expect(runtimeStateClass('STARTING')).toBe('text-bg-warning');
+    expect(runtimeStateClass('DEGRADED')).toBe('text-bg-warning');
+    expect(runtimeStateClass('STOPPED')).toBe('text-bg-danger');
+    expect(runtimeStateClass('UNKNOWN')).toBe('text-bg-primary');
+  });
+
   test('schema status with the missing objects as a text list', () => {
     const model = healthModel(report);
     expect(model.schemaOk).toBe(false);

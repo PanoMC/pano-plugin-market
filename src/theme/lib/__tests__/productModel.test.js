@@ -50,9 +50,9 @@ describe('resolveProductLoad', () => {
     expect(r.meta).toBeUndefined();
     expect('meta' in r).toBe(false);
     expect(r.breadcrumbs).toEqual([
-      { label: 'plugins.pano-plugin-market.nav-store', href: '/store', variant: 'bootstrap' },
-      { label: 'Ranks', raw: true, href: '/store?category=3', variant: 'bootstrap' },
-      { label: 'VIP', raw: true, variant: 'bootstrap' },
+      { label: 'plugins.pano-plugin-market.nav-store', href: '/store' },
+      { label: 'Ranks', raw: true, href: '/store?category=3' },
+      { label: 'VIP', raw: true },
     ]);
   });
 

@@ -19,7 +19,7 @@ const storeUrl = (env, tag) => `${env.url}/store?search=${encodeURIComponent(tag
 
 /** The cart button of the navigation; on a phone the navbar is collapsed, so it is opened first. */
 async function cartButton(page) {
-  const button = page.getByRole('button', { name: 'Your cart' }).first();
+  const button = page.getByRole('button', { name: 'Cart' }).first();
 
   if (!(await button.isVisible().catch(() => false))) {
     const toggler = page.locator('.navbar-toggler:visible').first();
@@ -351,7 +351,7 @@ scenarios.push(
       // the cart button shows on every market page (count 0 included), so the number on its badge is what is read
       const cartCount = async () => {
         const badge = page
-          .getByRole('button', { name: 'Your cart' })
+          .getByRole('button', { name: 'Cart' })
           .first()
           .locator('.badge [aria-hidden="true"]');
         if (!(await badge.count())) return 0;
@@ -373,7 +373,7 @@ scenarios.push(
       await page.waitForFunction(
         () =>
           document
-            .querySelector('button[aria-label="Your cart"] .badge [aria-hidden="true"]')
+            .querySelector('button[aria-label="Cart"] .badge [aria-hidden="true"]')
             ?.textContent?.trim() === '1',
         null,
         { timeout: 30000 },

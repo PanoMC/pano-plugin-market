@@ -168,7 +168,7 @@
     "cart": {
       "merge-dropped": "Some items of your browser cart are no longer available and were not added to your account cart.",
       "too-many-lines": "The cart is full. Remove an item before adding another one.",
-      "title": "Your cart",
+      "title": "Cart",
       "empty": "Your cart is empty.",
       "browse": "Browse the store",
       "subtotal": "Subtotal",

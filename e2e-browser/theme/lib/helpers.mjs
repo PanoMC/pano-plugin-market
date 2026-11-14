@@ -176,7 +176,7 @@ export async function waitForCards(page, count = 1) {
 
 /** The cart button of the navbar; on a phone width the navbar is collapsed, so it is opened first. */
 export async function cartButton(page) {
-  const button = page.getByRole('button', { name: 'Your cart' }).first();
+  const button = page.getByRole('button', { name: 'Cart' }).first();
 
   if (!(await button.isVisible().catch(() => false))) {
     const toggler = page.locator('.navbar-toggler:visible').first();
