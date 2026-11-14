@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { panoPlugin } from '@panomc/plugin-kit/rollup';
+import { localeFragmentFiles, mergeLocales } from './scripts/merge-locales.mjs';
 
 // The build is the kit preset (@panomc/plugin-kit): server and client bundles, the entry facade, the svelte
 // version guard against the SDK pin, PANO_SDK_DIR, DEV and BUNDLE_SDK all live there. This file only keeps what is
@@ -115,9 +116,30 @@ function apiSeamPlugin() {
   };
 }
 
+// --- Locale fragments in development ---------------------------------------------------
+// Pano's development mode reads src/main/resources/locales/ of this source folder on every request, but those files
+// are merged from the src/locales/ fragments by the Gradle task `mergeLocales`. Under `bun dev` this plugin merges
+// them at the start of every build and watches the fragments, so an edited translation shows on F5 without Gradle.
+// A fragment that does not merge (bad JSON, duplicate key, a language missing a key) is reported and the last good
+// merge stays in place; the UI build goes on.
+function localesDevPlugin() {
+  return {
+    name: 'pano-market-locales-dev',
+    buildStart() {
+      if (process.env.DEV !== 'true' || side) return;
+      for (const file of localeFragmentFiles()) this.addWatchFile(file);
+      try {
+        mergeLocales();
+      } catch (error) {
+        this.warn(error.message);
+      }
+    },
+  };
+}
+
 const builds = await panoPlugin({
   outDir: outRoot,
-  plugins: [apiSeamPlugin(), sideStubPlugin(), missingPageStubPlugin()],
+  plugins: [apiSeamPlugin(), sideStubPlugin(), missingPageStubPlugin(), localesDevPlugin()],
   bundle: isSeamImport,
 });
 
