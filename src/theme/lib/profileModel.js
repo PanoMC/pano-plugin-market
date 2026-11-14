@@ -82,7 +82,10 @@ export function navItems(summary, formatNumber = (n) => String(n)) {
       icon: link.icon,
     };
 
-    if (link.id === 'credits' && visible.credits && badge !== null) props.badge = badge;
+    if (link.id === 'credits' && visible.credits && badge !== null) {
+      props.badge = badge;
+      props.badgeVariant = 'info';
+    }
 
     const item = { id: link.navId, priority: link.priority, props };
     if (!visible[link.id]) item.hidden = true;

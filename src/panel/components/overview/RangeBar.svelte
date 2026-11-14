@@ -1,14 +1,17 @@
 <CardFilters>
-  <FilterSelect
-    label={$_('pages.overview.range.custom')}
+  <FilterDropdown
+    label={$_('pages.overview.range.label')}
     current={range}
-    options={[...RANGES, 'custom'].map((item) => ({ key: item, label: $_(`pages.overview.range.${item}`) }))}
+    options={[...RANGES, 'custom'].map((item) => ({
+      key: item,
+      label: $_(`pages.overview.range.${item}`),
+    }))}
     onSelect={(item) => (item.key === 'custom' ? onCustom() : onSelect(item.key))} />
 </CardFilters>
 
 <script>
   import { CardFilters } from '@panomc/sdk/components/panel';
-  import FilterSelect from '../FilterSelect.svelte';
+  import FilterDropdown from '../FilterDropdown.svelte';
   import { _ } from '../../../i18n';
   import { RANGES } from './range.js';
 

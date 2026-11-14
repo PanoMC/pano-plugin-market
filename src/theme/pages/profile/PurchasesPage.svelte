@@ -52,22 +52,12 @@
       <h2 class="market-purchases-page__orders-title h5 mb-0" id="market-orders-title">
         {$_('theme.profile.purchases.orders-title')}
       </h2>
-      <div class="d-flex align-items-center gap-2">
-        <label
-          class="market-purchases-page__label form-label mb-0 small"
-          for="market-orders-filter">
-          {$_('theme.profile.purchases.filter-label')}
-        </label>
-        <select
-          id="market-orders-filter"
-          class="market-purchases-page__select form-select form-select-sm w-auto"
-          value={filter.status}
-          onchange={onStatus}>
-          <option value="">{$_('theme.profile.purchases.filter-all')}</option>
-          {#each ORDER_FILTERS as status (status)}
-            <option value={status}>{$_(`theme.status.order.${status}`)}</option>
-          {/each}
-        </select>
+      <div class="market-purchases-page__label market-purchases-page__select">
+        <FilterDropdown
+          options={statusOptions}
+          current={filter.status}
+          label={$_('theme.profile.purchases.filter-label')}
+          onSelect={onStatus} />
       </div>
     </div>
 
@@ -139,9 +129,7 @@
             </table>
           </div>
         {:else}
-          <NoContent
-            icon="fa-solid fa-bag-shopping fa-3x"
-            text={$_('theme.profile.purchases.empty')} />
+          <NoContent text="" />
         {/if}
 
         <div class="mt-3">
@@ -223,6 +211,7 @@
   import GiftRedeemForm from '../../components/profile/GiftRedeemForm.svelte';
   import OrderStatusBadge from '../../components/profile/OrderStatusBadge.svelte';
   import ProfilePills from '../../components/profile/ProfilePills.svelte';
+  import FilterDropdown from '../../components/store/FilterDropdown.svelte';
   import Pager from '../../components/store/Pager.svelte';
   import { messageKey } from '../../lib/errorMap.js';
   import {
@@ -256,6 +245,10 @@
     (init.entitlements ?? []).map((e) => entitlementView(e, clock.state.now)),
   );
   const rows = $derived((orders.orders ?? []).map(orderRow));
+  const statusOptions = $derived([
+    { key: '', label: $_('theme.profile.purchases.filter-all') },
+    ...ORDER_FILTERS.map((status) => ({ key: status, label: $_(`theme.status.order.${status}`) })),
+  ]);
   const removeCents = $derived(
     (init.settings?.removeCents ?? storeSettings.state.settings?.removeCents) === true,
   );
@@ -294,8 +287,8 @@
     if (res.ok) writeUrl();
   }
 
-  function onStatus(event) {
-    fetchOrders({ page: 1, status: event.currentTarget.value });
+  function onStatus(option) {
+    fetchOrders({ page: 1, status: option.key });
   }
 
   function onPage(page) {

@@ -10,7 +10,7 @@
     <div class="alert alert-info d-flex align-items-start" role="alert">
       <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
       <div>
-        <b>{$_('settings.shipping-carriers.test-mode-title')}</b>
+        <h5 class="alert-heading mb-2">{$_('settings.shipping-carriers.test-mode-title')}</h5>
         <div>{$_('settings.shipping-carriers.test-mode-hint')}</div>
       </div>
     </div>
@@ -20,10 +20,10 @@
     <div class="alert alert-info d-flex align-items-start" role="alert">
       <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
       <div>
-        <b>{$_('settings.shipping-carriers.no-plugins-title')}</b>
+        <h5 class="alert-heading mb-2">{$_('settings.shipping-carriers.no-plugins-title')}</h5>
         <div>{$_('settings.shipping-carriers.no-plugins-body')}</div>
         {#if isHttpUrl(ctx?.storeUrl)}
-          <a class="alert-link" href={ctx.storeUrl} target="_blank" rel="noopener noreferrer">
+          <a class="alert-link d-inline-block mt-2" href={ctx.storeUrl} target="_blank" rel="noopener noreferrer">
             {$_('settings.shipping-carriers.open-store')}
           </a>
         {/if}

@@ -116,7 +116,7 @@
                     aria-label={$_('common.actions')}>
                     <span class="fas fa-ellipsis-v"></span>
                   </button>
-                  <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                  <div class="dropdown-menu dropdown-menu-start">
                     <button type="button" class="dropdown-item" onclick={() => onRedemptions(coupon)}>
                       <i class="fas fa-receipt me-2"></i>
                       {$_('discounts.coupons.redemptions')}

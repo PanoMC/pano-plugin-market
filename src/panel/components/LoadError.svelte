@@ -1,7 +1,7 @@
 <div class="alert alert-danger d-flex align-items-start" role="alert">
   <i class="fa-solid fa-circle-exclamation me-3 mt-1" aria-hidden="true"></i>
   <div>
-    <b>{$_('common.load-error-title')}</b>
+    <h5 class="alert-heading mb-2">{$_('common.load-error-title')}</h5>
     <div>{$_(errorKey(error))}</div>
     {#if error !== 'NO_PERMISSION'}
       <button class="btn alert-btn mt-2" type="button" onclick={retry}>

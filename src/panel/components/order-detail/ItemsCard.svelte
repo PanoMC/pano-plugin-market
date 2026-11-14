@@ -6,7 +6,7 @@
   </CardHeader>
 
   {#if items.length === 0}
-    <NoContent icon="" />
+    <NoContent text={$_('common.no-content')} />
   {:else}
     <div class="table-responsive">
       <table class="table table-hover">

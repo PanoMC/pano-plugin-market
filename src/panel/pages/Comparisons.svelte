@@ -50,11 +50,12 @@
 <script>
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import { sectionsFor } from '../navigation.js';
-  import { CardHeader, CardFilters, CardFiltersItem, Pagination, SearchInput, NoContent } from '@panomc/sdk/components/panel';
+  import { CardHeader, CardFilters, Pagination, SearchInput, NoContent } from '@panomc/sdk/components/panel';
   import { base, page, goto } from '@panomc/sdk/svelte';
   import { _, showSuccessToast, showErrorToast } from '../../i18n';
 
   import ConfirmModal from '../components/ConfirmModal.svelte';
+  import FilterDropdown from '../components/FilterDropdown.svelte';
   import { currentLocale } from '../utils/locale.js';
   import { pageOf } from '../utils/page.js';
 
@@ -223,13 +224,18 @@
           autofocus
           initialValue={currentSearch}
           {searching}
-          placeholderKey="plugins.pano-plugin-market.search.comparisons"
           onchange={onSearchChange} />
       </div>
       <CardFilters slot="right">
-        <CardFiltersItem href={filterHref('all')} active={filter === 'all'}>{$_('common.all')}</CardFiltersItem>
-        <CardFiltersItem href={filterHref('active')} active={filter === 'active'}>{$_('common.active')}</CardFiltersItem>
-        <CardFiltersItem href={filterHref('inactive')} active={filter === 'inactive'}>{$_('common.inactive')}</CardFiltersItem>
+        <FilterDropdown
+          label={$_('common.status')}
+          current={filter}
+          options={[
+            { key: 'all', label: $_('common.all') },
+            { key: 'active', label: $_('common.active') },
+            { key: 'inactive', label: $_('common.inactive') },
+          ]}
+          onSelect={(option) => goto(`${base}${filterHref(option.key)}`)} />
       </CardFilters>
     </CardHeader>
 
@@ -265,7 +271,7 @@
                       aria-label={$_('common.actions')}>
                       <span class="fas fa-ellipsis-v"></span>
                     </button>
-                    <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                    <div class="dropdown-menu dropdown-menu-start">
                       <button type="button" class="dropdown-item" onclick={() => editComparison(comp.id)}>
                         <i class="fas fa-pen me-2"></i>
                         {$_('common.edit')}

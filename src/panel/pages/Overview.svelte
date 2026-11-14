@@ -1,10 +1,4 @@
 <MarketLayout area="overview">
-  {#snippet right()}
-    {#if data.canStats}
-      <RangeBar range={data.range} onSelect={selectRange} onCustom={() => customModal?.open()} />
-    {/if}
-  {/snippet}
-
   {#if data.error}
     <LoadError error={data.error} />
   {:else}
@@ -17,6 +11,13 @@
 
     {#if data.canStats}
       {#if data.stats}
+        <div class="d-flex justify-content-end">
+          <RangeBar
+            range={data.range}
+            onSelect={selectRange}
+            onCustom={() => customModal?.open()} />
+        </div>
+
         <div class="row g-3">
           {#each cards as card (card.key)}
             <div class="col-12 col-md-6 col-xl">
@@ -126,10 +127,12 @@
     alertsFor(data.health, data.servers, data.ctx, { reviewCount: data.reviewCount }).length,
   );
 
-  // A trend (percent vs the previous period) is the secondary value of the money cards; the
-  // subscription card has none.
+  // Money cards show their trend; the subscription card shows the refund amount.
   function secondaryOf(card) {
-    if (card.kind === 'count' || !card.trend) return '';
+    if (card.kind === 'count') {
+      return `${$_('pages.overview.card.refunds')}: ${fmt.money(card.refundsAmount, currency)}`;
+    }
+    if (!card.trend) return '';
     const value = Math.round(card.trend);
     return `${value > 0 ? '+' : ''}${value}%`;
   }

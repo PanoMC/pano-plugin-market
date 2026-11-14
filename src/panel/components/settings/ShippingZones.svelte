@@ -11,7 +11,10 @@
 {:else}
   <div class="alert alert-info d-flex align-items-start" role="alert">
     <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
-    <div>{$_('settings.shipping-zones.first-match')}</div>
+    <div>
+      <h5 class="alert-heading mb-2">{$_('settings.shipping-zones.first-match-title')}</h5>
+      <div>{$_('settings.shipping-zones.first-match')}</div>
+    </div>
   </div>
 
   <div class="card">

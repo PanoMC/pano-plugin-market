@@ -91,6 +91,7 @@ object MarketConfigKeys {
         // Store
         str("storeName", "Market", 64),
         str("storeDescription", "", 1000),
+        str("storeBackgroundImage", "", 128, ConfigScope.SYSTEM),
         bool("storeEnabled", true),
         str("storeTimeZone", "", 64) { if (it.isEmpty() || isTimeZone(it)) null else INVALID_VALUE },
         enm("currencyMode", CurrencyMode.SINGLE, values<CurrencyMode>()),

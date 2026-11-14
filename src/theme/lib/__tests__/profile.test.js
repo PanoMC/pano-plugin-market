@@ -132,6 +132,7 @@ describe('profile links and nav items (14 §5 row 10, §12.1)', () => {
     const items = navItems(readSummary(summary()), (n) => `${n}`);
     expect(items.every((i) => !('hidden' in i))).toBe(true);
     expect(items[1].props.badge).toBe('12.5');
+    expect(items[1].props.badgeVariant).toBe('info');
     expect(items[0].props.badge).toBeUndefined();
   });
 

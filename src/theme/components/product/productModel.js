@@ -49,16 +49,17 @@ export function resolveSlug(rawSlug, hostDecodes) {
 
 /** Breadcrumbs of 14 §9.1; the category crumb only when the product has a category name. */
 export function productBreadcrumbs(product) {
-  const crumbs = [{ label: STORE_NAV_KEY, href: '/store' }];
+  const crumbs = [{ label: STORE_NAV_KEY, href: '/store', variant: 'bootstrap' }];
 
   if (product.categoryName && product.categoryId != null)
     crumbs.push({
       label: product.categoryName,
       raw: true,
       href: `/store?category=${encodeURIComponent(product.categoryId)}`,
+      variant: 'bootstrap',
     });
 
-  crumbs.push({ label: product.name, raw: true });
+  crumbs.push({ label: product.name, raw: true, variant: 'bootstrap' });
 
   return crumbs;
 }

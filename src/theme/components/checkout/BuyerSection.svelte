@@ -1,14 +1,16 @@
+<script module>
+  export const view = { contract: 2 };
+</script>
+
 <div class="market-buyer-section card">
   <div class="market-buyer-section__body card-body">
-    <h2 class="market-buyer-section__title h5">{$_('theme.checkout.buyer')}</h2>
-
     {#if user}
-      <div class="d-flex align-items-center gap-3">
+      <div class="d-flex flex-column align-items-center gap-2 text-center">
         <PlayerHead username={user.username} width={48} height={48} />
         <div>
           <div class="fw-semibold">{user.username}</div>
           {#if user.email}
-            <div class="small text-body-secondary">{user.email}</div>
+            <div class="small text-body-secondary">{maskEmail(user.email)}</div>
           {/if}
         </div>
       </div>
@@ -78,7 +80,7 @@
 <script>
   import { PlayerHead } from '@panomc/sdk/components/theme';
   import { plugin } from '@panomc/sdk/controllers';
-  import { fieldErrorKey, fieldId } from '../../lib/checkoutModel.js';
+  import { fieldErrorKey, fieldId, maskEmail } from '../../lib/checkoutModel.js';
 
   const market = plugin('market');
   const { _ } = market;

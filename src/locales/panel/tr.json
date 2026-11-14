@@ -190,7 +190,7 @@
       "tab-has-errors": "Bu sekmede geçersiz alanlar var",
       "pending-tab": "{tab} bölümü yeniden hazırlanıyor.",
       "validation-failed": "Bazı alanları düzeltmeniz gerekiyor.",
-      "side-load-failed": "Bu liste yüklenemedi.",
+      "side-load-failed": "Bu Liste Yüklenemedi",
       "reload": "Yeniden Yükle",
       "image-error": "5 MB a kadar PNG, JPEG, GIF veya WebP bir görsel seçin.",
       "delete-title": "Ürünü Sil",
@@ -487,8 +487,9 @@
       "load-error": "Market ayarları yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin."
     },
     "overview": {
-      "title": "Market Genel Bakış",
+      "title": "Market",
       "range": {
+        "label": "Tarih Aralığı",
         "7d": "7 Gün",
         "30d": "30 Gün",
         "90d": "90 Gün",
@@ -499,11 +500,11 @@
         "title": "Özel Tarih Aralığı"
       },
       "card": {
-        "weekly": "Haftalık Gelir (Tahsil Edilen)",
-        "monthly": "Aylık Gelir (Tahsil Edilen)",
-        "total": "Toplam Gelir (Tahsil Edilen)",
+        "weekly": "Haftalık Gelir",
+        "monthly": "Aylık Gelir",
+        "total": "Toplam Gelir",
         "refunds": "İadeler",
-        "subscriptions": "Aktif Abonelikler"
+        "subscriptions": "Abonelikler"
       },
       "recent-orders": "Son Siparişler",
       "charts": "Grafikler",
@@ -1215,6 +1216,11 @@
     }
   },
   "common": {
+    "no-content": "İçerik Bulunamadı",
+    "information": "Bilgi",
+    "warning": "Uyarı",
+    "error": "Hata",
+    "success": "Başarılı",
     "save": "Kaydet",
     "saving": "Kaydediliyor...",
     "cancel": "İptal",
@@ -2101,13 +2107,19 @@
     "general": {
       "store-name": "Mağaza Adı",
       "store-description": "Mağaza Açıklaması",
+      "background-label": "Mağaza Arka Plan Görseli",
+      "background-hint": "Mağaza sayfasının üstünde görünür. PNG, JPEG, GIF veya WebP; en fazla 5 MB. Değişikliği uygulamak için Kaydet'e basın.",
+      "background-preview": "Mağaza arka plan görseli önizlemesi",
+      "background-remove": "Görseli Kaldır",
+      "background-invalid": "En fazla 5 MB boyutunda PNG, JPEG, GIF veya WebP görseli seçin.",
+      "background-partial-save": "Diğer ayarlar kaydedildi ancak arka plan görseli kaydedilemedi. Tekrar deneyin.",
       "vat-label": "Vergi (%)",
       "vat-placeholder": "Vergi %",
       "show-vat-in-price": "Fiyatlara vergi dahildir göster",
       "test-mode": "Test modu (canlı satış yapılmaz)",
       "remove-cents": "Para biriminden .00 kısmını kaldır",
-      "show-bestsellers": "En çok satanları göster (Bestseller)",
-      "show-featured-products": "Öne çıkan ürünleri göster (Featured Products)",
+      "show-bestsellers": "En çok satanları göster",
+      "show-featured-products": "Öne çıkan ürünleri göster",
       "sales-currency-label": "Satış Para Birimi",
       "stats-currency-label": "İstatistik Para Birimi",
       "exchange-rate": {
@@ -2130,7 +2142,7 @@
         "toast-refresh-failed": "Kur alınamadı. Lütfen daha sonra tekrar deneyin.",
         "toast-refresh-error": "Kur güncellenirken bir hata oluştu."
       },
-      "show-comparisons": "Karşılaştırma tablolarını göster (Comparisons)",
+      "show-comparisons": "Karşılaştırma tablolarını göster",
       "store-enabled": "Mağaza Açık",
       "store-enabled-hint": "Kapalıyken mağaza ziyaretçilere kapalıdır. Panel çalışmaya devam eder.",
       "time-zone": "Saat Dilimi",
@@ -2207,6 +2219,7 @@
       "unavailable": "Bu ödeme yönteminin eklentisi çalışmıyor. Ayarları korunuyor.",
       "unavailable-hint": "Yöntemi tekrar kullanmak için eklentiyi başlatın.",
       "open-addons": "Eklentileri Aç",
+      "external-pricing-title": "Fiyatı Ödeme Altyapısı Belirler",
       "external-pricing": "Fiyatı ödeme altyapısı belirlediği için komisyon ve tutar sınırları buradan değiştirilemez.",
       "test-mode-title": "Test Modu",
       "test-mode-hint": "Test modundaki yöntemler yalnızca ayar veya ödeme yetkisi olan yetkililere sunulur. Alıcılar bu yöntemleri görmez.",
@@ -2657,6 +2670,7 @@
     "shipping-zones": {
       "count": "{count} Bölge",
       "create": "Bölge Oluştur",
+      "first-match-title": "Bölge Eşleştirme Sırası",
       "first-match": "Bölgeler yukarıdan aşağıya kontrol edilir ve adresle eşleşen ilk bölge kullanılır. Özel bölgeleri genel olanların üstüne koyun.",
       "shadowed": "Bu bölge hiçbir zaman eşleşmez: daha üstteki etkin bir bölge tüm ülkelerini zaten kapsıyor.",
       "everywhere": "Diğer Her Yer",
@@ -2784,7 +2798,7 @@
     }
   },
   "nav-overview": "Genel Bakış",
-  "nav-catalog": "Katalog",
+  "nav-catalog": "Ürünler",
   "nav-customers": "Müşteriler",
   "nav-section-orders": "Siparişler",
   "nav-section-deliveries": "Teslimatlar",

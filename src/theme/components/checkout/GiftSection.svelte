@@ -1,29 +1,33 @@
-<div class="market-gift-section card">
-  <div class="market-gift-section__body card-body">
-    <h2 class="market-gift-section__title h5">{$_('theme.checkout.gift')}</h2>
+<script module>
+  export const view = { contract: 2 };
+</script>
 
-    <div class="form-check form-switch">
-      <input
-        id={switchId}
-        class="market-gift-section__check form-check-input"
-        type="checkbox"
-        role="switch"
-        checked={isGift}
-        aria-invalid={lineNames.length ? 'true' : undefined}
-        aria-describedby={lineNames.length ? `${switchId}-error` : undefined}
-        onchange={(event) => onchange({ isGift: event.currentTarget.checked })} />
-      <label class="form-check-label" for={switchId}>{$_('theme.checkout.gift-switch')}</label>
-    </div>
-
-    {#if lineNames.length}
-      <div class="form-text text-danger" id="{switchId}-error" role="alert">
-        {$_('theme.errors.GIFT_NOT_ALLOWED')}
-        {lineNames.join(', ')}
+<div class="market-gift-section">
+  <div class="market-gift-section__body vstack gap-3">
+    {#if showSwitch}
+      <div class="form-check form-switch">
+        <input
+          id={switchId}
+          class="market-gift-section__check form-check-input"
+          type="checkbox"
+          role="switch"
+          checked={isGift}
+          aria-invalid={lineNames.length ? 'true' : undefined}
+          aria-describedby={lineNames.length ? `${switchId}-error` : undefined}
+          onchange={(event) => onchange({ isGift: event.currentTarget.checked })} />
+        <label class="form-check-label" for={switchId}>{$_('theme.checkout.gift-switch')}</label>
       </div>
+
+      {#if lineNames.length}
+        <div class="form-text text-danger" id="{switchId}-error" role="alert">
+          {$_('theme.errors.GIFT_NOT_ALLOWED')}
+          {lineNames.join(', ')}
+        </div>
+      {/if}
     {/if}
 
-    {#if isGift}
-      <div class="vstack gap-3 mt-3">
+    {#if showDetails && isGift}
+      <div class="vstack gap-3">
         <div>
           <label class="market-gift-section__label form-label" for={recipientId}>
             {$_('theme.checkout.gift-recipient')}
@@ -103,6 +107,8 @@
     errors = {},
     lineNames = [],
     recipientUnknown = false,
+    showSwitch = true,
+    showDetails = true,
     onchange = () => {},
     onblur = () => {},
   } = $props();

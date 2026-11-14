@@ -299,7 +299,7 @@
                           aria-label={$_('common.actions')}>
                           <span class="fas fa-ellipsis-v"></span>
                         </button>
-                        <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                        <div class="dropdown-menu dropdown-menu-start">
                           <button type="button" class="dropdown-item link-danger" onclick={() => cancelPayout(payout)}>
                             <i class="fas fa-ban me-2"></i>
                             {$_('pages.creator-detail.cancel')}

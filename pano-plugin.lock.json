@@ -332,10 +332,9 @@
         "market-buyer-section__email",
         "market-buyer-section__input",
         "market-buyer-section__input-2",
-        "market-buyer-section__label",
-        "market-buyer-section__title"
+        "market-buyer-section__label"
       ],
-      "contract": 1,
+      "contract": 2,
       "hooks": [],
       "props": {
         "errors": {
@@ -398,12 +397,11 @@
         "market-cart-offcanvas__action-2",
         "market-cart-offcanvas__body",
         "market-cart-offcanvas__checkout",
-        "market-cart-offcanvas__clear",
         "market-cart-offcanvas__header",
         "market-cart-offcanvas__list",
         "market-cart-offcanvas__title"
       ],
-      "contract": 1,
+      "contract": 2,
       "hooks": [],
       "props": {},
       "slots": []
@@ -461,6 +459,7 @@
         "market-checkout-page__alert",
         "market-checkout-page__check",
         "market-checkout-page__edit-cart",
+        "market-checkout-page__gift",
         "market-checkout-page__redirecting",
         "market-checkout-page__reload",
         "market-checkout-page__too-many-requests"
@@ -640,10 +639,15 @@
         "market-credits-section__action",
         "market-credits-section__alert",
         "market-credits-section__badge",
+        "market-credits-section__balance",
         "market-credits-section__body",
         "market-credits-section__check",
         "market-credits-section__check-2",
+        "market-credits-section__controls",
+        "market-credits-section__header",
         "market-credits-section__input",
+        "market-credits-section__list",
+        "market-credits-section__payment",
         "market-credits-section__title"
       ],
       "contract": 1,
@@ -759,6 +763,35 @@
       },
       "slots": []
     },
+    "market:FilterDropdown": {
+      "classes": [
+        "market-filter-dropdown",
+        "market-filter-dropdown__label",
+        "market-filter-dropdown__menu",
+        "market-filter-dropdown__option",
+        "market-filter-dropdown__trigger"
+      ],
+      "contract": 2,
+      "hooks": [],
+      "props": {
+        "current": {
+          "required": false
+        },
+        "icon": {
+          "required": false
+        },
+        "label": {
+          "required": true
+        },
+        "onSelect": {
+          "required": true
+        },
+        "options": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
     "market:GenericPaymentForm": {
       "classes": [
         "market-generic-payment-form",
@@ -812,10 +845,9 @@
         "market-gift-section__gift-message",
         "market-gift-section__input",
         "market-gift-section__input-2",
-        "market-gift-section__label",
-        "market-gift-section__title"
+        "market-gift-section__label"
       ],
-      "contract": 1,
+      "contract": 2,
       "hooks": [],
       "props": {
         "errors": {
@@ -840,6 +872,12 @@
           "required": false
         },
         "recipientUnknown": {
+          "required": false
+        },
+        "showDetails": {
+          "required": false
+        },
+        "showSwitch": {
           "required": false
         }
       },
@@ -1302,6 +1340,7 @@
         "market-payment-method-picker__body",
         "market-payment-method-picker__check",
         "market-payment-method-picker__external-pricing",
+        "market-payment-method-picker__header",
         "market-payment-method-picker__image",
         "market-payment-method-picker__item",
         "market-payment-method-picker__list",
@@ -1390,6 +1429,9 @@
         "settings": {
           "required": false
         },
+        "showCredits": {
+          "required": false
+        },
         "showVat": {
           "required": false
         }
@@ -1404,6 +1446,7 @@
         "market-product-card__badge",
         "market-product-card__body",
         "market-product-card__choose-options",
+        "market-product-card__credits",
         "market-product-card__image",
         "market-product-card__sold-out",
         "market-product-card__title"
@@ -1589,6 +1632,51 @@
       },
       "slots": []
     },
+    "market:SearchInput": {
+      "classes": [
+        "market-search-input",
+        "market-search-input__input",
+        "market-search-input__status"
+      ],
+      "contract": 1,
+      "hooks": [],
+      "props": {
+        "ariaLabel": {
+          "required": false
+        },
+        "debounceMs": {
+          "required": false
+        },
+        "id": {
+          "required": true
+        },
+        "initialValue": {
+          "required": false
+        },
+        "maxLength": {
+          "required": false
+        },
+        "onchange": {
+          "required": true
+        },
+        "placeholder": {
+          "required": false
+        },
+        "searching": {
+          "required": false
+        },
+        "searchingLabel": {
+          "required": false
+        },
+        "showSpinner": {
+          "required": false
+        },
+        "small": {
+          "required": false
+        }
+      },
+      "slots": []
+    },
     "market:ServerSelect": {
       "classes": [
         "market-server-select",
@@ -1769,10 +1857,12 @@
         "market-store-page__action",
         "market-store-page__all-products",
         "market-store-page__bestsellers",
+        "market-store-page__categories",
+        "market-store-page__category",
         "market-store-page__comparisons",
-        "market-store-page__title"
+        "market-store-page__layout"
       ],
-      "contract": 1,
+      "contract": 3,
       "hooks": [],
       "props": {
         "data": {
@@ -1805,12 +1895,17 @@
     "market:StoreToolbar": {
       "classes": [
         "market-store-toolbar",
-        "market-store-toolbar__input",
-        "market-store-toolbar__select"
+        "market-store-toolbar__controls",
+        "market-store-toolbar__credit",
+        "market-store-toolbar__credits",
+        "market-store-toolbar__search"
       ],
-      "contract": 1,
+      "contract": 2,
       "hooks": [],
       "props": {
+        "creditSummary": {
+          "required": false
+        },
         "currency": {
           "required": false
         },
@@ -1824,6 +1919,9 @@
           "required": true
         },
         "search": {
+          "required": false
+        },
+        "searching": {
           "required": false
         },
         "settings": {

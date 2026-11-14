@@ -4,7 +4,7 @@
   <div class="alert alert-info d-flex align-items-start mb-3" role="alert">
     <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
     <div>
-      <b>{$_('settings.billing.seller-notice.title')}</b>
+      <h5 class="alert-heading mb-2">{$_('settings.billing.seller-notice.title')}</h5>
       <div>{$_('settings.billing.seller-notice.body')}</div>
     </div>
   </div>
@@ -14,7 +14,7 @@
   <div class="card">
     <div class="card-body">
       <div class="mb-3">
-        <div class="mb-2">{$_('settings.billing.info-mode')}</div>
+        <div class="mb-2 text-capitalize">{$_('settings.billing.info-mode')}</div>
         {#each BILLING_INFO_MODES as mode (mode)}
           <div class="form-check">
             <input
@@ -27,7 +27,7 @@
               bind:group={draft.billingInfoMode} />
             <label class="form-check-label" for="setting-billingInfoMode-{mode}">
               {$_(`enums.billing-info-mode.${mode}`)}
-              <span class="form-text d-block mt-0">
+              <span class="form-text text-body-secondary d-block mt-0">
                 {$_(`settings.billing.info-mode-hint.${mode}`)}
               </span>
             </label>
@@ -199,9 +199,9 @@
           {$_('settings.billing.sequences.title', { values: { count: sequences.length } })}
         </div>
         <div slot="right">
-          <a class="btn btn-sm btn-link" href={previewUrl} target="_blank" rel="noopener">
-            <i class="fa-solid fa-file-pdf me-2" aria-hidden="true"></i>
+          <a class="btn btn-sm btn-primary" href={previewUrl} target="_blank" rel="noopener">
             {$_('settings.billing.preview-pdf')}
+            <i class="fa-solid fa-arrow-up-right-from-square ms-2" aria-hidden="true"></i>
           </a>
         </div>
       </CardHeader>

@@ -3,7 +3,7 @@ const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 
 const sparkOf = (block) => (Array.isArray(block?.spark) ? block.spark.map(num) : []);
 
-/** A summary block is `{count, revenue, trend, spark}`; refunds may arrive as a bare amount. */
+/** A summary block is `{count, revenue, trend, spark}`, or a bare amount. */
 function money(block) {
   if (block !== null && typeof block === 'object') {
     return {
@@ -17,16 +17,16 @@ function money(block) {
 }
 
 /**
- * Five cards in display order. `kind: 'money'` cards show `amount` formatted in the stats currency,
+ * Four cards in display order. `kind: 'money'` cards show `amount` formatted in the stats currency,
  * `kind: 'count'` shows `count`. `variant` is the Bootstrap `text-bg-*` colour of the card.
  */
 export function summaryCards(summary) {
   const subscriptions = summary?.activeSubscriptions;
+  const refundsAmount = money(summary?.refunds).amount;
   return [
     { key: 'weekly', variant: 'secondary', kind: 'money', ...money(summary?.weekly) },
     { key: 'monthly', variant: 'info', kind: 'money', ...money(summary?.monthly) },
     { key: 'total', variant: 'primary', kind: 'money', ...money(summary?.total) },
-    { key: 'refunds', variant: 'warning', kind: 'money', ...money(summary?.refunds) },
     {
       key: 'subscriptions',
       variant: 'success',
@@ -36,6 +36,7 @@ export function summaryCards(summary) {
           ? num(subscriptions.count)
           : num(subscriptions),
       amount: 0,
+      refundsAmount,
       trend: 0,
       spark:
         subscriptions !== null && typeof subscriptions === 'object' ? sparkOf(subscriptions) : [],

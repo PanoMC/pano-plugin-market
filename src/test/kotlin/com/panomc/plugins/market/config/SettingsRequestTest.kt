@@ -31,6 +31,7 @@ class SettingsRequestTest {
         assertFalse("version" in properties)
         assertFalse("creditValue" in properties, "credit keys go through /settings/credits")
         assertFalse("exchangeRateUpdatedAt" in properties, "system keys are not writable")
+        assertFalse("storeBackgroundImage" in properties, "background names are written only by the upload endpoint")
         assertTrue("storeEnabled" in properties && "mcVaultMode" in properties && "moduleSidebars" in properties)
 
         val credit = SettingsRequest.schema(ConfigScope.CREDIT).toJson().getJsonObject("properties").fieldNames()
@@ -69,10 +70,10 @@ class SettingsRequestTest {
     @Test
     fun `credit and system keys are unknown to the general endpoint`() {
         val error = assertThrows(InvalidSettings::class.java) {
-            SettingsRequest.apply(JsonObject().put("creditValue", 2.0).put("exchangeRateUpdatedAt", 5), current())
+            SettingsRequest.apply(JsonObject().put("creditValue", 2.0).put("exchangeRateUpdatedAt", 5).put("storeBackgroundImage", "../file"), current())
         }
 
-        assertEquals(setOf("creditValue", "exchangeRateUpdatedAt"), fieldErrors(error).fieldNames())
+        assertEquals(setOf("creditValue", "exchangeRateUpdatedAt", "storeBackgroundImage"), fieldErrors(error).fieldNames())
     }
 
     @Test

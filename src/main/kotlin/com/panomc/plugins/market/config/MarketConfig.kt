@@ -10,6 +10,7 @@ class MarketConfig(
     @ConfigSection("Store")
     val storeName: String = "Market",
     val storeDescription: String = "",
+    val storeBackgroundImage: String = "",
     @ConfigComment("false: the storefront endpoints answer STORE_DISABLED; the panel is unaffected.")
     val storeEnabled: Boolean = true,
     @ConfigComment("Time zone of the store day (e.g. Europe/Istanbul). Empty = the server's default zone.")

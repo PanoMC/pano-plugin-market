@@ -14,11 +14,9 @@
       <ProfilePills summary={data.summary} current="credits" />
     {/if}
 
-    <section class="card" aria-labelledby="market-balance-title">
+    <section class="card text-bg-info" aria-labelledby="market-balance-title">
       <div class="market-credits-page__body card-body">
-        <h2
-          class="market-credits-page__title h6 text-body-secondary mb-1"
-          id="market-balance-title">
+        <h2 class="market-credits-page__title h6 mb-1" id="market-balance-title">
           {$_('theme.profile.credits.balance')}
         </h2>
         <div class="display-6">{formatCredits(data.balance, data.creditName)}</div>
@@ -34,7 +32,9 @@
     {/if}
 
     <section aria-labelledby="market-ledger-title">
-      <h2 class="market-credits-page__ledger-title h5 mb-3" id="market-ledger-title">
+      <h2
+        class="market-credits-page__ledger-title h5 mb-3 text-capitalize"
+        id="market-ledger-title">
         {$_('theme.profile.credits.ledger-title')}
       </h2>
 
@@ -49,7 +49,7 @@
               <LedgerTable entries={ledger.entries} creditName={data.creditName} />
             </div>
           {:else}
-            <NoContent icon="fa-solid fa-coins fa-3x" text={$_('theme.profile.credits.empty')} />
+            <NoContent text="" />
           {/if}
 
           <div class="mt-3">

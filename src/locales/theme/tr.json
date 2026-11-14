@@ -148,6 +148,7 @@
       "TEST_MODE": "Bu ödeme yöntemi test modunda ve kullanılamıyor."
     },
     "common": {
+      "search-placeholder": "Bul...",
       "retry": "Tekrar dene",
       "loading": "Yükleniyor...",
       "copy": "Kopyala",
@@ -241,7 +242,7 @@
       "shipping-free": "Ücretsiz",
       "shipping-days": "{minDays}–{maxDays} gün",
       "shipping-days-single": "{days, plural, one {# gün} other {# gün}}",
-      "billing": "Fatura bilgileri",
+      "billing": "Fatura",
       "billing-add": "Fatura bilgisi ekle",
       "billing-type": "Fatura türü",
       "billing-type-INDIVIDUAL": "Bireysel",
@@ -441,7 +442,7 @@
     },
     "profile": {
       "nav": {
-        "purchases": "Satın alımlar",
+        "purchases": "Satın Alımlar",
         "credits": "Krediler",
         "subscriptions": "Abonelikler",
         "creator": "İçerik üretici"
@@ -451,7 +452,7 @@
         "balance": "Kredi bakiyesi:"
       },
       "purchases": {
-        "title": "Satın alımlar",
+        "title": "Satın Alımlar",
         "active-title": "Aktif ürünler",
         "permanent": "Süresiz",
         "valid-until": "{date} tarihine kadar geçerli",

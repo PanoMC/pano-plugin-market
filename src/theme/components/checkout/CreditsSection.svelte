@@ -1,57 +1,67 @@
 <div class="market-credits-section card">
-  <div class="market-credits-section__body card-body vstack gap-3">
-    <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2">
+  <div class="market-credits-section__body card-body p-0">
+    <div class="market-credits-section__header p-3">
       <h2 class="market-credits-section__title h5 mb-0">
         {$_('theme.checkout.credits', { values: { name: credits.name } })}
       </h2>
-      <div>
+    </div>
+
+    <div class="market-credits-section__list list-group list-group-flush">
+      <a
+        class="market-credits-section__balance list-group-item list-group-item-action d-flex justify-content-between align-items-baseline gap-2"
+        href="{base}/profile/credits">
         <span class="text-body-secondary">{$_('theme.checkout.credits-balance')}</span>
-        <span class="fw-semibold">{formatCredits(credits.balance, credits.name)}</span>
-        <a class="ms-2" href="{base}/profile/credits">{$_('theme.checkout.credits-top-up')}</a>
-      </div>
+        <span class="d-flex align-items-baseline gap-2">
+          <span class="fw-semibold">{formatCredits(credits.balance, credits.name)}</span>
+          <span>{$_('theme.checkout.credits-top-up')}</span>
+        </span>
+      </a>
+
+      {#if radio.payable}
+        <label
+          class="market-credits-section__payment list-group-item list-group-item-action d-flex align-items-start gap-2">
+          <input
+            id={payId}
+            class="market-credits-section__check form-check-input flex-shrink-0 mt-1"
+            type="radio"
+            name={PAY_GROUP}
+            value="credits"
+            checked={payWithCredits}
+            disabled={disabled || radio.insufficient}
+            aria-describedby={radio.insufficient ? `${payId}-help` : undefined}
+            onchange={() => onchange(selectCreditsPatch())} />
+          <span class="flex-grow-1">
+            {$_('theme.checkout.credits-pay', { values: { name: credits.name } })}
+            <span class="market-credits-section__badge badge text-bg-info ms-1">
+              {formatCredits(credits.creditTotal, credits.name)}
+            </span>
+            {#if radio.insufficient}
+              <span class="form-text text-danger d-block" id="{payId}-help">
+                {$_('theme.errors.INSUFFICIENT_CREDITS')}
+              </span>
+            {/if}
+          </span>
+        </label>
+      {/if}
     </div>
 
     {#if alertKey}
-      <div class="market-credits-section__alert alert alert-warning mb-0" role="alert">
-        {$_(alertKey)}
-        {#if alertMax !== null}
-          <span class="d-block small">
-            {$_('theme.checkout.credits-max-applicable', {
-              values: { amount: formatCredits(alertMax, credits.name) },
-            })}
-          </span>
-        {/if}
-      </div>
-    {/if}
-
-    {#if radio.payable}
-      <div class="form-check">
-        <input
-          id={payId}
-          class="market-credits-section__check form-check-input"
-          type="radio"
-          name={PAY_GROUP}
-          value="credits"
-          checked={payWithCredits}
-          disabled={disabled || radio.insufficient}
-          aria-describedby={radio.insufficient ? `${payId}-help` : undefined}
-          onchange={() => onchange(selectCreditsPatch())} />
-        <label class="form-check-label" for={payId}>
-          {$_('theme.checkout.credits-pay', { values: { name: credits.name } })}
-          <span class="market-credits-section__badge badge text-bg-info ms-1">
-            {formatCredits(credits.creditTotal, credits.name)}
-          </span>
-        </label>
-        {#if radio.insufficient}
-          <div class="form-text text-danger" id="{payId}-help">
-            {$_('theme.errors.INSUFFICIENT_CREDITS')}
-          </div>
-        {/if}
+      <div class="p-3">
+        <div class="market-credits-section__alert alert alert-warning mb-0" role="alert">
+          {$_(alertKey)}
+          {#if alertMax !== null}
+            <span class="d-block small">
+              {$_('theme.checkout.credits-max-applicable', {
+                values: { amount: formatCredits(alertMax, credits.name) },
+              })}
+            </span>
+          {/if}
+        </div>
       </div>
     {/if}
 
     {#if mixed}
-      <div class="vstack gap-2">
+      <div class="market-credits-section__controls p-3 vstack gap-2">
         <div class="form-check">
           <input
             id={useId}

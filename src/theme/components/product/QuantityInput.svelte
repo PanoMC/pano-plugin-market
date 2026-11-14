@@ -4,7 +4,7 @@
   <div class="input-group w-auto">
     <button
       type="button"
-      class="market-quantity-input__action btn btn-outline-secondary"
+      class="market-quantity-input__action btn btn-primary"
       aria-label={$_('theme.product.quantity-decrease')}
       disabled={value <= 1}
       onclick={() => onchange(clampQuantity(value - 1, max))}>
@@ -13,7 +13,7 @@
     <input
       id="mp-quantity"
       type="number"
-      class="market-quantity-input__input form-control text-center"
+      class="market-quantity-input__input form-control w-auto flex-grow-0 border-primary text-center"
       min="1"
       {max}
       step="1"
@@ -29,7 +29,7 @@
       }} />
     <button
       type="button"
-      class="market-quantity-input__quantity-increase btn btn-outline-secondary"
+      class="market-quantity-input__quantity-increase btn btn-primary"
       aria-label={$_('theme.product.quantity-increase')}
       disabled={value >= max}
       onclick={() => onchange(clampQuantity(value + 1, max))}>

@@ -58,7 +58,7 @@
                       <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
                     </button>
                     <div
-                      class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                      class="dropdown-menu dropdown-menu-start">
                       <button
                         type="button"
                         class="dropdown-item"

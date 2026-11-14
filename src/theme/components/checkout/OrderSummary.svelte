@@ -1,7 +1,9 @@
 <div class="market-order-summary card" id="market-checkout-summary-card">
   <div class="market-order-summary__body card-body vstack gap-3">
     <div class="d-flex justify-content-between align-items-baseline gap-2">
-      <h2 class="market-order-summary__title h5 mb-0">{$_('theme.checkout.summary.title')}</h2>
+      <h2 class="market-order-summary__title h5 mb-0 text-capitalize">
+        {$_('theme.checkout.summary.title')}
+      </h2>
       {#if !topup}
         <button
           type="button"
@@ -87,7 +89,13 @@
         aria-live="polite"
         aria-busy={quoting ? 'true' : 'false'}>
         {#each rows as row (row.id)}
-          <dt class={['col-7', 'fw-normal', row.strong && 'fw-bold']}>
+          <dt
+            class={[
+              'col-7',
+              'fw-normal',
+              isSubtotal(row) && 'text-body-secondary',
+              row.strong && 'fw-bold',
+            ]}>
             {$_(row.labelKey, { values: row.values ?? {} })}
             {#if row.extra}
               <span class="small text-body-secondary">
@@ -160,6 +168,8 @@
   const rows = $derived(summaryRows(quote));
   const alerts = $derived(summaryAlerts(quote));
   const chargedIn = $derived(chargedInCurrency(quote));
+
+  const isSubtotal = (row) => row.id === 'subtotal';
 
   /** Interpolation values of an alert: the formatted amount of `minimum`, plain numbers otherwise. */
   function alertValues(alert) {

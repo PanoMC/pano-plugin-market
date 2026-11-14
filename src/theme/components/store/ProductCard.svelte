@@ -1,7 +1,8 @@
-<div class={['market-product-card', 'card', 'h-100', { 'opacity-75': !product.inStock }]}>
+<div
+  class={['market-product-card', 'card', 'rounded-3', 'h-100', { 'opacity-75': !product.inStock }]}>
   <div class="position-relative">
     <a {href} class="d-block">
-      <div class="ratio ratio-1x1 bg-body-tertiary rounded-top overflow-hidden">
+      <div class="ratio ratio-1x1 bg-body-tertiary rounded-top-3 overflow-hidden">
         {#if product.imageFileName}
           <img
             src="{base}/api/plugins/pano-plugin-market/products/image/{encodeURIComponent(
@@ -25,7 +26,7 @@
     </div>
     {#if product.featured}
       <span
-        class="market-product-card__badge badge text-bg-warning position-absolute top-0 end-0 m-2">
+        class="market-product-card__badge badge bg-white text-dark position-absolute top-0 end-0 m-2">
         <i class="fa-solid fa-star me-1" aria-hidden="true"></i>{$_('theme.store.featured-badge')}
       </span>
     {/if}
@@ -45,7 +46,17 @@
     {#if product.shortDescription}
       <p class="small text-body-secondary text-truncate mb-1">{product.shortDescription}</p>
     {/if}
-    <PriceTag {product} {settings} />
+    <PriceTag {product} {settings} showCredits={false} />
+    {#if settings.creditsEnabled && product.creditPrice != null && Number(product.price) !== 0}
+      <div class="d-flex justify-content-end">
+        <span class="market-product-card__credits badge rounded-pill text-bg-primary text-wrap text-start">
+          <i class="fa-solid fa-coins me-1" aria-hidden="true"></i>{formatCredits(
+            product.creditPrice,
+            settings.creditName || $_('theme.store.credits'),
+          )}
+        </span>
+      </div>
+    {/if}
     <StockNote {product} />
     <SaleCountdown {product} {settings} />
     {#if product.owned === true}
@@ -69,11 +80,9 @@
       {:else}
         <button
           type="button"
-          class="market-product-card__add-to-cart btn btn-primary btn-sm w-100"
+          class="market-product-card__add-to-cart btn btn-info btn-sm w-100"
           onclick={add}>
-          <i class="fa-solid fa-cart-plus me-1" aria-hidden="true"></i>{$_(
-            'theme.store.add-to-cart',
-          )}
+          {$_('theme.store.add-to-cart')}
         </button>
       {/if}
     </div>
@@ -91,6 +100,7 @@
 
   const market = plugin('market');
   const _ = market._;
+  const { formatCredits } = market.require('format').actions;
 
   let { product, settings = {} } = $props();
 

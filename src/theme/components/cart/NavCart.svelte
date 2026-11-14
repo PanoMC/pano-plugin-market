@@ -10,7 +10,7 @@
   <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i>
   {#if count > 0}
     <span
-      class="market-nav-cart__badge badge rounded-pill text-bg-danger position-absolute top-0 start-100 translate-middle"
+      class="market-nav-cart__badge badge rounded-pill text-bg-info position-absolute top-0 start-100 translate-middle"
       aria-hidden="true">{count}</span>
   {/if}
   <span class="visually-hidden" aria-live="polite" aria-atomic="true"

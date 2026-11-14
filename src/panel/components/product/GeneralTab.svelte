@@ -80,28 +80,40 @@
     {#if product.saleWindow}
       <div class="row g-2">
         <div class="col-md-6">
-          <label for="product-duration-start" class="form-label mb-1 text-body-secondary">
-            {$_('pages.create-product.start-date')}
-          </label>
-          <input
-            type="datetime-local"
-            id="product-duration-start"
-            data-field="durationStart"
-            class="form-control"
-            class:is-invalid={errors.durationStart}
-            bind:value={product.durationStart} />
+          <div class="input-group">
+            <span class="input-group-text" aria-hidden="true">
+              <i class="fa-solid fa-calendar-day"></i>
+            </span>
+            <div class="form-floating flex-grow-1">
+              <input
+                type="datetime-local"
+                id="product-duration-start"
+                data-field="durationStart"
+                class="form-control"
+                class:is-invalid={errors.durationStart}
+                placeholder=" "
+                bind:value={product.durationStart} />
+              <label for="product-duration-start">{$_('pages.create-product.start-date')}</label>
+            </div>
+          </div>
         </div>
         <div class="col-md-6">
-          <label for="product-duration-expiry" class="form-label mb-1 text-body-secondary">
-            {$_('pages.create-product.end-date')}
-          </label>
-          <input
-            type="datetime-local"
-            id="product-duration-expiry"
-            data-field="durationExpiry"
-            class="form-control"
-            class:is-invalid={errors.durationExpiry}
-            bind:value={product.durationExpiry} />
+          <div class="input-group">
+            <span class="input-group-text" aria-hidden="true">
+              <i class="fa-solid fa-calendar-check"></i>
+            </span>
+            <div class="form-floating flex-grow-1">
+              <input
+                type="datetime-local"
+                id="product-duration-expiry"
+                data-field="durationExpiry"
+                class="form-control"
+                class:is-invalid={errors.durationExpiry}
+                placeholder=" "
+                bind:value={product.durationExpiry} />
+              <label for="product-duration-expiry">{$_('pages.create-product.end-date')}</label>
+            </div>
+          </div>
           {#if errors.durationExpiry}
             <div class="invalid-feedback d-block">{$_(fieldErrorKey(errors.durationExpiry))}</div>
           {/if}

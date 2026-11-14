@@ -14,6 +14,7 @@ import {
   firstInvalidId,
   lineNamesWith,
   mapBuyerFields,
+  maskEmail,
   mergeServerCodes,
   NO_CARRIER_EXTRAS,
   nextCarrierExtras,
@@ -55,6 +56,18 @@ const trAddress = (extra = {}) => ({
 });
 
 const draftWith = (extra = {}) => ({ ...defaultDraft(), ...extra });
+
+describe('maskEmail', () => {
+  test('keeps only the first local-part character and the domain', () => {
+    expect(maskEmail('selim@example.com')).toBe('s***@example.com');
+  });
+
+  test('does not expose malformed values', () => {
+    expect(maskEmail('invalid')).toBe('***');
+    expect(maskEmail('user@')).toBe('***');
+    expect(maskEmail(null)).toBe('***');
+  });
+});
 
 describe('resolveCheckoutLoad', () => {
   test('a flat config body becomes READY with the config', () => {

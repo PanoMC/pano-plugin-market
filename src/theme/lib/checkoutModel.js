@@ -66,6 +66,16 @@ export function fieldErrorKey(field, code) {
 /** DOM id of a checkout control: `market-checkout-<section>-<field>`. */
 export const fieldId = (section, field) => `market-checkout-${section}-${field}`;
 
+/** A buyer email safe to show in the checkout summary. */
+export function maskEmail(email) {
+  if (typeof email !== 'string') return '***';
+
+  const at = email.lastIndexOf('@');
+  if (at <= 0 || at === email.length - 1) return '***';
+
+  return `${email[0]}***@${email.slice(at + 1)}`;
+}
+
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 

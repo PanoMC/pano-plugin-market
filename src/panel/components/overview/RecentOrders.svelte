@@ -1,5 +1,5 @@
 {#if orders.length === 0}
-  <NoContent icon="" />
+  <NoContent text="" />
 {:else}
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">

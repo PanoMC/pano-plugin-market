@@ -13,7 +13,7 @@
       <div class="alert alert-warning d-flex align-items-start" role="alert">
         <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
         <div>
-          <b>{$_('pages.create-order.force-alert.title')}</b>
+          <h5 class="alert-heading mb-2">{$_('pages.create-order.force-alert.title')}</h5>
           <div>{$_('pages.create-order.force-alert.body')}</div>
           <button class="btn alert-btn mt-2" type="button" onclick={enableForce}>
             {$_('pages.create-order.force-alert.enable')}
@@ -118,7 +118,7 @@
             </CardHeader>
 
             {#if lines.length === 0}
-              <NoContent icon="" />
+              <NoContent text={$_('common.no-content')} />
             {:else}
               <div class="table-responsive">
                 <table class="table table-hover">

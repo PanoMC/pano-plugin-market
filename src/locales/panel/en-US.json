@@ -190,7 +190,7 @@
       "tab-has-errors": "This tab has invalid fields",
       "pending-tab": "The {tab} section is being rebuilt.",
       "validation-failed": "Some fields need your attention.",
-      "side-load-failed": "Could not load this list.",
+      "side-load-failed": "Could Not Load This List",
       "reload": "Reload",
       "image-error": "Choose a PNG, JPEG, GIF or WebP image up to 5 MB.",
       "delete-title": "Delete Product",
@@ -487,8 +487,9 @@
       "load-error": "Failed to load market settings. Please refresh the page and try again."
     },
     "overview": {
-      "title": "Market Overview",
+      "title": "Market",
       "range": {
+        "label": "Date range",
         "7d": "7 Days",
         "30d": "30 Days",
         "90d": "90 Days",
@@ -499,11 +500,11 @@
         "title": "Custom Date Range"
       },
       "card": {
-        "weekly": "Weekly Revenue (Collected)",
-        "monthly": "Monthly Revenue (Collected)",
-        "total": "Total Revenue (Collected)",
+        "weekly": "Weekly Revenue",
+        "monthly": "Monthly Revenue",
+        "total": "Total Revenue",
         "refunds": "Refunds",
-        "subscriptions": "Active Subscriptions"
+        "subscriptions": "Subscriptions"
       },
       "recent-orders": "Recent Orders",
       "charts": "Charts",
@@ -1215,6 +1216,11 @@
     }
   },
   "common": {
+    "no-content": "No Content Found",
+    "information": "Information",
+    "warning": "Warning",
+    "error": "Error",
+    "success": "Success",
     "save": "Save",
     "saving": "Saving...",
     "cancel": "Cancel",
@@ -2101,6 +2107,12 @@
     "general": {
       "store-name": "Store Name",
       "store-description": "Store Description",
+      "background-label": "Store Background Image",
+      "background-hint": "Shown at the top of the store page. PNG, JPEG, GIF or WebP; maximum 5 MB. Press Save to apply the change.",
+      "background-preview": "Store background image preview",
+      "background-remove": "Remove Image",
+      "background-invalid": "Choose a PNG, JPEG, GIF or WebP image up to 5 MB.",
+      "background-partial-save": "Other settings were saved, but the background image could not be saved. Please try again.",
       "vat-label": "Tax (%)",
       "vat-placeholder": "Tax %",
       "show-vat-in-price": "Show prices as tax-inclusive",
@@ -2130,7 +2142,7 @@
         "toast-refresh-failed": "Could not fetch the exchange rate. Please try again later.",
         "toast-refresh-error": "An error occurred while updating the exchange rate."
       },
-      "show-comparisons": "Show comparison tables (Comparisons)",
+      "show-comparisons": "Show comparison tables",
       "store-enabled": "Store Enabled",
       "store-enabled-hint": "While off, the storefront is closed to visitors. The panel keeps working.",
       "time-zone": "Time Zone",
@@ -2207,6 +2219,7 @@
       "unavailable": "The plugin of this payment method is not running. Its settings are kept.",
       "unavailable-hint": "Start the plugin to use this method again.",
       "open-addons": "Open Addons",
+      "external-pricing-title": "Pricing Set By Gateway",
       "external-pricing": "The gateway sets the price, so fees and amount limits cannot be changed here.",
       "test-mode-title": "Test Mode",
       "test-mode-hint": "Methods in test mode are offered only to staff members with settings or payment permissions. Buyers do not see them.",
@@ -2657,6 +2670,7 @@
     "shipping-zones": {
       "count": "{count} Zones",
       "create": "Create Zone",
+      "first-match-title": "Zone Matching Order",
       "first-match": "Zones are checked from top to bottom and the first zone that matches the address is used. Put specific zones above general ones.",
       "shadowed": "This zone can never match: an earlier active zone already covers all of its countries.",
       "everywhere": "Everywhere Else",
@@ -2784,7 +2798,7 @@
     }
   },
   "nav-overview": "Overview",
-  "nav-catalog": "Catalog",
+  "nav-catalog": "Products",
   "nav-customers": "Customers",
   "nav-section-orders": "Orders",
   "nav-section-deliveries": "Deliveries",

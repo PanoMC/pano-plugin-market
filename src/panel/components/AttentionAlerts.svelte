@@ -2,7 +2,7 @@
   <div class="alert alert-{alert.variant} d-flex align-items-start" role="alert">
     <i class="fa-solid {alert.icon} me-3 mt-1" aria-hidden="true"></i>
     <div>
-      <b>{$_(`alerts.${alert.title}`)}</b>
+      <h5 class="alert-heading mb-2">{$_(`alerts.${alert.title}`)}</h5>
       <div>
         {$_(`alerts.${alert.body}`, {
           values: { count: alert.count ?? 0, providers: alert.providers?.join(', ') ?? '' },
@@ -33,7 +33,7 @@
               {/if}
               {#if item.downloadUrl}
                 <a
-                  class="alert-link ms-1"
+                  class="alert-link d-block mt-2 text-capitalize"
                   href={item.downloadUrl}
                   target="_blank"
                   rel="noopener noreferrer">
@@ -46,7 +46,7 @@
       {/if}
 
       {#each alert.links as item (item.href)}
-        <a class="alert-link me-3" href="{base}{item.href}">{$_(`alerts.actions.${item.label}`)}</a>
+        <a class="alert-link d-inline-block mt-2 me-3 text-capitalize" href="{base}{item.href}">{$_(`alerts.actions.${item.label}`)}</a>
       {/each}
     </div>
   </div>

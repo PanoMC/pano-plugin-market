@@ -3,10 +3,10 @@
     <div class="alert alert-warning d-flex align-items-start mb-0" role="alert">
       <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
       <div>
-        <b>{$_('pages.create-product.shipping.disabled-title')}</b>
+        <h5 class="alert-heading mb-2">{$_('pages.create-product.shipping.disabled-title')}</h5>
         <div>{$_('pages.create-product.shipping.disabled-body')}</div>
         {#if can(user, 'SET')}
-          <a class="alert-link" href="{base}/market/settings?section=shipping-methods">
+          <a class="alert-link d-inline-block mt-2 text-capitalize" href="{base}/market/settings?section=shipping-methods">
             {$_('pages.create-product.shipping.disabled-link')}
           </a>
         {/if}

@@ -1,27 +1,32 @@
 <div class="market-payment-method-picker card">
-  <div class="market-payment-method-picker__body card-body vstack gap-3">
-    <h2 class="market-payment-method-picker__title h5 mb-0">{$_('theme.checkout.payment')}</h2>
+  <div class="market-payment-method-picker__body card-body p-0">
+    <div class="market-payment-method-picker__header p-3 vstack gap-3">
+      <h2 class="market-payment-method-picker__title h5 mb-0">{$_('theme.checkout.payment')}</h2>
 
-    {#if alertKey}
-      <div class="market-payment-method-picker__alert alert alert-warning mb-0" role="alert">
-        {$_(alertKey)}
-        {#if alertDetail}
-          <span class="d-block small">{alertDetail}</span>
-        {/if}
-      </div>
-    {/if}
+      {#if alertKey}
+        <div class="market-payment-method-picker__alert alert alert-warning mb-0" role="alert">
+          {$_(alertKey)}
+          {#if alertDetail}
+            <span class="d-block small">{alertDetail}</span>
+          {/if}
+        </div>
+      {/if}
+    </div>
 
     {#if view.mode === 'NONE_NEEDED'}
-      <p class="mb-0 text-body-secondary">{$_('theme.checkout.no-payment-needed')}</p>
+      <p class="p-3 mb-0 text-body-secondary">{$_('theme.checkout.no-payment-needed')}</p>
     {:else if view.mode === 'NO_METHOD'}
       <div
-        class="market-payment-method-picker__no-payment-method alert alert-warning mb-0"
-        role="alert">
-        {$_('theme.checkout.no-payment-method')}
+        class="p-3">
+        <div
+          class="market-payment-method-picker__no-payment-method alert alert-warning mb-0"
+          role="alert">
+          {$_('theme.checkout.no-payment-method')}
+        </div>
       </div>
     {:else}
       <div
-        class="market-payment-method-picker__list list-group"
+        class="market-payment-method-picker__list list-group list-group-flush"
         role="radiogroup"
         aria-label={$_('theme.checkout.payment')}>
         {#each view.methods as method (method.id)}
@@ -32,6 +37,7 @@
             class={[
               'market-payment-method-picker__item',
               'list-group-item',
+              'list-group-item-action',
               'd-flex',
               'gap-3',
               unavailable && 'opacity-50',
@@ -82,26 +88,28 @@
       </div>
 
       {#if method}
-        {#if external}
-          <div
-            class="market-payment-method-picker__external-pricing alert alert-info mb-0"
-            role="status">
-            {$_('theme.errors.EXTERNAL_PRICING')}
-          </div>
-        {/if}
-        {#if notices.length > 0}
-          <ul class="list-unstyled small mb-0">
-            {#each notices as notice (notice.url)}
-              <li>
-                <a href={notice.url} target="_blank" rel="noopener noreferrer"
-                  >{notice.label}<i
-                    class="fa-solid fa-arrow-up-right-from-square ms-1"
-                    aria-hidden="true"></i
-                  ></a>
-              </li>
-            {/each}
-          </ul>
-        {/if}
+        <div class="p-3 vstack gap-3">
+          {#if external}
+            <div
+              class="market-payment-method-picker__external-pricing alert alert-info mb-0"
+              role="status">
+              {$_('theme.errors.EXTERNAL_PRICING')}
+            </div>
+          {/if}
+          {#if notices.length > 0}
+            <ul class="list-unstyled small mb-0">
+              {#each notices as notice (notice.url)}
+                <li>
+                  <a href={notice.url} target="_blank" rel="noopener noreferrer"
+                    >{notice.label}<i
+                      class="fa-solid fa-arrow-up-right-from-square ms-1"
+                      aria-hidden="true"></i
+                    ></a>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
       {/if}
     {/if}
   </div>

@@ -17,7 +17,7 @@
       <div class="alert alert-danger d-flex align-items-start mb-0" role="alert">
         <i class="fa-solid fa-circle-exclamation me-3 mt-1" aria-hidden="true"></i>
         <div>
-          <b>{$_('alerts.schema-degraded.title')}</b>
+          <h5 class="alert-heading mb-2">{$_('alerts.schema-degraded.title')}</h5>
           <div>{$_('alerts.schema-degraded.body')}</div>
           <ul class="mb-0">
             {#each model.missing as item, index (index)}
@@ -35,7 +35,7 @@
       <div class="alert alert-warning d-flex align-items-start mb-0" role="alert">
         <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
         <div>
-          <b>{$_('settings.health.ip-trust.title')}</b>
+          <h5 class="alert-heading mb-2">{$_('settings.health.ip-trust.title')}</h5>
           <div>{$_('settings.health.ip-trust.body')}</div>
         </div>
       </div>
@@ -46,7 +46,7 @@
         <div class="col-6 col-md-4 col-xl-2">
           <div class="card text-bg-{card.variant} h-100">
             <div class="card-body">
-              <p class="m-0">{$_(`settings.health.queue.${card.id}`)}</p>
+              <p class="m-0 text-capitalize">{$_(`settings.health.queue.${card.id}`)}</p>
               <span class="fs-2 lh-1">{card.value}</span>
             </div>
           </div>
@@ -65,7 +65,7 @@
         </div>
       </CardHeader>
       <div class="table-responsive">
-        <table class="table table-hover mb-0">
+        <table class="table table-hover mb-0 settings-status-table">
           <tbody>
             <tr>
               <th scope="row" class="align-middle">{$_('settings.health.status.schema')}</th>

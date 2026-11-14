@@ -8,7 +8,7 @@
           {$_('pages.payment-events.count', { values: { count: eventCount } })}
         </div>
         <CardFilters slot="right">
-          <FilterSelect
+          <FilterDropdown
             label={$_('common.status')}
             current={currentTab}
             options={STATUS_TABS.map((tab) => ({ ...tab, label: $_(`pages.payment-events.tab.${tab.key}`) }))}
@@ -17,7 +17,7 @@
       </CardHeader>
 
       {#if events.length === 0}
-        <NoContent icon="" />
+        <NoContent text={$_('common.no-content')} />
       {:else}
         <div class="table-responsive">
           <table class="table table-hover align-middle">
@@ -57,7 +57,7 @@
                         <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
                       </button>
                       <div
-                        class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                        class="dropdown-menu dropdown-menu-start">
                         <button
                           type="button"
                           class="dropdown-item"
@@ -134,7 +134,7 @@
 </script>
 
 <script>
-  import FilterSelect from '../components/FilterSelect.svelte';
+  import FilterDropdown from '../components/FilterDropdown.svelte';
   import { api } from '@panomc/sdk/plugin-api';
   import {
     CardHeader,

@@ -4,7 +4,7 @@
   <div class="alert alert-danger d-flex align-items-start mb-3" role="alert">
     <i class="fa-solid fa-circle-exclamation me-3 mt-1" aria-hidden="true"></i>
     <div>
-      <b>{$_('settings.mail.host-too-old.title')}</b>
+      <h5 class="alert-heading mb-2">{$_('settings.mail.host-too-old.title')}</h5>
       <div>{$_('alerts.mail-host-too-old.body')}</div>
     </div>
   </div>
@@ -12,9 +12,9 @@
   <div class="alert alert-warning d-flex align-items-start mb-3" role="alert">
     <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
     <div>
-      <b>{$_('alerts.mail-disabled.title')}</b>
+      <h5 class="alert-heading mb-2">{$_('alerts.mail-disabled.title')}</h5>
       <div>{$_('alerts.mail-disabled.body')}</div>
-      <a class="alert-link" href="{base}/settings/platform">
+      <a class="alert-link d-inline-block mt-2" href="{base}/settings/platform">
         {$_('settings.mail.open-platform-settings')}
       </a>
     </div>

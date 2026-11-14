@@ -78,7 +78,7 @@
                           aria-label={$_('common.actions')}>
                           <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
                         </button>
-                        <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                        <div class="dropdown-menu dropdown-menu-start">
                           {#if actions.includes('view-order')}
                             <a class="dropdown-item" href="{base}/market/orders/detail/{block.orderId}">
                               <i class="fa-solid fa-eye me-2" aria-hidden="true"></i>

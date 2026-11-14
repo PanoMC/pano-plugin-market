@@ -97,7 +97,7 @@
               <div class="alert alert-info d-flex align-items-start mb-0" role="status">
                 <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
                 <div>
-                  <b>{$_('modals.shipping-zone.regions-kept-title')}</b>
+                  <h5 class="alert-heading mb-2">{$_('modals.shipping-zone.regions-kept-title')}</h5>
                   <div>{$_('modals.shipping-zone.regions-kept')}</div>
                 </div>
               </div>

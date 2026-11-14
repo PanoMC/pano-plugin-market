@@ -11,8 +11,8 @@
     {#if suffix}
       <span class="small text-body-secondary">{suffix}</span>
     {/if}
-    {#if settings.creditsEnabled && product.creditPrice != null}
-      <span class="market-price-tag__badge badge text-bg-info text-wrap text-start">
+    {#if showCredits && settings.creditsEnabled && product.creditPrice != null && Number(product.price) !== 0}
+      <span class="market-price-tag__badge badge rounded-pill text-bg-info text-wrap text-start">
         <i class="fa-solid fa-coins me-1" aria-hidden="true"></i>{formatCredits(
           product.creditPrice,
           settings.creditName || $_('theme.store.credits'),
@@ -21,7 +21,7 @@
     {/if}
   </div>
   {#if showVat && typeof settings.pricesIncludeVat === 'boolean'}
-    <div class="small text-body-secondary">
+    <div class="small fs-6 text-body-secondary">
       {$_(settings.pricesIncludeVat ? 'theme.store.vat-included' : 'theme.store.vat-excluded')}
     </div>
   {/if}
@@ -38,7 +38,7 @@
     market.require('format').actions;
 
   /** Shared by the card, the product page and the cart. showVat: the VAT note (product page only). */
-  let { product, settings = {}, showVat = false } = $props();
+  let { product, settings = {}, showVat = false, showCredits = true } = $props();
 
   const currency = $derived(product.currency || settings.displayCurrency || settings.currency);
   const strike = $derived(strikePrice(product, settings, clock.state.now));

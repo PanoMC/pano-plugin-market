@@ -13,15 +13,19 @@
       {#if lossy}
         <div class="alert alert-warning d-flex align-items-start" role="alert">
           <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
-          <div>{$_('pages.shipping-method.mixed-basis')}</div>
+          <div>
+            <h5 class="alert-heading mb-2">{$_('common.warning')}</h5>
+            <div>{$_('pages.shipping-method.mixed-basis')}</div>
+          </div>
         </div>
       {/if}
       {#if zones.length === 0}
         <div class="alert alert-warning d-flex align-items-start" role="alert">
           <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
           <div>
-            {$_('pages.shipping-method.no-zones')}
-            <a class="alert-link" href="{base}/market/settings?section=shipping-zones">
+            <h5 class="alert-heading mb-2">{$_('common.warning')}</h5>
+            <div>{$_('pages.shipping-method.no-zones')}</div>
+            <a class="alert-link d-inline-block mt-2 text-capitalize" href="{base}/market/settings?section=shipping-zones">
               {$_('pages.shipping-method.open-zones')}
             </a>
           </div>

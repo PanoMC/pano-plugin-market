@@ -32,7 +32,7 @@
               <div class="alert alert-warning d-flex align-items-start" role="alert">
                 <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
                 <div>
-                  <b>{$_('modals.provider.read-only-title')}</b>
+                  <h5 class="alert-heading mb-2">{$_('modals.provider.read-only-title')}</h5>
                   <div>
                     {provider.state === 'INCOMPATIBLE'
                       ? $_('settings.payments.incompatible', {
@@ -112,6 +112,9 @@
                     class="fa-solid {actionResult.success ? 'fa-circle-check' : 'fa-circle-exclamation'} me-3 mt-1"
                     aria-hidden="true"></i>
                   <div>
+                    <h5 class="alert-heading mb-2">
+                      {$_(actionResult.success ? 'common.success' : 'common.error')}
+                    </h5>
                     {#if actionResult.message}
                       <div>{actionResult.message}</div>
                     {/if}
@@ -185,7 +188,10 @@
     {#if locked}
       <div class="alert alert-info d-flex align-items-start mb-0" role="alert">
         <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
-        <div>{$_('settings.payments.external-pricing')}</div>
+        <div>
+          <h5 class="alert-heading mb-2">{$_('settings.payments.external-pricing-title')}</h5>
+          <div>{$_('settings.payments.external-pricing')}</div>
+        </div>
       </div>
     {/if}
 

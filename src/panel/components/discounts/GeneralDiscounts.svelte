@@ -133,7 +133,7 @@
                     aria-label={$_('common.actions')}>
                     <span class="fas fa-ellipsis-v"></span>
                   </button>
-                  <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                  <div class="dropdown-menu dropdown-menu-start">
                     <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createDiscountModal" onclick={() => onEdit(discount)}>
                       <i class="fas fa-pen me-2"></i>
                       {$_('common.edit')}

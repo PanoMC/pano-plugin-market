@@ -85,7 +85,7 @@
             <div class="alert alert-danger d-flex align-items-start mb-0" role="alert">
               <i class="fa-solid fa-circle-exclamation me-3 mt-1" aria-hidden="true"></i>
               <div>
-                <b>{$_('modals.rerun.grant-again-title')}</b>
+                <h5 class="alert-heading mb-2">{$_('modals.rerun.grant-again-title')}</h5>
                 <div>{$_('modals.rerun.grant-again')}</div>
               </div>
             </div>

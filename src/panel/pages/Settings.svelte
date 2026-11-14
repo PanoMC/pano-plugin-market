@@ -1,22 +1,24 @@
 <MarketLayout area="settings" sections={sectionsFor('settings', user)} active={section}>
-  {#if data.error}
-    <LoadError error={data.error} />
-  {:else if Section}
-    <Section
-      settings={data.settings}
-      ctx={data.ctx}
-      extra={data.extra}
-      extraError={data.extraError} />
-  {:else}
-    <div class="alert alert-info d-flex align-items-start mb-0" role="alert">
-      <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
-      <div>
-        <b>{$_('settings.pending.title')}</b>
-        <div>{$_('settings.pending.body')}</div>
+  <div class="settings-content vstack gap-3" lang={$currentLanguage?.code}>
+    {#if data.error}
+      <LoadError error={data.error} />
+    {:else if Section}
+      <Section
+        settings={data.settings}
+        ctx={data.ctx}
+        extra={data.extra}
+        extraError={data.extraError} />
+    {:else}
+      <div class="alert alert-info d-flex align-items-start mb-0" role="alert">
+        <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
+        <div>
+          <h5 class="alert-heading mb-2">{$_('settings.pending.title')}</h5>
+          <div>{$_('settings.pending.body')}</div>
+        </div>
       </div>
-    </div>
-    <PluginHook name="market:panel:settings:section:{section}" props={{ ctx: data.ctx }} />
-  {/if}
+      <PluginHook name="market:panel:settings:section:{section}" props={{ ctx: data.ctx }} />
+    {/if}
+  </div>
 </MarketLayout>
 
 <script module>
@@ -77,6 +79,7 @@
 
 <script>
   import { page } from '@panomc/sdk/svelte';
+  import { currentLanguage } from '@panomc/sdk/utils/language';
   import { _ } from '../../i18n';
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import LoadError from '../components/LoadError.svelte';
@@ -92,3 +95,23 @@
   // address bar and history always match what is shown. `general` is the default.
   const Section = $derived(SECTION_COMPONENTS[section] ?? null);
 </script>
+
+<style>
+  .settings-content :global(label),
+  .settings-content :global(.col-form-label),
+  .settings-content :global(h1),
+  .settings-content :global(h2),
+  .settings-content :global(h3),
+  .settings-content :global(h4),
+  .settings-content :global(h5:not(.alert-heading)),
+  .settings-content :global(h6),
+  .settings-content :global(th[scope='col']),
+  .settings-content :global(.settings-status-table th[scope='row']),
+  .settings-content :global(.card-header > .row > div:first-child) {
+    text-transform: capitalize;
+  }
+
+  .settings-content :global(.form-text) {
+    text-transform: none;
+  }
+</style>

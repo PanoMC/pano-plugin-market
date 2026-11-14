@@ -35,8 +35,9 @@
           onchange={onGuestChange}
           onblur={onGuestBlur} />
 
-        {#if visible.gift}
+        {#if visible.gift && draft.isGift}
           <GiftSection
+            showSwitch={false}
             isGift={draft.isGift}
             recipient={draft.recipientUsername}
             message={draft.giftMessage}
@@ -176,6 +177,21 @@
 
     <div class="col-lg-5">
       <div class="sticky-lg-top vstack gap-3" id="market-checkout-summary">
+        {#if visible.gift}
+          <fieldset class="market-checkout-page__gift border-0 p-0 m-0" disabled={formDisabled}>
+            <GiftSection
+              showDetails={false}
+              isGift={draft.isGift}
+              recipient={draft.recipientUsername}
+              message={draft.giftMessage}
+              errors={errors.gift}
+              lineNames={lineNamesWith(quote, 'GIFT_NOT_ALLOWED')}
+              recipientUnknown={quoteHasCode(quote, 'RECIPIENT_UNKNOWN')}
+              onchange={onGiftChange}
+              onblur={onGiftBlur} />
+          </fieldset>
+        {/if}
+
         {#if notices.summary}
           {@render noticeAlert(notices.summary)}
         {/if}
@@ -364,6 +380,7 @@
 
   let mounted = $state(false);
   let cartReady = $state(false);
+  let emptyCartRedirectStarted = false;
   let quote = $state(null);
   // the signature of the input the shown quote was requested for (a stale quote never places an order)
   let quoteSig = $state(null);
@@ -486,6 +503,22 @@
       forced: forced ?? (runnerState.status === 'DISABLED' ? 'DISABLED' : null),
     }),
   );
+
+  $effect(() => {
+    if (
+      !mounted ||
+      data.state !== 'READY' ||
+      pageState !== 'EMPTY' ||
+      topup !== null ||
+      cartCtl.state.count !== 0 ||
+      emptyCartRedirectStarted
+    )
+      return;
+
+    emptyCartRedirectStarted = true;
+    navigate({ type: 'GOTO', path: '/store' });
+  });
+
   const formDisabled = $derived(
     pageState === 'BLOCKED' || pageState === 'SUBMITTING' || pageState === 'LEAVING',
   );

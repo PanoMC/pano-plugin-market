@@ -6,7 +6,7 @@
   <div class="card">
     <div class="card-body">
       <div class="mb-3">
-        <div class="mb-2">{$_('settings.currencies.mode')}</div>
+        <div class="mb-2 text-capitalize">{$_('settings.currencies.mode')}</div>
         {#each CURRENCY_MODES as mode (mode)}
           <div class="form-check">
             <input
@@ -19,7 +19,7 @@
               bind:group={draft.currencyMode} />
             <label class="form-check-label" for="setting-currencyMode-{mode}">
               {$_(`enums.currency-mode.${mode}`)}
-              <span class="form-text d-block mt-0"
+              <span class="form-text text-body-secondary d-block mt-0"
                 >{$_(`settings.currencies.mode-hint.${mode}`)}</span>
             </label>
           </div>
@@ -31,7 +31,7 @@
 
       {#if showRates}
         <div class="mb-3">
-          <div class="mb-2">{$_('settings.currencies.additional')}</div>
+          <div class="mb-2 text-capitalize">{$_('settings.currencies.additional')}</div>
           <div class="d-flex flex-wrap gap-2 mb-2">
             {#each draft.additionalCurrencies as code (code)}
               <span class="badge text-bg-secondary d-inline-flex align-items-center">
@@ -45,18 +45,20 @@
             {/each}
           </div>
           {#if choices.length > 0}
-            <select
-              id="setting-additionalCurrencies"
-              class="form-select"
-              class:is-invalid={shown.additionalCurrencies}
-              aria-label={$_('settings.currencies.add')}
-              value=""
-              onchange={addCurrency}>
-              <option value="">{$_('settings.currencies.add')}</option>
-              {#each choices as code (code)}
-                <option value={code}>{code} ({currencySymbol(ctx, code)})</option>
-              {/each}
-            </select>
+            <div class="form-floating">
+              <select
+                id="setting-additionalCurrencies"
+                class="form-select"
+                class:is-invalid={shown.additionalCurrencies}
+                value=""
+                onchange={addCurrency}>
+                <option value=""></option>
+                {#each choices as code (code)}
+                  <option value={code}>{code} ({currencySymbol(ctx, code)})</option>
+                {/each}
+              </select>
+              <label for="setting-additionalCurrencies">{$_('settings.currencies.add')}</label>
+            </div>
           {/if}
           {#if shown.additionalCurrencies}
             <div class="invalid-feedback d-block">{message('additionalCurrencies')}</div>
@@ -65,10 +67,10 @@
 
         <div class="mb-3">
           <div class="d-flex align-items-center justify-content-between mb-2">
-            <span>{$_('settings.currencies.rates')}</span>
+            <span class="text-capitalize">{$_('settings.currencies.rates')}</span>
             <button
               type="button"
-              class="btn btn-sm btn-link"
+              class="btn btn-sm btn-link text-decoration-none"
               disabled={refreshing || draft.additionalCurrencies.length === 0}
               onclick={refreshRates}>
               <i class="fa-solid fa-rotate me-2" aria-hidden="true"></i>
@@ -157,7 +159,7 @@
 
       {#if draft.currencyMode === 'MULTI'}
         <div class="mb-3">
-          <div class="mb-2">{$_('settings.currencies.fallback')}</div>
+          <div class="mb-2 text-capitalize">{$_('settings.currencies.fallback')}</div>
           {#each MULTI_FALLBACKS as fallback (fallback)}
             <div class="form-check">
               <input
@@ -170,7 +172,7 @@
                 bind:group={draft.multiCurrencyFallback} />
               <label class="form-check-label" for="setting-multiCurrencyFallback-{fallback}">
                 {$_(`settings.currencies.fallback-option.${fallback}`)}
-                <span class="form-text d-block mt-0">
+                <span class="form-text text-body-secondary d-block mt-0">
                   {$_(`settings.currencies.fallback-hint.${fallback}`)}
                 </span>
               </label>

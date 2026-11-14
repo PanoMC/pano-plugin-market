@@ -3,31 +3,30 @@
   novalidate
   onsubmit={submit}
   aria-labelledby="market-gift-title">
-  <h2 class="market-gift-redeem-form__title h5 mb-0" id="market-gift-title">
-    <i class="fa-solid fa-gift me-2" aria-hidden="true"></i>{$_(
-      'theme.profile.purchases.redeem-title',
-    )}
-  </h2>
-
-  <label class="market-gift-redeem-form__label form-label visually-hidden" for="market-gift-code">
-    {$_('theme.profile.purchases.redeem-label')}
-  </label>
   <div class="input-group">
-    <input
-      id="market-gift-code"
-      class={['market-gift-redeem-form__input', 'form-control', { 'is-invalid': !!invalidKey }]}
-      type="text"
-      maxlength={GIFT_CODE_MAX}
-      autocomplete="off"
-      autocapitalize="off"
-      spellcheck="false"
-      placeholder={$_('theme.profile.purchases.redeem-placeholder')}
-      aria-invalid={invalidKey ? 'true' : undefined}
-      aria-describedby={invalidKey ? 'market-gift-feedback' : undefined}
-      disabled={busy || locked}
-      bind:value={code}
-      bind:this={input}
-      oninput={() => (invalidKey = '')} />
+    <div class="form-floating flex-grow-1">
+      <input
+        id="market-gift-code"
+        class={['market-gift-redeem-form__input', 'form-control', { 'is-invalid': !!invalidKey }]}
+        type="text"
+        maxlength={GIFT_CODE_MAX}
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        placeholder=" "
+        aria-invalid={invalidKey ? 'true' : undefined}
+        aria-describedby={invalidKey ? 'market-gift-feedback' : undefined}
+        disabled={busy || locked}
+        bind:value={code}
+        bind:this={input}
+        oninput={() => (invalidKey = '')} />
+      <label
+        class="market-gift-redeem-form__title market-gift-redeem-form__label text-capitalize"
+        id="market-gift-title"
+        for="market-gift-code">
+        {$_('theme.profile.purchases.redeem-title')}
+      </label>
+    </div>
     <button
       type="submit"
       class="market-gift-redeem-form__action btn btn-primary"
@@ -38,7 +37,7 @@
       {$_('theme.profile.purchases.redeem-submit')}
     </button>
     {#if invalidKey}
-      <div class="invalid-feedback" id="market-gift-feedback">{$_(invalidKey)}</div>
+      <div class="invalid-feedback d-block" id="market-gift-feedback">{$_(invalidKey)}</div>
     {/if}
   </div>
 

@@ -148,6 +148,7 @@
       "TEST_MODE": "This payment method is in test mode and not available."
     },
     "common": {
+      "search-placeholder": "Find...",
       "retry": "Retry",
       "loading": "Loading...",
       "copy": "Copy",

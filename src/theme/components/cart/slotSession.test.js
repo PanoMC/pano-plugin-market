@@ -45,6 +45,8 @@ describe('cart slot components read the session from the controllers', () => {
     expect(sources[0].replace(/\s+/g, ' ')).toContain(
       "export const view = { slot: 'navbar-right', id: 'market-cart', priority: 50, block: true, widget: true, };",
     );
-    expect(sources[1]).toContain("export const view = { hook: 'theme:top', skipLoad: true };");
+    expect(sources[1]).toContain(
+      "export const view = { hook: 'theme:top', skipLoad: true, contract: 2 };",
+    );
   });
 });

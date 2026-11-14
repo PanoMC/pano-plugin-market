@@ -24,10 +24,10 @@
       <div class="alert alert-info d-flex align-items-start mb-0" role="alert">
         <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
         <div>
-          <b>{$_('pages.credits.disabled-title')}</b>
+          <h5 class="alert-heading mb-2">{$_('pages.credits.disabled-title')}</h5>
           <div>{$_('pages.credits.disabled-body')}</div>
           {#if can(user, 'SET')}
-            <a class="alert-link" href="{base}/market/settings?section=credits">
+            <a class="alert-link d-inline-block mt-2 text-capitalize" href="{base}/market/settings?section=credits">
               {$_('pages.credits.disabled-link')}
             </a>
           {/if}
@@ -199,7 +199,7 @@
                           <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
                         </button>
                         <div
-                          class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                          class="dropdown-menu dropdown-menu-start">
                           <a
                             class="dropdown-item"
                             href="{base}/market/credits/account/{account.userId}?player={encodeURIComponent(

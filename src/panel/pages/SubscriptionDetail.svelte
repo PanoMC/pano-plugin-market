@@ -23,7 +23,7 @@
           aria-label={$_('common.actions')}>
           <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
         </button>
-        <div class="dropdown-menu dropdown-menu-end animate__animated animate__fadeIn">
+        <div class="dropdown-menu dropdown-menu-end">
           {#if actions.includes('retry')}
             <button
               type="button"
@@ -120,7 +120,7 @@
         </div>
       </CardHeader>
       {#if renewals.length === 0}
-        <NoContent icon="" />
+        <NoContent text={$_('common.no-content')} />
       {:else}
         <div class="table-responsive">
           <table class="table table-hover align-middle">
@@ -176,7 +176,7 @@
         </div>
       </CardHeader>
       {#if orders.length === 0}
-        <NoContent icon="" />
+        <NoContent text={$_('common.no-content')} />
       {:else}
         <div class="table-responsive">
           <table class="table table-hover align-middle">

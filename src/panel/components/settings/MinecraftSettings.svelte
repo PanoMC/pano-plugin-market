@@ -4,10 +4,10 @@
   <div class="alert alert-info d-flex align-items-start mb-0" role="alert">
     <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
     <div>
-      <b>{$_('settings.minecraft.info.title')}</b>
+      <h5 class="alert-heading mb-2">{$_('settings.minecraft.info.title')}</h5>
       <div>{$_('settings.minecraft.info.body')}</div>
       {#if downloadUrl}
-        <a class="alert-link" href={downloadUrl} target="_blank" rel="noopener">
+        <a class="alert-link d-inline-block mt-2" href={downloadUrl} target="_blank" rel="noopener">
           {$_('settings.minecraft.info.download')}
         </a>
       {/if}
@@ -18,8 +18,10 @@
     <div class="alert alert-warning d-flex align-items-start mb-0" role="alert">
       <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
       <div>
-        <b>{$_('settings.minecraft.vault-provider-warning.title')}</b>
-        <div>{$_('settings.minecraft.vault-provider-warning.body')}</div>
+        <h5 class="alert-heading mb-2">{$_('settings.minecraft.vault-provider-warning.title')}</h5>
+        <div>
+          {$_('settings.minecraft.vault-provider-warning.body')}
+        </div>
       </div>
     </div>
   {/if}
@@ -79,7 +81,9 @@
               disabled={!draft.mcBroadcast}
               placeholder={$_('settings.minecraft.broadcast-template')}
               bind:value={draft.mcBroadcastTemplate}></textarea>
-            <div class="form-text">{$_('settings.minecraft.broadcast-preview')}</div>
+            <div class="form-text text-body-secondary">
+              {$_('settings.minecraft.broadcast-preview')}
+            </div>
             <div
               class="rounded p-2 mt-1 text-bg-dark font-monospace"
               data-field="broadcast-preview">
@@ -117,7 +121,9 @@
                 for="setting-mcVaultMode{mode === 'OFF' ? '' : `-${mode}`}">
                 {$_(`settings.minecraft.vault-option.${mode}`)}
               </label>
-              <div class="form-text mt-0">{$_(`settings.minecraft.vault-hint.${mode}`)}</div>
+              <div class="form-text text-body-secondary mt-0">
+                {$_(`settings.minecraft.vault-hint.${mode}`)}
+              </div>
             </div>
           {/each}
         </div>
@@ -174,7 +180,7 @@
     <div class="alert alert-warning d-flex align-items-start mb-0" role="alert">
       <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
       <div>
-        <b>{$_('settings.minecraft.servers-error.title')}</b>
+        <h5 class="alert-heading mb-2">{$_('settings.minecraft.servers-error.title')}</h5>
         <div>{$_('settings.minecraft.servers-error.body')}</div>
       </div>
     </div>

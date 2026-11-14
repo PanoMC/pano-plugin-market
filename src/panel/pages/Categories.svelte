@@ -40,11 +40,12 @@
 
 <script>
   import MarketLayout from '../layouts/MarketLayout.svelte';
-  import { CardHeader, CardFilters, CardFiltersItem, SearchInput, NoContent } from '@panomc/sdk/components/panel';
+  import { CardHeader, CardFilters, SearchInput, NoContent } from '@panomc/sdk/components/panel';
   import { flip } from 'svelte/animate';
   import { base, page, goto } from '@panomc/sdk/svelte';
   import { _, showSuccessToast, showErrorToast } from '../../i18n';
   import ConfirmModal from '../components/ConfirmModal.svelte';
+  import FilterDropdown from '../components/FilterDropdown.svelte';
   import CreateCategoryModal from '../components/modals/CreateCategoryModal.svelte';
   import { sectionsFor } from '../navigation.js';
   import { call, errorKey } from '../utils/api.js';
@@ -543,9 +544,12 @@
   {/snippet}
 
   {#if view === 'sort' && categories.length > 0}
-    <div class="alert alert-info d-flex align-items-center mb-0">
-      <i class="fas fa-info-circle me-3"></i>
-      {$_('pages.categories.sort-hint')}
+    <div class="alert alert-info d-flex align-items-start mb-0" role="alert">
+      <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
+      <div>
+        <h5 class="alert-heading mb-2">{$_('common.information')}</h5>
+        <div>{$_('pages.categories.sort-hint')}</div>
+      </div>
     </div>
   {/if}
 
@@ -559,12 +563,18 @@
           autofocus
           initialValue={searchValue}
           {searching}
-          placeholderKey="plugins.pano-plugin-market.search.categories"
           onchange={onSearchChange} />
       </div>
       <CardFilters slot="right">
-        <CardFiltersItem button active={view === 'table'} onclick={() => setView('table')}>{$_('pages.categories.view-table')}</CardFiltersItem>
-        <CardFiltersItem button active={view === 'sort'} onclick={() => setView('sort')}>{$_('pages.categories.view-sort')}</CardFiltersItem>
+        <FilterDropdown
+          label={$_('common.view')}
+          icon="fa-table"
+          current={view}
+          options={[
+            { key: 'table', label: $_('pages.categories.view-table') },
+            { key: 'sort', label: $_('pages.categories.view-sort') },
+          ]}
+          onSelect={(option) => setView(option.key)} />
       </CardFilters>
     </CardHeader>
 
@@ -595,7 +605,7 @@
                     aria-label={$_('common.actions')}>
                     <span class="fas fa-ellipsis-v"></span>
                   </button>
-                  <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                  <div class="dropdown-menu dropdown-menu-start">
                     <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={() => openEditModal(category)}>
                       <i class="fas fa-pen me-2"></i> {$_('common.edit')}
                     </button>
@@ -690,7 +700,7 @@
                     draggable="false">
                     <span class="fas fa-ellipsis-v"></span>
                   </button>
-                  <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                  <div class="dropdown-menu dropdown-menu-start">
                     <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={() => openEditModal(category)}>
                       <i class="fas fa-pen me-2"></i> {$_('common.edit')}
                     </button>

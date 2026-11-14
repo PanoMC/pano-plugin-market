@@ -4,10 +4,13 @@
       <p class="text-truncate m-0">{title}</p>
       <div class="d-flex align-items-baseline gap-2">
         <span class="fs-2 lh-1 text-truncate">{value}</span>
-        {#if secondary}
+        {#if secondary && card.kind !== 'count'}
           <span class="text-truncate small">{secondary}</span>
         {/if}
       </div>
+      {#if secondary && card.kind === 'count'}
+        <small class="d-block text-truncate">{secondary}</small>
+      {/if}
     </div>
     <div class="mt-auto" style="height: 64px;">
       {#if card.spark.length > 1}

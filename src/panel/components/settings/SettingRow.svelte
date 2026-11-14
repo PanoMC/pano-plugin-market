@@ -2,7 +2,7 @@
   <div class="col-md-6">
     <label class="col-form-label pb-0 d-block" for={id}>{label}</label>
     {#if hint}
-      <div class="form-text mt-0">{hint}</div>
+      <div class="form-text text-body-secondary mt-0">{hint}</div>
     {/if}
   </div>
   <div class="col-md-6" class:d-flex={center} class:align-items-center={center}>

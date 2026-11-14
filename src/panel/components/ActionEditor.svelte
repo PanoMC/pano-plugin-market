@@ -169,7 +169,7 @@
                 {$_('components.action-editor.variables')}
               </button>
               <div
-                class="dropdown-menu animate__animated animate__fadeIn overflow-y-auto"
+                class="dropdown-menu overflow-y-auto"
                 style="max-height: 16rem;">
                 {#each variables as name (name)}
                   <button

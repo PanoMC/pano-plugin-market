@@ -3,7 +3,7 @@
     <div slot="left">{$_('pages.order-detail.cards.timeline')}</div>
   </CardHeader>
   {#if events.length === 0}
-    <NoContent icon="" />
+    <NoContent text={$_('common.no-content')} />
   {:else}
     <ul class="list-group list-group-flush">
       {#each events as event (event.id)}

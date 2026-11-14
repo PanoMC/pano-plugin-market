@@ -55,6 +55,18 @@ describe('store failure states', () => {
 });
 
 describe('ready state', () => {
+  test('the configured background reaches the page title', () => {
+    const name = 'store-background-00000000-0000-0000-0000-000000000000.png';
+    const res = resolveStoreLoad({
+      store: { ...store, settings: { ...store.settings, storeBackgroundImage: name } },
+      filter: DEFAULT_FILTER,
+      origin,
+    });
+    expect(res.pageTitle.backgroundImage).toBe(
+      `/api/plugins/pano-plugin-market/store/background/${name}`,
+    );
+  });
+
   test('without a list the grid is the first page of the store response', () => {
     const res = resolveStoreLoad({
       store,
@@ -75,7 +87,7 @@ describe('ready state', () => {
     expect(res.data.featured).toEqual(store.featured);
     expect(res.data.comparisonProducts).toEqual(store.comparisonProducts);
     expect(res.data.widgets).toEqual({});
-    expect(res.pageTitle.titleValues).toEqual({ storeName: 'Shop' });
+    expect(res.pageTitle.title).toBe('plugins.pano-plugin-market.theme.store.title');
   });
 
   test('a successful list replaces the grid, the first page stays', () => {

@@ -32,7 +32,7 @@
               <div class="alert alert-warning d-flex align-items-start" role="alert">
                 <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
                 <div>
-                  <b>{$_('modals.provider.read-only-title')}</b>
+                  <h5 class="alert-heading mb-2">{$_('modals.provider.read-only-title')}</h5>
                   <div>
                     {carrier.state === 'INCOMPATIBLE'
                       ? $_('settings.shipping-carriers.incompatible', {
@@ -138,7 +138,12 @@
                       ? 'fa-circle-check'
                       : 'fa-circle-exclamation'} me-3 mt-1"
                     aria-hidden="true"></i>
-                  <div>{actionResult.message}</div>
+                  <div>
+                    <h5 class="alert-heading mb-2">
+                      {$_(actionResult.success ? 'common.success' : 'common.error')}
+                    </h5>
+                    <div>{actionResult.message}</div>
+                  </div>
                 </div>
               {/if}
             {:else}

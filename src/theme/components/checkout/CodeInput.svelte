@@ -1,7 +1,6 @@
 <div class="market-code-input">
-  <label class="market-code-input__label form-label" for={id}>{label}</label>
-
   {#if isApplied}
+    <label class="market-code-input__label form-label" for={id}>{label}</label>
     <div class="d-flex align-items-center gap-2">
       <span class="market-code-input__badge badge text-bg-success text-break"
         >{info.code ?? applied}</span>
@@ -16,24 +15,28 @@
     </div>
   {:else}
     <div class="input-group">
-      <input
-        {id}
-        class={['market-code-input__input', 'form-control', invalid && 'is-invalid']}
-        type="text"
-        maxlength="64"
-        autocomplete="off"
-        autocapitalize="off"
-        spellcheck="false"
-        aria-invalid={invalid ? 'true' : undefined}
-        aria-describedby={invalid || locked ? `${id}-feedback` : undefined}
-        disabled={disabled || locked}
-        value={text}
-        oninput={(event) => (typed = event.currentTarget.value)}
-        onkeydown={(event) => {
-          if (event.key !== 'Enter') return;
-          event.preventDefault();
-          apply();
-        }} />
+      <div class="form-floating flex-grow-1">
+        <input
+          {id}
+          class={['market-code-input__input', 'form-control', invalid && 'is-invalid']}
+          type="text"
+          maxlength="64"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          placeholder=" "
+          aria-invalid={invalid ? 'true' : undefined}
+          aria-describedby={invalid || locked ? `${id}-feedback` : undefined}
+          disabled={disabled || locked}
+          value={text}
+          oninput={(event) => (typed = event.currentTarget.value)}
+          onkeydown={(event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            apply();
+          }} />
+        <label class="market-code-input__label" for={id}>{label}</label>
+      </div>
       <button
         type="button"
         class="market-code-input__code-apply btn btn-outline-primary"
@@ -44,10 +47,10 @@
         {/if}
         {$_('theme.checkout.code-apply')}
       </button>
-      {#if invalid}
-        <div class="invalid-feedback" id="{id}-feedback">{$_(info.messageKey)}</div>
-      {/if}
     </div>
+    {#if invalid}
+      <div class="invalid-feedback d-block" id="{id}-feedback">{$_(info.messageKey)}</div>
+    {/if}
     {#if locked}
       <div class="form-text text-danger" id="{id}-feedback" role="status">
         {$_('theme.checkout.code-locked-wait', { values: { seconds } })}

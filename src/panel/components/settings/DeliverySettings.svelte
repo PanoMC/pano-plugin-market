@@ -3,7 +3,7 @@
     <div class="alert alert-warning d-flex align-items-start mb-0" role="alert">
       <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
       <div>
-        <b>{$_('settings.delivery.servers-error.title')}</b>
+        <h5 class="alert-heading mb-2">{$_('settings.delivery.servers-error.title')}</h5>
         <div>{$_('settings.delivery.servers-error.body')}</div>
       </div>
     </div>
@@ -153,7 +153,7 @@
     <div class="alert alert-warning d-flex align-items-start mb-0" role="alert">
       <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
       <div>
-        <b>{$_('settings.delivery.chargeback-invalid.title')}</b>
+        <h5 class="alert-heading mb-2">{$_('settings.delivery.chargeback-invalid.title')}</h5>
         <div>{$_('settings.delivery.chargeback-invalid.body')}</div>
       </div>
     </div>

@@ -83,7 +83,7 @@
             <div class="alert alert-info d-flex align-items-start" role="alert">
               <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
               <div>
-                <b>{$_('pages.create-product.subscription-notice.title')}</b>
+                <h5 class="alert-heading mb-2">{$_('pages.create-product.subscription-notice.title')}</h5>
                 <div>{$_('pages.create-product.subscription-notice.body')}</div>
               </div>
             </div>
@@ -376,7 +376,7 @@
   <div class="alert alert-warning d-flex align-items-start" role="alert">
     <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
     <div>
-      <b>{$_('pages.create-product.side-load-failed')}</b>
+      <h5 class="alert-heading mb-2">{$_('pages.create-product.side-load-failed')}</h5>
       <div>
         <button type="button" class="btn alert-btn mt-2" onclick={() => reloadSide(kind)}>
           {$_('pages.create-product.reload')}

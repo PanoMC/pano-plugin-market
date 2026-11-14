@@ -45,7 +45,7 @@
                         aria-label={$_('common.actions')}>
                         <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
                       </button>
-                      <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                      <div class="dropdown-menu dropdown-menu-start">
                         <button type="button" class="dropdown-item" onclick={() => goalModal?.open(goal)}>
                           <i class="fa-solid fa-pen me-2" aria-hidden="true"></i>
                           {$_('common.edit')}

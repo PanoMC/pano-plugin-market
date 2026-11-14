@@ -19,7 +19,12 @@
                 ? 'fa-triangle-exclamation'
                 : 'fa-circle-info'} me-3 mt-1"
               aria-hidden="true"></i>
-            <div>{txt(field.label)}</div>
+            <div>
+              <h5 class="alert-heading mb-2">
+                {$_(field.noticeLevel === 'WARNING' ? 'common.warning' : 'common.information')}
+              </h5>
+              <div>{txt(field.label)}</div>
+            </div>
           </div>
         {:else if field.type === 'READONLY'}
           <div class="input-group">

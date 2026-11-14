@@ -12,12 +12,11 @@
             autofocus
             initialValue={filters.search}
             searching={$navigating !== null}
-            placeholderKey="plugins.pano-plugin-market.search.subscriptions"
             debounceMs={300}
             onchange={(value) => go({ search: value })} />
         </div>
         <CardFilters slot="right">
-          <FilterSelect
+          <FilterDropdown
             label={$_('common.status')}
             current={currentTab}
             options={STATUS_TABS.map((tab) => ({ ...tab, label: $_(`pages.subscriptions.tab.${tab.key}`) }))}
@@ -26,7 +25,7 @@
       </CardHeader>
 
       {#if subscriptions.length === 0}
-        <NoContent icon="" />
+        <NoContent text={$_('common.no-content')} />
       {:else}
         <div class="table-responsive">
           <table class="table table-hover align-middle">
@@ -57,7 +56,7 @@
                         aria-label={$_('common.actions')}>
                         <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
                       </button>
-                      <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                      <div class="dropdown-menu dropdown-menu-start">
                         <a class="dropdown-item" href="{base}/market/subscriptions/detail/{subscription.id}">
                           <i class="fa-solid fa-eye me-2" aria-hidden="true"></i>
                           {$_('pages.subscriptions.actions.view')}
@@ -153,7 +152,7 @@
 </script>
 
 <script>
-  import FilterSelect from '../components/FilterSelect.svelte';
+  import FilterDropdown from '../components/FilterDropdown.svelte';
   import {
     CardHeader,
     CardFilters,

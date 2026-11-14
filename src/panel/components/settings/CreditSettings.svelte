@@ -2,7 +2,7 @@
   <div class="alert alert-warning d-flex align-items-start mb-3" role="alert">
     <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
     <div>
-      <b>{$_('settings.credits.refund-split.title')}</b>
+      <h5 class="alert-heading mb-2">{$_('settings.credits.refund-split.title')}</h5>
       <div>{$_('settings.credits.refund-split.body')}</div>
     </div>
   </div>
@@ -12,8 +12,10 @@
   <div class="alert alert-warning d-flex align-items-start mb-3" role="alert">
     <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
     <div>
-      <b>{$_('settings.credits.price-mismatch.title')}</b>
-      <div>{$_('settings.credits.price-mismatch.body', { values: { count: mismatch } })}</div>
+      <h5 class="alert-heading mb-2">{$_('settings.credits.price-mismatch.title')}</h5>
+      <div>
+        {$_('settings.credits.price-mismatch.body', { values: { count: mismatch } })}
+      </div>
     </div>
   </div>
 {/if}
@@ -21,9 +23,9 @@
 <div class="alert alert-info d-flex align-items-start mb-3" role="alert">
   <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
   <div>
-    <b>{$_('settings.credits.packs.title')}</b>
+    <h5 class="alert-heading mb-2">{$_('settings.credits.packs.title')}</h5>
     <div>{$_('settings.credits.packs.body')}</div>
-    <a class="alert-link" href="{base}/market/products?kind=CREDIT_PACK">
+    <a class="alert-link d-inline-block mt-2" href="{base}/market/products?kind=CREDIT_PACK">
       {$_('settings.credits.packs.open')}
     </a>
   </div>

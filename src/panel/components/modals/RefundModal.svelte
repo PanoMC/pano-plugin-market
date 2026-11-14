@@ -93,7 +93,10 @@
             {#each listed as warning, index (index)}
               <div class="alert alert-warning d-flex align-items-start mb-0" role="alert">
                 <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
-                <div>{warningText(warning)}</div>
+                <div>
+                  <h5 class="alert-heading mb-2">{$_('common.warning')}</h5>
+                  <div>{warningText(warning)}</div>
+                </div>
               </div>
             {/each}
 
@@ -101,7 +104,7 @@
               <div class="alert alert-warning d-flex align-items-start mb-0" role="alert">
                 <i class="fa-solid fa-triangle-exclamation me-3 mt-1" aria-hidden="true"></i>
                 <div>
-                  <b>{$_('modals.refund.split-warning.title')}</b>
+                  <h5 class="alert-heading mb-2">{$_('modals.refund.split-warning.title')}</h5>
                   <div>{$_('modals.refund.split-warning.body')}</div>
                 </div>
               </div>

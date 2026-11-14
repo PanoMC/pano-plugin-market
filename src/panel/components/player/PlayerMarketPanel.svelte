@@ -31,7 +31,7 @@
                 aria-label={$_('common.actions')}>
                 <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
               </button>
-              <div class="dropdown-menu dropdown-menu-end animate__animated animate__fadeIn">
+              <div class="dropdown-menu dropdown-menu-end">
                 {#if view.actions.allOrders}
                   <a class="dropdown-item" href="{base}{ordersLink(username)}">
                     <i class="fa-solid fa-list me-2" aria-hidden="true"></i>

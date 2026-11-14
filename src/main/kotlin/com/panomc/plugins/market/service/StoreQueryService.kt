@@ -699,6 +699,7 @@ class StoreQueryService(
         return JsonObject()
             .put("storeName", c.storeName)
             .put("storeDescription", c.storeDescription)
+            .put("storeBackgroundImage", c.storeBackgroundImage)
             .put("currency", base)
             .put("currencySymbol", Currencies.symbol(c.currency))
             .put("creditsEnabled", c.creditsEnabled)

@@ -1,6 +1,6 @@
 <MarketLayout area="catalog" sections={sectionsFor('catalog', user)} active="products">
   {#snippet right()}
-    <a href="{base}/market/products/create-product" class="btn btn-primary">
+    <a href="{base}/market/products/create-product" class="btn btn-secondary">
       <i class="fa-solid fa-plus" aria-hidden="true"></i>
       <span class="d-lg-inline d-none ms-2">{$_('pages.products.add-product')}</span>
     </a>
@@ -20,12 +20,12 @@
             initialValue={filters.search}
             searching={$navigating !== null}
             debounceMs={300}
-            placeholderKey="plugins.pano-plugin-market.search.products"
             onchange={(value) => go({ search: value })} />
         </div>
         <div slot="right" class="d-flex align-items-center gap-3">
           <CardFilters>
-            <FilterSelect
+            <FilterDropdown
+              iconOnly
               label={$_('common.status')}
               current={filters.status === '' ? 'ALL' : filters.status}
               options={[
@@ -37,8 +37,10 @@
                 })),
               ]}
               onSelect={(option) => go({ status: option.value })} />
-            <FilterSelect
+            <FilterDropdown
               class="ms-2"
+              iconOnly
+              icon="fa-tags"
               label={$_('pages.create-product.kind')}
               current={filters.kind === '' ? 'ALL' : filters.kind}
               options={[
@@ -108,7 +110,7 @@
                         <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
                       </button>
                       <div
-                        class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                        class="dropdown-menu dropdown-menu-start">
                         <button
                           type="button"
                           class="dropdown-item"
@@ -245,7 +247,7 @@
 </script>
 
 <script>
-  import FilterSelect from '../components/FilterSelect.svelte';
+  import FilterDropdown from '../components/FilterDropdown.svelte';
   import {
     CardHeader,
     CardFilters,

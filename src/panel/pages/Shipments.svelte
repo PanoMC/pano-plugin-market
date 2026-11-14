@@ -17,7 +17,7 @@
             onchange={(value) => go({ search: value })} />
         </div>
         <CardFilters slot="right">
-          <FilterSelect
+          <FilterDropdown
             label={$_('common.status')}
             current={currentTab}
             options={STATUS_TABS.map((tab) => ({ ...tab, label: $_(`pages.shipments.tab.${tab.key}`) }))}
@@ -26,7 +26,7 @@
       </CardHeader>
 
       {#if shipments.length === 0}
-        <NoContent icon="" />
+        <NoContent text={$_('common.no-content')} />
       {:else}
         <div class="table-responsive">
           <table class="table table-hover align-middle">
@@ -67,7 +67,7 @@
                         <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
                       </button>
                       <div
-                        class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                        class="dropdown-menu dropdown-menu-start">
                         {#each actions as action (action)}
                           {#if action === 'label' || action === 'generic-label'}
                             <a
@@ -176,7 +176,7 @@
 </script>
 
 <script>
-  import FilterSelect from '../components/FilterSelect.svelte';
+  import FilterDropdown from '../components/FilterDropdown.svelte';
   import { api } from '@panomc/sdk/plugin-api';
   import {
     CardHeader,

@@ -3,6 +3,12 @@
 Store plugin for [Pano](https://panomc.com): list, manage and sell products on your website, with a cart,
 checkout, credits, orders and invoices, plus delivery to your Minecraft servers.
 
+## Store background
+
+Market > Settings > General lets administrators upload or remove a store background image. PNG, JPEG, GIF and WebP
+images up to 5 MB are supported. Uploads and removals are applied when the General settings are saved.
+The default theme displays the image behind the store heading and upper content, fading into the page background.
+
 ## Payment gateways and shipping carriers
 
 The market plugin itself ships no payment gateway and no shipping carrier. Gateways (Stripe, ...) and carriers are

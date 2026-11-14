@@ -28,7 +28,7 @@
           aria-label={$_('common.actions')}>
           <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
         </button>
-        <div class="dropdown-menu dropdown-menu-end animate__animated animate__fadeIn">
+        <div class="dropdown-menu dropdown-menu-end">
           {#each actions as action (action.id)}
             <button
               type="button"
@@ -51,7 +51,7 @@
       <div class="alert alert-danger d-flex align-items-start mb-0" role="alert">
         <i class="fa-solid fa-circle-exclamation me-3 mt-1" aria-hidden="true"></i>
         <div>
-          <b>{$_('pages.order-detail.revoke-alert.title')}</b>
+          <h5 class="alert-heading mb-2">{$_('pages.order-detail.revoke-alert.title')}</h5>
           <div>
             {$_('pages.order-detail.revoke-alert.body', {
               values: { pending: detail.revokePending ?? 0, failed: detail.revokeFailed ?? 0 },

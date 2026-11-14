@@ -23,21 +23,25 @@
             onchange={(value) => go({ search: value })} />
         </div>
         <CardFilters slot="right">
-          <FilterSelect
+          <FilterDropdown
             label={$_('common.status')}
             current={currentTab}
             options={STATUS_TABS.map((tab) => ({ ...tab, label: $_(`pages.deliveries.tab.${tab.key}`) }))}
             onSelect={(tab) => go({ status: tab.value })} />
-          <select
-            class="form-select form-select-sm ms-2 w-auto"
-            aria-label={$_('pages.deliveries.phase')}
-            value={filters.phase}
-            onchange={(event) => go({ phase: event.currentTarget.value })}>
-            <option value="">{$_('pages.deliveries.phase-all')}</option>
-            {#each PHASES as value (value)}
-              <option {value}>{$_(`enums.phase.${value}`)}</option>
-            {/each}
-          </select>
+          <FilterDropdown
+            class="ms-2"
+            label={$_('pages.deliveries.phase')}
+            current={filters.phase}
+            icon="fa-layer-group"
+            options={[
+              { key: '', value: '', label: $_('pages.deliveries.phase-all') },
+              ...PHASES.map((value) => ({
+                key: value,
+                value,
+                label: $_(`enums.phase.${value}`),
+              })),
+            ]}
+            onSelect={(phase) => go({ phase: phase.value })} />
           {#if modalFilterCount > 0}
             <CardFiltersItem button onclick={clearModalFilters}>
               {$_('common.clear-filters')}
@@ -47,7 +51,7 @@
       </CardHeader>
 
       {#if deliveries.length === 0}
-        <NoContent icon="" />
+        <NoContent text={$_('common.no-content')} />
       {:else}
         <div class="table-responsive">
           <table class="table table-hover align-middle">
@@ -80,7 +84,7 @@
                         aria-label={$_('common.actions')}>
                         <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
                       </button>
-                      <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+                      <div class="dropdown-menu dropdown-menu-start">
                         {#if actions.includes('retry')}
                           <button type="button" class="dropdown-item" onclick={() => askRetry(delivery)}>
                             <i class="fa-solid fa-rotate-right me-2" aria-hidden="true"></i>
@@ -212,7 +216,7 @@
 </script>
 
 <script>
-  import FilterSelect from '../components/FilterSelect.svelte';
+  import FilterDropdown from '../components/FilterDropdown.svelte';
   import { api } from '@panomc/sdk/plugin-api';
   import {
     CardHeader,

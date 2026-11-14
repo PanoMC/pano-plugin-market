@@ -66,17 +66,17 @@
           <div class="btn-group btn-group-sm" role="group" aria-label={$_('theme.cart.quantity')}>
             <button
               type="button"
-              class="market-cart-line-row__decrease btn btn-outline-secondary"
+              class="market-cart-line-row__decrease btn btn-primary"
               aria-label={$_('theme.cart.decrease')}
               onclick={() => setQuantity(row.key, row.quantity - 1)}>
               <i class="fa-solid fa-minus" aria-hidden="true"></i>
             </button>
             <span
-              class="market-cart-line-row__action-2 btn btn-outline-secondary disabled"
+              class="market-cart-line-row__action-2 btn btn-primary disabled"
               aria-live="polite">{row.quantity}</span>
             <button
               type="button"
-              class="market-cart-line-row__increase btn btn-outline-secondary"
+              class="market-cart-line-row__increase btn btn-primary"
               aria-label={$_('theme.cart.increase')}
               disabled={row.maxQuantity !== null && row.quantity >= row.maxQuantity}
               onclick={() => setQuantity(row.key, row.quantity + 1)}>

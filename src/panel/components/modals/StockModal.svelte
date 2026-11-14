@@ -36,7 +36,7 @@
                 autocomplete="off"
                 value={option}
                 bind:group={mode} />
-              <label class="btn btn-outline-secondary" for="stock-mode-{option}">
+              <label class="btn btn-outline-primary" for="stock-mode-{option}">
                 {$_(`modals.stock.mode-${option}`)}
               </label>
             {/each}
@@ -58,17 +58,21 @@
 
           {#if mode === 'ADJUST' || !unlimited}
             <div>
-              <input
-                type="number"
-                step="1"
-                min={mode === 'SET' ? 0 : undefined}
-                class="form-control"
-                class:is-invalid={invalid}
-                placeholder={$_('modals.stock.value')}
-                aria-label={$_('modals.stock.value')}
-                bind:value />
+              <div class="form-floating">
+                <input
+                  id="stock-value"
+                  type="number"
+                  step="1"
+                  min={mode === 'SET' ? 0 : undefined}
+                  class="form-control"
+                  class:is-invalid={invalid}
+                  placeholder={$_('modals.stock.value')}
+                  aria-describedby={invalid ? 'stock-value-error' : undefined}
+                  bind:value />
+                <label for="stock-value">{$_('modals.stock.value')}</label>
+              </div>
               {#if invalid}
-                <div class="invalid-feedback d-block">{$_(invalidKey)}</div>
+                <div id="stock-value-error" class="invalid-feedback d-block">{$_(invalidKey)}</div>
               {/if}
             </div>
           {/if}

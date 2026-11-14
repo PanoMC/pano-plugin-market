@@ -6,7 +6,7 @@
   bind:this={element}>
   <div class="market-cart-offcanvas__header offcanvas-header border-bottom">
     <h5 class="market-cart-offcanvas__title offcanvas-title" id="marketCartLabel">
-      <i class="fa-solid fa-cart-shopping me-2" aria-hidden="true"></i>{$_('theme.cart.title')}
+      {$_('theme.cart.title')}
     </h5>
     <span class="visually-hidden" aria-live="polite" aria-atomic="true"
       >{$_('theme.cart.items-in-cart', { values: { count: cart.state.count } })}</span>
@@ -27,9 +27,9 @@
       </div>
     {:else if view === 'EMPTY'}
       <div class="my-auto text-center">
-        <NoContent icon="fa-solid fa-cart-shopping fa-3x" text={$_('theme.cart.empty')} />
+        <NoContent text="" />
         <a
-          class="market-cart-offcanvas__action btn btn-primary mt-3"
+          class="market-cart-offcanvas__action btn btn-primary text-capitalize mt-3"
           href="{base}/store"
           onclick={close}>
           {$_('theme.cart.browse')}
@@ -60,44 +60,32 @@
             </span>
           {/if}
         </div>
-        <div class="small text-body-secondary mb-3">{$_('theme.cart.fees-at-checkout')}</div>
       </div>
     {/if}
 
     {#if view !== 'LOADING' && view !== 'EMPTY' && view !== 'ERROR'}
       <a
-        class="market-cart-offcanvas__checkout btn btn-primary w-100"
+        class="market-cart-offcanvas__checkout btn btn-secondary text-capitalize w-100"
         href="{base}/store/checkout"
         onclick={close}>
         <i class="fa-solid fa-lock me-2" aria-hidden="true"></i>{$_('theme.cart.checkout')}
       </a>
+    {:else if view === 'EMPTY'}
       <button
         type="button"
-        class="market-cart-offcanvas__clear btn btn-link btn-sm text-danger w-100 mt-1"
-        onclick={() => confirmClear?.show()}>
-        {$_('theme.cart.clear')}
-      </button>
-    {:else if view === 'EMPTY'}
-      <button type="button" class="market-cart-offcanvas__action-2 btn btn-primary w-100" disabled>
+        class="market-cart-offcanvas__action-2 btn btn-secondary text-capitalize w-100"
+        disabled>
         <i class="fa-solid fa-lock me-2" aria-hidden="true"></i>{$_('theme.cart.checkout')}
       </button>
     {/if}
   </div>
 </div>
 
-<ConfirmModal
-  bind:this={confirmClear}
-  id="marketClearCartModal"
-  title={$_('theme.cart.clear-title')}
-  message={$_('theme.cart.clear-message')}
-  confirmLabel={$_('theme.cart.clear')}
-  onconfirm={() => cart.actions.clear()} />
-
 <ReplaceCartModal />
 
 <script module>
   // hook injection (doc 01 section 2): mounted outside the navbar DOM, without a load
-  export const view = { hook: 'theme:top', skipLoad: true };
+  export const view = { hook: 'theme:top', skipLoad: true, contract: 2 };
 </script>
 
 <script>
@@ -105,7 +93,6 @@
   import { base } from '@panomc/sdk/svelte';
   import { NoContent } from '@panomc/sdk/components/theme';
   import { plugin } from '@panomc/sdk/controllers';
-  import ConfirmModal from '../common/ConfirmModal.svelte';
   import ErrorAlert from '../common/ErrorAlert.svelte';
   import CartLineRow from './CartLineRow.svelte';
   import ReplaceCartModal from './ReplaceCartModal.svelte';
@@ -118,7 +105,6 @@
   const settings = market.require('settings');
 
   let element = $state();
-  let confirmClear = $state();
 
   const view = $derived(viewState(cart.state));
   const rows = $derived(

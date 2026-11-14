@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { DESCRIPTION_MAX, cutDescription, storeMeta, storePageTitle } from '../storeMeta.js';
+import {
+  DESCRIPTION_MAX,
+  cutDescription,
+  storeBackgroundUrl,
+  storeMeta,
+  storePageTitle,
+} from '../storeMeta.js';
 import { DEFAULT_FILTER } from '../storeFilter.js';
 
 const origin = 'https://example.com';
@@ -56,6 +62,15 @@ describe('storeMeta', () => {
 });
 
 describe('storePageTitle', () => {
+  test('only a generated image name becomes a background URL, even without a store name', () => {
+    const name = 'store-background-00000000-0000-0000-0000-000000000000.webp';
+    const url = `/api/plugins/pano-plugin-market/store/background/${name}`;
+    expect(storePageTitle({ storeBackgroundImage: name }).backgroundImage).toBe(url);
+    for (const invalid of ['', '../secret.png', `${name}/other`, name.replace('.webp', '.svg')]) {
+      expect(storeBackgroundUrl(invalid)).toBe('');
+      expect(storePageTitle({ storeBackgroundImage: invalid }).backgroundImage).toBeUndefined();
+    }
+  });
   test('plain key without a store name', () => {
     expect(storePageTitle({})).toEqual({ title: 'plugins.pano-plugin-market.theme.store.title' });
     expect(storePageTitle({ storeName: '   ' })).toEqual({
@@ -63,10 +78,9 @@ describe('storePageTitle', () => {
     });
   });
 
-  test('the store name and description go through fixed keys with values', () => {
+  test('the store title is localized and the description uses interpolation', () => {
     expect(storePageTitle({ storeName: 'My {shop}', storeDescription: 'Desc' })).toEqual({
-      title: 'plugins.pano-plugin-market.theme.store.title-with-name',
-      titleValues: { storeName: 'My {shop}' },
+      title: 'plugins.pano-plugin-market.theme.store.title',
       subtitle: 'plugins.pano-plugin-market.theme.store.subtitle',
       subtitleValues: { storeDescription: 'Desc' },
     });

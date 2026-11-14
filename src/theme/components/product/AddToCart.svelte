@@ -26,7 +26,7 @@
       {:else}
         <button
           type="button"
-          class="market-add-to-cart__add-to-cart btn btn-primary"
+          class="market-add-to-cart__add-to-cart btn btn-info"
           {disabled}
           onclick={() => onadd()}>
           {#if pending}<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span
@@ -36,7 +36,7 @@
         </button>
         <button
           type="button"
-          class="market-add-to-cart__buy-now btn btn-outline-primary"
+          class="market-add-to-cart__buy-now btn btn-outline-secondary"
           {disabled}
           onclick={() => onbuy()}>
           {$_('theme.product.buy-now')}

@@ -1,10 +1,5 @@
 <MarketLayout area="orders" sections={sectionsFor('orders', user)} active="orders">
   {#snippet right()}
-    {#if can(user, 'PAY')}
-      <a class="btn btn-primary me-2" href="{base}/market/orders/create-order">
-        {$_('pages.orders.create-order')}
-      </a>
-    {/if}
     <div class="dropdown d-inline-block">
       <button
         type="button"
@@ -15,7 +10,7 @@
         aria-label={$_('common.actions')}>
         <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
       </button>
-      <div class="dropdown-menu dropdown-menu-end animate__animated animate__fadeIn">
+      <div class="dropdown-menu dropdown-menu-end">
         <button type="button" class="dropdown-item" onclick={() => exportModal?.open()}>
           <i class="fa-solid fa-file-csv me-2" aria-hidden="true"></i>
           {$_('pages.orders.export-csv')}
@@ -26,6 +21,12 @@
         </button>
       </div>
     </div>
+    {#if can(user, 'PAY')}
+      <a class="btn btn-secondary ms-2" href="{base}/market/orders/create-order">
+        <i class="fa-solid fa-plus" aria-hidden="true"></i>
+        <span class="d-lg-inline d-none ms-2">{$_('pages.orders.create-order')}</span>
+      </a>
+    {/if}
   {/snippet}
 
   {#if data.error}
@@ -45,10 +46,13 @@
             onchange={(value) => go({ search: value })} />
         </div>
         <CardFilters slot="right">
-          <FilterSelect
+          <FilterDropdown
             label={$_('common.status')}
             current={currentTab}
-            options={STATUS_TABS.map((tab) => ({ ...tab, label: $_(`pages.orders.tab.${tab.key}`) }))}
+            options={STATUS_TABS.map((tab) => ({
+              ...tab,
+              label: $_(`pages.orders.tab.${tab.key}`),
+            }))}
             onSelect={(tab) => go({ status: tab.value })} />
           {#if modalFilterCount > 0}
             <CardFiltersItem button onclick={clearModalFilters}>
@@ -59,7 +63,7 @@
       </CardHeader>
 
       {#if orders.length === 0}
-        <NoContent icon="" />
+        <NoContent text={$_('common.no-content')} />
       {:else}
         <OrdersTable {orders} {user} shippingEnabled={ctx?.shippingEnabled === true} />
 
@@ -99,7 +103,7 @@
 </script>
 
 <script>
-  import FilterSelect from '../components/FilterSelect.svelte';
+  import FilterDropdown from '../components/FilterDropdown.svelte';
   // The page header's right column scrolls sideways, which clips a menu hanging below it; a fixed menu is not clipped.
   const POPPER_FIXED = '{"strategy":"fixed"}';
 

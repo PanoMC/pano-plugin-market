@@ -19,7 +19,6 @@
         class="form-control"
         class:is-invalid={shown.storeName}
         autocomplete="off"
-        placeholder={$_('settings.general.store-name')}
         bind:value={draft.storeName} />
     </SettingRow>
 
@@ -32,8 +31,39 @@
         class="form-control"
         class:is-invalid={shown.storeDescription}
         rows="3"
-        placeholder={$_('settings.general.store-description')}
         bind:value={draft.storeDescription}></textarea>
+    </SettingRow>
+
+    <SettingRow
+      id="setting-storeBackgroundImage"
+      label={$_('settings.general.background-label')}
+      hint={$_('settings.general.background-hint')}>
+      {#if backgroundUrl}
+        <img
+          src={backgroundUrl}
+          alt={$_('settings.general.background-preview')}
+          class="img-fluid rounded mb-2" />
+      {/if}
+      <div class="d-flex align-items-center gap-2">
+        <input
+          id="setting-storeBackgroundImage"
+          type="file"
+          class="form-control"
+          style="min-width: 0"
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          disabled={saving}
+          bind:this={backgroundInput}
+          onchange={selectBackground} />
+        {#if backgroundUrl}
+          <button
+            type="button"
+            class="btn-close flex-shrink-0"
+            title={$_('settings.general.background-remove')}
+            aria-label={$_('settings.general.background-remove')}
+            disabled={saving}
+            onclick={removeBackground}></button>
+        {/if}
+      </div>
     </SettingRow>
 
     <SettingRow
@@ -289,7 +319,11 @@
   </div>
 
   <div class="card-footer d-flex justify-content-start">
-    <button type="button" class="btn btn-secondary" onclick={onSave} disabled={saving || !isDirty}>
+    <button
+      type="button"
+      class="btn btn-secondary"
+      onclick={onSave}
+      disabled={saving || !isDirty}>
       {#if saving}
         <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
       {/if}
@@ -302,15 +336,16 @@
   import { untrack } from 'svelte';
   import { api } from '@panomc/sdk/plugin-api';
   import { Date as DateComponent } from '@panomc/sdk/components/panel';
-  import { _, showSuccessToast } from '../../../i18n';
+  import { _, showSuccessToast, showErrorToast } from '../../../i18n';
   import ConfirmModal from '../ConfirmModal.svelte';
   import SettingRow from './SettingRow.svelte';
   import SwitchRow from './SwitchRow.svelte';
-  import { fetchSettings, reportFailure, saveSection } from './save.js';
+  import { fetchSettings, postSettings, reportFailure } from './save.js';
   import { call } from '../../utils/api.js';
   import { pageOf } from '../../utils/page.js';
   import { toastError } from '../../utils/toast.js';
   import { currentLocale } from '../../utils/locale.js';
+  import { storeBackgroundUrl } from '../../../theme/lib/storeMeta.js';
   import {
     SECTION_KEYS,
     activeKeys,
@@ -321,6 +356,7 @@
     fieldErrorKey,
     isDirtyBody,
     seedValues,
+    submitSettings,
     timeZoneOptions,
     validateGeneral,
   } from '../../utils/settings.js';
@@ -338,6 +374,27 @@
   let submitted = $state(false);
   let saving = $state(false);
   let refreshingRate = $state(false);
+  let backgroundInput = $state(null);
+  let backgroundFile = $state(null);
+  let backgroundRemoved = $state(false);
+  let backgroundPreview = $state('');
+  const backgroundUrl = $derived(
+    backgroundFile
+      ? backgroundPreview
+      : backgroundRemoved
+        ? ''
+        : storeBackgroundUrl(settings.storeBackgroundImage),
+  );
+  const backgroundDirty = $derived(backgroundFile !== null || backgroundRemoved);
+  $effect(() => {
+    if (!backgroundFile) {
+      backgroundPreview = '';
+      return;
+    }
+    const url = URL.createObjectURL(backgroundFile);
+    backgroundPreview = url;
+    return () => URL.revokeObjectURL(url);
+  });
   // Errors the server returned; they hold only for the exact draft they answered for.
   let serverMark = $state.raw(null);
 
@@ -363,7 +420,8 @@
   const shown = $derived(submitted ? { ...clientErrors, ...serverErrors } : serverErrors);
 
   const keys = $derived(activeKeys('general', draft));
-  const isDirty = $derived(isDirtyBody(buildSettingsBody(settings, draft, keys)));
+  const settingsDirty = $derived(isDirtyBody(buildSettingsBody(settings, draft, keys)));
+  const isDirty = $derived(settingsDirty || backgroundDirty);
   const needsConversion = $derived(draft.statsCurrency !== draft.currency);
   const salesSymbol = $derived(settings.currencySymbol ?? currencySymbol(ctx, settings.currency));
   const statsSymbol = $derived(
@@ -378,6 +436,28 @@
 
   const message = (key) => (shown[key] ? $_(fieldErrorKey(shown[key])) : '');
   const currencyLabel = (code) => `${code} (${currencySymbol(ctx, code)})`;
+
+  function selectBackground(event) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+    if (
+      file.size > 5 * 1024 * 1024 ||
+      !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type)
+    ) {
+      showErrorToast($_('settings.general.background-invalid'));
+      input.value = '';
+      return;
+    }
+    backgroundFile = file;
+    backgroundRemoved = false;
+  }
+
+  function removeBackground() {
+    backgroundFile = null;
+    backgroundRemoved = Boolean(settings.storeBackgroundImage);
+    if (backgroundInput) backgroundInput.value = '';
+  }
 
   function formatRate(value) {
     const number = Number(value);
@@ -425,18 +505,54 @@
   async function persist() {
     saving = true;
     try {
-      const result = await saveSection({
+      const result = await submitSettings({
+        post: postSettings,
         baseline: settings,
         values: draft,
         keys,
-        errors: clientErrors,
-        order: KEYS,
+        errors: settingsDirty ? clientErrors : {},
       });
       if (result.status === 'saved') {
         adopt((await fetchSettings()) ?? { ...settings, ...result.sent });
-      } else if (result.status === 'failed' && Object.keys(result.errors).length > 0) {
-        serverMark = { errors: result.errors, draftKey };
+      } else if (result.status !== 'clean') {
+        reportFailure(result, KEYS);
+        if (result.status === 'failed' && Object.keys(result.errors).length > 0)
+          serverMark = { errors: result.errors, draftKey };
+        return;
       }
+
+      if (backgroundDirty) {
+        let backgroundResult;
+        if (backgroundFile) {
+          const body = new FormData();
+          body.append('image', backgroundFile);
+          backgroundResult = await call(
+            api.panel.post({ path: '/settings/store-background', body, headers: {} }),
+          );
+        } else {
+          backgroundResult = await call(api.panel.delete({ path: '/settings/store-background' }));
+        }
+        if (!backgroundResult.ok) {
+          if (result.status === 'saved')
+            showErrorToast($_('settings.general.background-partial-save'));
+          else toastError($_, backgroundResult);
+          return;
+        }
+        if (backgroundFile && !storeBackgroundUrl(backgroundResult.body.storeBackgroundImage)) {
+          if (result.status === 'saved')
+            showErrorToast($_('settings.general.background-partial-save'));
+          else showErrorToast($_('errors.NETWORK_ERROR'));
+          return;
+        }
+        settings = {
+          ...settings,
+          storeBackgroundImage: backgroundFile ? backgroundResult.body.storeBackgroundImage : '',
+        };
+        backgroundFile = null;
+        backgroundRemoved = false;
+        if (backgroundInput) backgroundInput.value = '';
+      }
+      showSuccessToast($_('settings.toast-saved'));
     } finally {
       saving = false;
     }
@@ -445,7 +561,7 @@
   async function onSave() {
     if (saving || !isDirty) return;
     submitted = true;
-    if (Object.keys(clientErrors).length > 0) {
+    if (settingsDirty && Object.keys(clientErrors).length > 0) {
       reportFailure({ status: 'invalid', errors: clientErrors }, KEYS);
       return;
     }

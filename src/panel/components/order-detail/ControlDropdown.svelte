@@ -9,7 +9,7 @@
       aria-label={$_('common.actions')}>
       <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
     </button>
-    <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+    <div class="dropdown-menu dropdown-menu-start">
       {#each items as item (item.key)}
         {#if item.href}
           <a

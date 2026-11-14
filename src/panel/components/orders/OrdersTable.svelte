@@ -32,7 +32,7 @@
                 aria-label={$_('common.actions')}>
                 <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
               </button>
-              <div class="dropdown-menu dropdown-menu-start animate__animated animate__fadeIn">
+              <div class="dropdown-menu dropdown-menu-start">
                 {#if actions.includes('view')}
                   <a class="dropdown-item" href="{base}/market/orders/detail/{order.id}">
                     <i class="fa-solid fa-eye me-2" aria-hidden="true"></i>
