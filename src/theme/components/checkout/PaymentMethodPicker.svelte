@@ -1,4 +1,4 @@
-<div class="market-payment-method-picker card">
+<div class={['market-payment-method-picker', !embedded && 'card']}>
   <div class="market-payment-method-picker__body card-body p-0">
     <div class="market-payment-method-picker__header p-3 vstack gap-3">
       <h2 class="market-payment-method-picker__title h5 mb-0">{$_('theme.checkout.payment')}</h2>
@@ -14,7 +14,7 @@
     </div>
 
     {#if view.mode === 'NONE_NEEDED'}
-      <p class="p-3 mb-0 text-body-secondary">{$_('theme.checkout.no-payment-needed')}</p>
+      <NoContent text={$_('theme.checkout.no-payment-needed')} />
     {:else if view.mode === 'NO_METHOD'}
       <div
         class="p-3">
@@ -118,6 +118,7 @@
 <script>
   import { base } from '@panomc/sdk/svelte';
   import { plugin } from '@panomc/sdk/controllers';
+  import { NoContent } from '@panomc/sdk/components/theme';
   import {
     isExternalPricing,
     logoSource,
@@ -148,6 +149,7 @@
     currency = '',
     removeCents = false,
     disabled = false,
+    embedded = false,
     alertKey = '',
     alertDetail = '',
     onselect = () => {},

@@ -35,19 +35,6 @@
           onchange={onGuestChange}
           onblur={onGuestBlur} />
 
-        {#if visible.gift && draft.isGift}
-          <GiftSection
-            showSwitch={false}
-            isGift={draft.isGift}
-            recipient={draft.recipientUsername}
-            message={draft.giftMessage}
-            errors={errors.gift}
-            lineNames={lineNamesWith(quote, 'GIFT_NOT_ALLOWED')}
-            recipientUnknown={quoteHasCode(quote, 'RECIPIENT_UNKNOWN')}
-            onchange={onGiftChange}
-            onblur={onGiftBlur} />
-        {/if}
-
         {#if visible.shipping}
           <ShippingSection
             {loggedIn}
@@ -90,35 +77,41 @@
             onblur={onBillingBlur} />
         {/if}
 
-        {#if creditsVisible}
-          <CreditsSection
-            credits={quote.credits}
-            {config}
-            payWithCredits={draft.payWithCredits}
-            useCredits={draft.useCredits}
-            method={chosenMethod}
-            currency={quote.currency}
-            removeCents={settings.removeCents === true}
-            alertKey={notices.credits?.messageKey ?? ''}
-            alertMax={notices.credits?.max ?? null}
-            onchange={onCreditsChange} />
-        {/if}
-
         {#if quote}
-          <PaymentMethodPicker
-            {quote}
-            selectedId={draft.paymentMethodId}
-            payWithCredits={draft.payWithCredits}
-            currency={quote.currency}
-            removeCents={settings.removeCents === true}
-            alertKey={notices.payment?.messageKey ?? ''}
-            onselect={onSelectMethod} />
+          <div class="market-checkout-page__payment-options card">
+            {#if creditsVisible}
+              <CreditsSection
+                embedded={true}
+                credits={quote.credits}
+                {config}
+                payWithCredits={draft.payWithCredits}
+                useCredits={draft.useCredits}
+                method={chosenMethod}
+                currency={quote.currency}
+                removeCents={settings.removeCents === true}
+                alertKey={notices.credits?.messageKey ?? ''}
+                alertMax={notices.credits?.max ?? null}
+                onchange={onCreditsChange} />
+            {/if}
 
-          <!-- slot opened for other plugins (doc 01 section 6): the view of the chosen payment method (id = method id) -->
-          <PluginSlot
-            id="market:checkout:payment"
-            props={{ quote, method: draft.paymentMethodId, onselect: onSelectMethod }}
-            filter={(item) => item.id === draft.paymentMethodId} />
+            <div class={creditsVisible ? 'border-top' : ''}>
+              <PaymentMethodPicker
+                embedded={true}
+                {quote}
+                selectedId={draft.paymentMethodId}
+                payWithCredits={draft.payWithCredits}
+                currency={quote.currency}
+                removeCents={settings.removeCents === true}
+                alertKey={notices.payment?.messageKey ?? ''}
+                onselect={onSelectMethod} />
+
+              <!-- slot opened for other plugins (doc 01 section 6): the view of the chosen payment method (id = method id) -->
+              <PluginSlot
+                id="market:checkout:payment"
+                props={{ quote, method: draft.paymentMethodId, onselect: onSelectMethod }}
+                filter={(item) => item.id === draft.paymentMethodId} />
+            </div>
+          </div>
         {/if}
       </fieldset>
 
@@ -153,7 +146,7 @@
 
       <button
         type="button"
-        class="market-checkout-page__redirecting btn btn-primary btn-lg w-100"
+        class="market-checkout-page__redirecting btn btn-secondary btn-lg w-100 text-capitalize"
         disabled={place.disabled || rateLocked}
         onclick={placeOrder}>
         {#if pageState === 'SUBMITTING' || pageState === 'LEAVING'}
@@ -180,7 +173,7 @@
         {#if visible.gift}
           <fieldset class="market-checkout-page__gift border-0 p-0 m-0" disabled={formDisabled}>
             <GiftSection
-              showDetails={false}
+              showDetails={true}
               isGift={draft.isGift}
               recipient={draft.recipientUsername}
               message={draft.giftMessage}
@@ -1156,3 +1149,16 @@
     };
   });
 </script>
+
+<style>
+  :global(.market-checkout-page h1),
+  :global(.market-checkout-page h2),
+  :global(.market-checkout-page h3),
+  :global(.market-checkout-page h4),
+  :global(.market-checkout-page h5),
+  :global(.market-checkout-page h6),
+  :global(.market-checkout-page legend),
+  :global(.market-checkout-page label) {
+    text-transform: capitalize;
+  }
+</style>

@@ -1,4 +1,4 @@
-<div class="market-credits-section card">
+<div class={['market-credits-section', !embedded && 'card']}>
   <div class="market-credits-section__body card-body p-0">
     <div class="market-credits-section__header p-3">
       <h2 class="market-credits-section__title h5 mb-0">
@@ -148,6 +148,7 @@
     currency = '',
     removeCents = false,
     disabled = false,
+    embedded = false,
     alertKey = '',
     alertMax = null,
     onchange = () => {},

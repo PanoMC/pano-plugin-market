@@ -17,9 +17,9 @@
     </div>
 
     {#if quote}
-      <ul class="market-order-summary__list list-group list-group-flush">
+      <ul class="market-order-summary__list list-group">
         {#each lines as line (line.lineKey)}
-          <li class="market-order-summary__item list-group-item px-0">
+          <li class="market-order-summary__item list-group-item list-group-item-action">
             <div class="d-flex gap-2 align-items-start">
               <div class="flex-shrink-0 bg-body-tertiary rounded overflow-hidden">
                 {#if line.imageFileName}
@@ -54,25 +54,29 @@
       </ul>
 
       {#if !hideCodes}
-        <div class="vstack gap-3">
-          <CodeInput
-            id="market-checkout-coupon"
-            label={$_('theme.checkout.coupon')}
-            applied={couponCode}
-            info={couponState}
-            busy={quoting}
-            {disabled}
-            onapply={(code) => oncode('coupon', code)}
-            onremove={() => oncode('coupon', null)} />
-          <CodeInput
-            id="market-checkout-creator-code"
-            label={$_('theme.checkout.creator-code')}
-            applied={creatorCode}
-            info={creatorState}
-            busy={quoting}
-            {disabled}
-            onapply={(code) => oncode('creator', code)}
-            onremove={() => oncode('creator', null)} />
+        <div class="row g-3">
+          <div class="col-md-6">
+            <CodeInput
+              id="market-checkout-coupon"
+              label={$_('theme.checkout.coupon')}
+              applied={couponCode}
+              info={couponState}
+              busy={quoting}
+              {disabled}
+              onapply={(code) => oncode('coupon', code)}
+              onremove={() => oncode('coupon', null)} />
+          </div>
+          <div class="col-md-6">
+            <CodeInput
+              id="market-checkout-creator-code"
+              label={$_('theme.checkout.creator-code')}
+              applied={creatorCode}
+              info={creatorState}
+              busy={quoting}
+              {disabled}
+              onapply={(code) => oncode('creator', code)}
+              onremove={() => oncode('creator', null)} />
+          </div>
         </div>
       {/if}
 
@@ -95,6 +99,7 @@
               'fw-normal',
               isSubtotal(row) && 'text-body-secondary',
               row.strong && 'fw-bold',
+              row.id === 'total' && 'fs-5',
             ]}>
             {$_(row.labelKey, { values: row.values ?? {} })}
             {#if row.extra}
@@ -103,7 +108,7 @@
               </span>
             {/if}
           </dt>
-          <dd class={['col-5', 'text-end', 'mb-0', row.strong && 'fw-bold']}>
+          <dd class={['col-5', 'text-end', 'mb-0', row.strong && 'fw-bold', row.id === 'total' && 'fs-5']}>
             {#if row.amount === null || row.amount === undefined}
               &mdash;
             {:else}

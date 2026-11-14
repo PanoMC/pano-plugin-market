@@ -3,53 +3,76 @@
 </script>
 
 <div class="market-gift-section">
-  <div class="market-gift-section__body vstack gap-3">
-    {#if showSwitch}
-      <div class="form-check form-switch">
-        <input
-          id={switchId}
-          class="market-gift-section__check form-check-input"
-          type="checkbox"
-          role="switch"
-          checked={isGift}
-          aria-invalid={lineNames.length ? 'true' : undefined}
-          aria-describedby={lineNames.length ? `${switchId}-error` : undefined}
-          onchange={(event) => onchange({ isGift: event.currentTarget.checked })} />
-        <label class="form-check-label" for={switchId}>{$_('theme.checkout.gift-switch')}</label>
-      </div>
-
-      {#if lineNames.length}
-        <div class="form-text text-danger" id="{switchId}-error" role="alert">
-          {$_('theme.errors.GIFT_NOT_ALLOWED')}
-          {lineNames.join(', ')}
-        </div>
-      {/if}
-    {/if}
-
-    {#if showDetails && isGift}
-      <div class="vstack gap-3">
-        <div>
-          <label class="market-gift-section__label form-label" for={recipientId}>
-            {$_('theme.checkout.gift-recipient')}
-            <span class="text-danger" aria-hidden="true">*</span>
-          </label>
+  {#if showSwitch || (showDetails && isGift)}
+    <div class="market-gift-section__body vstack gap-3">
+      {#if showSwitch}
+        <div class="form-check form-switch">
           <input
-            id={recipientId}
-            class={['market-gift-section__input', 'form-control', errors.recipient && 'is-invalid']}
-            type="text"
-            maxlength="32"
-            autocomplete="off"
-            autocapitalize="off"
-            spellcheck="false"
-            required
-            aria-required="true"
-            aria-invalid={errors.recipient ? 'true' : undefined}
-            aria-describedby={describedBy}
-            value={recipient}
-            oninput={(event) => onchange({ recipientUsername: event.currentTarget.value })}
-            onblur={() => onblur('recipient')} />
+            id={switchId}
+            class="market-gift-section__check form-check-input"
+            type="checkbox"
+            role="switch"
+            checked={isGift}
+            aria-invalid={lineNames.length ? 'true' : undefined}
+            aria-describedby={lineNames.length ? `${switchId}-error` : undefined}
+            onchange={(event) => onchange({ isGift: event.currentTarget.checked })} />
+          <label class="form-check-label" for={switchId}>
+            {$_('theme.checkout.gift-switch')}
+          </label>
+        </div>
+
+        {#if lineNames.length}
+          <div class="form-text text-danger" id="{switchId}-error" role="alert">
+            {$_('theme.errors.GIFT_NOT_ALLOWED')}
+            {lineNames.join(', ')}
+          </div>
+        {/if}
+      {/if}
+
+      {#if showDetails && isGift}
+        <div class="market-gift-section__fields vstack gap-3">
+          <div class="market-gift-section__input-group input-group flex-column">
+            <div class="form-floating flex-grow-1 w-100">
+              <input
+                id={recipientId}
+                class={['market-gift-section__input', 'form-control', errors.recipient && 'is-invalid']}
+                type="text"
+                maxlength="32"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                placeholder=" "
+                required
+                aria-required="true"
+                aria-invalid={errors.recipient ? 'true' : undefined}
+                aria-describedby={describedBy}
+                value={recipient}
+                oninput={(event) => onchange({ recipientUsername: event.currentTarget.value })}
+                onblur={() => onblur('recipient')} />
+              <label class="market-gift-section__label text-capitalize" for={recipientId}>
+                {$_('theme.checkout.gift-recipient')}
+                <span class="text-danger" aria-hidden="true">*</span>
+              </label>
+            </div>
+            <div class="form-floating flex-grow-1 w-100">
+              <textarea
+                id={messageId}
+                class={['market-gift-section__input-2', 'form-control', errors.message && 'is-invalid']}
+                rows="3"
+                maxlength={GIFT_MESSAGE_MAX}
+                placeholder=" "
+                aria-invalid={errors.message ? 'true' : undefined}
+                aria-describedby="{messageId}-counter"
+                value={message}
+                oninput={(event) => onchange({ giftMessage: event.currentTarget.value })}
+                onblur={() => onblur('message')}></textarea>
+              <label class="market-gift-section__gift-message text-capitalize" for={messageId}>
+                {$_('theme.checkout.gift-message')}
+              </label>
+            </div>
+          </div>
           {#if errors.recipient}
-            <div class="invalid-feedback" id="{recipientId}-error">
+            <div class="invalid-feedback d-block" id="{recipientId}-error">
               {$_(fieldErrorKey('recipient', errors.recipient))}
             </div>
           {/if}
@@ -58,21 +81,6 @@
               {$_('theme.checkout.recipient-unknown')}
             </div>
           {/if}
-        </div>
-
-        <div>
-          <label class="market-gift-section__gift-message form-label" for={messageId}
-            >{$_('theme.checkout.gift-message')}</label>
-          <textarea
-            id={messageId}
-            class={['market-gift-section__input-2', 'form-control', errors.message && 'is-invalid']}
-            rows="3"
-            maxlength={GIFT_MESSAGE_MAX}
-            aria-invalid={errors.message ? 'true' : undefined}
-            aria-describedby="{messageId}-counter"
-            value={message}
-            oninput={(event) => onchange({ giftMessage: event.currentTarget.value })}
-            onblur={() => onblur('message')}></textarea>
           <div class="form-text text-end" id="{messageId}-counter">
             {message.length} / {GIFT_MESSAGE_MAX}
           </div>
@@ -82,9 +90,9 @@
             </div>
           {/if}
         </div>
-      </div>
-    {/if}
-  </div>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <script>
@@ -125,3 +133,25 @@
         : undefined,
   );
 </script>
+
+<style>
+  .market-gift-section__input-group > .form-floating:focus-within {
+    position: relative;
+    z-index: 2;
+  }
+
+  .market-gift-section__input-group > .form-floating + .form-floating {
+    margin-left: 0 !important;
+    margin-top: calc(var(--bs-border-width) * -1);
+  }
+
+  .market-gift-section__input-group > .form-floating:first-child > .form-control {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .market-gift-section__input-group > .form-floating + .form-floating > .form-control {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+  }
+</style>
