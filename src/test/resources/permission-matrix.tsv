@@ -120,6 +120,8 @@ PUT	/settings/currencies	P:SET	LIVE
 POST	/settings/currencies/refresh	P:SET	LIVE		
 GET	/settings/legal	P:SET	LIVE		
 POST	/settings/legal	P:SET	LIVE		
+POST	/settings/store-background	P:SET	LIVE		
+DELETE	/settings/store-background	P:SET	LIVE		
 GET	/payment-providers	P:SET	LIVE		
 POST	/payment-methods/:id	P:SET	LIVE		
 POST	/payment-methods/:id/toggle	P:SET	LIVE		

@@ -19,6 +19,7 @@ class MarketConfigTest {
         // existing
         Triple("storeName", ConfigKind.STRING, "Market"),
         Triple("storeDescription", ConfigKind.STRING, ""),
+        Triple("storeBackgroundImage", ConfigKind.STRING, ""),
         Triple("currency", ConfigKind.STRING, "TRY"),
         Triple("statsCurrency", ConfigKind.STRING, "TRY"),
         Triple("exchangeRateMode", ConfigKind.ENUM, "AUTO"),

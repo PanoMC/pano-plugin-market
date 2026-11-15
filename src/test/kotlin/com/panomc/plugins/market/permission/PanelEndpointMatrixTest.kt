@@ -22,6 +22,7 @@ class PanelEndpointMatrixTest {
         DELETE /gifts/:id
         DELETE /goals/:id
         DELETE /products/:id
+        DELETE /settings/store-background
         DELETE /shipping/methods/:id
         DELETE /shipping/zones/:id
         GET /blocks
@@ -127,6 +128,7 @@ class PanelEndpointMatrixTest {
         POST /settings/exchange-rate/refresh
         POST /settings/legal
         POST /settings/mail/test
+        POST /settings/store-background
         POST /shipments/:id/cancel
         POST /shipments/:id/retry
         POST /shipments/:id/track
@@ -273,7 +275,7 @@ class PanelEndpointMatrixTest {
         assertEquals(
             mapOf(
                 "P:ANY" to 5, "P:CAT" to 22, "P:CAT,PAY" to 1, "P:DISC" to 19, "P:PAY,DISC" to 3, "P:PAY" to 25, "P:OV" to 11, "P:OV,PAY" to 1,
-                "P:OM,PAY" to 2, "P:OM" to 20, "P:STATS" to 1, "P:SET" to 36
+                "P:OM,PAY" to 2, "P:OM" to 20, "P:STATS" to 1, "P:SET" to 38
             ),
             rows.groupingBy { it.auth }.eachCount()
         )
