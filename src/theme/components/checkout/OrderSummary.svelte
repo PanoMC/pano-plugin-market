@@ -99,7 +99,7 @@
               'fw-normal',
               isSubtotal(row) && 'text-body-secondary',
               row.strong && 'fw-bold',
-              row.id === 'total' && 'fs-5',
+              isTotal(row) && 'fs-5',
             ]}>
             {$_(row.labelKey, { values: row.values ?? {} })}
             {#if row.extra}
@@ -108,7 +108,7 @@
               </span>
             {/if}
           </dt>
-          <dd class={['col-5', 'text-end', 'mb-0', row.strong && 'fw-bold', row.id === 'total' && 'fs-5']}>
+          <dd class={['col-5', 'text-end', 'mb-0', row.strong && 'fw-bold', isTotal(row) && 'fs-5']}>
             {#if row.amount === null || row.amount === undefined}
               &mdash;
             {:else}
@@ -175,6 +175,7 @@
   const chargedIn = $derived(chargedInCurrency(quote));
 
   const isSubtotal = (row) => row.id === 'subtotal';
+  const isTotal = (row) => row.id === 'total';
 
   /** Interpolation values of an alert: the formatted amount of `minimum`, plain numbers otherwise. */
   function alertValues(alert) {

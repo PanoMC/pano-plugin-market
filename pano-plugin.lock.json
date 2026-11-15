@@ -460,6 +460,7 @@
         "market-checkout-page__check",
         "market-checkout-page__edit-cart",
         "market-checkout-page__gift",
+        "market-checkout-page__payment-options",
         "market-checkout-page__redirecting",
         "market-checkout-page__reload",
         "market-checkout-page__too-many-requests"
@@ -671,6 +672,9 @@
         "disabled": {
           "required": false
         },
+        "embedded": {
+          "required": false
+        },
         "method": {
           "required": false
         },
@@ -842,9 +846,11 @@
         "market-gift-section",
         "market-gift-section__body",
         "market-gift-section__check",
+        "market-gift-section__fields",
         "market-gift-section__gift-message",
         "market-gift-section__input",
         "market-gift-section__input-2",
+        "market-gift-section__input-group",
         "market-gift-section__label"
       ],
       "contract": 2,
@@ -951,13 +957,11 @@
     "market:LegalModal": {
       "classes": [
         "market-legal-modal",
-        "market-legal-modal__action",
         "market-legal-modal__body",
-        "market-legal-modal__footer",
         "market-legal-modal__header",
         "market-legal-modal__title"
       ],
-      "contract": 1,
+      "contract": 2,
       "hooks": [],
       "props": {
         "content": {
@@ -1360,6 +1364,9 @@
           "required": false
         },
         "disabled": {
+          "required": false
+        },
+        "embedded": {
           "required": false
         },
         "onselect": {

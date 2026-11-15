@@ -142,7 +142,7 @@
 
   .market-gift-section__input-group > .form-floating + .form-floating {
     margin-left: 0 !important;
-    margin-top: calc(var(--bs-border-width) * -1);
+    margin-top: calc(var(--pano-border-width) * -1);
   }
 
   .market-gift-section__input-group > .form-floating:first-child > .form-control {

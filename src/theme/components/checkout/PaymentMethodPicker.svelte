@@ -1,7 +1,7 @@
 <div class={['market-payment-method-picker', !embedded && 'card']}>
   <div class="market-payment-method-picker__body card-body p-0">
     <div class="market-payment-method-picker__header p-3 vstack gap-3">
-      <h2 class="market-payment-method-picker__title h5 mb-0">{$_('theme.checkout.payment')}</h2>
+      <h2 class="market-payment-method-picker__title text-capitalize h5 mb-0">{$_('theme.checkout.payment')}</h2>
 
       {#if alertKey}
         <div class="market-payment-method-picker__alert alert alert-warning mb-0" role="alert">

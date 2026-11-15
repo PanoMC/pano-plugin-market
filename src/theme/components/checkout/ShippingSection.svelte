@@ -1,10 +1,10 @@
 <div class="market-shipping-section card">
   <div class="market-shipping-section__body card-body vstack gap-3">
-    <h2 class="market-shipping-section__title h5 mb-0">{$_('theme.checkout.shipping')}</h2>
+    <h2 class="market-shipping-section__title text-capitalize h5 mb-0">{$_('theme.checkout.shipping')}</h2>
 
     {#if loggedIn && addresses.length > 0}
       <fieldset class="vstack gap-2">
-        <legend class="market-shipping-section__label form-label fs-6"
+        <legend class="market-shipping-section__label text-capitalize form-label fs-6"
           >{$_('theme.checkout.saved-addresses')}</legend>
         <div class="market-shipping-section__list list-group">
           {#each addresses as saved (saved.id)}
@@ -69,7 +69,7 @@
         class="vstack gap-2"
         aria-busy={quoting ? 'true' : undefined}
         aria-describedby={errors.method ? `${methodId}-error` : undefined}>
-        <legend class="market-shipping-section__shipping-method form-label fs-6"
+        <legend class="market-shipping-section__shipping-method text-capitalize form-label fs-6"
           >{$_('theme.checkout.shipping-method')}</legend>
 
         {#if options.length > 0}

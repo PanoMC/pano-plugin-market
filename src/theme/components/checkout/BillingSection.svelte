@@ -1,6 +1,6 @@
 <div class="market-billing-section card">
   <div class="market-billing-section__body card-body vstack gap-3">
-    <h2 class="market-billing-section__title h5 mb-0">{$_('theme.checkout.billing')}</h2>
+    <h2 class="market-billing-section__title text-capitalize h5 mb-0">{$_('theme.checkout.billing')}</h2>
 
     {#if req.mode === 'OPTIONAL'}
       <div class="form-check">

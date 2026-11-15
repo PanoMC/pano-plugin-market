@@ -1150,15 +1150,3 @@
   });
 </script>
 
-<style>
-  :global(.market-checkout-page h1),
-  :global(.market-checkout-page h2),
-  :global(.market-checkout-page h3),
-  :global(.market-checkout-page h4),
-  :global(.market-checkout-page h5),
-  :global(.market-checkout-page h6),
-  :global(.market-checkout-page legend),
-  :global(.market-checkout-page label) {
-    text-transform: capitalize;
-  }
-</style>
