@@ -72,7 +72,7 @@ describe('status (13 25.1 test 15)', () => {
     expect(badgeClass('webhook', 'DEAD')).toBe('text-bg-danger');
     expect(badgeClass('earning', 'AVAILABLE')).toBe('text-bg-info');
     expect(badgeClass('shipment', 'LOST')).toBe('text-bg-danger');
-    expect(badgeClass('provider', 'DISABLED')).toBe('text-bg-secondary');
+    expect(badgeClass('provider', 'DISABLED')).toBe('text-bg-danger');
   });
 
   test('every value has enums.<kind>.<VALUE> in tr, en-US and ru', () => {
