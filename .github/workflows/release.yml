@@ -56,7 +56,7 @@ jobs:
     if: ${{needs.get-next-version.outputs.new_tag_version != ''}}
     services:
       mariadb:
-        image: mariadb:11.4
+        image: mariadb:11.8
         env:
           MARIADB_ROOT_PASSWORD: market-it-root
         ports:
@@ -96,6 +96,9 @@ jobs:
 
       - name: UI checks
         run: bun run check:ui
+
+      - name: UI tests
+        run: bun run test
 
       # T2 database tier (17 section 3.4): a red dbTest blocks the release. The E2E tier (needs a full Pano instance) is not run here.
       - name: Database tests

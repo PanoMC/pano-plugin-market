@@ -4,7 +4,9 @@ import com.panomc.platform.db.dao.WebhookEndpointDao
 import com.panomc.platform.db.model.WebhookEndpoint
 import com.panomc.platform.db.model.WebhookFormat
 import com.panomc.platform.db.model.WebhookSigning
+import com.panomc.platform.webhook.WebhookEvents
 import com.panomc.platform.webhook.WebhookRegistry
+import com.panomc.platform.webhook.template.WebhookTemplates
 import com.panomc.platform.webhook.WebhookEndpointService
 import com.panomc.platform.webhook.WebhookService as CoreWebhookService
 import com.panomc.plugins.market.support.WebhookTestSupport
@@ -40,7 +42,7 @@ class WebhookImportTest {
             val id = rows.size + 1L
             rows += WebhookEndpoint(
                 id = id, name = endpoint.name, url = endpoint.url, events = endpoint.events, format = endpoint.format, signing = endpoint.signing, secret = endpoint.secret,
-                headers = endpoint.headers, template = endpoint.template, enabled = endpoint.enabled, maxAttempts = endpoint.maxAttempts,
+                headers = endpoint.headers, templates = endpoint.templates, enabled = endpoint.enabled, maxAttempts = endpoint.maxAttempts,
                 createdAt = endpoint.createdAt, updatedAt = endpoint.updatedAt
             )
             return id
@@ -145,7 +147,7 @@ class WebhookImportTest {
         assertEquals(listOf("market.*"), JsonArray(second.events).list)
         assertEquals(WebhookFormat.DISCORD, second.format)
         assertEquals(WebhookSigning.NONE, second.signing)
-        assertEquals("{\"content\":\"hi\"}", second.template)
+        assertEquals(WebhookTemplates.encode(mapOf(WebhookEvents.WILDCARD to "{\"content\":\"hi\"}")), second.templates)
         assertFalse(second.enabled)
         assertNull(second.secret)
     }

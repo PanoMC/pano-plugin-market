@@ -191,7 +191,7 @@ describe('what the sections must show', () => {
     expect(text).not.toContain('api.panel.post');
     expect(text).not.toContain('api.panel.put');
     expect(text).toContain('RECHECK_CREDITS_PATH');
-    expect(text).toContain('StatusBadge kind="provider"');
+    expect(text).toMatch(/StatusBadge\s+kind="provider"/);
   });
 
   test('every section is registered', () => {

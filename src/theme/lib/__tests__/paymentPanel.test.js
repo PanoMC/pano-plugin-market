@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { writable } from 'svelte/store';
 import {
   MAX_SCRIPTS,
@@ -1055,7 +1056,7 @@ describe('bank transfer notice', () => {
 
 // ---- the components (no DOM harness in this repo: the source rules of 14 §2 / §11.4 are pinned here) ---------
 
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const orderDir = path.resolve(here, '../../components/order');
 const read = (name) => fs.readFileSync(path.join(orderDir, name), 'utf8');
 const PANEL_FILES = [

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // The views of the cart, the checkout and the order (step B of doc 02 section 3) ship sample data for the view catalogue (doc 02 section 7) and
 // no longer import the stateful shims (rule V1) or read the Svelte context (rule V5). A Svelte component cannot be rendered under bun here, so the
@@ -8,7 +9,7 @@ import path from 'node:path';
 // and the standard states are either present or named in `notApplicable`.
 const FOLDERS = ['cart', 'checkout', 'order'];
 const STANDARD = ['empty', 'filled', 'error', 'loading'];
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, '..');
 
 const views = FOLDERS.flatMap((folder) =>

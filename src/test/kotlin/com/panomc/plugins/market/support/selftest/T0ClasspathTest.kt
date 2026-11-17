@@ -84,8 +84,8 @@ class T0ClasspathTest {
     @Test
     fun `both main and test class directories are covered`() {
         val dirs = roots("core")
-        assertTrue(dirs.any { it.path.contains("classes/kotlin/main") || it.path.contains("/main") }, "main core classes not found: $dirs")
-        assertTrue(dirs.any { it.path.contains("/test") }, "test core classes not found: $dirs")
+        assertTrue(dirs.any { it.invariantSeparatorsPath.contains("/main") }, "main core classes not found: $dirs")
+        assertTrue(dirs.any { it.invariantSeparatorsPath.contains("/test") }, "test core classes not found: $dirs")
     }
 
     @Test

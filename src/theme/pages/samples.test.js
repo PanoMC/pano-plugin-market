@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // The pages and the store and product views (step B of doc 02 section 3) ship sample data for the view catalogue (doc 02 section 7), no longer
 // import the stateful shims (rule V1) and no longer read the Svelte context (rule V5). A Svelte component cannot be rendered under bun here, so the
@@ -11,7 +12,7 @@ const STANDARD = ['empty', 'filled', 'error', 'loading'];
 const CONTEXT_CALLS = new RegExp(
   ['get', 'set', 'has'].map((verb) => `\\b${verb}Context\\b`).join('|'),
 );
-const theme = path.join(path.dirname(new URL(import.meta.url).pathname), '..');
+const theme = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const controllers = fs
   .readdirSync(path.join(theme, 'controllers'))
   .filter((file) => file.endsWith('.js') && !file.startsWith('_'))
@@ -53,7 +54,7 @@ function requiredProps(source) {
     .map((entry) => entry.replace(/\/\/.*$/gm, '').trim())
     .filter((entry) => entry && !entry.startsWith('...') && !entry.includes('='))
     .map((entry) => entry.split(':')[0].trim())
-    .filter((name) => !/^on[a-z]+$/.test(name));
+    .filter((name) => !/^on[A-Za-z]+$/.test(name));
 }
 
 describe('the pages and the store and product views', () => {
