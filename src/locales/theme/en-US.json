@@ -354,7 +354,7 @@
       "payment-ui-missing": "This payment method cannot be completed on this page right now. Choose another one.",
       "payment-form-submit": "Continue",
       "payment-form-invalid": "Some details are not valid. Check the fields and try again.",
-      "transfer-made": "I have made the transfer",
+      "transfer-made": "I Have Made the Transfer",
       "transfer-sender": "Sender name (optional)",
       "transfer-note": "Note (optional)",
       "transfer-submit": "Send notice",

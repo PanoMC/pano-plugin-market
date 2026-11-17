@@ -1,5 +1,5 @@
 <div class="modal fade" tabindex="-1" aria-hidden="true" bind:this={modalElement}>
-  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
       {#if provider}
         <div class="modal-header">

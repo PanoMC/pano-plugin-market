@@ -568,7 +568,6 @@
       <CardFilters slot="right">
         <FilterDropdown
           label={$_('common.view')}
-          icon="fa-table"
           current={view}
           options={[
             { key: 'table', label: $_('pages.categories.view-table') },

@@ -36,7 +36,7 @@
         </button>
         <button
           type="button"
-          class="market-add-to-cart__buy-now btn btn-outline-secondary"
+          class="market-add-to-cart__buy-now btn btn-outline-secondary text-capitalize"
           {disabled}
           onclick={() => onbuy()}>
           {$_('theme.product.buy-now')}

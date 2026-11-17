@@ -32,7 +32,6 @@
             class="ms-2"
             label={$_('pages.deliveries.phase')}
             current={filters.phase}
-            icon="fa-layer-group"
             options={[
               { key: '', value: '', label: $_('pages.deliveries.phase-all') },
               ...PHASES.map((value) => ({

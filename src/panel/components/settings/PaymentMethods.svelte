@@ -31,47 +31,50 @@
     </div>
   {/if}
 
-  <div class="row g-2 align-items-center mb-3">
-    <div class="col-12 col-md">
-      {$_('settings.payments.method-count', { values: { count: visible.length } })}
-    </div>
-    <div class="col-12 col-md-4">
-      <SearchInput
-        initialValue={searchValue}
-        placeholderKey="plugins.pano-plugin-market.search.payment-methods"
-        onchange={(val) => applyFilters({ search: val })} />
-    </div>
-    <div class="col-12 col-md-auto">
-      <div class="btn-group" role="group" aria-label={$_('settings.payments.region-label')}>
+  <div class="card">
+    <CardHeader>
+      <div slot="left">
+        {$_('settings.payments.method-count', { values: { count: visible.length } })}
+      </div>
+      <div slot="middle" style="width: 250px;">
+        <SearchInput
+          autofocus
+          initialValue={searchValue}
+          onchange={(val) => applyFilters({ search: val })} />
+      </div>
+      <CardFilters slot="right">
         {#each REGIONS as item (item)}
-          <button
-            type="button"
-            class="btn btn-outline-secondary"
-            class:active={regionFilter === item}
-            aria-pressed={regionFilter === item}
-            onclick={() => applyFilters({ region: item })}>
+          <CardFiltersItem button active={regionFilter === item} onclick={() => applyFilters({ region: item })}>
             {item === 'all'
               ? $_('common.all')
               : item === 'tr'
                 ? $_('settings.payments.filters.turkey')
                 : $_('settings.payments.filters.global')}
-          </button>
+          </CardFiltersItem>
         {/each}
-      </div>
-    </div>
-  </div>
+      </CardFilters>
+    </CardHeader>
 
   {#if visible.length === 0}
     <NoContent />
   {:else}
-    <div class="row g-3">
+    <div class="row g-3 p-3 m-0">
       {#each visible as provider (provider.id)}
         {@const behavior = rowBehavior(provider)}
         {@const label = providerName(provider, locale(), rawTranslate)}
         {@const orderIndex = ordered.findIndex((p) => p.id === provider.id)}
         {@const checked = pending[provider.id] ?? behavior.switchOn}
         <div class="col-md-6 col-xl-4">
-          <div class="card h-100" class:border-danger={behavior.danger}>
+          <div
+            class="card h-100"
+            class:border-danger={behavior.danger}
+            style="cursor: pointer;"
+            role="presentation"
+            title={behavior.readOnly ? $_('settings.payments.view') : $_('settings.payments.configure')}
+            onclick={(e) => {
+              if (e.target.closest('a, button, input, label, .dropdown, .dropdown-menu')) return;
+              modal?.open(provider);
+            }}>
             <div class="card-body d-flex flex-column gap-3">
               <div class="d-flex align-items-start gap-2">
                 <div
@@ -89,8 +92,17 @@
                   {/if}
                 </div>
                 <div class="flex-grow-1 min-w-0">
-                  <h6 class="mb-1 text-break">{label}</h6>
-                  <p class="mb-0 text-body-secondary">
+                  <h6 class="mb-1 text-break fs-6">
+                    <a
+                      href="#configure"
+                      class="text-reset text-decoration-none"
+                      title={behavior.readOnly ? $_('settings.payments.view') : $_('settings.payments.configure')}
+                      onclick={(e) => {
+                        e.preventDefault();
+                        modal?.open(provider);
+                      }}>{label}</a>
+                  </h6>
+                  <p class="mb-0 small text-body-secondary">
                     {provider.config?.customDescription || txt(provider.descriptor?.description)}
                   </p>
                 </div>
@@ -102,12 +114,19 @@
                   <span class="badge text-bg-warning">{$_('common.test')}</span>
                 {/if}
                 {#if provider.descriptor?.verification}
-                  <span class="badge text-bg-secondary">
+                  <span
+                    class="badge {{
+                      LIVE: 'text-bg-success',
+                      SANDBOX: 'text-bg-info',
+                      DOC_SAMPLES: 'text-bg-warning',
+                      UNVERIFIED: 'text-bg-primary',
+                                          }[provider.descriptor.verification] ?? 'text-bg-primary'}"
+                  >
                     {$_(`enums.verification.${provider.descriptor.verification}`)}
                   </span>
                 {/if}
                 {#if provider.descriptor?.region}
-                  <span class="badge text-bg-light border">
+                  <span class="badge text-bg-primary">
                     {provider.descriptor.region === 'global'
                       ? $_('settings.payments.filters.global')
                       : provider.descriptor.region.toUpperCase()}
@@ -154,14 +173,7 @@
                   {@render toggle()}
                 {/if}
 
-                <button
-                  type="button"
-                  class="btn btn-outline-secondary btn-sm ms-auto"
-                  onclick={() => modal?.open(provider)}>
-                  {behavior.readOnly ? $_('settings.payments.view') : $_('settings.payments.configure')}
-                </button>
-
-                <div class="dropdown">
+                <div class="dropdown ms-auto">
                   <button
                     type="button"
                     class="btn btn-link btn-sm"
@@ -206,6 +218,7 @@
       {/each}
     </div>
   {/if}
+  </div>
 {/if}
 
 <PaymentMethodModal bind:this={modal} {ctx} onRefresh={refresh} getProvider={findProvider} />
@@ -214,7 +227,7 @@
   import { onMount } from 'svelte';
   import { buildQueryParams } from '@panomc/sdk/utils/api';
   import { api } from '@panomc/sdk/plugin-api';
-  import { NoContent, SearchInput } from '@panomc/sdk/components/panel';
+  import { CardHeader, CardFilters, CardFiltersItem, NoContent, SearchInput } from '@panomc/sdk/components/panel';
   import { base, page, goto } from '@panomc/sdk/svelte';
   import { tooltip } from '@panomc/sdk/utils/tooltip';
   import { _ as rawI18n } from '@panomc/sdk/utils/language';

@@ -4,6 +4,7 @@ const WARNING = 'text-bg-warning';
 const DANGER = 'text-bg-danger';
 const INFO = 'text-bg-info';
 const SECONDARY = 'text-bg-secondary';
+const PRIMARY = 'text-bg-primary';
 
 // kind -> { class: [values] }
 const TABLE = {
@@ -82,9 +83,9 @@ const TABLE = {
   },
   provider: {
     [SUCCESS]: ['ACTIVE'],
-    [WARNING]: ['NOT_CONFIGURED'],
-    [DANGER]: ['INCOMPATIBLE', 'UNAVAILABLE'],
-    [SECONDARY]: ['DISABLED'],
+    [PRIMARY]: ['NOT_CONFIGURED'],
+    [DANGER]: ['INCOMPATIBLE', 'UNAVAILABLE', 'DISABLED'],
+    [SECONDARY]: [],
   },
   entitlement: {
     [SUCCESS]: ['ACTIVE'],

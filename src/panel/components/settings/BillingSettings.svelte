@@ -15,24 +15,29 @@
     <div class="card-body">
       <div class="mb-3">
         <div class="mb-2 text-capitalize">{$_('settings.billing.info-mode')}</div>
-        {#each BILLING_INFO_MODES as mode (mode)}
-          <div class="form-check">
-            <input
-              id="setting-billingInfoMode-{mode}"
-              class="form-check-input"
-              class:is-invalid={shown.billingInfoMode}
-              type="radio"
-              name="billingInfoMode"
-              value={mode}
-              bind:group={draft.billingInfoMode} />
-            <label class="form-check-label" for="setting-billingInfoMode-{mode}">
-              {$_(`enums.billing-info-mode.${mode}`)}
-              <span class="form-text text-body-secondary d-block mt-0">
-                {$_(`settings.billing.info-mode-hint.${mode}`)}
+        <div class="list-group">
+          {#each BILLING_INFO_MODES as mode (mode)}
+            <label
+              class="billing-mode-option list-group-item list-group-item-action"
+              class:active={draft.billingInfoMode === mode}>
+              <input
+                id="setting-billingInfoMode-{mode}"
+                class="visually-hidden"
+                class:is-invalid={shown.billingInfoMode}
+                type="radio"
+                name="billingInfoMode"
+                value={mode}
+                bind:group={draft.billingInfoMode} />
+              <span>
+                {$_(`enums.billing-info-mode.${mode}`)}
+                <span
+                  class={['form-text', 'd-block', 'mt-0', draft.billingInfoMode === mode ? 'text-white-50' : 'text-body-secondary']}>
+                  {$_(`settings.billing.info-mode-hint.${mode}`)}
+                </span>
               </span>
             </label>
-          </div>
-        {/each}
+          {/each}
+        </div>
         {#if shown.billingInfoMode}
           <div class="invalid-feedback d-block">{message('billingInfoMode')}</div>
         {/if}
@@ -350,3 +355,11 @@
     }
   }
 </script>
+
+<style>
+  .billing-mode-option:focus-within {
+    z-index: 2;
+    box-shadow: var(--bs-focus-ring-x, 0) var(--bs-focus-ring-y, 0) var(--bs-focus-ring-blur, 0)
+      var(--bs-focus-ring-width) var(--bs-focus-ring-color);
+  }
+</style>

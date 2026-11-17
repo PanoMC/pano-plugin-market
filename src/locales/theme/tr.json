@@ -354,7 +354,7 @@
       "payment-ui-missing": "Bu ödeme yöntemi şu anda bu sayfada tamamlanamıyor. Başka bir yöntem seçin.",
       "payment-form-submit": "Devam et",
       "payment-form-invalid": "Bazı bilgiler geçerli değil. Alanları kontrol edip tekrar deneyin.",
-      "transfer-made": "Havaleyi yaptım",
+      "transfer-made": "Havaleyi Yaptım",
       "transfer-sender": "Gönderen adı (isteğe bağlı)",
       "transfer-note": "Not (isteğe bağlı)",
       "transfer-submit": "Bildirim gönder",

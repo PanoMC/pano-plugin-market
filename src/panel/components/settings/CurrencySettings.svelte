@@ -7,23 +7,27 @@
     <div class="card-body">
       <div class="mb-3">
         <div class="mb-2 text-capitalize">{$_('settings.currencies.mode')}</div>
-        {#each CURRENCY_MODES as mode (mode)}
-          <div class="form-check">
-            <input
-              id="setting-currencyMode-{mode}"
-              class="form-check-input"
-              class:is-invalid={shown.currencyMode}
-              type="radio"
-              name="currencyMode"
-              value={mode}
-              bind:group={draft.currencyMode} />
-            <label class="form-check-label" for="setting-currencyMode-{mode}">
-              {$_(`enums.currency-mode.${mode}`)}
-              <span class="form-text text-body-secondary d-block mt-0"
-                >{$_(`settings.currencies.mode-hint.${mode}`)}</span>
+        <div class="list-group">
+          {#each CURRENCY_MODES as mode (mode)}
+            <label
+              class="currency-mode-option list-group-item list-group-item-action"
+              class:active={draft.currencyMode === mode}>
+              <input
+                id="setting-currencyMode-{mode}"
+                class="visually-hidden"
+                class:is-invalid={shown.currencyMode}
+                type="radio"
+                name="currencyMode"
+                value={mode}
+                bind:group={draft.currencyMode} />
+              <span>
+                {$_(`enums.currency-mode.${mode}`)}
+                <span class={['form-text', 'd-block', 'mt-0', draft.currencyMode === mode ? 'text-white-50' : 'text-body-secondary']}
+                  >{$_(`settings.currencies.mode-hint.${mode}`)}</span>
+              </span>
             </label>
-          </div>
-        {/each}
+          {/each}
+        </div>
         {#if shown.currencyMode}
           <div class="invalid-feedback d-block">{message('currencyMode')}</div>
         {/if}
@@ -401,3 +405,11 @@
     persist();
   }
 </script>
+
+<style>
+  .currency-mode-option:focus-within {
+    z-index: 2;
+    box-shadow: var(--bs-focus-ring-x, 0) var(--bs-focus-ring-y, 0) var(--bs-focus-ring-blur, 0)
+      var(--bs-focus-ring-width) var(--bs-focus-ring-color);
+  }
+</style>

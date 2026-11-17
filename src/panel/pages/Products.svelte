@@ -40,7 +40,6 @@
             <FilterDropdown
               class="ms-2"
               iconOnly
-              icon="fa-tags"
               label={$_('pages.create-product.kind')}
               current={filters.kind === '' ? 'ALL' : filters.kind}
               options={[

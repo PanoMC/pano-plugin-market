@@ -2,11 +2,11 @@
   <div class="market-store-toolbar__credits col d-flex align-items-center">
     {#if creditSummary?.creditsEnabled}
       <a
-        class="market-store-toolbar__credit badge rounded-pill text-bg-info text-decoration-none"
+        class="market-store-toolbar__credit badge rounded-pill text-bg-info text-decoration-none focus-ring"
         href="{base}/profile/credits"
         aria-label={`${$_('theme.store.credits')}: ${creditBalanceText}`}>
-        <i class="fa-solid fa-coins me-1" aria-hidden="true"></i>{$_('theme.store.credits')}:
-        {creditBalanceText}
+        {$_('theme.store.credits')}: {creditBalanceText}
+        <i class="fa-solid fa-coins ms-1" aria-hidden="true"></i>
       </a>
     {/if}
   </div>
