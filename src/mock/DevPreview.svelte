@@ -56,7 +56,13 @@
         <h6 class="mt-3">{$_(title)}</h6>
         <ul class="list-unstyled small mb-0">
           {#each list as p (p.href)}
-            <li><a href={href(p)} data-sveltekit-reload>{p.label}</a></li>
+            <li>
+              {#if p.side === side}
+                <a href={href(p)} onclick={(e) => follow(e, p)}>{p.label}</a>
+              {:else}
+                <a href={href(p)} data-sveltekit-reload>{p.label}</a>
+              {/if}
+            </li>
           {/each}
         </ul>
       {/if}
@@ -76,7 +82,7 @@
 <script>
   import { onMount } from 'svelte';
   import { _ } from '../i18n.js';
-  import { base, invalidateAll } from '@panomc/sdk/svelte';
+  import { base, goto, invalidateAll } from '@panomc/sdk/svelte';
   import { COOKIE, cookieString, parseCookie } from './core.js';
   import { DEFAULT_VOLUME, VOLUMES } from './kit.js';
 
@@ -134,6 +140,16 @@
   const reset = () => apply(null);
   // Pages of this app get its base; panel pages opened from the site go to the panel (Pano serves it under
   // /panel), site pages opened from the panel go to the site root.
+  /**
+   * A page of this app: client-side navigation. The drawer is mounted on document.body, outside the SvelteKit
+   * root, so a plain link would load the whole page again. Modified clicks (new tab, ...) keep the browser default.
+   */
+  function follow(e, p) {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    goto(href(p));
+  }
+
   const PANEL_BASE = '/panel';
   const href = (p) => {
     if (p.side === side) return `${base}${p.href}`;
