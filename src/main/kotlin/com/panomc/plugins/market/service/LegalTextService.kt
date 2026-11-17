@@ -2,6 +2,8 @@ package com.panomc.plugins.market.service
 
 import com.panomc.plugins.market.core.time.Clock
 import com.panomc.plugins.market.db.dao.MarketLegalTextDao
+import com.panomc.plugins.market.db.dao.MarketSequenceDao
+import com.panomc.plugins.market.db.impl.MarketSequenceDaoImpl
 import com.panomc.plugins.market.db.model.MarketLegalText
 import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.error.RequestValueException
@@ -21,7 +23,9 @@ class LegalTextService(
     private val clock: Clock,
     private val legalTexts: MarketLegalTextDao,
     /** The site's default locale (the platform setting), the third step of the fallback chain. */
-    private val siteLocale: () -> String
+    private val siteLocale: () -> String,
+    /** Its `lock:legal-text` row serialises publishers (see [publish]). */
+    private val sequences: MarketSequenceDao = MarketSequenceDaoImpl()
 ) {
     /** A version as served: [content] is sanitised. */
     class LegalView(
@@ -61,6 +65,11 @@ class LegalTextService(
         val hash = sha256(sanitised)
 
         return db.tx { conn ->
+            // Concurrent publishers would otherwise meet on the gap locks of the insert and the locale-wide activate
+            // update in opposite orders and deadlock (MariaDB 11.6+ with innodb_snapshot_isolation hits this every
+            // time). The exclusive lock on one sequence row queues them up first; it is held until the commit.
+            sequences.next(PUBLISH_LOCK, conn)
+
             val now = clock.now()
             var version = legalTexts.maxVersion(conn) + 1
             var id: Long? = null
@@ -103,6 +112,7 @@ class LegalTextService(
         const val MAX_TITLE = 255
         const val MAX_CONTENT = 200_000
         private const val MAX_VERSION_TRIES = 50
+        private const val PUBLISH_LOCK = "lock:legal-text"
 
         private val LOCALE = Regex("[a-z]{2,3}(-[A-Za-z]{2,4})?")
 

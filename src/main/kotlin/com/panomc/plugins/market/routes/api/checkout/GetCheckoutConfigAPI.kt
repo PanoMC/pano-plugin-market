@@ -15,6 +15,7 @@ import com.panomc.platform.model.Successful
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.time.SystemClock
 import com.panomc.plugins.market.db.dao.MarketLegalTextDao
+import com.panomc.plugins.market.db.dao.MarketSequenceDao
 import com.panomc.plugins.market.db.dao.MarketShippingZoneDao
 import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.routes.base.MarketApi
@@ -76,6 +77,7 @@ internal fun legalTextService(plugin: MarketPlugin): LegalTextService {
         db = MarketDb({ databaseManager.getSqlClient() as Pool }, SystemClock),
         clock = SystemClock,
         legalTexts = context.getBean(MarketLegalTextDao::class.java),
-        siteLocale = { context.getBean(ConfigManager::class.java).config.locale }
+        siteLocale = { context.getBean(ConfigManager::class.java).config.locale },
+        sequences = context.getBean(MarketSequenceDao::class.java)
     )
 }
