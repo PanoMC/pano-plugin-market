@@ -93,7 +93,7 @@ function probeDevelopmentMode() {
   });
 }
 
-export async function startDevPreview(pano) {
+export async function startDevPreview(pano, side = 'panel') {
   if (mounted || typeof document === 'undefined') return;
   // The page data of the host carries siteInfo once the page is hydrated: no request needed in production.
   await hydrated();
@@ -101,7 +101,7 @@ export async function startDevPreview(pano) {
   mounted = true;
   installThemeHook();
   const { default: DevPreview } = await import('./DevPreview.svelte');
-  mount(DevPreview, { target: document.body });
+  mount(DevPreview, { target: document.body, props: { side } });
   if (gate.deferred) {
     gate.deferred = false;
     if (readVolume()) {
@@ -138,7 +138,8 @@ function installThemeHook() {
     const volume = readVolume();
     if (!volume) return undefined;
     const router = await import('./router.js').then((m) => m.router);
-    if (method === 'GET' || router.isSafe(method, path)) return router.answer(method, path, volume, body);
+    if (method === 'GET' || router.isSafe(method, path))
+      return router.answer(method, path, volume, body);
     notify();
     return router.answer(method, path, volume, body) ?? SAVED_NOTHING;
   };

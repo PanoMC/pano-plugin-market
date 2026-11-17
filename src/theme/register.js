@@ -19,7 +19,7 @@ function optional(name, fn) {
 }
 
 export function registerTheme(pano) {
-  startDevPreview(pano);
+  startDevPreview(pano, 'theme');
 
   // 1-5. The store pages, the navbar cart (market:NavCart), the cart offcanvas (market:CartOffcanvas) and the
   // four sidebar widgets are registered by the build from `export const view` in each view file (doc 01 section 2).

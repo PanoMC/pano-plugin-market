@@ -80,6 +80,9 @@
   import { COOKIE, cookieString, parseCookie } from './core.js';
   import { DEFAULT_VOLUME, VOLUMES } from './kit.js';
 
+  /** Where the drawer is mounted: 'panel' or 'theme'. */
+  let { side = 'panel' } = $props();
+
   let open = $state(false);
   let volume = $state(null);
   let pages = $state([]);
@@ -129,5 +132,11 @@
 
   const toggle = () => apply(active ? null : DEFAULT_VOLUME);
   const reset = () => apply(null);
-  const href = (p) => `${p.side === 'panel' ? base : ''}${p.href}`;
+  // Pages of this app get its base; panel pages opened from the site go to the panel (Pano serves it under
+  // /panel), site pages opened from the panel go to the site root.
+  const PANEL_BASE = '/panel';
+  const href = (p) => {
+    if (p.side === side) return `${base}${p.href}`;
+    return p.side === 'panel' ? `${PANEL_BASE}${p.href}` : p.href;
+  };
 </script>

@@ -84,7 +84,7 @@ function register(pano, anyOf, { path, importer, keys, feature = null, ...extra 
 
 export function registerPanel(pano) {
   setPano(pano);
-  startDevPreview(pano);
+  startDevPreview(pano, 'panel');
   const anyOf = pano.features?.has?.('permission-any-of') === true;
 
   for (const [path, importer, keys, feature] of PAGES) {
