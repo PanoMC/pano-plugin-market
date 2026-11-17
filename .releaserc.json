@@ -13,7 +13,7 @@
       "@PanoMC/semantic-release-pano",
       {
         "file": "build/libs/pano-plugin-market-${version}.jar",
-        "panoVersion": "1.0.0",
+        "panoVersion": "1.4.0-alpha.5",
         "useGitHubLink": false,
         "configs": [
           {
