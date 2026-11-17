@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { createRouter } from '../core.js';
 import { routes, pages, PAGE_SIZE } from './panel-lists.js';
 import { categoryRows, orderRows, productRows } from './world.js';
+import { STATUSES } from '../../panel/components/product/model.js';
 
 const router = createRouter(routes);
 const get = (path, volume = 'many') =>
@@ -361,6 +362,12 @@ describe('filters', () => {
     expect(
       all(`/payment-events?providerId=${provider}`).items.every((e) => e.providerId === provider),
     ).toBe(true);
+  });
+
+  test('every sample product has a status the panel can show and the server accepts', () => {
+    for (const volume of ['few', 'many']) {
+      for (const product of productRows(volume)) expect(STATUSES).toContain(product.status);
+    }
   });
 
   test('products: search, status, kind, categoryId', () => {

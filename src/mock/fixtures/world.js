@@ -180,10 +180,10 @@ export function productRows(volume) {
         creditPrice: kind === 'CREDIT_PACK' ? null : k % 3 === 0 ? money(price * 100) : null,
         compareAtPrice: k % 5 === 2 ? money(price * 1.4) : null,
         stock,
+        // The statuses a product can have (ProductRules): HIDDEN is for categories and comparisons only.
         status: weighted(random(), [
           ['ACTIVE', 8],
-          ['INACTIVE', 1],
-          ['HIDDEN', 1],
+          ['INACTIVE', 2],
           ['ARCHIVED', 1],
         ]),
         featured: k === 0 || k === 2,
