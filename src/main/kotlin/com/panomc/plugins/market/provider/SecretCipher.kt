@@ -6,6 +6,10 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
+import java.nio.file.attribute.AclEntry
+import java.nio.file.attribute.AclEntryPermission
+import java.nio.file.attribute.AclEntryType
+import java.nio.file.attribute.AclFileAttributeView
 import java.nio.file.attribute.PosixFilePermission
 import java.security.SecureRandom
 import java.util.Base64
@@ -117,14 +121,40 @@ class SecretCipher(key: ByteArray, private val random: SecureRandom = SecureRand
             logger.warn("{} was not a valid key; moved to {}. Secrets stored with it are unreadable until re-entered.", file.fileName, target.fileName)
         }
 
+        /**
+         * Owner read / write only: POSIX permissions where the file system has them, otherwise (NTFS) an ACL with one
+         * entry for the owner, which also drops the entries inherited from the folder. `false` when neither exists.
+         */
+        internal fun restrictToOwner(file: Path): Boolean {
+            try {
+                Files.setPosixFilePermissions(file, setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE))
+                return true
+            } catch (e: UnsupportedOperationException) {
+                // no POSIX view: fall through to the ACL
+            }
+            val acl = Files.getFileAttributeView(file, AclFileAttributeView::class.java) ?: return false
+            acl.acl = listOf(
+                AclEntry.newBuilder()
+                    .setType(AclEntryType.ALLOW)
+                    .setPrincipal(acl.owner)
+                    .setPermissions(
+                        AclEntryPermission.READ_DATA, AclEntryPermission.WRITE_DATA, AclEntryPermission.APPEND_DATA,
+                        AclEntryPermission.READ_ATTRIBUTES, AclEntryPermission.WRITE_ATTRIBUTES,
+                        AclEntryPermission.READ_NAMED_ATTRS, AclEntryPermission.WRITE_NAMED_ATTRS,
+                        AclEntryPermission.READ_ACL, AclEntryPermission.WRITE_ACL, AclEntryPermission.DELETE,
+                        AclEntryPermission.SYNCHRONIZE
+                    )
+                    .build()
+            )
+            return true
+        }
+
         private fun writeKey(dataDir: Path, file: Path, key: ByteArray) {
             val tmp = dataDir.resolve("$KEY_FILE.tmp")
             Files.deleteIfExists(tmp)
             Files.write(tmp, Base64.getEncoder().encode(key), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
-            try {
-                Files.setPosixFilePermissions(tmp, setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE))
-            } catch (e: UnsupportedOperationException) {
-                logger.warn("This file system has no POSIX permissions: {} is not restricted to its owner.", KEY_FILE)
+            if (!restrictToOwner(tmp)) {
+                logger.warn("This file system has neither POSIX permissions nor ACLs: {} is not restricted to its owner.", KEY_FILE)
             }
             try {
                 Files.move(tmp, file, StandardCopyOption.ATOMIC_MOVE)

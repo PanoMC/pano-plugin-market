@@ -10,6 +10,10 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.AclEntryPermission
+import java.nio.file.attribute.AclEntryType
+import java.nio.file.attribute.AclFileAttributeView
+import java.nio.file.attribute.PosixFileAttributeView
 import java.nio.file.attribute.PosixFilePermission
 import java.security.SecureRandom
 import java.util.Base64
@@ -124,8 +128,18 @@ class SecretCipherTest {
     @Test
     fun `the key file is readable by its owner only`(@TempDir dir: Path) {
         SecretCipher.load(dir)
-        val perms = Files.getPosixFilePermissions(dir.resolve("secret.key"))
-        assertEquals(setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE), perms)
+        val file = dir.resolve("secret.key")
+        val acl = Files.getFileAttributeView(file, AclFileAttributeView::class.java)
+        if (acl == null || Files.getFileAttributeView(file, PosixFileAttributeView::class.java) != null) {
+            assertEquals(setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE), Files.getPosixFilePermissions(file))
+        } else {
+            // NTFS: one ALLOW entry, for the owner, nothing inherited from the folder
+            val entries = acl.acl
+            assertEquals(1, entries.size, "ACL entries: $entries")
+            assertEquals(AclEntryType.ALLOW, entries[0].type())
+            assertEquals(acl.owner, entries[0].principal())
+            assertTrue(AclEntryPermission.READ_DATA in entries[0].permissions())
+        }
     }
 
     @Test
