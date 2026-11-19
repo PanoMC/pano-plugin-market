@@ -13,8 +13,8 @@ export const STATUS_TABS = [
   { key: 'cancelled', value: ENDED_STATUSES.join(',') },
 ];
 
-/** Statuses the Cancel action is offered for. */
-export const CANCELLABLE_STATUSES = ['ACTIVE', 'PAST_DUE', 'PAUSED', 'PENDING'];
+/** Statuses the Cancel action is offered for (the server refuses PENDING with 409). */
+export const CANCELLABLE_STATUSES = ['ACTIVE', 'PAST_DUE', 'PAUSED'];
 
 export const REASON_MAX = 255;
 
@@ -48,12 +48,17 @@ export const isCancellable = (subscription) => CANCELLABLE_STATUSES.includes(sub
 export const canRetry = (subscription) =>
   subscription?.mode === 'MERCHANT' && subscription?.status === 'PAST_DUE';
 
-/** Menu of a row / the detail page: 'view' always (list only), 'cancel' / 'retry' need PAY. */
-export function actionsFor(subscription, user) {
+/**
+ * Menu of a row / the detail page: 'view' always (list only), 'cancel' / 'retry' need PAY.
+ * `allowed` is the detail endpoint's `{ cancel, retry }`: when given it wins over the local status rules
+ * (it also offers Cancel on a closed row whose remote cancel failed, which re-queues it). List rows have none.
+ */
+export function actionsFor(subscription, user, allowed = null) {
   const actions = [];
   if (can(user, 'PAY')) {
-    if (isCancellable(subscription)) actions.push('cancel');
-    if (canRetry(subscription)) actions.push('retry');
+    const known = allowed && typeof allowed === 'object';
+    if (known ? allowed.cancel === true : isCancellable(subscription)) actions.push('cancel');
+    if (known ? allowed.retry === true : canRetry(subscription)) actions.push('retry');
   }
   return actions;
 }

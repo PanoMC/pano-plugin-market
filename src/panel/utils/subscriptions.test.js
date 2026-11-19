@@ -37,10 +37,10 @@ describe('status tabs', () => {
 });
 
 describe('actions', () => {
-  test('cancel is offered for ACTIVE / PAST_DUE / PAUSED / PENDING only', () => {
-    for (const status of ['ACTIVE', 'PAST_DUE', 'PAUSED', 'PENDING'])
+  test('cancel is offered for ACTIVE / PAST_DUE / PAUSED only', () => {
+    for (const status of ['ACTIVE', 'PAST_DUE', 'PAUSED'])
       expect(isCancellable({ status })).toBe(true);
-    for (const status of ['CANCELLED', 'EXPIRED', 'COMPLETED'])
+    for (const status of ['PENDING', 'CANCELLED', 'EXPIRED', 'COMPLETED'])
       expect(isCancellable({ status })).toBe(false);
   });
   test('retry only for a past-due merchant subscription', () => {
@@ -56,6 +56,20 @@ describe('actions', () => {
     expect(actionsFor({ mode: 'GATEWAY', status: 'ACTIVE' }, pay)).toEqual(['cancel']);
     expect(actionsFor({ mode: 'GATEWAY', status: 'EXPIRED' }, pay)).toEqual([]);
     expect(actionsFor(sub, null)).toEqual([]);
+  });
+  test('the detail page follows the server allowed flags', () => {
+    // a closed gateway row whose remote cancel failed: Cancel re-queues it
+    const ended = { mode: 'GATEWAY', status: 'EXPIRED', remoteCancelState: 'FAILED' };
+    expect(actionsFor(ended, pay, { cancel: true, retry: false })).toEqual(['cancel']);
+    // gateway retry and a merchant row whose period is over
+    expect(
+      actionsFor({ mode: 'GATEWAY', status: 'ACTIVE' }, pay, { cancel: true, retry: true }),
+    ).toEqual(['cancel', 'retry']);
+    expect(
+      actionsFor({ mode: 'MERCHANT', status: 'PAST_DUE' }, pay, { cancel: false, retry: false }),
+    ).toEqual([]);
+    expect(actionsFor(ended, ov, { cancel: true, retry: true })).toEqual([]);
+    expect(actionsFor({ mode: 'MERCHANT', status: 'PENDING' }, pay)).toEqual([]);
   });
 });
 

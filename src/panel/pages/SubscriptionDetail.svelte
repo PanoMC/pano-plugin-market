@@ -300,7 +300,7 @@
   const subscription = $derived(view.subscription ?? null);
   const renewals = $derived(view.renewals ?? []);
   const orders = $derived(view.orders ?? []);
-  const actions = $derived(subscription ? actionsFor(subscription, user) : []);
+  const actions = $derived(subscription ? actionsFor(subscription, user, view.allowed) : []);
 
   const duration = (unit, count) => formatDuration(unit, count, $_);
   const dateText = (epoch) =>
