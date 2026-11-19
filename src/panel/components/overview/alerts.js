@@ -3,11 +3,19 @@
 export const REVOKE_PENDING_GRACE_MS = 10 * 60 * 1000;
 export const MAX_MISSING_SHOWN = 10;
 
+/** The market's public releases on GitHub: the Pano Market Minecraft plugin is downloaded from there. */
+export const MC_DOWNLOAD_URL = 'https://github.com/PanoMC/pano-plugin-market/releases';
+
 /**
- * Where the component is installed from: the public downloads page. The alert is about the
- * product, not about this panel's own jar, so its link never points at `server.downloadUrl`.
+ * The GitHub release the servers need: the version the market requires (`requiredVersion`, the same on
+ * every row). A build that was never released (`local-build`) has no release and opens the list.
  */
-export const MC_DOWNLOAD_URL = 'https://panomc.com/downloads';
+export function mcReleaseUrl(servers) {
+  const version = (Array.isArray(servers) ? servers : []).find((s) => s?.requiredVersion)?.requiredVersion;
+  return /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(String(version ?? ''))
+    ? `${MC_DOWNLOAD_URL}/tag/v${version}`
+    : MC_DOWNLOAD_URL;
+}
 
 const BAD_PROVIDER_STATES = ['UNAVAILABLE', 'INCOMPATIBLE'];
 
@@ -90,7 +98,7 @@ export function alertsFor(health, servers, ctx, options = {}) {
   }
 
   if (mcPluginNeedsAttention(servers)) {
-    add('mc-plugin', 'warning', { downloadUrl: MC_DOWNLOAD_URL });
+    add('mc-plugin', 'warning', { downloadUrl: mcReleaseUrl(servers) });
   }
 
   const mailTooOld = health?.mail === 'HOST_TOO_OLD';

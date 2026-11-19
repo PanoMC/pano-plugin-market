@@ -161,6 +161,7 @@ export function serverRow(server) {
     waiting: Number.isFinite(waiting) && waiting > 0 ? waiting : 0,
     overrides: overrideCount(server),
     downloadUrl: safeUrl(server?.downloadUrl),
+    platform: server?.platform ? String(server.platform) : '',
     needsComponent: state === 'COMPONENT_MISSING' || state === 'VERSION_MISMATCH',
   };
 }

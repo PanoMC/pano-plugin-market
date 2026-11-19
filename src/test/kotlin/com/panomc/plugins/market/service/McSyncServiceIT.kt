@@ -673,7 +673,7 @@ class McSyncServiceIT : MarketDaoITBase() {
         assertEquals(listOf("luckperms", "vault"), a.integrations)
         assertEquals(1L, a.queuedDeliveries)
         assertEquals(0L, a.waitingDeliveries)
-        assertEquals("${McSyncService.DOWNLOAD_URL}?platform=fabric", a.downloadUrl)
+        assertEquals(McSyncService.githubDownloadUrl(version, fabric = true), a.downloadUrl)
         assertEquals(false, a.settings!!.getBoolean("mcBroadcast"))
 
         assertEquals(ServerReadiness.OFFLINE, b.marketState)
@@ -681,7 +681,7 @@ class McSyncServiceIT : MarketDaoITBase() {
         assertNull(b.mcComponentVersion)
         assertNull(b.platform)
         assertEquals(2L, b.waitingDeliveries)
-        assertEquals(McSyncService.DOWNLOAD_URL, b.downloadUrl)
+        assertEquals(McSyncService.githubDownloadUrl(version, fabric = false), b.downloadUrl)
         assertNull(b.settings)
 
         val json = a.toJson()

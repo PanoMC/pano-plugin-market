@@ -365,7 +365,11 @@
   let serverMark = $state.raw(null);
 
   const rows = $derived(serverRows(servers));
-  const downloadUrl = $derived(rows.find((row) => row.downloadUrl)?.downloadUrl ?? null);
+  // The info box offers the Spigot / Paper / Velocity jar: a Fabric row's link is used only when every server is Fabric.
+  const downloadUrl = $derived(
+    (rows.find((row) => row.downloadUrl && row.platform !== 'FABRIC') ?? rows.find((row) => row.downloadUrl))
+      ?.downloadUrl ?? null,
+  );
   const preview = $derived(
     previewSegments(draft.mcBroadcastTemplate, previewValues(settings.storeName)),
   );

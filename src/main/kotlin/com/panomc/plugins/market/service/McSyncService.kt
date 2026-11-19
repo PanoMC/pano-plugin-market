@@ -635,7 +635,7 @@ class McSyncService(
                 id = info.id, name = info.name, type = info.type, connected = link.isConnected(info.id), proxy = info.proxy,
                 mcComponentVersion = state?.mcComponentVersion, requiredVersion = required, marketState = readiness(info.id, true),
                 waitingDeliveries = waiting, queuedDeliveries = counts[info.id to "QUEUED"] ?: 0L,
-                downloadUrl = if (platform == "FABRIC") "$DOWNLOAD_URL?platform=fabric" else DOWNLOAD_URL, platform = platform,
+                downloadUrl = githubDownloadUrl(required, fabric = platform == "FABRIC"), platform = platform,
                 integrations = state?.capabilities.orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() && it != "market-delivery" },
                 settings = state?.settings?.takeIf { it.isNotBlank() }?.let { runCatching { JsonObject(it) }.getOrNull() }
             )
@@ -730,6 +730,21 @@ class McSyncService(
 
         /** The panel's download of the running jar (04 section 8, `GET /mc-component/download`; MC-04 serves it). */
         const val DOWNLOAD_URL = "${MarketPaths.PANEL_ROOT}/mc-component/download"
+
+        /** The market's public releases on GitHub. The market jar is also the Spigot / Paper / Folia / BungeeCord / Velocity plugin. */
+        const val GITHUB_RELEASES_URL = "https://github.com/PanoMC/pano-plugin-market/releases"
+
+        private val RELEASED_VERSION = Regex("""\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?""")
+
+        /**
+         * The Pano Market Minecraft plugin file of [version] on GitHub (the Fabric jar when [fabric]): the file the servers need, as `MARKET_SYNC`
+         * requires the same version. A build that was never released (`local-build`) has no such file and gets the release list.
+         */
+        fun githubDownloadUrl(version: String, fabric: Boolean): String {
+            if (!RELEASED_VERSION.matches(version)) return GITHUB_RELEASES_URL
+            val file = if (fabric) "pano-plugin-market-fabric-$version.jar" else "pano-plugin-market-$version.jar"
+            return "$GITHUB_RELEASES_URL/download/v$version/$file"
+        }
 
         private val logger = LoggerFactory.getLogger(McSyncService::class.java)
 

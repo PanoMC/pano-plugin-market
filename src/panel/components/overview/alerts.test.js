@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   MC_DOWNLOAD_URL,
+  mcReleaseUrl,
   alertsFor,
   mcPluginNeedsAttention,
   safeUrl,
@@ -63,7 +64,7 @@ describe('alertsFor', () => {
     const [alert] = alertsFor(null, servers, {});
     expect(alert.key).toBe('mc-plugin');
     expect(alert.variant).toBe('warning');
-    expect(alert.downloadUrl).toBe(MC_DOWNLOAD_URL);
+    expect(alert.downloadUrl).toBe(`${MC_DOWNLOAD_URL}/tag/v1.2.0`);
     expect(alert.links).toEqual([]);
     expect(alert.items).toBeUndefined();
   });
@@ -243,4 +244,13 @@ describe('alert locale keys', () => {
       for (const key of wanted) expect(typeof lookup(alerts, key)).toBe('string');
     });
   }
+});
+
+describe('mcReleaseUrl', () => {
+  test('the release of the required version, or the list for an unreleased build', () => {
+    expect(mcReleaseUrl([{ requiredVersion: '1.0.0-dev.30' }])).toBe(`${MC_DOWNLOAD_URL}/tag/v1.0.0-dev.30`);
+    expect(mcReleaseUrl([{ requiredVersion: 'local-build' }])).toBe(MC_DOWNLOAD_URL);
+    expect(mcReleaseUrl([])).toBe(MC_DOWNLOAD_URL);
+    expect(mcReleaseUrl(null)).toBe(MC_DOWNLOAD_URL);
+  });
 });
