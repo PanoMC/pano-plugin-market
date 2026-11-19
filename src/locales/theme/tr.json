@@ -160,6 +160,8 @@
       "no": "Hayır"
     },
     "period": {
+      "MINUTE": "{count} dakika",
+      "HOUR": "{count} saat",
       "DAY": "{count} gün",
       "WEEK": "{count} hafta",
       "MONTH": "{count} ay",

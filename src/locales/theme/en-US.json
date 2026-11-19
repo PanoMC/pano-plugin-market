@@ -160,6 +160,8 @@
       "no": "No"
     },
     "period": {
+      "MINUTE": "{count, plural, one {# minute} other {# minutes}}",
+      "HOUR": "{count, plural, one {# hour} other {# hours}}",
       "DAY": "{count, plural, one {# day} other {# days}}",
       "WEEK": "{count, plural, one {# week} other {# weeks}}",
       "MONTH": "{count, plural, one {# month} other {# months}}",
