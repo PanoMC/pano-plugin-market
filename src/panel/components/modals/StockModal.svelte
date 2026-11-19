@@ -19,7 +19,6 @@
               class="form-select"
               aria-label={$_('modals.stock.target')}
               bind:value={targetId}>
-              <option value={0}>{$_('modals.stock.product')}</option>
               {#each variants as variant (variant.id)}
                 <option value={variant.id}>{variant.name}</option>
               {/each}
@@ -94,7 +93,7 @@
   import { api } from '@panomc/sdk/plugin-api';
   import { _, showErrorToast, showSuccessToast } from '../../../i18n';
   import { call, errorKey } from '../../utils/api.js';
-  import { stockFieldErrorKey } from '../../utils/stock.js';
+  import { stockFieldErrorKey, stockTargetId } from '../../utils/stock.js';
 
   let { onUpdated = () => {} } = $props();
 
@@ -109,11 +108,11 @@
   let invalid = $state(false);
   let invalidKey = $state('pages.create-product.field-errors.INVALID');
 
-  /** `variantId` preselects a variant row; 0 / null = the product itself. */
+  /** `variantId` preselects a variant row; 0 / null = the first variant, or the product itself without variants. */
   export function open({ productId: id, variants: rows = [], variantId = 0 }) {
     productId = id;
     variants = rows.filter((v) => v.id);
-    targetId = variantId ?? 0;
+    targetId = stockTargetId(variants, variantId);
     mode = 'SET';
     unlimited = false;
     value = null;

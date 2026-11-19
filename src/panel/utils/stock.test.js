@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { stockFieldErrorKey } from './stock.js';
+import { stockFieldErrorKey, stockTargetId } from './stock.js';
 
 const failure = (error, body = {}) => ({ ok: false, error, body });
 
@@ -43,5 +43,20 @@ describe('stockFieldErrorKey', () => {
     expect(stockFieldErrorKey(failure('PRODUCT_NOT_FOUND'))).toBe(null);
     expect(stockFieldErrorKey({ ok: true, body: {} })).toBe(null);
     expect(stockFieldErrorKey(null)).toBe(null);
+  });
+});
+
+describe('stockTargetId', () => {
+  test('a product with variants preselects the first variant, never the product itself', () => {
+    const variants = [{ id: 7 }, { id: 9 }];
+
+    expect(stockTargetId(variants, 0)).toBe(7);
+    expect(stockTargetId(variants, null)).toBe(7);
+    expect(stockTargetId(variants, 9)).toBe(9);
+  });
+
+  test('a product without variants targets the product', () => {
+    expect(stockTargetId([], 0)).toBe(0);
+    expect(stockTargetId(undefined, null)).toBe(0);
   });
 });

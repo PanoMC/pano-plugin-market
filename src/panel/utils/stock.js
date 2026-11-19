@@ -10,6 +10,15 @@ const BY_FIELD_CODE = {
 };
 
 /**
+ * The row the dialog adjusts first: `variantId` when given, else the first variant. A product with variants keeps its stock on
+ * the variants (the server refuses a product-level write with `variantId: REQUIRED`), so 0 (the product itself) only without variants.
+ */
+export function stockTargetId(variants, variantId) {
+  if (variantId) return variantId;
+  return Array.isArray(variants) && variants.length > 0 ? variants[0].id : 0;
+}
+
+/**
  * Locale key of the message under the quantity input when the server refused the request because of the quantity, else null (the
  * caller toasts the error). The contract names `BAD_REQUEST`; the backend answers a refused adjustment (a negative result, a
  * limited-stock write on an unlimited stock) as `INVALID_PRODUCT` with `fieldErrors.value`, so both mark the value.
