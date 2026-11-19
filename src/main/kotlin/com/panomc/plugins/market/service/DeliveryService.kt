@@ -1092,7 +1092,11 @@ class DeliveryService(
                 } else {
                     val userId = resolvePermissionUser(conn, row)
                     val tuples = nodes.map { PermissionGrantService.Tuple(it, DeliveryPlanner.nodeContext(it, scope)) }
-                    val granted = permissions.grant(userId, tuples, expiresAt, extend = op == "EXTEND", heldElsewhere = { heldElsewhere(conn, row, it, lowerTo = expiresAt) }, sqlClient = conn)
+                    val owned = marketRecords(conn, row, userId)
+                    val granted = permissions.grant(
+                        userId, tuples, expiresAt, extend = op == "EXTEND", heldElsewhere = { heldElsewhere(conn, row, it, lowerTo = expiresAt) }, sqlClient = conn,
+                        marketRecord = { stored -> owned.firstOrNull { (sameAction, r) -> r.id == stored.id || sameAction && Canon.of(r.node, r.context) == Canon.of(stored.node, stored.context) }?.second }
+                    )
 
                     changed = granted.changed
 
@@ -1109,6 +1113,34 @@ class DeliveryService(
 
     private fun resultOf(userId: Long, nodes: List<PermissionGrantService.Recorded>, verify: Int) =
         JsonObject().put("userId", userId).put("nodes", JsonArray(nodes.map { it.toJson() })).put("verify", verify)
+
+    /**
+     * The nodes confirmed market permission grants of [userId] wrote themselves (not the ones they found and kept, `preexisting`), each with whether it is
+     * a grant of the same item and action as [row] (its own earlier GRANT / RENEW: a snapshot may have rewritten the ids since, so these match by tuple).
+     */
+    private suspend fun marketRecords(conn: SqlClient, row: MarketDelivery, userId: Long): List<Pair<Boolean, PermissionGrantService.Recorded>> {
+        val rows = conn.preparedQuery(
+            "SELECT `orderItemId`, `actionId`, `result` FROM $deliveryTable WHERE `status` = 'CONFIRMED' AND `actionType` = 'PERMISSION' AND `transport` = 'INLINE' " +
+                "AND `phase` IN ('GRANT','RENEW') AND `playerUsername` = ? AND `result` IS NOT NULL"
+        ).execute(Tuple.of(row.playerUsername)).coAwait()
+        val out = ArrayList<Pair<Boolean, PermissionGrantService.Recorded>>()
+
+        for (r in rows) {
+            val result = runCatching { JsonObject(r.getString("result")) }.getOrNull() ?: continue
+
+            if (result.getLong("userId") != userId) continue
+
+            val sameAction = row.orderItemId != null && r.getLong("orderItemId") == row.orderItemId && r.getString("actionId") == row.actionId
+
+            for (any in result.getJsonArray("nodes").orEmpty()) {
+                val entry = PermissionGrantService.Recorded.of(any as? JsonObject ?: continue)
+
+                if (!entry.preexisting) out += sameAction to entry
+            }
+        }
+
+        return out
+    }
 
     /** The user a rank is written for: the order's recipient account, else the name (created the way a join of that player would create it). */
     private suspend fun resolvePermissionUser(conn: SqlConnection, row: MarketDelivery): Long {

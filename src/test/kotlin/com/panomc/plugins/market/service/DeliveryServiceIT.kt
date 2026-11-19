@@ -676,6 +676,34 @@ class DeliveryServiceIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a REMOVE never deletes a node an admin gave by hand and gives a replaced admin node its expiry back`(): Unit = runBlocking {
+        val u = steve()
+        val soon = w.clock.now() + 86_400_000L
+        val later = w.clock.now() + 60L * 86_400_000L
+
+        // an admin gave group.mvp for ever, group.long for 60 days and group.vip for one day, before the purchase
+        d.permissionStore.seed(u.id, "group.mvp", JsonObject(), null)
+        d.permissionStore.seed(u.id, "group.long", JsonObject(), later)
+        d.permissionStore.seed(u.id, "group.vip", JsonObject(), soon)
+
+        val timed = d.place(user = u, actions = listOf(permission("a1", "group.mvp", "group.long", "group.vip", "kit.gold")), billing = "TIMED", periodUnit = "DAY", periodCount = 30)
+
+        d.pay(timed)
+        d.runInline()
+        assertEquals(w.clock.now() + 30L * 86_400_000L, d.permissionStore.nodes(u.id, "group.vip").single().expiresAt)
+
+        d.revoke(timed)
+        d.runInline()
+
+        assertEquals(DeliveryStatus.CONFIRMED, d.rows(timed.order.id).single { it.phase == DeliveryPhase.REVOKE }.status)
+        // the admin's nodes stay as the admin left them; only what the purchase itself added is gone
+        assertNull(d.permissionStore.nodes(u.id, "group.mvp").single().expiresAt)
+        assertEquals(later, d.permissionStore.nodes(u.id, "group.long").single().expiresAt)
+        assertEquals(soon, d.permissionStore.nodes(u.id, "group.vip").single().expiresAt)
+        assertTrue(d.permissionStore.nodes(u.id, "kit.gold").isEmpty())
+    }
+
+    @Test
     fun `a REMOVE keeps a node another active purchase also grants and still works after a snapshot rewrote the ids (34, 36)`(): Unit = runBlocking {
         val u = steve()
         val a = d.place(user = u, actions = listOf(permission("a1", "group.vip", "kit.diamond")))
