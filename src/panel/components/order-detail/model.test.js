@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   AUTO_REFRESH_MAX,
+  createAutoRefresh,
   ORDER_EVENT_TYPES,
   addressLines,
   asText,
@@ -251,6 +252,31 @@ describe('auto refresh (13 §6)', () => {
     expect(shouldAutoRefresh({ ...ok, runs: AUTO_REFRESH_MAX - 1 })).toBe(true);
     expect(shouldAutoRefresh({ ...ok, runs: AUTO_REFRESH_MAX })).toBe(false);
     expect(AUTO_REFRESH_MAX).toBe(40);
+  });
+
+  test('auto refresh resumes after the cap or a failed refresh once an action resets it', async () => {
+    let calls = 0;
+    let ok = true;
+    const poll = createAutoRefresh(async () => {
+      calls++;
+      return ok;
+    });
+    const tick = () => poll.tick({ visible: true, modalOpen: false });
+    for (let i = 0; i < AUTO_REFRESH_MAX + 5; i++) await tick();
+    expect(calls).toBe(AUTO_REFRESH_MAX);
+    poll.reset();
+    await tick();
+    expect(calls).toBe(AUTO_REFRESH_MAX + 1);
+
+    ok = false;
+    await tick();
+    await tick();
+    expect(calls).toBe(AUTO_REFRESH_MAX + 2);
+    ok = true;
+    poll.reset();
+    await tick();
+    expect(calls).toBe(AUTO_REFRESH_MAX + 3);
+    expect(poll.runs).toBe(1);
   });
 });
 

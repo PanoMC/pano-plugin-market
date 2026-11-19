@@ -150,6 +150,29 @@ export function shouldAutoRefresh({ needed, visible, modalOpen, runs }) {
   return needed === true && visible === true && modalOpen !== true && runs < AUTO_REFRESH_MAX;
 }
 
+/**
+ * Run counter + interval tick of the auto refresh. The timer is never stopped from inside: past the
+ * cap, or after a failed refresh, ticks idle until `reset()` (an admin action) lets polling resume.
+ * `refresh` resolves to false on failure.
+ */
+export function createAutoRefresh(refresh) {
+  let runs = 0;
+  return {
+    get runs() {
+      return runs;
+    },
+    reset() {
+      runs = 0;
+    },
+    async tick({ visible, modalOpen }) {
+      if (!shouldAutoRefresh({ needed: true, visible, modalOpen, runs })) return;
+      const run = ++runs;
+      const ok = await refresh();
+      if (!ok && runs === run) runs = AUTO_REFRESH_MAX; // stop on the first failed refresh
+    },
+  };
+}
+
 // ---- timeline, addresses, invoices ------------------------------------------------------------
 
 export const ORDER_EVENT_TYPES = [

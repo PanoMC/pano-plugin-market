@@ -250,10 +250,9 @@
   import { orderActions, withAvailable } from '../components/order-detail/actions.js';
   import { EXTERNAL_MODALS } from '../components/order-detail/external.js';
   import {
-    AUTO_REFRESH_MAX,
     AUTO_REFRESH_MS,
     autoRefreshNeeded,
-    shouldAutoRefresh,
+    createAutoRefresh,
   } from '../components/order-detail/model.js';
   import { performMutation } from '../components/order-detail/mutation.js';
   import {
@@ -347,7 +346,6 @@
   // ---- data ------------------------------------------------------------------------------------
 
   let refreshRun = 0;
-  let autoRuns = 0;
 
   /** Re-GETs the order. `silent` (auto refresh) never toasts; returns false on failure. */
   async function refresh(silent = false) {
@@ -362,6 +360,8 @@
     detail = result.body;
     return true;
   }
+
+  const autoRefresh = createAutoRefresh(() => refresh(true));
 
   function toast(spec) {
     if (!spec) return;
@@ -379,7 +379,7 @@
    * `{ key, values, variant }` object or a function of the response body. Returns the call() result.
    */
   function mutate(request, successToast) {
-    autoRuns = 0;
+    autoRefresh.reset();
     return performMutation(
       {
         send,
@@ -394,7 +394,7 @@
 
   // Modals have hidden themselves already: refresh, then toast.
   async function done(spec) {
-    autoRuns = 0;
+    autoRefresh.reset();
     await refresh();
     toast(spec);
   }
@@ -612,22 +612,14 @@
 
   $effect(() => {
     if (!needsPolling) return;
-    const timer = setInterval(async () => {
-      if (autoRuns >= AUTO_REFRESH_MAX) {
-        clearInterval(timer);
-        return;
-      }
-      const due = shouldAutoRefresh({
-        needed: true,
-        visible: document.visibilityState === 'visible',
-        modalOpen: anyModalOpen(),
-        runs: autoRuns,
-      });
-      if (!due) return;
-      autoRuns++;
-      const ok = await refresh(true);
-      if (!ok) clearInterval(timer); // stop on the first failed refresh
-    }, AUTO_REFRESH_MS);
+    const timer = setInterval(
+      () =>
+        autoRefresh.tick({
+          visible: document.visibilityState === 'visible',
+          modalOpen: anyModalOpen(),
+        }),
+      AUTO_REFRESH_MS,
+    );
     return () => clearInterval(timer);
   });
 
