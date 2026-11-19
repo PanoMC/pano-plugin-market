@@ -1483,6 +1483,29 @@ class ShippingServiceIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `editing a shipment - an emptied tracking number, tracking URL or carrier name is cleared`(): Unit = runBlocking {
+        val o = order(Line("Shirt", 2))
+        val item = o.items.single()
+        val s = ship(o, item to 1, manual = manual(number = null, carrierName = null))
+
+        service.editShipment(id(s), JsonObject().put("trackingNumber", "N-1").put("trackingUrl", "https://x.example.com/N-1").put("carrierName", "PTT"), 7, pool)
+
+        val (json, changed) = service.editShipment(id(s), JsonObject().put("trackingUrl", "").put("carrierName", " "), 7, pool)
+
+        assertEquals(listOf("carrierName", "trackingUrl"), changed.sorted())
+        assertNull(json.getValue("trackingUrl"))
+        assertNull(json.getValue("carrierName"))
+        assertEquals("N-1", json.getString("trackingNumber"))
+
+        val (cleared, changedNumber) = service.editShipment(id(s), JsonObject().put("trackingNumber", ""), 7, pool)
+
+        assertEquals(listOf("trackingNumber"), changedNumber)
+        assertNull(cleared.getValue("trackingNumber"))
+        assertNull(shipmentNow(id(s)).trackingNumber)
+        assertEquals(emptyList<String>(), service.editShipment(id(s), JsonObject().put("trackingUrl", ""), 7, pool).second, "clearing an empty field changes nothing")
+    }
+
+    @Test
     fun `the tracking number of a carrier shipment with a carrier reference is read-only, a cancelled shipment takes no tracking edit`(): Unit = runBlocking {
         carrier.caps = ScriptedCarrier.caps(cancel = true)
         carrier.onCreate = { r -> CreateShipmentResult.Created("CAR-${r.shipmentId}").also { it.trackingNumber = "C1" } }

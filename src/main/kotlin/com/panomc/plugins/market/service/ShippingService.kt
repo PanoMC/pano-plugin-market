@@ -1821,7 +1821,12 @@ class ShippingService(
         if (rawStatus != null && status == null) errors["status"] = "INVALID"
         if (releaseRaw != null && releaseRaw !is Boolean) errors["releaseItems"] = "INVALID"
 
-        val touchesTracking = hasNumber || url != null
+        // an empty string clears the field (the panel sends "" when the admin empties it)
+        fun clears(key: String) = (body.getValue(key) as? String)?.isBlank() == true
+        val clearNumber = clears("trackingNumber")
+        val clearUrl = clears("trackingUrl")
+        val clearCarrierName = clears("carrierName")
+        val touchesTracking = hasNumber || url != null || clearUrl
 
         if (touchesTracking && row.status == ShipmentStatus.CANCELLED) throw InvalidShipmentTransition(row.status.name, row.status.name)
         if (hasNumber && row.entryMode == ShipmentEntryMode.CARRIER && row.carrierReference != null) errors["trackingNumber"] = "READ_ONLY"
@@ -1844,9 +1849,24 @@ class ShippingService(
                 changed += "carrierName"
             }
 
+            if (clearCarrierName && current.carrierName != null) {
+                direct["carrierName"] = null
+                changed += "carrierName"
+            }
+
             if (body.containsKey("note") && note != current.note) {
                 direct["note"] = note
                 changed += "note"
+            }
+
+            if (clearNumber && current.trackingNumber != null) {
+                direct["trackingNumber"] = null
+                changed += "trackingNumber"
+            }
+
+            if (clearUrl && current.trackingUrl != null) {
+                direct["trackingUrl"] = null
+                changed += "trackingUrl"
             }
 
             setShipment(conn, shipmentId, direct)
@@ -1868,8 +1888,8 @@ class ShippingService(
 
                 if (moves && outcome.to == outcome.from) throw InvalidShipmentTransition(current.status.name, status!!.name)
 
-                if (after.trackingNumber != current.trackingNumber) changed += "trackingNumber"
-                if (after.trackingUrl != current.trackingUrl) changed += "trackingUrl"
+                if (after.trackingNumber != current.trackingNumber && "trackingNumber" !in changed) changed += "trackingNumber"
+                if (after.trackingUrl != current.trackingUrl && "trackingUrl" !in changed) changed += "trackingUrl"
                 if (moves) changed += "status"
             }
 
