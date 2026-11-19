@@ -2,7 +2,7 @@
   import { api } from '@panomc/sdk/plugin-api';
   import ProductSelector from '../ProductSelector.svelte';
   import { _, showSuccessToast, showErrorToast } from '../../../i18n';
-  import { giftDatesReversed, validateGiftLimits } from '../../utils/category-gift.js';
+  import { giftDates, giftDatesReversed, validateGiftLimits } from '../../utils/category-gift.js';
 
   let { isEdit = false, gift = null, onSaved = () => {} } = $props();
 
@@ -150,10 +150,9 @@
         body.productIds = selectedRandomProductIds.map(Number);
       }
 
-      if (!isExpiryUnlimited) {
-        if (startDate) body.startDate = dateInputToEpoch(startDate);
-        if (expiryDate) body.expiryDate = dateInputToEpoch(expiryDate);
-      }
+      const dates = giftDates(isExpiryUnlimited, startDate, expiryDate);
+      body.startDate = dates.startDate;
+      body.expiryDate = dates.expiryDate;
 
       let result;
       if (isEdit && gift) {

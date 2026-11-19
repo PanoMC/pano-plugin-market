@@ -124,12 +124,14 @@ export function buildDiscountBody(form, exponent = 2) {
     status: form.active ? 'ACTIVE' : 'INACTIVE',
     showBadge: form.showBadge === true,
   };
-  if (min.value !== null && min.value !== undefined) body.minPaymentAmount = min.value;
+  // cleared / unlimited fields go as an explicit null: the PUT is partial and a missing key
+  // keeps the stored value
+  body.minPaymentAmount = min.value ?? null;
   if (productIds) body.productIds = productIds;
   if (categoryIds) body.categoryIds = categoryIds;
-  if (dates.start !== null && dates.start !== undefined) body.startDate = dates.start;
-  if (dates.end !== null && dates.end !== undefined) body.expiryDate = dates.end;
-  if (limit.value !== null && limit.value !== undefined) body.usageLimit = limit.value;
+  body.startDate = dates.start ?? null;
+  body.expiryDate = dates.end ?? null;
+  body.usageLimit = limit.value ?? null;
   return finish(errors, body);
 }
 
@@ -168,16 +170,17 @@ export function buildCouponBody(form, exponent = 2) {
     scope,
     status: form.active ? 'ACTIVE' : 'INACTIVE',
   };
-  if (min.value !== null && min.value !== undefined) body.minPaymentAmount = min.value;
+  // cleared / unlimited fields go as an explicit null: the PUT is partial and a missing key
+  // keeps the stored value
+  body.minPaymentAmount = min.value ?? null;
   if (scope === 'SELECTED') {
     body.productIds = productIds;
     body.categoryIds = categoryIds;
   }
-  if (dates.start !== null && dates.start !== undefined) body.startDate = dates.start;
-  if (dates.end !== null && dates.end !== undefined) body.expiryDate = dates.end;
-  if (redeem.value !== null && redeem.value !== undefined) body.redeemLimit = redeem.value;
-  if (customer.value !== null && customer.value !== undefined)
-    body.customerRedeemLimit = customer.value;
+  body.startDate = dates.start ?? null;
+  body.expiryDate = dates.end ?? null;
+  body.redeemLimit = redeem.value ?? null;
+  body.customerRedeemLimit = customer.value ?? null;
   return finish(errors, body);
 }
 
@@ -210,9 +213,9 @@ export function buildCreatorBody(form, exponent = 2) {
     commissionPercent: commission.value,
     status: form.active ? 'ACTIVE' : 'INACTIVE',
   };
-  if (dates.start !== null && dates.start !== undefined) body.startDate = dates.start;
-  if (dates.end !== null && dates.end !== undefined) body.expiryDate = dates.end;
-  if (redeem.value !== null && redeem.value !== undefined) body.redeemLimit = redeem.value;
+  body.startDate = dates.start ?? null;
+  body.expiryDate = dates.end ?? null;
+  body.redeemLimit = redeem.value ?? null;
   return finish(errors, body);
 }
 

@@ -1,5 +1,5 @@
 // Pure helpers of CreateCategoryModal (tiered, partial PUT; 13 §10) and CreateGiftModal (limits; 13 §12.1).
-import { parseInteger } from './format.js';
+import { dayToEpoch, parseInteger } from './format.js';
 
 export const UPGRADE_MODES = ['DIFFERENCE', 'FULL'];
 export const DEFAULT_UPGRADE_MODE = 'DIFFERENCE';
@@ -51,6 +51,15 @@ export function validateGiftLimits({ name = '', redeemLimit = '', customerRedeem
 /** Gift dates are epoch ms; both set and start after end is invalid. */
 export const giftDatesReversed = (startEpoch, endEpoch) =>
   startEpoch !== null && endEpoch !== null && startEpoch > endEpoch;
+
+/**
+ * Day inputs of the gift modal -> { startDate, expiryDate } epochs. Unlimited or empty = null, sent
+ * as an explicit null: PUT /gifts/:id is partial, a missing key keeps the stored date.
+ */
+export function giftDates(unlimited, startText, expiryText) {
+  if (unlimited) return { startDate: null, expiryDate: null };
+  return { startDate: dayToEpoch(startText, false), expiryDate: dayToEpoch(expiryText, false) };
+}
 
 /** `usedCount / redeemLimit ?? '∞'`. */
 export const usedCell = (gift) => `${gift?.usedCount ?? 0} / ${gift?.redeemLimit ?? '∞'}`;

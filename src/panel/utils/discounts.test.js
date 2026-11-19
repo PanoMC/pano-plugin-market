@@ -52,6 +52,10 @@ describe('discount form', () => {
       scope: 'ALL',
       status: 'ACTIVE',
       showBadge: true,
+      minPaymentAmount: null,
+      startDate: null,
+      expiryDate: null,
+      usageLimit: null,
     });
     expect(unitOf('₺')).toBe('PERCENT');
   });
@@ -141,6 +145,27 @@ describe('coupon and creator forms', () => {
     expect(buildCouponBody(coupon({ scope: 'ALL' })).body.categoryIds).toBeUndefined();
   });
 
+  test('an edit that clears dates, limits and the minimum sends them as null (partial PUT)', () => {
+    const { body } = buildCouponBody(
+      coupon({ unlimitedDates: true, unlimitedCustomerRedeem: true, minPaymentAmount: '' }),
+    );
+    for (const key of [
+      'startDate',
+      'expiryDate',
+      'redeemLimit',
+      'customerRedeemLimit',
+      'minPaymentAmount',
+    ]) {
+      expect(key in body).toBe(true);
+      expect(body[key]).toBeNull();
+    }
+    const discountBody = buildDiscountBody(discount({ unlimitedUsage: true })).body;
+    expect(discountBody.usageLimit).toBeNull();
+    expect(discountBody.expiryDate).toBeNull();
+    expect('usageLimit' in discountBody).toBe(true);
+    expect('redeemLimit' in buildCreatorBody(creator()).body).toBe(true);
+  });
+
   const creator = (over = {}) => ({
     creator: 'Alex',
     code: 'ALEX',
@@ -165,6 +190,9 @@ describe('coupon and creator forms', () => {
       unit: 'FIXED',
       commissionPercent: 12.5,
       status: 'ACTIVE',
+      startDate: null,
+      expiryDate: null,
+      redeemLimit: null,
     });
     expect(buildCreatorBody(creator({ commission: '101' })).errors.commission).toBe('TOO_LARGE');
     expect(buildCreatorBody(creator({ commission: '' })).body.commissionPercent).toBe(0);

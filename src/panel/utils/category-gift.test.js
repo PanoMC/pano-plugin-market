@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { changedCategoryFields, formValue, giftDatesReversed, usedCell, validateGiftLimits } from './category-gift.js';
+import { changedCategoryFields, formValue, giftDates, giftDatesReversed, usedCell, validateGiftLimits } from './category-gift.js';
 
 const base = { name: 'A', description: 'd', icon: 'fa-folder', color: '#000', status: 'ACTIVE', tiered: false, upgradeMode: 'DIFFERENCE' };
 
@@ -97,5 +97,15 @@ describe('giftRedemptionTarget', () => {
   });
   test('missing code falls back to an empty title value', () => {
     expect(giftRedemptionTarget({ id: 1 }).code).toBe('');
+  });
+});
+
+describe('giftDates', () => {
+  test('unlimited or empty dates are an explicit null so an edit can clear them', () => {
+    expect(giftDates(true, '2026-12-01', '2026-12-31')).toEqual({ startDate: null, expiryDate: null });
+    const open = giftDates(false, '', '');
+    expect('startDate' in open && 'expiryDate' in open).toBe(true);
+    expect(open).toEqual({ startDate: null, expiryDate: null });
+    expect(giftDates(false, '2026-12-01', '').startDate).toBe(new Date(2026, 11, 1).getTime());
   });
 });
