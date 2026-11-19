@@ -46,6 +46,7 @@ import com.panomc.plugins.market.db.model.MarketShipment
 import com.panomc.plugins.market.db.model.MarketSubscription
 import com.panomc.plugins.market.db.model.OrderActorType
 import com.panomc.plugins.market.db.model.OrderEventType
+import com.panomc.plugins.market.db.model.OrderItemKind
 import com.panomc.plugins.market.db.model.OrderSource
 import com.panomc.plugins.market.db.model.PaymentStatus
 import com.panomc.plugins.market.db.model.RefundOrigin
@@ -144,10 +145,11 @@ class OrderQueryIT : MarketDaoITBase() {
         return orders.getById(id, pool)!!
     }
 
-    private suspend fun item(order: MarketOrder, name: String = "VIP", variant: String? = null, quantity: Int = 1, unit: Long = 2_500, sku: String? = null, physical: Boolean = false, fieldValues: String? = null): Long =
+    private suspend fun item(order: MarketOrder, name: String = "VIP", variant: String? = null, quantity: Int = 1, unit: Long = 2_500, sku: String? = null, physical: Boolean = false, fieldValues: String? = null,
+                             kind: OrderItemKind = OrderItemKind.PRODUCT, parent: Long? = null): Long =
         items.add(
             MarketOrderItem(
-                orderId = order.id, productId = 7, productName = name, variantName = variant, sku = sku, quantity = quantity, unitPrice = unit, listUnitPrice = unit,
+                orderId = order.id, productId = 7, productName = name, kind = kind, parentItemId = parent, variantName = variant, sku = sku, quantity = quantity, unitPrice = unit, listUnitPrice = unit,
                 lineTotal = unit * quantity, physical = physical, fieldValues = fieldValues, snapshot = "{\"slug\":\"vip\",\"kind\":\"PRODUCT\",\"actions\":[{\"id\":\"a\",\"type\":\"COMMAND\"}]}",
                 createdAt = order.createdAt, updatedAt = order.createdAt
             ),
@@ -200,6 +202,18 @@ class OrderQueryIT : MarketDaoITBase() {
         assertEquals(20.0, line.getDouble("lineTotal"))
         assertEquals(2, line.getInteger("quantity"))
         assertFalse(row.encode().contains("secret"), "no token or hash in a row")
+    }
+
+    @Test
+    fun `a bundle is one line of the list, its children are not counted as products`(): Unit = runBlocking {
+        val o = order()
+        val bundle = item(o, name = "Starter Bundle", kind = OrderItemKind.BUNDLE)
+
+        for (child in listOf("VIP", "Coins", "Kit")) item(o, name = child, unit = 0, kind = OrderItemKind.BUNDLE_CHILD, parent = bundle)
+
+        val lines = service.list(OrderFilter(), firstPage, pii = true, client = pool).rows.single().getJsonArray("items")
+
+        assertEquals(listOf("Starter Bundle"), (0 until lines.size()).map { lines.getJsonObject(it).getString("productName") })
     }
 
     @Test

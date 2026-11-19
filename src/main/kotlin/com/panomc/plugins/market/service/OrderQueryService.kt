@@ -179,7 +179,8 @@ class OrderQueryService(
                 "o.`reviewReason`, o.`createdAt`, o.`updatedAt` FROM ${table("market_order")} o WHERE $where ORDER BY o.`createdAt` DESC, o.`id` DESC LIMIT ? OFFSET ?"
         ).execute(Tuple.from(pageArgs)).coAwait().toList()
 
-        val itemsByOrder = orderItems.getByOrderIds(rows.map { it.getLong("id") }, client).groupBy { it.orderId }
+        // a bundle's children are not lines of their own: the list shows the bundle once
+        val itemsByOrder = orderItems.getByOrderIds(rows.map { it.getLong("id") }, client).filter { it.kind != OrderItemKind.BUNDLE_CHILD }.groupBy { it.orderId }
 
         return OrderPage(rows.map { listRow(it, itemsByOrder[it.getLong("id")].orEmpty(), pii) }, count)
     }
