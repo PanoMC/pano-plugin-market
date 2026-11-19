@@ -2346,8 +2346,8 @@ class CheckoutService(
         return when {
             !c.creditsEnabled || !c.creditTopUpEnabled || !c.creditTopUpFreeAmount -> "TOPUP_DISABLED"
             credits == null || credits <= 0 -> "NOT_A_NUMBER"
-            credits < (c.creditTopUpMin * 100).toLong() -> "BELOW_MINIMUM"
-            credits > (c.creditTopUpMax * 100).toLong() -> "ABOVE_MAXIMUM"
+            credits < com.panomc.plugins.market.util.MoneyUtil.toMinor(c.creditTopUpMin) -> "BELOW_MINIMUM"
+            credits > com.panomc.plugins.market.util.MoneyUtil.toMinor(c.creditTopUpMax) -> "ABOVE_MAXIMUM"
             else -> null
         }
     }

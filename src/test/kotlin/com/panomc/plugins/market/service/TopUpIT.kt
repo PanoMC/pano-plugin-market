@@ -538,6 +538,18 @@ class TopUpIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `two decimal bounds are exact - the configured maximum is accepted and an amount below the minimum is refused`(): Unit = runBlocking {
+        configure(free = true, min = 0.29, max = 19.99)
+
+        val (_, caller) = user("Alex")
+
+        assertNotNull(gateway(caller, "creditTopUp" to 19.99), "19.99 * 100 is 1998.999..., the maximum itself must pass")
+        assertEquals("ABOVE_MAXIMUM", expect("INVALID_CREDIT_AMOUNT", 400) { c.checkout(h.body("creditTopUp" to 20, "paymentMethodId" to "fake"), caller) }.getString("reason"))
+        assertEquals("BELOW_MINIMUM", expect("INVALID_CREDIT_AMOUNT", 400) { c.checkout(h.body("creditTopUp" to 0.28, "paymentMethodId" to "fake"), caller) }.getString("reason"))
+        assertNotNull(gateway(caller, "creditTopUp" to 0.29))
+    }
+
+    @Test
     fun `V-15 a gift top-up credits the recipient`(): Unit = runBlocking {
         configure(free = true)
 
