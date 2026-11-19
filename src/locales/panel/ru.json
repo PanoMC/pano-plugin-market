@@ -1497,7 +1497,9 @@
         "PANEL": "Панель",
         "GIFT_CODE": "Подарочный код",
         "RENEWAL": "Продление",
-        "EXTERNAL": "Внешний"
+        "EXTERNAL": "Внешний",
+        "INGAME": "В игре",
+        "LEGACY": "Устаревший"
       }
     },
     "export-orders": {

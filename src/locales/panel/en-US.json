@@ -1497,7 +1497,9 @@
         "PANEL": "Panel",
         "GIFT_CODE": "Gift code",
         "RENEWAL": "Renewal",
-        "EXTERNAL": "External"
+        "EXTERNAL": "External",
+        "INGAME": "In-game",
+        "LEGACY": "Legacy"
       }
     },
     "export-orders": {

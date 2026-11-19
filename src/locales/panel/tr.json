@@ -1497,7 +1497,9 @@
         "PANEL": "Panel",
         "GIFT_CODE": "Hediye kodu",
         "RENEWAL": "Yenileme",
-        "EXTERNAL": "Harici"
+        "EXTERNAL": "Harici",
+        "INGAME": "Oyun içi",
+        "LEGACY": "Eski"
       }
     },
     "export-orders": {

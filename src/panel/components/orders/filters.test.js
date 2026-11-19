@@ -4,6 +4,7 @@ import {
   DEFAULT_EXPORT_COLUMNS,
   EXPORT_COLUMNS,
   ORDER_PARAMS,
+  SOURCE_VALUES,
   STATUS_TABS,
   activeModalFilters,
   activeTab,
@@ -19,6 +20,9 @@ import {
   rowActions,
   sanitizeColumns,
 } from './filters.js';
+import enUS from '../../../locales/panel/en-US.json';
+import tr from '../../../locales/panel/tr.json';
+import ru from '../../../locales/panel/ru.json';
 
 const buildQueryParams = (params) => {
   const qs = Object.keys(params)
@@ -204,5 +208,22 @@ describe('row cells', () => {
     expect(rowActions({ fulfillmentStatus: 'FAILED' }, ov)).toEqual(['view', 'copy']);
     expect(rowActions({ fulfillmentStatus: 'FAILED' }, pay)).toEqual(['view', 'copy']);
     expect(rowActions({ fulfillmentStatus: 'FULFILLED' }, om)).toEqual(['view', 'copy']);
+  });
+});
+
+describe('SOURCE_VALUES', () => {
+  test('offers every order source, in-game and legacy included, with a label in each locale', () => {
+    expect(SOURCE_VALUES).toEqual([
+      'STOREFRONT',
+      'PANEL',
+      'GIFT_CODE',
+      'RENEWAL',
+      'EXTERNAL',
+      'INGAME',
+      'LEGACY',
+    ]);
+    for (const locale of [enUS, tr, ru])
+      for (const value of SOURCE_VALUES)
+        expect(typeof locale.modals['order-filters'].sources[value]).toBe('string');
   });
 });

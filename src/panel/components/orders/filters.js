@@ -47,7 +47,15 @@ export const SHIPPING_VALUES = [
   'DELIVERED',
   'RETURNED',
 ];
-export const SOURCE_VALUES = ['STOREFRONT', 'PANEL', 'GIFT_CODE', 'RENEWAL', 'EXTERNAL'];
+export const SOURCE_VALUES = [
+  'STOREFRONT',
+  'PANEL',
+  'GIFT_CODE',
+  'RENEWAL',
+  'EXTERNAL',
+  'INGAME',
+  'LEGACY',
+];
 export const TEST_MODE_VALUES = ['all', 'false', 'true'];
 
 const present = (value) => value !== null && value !== undefined && String(value).trim() !== '';
