@@ -3312,12 +3312,6 @@
       "CHARGEBACK": "Geri ödeme itirazı",
       "PROVIDER_UNAVAILABLE": "Sağlayıcı kullanılamıyor"
     },
-    "verification": {
-      "UNVERIFIED": "Doğrulanmadı",
-      "DOC_SAMPLES": "Dokümanla Test Edildi",
-      "SANDBOX": "Sandbox Testi Yapıldı",
-      "LIVE": "Canlı Test Edildi"
-    },
     "refund-support": {
       "NONE": "Yalnızca manuel",
       "FULL_ONLY": "Tam iade",

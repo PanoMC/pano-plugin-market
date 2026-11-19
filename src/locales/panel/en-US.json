@@ -3312,12 +3312,6 @@
       "CHARGEBACK": "Chargeback",
       "PROVIDER_UNAVAILABLE": "Provider unavailable"
     },
-    "verification": {
-      "UNVERIFIED": "Unverified",
-      "DOC_SAMPLES": "Docs Tested",
-      "SANDBOX": "Sandbox Tested",
-      "LIVE": "Live Tested"
-    },
     "refund-support": {
       "NONE": "Manual only",
       "FULL_ONLY": "Full refunds",

@@ -63,11 +63,6 @@
                 {#if effectiveTestMode(carrier, ctx)}
                   <span class="badge text-bg-warning">{$_('common.test')}</span>
                 {/if}
-                {#if carrier.descriptor?.verification}
-                  <span class="badge text-bg-primary">
-                    {$_(`enums.verification.${carrier.descriptor.verification}`)}
-                  </span>
-                {/if}
                 {#if Number(carrier.methodCount) > 0}
                   <span class="badge text-bg-light border">
                     {$_('settings.shipping-carriers.methods', {

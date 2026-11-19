@@ -113,18 +113,6 @@
                 {#if effectiveTestMode(provider, ctx)}
                   <span class="badge text-bg-warning">{$_('common.test')}</span>
                 {/if}
-                {#if provider.descriptor?.verification}
-                  <span
-                    class="badge {{
-                      LIVE: 'text-bg-success',
-                      SANDBOX: 'text-bg-info',
-                      DOC_SAMPLES: 'text-bg-warning',
-                      UNVERIFIED: 'text-bg-primary',
-                                          }[provider.descriptor.verification] ?? 'text-bg-primary'}"
-                  >
-                    {$_(`enums.verification.${provider.descriptor.verification}`)}
-                  </span>
-                {/if}
                 {#if provider.descriptor?.region}
                   <span class="badge text-bg-primary">
                     {provider.descriptor.region === 'global'

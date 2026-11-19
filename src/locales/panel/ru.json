@@ -3312,12 +3312,6 @@
       "CHARGEBACK": "Чарджбэк",
       "PROVIDER_UNAVAILABLE": "Провайдер недоступен"
     },
-    "verification": {
-      "UNVERIFIED": "Не проверено",
-      "DOC_SAMPLES": "Проверено по документации",
-      "SANDBOX": "Проверено в песочнице",
-      "LIVE": "Проверено в работе"
-    },
     "refund-support": {
       "NONE": "Только вручную",
       "FULL_ONLY": "Полный возврат",
