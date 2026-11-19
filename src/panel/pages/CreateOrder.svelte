@@ -259,7 +259,6 @@
                 type="checkbox"
                 role="switch"
                 id="create-order-run-deliveries"
-                disabled={!form.markPaid}
                 checked={effectiveRunDeliveries(form)}
                 onchange={(e) => (form.runDeliveries = e.currentTarget.checked)} />
               <label class="form-check-label" for="create-order-run-deliveries">

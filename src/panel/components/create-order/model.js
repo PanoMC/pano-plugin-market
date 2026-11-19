@@ -244,8 +244,11 @@ export function initialForm(player = '') {
   };
 }
 
-/** The deliveries switch only means something for a paid order. */
-export const effectiveRunDeliveries = (form) => form.markPaid && form.runDeliveries;
+/**
+ * The deliveries switch. For an unpaid order the server stores it and honours it when the order is
+ * paid later (06 §14.3), so it is the admin's choice in both cases, never a forced "off".
+ */
+export const effectiveRunDeliveries = (form) => !!form.runDeliveries;
 
 /**
  * Mail switch availability: an e-mail was typed, or the quote does not say the buyer is unknown

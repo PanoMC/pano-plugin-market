@@ -196,7 +196,12 @@ describe('form validation and body', () => {
       paymentLabel: 'Manual payment',
     });
   });
-  test('not paid: no deliveries, no label; optional keys only when set', () => {
+  test('not paid: deliveries keep the admin choice for the later payment', () => {
+    const form = { ...initialForm('a'), markPaid: false };
+    expect(buildBody(form, [line()]).runDeliveries).toBe(true);
+    expect(buildBody({ ...form, runDeliveries: false }, [line()]).runDeliveries).toBe(false);
+  });
+  test('not paid: no label; optional keys only when set', () => {
     const form = {
       ...initialForm('a'),
       markPaid: false,
@@ -210,7 +215,7 @@ describe('form validation and body', () => {
       sendMail: true,
     };
     const body = buildBody(form, [line({ variantId: 3, targetServerId: 2 })]);
-    expect(body.runDeliveries).toBe(false);
+    expect(body.runDeliveries).toBe(true);
     expect('paymentLabel' in body).toBe(false);
     expect(body).toMatchObject({
       recipientUsername: 'b',
