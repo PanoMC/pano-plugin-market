@@ -1,14 +1,13 @@
 {#if render}
   <div class="market-recent-buyers-widget card">
-    <div class="market-recent-buyers-widget__header card-header">
-      <i class="fa-solid fa-bag-shopping me-2" aria-hidden="true"></i>{$_(
-        'theme.widgets.recent-buyers.title',
-      )}
+    <div class="market-recent-buyers-widget__header card-header text-capitalize">
+      {$_('theme.widgets.recent-buyers.title')}
     </div>
-    <ul class="market-recent-buyers-widget__list list-group list-group-flush">
+    <div class="market-recent-buyers-widget__list list-group list-group-flush">
       {#each entries as entry, index (index)}
-        <li
-          class="market-recent-buyers-widget__item list-group-item d-flex align-items-center gap-2">
+        <a
+          href="{base}/player/{encodeURIComponent(entry.username)}"
+          class="market-recent-buyers-widget__item list-group-item list-group-item-action d-flex align-items-center gap-2">
           <PlayerHead username={entry.username} width={24} height={24} />
           <div class="flex-grow-1 text-truncate">
             <div class="text-truncate">{entry.username}</div>
@@ -32,9 +31,9 @@
               </div>
             {/if}
           </div>
-        </li>
+        </a>
       {/each}
-    </ul>
+    </div>
   </div>
 {/if}
 
@@ -57,6 +56,7 @@
 </script>
 
 <script>
+  import { base } from '@panomc/sdk/svelte';
   import { PlayerHead, Date as PanoDate } from '@panomc/sdk/components/theme';
   import { buyerView, shouldRender, unwrapWidgets, withSidebar } from './widgetsModel.js';
 

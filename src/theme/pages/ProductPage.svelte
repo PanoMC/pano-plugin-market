@@ -34,15 +34,13 @@
         <div class="d-flex flex-wrap align-items-center gap-2">
           {#if product.categoryName && product.categoryId != null}
             <a
-              class="small link-secondary"
+              class="market-product-page__category small text-decoration-none"
               href="{base}/store?category={encodeURIComponent(product.categoryId)}"
               >{product.categoryName}</a>
           {/if}
           {#if product.featured}
             <span class="market-product-page__badge badge text-bg-warning">
-              <i class="fa-solid fa-star me-1" aria-hidden="true"></i>{$_(
-                'theme.store.featured-badge',
-              )}
+              {$_('theme.store.featured-badge')}
             </span>
           {/if}
           <SaleBadge product={view} {settings} />

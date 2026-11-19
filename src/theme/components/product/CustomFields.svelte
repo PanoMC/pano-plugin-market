@@ -16,7 +16,7 @@
           aria-describedby={described}
           onchange={(event) => onchange(field.fieldKey, event.currentTarget.checked)}
           onblur={() => onblur(field.fieldKey)} />
-        <label class="form-check-label" for={id}>
+        <label class="form-check-label text-capitalize" for={id}>
           {field.label}{#if field.required}<span class="text-danger" aria-hidden="true">
               *</span
             >{/if}
@@ -26,58 +26,69 @@
         {/if}
       </div>
     {:else}
-      <label class="market-custom-fields__label form-label" for={id}>
-        {field.label}{#if field.required}<span class="text-danger" aria-hidden="true"> *</span>{/if}
-      </label>
-      {#if field.type === 'SELECT'}
-        <select
-          {id}
-          class={['market-custom-fields__select', 'form-select', error && 'is-invalid']}
-          value={values[field.fieldKey] ?? ''}
-          aria-invalid={error ? 'true' : undefined}
-          aria-describedby={described}
-          onchange={(event) => onchange(field.fieldKey, event.currentTarget.value)}
-          onblur={() => onblur(field.fieldKey)}>
-          <option value="" disabled={field.required}>{field.placeholder || ''}</option>
-          {#each field.options || [] as option (option.value ?? option)}
-            <option value={String(option.value ?? option)}
-              >{option.label ?? option.value ?? option}</option>
-          {/each}
-        </select>
-      {:else if field.type === 'NUMBER'}
-        <input
-          {id}
-          type="number"
-          step="1"
-          min={field.minValue ?? undefined}
-          max={field.maxValue ?? undefined}
-          class={['market-custom-fields__input', 'form-control', error && 'is-invalid']}
-          placeholder={field.placeholder || undefined}
-          value={values[field.fieldKey] ?? ''}
-          aria-invalid={error ? 'true' : undefined}
-          aria-describedby={described}
-          oninput={(event) => onchange(field.fieldKey, event.currentTarget.value)}
-          onblur={() => onblur(field.fieldKey)} />
-      {:else}
-        <input
-          {id}
-          type={field.type === 'EMAIL' ? 'email' : 'text'}
-          inputmode={field.type === 'DISCORD_ID' ? 'numeric' : undefined}
-          maxlength={field.type === 'TEXT' ? (field.maxLength ?? 128) : undefined}
-          class={['market-custom-fields__input-2', 'form-control', error && 'is-invalid']}
-          placeholder={field.placeholder || undefined}
-          autocomplete="off"
-          value={values[field.fieldKey] ?? ''}
-          aria-invalid={error ? 'true' : undefined}
-          aria-describedby={described}
-          oninput={(event) => onchange(field.fieldKey, event.currentTarget.value)}
-          onblur={() => onblur(field.fieldKey)} />
-      {/if}
-      {#if error}
-        <div class="invalid-feedback" id={feedback}>{$_(`theme.errors.${error}`)}</div>
-      {/if}
+      <div class="row">
+        <div class="col-12 col-md-8 col-xl-6">
+          <div class="market-custom-fields__floating form-floating">
+            {#if field.type === 'SELECT'}
+              <select
+                {id}
+                class={['market-custom-fields__select', 'form-select', error && 'is-invalid']}
+                value={values[field.fieldKey] ?? ''}
+                aria-invalid={error ? 'true' : undefined}
+                aria-describedby={described}
+                onchange={(event) => onchange(field.fieldKey, event.currentTarget.value)}
+                onblur={() => onblur(field.fieldKey)}>
+                <option value="" disabled={field.required}>{field.placeholder || ''}</option>
+                {#each field.options || [] as option (option.value ?? option)}
+                  <option value={String(option.value ?? option)}
+                    >{option.label ?? option.value ?? option}</option>
+                {/each}
+              </select>
+            {:else if field.type === 'NUMBER'}
+              <input
+                {id}
+                type="number"
+                step="1"
+                min={field.minValue ?? undefined}
+                max={field.maxValue ?? undefined}
+                class={['market-custom-fields__input', 'form-control', error && 'is-invalid']}
+                placeholder={field.placeholder || field.label}
+                value={values[field.fieldKey] ?? ''}
+                aria-invalid={error ? 'true' : undefined}
+                aria-describedby={described}
+                oninput={(event) => onchange(field.fieldKey, event.currentTarget.value)}
+                onblur={() => onblur(field.fieldKey)} />
+            {:else}
+              <input
+                {id}
+                type={field.type === 'EMAIL' ? 'email' : 'text'}
+                inputmode={field.type === 'DISCORD_ID' ? 'numeric' : undefined}
+                maxlength={field.type === 'TEXT' ? (field.maxLength ?? 128) : undefined}
+                class={['market-custom-fields__input-2', 'form-control', error && 'is-invalid']}
+                placeholder={field.placeholder || field.label}
+                autocomplete="off"
+                value={values[field.fieldKey] ?? ''}
+                aria-invalid={error ? 'true' : undefined}
+                aria-describedby={described}
+                oninput={(event) => onchange(field.fieldKey, event.currentTarget.value)}
+                onblur={() => onblur(field.fieldKey)} />
+            {/if}
+            <label class="market-custom-fields__label text-capitalize" for={id}>
+              {field.label}{#if field.required}<span class="text-danger" aria-hidden="true">
+                  *</span
+                >{/if}
+            </label>
+            {#if error}
+              <div class="invalid-feedback" id={feedback}>{$_(`theme.errors.${error}`)}</div>
+            {/if}
+          </div>
+          {#if field.helpText}
+            <div class="form-text" id={hint}>{field.helpText}</div>
+          {/if}
+        </div>
+      </div>
     {/if}
-    {#if field.helpText}
+    {#if field.type === 'CHECKBOX' && field.helpText}
       <div class="form-text" id={hint}>{field.helpText}</div>
     {/if}
   </div>

@@ -15,7 +15,7 @@
       {#if buy.kind === 'SUBSCRIBE'}
         <button
           type="button"
-          class="market-add-to-cart__subscribe btn btn-primary"
+          class="market-add-to-cart__subscribe btn btn-secondary"
           {disabled}
           onclick={() => onsubscribe()}>
           {#if pending}<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span
@@ -26,6 +26,13 @@
       {:else}
         <button
           type="button"
+          class="market-add-to-cart__buy-now btn btn-secondary text-capitalize"
+          {disabled}
+          onclick={() => onbuy()}>
+          {$_('theme.product.buy-now')}
+        </button>
+        <button
+          type="button"
           class="market-add-to-cart__add-to-cart btn btn-info"
           {disabled}
           onclick={() => onadd()}>
@@ -33,13 +40,6 @@
             >{:else}<i class="fa-solid fa-cart-plus me-2" aria-hidden="true"></i>{/if}{$_(
             'theme.store.add-to-cart',
           )}
-        </button>
-        <button
-          type="button"
-          class="market-add-to-cart__buy-now btn btn-outline-secondary text-capitalize"
-          {disabled}
-          onclick={() => onbuy()}>
-          {$_('theme.product.buy-now')}
         </button>
       {/if}
     </div>

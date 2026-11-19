@@ -120,12 +120,9 @@
         </section>
 
         {#if showSections && settings.showComparisons !== false && resolvedComparisons.length}
-          <section class="vstack gap-3">
-            <h2 class="market-store-page__comparisons h5 mb-0">
-              <i class="fa-solid fa-table-list me-2" aria-hidden="true"></i>{$_(
-                'theme.store.comparisons',
-              )}
-            </h2>
+          <section
+            class="market-store-page__comparisons vstack gap-3"
+            aria-label={$_('theme.store.comparisons')}>
             {#each resolvedComparisons as comparison (comparison.id)}
               <ComparisonTable {comparison} {productMap} {settings} />
             {/each}

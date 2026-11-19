@@ -1,15 +1,14 @@
 {#if render}
   <div class="market-top-supporters-widget card">
-    <div class="market-top-supporters-widget__header card-header">
-      <i class="fa-solid fa-ranking-star me-2" aria-hidden="true"></i>{$_(
-        'theme.widgets.top-supporters.title',
-      )}
+    <div class="market-top-supporters-widget__header card-header text-capitalize">
+      {$_('theme.widgets.top-supporters.title')}
     </div>
-    <ul class="market-top-supporters-widget__list list-group list-group-flush">
+    <div class="market-top-supporters-widget__list list-group list-group-flush">
       {#each entries as entry (entry.rank + ':' + entry.username)}
-        <li
-          class="market-top-supporters-widget__item list-group-item d-flex align-items-center gap-2">
-          <span class="text-center flex-shrink-0 w-25 small">
+        <a
+          href="{base}/player/{encodeURIComponent(entry.username)}"
+          class="market-top-supporters-widget__item list-group-item list-group-item-action d-flex align-items-center gap-2">
+          <span class="text-center flex-shrink-0 w-auto small">
             {#if entry.trophy}
               <i
                 class={[iconClass(entry.trophy.icon), toneClass(entry.trophy.tone)]}
@@ -26,9 +25,9 @@
             <span class="small text-body-secondary text-nowrap"
               >{formatMoney(entry.total, data?.currency || currency)}</span>
           {/if}
-        </li>
+        </a>
       {/each}
-    </ul>
+    </div>
   </div>
 {/if}
 
@@ -51,6 +50,7 @@
 </script>
 
 <script>
+  import { base } from '@panomc/sdk/svelte';
   import { PlayerHead } from '@panomc/sdk/components/theme';
   import { shouldRender, supporterView, unwrapWidgets, withSidebar } from './widgetsModel.js';
   import { iconClass, toneClass } from '../../lib/classes.js';

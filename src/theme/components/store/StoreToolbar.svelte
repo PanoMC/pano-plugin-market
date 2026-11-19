@@ -31,7 +31,12 @@
       label={$_('theme.store.sort-label')}
       onSelect={(option) => onsort?.(option.key)} />
     {#if showCurrency}
-      <CurrencySelect currencies={settings.currencies} selected={currency} onchange={oncurrency} />
+      <FilterDropdown
+        options={currencyOptions}
+        current={currency}
+        label={$_('theme.store.currency-label')}
+        icon="fa-money-bill-wave"
+        onSelect={(option) => oncurrency?.(option.key)} />
     {/if}
   </div>
 </div>
@@ -44,7 +49,6 @@
   import { plugin } from '@panomc/sdk/controllers';
   import { base } from '@panomc/sdk/svelte';
   import { SEARCH_DEBOUNCE_MS, SEARCH_MAX, SORTS } from '../../lib/storeFilter.js';
-  import CurrencySelect from './CurrencySelect.svelte';
   import FilterDropdown from './FilterDropdown.svelte';
   import SearchInput from './SearchInput.svelte';
 
@@ -69,6 +73,13 @@
   const showCurrency = $derived(currencies.actions.isMulti(settings));
   const creditBalanceText = $derived(
     creditSummary?.creditsEnabled ? formatCredits(creditSummary.creditBalance) : '',
+  );
+  // settings.currencies holds ISO codes or { code } objects.
+  const currencyOptions = $derived(
+    (settings.currencies ?? [])
+      .map((entry) => (typeof entry === 'string' ? entry : entry?.code))
+      .filter(Boolean)
+      .map((code) => ({ key: code, label: code })),
   );
   const sortOptions = $derived(
     SORTS.map((value) => ({ key: value, label: $_(`theme.store.sort.${value}`) })),

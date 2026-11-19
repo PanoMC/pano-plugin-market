@@ -545,7 +545,7 @@ function storeBody({ query, volume }) {
       ? [
           {
             id: 1,
-            name: 'Compare the ranks',
+            name: 'Compare',
             productIds: ranks.map((p) => p.id),
             features: COMPARISON_FEATURES.map((name, id) => ({ id: id + 1, name })),
             // keyed `${featureId}-${productId}` like the panel editor stores it

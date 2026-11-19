@@ -93,9 +93,9 @@ class ProductRulesTest {
     }
 
     @Test
-    fun `status is one of ACTIVE, INACTIVE, ARCHIVED`() {
+    fun `status is one of ACTIVE, INACTIVE, HIDDEN, ARCHIVED`() {
+        ok(base("status" to "HIDDEN"))
         ok(base("status" to "ARCHIVED"))
-        assertCode("INVALID", "status", base("status" to "HIDDEN"))
     }
 
     @Test

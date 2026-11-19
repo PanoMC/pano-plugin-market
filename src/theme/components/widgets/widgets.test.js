@@ -375,7 +375,11 @@ describe('markup rules', () => {
   test('only allow-listed SDK imports', () => {
     for (const s of Object.values(src))
       for (const m of s.matchAll(/from '(@panomc\/sdk[^']*)'/g))
-        expect(['@panomc/sdk/components/theme', '@panomc/sdk/controllers']).toContain(m[1]);
+        expect([
+          '@panomc/sdk/components/theme',
+          '@panomc/sdk/controllers',
+          '@panomc/sdk/svelte',
+        ]).toContain(m[1]);
   });
 });
 

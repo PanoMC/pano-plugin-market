@@ -14,6 +14,9 @@
     class="market-filter-dropdown__menu dropdown-menu dropdown-menu-end"
     role="menu"
     aria-label={label}>
+    <div class="market-filter-dropdown__header dropdown-header text-capitalize" role="presentation">
+      {label}
+    </div>
     {#each options as option (option.key)}
       <button
         type="button"

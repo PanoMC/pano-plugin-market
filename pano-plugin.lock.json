@@ -693,33 +693,11 @@
       },
       "slots": []
     },
-    "market:CurrencySelect": {
-      "classes": [
-        "market-currency-select",
-        "market-currency-select__select"
-      ],
-      "contract": 1,
-      "hooks": [],
-      "props": {
-        "currencies": {
-          "required": false
-        },
-        "id": {
-          "required": false
-        },
-        "onchange": {
-          "required": true
-        },
-        "selected": {
-          "required": false
-        }
-      },
-      "slots": []
-    },
     "market:CustomFields": {
       "classes": [
         "market-custom-fields",
         "market-custom-fields__check",
+        "market-custom-fields__floating",
         "market-custom-fields__input",
         "market-custom-fields__input-2",
         "market-custom-fields__label",
@@ -770,6 +748,7 @@
     "market:FilterDropdown": {
       "classes": [
         "market-filter-dropdown",
+        "market-filter-dropdown__header",
         "market-filter-dropdown__label",
         "market-filter-dropdown__menu",
         "market-filter-dropdown__option",
@@ -1476,6 +1455,7 @@
         "market-product-page__alert",
         "market-product-page__badge",
         "market-product-page__body",
+        "market-product-page__category",
         "market-product-page__image",
         "market-product-page__owned",
         "market-product-page__sold-out",
@@ -1687,6 +1667,7 @@
     "market:ServerSelect": {
       "classes": [
         "market-server-select",
+        "market-server-select__floating",
         "market-server-select__label",
         "market-server-select__select"
       ],

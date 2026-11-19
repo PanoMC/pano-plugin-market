@@ -40,7 +40,7 @@ object ProductRules {
     private val VALUE_KEY = Regex("^[A-Za-z0-9_-]{1,32}$")
     private val DISCORD_ID = Regex("^[0-9]{17,20}$")
     private val SUBSCRIPTION_UNITS = setOf(PeriodUnit.DAY, PeriodUnit.WEEK, PeriodUnit.MONTH, PeriodUnit.YEAR)
-    private val PRODUCT_STATUSES = setOf(MarketStatus.ACTIVE, MarketStatus.INACTIVE, MarketStatus.ARCHIVED)
+    private val PRODUCT_STATUSES = setOf(MarketStatus.ACTIVE, MarketStatus.INACTIVE, MarketStatus.HIDDEN, MarketStatus.ARCHIVED)
 
     /** What the rules need besides the product: the store's base currency, create or update, and the variant count after the save. */
     class Context(

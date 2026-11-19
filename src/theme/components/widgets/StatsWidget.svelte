@@ -1,9 +1,7 @@
 {#if render}
   <div class="market-stats-widget card">
-    <div class="market-stats-widget__header card-header">
-      <i class="fa-solid fa-chart-simple me-2" aria-hidden="true"></i>{$_(
-        'theme.widgets.stats.title',
-      )}
+    <div class="market-stats-widget__header card-header text-capitalize">
+      {$_('theme.widgets.stats.title')}
     </div>
     <div class="market-stats-widget__body card-body">
       <div class="row row-cols-2 g-2 text-center">
