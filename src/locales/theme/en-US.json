@@ -108,7 +108,7 @@
       "GUESTS_NOT_SUPPORTED": "This payment method is only available to signed-in buyers.",
       "IDEMPOTENCY_CONFLICT": "This request clashed with an earlier one. Please check your order and try again.",
       "INSUFFICIENT_CREDITS": "You do not have enough credits.",
-      "INVALID_CART": "Some items in your cart need attention. Check them below.",
+      "INVALID_CART": "There is a problem with some items in your cart. Check them below.",
       "INVALID_COUPON": "This coupon code is not valid.",
       "INVALID_CREATOR_CODE": "This creator code is not valid.",
       "INVALID_CREDIT_AMOUNT": "This credit amount is not valid.",

@@ -108,7 +108,7 @@
       "GUESTS_NOT_SUPPORTED": "Bu ödeme yöntemi yalnızca giriş yapmış alıcılar için kullanılabilir.",
       "IDEMPOTENCY_CONFLICT": "Bu istek önceki bir istekle çakıştı. Lütfen siparişinizi kontrol edip tekrar deneyin.",
       "INSUFFICIENT_CREDITS": "Yeterli krediniz yok.",
-      "INVALID_CART": "Sepetinizdeki bazı ürünler dikkat gerektiriyor. Aşağıdan kontrol edin.",
+      "INVALID_CART": "Sepetinizdeki bazı ürünlerde sorun var. Aşağıdan kontrol edin.",
       "INVALID_COUPON": "Bu kupon kodu geçerli değil.",
       "INVALID_CREATOR_CODE": "Bu içerik üretici kodu geçerli değil.",
       "INVALID_CREDIT_AMOUNT": "Bu kredi miktarı geçerli değil.",

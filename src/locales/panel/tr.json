@@ -539,7 +539,7 @@
         "payments": "Ödemeler",
         "fulfillment": "Teslimat",
         "history": "Geçmiş",
-        "attention": "Dikkat gerekiyor"
+        "attention": "Açık sorunlar"
       },
       "summary": {
         "total": "Toplam",
@@ -550,7 +550,7 @@
         "player": "Oyuncu"
       },
       "attention": {
-        "title": "Dikkat Gerekiyor",
+        "title": "Açık Sorunlar",
         "view": "Görüntüle",
         "items": {
           "delivery-failed": "{count} başarısız teslimat",
@@ -676,7 +676,7 @@
         "pending": "Bekliyor"
       },
       "revoke-alert": {
-        "title": "Geri Alma İlgi Bekliyor",
+        "title": "Geri Alma Tamamlanmadı",
         "body": "{pending} geri alma teslimatı henüz onaylanmadı, {failed} tanesi başarısız oldu. Alıcıda ürünler hâlâ kalmış olabilir."
       },
       "actions": {
@@ -3415,7 +3415,7 @@
       "body": "Siparişler gerçek değildir ve gerçek para tahsil edilmez."
     },
     "mc-plugin": {
-      "title": "Pano Market Minecraft Plugini Dikkat Gerektiriyor",
+      "title": "Pano Market Minecraft Plugini Kurulu Değil veya Eski",
       "body": "Pano Market Minecraft plugini kurulu ve güncel olana kadar teslimatlar çalışmaz.",
       "download": "İndir"
     },
@@ -3431,7 +3431,7 @@
       "body": "Mağaza hazır değil. Eksik veya onarılmamış veritabanı nesneleri:"
     },
     "revoke-pending": {
-      "title": "Geri Alma Dikkat Gerektiriyor",
+      "title": "Ürünler Geri Alınamadı",
       "body": "İade edilen veya ters ibraz edilen bir siparişin ürünleri geri alınamadı. Alıcı hem paraya hem ürüne sahip olabilir."
     },
     "review": {

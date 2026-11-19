@@ -191,7 +191,7 @@
       },
       "tab-has-errors": "This tab has invalid fields",
       "pending-tab": "The {tab} section is being rebuilt.",
-      "validation-failed": "Some fields need your attention.",
+      "validation-failed": "Some fields need to be fixed.",
       "side-load-failed": "Could Not Load This List",
       "reload": "Reload",
       "image-error": "Choose a PNG, JPEG, GIF or WebP image up to 5 MB.",
@@ -539,7 +539,7 @@
         "payments": "Payments",
         "fulfillment": "Fulfillment",
         "history": "History",
-        "attention": "Needs attention"
+        "attention": "Open issues"
       },
       "summary": {
         "total": "Total",
@@ -550,7 +550,7 @@
         "player": "Player"
       },
       "attention": {
-        "title": "Needs Attention",
+        "title": "Open Issues",
         "view": "View",
         "items": {
           "delivery-failed": "{count} failed deliveries",
@@ -676,7 +676,7 @@
         "pending": "Pending"
       },
       "revoke-alert": {
-        "title": "Revoke Needs Attention",
+        "title": "Revoke Not Finished",
         "body": "{pending} revoke deliveries are not confirmed yet and {failed} failed. The buyer may still hold the goods."
       },
       "actions": {
@@ -3415,7 +3415,7 @@
       "body": "Orders are not real and no real money is collected."
     },
     "mc-plugin": {
-      "title": "Pano Market Minecraft Plugin Needs Attention",
+      "title": "Pano Market Minecraft Plugin Missing or Outdated",
       "body": "Deliveries cannot run until the Pano Market Minecraft plugin is installed and up to date.",
       "download": "Download"
     },
@@ -3431,7 +3431,7 @@
       "body": "The store is not ready. Missing or unrepaired database objects:"
     },
     "revoke-pending": {
-      "title": "Revoke Needs Attention",
+      "title": "Items Could Not Be Revoked",
       "body": "A refunded or charged-back order could not take its goods back. The buyer may hold both the money and the goods."
     },
     "review": {
