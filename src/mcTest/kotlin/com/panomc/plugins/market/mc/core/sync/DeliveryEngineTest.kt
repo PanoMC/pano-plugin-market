@@ -4,6 +4,7 @@ import com.panomc.plugins.market.mc.core.platform.DispatchResult
 import com.panomc.plugins.market.mc.core.platform.PermissionOutcome
 import com.panomc.plugins.market.mc.core.store.FileAppendSink
 import com.panomc.plugins.market.mc.core.store.StoreOptions
+import com.panomc.plugins.market.mc.core.support.OpenSinks
 import com.panomc.plugins.market.mc.core.support.EngineHarness
 import com.panomc.plugins.market.mc.core.support.FlakySink
 import com.panomc.plugins.market.mc.core.support.delivery
@@ -606,10 +607,12 @@ class DeliveryEngineTest {
 
     @Test
     fun `u5 a corrupt store is quarantined, capacity is 0 and nothing runs until recover is confirmed`() {
-        val first = harness()
+        val sinks = OpenSinks()
+        val first = harness(storeOptions = sinks.track())
         first.platform.join("Steve")
         first.sync(response(deliveries = listOf(delivery("old1", 1), delivery("old2", 2))))
         assertEquals(2, first.platform.console.size)
+        sinks.crash()
         corruptJournalOf(dir)
 
         val h = harness()

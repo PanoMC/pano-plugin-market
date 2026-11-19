@@ -1,6 +1,7 @@
 package com.panomc.plugins.market.mc.core.store
 
 import com.panomc.plugins.market.mc.core.support.FlakySink
+import com.panomc.plugins.market.mc.core.support.OpenSinks
 import com.panomc.plugins.market.mc.core.support.TestClock
 import com.panomc.plugins.market.mc.core.support.TestLog
 import com.panomc.plugins.market.mc.core.support.record
@@ -23,7 +24,13 @@ class StateStoreTest {
     private val clock = TestClock()
     private val log = TestLog()
 
-    private fun open(options: StoreOptions = StoreOptions()) = StateStore.open(dir, clock, log, options)
+    private val sinks = OpenSinks()
+
+    /** A start of the server: the stores opened before belong to a process that is gone (they are never written again). */
+    private fun open(options: StoreOptions = StoreOptions()): StateStore {
+        sinks.crash()
+        return StateStore.open(dir, clock, log, sinks.track(options))
+    }
 
     private val stateDir get() = dir.resolve("state")
     private val journal get() = stateDir.resolve("journal.log")
@@ -70,6 +77,7 @@ class StateStoreTest {
         val live = store.dump()
         assertEquals(live, open(options).dump(), "snapshot + journal tail")
 
+        sinks.crash() // the copy that read it back is gone, only the running store is left
         store.close() // clean shutdown compacts again
         assertEquals(0L, Files.size(journal), "the journal is empty after compaction")
         assertEquals(live, open(options).dump(), "snapshot only")

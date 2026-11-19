@@ -11,6 +11,7 @@ import com.panomc.plugins.market.mc.core.platform.PermissionOutcome
 import com.panomc.plugins.market.mc.core.platform.SyncTransport
 import com.panomc.plugins.market.mc.core.store.AppendSink
 import com.panomc.plugins.market.mc.core.store.DeliveryRecord
+import com.panomc.plugins.market.mc.core.store.StoreOptions
 import com.panomc.plugins.market.mc.core.sync.EngineCallbacks
 import com.panomc.plugins.market.mc.core.wire.McPlatformName
 import com.panomc.plugins.market.mc.core.wire.MarketSyncMessage
@@ -230,4 +231,25 @@ class FlakySink(private val delegate: AppendSink) : AppendSink {
     }
 
     override fun close() = delegate.close()
+}
+
+/**
+ * The journal files a test left open, closed the way a dead process releases them.
+ *
+ * A test that "crashes" a store simply stops using it and opens the same directory again. On Linux the files the
+ * abandoned store still holds open do not matter; on Windows they block the quarantine rename (`state` ->
+ * `state.corrupt-<ts>`) and the replacement of the journal, which a real crash never does, as the process is gone.
+ */
+class OpenSinks {
+    private val open = ArrayList<AppendSink>()
+
+    /** [options] with every sink it opens recorded here. */
+    fun track(options: StoreOptions = StoreOptions()): StoreOptions =
+        options.copy(sinkFactory = { path -> options.sinkFactory(path).also { open.add(it) } })
+
+    /** The process that held them is gone: every recorded sink is closed. */
+    fun crash() {
+        open.forEach { runCatching { it.close() } }
+        open.clear()
+    }
 }
