@@ -931,6 +931,42 @@ class MailEnqueueIT : MarketDaoITBase() {
         assertTrue(quiet.sent.none { it.rendered.text.contains("attached") })
     }
 
+    @Test
+    fun `when the invoice PDF cannot be rendered the confirmation is sent without the footer promising it`(): Unit = runBlocking {
+        val invoices = InvoiceService(
+            config = { w.config }, clock = w.clock, orders = w.orders, orderEvents = w.orderEvents, refunds = w.refunds, refundItems = w.refundItems, invoices = w.invoices,
+            sequences = w.sequences, site = { InvoiceSite("Blocky Network", "https://shop.example") }, defaultLocale = { "en-US" }
+        )
+        val world = RefundWorld(w, vertx, invoices)
+        val seller = world.config(seller = true)
+
+        w.configure { seller }
+
+        val u = registered("Steve")
+        val paid = world.place(u, listOf(RefundLine(1000)), email = "steve@example.com")
+
+        w.db.tx { conn ->
+            val order = w.orders.getById(paid.order.id, conn)!!
+
+            invoices.issueForOrder(conn, order, w.orderItems.getByOrderIds(listOf(order.id), conn))
+            mails.paid(conn, order)
+        }
+
+        // the renderer fails (a missing font, an unwritable folder): no PDF comes back
+        val documents = InvoiceDocuments(
+            base = java.nio.file.Files.createTempDirectory("market-mail-invoices"), invoices = w.invoices, clock = w.clock,
+            texts = { _, _ -> throw IllegalStateException("font missing") }, logo = { null }, onWorker = { it() }, sqlClient = { pool }
+        )
+        val gateway = FakeMailGateway()
+
+        job(gateway, composer(InvoiceMailAttachments(w.invoices, documents) { w.config.mailAttachInvoice })).runOnce()
+
+        val confirmation = gateway.sent.single { it.rendered.subject.contains("is confirmed") }
+
+        assertTrue(confirmation.attachments.isEmpty())
+        assertFalse(confirmation.rendered.text.contains("attached"), confirmation.rendered.text)
+    }
+
     // ================================================================================== a row without its reference is never sent (MK-146 owns the other kinds)
 
     @Test

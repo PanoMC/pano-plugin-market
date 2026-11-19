@@ -99,8 +99,11 @@ interface MailComposition {
     /** Relevance check of 12 section 4.3.5: `true` => the row is `SKIPPED (OBSOLETE)`. Not asked for forced resends. */
     suspend fun isObsolete(row: MarketMailOutbox, sqlClient: SqlClient): Boolean
 
-    /** Builds the final message of [row]; an exception ends the row `FAILED (RENDER_ERROR)`. */
-    suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient): MarketMailMessage
+    /**
+     * Builds the final message of [row]; an exception ends the row `FAILED (RENDER_ERROR)`. [documentAttached] is whether the invoice / credit-note PDF is really
+     * attached (`null` = not known yet): `false` keeps the footer from promising a file the mail does not carry.
+     */
+    suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient, documentAttached: Boolean? = null): MarketMailMessage
 
     /** Invoice / credit-note attachments of [row] (12 section 4.4); a failure is reported, not thrown. */
     suspend fun attachments(row: MarketMailOutbox, sqlClient: SqlClient): MailAttachments = MailAttachments.NONE
@@ -114,6 +117,6 @@ object UnwiredMailComposition : MailComposition {
     /** Not obsolete, so the row reaches [compose], which fails it closed (a throw here would be retried as transient). */
     override suspend fun isObsolete(row: MarketMailOutbox, sqlClient: SqlClient): Boolean = false
 
-    override suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient): MarketMailMessage =
+    override suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient, documentAttached: Boolean?): MarketMailMessage =
         throw IllegalStateException("the mail composer is not wired (MK-142)")
 }

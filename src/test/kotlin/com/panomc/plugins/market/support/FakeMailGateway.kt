@@ -111,7 +111,7 @@ class FakeMailComposition : MailComposition {
         return row.id in obsoleteIds
     }
 
-    override suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient): MarketMailMessage {
+    override suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient, documentAttached: Boolean?): MarketMailMessage {
         composeFailures[row.id]?.let { throw it }
         return MarketMailMessage(MarketMailMessage.variantOf(row.kind), mapOf("orderNumber" to "Row ${row.id}"))
     }

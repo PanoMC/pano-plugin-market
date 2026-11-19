@@ -519,7 +519,7 @@ class MailComposer(
         }
     }
 
-    override suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient): MarketMailMessage {
+    override suspend fun compose(row: MarketMailOutbox, sqlClient: SqlClient, documentAttached: Boolean?): MarketMailMessage {
         val order = checkNotNull(orderOf(row, sqlClient)) { "order of mail ${row.id} is gone" }
         val items = orderItems.getByOrderIds(listOf(order.id), sqlClient)
         val refund = if (row.kind == MailKind.ORDER_REFUNDED) refundOf(row, order, sqlClient) else null
@@ -528,7 +528,7 @@ class MailComposer(
 
         val refundLines = refund?.let { refundItems.getByRefundId(it.id, sqlClient) }.orEmpty()
         val params = runCatching { JsonObject(row.params.ifBlank { "{}" }) }.getOrDefault(JsonObject())
-        val attached = invoiceWillBeAttached(row, order, refund, sqlClient)
+        val attached = documentAttached != false && invoiceWillBeAttached(row, order, refund, sqlClient)
         val base = MailInput(row.kind, row.locale, order, items, params, refund, refundLines, attached, recipient = row.recipient)
 
         return builder.build(

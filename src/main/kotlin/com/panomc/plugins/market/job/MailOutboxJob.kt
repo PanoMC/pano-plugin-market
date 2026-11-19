@@ -97,22 +97,23 @@ class MailOutboxJob(
             if (obsolete) return skip(row, before, "OBSOLETE", client)
         }
 
-        // Only a compose exception is non-retryable (deterministic, 12 section 4.3.6).
-        val content = try {
-            composition.compose(row, client)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (t: Throwable) {
-            service.finish(row, MailStatus.FAILED, row.attempts, null, "RENDER_ERROR: ${t.javaClass.simpleName}: ${t.message.orEmpty().take(400)}", null, client)
-            return true
-        }
-
+        // The attachments come first: the footer may only promise a PDF the mail really carries (a failed render or a file over the limit has none).
         val attachments = try {
             composition.attachments(row, client)
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
             MailAttachments(invoiceRenderFailed = true)
+        }
+
+        // Only a compose exception is non-retryable (deterministic, 12 section 4.3.6).
+        val content = try {
+            composition.compose(row, client, attachments.files.isNotEmpty())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            service.finish(row, MailStatus.FAILED, row.attempts, null, "RENDER_ERROR: ${t.javaClass.simpleName}: ${t.message.orEmpty().take(400)}", null, client)
+            return true
         }
 
         val message = OutboundMail(
