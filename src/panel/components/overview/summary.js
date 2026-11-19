@@ -44,8 +44,13 @@ export function summaryCards(summary) {
   ];
 }
 
-/** `charts.currencies` rows -> `{ labels, values }` for the doughnut. */
+/**
+ * `charts.currencies` -> `{ labels, values }` for the doughnut. The server sends it like every other chart
+ * (`StatsService`: `{ labels: [currency codes], values: [revenue in the stats currency] }`).
+ */
 export function currencySeries(charts) {
-  const rows = Array.isArray(charts?.currencies) ? charts.currencies : [];
-  return { labels: rows.map((r) => String(r.currency)), values: rows.map((r) => num(r.amount)) };
+  const chart = charts?.currencies;
+  const labels = Array.isArray(chart?.labels) ? chart.labels : [];
+  const values = Array.isArray(chart?.values) ? chart.values : [];
+  return { labels: labels.map(String), values: labels.map((_, i) => num(values[i])) };
 }

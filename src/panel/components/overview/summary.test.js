@@ -39,17 +39,18 @@ describe('summaryCards', () => {
 });
 
 describe('currencySeries', () => {
-  test('rows to labels and values', () => {
+  test('reads the server chart shape { labels, values }', () => {
     expect(
       currencySeries({
-        currencies: [
-          { currency: 'USD', amount: 3 },
-          { currency: 'EUR', amount: '4' },
-        ],
+        currencies: { labels: ['USD', 'EUR'], values: [3, '4'] },
       }),
     ).toEqual({
       labels: ['USD', 'EUR'],
       values: [3, 4],
+    });
+    expect(currencySeries({ currencies: { labels: ['TRY'], values: [] } })).toEqual({
+      labels: ['TRY'],
+      values: [0],
     });
     expect(currencySeries({})).toEqual({ labels: [], values: [] });
   });
