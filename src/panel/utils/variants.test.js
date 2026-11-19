@@ -193,6 +193,19 @@ describe('helpers', () => {
     expect(keyFromLabel('Ünite_1')).toBe('unite_1');
   });
 
+  test('keyFromLabel keeps the server key rules (leading letter, at most 32 characters)', () => {
+    const axisKey = /^[a-z][a-z0-9_]{0,31}$/;
+    expect(keyFromLabel('2024 Edition')).toBe('o_2024_edition');
+    expect(keyFromLabel('2024 Edition')).toMatch(axisKey);
+    const long = keyFromLabel('Large size with extra storage slots');
+    expect(long).toMatch(axisKey);
+    expect(long.length).toBeLessThanOrEqual(28);
+    expect(long.endsWith('_')).toBe(false);
+    const taken = [long, ...Array.from({ length: 200 }, (_, i) => `${long}_${i + 2}`)];
+    expect(uniqueKey(long, taken)).toMatch(axisKey);
+    expect(uniqueKey('a'.repeat(32), ['a'.repeat(32)])).toBe(`${'a'.repeat(30)}_2`);
+  });
+
   test('uniqueKey', () => {
     expect(uniqueKey('size', [])).toBe('size');
     expect(uniqueKey('size', ['size'])).toBe('size_2');

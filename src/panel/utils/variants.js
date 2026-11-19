@@ -6,10 +6,16 @@ export const MAX_AXES = 3;
 export const MAX_AXIS_VALUES = 20;
 export const MAX_VARIANTS = 100;
 
+/** Longest key the server accepts (`ProductRules`: axis `^[a-z][a-z0-9_]{0,31}$`, value `{1,32}`). */
+export const MAX_KEY_LENGTH = 32;
+/** Longest generated base, so a `uniqueKey` suffix (`_2` ... `_999`) still fits in [MAX_KEY_LENGTH]. */
+const MAX_KEY_BASE = 28;
+
 /**
  * `key` generated from a label: lower-case, accents stripped (Turkish letters included), everything else
  * outside `[a-z0-9_]` becomes `_`, runs and edges collapsed. Empty when the label has no usable
- * character.
+ * character. The server's key rules hold: a key starting with a digit gets an `o_` prefix and the
+ * key is cut to 28 characters, leaving room for a `uniqueKey` suffix.
  */
 export function keyFromLabel(label) {
   const text = String(label ?? '')
@@ -17,10 +23,12 @@ export function keyFromLabel(label) {
     .replace(/ı/g, 'i')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
-  return text
+  const key = text
     .replace(/[^a-z0-9_]+/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '');
+  if (key === '') return '';
+  return (/^[a-z]/.test(key) ? key : `o_${key}`).slice(0, MAX_KEY_BASE).replace(/_+$/, '');
 }
 
 /** `base` made unique against `taken` (a Set or array) by appending `_2`, `_3`, ... */
@@ -29,8 +37,9 @@ export function uniqueKey(base, taken) {
   const root = base === '' ? 'option' : base;
   if (!used.has(root)) return root;
   let n = 2;
-  while (used.has(`${root}_${n}`)) n++;
-  return `${root}_${n}`;
+  const next = (i) => `${root.slice(0, MAX_KEY_LENGTH - String(i).length - 1)}_${i}`;
+  while (used.has(next(n))) n++;
+  return next(n);
 }
 
 /** An axis `{key, label, values: [{key, label}]}` without a label or without values is unusable. */
