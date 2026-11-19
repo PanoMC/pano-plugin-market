@@ -783,6 +783,16 @@ export function sortCarriers(carriers, nameOf = (c) => c.id) {
   );
 }
 
+/**
+ * Font Awesome class of a carrier card. The descriptor icon comes from API data and is only used when
+ * it looks like one. Built-in providers name a bare icon ("truck"), plugin providers a full class.
+ */
+export function carrierIcon(carrier) {
+  const icon = carrier?.descriptor?.icon ?? '';
+  if (!/^[a-z0-9 -]{1,64}$/i.test(icon)) return 'fa-solid fa-truck';
+  return /\bfa-/.test(icon) ? icon : `fa-solid fa-${icon}`;
+}
+
 /** True when there is no carrier plugin besides market's own `manual` provider. */
 export const onlyManualCarrier = (carriers) =>
   (carriers ?? []).every((c) => c.id === MANUAL_PROVIDER);

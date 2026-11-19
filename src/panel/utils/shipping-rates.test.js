@@ -10,6 +10,7 @@ import {
   buildZoneBody,
   canQuote,
   carrierBalance,
+  carrierIcon,
   carrierBehavior,
   carrierBlocks,
   countrySummary,
@@ -1008,5 +1009,18 @@ describe('carriers', () => {
     expect(onlyManualCarrier([{ id: 'manual' }])).toBe(true);
     expect(onlyManualCarrier(list)).toBe(false);
     expect(onlyManualCarrier(undefined)).toBe(true);
+  });
+});
+
+describe('carrierIcon', () => {
+  test('a bare built-in icon name becomes a Font Awesome class', () => {
+    expect(carrierIcon({ descriptor: { icon: 'truck' } })).toBe('fa-solid fa-truck');
+    expect(carrierIcon({ descriptor: { icon: 'box' } })).toBe('fa-solid fa-box');
+  });
+  test('a full class is kept, anything else falls back to the truck', () => {
+    expect(carrierIcon({ descriptor: { icon: 'fa-brands fa-dhl' } })).toBe('fa-brands fa-dhl');
+    expect(carrierIcon({ descriptor: { icon: 'x" onclick="y' } })).toBe('fa-solid fa-truck');
+    expect(carrierIcon({ descriptor: {} })).toBe('fa-solid fa-truck');
+    expect(carrierIcon(null)).toBe('fa-solid fa-truck');
   });
 });

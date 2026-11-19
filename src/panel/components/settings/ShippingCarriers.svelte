@@ -164,7 +164,12 @@
   import { currentLocale } from '../../utils/locale.js';
   import { effectiveTestMode, isHttpUrl, providerName } from '../../utils/payment-methods.js';
   import { resolveText } from '../../utils/schema-form.js';
-  import { carrierBehavior, onlyManualCarrier, sortCarriers } from '../../utils/shipping-rates.js';
+  import {
+    carrierBehavior,
+    carrierIcon,
+    onlyManualCarrier,
+    sortCarriers,
+  } from '../../utils/shipping-rates.js';
   import { toastError } from '../../utils/toast.js';
 
   // Section `shipping-carriers` of the settings page (13 §19.3): the twin of the payment method grid
@@ -201,10 +206,7 @@
 
   const findCarrier = (id) => carriers.find((c) => c.id === id) ?? null;
   // The descriptor icon comes from API data and is only used as a Font Awesome class when it looks like one.
-  const iconOf = (carrier) =>
-    /^[a-z0-9 -]{1,64}$/i.test(carrier.descriptor?.icon ?? '')
-      ? carrier.descriptor.icon
-      : 'fa-solid fa-truck';
+  const iconOf = carrierIcon;
 
   async function fetchCarriers() {
     const result = await call(api.panel.get({ path: '/shipping/carriers' }));
