@@ -77,20 +77,24 @@
             }}>
             <div class="card-body d-flex flex-column gap-3">
               <div class="d-flex align-items-start gap-2">
-                <div
-                  class="d-flex align-items-center justify-content-center rounded flex-shrink-0 overflow-hidden bg-body-secondary"
-                  style="width: 40px; height: 40px;">
-                  {#if provider.descriptor?.logoUrl && !logoFailed[provider.id]}
-                    <img
-                      src={logoPath('', provider.id)}
-                      alt={$_('settings.payments.logo-alt', { values: { name: label } })}
-                      loading="lazy"
-                      style="max-width: 70%; max-height: 70%; object-fit: contain;"
-                      onerror={() => (logoFailed[provider.id] = true)} />
-                  {:else}
+                {#if provider.descriptor?.logoUrl && !logoFailed[provider.id]}
+                  <!-- A logo is artwork with its own frame: shown large and uncropped, not shrunk into the icon tile. -->
+                  <img
+                    class="flex-shrink-0"
+                    src={logoPath('', provider.id)}
+                    alt={$_('settings.payments.logo-alt', { values: { name: label } })}
+                    loading="lazy"
+                    width="64"
+                    height="64"
+                    style="object-fit: contain;"
+                    onerror={() => (logoFailed[provider.id] = true)} />
+                {:else}
+                  <div
+                    class="d-flex align-items-center justify-content-center rounded flex-shrink-0 overflow-hidden bg-body-secondary"
+                    style="width: 40px; height: 40px;">
                     <i class={iconClass(provider.descriptor?.icon)} aria-hidden="true"></i>
-                  {/if}
-                </div>
+                  </div>
+                {/if}
                 <div class="flex-grow-1 min-w-0">
                   <h6 class="mb-1 text-break fs-6">
                     <a
