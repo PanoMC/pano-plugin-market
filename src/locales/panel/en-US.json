@@ -3143,7 +3143,8 @@
       "SUBSCRIPTION_ENDED": "Subscription ended",
       "SUBSCRIPTION_REMOTE_CANCEL_FAILED": "Remote subscription cancel failed",
       "MAIL_QUEUED": "E-mail queued",
-      "NOTE": "Note"
+      "NOTE": "Note",
+      "PII_ERASED": "Personal data erased"
     },
     "actor": {
       "SYSTEM": "System",

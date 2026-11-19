@@ -3143,7 +3143,8 @@
       "SUBSCRIPTION_ENDED": "Подписка завершена",
       "SUBSCRIPTION_REMOTE_CANCEL_FAILED": "Не удалось отменить подписку у провайдера",
       "MAIL_QUEUED": "Письмо поставлено в очередь",
-      "NOTE": "Заметка"
+      "NOTE": "Заметка",
+      "PII_ERASED": "Персональные данные удалены"
     },
     "actor": {
       "SYSTEM": "Система",

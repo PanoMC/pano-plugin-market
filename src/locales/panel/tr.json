@@ -3143,7 +3143,8 @@
       "SUBSCRIPTION_ENDED": "Abonelik sona erdi",
       "SUBSCRIPTION_REMOTE_CANCEL_FAILED": "Uzak abonelik iptali başarısız",
       "MAIL_QUEUED": "E-posta sıraya alındı",
-      "NOTE": "Not"
+      "NOTE": "Not",
+      "PII_ERASED": "Kişisel veriler silindi"
     },
     "actor": {
       "SYSTEM": "Sistem",

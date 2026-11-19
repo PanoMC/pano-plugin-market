@@ -267,8 +267,9 @@ describe('timeline', () => {
   });
 
   test('event types of 01 §5.3 are known, anything else is shown raw', () => {
-    expect(ORDER_EVENT_TYPES).toHaveLength(33);
+    expect(ORDER_EVENT_TYPES).toHaveLength(34);
     expect(isKnownEventType('REFUND_SUCCEEDED')).toBe(true);
+    expect(isKnownEventType('PII_ERASED')).toBe(true);
     expect(isKnownEventType('SOMETHING_NEW')).toBe(false);
     expect(isKnownActor('GATEWAY')).toBe(true);
     expect(isKnownActor('ROBOT')).toBe(false);
