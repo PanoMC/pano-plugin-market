@@ -938,6 +938,26 @@ class McGameServiceIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a grant product replay returns the first order even when the product was deleted in between`(): Unit = runBlocking {
+        user("Steve")
+        val p = product()
+        val operationId = op()
+        val first = adminOf(McGameService.OP_GRANT, null, "Steve", operationId = operationId, productId = p.id)
+
+        assertEquals(true, first.ok)
+
+        Fixtures.setColumns(pool, "market_product", p.id, mapOf("deletedAt" to w.clock.now()))
+
+        assertFailed("PRODUCT_UNAVAILABLE", adminOf(McGameService.OP_GRANT, null, "Steve", productId = p.id))
+
+        val again = adminOf(McGameService.OP_GRANT, null, "Steve", operationId = operationId, productId = p.id)
+
+        assertEquals(true, again.ok)
+        assertEquals(first.orderPublicId, again.orderPublicId)
+        assertEquals(1, orderCount())
+    }
+
+    @Test
     fun `purchases of a player are listed for PAY, the latest ten paid non-test orders, newest first`(): Unit = runBlocking {
         val admin = user("Admin")
         user("Steve", credit = 100_000)

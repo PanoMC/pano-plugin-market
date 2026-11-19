@@ -855,12 +855,14 @@ class McGameService(
 
         if (quantity !in CartLimits.MIN_QUANTITY..CartLimits.MAX_QUANTITY) return adminFailed(REASON_BAD_REQUEST)
 
+        // a replay skips the product check: the first result stands even when the product was deleted since (the checkout answers the replay)
+        val replay = orders.getByBuyerAndIdempotencyKey("u:${target.id}", key, c) != null
         val product = products.getById(productId, c)
 
-        if (product == null || product.deletedAt != null) return adminFailed("PRODUCT_UNAVAILABLE")
+        if (!replay && (product == null || product.deletedAt != null)) return adminFailed("PRODUCT_UNAVAILABLE")
 
         val manual = ManualOrderRequest(
-            playerUsername = target.username, items = listOf(CartLine(productId, 0, quantity, emptyMap(), targetFor(product, server.id))), priceOverride = 0, markPaid = true,
+            playerUsername = target.username, items = listOf(CartLine(productId, 0, quantity, emptyMap(), product?.let { targetFor(it, server.id) })), priceOverride = 0, markPaid = true,
             runDeliveries = true, sendMail = false, note = note, force = false, idempotencyKey = key, bodyHash = hashOfParts(target.id, productId, quantity),
             orderLocale = orderLocale(target.username)
         )
