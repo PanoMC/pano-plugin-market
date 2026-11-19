@@ -26,7 +26,7 @@
           </div>
         </div>
       {:else if shipping}
-        <form onsubmit={submit}>
+        <form class="d-flex flex-column overflow-hidden" onsubmit={submit}>
           <div class="modal-body vstack gap-3">
             {#if shipping.quoteExpired}
               <div class="alert alert-warning d-flex align-items-start mb-0" role="alert">

@@ -29,7 +29,7 @@
           </div>
         </div>
       {:else if shipment}
-        <form onsubmit={submit}>
+        <form class="d-flex flex-column overflow-hidden" onsubmit={submit}>
           <div class="modal-body vstack gap-3">
             <dl class="row mb-0">
               <dt class="col-sm-4">{$_('common.status')}</dt>

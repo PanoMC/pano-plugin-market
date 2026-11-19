@@ -9,7 +9,7 @@
           data-bs-dismiss="modal"
           aria-label={$_('common.close')}></button>
       </div>
-      <form onsubmit={submit}>
+      <form class="d-flex flex-column overflow-hidden" onsubmit={submit}>
         <div class="modal-body vstack gap-3">
           <div class="vstack gap-1">
             {#each RERUN_SCOPES as value (value)}

@@ -10,7 +10,7 @@
             data-bs-dismiss="modal"
             aria-label={$_('common.close')}></button>
         </div>
-        <form onsubmit={submit} novalidate>
+        <form class="d-flex flex-column overflow-hidden" onsubmit={submit} novalidate>
           <div class="modal-body">
             <ul class="nav nav-tabs mb-3" role="tablist">
               {#each TABS as item (item)}

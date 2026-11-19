@@ -9,7 +9,7 @@
           data-bs-dismiss="modal"
           aria-label={$_('common.close')}></button>
       </div>
-      <form onsubmit={submit}>
+      <form class="d-flex flex-column overflow-hidden" onsubmit={submit}>
         <div class="modal-body vstack gap-3">
           {#if loadError}
             <LoadError error={loadError} onRetry={retryPreview} />

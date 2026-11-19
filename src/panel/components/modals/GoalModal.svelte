@@ -11,7 +11,7 @@
           data-bs-dismiss="modal"
           aria-label={$_('common.close')}></button>
       </div>
-      <form onsubmit={submit} novalidate>
+      <form class="d-flex flex-column overflow-hidden" onsubmit={submit} novalidate>
         <div class="modal-body vstack gap-3">
           <div>
             <div class="form-floating">
