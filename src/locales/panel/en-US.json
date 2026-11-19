@@ -2483,6 +2483,11 @@
     },
     "mail": {
       "title": "E-Mail",
+      "templates-link": {
+        "title": "Mail Templates",
+        "body": "The texts and look of the mails the store sends are edited on the platform's Mail Templates page. The market templates are listed there under Pano Market.",
+        "open": "Open Mail Templates"
+      },
       "host-too-old": {
         "title": "Pano Is Too Old For Store E-Mail"
       },

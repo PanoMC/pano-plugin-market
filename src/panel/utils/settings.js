@@ -842,6 +842,9 @@ export const PAGE_SECTIONS = [
  */
 export const PLATFORM_WEBHOOKS_PATH = '/settings/webhooks?source=market';
 
+/** The platform's mail template editor, where the store's templates are listed under Pano Market. Relative to the panel base. */
+export const PLATFORM_MAIL_TEMPLATES_PATH = '/settings/mail-templates';
+
 /** `?section=` value -> a known section, `general` for anything else. */
 export function resolveSection(value) {
   return PAGE_SECTIONS.includes(value) ? value : 'general';

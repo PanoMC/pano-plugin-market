@@ -1,5 +1,7 @@
 <MailTestModal bind:this={testModal} {defaultRecipient} />
 
+<MailTemplatesLink />
+
 {#if alertKind === 'HOST_TOO_OLD'}
   <div class="alert alert-danger d-flex align-items-start mb-3" role="alert">
     <i class="fa-solid fa-circle-exclamation me-3 mt-1" aria-hidden="true"></i>
@@ -125,6 +127,7 @@
   import { base, page } from '@panomc/sdk/svelte';
   import { _ } from '../../../i18n';
   import MailTestModal from '../modals/MailTestModal.svelte';
+  import MailTemplatesLink from './MailTemplatesLink.svelte';
   import SettingRow from './SettingRow.svelte';
   import SwitchRow from './SwitchRow.svelte';
   import { fetchSettings, reportFailure, saveSection } from './save.js';

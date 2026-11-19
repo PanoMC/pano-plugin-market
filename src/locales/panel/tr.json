@@ -2483,6 +2483,11 @@
     },
     "mail": {
       "title": "E-Posta",
+      "templates-link": {
+        "title": "E-Posta Şablonları",
+        "body": "Mağazanın gönderdiği e-postaların metinleri ve görünümü platformun E-Posta Şablonları sayfasında düzenlenir. Market şablonları orada Pano Market altında listelenir.",
+        "open": "E-Posta Şablonlarını Aç"
+      },
       "host-too-old": {
         "title": "Pano Mağaza E-Postası İçin Çok Eski"
       },
