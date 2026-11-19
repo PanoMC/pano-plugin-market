@@ -19,7 +19,7 @@
         </label>
       </div>
       {#if server.type}
-        <span class="badge text-bg-secondary">{server.type}</span>
+        <span class="badge text-bg-primary">{server.type}</span>
       {/if}
       <span class="badge text-bg-{server.connected ? 'success' : 'secondary'}">
         {$_(

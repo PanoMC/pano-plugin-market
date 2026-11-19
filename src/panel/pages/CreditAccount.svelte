@@ -1,19 +1,13 @@
 <MarketLayout area="customers">
-  {#snippet left()}
-    <div class="d-flex align-items-center gap-3 flex-wrap">
-      <a class="btn btn-link px-0" href="{base}/market/credits">
-        <i class="fa-solid fa-arrow-left me-2" aria-hidden="true"></i>
-        {$_('common.back')}
-      </a>
-      {#if !error || error !== 'NOT_FOUND'}
-        {#if username}
-          <PlayerCell {username} />
-        {:else}
-          <span>{$_('pages.credit-account.player-id', { values: { id: data.userId } })}</span>
-        {/if}
-        <span class="badge text-bg-info fs-6">{creditsText(view.balance)}</span>
+  {#snippet heading()}
+    {#if !error || error !== 'NOT_FOUND'}
+      {#if username}
+        <PlayerCell {username} />
+      {:else}
+        <span>{$_('pages.credit-account.player-id', { values: { id: data.userId } })}</span>
       {/if}
-    </div>
+      <span class="badge text-bg-info fs-6">{creditsText(view.balance)}</span>
+    {/if}
   {/snippet}
   {#snippet right()}
     {#if !error}
@@ -63,8 +57,15 @@
             </thead>
             <tbody>
               {#each entries as entry (entry.id)}
-                <tr>
-                  <td>
+                <tr
+                  class="row-action"
+                  use:rowLink={entry.orderId && can(user, 'OV')
+                    ? `${base}/market/orders/detail/${entry.orderId}`
+                    : null}
+                  title={entry.orderId && can(user, 'OV')
+                    ? $_('pages.orders.actions.view')
+                    : undefined}>
+                  <td class="text-nowrap">
                     <span class="badge {creditBadgeClass(entry)}">
                       {$_(`enums.credit-tx.${entry.type}`)}
                     </span>
@@ -74,14 +75,19 @@
                   <td class="text-nowrap">
                     {#if entry.orderId}
                       {#if can(user, 'OV')}
-                        <a href="{base}/market/orders/detail/{entry.orderId}">#{entry.orderId}</a>
+                        <a
+                          class="rounded focus-ring text-decoration-none"
+                          href="{base}/market/orders/detail/{entry.orderId}">#{entry.orderId}</a>
                       {:else}
                         #{entry.orderId}
                       {/if}
                     {/if}
                   </td>
-                  <td>{entry.actorUsername ?? $_('common.system')}</td>
-                  <td style="min-width: 160px;">{entry.note ?? ''}</td>
+                  <td class="text-nowrap">{entry.actorUsername ?? $_('common.system')}</td>
+                  <td class="text-nowrap"
+                    ><div class="text-truncate" style="max-width: 280px;" title={entry.note ?? ''}>
+                      {entry.note ?? ''}
+                    </div></td>
                   <td class="text-nowrap">{dateText(entry.createdAt)}</td>
                 </tr>
               {/each}
@@ -153,6 +159,7 @@
   import { fmt, currentLocale } from '../utils/locale.js';
   import { pageOf } from '../utils/page.js';
   import { can } from '../utils/permissions.js';
+  import { rowLink } from '../utils/row-link.js';
 
   let { data } = $props();
 

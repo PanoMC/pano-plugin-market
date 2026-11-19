@@ -367,7 +367,9 @@ function defaultRandom() {
 export function redemptionBadge(state) {
   if (state === 'APPLIED') return 'text-bg-success';
   if (state === 'HELD') return 'text-bg-warning';
-  return 'text-bg-secondary';
+  // RELEASED is a passive state; anything unknown gets the default badge colour
+  if (state === 'RELEASED') return 'text-bg-secondary';
+  return 'text-bg-primary';
 }
 
 /** Names the payout action helper offers (08 §12): the creator is the player, no order exists. */

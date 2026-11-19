@@ -21,7 +21,10 @@
         {@const actions = rowActions(order, user)}
         {@const products = productsCell(order)}
         {@const refunded = refundedLine(order)}
-        <tr>
+        <tr
+          class="row-action"
+          use:rowLink={`${base}/market/orders/detail/${order.id}`}
+          title={$_('pages.orders.actions.view')}>
           <th scope="row" class="align-middle">
             <div class="dropdown position-static">
               <button
@@ -34,7 +37,9 @@
               </button>
               <div class="dropdown-menu dropdown-menu-start">
                 {#if actions.includes('view')}
-                  <a class="dropdown-item" href="{base}/market/orders/detail/{order.id}">
+                  <a
+                    class="dropdown-item rounded focus-ring text-decoration-none"
+                    href="{base}/market/orders/detail/{order.id}">
                     <i class="fa-solid fa-eye me-2" aria-hidden="true"></i>
                     {$_('pages.orders.actions.view')}
                   </a>
@@ -46,7 +51,9 @@
                   </button>
                 {/if}
                 {#if actions.includes('rerun')}
-                  <a class="dropdown-item" href="{base}/market/orders/detail/{order.id}#deliveries">
+                  <a
+                    class="dropdown-item rounded focus-ring text-decoration-none"
+                    href="{base}/market/orders/detail/{order.id}#deliveries">
                     <i class="fa-solid fa-rotate-right me-2" aria-hidden="true"></i>
                     {$_('pages.orders.actions.rerun')}
                   </a>
@@ -55,7 +62,9 @@
             </div>
           </th>
           <td class="align-middle text-nowrap">
-            <a class="text-decoration-none" href="{base}/market/orders/detail/{order.id}">
+            <a
+              class="rounded focus-ring text-decoration-none"
+              href="{base}/market/orders/detail/{order.id}">
               #{order.id}
             </a>
             {#if order.testMode}
@@ -69,26 +78,38 @@
                 use:tooltip={[$_('pages.orders.gift')]}></i>
             {/if}
           </td>
-          <td class="align-middle">
+          <td class="align-middle text-nowrap">
             {#if order.playerUsername}
               <PlayerCell username={order.playerUsername} />
             {:else}
               <span class="text-body-secondary">—</span>
             {/if}
             {#if order.isGift && order.recipientUsername}
-              <div class="text-body-secondary">→ {order.recipientUsername}</div>
+              <div
+                class="text-body-secondary text-truncate"
+                style="max-width: 240px;"
+                title={order.recipientUsername}>
+                → {order.recipientUsername}
+              </div>
             {/if}
           </td>
-          <td class="align-middle">
+          <td class="align-middle text-nowrap">
             {#if products.first}
-              {#if products.more > 0}
-                <span use:tooltip={[products.tooltip]}>
-                  {products.first}
-                  <span class="text-body-secondary">+{products.more}</span>
-                </span>
-              {:else}
-                <span>{products.first}</span>
-              {/if}
+              <div
+                class="d-flex align-items-center gap-1"
+                style="max-width: 240px;"
+                use:tooltip={[products.tooltip]}>
+                {#if productHref(order.items?.[0]?.productId, user)}
+                  <a
+                    class="rounded focus-ring text-decoration-none text-truncate"
+                    href="{base}{productHref(order.items[0].productId, user)}">{products.first}</a>
+                {:else}
+                  <span class="text-truncate">{products.first}</span>
+                {/if}
+                {#if products.more > 0}
+                  <span class="text-body-secondary flex-shrink-0">+{products.more}</span>
+                {/if}
+              </div>
             {:else}
               <span class="text-body-secondary">—</span>
             {/if}
@@ -99,8 +120,12 @@
               <div class="text-body-secondary">−{fmt.money(refunded, order.currency)}</div>
             {/if}
           </td>
-          <td class="align-middle">{order.paymentLabel || '—'}</td>
-          <td class="align-middle">
+          <td class="align-middle text-nowrap">
+            <div class="text-truncate" style="max-width: 200px;" title={order.paymentLabel || '—'}>
+              {order.paymentLabel || '—'}
+            </div>
+          </td>
+          <td class="align-middle text-nowrap">
             {#if order.status === 'REVIEW' && order.reviewReason}
               <span use:tooltip={[$_(`enums.review-reason.${order.reviewReason}`)]}>
                 <StatusBadge kind="order" value={order.status} />
@@ -109,7 +134,7 @@
               <StatusBadge kind="order" value={order.status} />
             {/if}
           </td>
-          <td class="align-middle">
+          <td class="align-middle text-nowrap">
             {#if hiddenStatus('fulfillment', order.fulfillmentStatus)}
               <span class="text-body-secondary">—</span>
             {:else}
@@ -117,7 +142,7 @@
             {/if}
           </td>
           {#if shippingEnabled}
-            <td class="align-middle">
+            <td class="align-middle text-nowrap">
               {#if hiddenStatus('shipping', order.shippingStatus)}
                 <span class="text-body-secondary">—</span>
               {:else}
@@ -141,6 +166,8 @@
   import { tooltip } from '@panomc/sdk/utils/tooltip';
   import { _, showErrorToast, showSuccessToast } from '../../../i18n';
   import { fmt } from '../../utils/locale.js';
+  import { rowLink } from '../../utils/row-link.js';
+  import { productHref } from '../../utils/product-link.js';
   import PlayerCell from '../PlayerCell.svelte';
   import StatusBadge from '../StatusBadge.svelte';
   import { hiddenStatus, productsCell, refundedLine, rowActions } from './filters.js';

@@ -41,34 +41,59 @@
                 <th scope="row" class="align-middle">
                   <ControlDropdown items={menu(shipment)} />
                 </th>
-                <td class="align-middle">
+                <td class="align-middle text-nowrap">
                   {#if shipment.toAddress}
-                    <div>
-                      {[shipment.toAddress.firstName, shipment.toAddress.lastName]
-                        .filter(Boolean)
-                        .join(' ')}
+                    {@const recipient = [shipment.toAddress.firstName, shipment.toAddress.lastName]
+                      .filter(Boolean)
+                      .join(' ')}
+                    <div class="text-truncate" style="max-width: 240px;" title={recipient}>
+                      {recipient}
                     </div>
-                    <div class="text-body-secondary">{shipment.toAddress.city ?? ''}</div>
+                    <div
+                      class="text-body-secondary text-truncate"
+                      style="max-width: 240px;"
+                      title={shipment.toAddress.city ?? ''}>
+                      {shipment.toAddress.city ?? ''}
+                    </div>
                   {:else}
                     <span class="text-body-secondary">—</span>
                   {/if}
                 </td>
-                <td class="align-middle">{shipment.carrierName ?? shipment.providerId ?? '—'}</td>
+                <td class="align-middle text-nowrap">
+                  <div
+                    class="text-truncate"
+                    style="max-width: 200px;"
+                    title={shipment.carrierName ?? shipment.providerId ?? '—'}>
+                    {shipment.carrierName ?? shipment.providerId ?? '—'}
+                  </div>
+                </td>
                 <td class="align-middle text-nowrap">
                   {#if shipment.trackingNumber}
-                    {#if isHttpUrl(shipment.trackingUrl)}
-                      <a href={shipment.trackingUrl} target="_blank" rel="noopener">
-                        {shipment.trackingNumber}
-                      </a>
-                    {:else}
-                      {shipment.trackingNumber}
-                    {/if}
-                    <CopyButton text={shipment.trackingNumber} />
+                    <div class="d-flex align-items-center">
+                      {#if isHttpUrl(shipment.trackingUrl)}
+                        <a
+                          class="rounded focus-ring text-decoration-none text-truncate"
+                          style="max-width: 200px;"
+                          title={shipment.trackingNumber}
+                          href={shipment.trackingUrl}
+                          target="_blank"
+                          rel="noopener">
+                          {shipment.trackingNumber}
+                        </a>
+                      {:else}
+                        <span
+                          class="text-truncate"
+                          style="max-width: 200px;"
+                          title={shipment.trackingNumber}>{shipment.trackingNumber}</span>
+                      {/if}
+                      <span class="flex-shrink-0"
+                        ><CopyButton text={shipment.trackingNumber} /></span>
+                    </div>
                   {:else}
                     <span class="text-body-secondary">—</span>
                   {/if}
                 </td>
-                <td class="align-middle">
+                <td class="align-middle text-nowrap">
                   <StatusBadge kind="shipment" value={shipment.status} />
                   {#if shipment.stale}
                     <span class="badge text-bg-warning ms-1">{$_('pages.order-detail.stale')}</span>

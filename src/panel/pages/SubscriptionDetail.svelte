@@ -1,15 +1,9 @@
 <MarketLayout area="orders">
-  {#snippet left()}
-    <div class="d-flex align-items-center gap-3 flex-wrap">
-      <a class="btn btn-link px-0" href="{base}/market/subscriptions">
-        <i class="fa-solid fa-arrow-left me-2" aria-hidden="true"></i>
-        {$_('common.back')}
-      </a>
-      {#if !error}
-        <span>{$_('pages.subscription-detail.heading', { values: { id: data.id } })}</span>
-        <StatusBadge kind="subscription" value={subscription?.status} />
-      {/if}
-    </div>
+  {#snippet heading()}
+    {#if !error}
+      <span>{$_('pages.subscription-detail.heading', { values: { id: data.id } })}</span>
+      <StatusBadge kind="subscription" value={subscription?.status} />
+    {/if}
   {/snippet}
   {#snippet right()}
     {#if !error && actions.length > 0}
@@ -18,7 +12,7 @@
           type="button"
           class="btn btn-link"
           data-bs-toggle="dropdown"
-        data-bs-popper-config={POPPER_FIXED}
+          data-bs-popper-config={POPPER_FIXED}
           title={$_('common.actions')}
           aria-label={$_('common.actions')}>
           <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
@@ -126,19 +120,30 @@
           <table class="table table-hover align-middle">
             <thead>
               <tr>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.subscription-detail.table.index')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.subscription-detail.table.period')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.subscription-detail.table.amount')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.subscription-detail.table.index')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.subscription-detail.table.period')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.subscription-detail.table.amount')}</th>
                 <th class="align-middle text-nowrap" scope="col">{$_('common.status')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.subscription-detail.table.attempts')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.subscription-detail.table.last-error')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.subscription-detail.table.order')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.subscription-detail.table.attempts')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.subscription-detail.table.last-error')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.subscription-detail.table.order')}</th>
               </tr>
             </thead>
             <tbody>
               {#each renewals as renewal (renewal.periodIndex)}
-                <tr>
-                  <td>{renewal.periodIndex}</td>
+                <tr
+                  class="row-action"
+                  use:rowLink={renewal.orderId
+                    ? `${base}/market/orders/detail/${renewal.orderId}`
+                    : null}
+                  title={renewal.orderId ? $_('pages.orders.actions.view') : undefined}>
+                  <td class="text-nowrap">{renewal.periodIndex}</td>
                   <td class="text-nowrap">
                     {dateText(renewal.periodStart)} – {dateText(renewal.periodEnd)}
                   </td>
@@ -152,11 +157,20 @@
                       —
                     {/if}
                   </td>
-                  <td>{renewal.attempts ?? 0}</td>
-                  <td>{renewal.lastError || '—'}</td>
+                  <td class="text-nowrap">{renewal.attempts ?? 0}</td>
+                  <td class="text-nowrap">
+                    <div
+                      class="text-truncate"
+                      style="max-width: 280px;"
+                      title={renewal.lastError || '—'}>
+                      {renewal.lastError || '—'}
+                    </div>
+                  </td>
                   <td class="text-nowrap">
                     {#if renewal.orderId}
-                      <a href="{base}/market/orders/detail/{renewal.orderId}">#{renewal.orderId}</a>
+                      <a
+                        class="rounded focus-ring text-decoration-none"
+                        href="{base}/market/orders/detail/{renewal.orderId}">#{renewal.orderId}</a>
                     {:else}
                       —
                     {/if}
@@ -182,17 +196,25 @@
           <table class="table table-hover align-middle">
             <thead>
               <tr>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.orders.table.order')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.orders.table.total')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.orders.table.order')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.orders.table.total')}</th>
                 <th class="align-middle text-nowrap" scope="col">{$_('common.status')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.orders.table.date')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.orders.table.date')}</th>
               </tr>
             </thead>
             <tbody>
               {#each orders as order (order.id)}
-                <tr>
+                <tr
+                  class="row-action"
+                  use:rowLink={`${base}/market/orders/detail/${order.id}`}
+                  title={$_('pages.orders.actions.view')}>
                   <td class="text-nowrap">
-                    <a href="{base}/market/orders/detail/{order.id}">#{order.id}</a>
+                    <a
+                      class="rounded focus-ring text-decoration-none"
+                      href="{base}/market/orders/detail/{order.id}">#{order.id}</a>
                   </td>
                   <td class="text-nowrap">{fmt.money(order.totalPrice, order.currency)}</td>
                   <td class="text-nowrap"><StatusBadge kind="order" value={order.status} /></td>
@@ -253,6 +275,7 @@
   import { call } from '../utils/api.js';
   import { formatDuration } from '../utils/format.js';
   import { currentLocale, fmt } from '../utils/locale.js';
+  import { rowLink } from '../utils/row-link.js';
   import {
     actionsFor,
     cycleText,
@@ -280,7 +303,8 @@
   const actions = $derived(subscription ? actionsFor(subscription, user) : []);
 
   const duration = (unit, count) => formatDuration(unit, count, $_);
-  const dateText = (epoch) => (epoch ? new Date(Number(epoch)).toLocaleString(currentLocale()) : '—');
+  const dateText = (epoch) =>
+    epoch ? new Date(Number(epoch)).toLocaleString(currentLocale()) : '—';
 
   // end reasons are an open set: an unknown one is shown raw
   function endReasonText(reason) {

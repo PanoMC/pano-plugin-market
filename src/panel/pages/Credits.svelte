@@ -187,7 +187,12 @@
               </thead>
               <tbody>
                 {#each accounts as account (account.userId)}
-                  <tr>
+                  <tr
+                    class="row-action"
+                    use:rowLink={`${base}/market/credits/account/${account.userId}?player=${encodeURIComponent(
+                      account.username,
+                    )}`}
+                    title={$_('pages.credits.view-ledger')}>
                     <th class="align-middle" scope="row">
                       <div class="dropdown position-static">
                         <button
@@ -201,7 +206,7 @@
                         <div
                           class="dropdown-menu dropdown-menu-start">
                           <a
-                            class="dropdown-item"
+                            class="dropdown-item rounded focus-ring text-decoration-none"
                             href="{base}/market/credits/account/{account.userId}?player={encodeURIComponent(
                               account.username,
                             )}">
@@ -225,7 +230,7 @@
                         </div>
                       </div>
                     </th>
-                    <td><PlayerCell username={account.username} /></td>
+                    <td class="text-nowrap"><PlayerCell username={account.username} /></td>
                     <td class="text-nowrap">{creditsText(account.balance)}</td>
                     <td class="text-nowrap">
                       {ctx
@@ -269,12 +274,12 @@
               {#each transactions as tx (tx.id)}
                 <tr>
                   <td class="text-nowrap">{dateText(tx.createdAt)}</td>
-                  <td>
+                  <td class="text-nowrap">
                     <span class="badge {creditBadgeClass(tx)}">
                       {$_(`enums.credit-tx.${tx.type}`)}
                     </span>
                   </td>
-                  <td><PlayerCell username={tx.username} /></td>
+                  <td class="text-nowrap"><PlayerCell username={tx.username} /></td>
                   <td class="text-nowrap">{signedAmount(tx, (v) => creditsText(v))}</td>
                   <td class="text-nowrap">
                     {tx.shortfall > 0 ? creditsText(tx.shortfall) : ''}
@@ -282,14 +287,16 @@
                   <td class="text-nowrap">
                     {#if tx.orderId}
                       {#if can(user, 'OV')}
-                        <a href="{base}/market/orders/detail/{tx.orderId}">#{tx.orderId}</a>
+                        <a
+                          class="rounded focus-ring text-decoration-none"
+                          href="{base}/market/orders/detail/{tx.orderId}">#{tx.orderId}</a>
                       {:else}
                         #{tx.orderId}
                       {/if}
                     {/if}
                   </td>
-                  <td>{tx.actorUsername ?? $_('common.system')}</td>
-                  <td style="min-width: 160px;">{tx.note ?? ''}</td>
+                  <td class="text-nowrap">{tx.actorUsername ?? $_('common.system')}</td>
+                  <td class="text-nowrap"><div class="text-truncate" style="max-width: 280px;" title={tx.note ?? ''}>{tx.note ?? ''}</div></td>
                 </tr>
               {/each}
             </tbody>
@@ -381,6 +388,7 @@
   import { pageOf } from '../utils/page.js';
   import { fmt, currentLocale } from '../utils/locale.js';
   import { can } from '../utils/permissions.js';
+  import { rowLink } from '../utils/row-link.js';
 
   let { data } = $props();
 

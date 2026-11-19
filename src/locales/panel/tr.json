@@ -104,6 +104,8 @@
       "toast-delete-error": "Ürün silinirken bir hata oluştu.",
       "toast-delete-success": "Ürün başarıyla silindi.",
       "delete-title": "Ürünü Sil",
+      "all-statuses": "Tüm Durumlar",
+      "all-types": "Tüm Türler",
       "badge": {
         "physical": "Fiziksel",
         "variants": "Varyantlı"
@@ -204,6 +206,7 @@
       "statuses": {
         "ACTIVE": "Aktif",
         "INACTIVE": "Pasif",
+        "HIDDEN": "Gizli",
         "ARCHIVED": "Arşivlenmiş"
       },
       "physical": "Fiziksel Ürün",
@@ -531,6 +534,34 @@
     },
     "order-detail": {
       "title": "Sipariş",
+      "tabs": {
+        "overview": "Genel",
+        "payments": "Ödemeler",
+        "fulfillment": "Teslimat",
+        "history": "Geçmiş",
+        "attention": "Dikkat gerekiyor"
+      },
+      "summary": {
+        "total": "Toplam",
+        "payment": "Ödeme",
+        "fulfillment": "Teslimat",
+        "shipping": "Kargo",
+        "date": "Tarih",
+        "player": "Oyuncu"
+      },
+      "attention": {
+        "title": "Dikkat Gerekiyor",
+        "view": "Görüntüle",
+        "items": {
+          "delivery-failed": "{count} başarısız teslimat",
+          "shipment-problem": "{count} sorunlu kargo",
+          "dispute-open": "{count} açık itiraz",
+          "refund-failed": "{count} başarısız iade",
+          "payment-review": "{count} ödeme incelemede",
+          "mail-failed": "{count} mail gönderilemedi"
+        }
+      },
+      "title-with-id": "Sipariş #{id}",
       "back": "Siparişler",
       "expires": "Bitiş",
       "duplicate": "Mükerrer",
@@ -610,9 +641,9 @@
         "display": "Alıcıya Gösterilen"
       },
       "exchange-rate": {
-        "title": "İstatistik döviz kuru",
+        "title": "İstatistik Döviz Kuru",
         "placeholder": "Kur, örn. 32,50",
-        "refresh": "Kuru piyasadan yenile",
+        "refresh": "Kuru Piyasadan Yenile",
         "stats-value": "İstatistik değeri"
       },
       "customer": {
@@ -1248,6 +1279,8 @@
     "load-error-title": "Veriler Yüklenemedi",
     "try-again": "Tekrar Dene",
     "copy": "Kopyala",
+    "show": "Göster",
+    "hide": "Gizle",
     "copied": "Kopyalandı",
     "copy-failed": "Panoya kopyalanamadı.",
     "never": "Asla",
@@ -2800,7 +2833,7 @@
   "nav-overview": "Genel Bakış",
   "nav-catalog": "Ürünler",
   "nav-customers": "Müşteriler",
-  "nav-section-orders": "Siparişler",
+  "nav-section-orders": "Tüm Siparişler",
   "nav-section-deliveries": "Teslimatlar",
   "nav-section-shipments": "Kargolar",
   "nav-section-subscriptions": "Abonelikler",
@@ -3384,11 +3417,7 @@
     },
     "mc-plugin": {
       "title": "Minecraft Bileşeni Dikkat Gerektiriyor",
-      "body": "Pano bileşeni hazır olana kadar bu sunucularda teslimat çalışamaz.",
-      "missing": "sunucusunda Pano bileşeni kurulu değil.",
-      "mismatch": "sunucusunda bileşen sürümü {have}, gereken sürüm {want}.",
-      "offline": "sunucusu çevrimdışı.",
-      "waiting": "{count, plural, one {# teslimat bekliyor.} other {# teslimat bekliyor.}}",
+      "body": "Pano bileşeni kurulu ve güncel olana kadar teslimatlar çalışmaz.",
       "download": "İndir"
     },
     "mail-host-too-old": {

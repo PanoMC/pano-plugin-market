@@ -137,10 +137,14 @@
                       </div>
                     </div>
                   </th>
-                  <td class="align-middle">{version.version}</td>
-                  <td class="align-middle">{localeName(version.locale)}</td>
-                  <td class="align-middle">{version.title}</td>
-                  <td class="align-middle">
+                  <td class="align-middle text-nowrap">{version.version}</td>
+                  <td class="align-middle text-nowrap">{localeName(version.locale)}</td>
+                  <td class="align-middle text-nowrap">
+                    <div class="text-truncate" style="max-width: 280px;" title={version.title}>
+                      {version.title}
+                    </div>
+                  </td>
+                  <td class="align-middle text-nowrap">
                     {#if version.active}
                       <span class="badge text-bg-success">{$_('common.active')}</span>
                     {/if}
@@ -161,11 +165,7 @@
 <script>
   import { untrack } from 'svelte';
   import { api } from '@panomc/sdk/plugin-api';
-  import {
-    CardHeader,
-    Date as DateComponent,
-    NoContent,
-  } from '@panomc/sdk/components/panel';
+  import { CardHeader, Date as DateComponent, NoContent } from '@panomc/sdk/components/panel';
   import { Languages, currentLanguage } from '@panomc/sdk/utils/language';
   import { _, showSuccessToast } from '../../../i18n';
   import ClientEditor from '../ClientEditor.svelte';

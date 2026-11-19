@@ -25,11 +25,10 @@
         <div slot="right" class="d-flex align-items-center gap-3">
           <CardFilters>
             <FilterDropdown
-              iconOnly
               label={$_('common.status')}
               current={filters.status === '' ? 'ALL' : filters.status}
               options={[
-                { key: 'ALL', value: null, label: $_('common.all') },
+                { key: 'ALL', value: null, label: $_('pages.products.all-statuses') },
                 ...STATUS_FILTERS.map((status) => ({
                   key: status,
                   value: status,
@@ -39,14 +38,13 @@
               onSelect={(option) => go({ status: option.value })} />
             <FilterDropdown
               class="ms-2"
-              iconOnly
               label={$_('pages.create-product.kind')}
               current={filters.kind === '' ? 'ALL' : filters.kind}
               options={[
                 {
                   key: 'ALL',
                   value: null,
-                  label: `${$_('pages.create-product.kind')}: ${$_('common.all')}`,
+                  label: $_('pages.products.all-types'),
                 },
                 ...KIND_FILTERS.map((kind) => ({
                   key: kind,
@@ -96,7 +94,10 @@
             <tbody>
               {#each products as product (product.id)}
                 {@const stock = stockCell(product)}
-                <tr>
+                <tr
+                  class="row-action"
+                  use:rowLink={`${base}/market/products/create-product?id=${product.id}`}
+                  title={$_('common.edit')}>
                   <th class="align-middle" scope="row">
                     <div class="dropdown position-static">
                       <button
@@ -144,7 +145,7 @@
                       </div>
                     </div>
                   </th>
-                  <td class="align-middle">
+                  <td class="align-middle text-nowrap">
                     <div class="d-flex align-items-center gap-2">
                       {#if product.imageFileName}
                         <img
@@ -163,9 +164,11 @@
                             aria-hidden="true"></i>
                         </div>
                       {/if}
-                      <div class="vstack">
+                      <div class="vstack" style="min-width: 0;">
                         <a
-                          class="text-decoration-none fw-medium"
+                          class="rounded focus-ring text-decoration-none fw-medium d-block text-truncate"
+                          style="max-width: 240px;"
+                          title={product.name}
                           href="{base}/market/products/create-product?id={product.id}">
                           {product.name}
                         </a>
@@ -173,20 +176,20 @@
                       </div>
                     </div>
                   </td>
-                  <td class="align-middle">
-                    <div class="d-flex flex-wrap gap-1">
+                  <td class="align-middle text-nowrap">
+                    <div class="d-flex flex-nowrap gap-1">
                       {#each typeBadges(product) as badge (badge.key)}
                         <span class="badge text-bg-{badge.tone}">{$_(badge.key)}</span>
                       {/each}
                     </div>
                   </td>
-                  <td class="align-middle">
+                  <td class="align-middle text-nowrap">
                     <span class="badge text-bg-{statusTone(product.status)}">
                       {$_(`pages.create-product.statuses.${product.status}`)}
                     </span>
                   </td>
-                  <td class="align-middle">
-                    {product.categoryName || $_('pages.products.uncategorized')}
+                  <td class="align-middle text-nowrap">
+                    <div class="text-truncate" style="max-width: 200px;" title={product.categoryName || $_('pages.products.uncategorized')}>{product.categoryName || $_('pages.products.uncategorized')}</div>
                   </td>
                   <td class="align-middle text-nowrap">
                     {fmt.money(product.price, currency)}
@@ -278,6 +281,7 @@
   import { gotoList } from '../utils/list.js';
   import { pageOf } from '../utils/page.js';
   import { fmt } from '../utils/locale.js';
+  import { rowLink } from '../utils/row-link.js';
 
   let { data } = $props();
 

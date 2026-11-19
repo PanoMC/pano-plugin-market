@@ -1,11 +1,4 @@
 <MarketLayout area="catalog">
-  {#snippet left()}
-    <a href="{base}/market/products" class="btn btn-link text-decoration-none p-0">
-      <i class="fas fa-arrow-left" aria-hidden="true"></i>
-      <span class="ms-2">{$_('pages.create-product.products')}</span>
-    </a>
-  {/snippet}
-
   {#snippet right()}
     {#if !productMissing && !data.error}
       <div class="hstack gap-1">
@@ -83,7 +76,9 @@
             <div class="alert alert-info d-flex align-items-start" role="alert">
               <i class="fa-solid fa-circle-info me-3 mt-1" aria-hidden="true"></i>
               <div>
-                <h5 class="alert-heading mb-2">{$_('pages.create-product.subscription-notice.title')}</h5>
+                <h5 class="alert-heading mb-2">
+                  {$_('pages.create-product.subscription-notice.title')}
+                </h5>
                 <div>{$_('pages.create-product.subscription-notice.body')}</div>
               </div>
             </div>

@@ -104,6 +104,8 @@
       "toast-delete-error": "Произошла ошибка при удалении товара.",
       "toast-delete-success": "Товар успешно удалён.",
       "delete-title": "Удалить товар",
+      "all-statuses": "Все статусы",
+      "all-types": "Все типы",
       "badge": {
         "physical": "Физический",
         "variants": "С вариантами"
@@ -204,6 +206,7 @@
       "statuses": {
         "ACTIVE": "Активен",
         "INACTIVE": "Неактивен",
+        "HIDDEN": "Скрытый",
         "ARCHIVED": "В архиве"
       },
       "physical": "Физический товар",
@@ -531,6 +534,34 @@
     },
     "order-detail": {
       "title": "Заказ",
+      "tabs": {
+        "overview": "Обзор",
+        "payments": "Платежи",
+        "fulfillment": "Выполнение",
+        "history": "История",
+        "attention": "Требует внимания"
+      },
+      "summary": {
+        "total": "Итого",
+        "payment": "Оплата",
+        "fulfillment": "Выполнение",
+        "shipping": "Доставка",
+        "date": "Дата",
+        "player": "Игрок"
+      },
+      "attention": {
+        "title": "Требует внимания",
+        "view": "Открыть",
+        "items": {
+          "delivery-failed": "Неудачных выдач: {count}",
+          "shipment-problem": "Проблемных отправлений: {count}",
+          "dispute-open": "Открытых споров: {count}",
+          "refund-failed": "Неудачных возвратов: {count}",
+          "payment-review": "Платежей на проверке: {count}",
+          "mail-failed": "Не отправлено писем: {count}"
+        }
+      },
+      "title-with-id": "Заказ #{id}",
       "back": "Заказы",
       "expires": "Истекает",
       "duplicate": "Дубликат",
@@ -1248,6 +1279,8 @@
     "load-error-title": "Не Удалось Загрузить Данные",
     "try-again": "Повторить",
     "copy": "Копировать",
+    "show": "Показать",
+    "hide": "Скрыть",
     "copied": "Скопировано",
     "copy-failed": "Не удалось скопировать в буфер обмена.",
     "never": "Никогда",
@@ -2800,7 +2833,7 @@
   "nav-overview": "Обзор",
   "nav-catalog": "Товары",
   "nav-customers": "Клиенты",
-  "nav-section-orders": "Заказы",
+  "nav-section-orders": "Все заказы",
   "nav-section-deliveries": "Доставки",
   "nav-section-shipments": "Отправления",
   "nav-section-subscriptions": "Подписки",
@@ -3384,11 +3417,7 @@
     },
     "mc-plugin": {
       "title": "Компонент Minecraft Требует Внимания",
-      "body": "Пока компонент Pano не готов, доставки на этих серверах не выполняются.",
-      "missing": ": компонент Pano не установлен.",
-      "mismatch": ": версия компонента {have}, требуется {want}.",
-      "offline": ": сервер не в сети.",
-      "waiting": "{count, plural, one {Ожидает # доставка.} few {Ожидают # доставки.} many {Ожидают # доставок.} other {Ожидают # доставки.}}",
+      "body": "Пока компонент Pano не установлен и не обновлён, доставки не выполняются.",
       "download": "Скачать"
     },
     "mail-host-too-old": {

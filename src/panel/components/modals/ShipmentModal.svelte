@@ -41,7 +41,9 @@
               </dd>
               <dt class="col-sm-4">{$_('modals.shipment.order')}</dt>
               <dd class="col-sm-8">
-                <a href="{base}/market/orders/detail/{shipment.orderId}">#{shipment.orderId}</a>
+                <a
+                  class="rounded focus-ring text-decoration-none"
+                  href="{base}/market/orders/detail/{shipment.orderId}">#{shipment.orderId}</a>
               </dd>
               <dt class="col-sm-4">{$_('modals.shipment.recipient')}</dt>
               <dd class="col-sm-8">
@@ -56,7 +58,11 @@
               <dd class="col-sm-8">
                 {#if shipment.trackingNumber}
                   {#if isHttpUrl(shipment.trackingUrl)}
-                    <a href={shipment.trackingUrl} target="_blank" rel="noopener">
+                    <a
+                      class="rounded focus-ring text-decoration-none"
+                      href={shipment.trackingUrl}
+                      target="_blank"
+                      rel="noopener">
                       {shipment.trackingNumber}
                     </a>
                   {:else}
@@ -94,8 +100,15 @@
                   <tbody>
                     {#each items as item, index (item.id ?? index)}
                       <tr>
-                        <td>{item.name ?? item.productName ?? `#${item.orderItemId}`}</td>
-                        <td>{item.quantity}</td>
+                        <td class="text-nowrap">
+                          <div
+                            class="text-truncate"
+                            style="max-width: 240px;"
+                            title={item.name ?? item.productName ?? `#${item.orderItemId}`}>
+                            {item.name ?? item.productName ?? `#${item.orderItemId}`}
+                          </div>
+                        </td>
+                        <td class="text-nowrap">{item.quantity}</td>
                       </tr>
                     {/each}
                   </tbody>
@@ -111,7 +124,7 @@
                       <StatusBadge kind="shipment" value={event.status} />
                       <span class="text-body-secondary">{formatWhen(event.occurredAt)}</span>
                       {#if event.source}
-                        <span class="badge text-bg-secondary">{event.source}</span>
+                        <span class="badge text-bg-primary">{event.source}</span>
                       {/if}
                     </div>
                     {#if event.rawStatus}<div class="small">{event.rawStatus}</div>{/if}

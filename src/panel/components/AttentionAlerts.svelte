@@ -20,29 +20,14 @@
         </ul>
       {/if}
 
-      {#if alert.items?.length}
-        <ul class="mb-2">
-          {#each alert.items as item (item.id)}
-            <li>
-              <b>{item.name}</b>
-              {$_(`alerts.mc-plugin.${item.kind}`, {
-                values: { have: item.have ?? '', want: item.want ?? '' },
-              })}
-              {#if item.count > 0}
-                {$_('alerts.mc-plugin.waiting', { values: { count: item.count } })}
-              {/if}
-              {#if item.downloadUrl}
-                <a
-                  class="alert-link d-block mt-2 text-capitalize"
-                  href={item.downloadUrl}
-                  target="_blank"
-                  rel="noopener noreferrer">
-                  {$_('alerts.mc-plugin.download')}
-                </a>
-              {/if}
-            </li>
-          {/each}
-        </ul>
+      {#if alert.downloadUrl}
+        <a
+          class="btn alert-btn mt-2"
+          href={alert.downloadUrl}
+          target="_blank"
+          rel="noopener noreferrer">
+          {$_('alerts.mc-plugin.download')}
+        </a>
       {/if}
 
       {#each alert.links as item (item.href)}

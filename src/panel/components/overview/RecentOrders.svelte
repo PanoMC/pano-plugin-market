@@ -16,26 +16,41 @@
       </thead>
       <tbody>
         {#each orders as order (order.id)}
-          <tr>
+          <tr
+            class="row-action"
+            use:rowLink={`${base}/market/orders/detail/${order.id}`}
+            title={$_('pages.orders.actions.view')}>
             <td class="align-middle text-nowrap">
-              <a class="text-decoration-none" href="{base}/market/orders/detail/{order.id}">
+              <a
+                class="rounded focus-ring text-decoration-none"
+                href="{base}/market/orders/detail/{order.id}">
                 #{order.id}
               </a>
               {#if order.testMode}
                 <span class="badge text-bg-warning ms-1">{$_('common.test')}</span>
               {/if}
             </td>
-            <td class="align-middle">
+            <td class="align-middle text-nowrap">
               {#if order.playerUsername}
                 <PlayerCell username={order.playerUsername} />
               {:else}
                 <span class="text-body-secondary">—</span>
               {/if}
             </td>
-            <td class="align-middle">{productsText(order)}</td>
+            <td class="align-middle text-nowrap"
+              ><div class="text-truncate" style="max-width: 240px;" title={productsText(order)}>
+                {productsText(order)}
+              </div></td>
             <td class="align-middle text-nowrap">{fmt.money(order.totalPrice, order.currency)}</td>
-            <td class="align-middle">{order.paymentLabel || '—'}</td>
-            <td class="align-middle"><StatusBadge kind="order" value={order.status} /></td>
+            <td class="align-middle text-nowrap"
+              ><div
+                class="text-truncate"
+                style="max-width: 200px;"
+                title={order.paymentLabel || '—'}>
+                {order.paymentLabel || '—'}
+              </div></td>
+            <td class="align-middle text-nowrap"
+              ><StatusBadge kind="order" value={order.status} /></td>
             <td class="align-middle text-nowrap">
               <DateComponent time={order.paidAt ?? order.createdAt} />
             </td>
@@ -51,6 +66,7 @@
   import { base } from '@panomc/sdk/svelte';
   import { _ } from '../../../i18n';
   import { fmt } from '../../utils/locale.js';
+  import { rowLink } from '../../utils/row-link.js';
   import PlayerCell from '../PlayerCell.svelte';
   import StatusBadge from '../StatusBadge.svelte';
 

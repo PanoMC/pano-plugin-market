@@ -104,6 +104,8 @@
       "toast-delete-error": "An error occurred while deleting the product.",
       "toast-delete-success": "Product deleted successfully.",
       "delete-title": "Delete Product",
+      "all-statuses": "All Statuses",
+      "all-types": "All Types",
       "badge": {
         "physical": "Physical",
         "variants": "Variants"
@@ -204,6 +206,7 @@
       "statuses": {
         "ACTIVE": "Active",
         "INACTIVE": "Inactive",
+        "HIDDEN": "Hidden",
         "ARCHIVED": "Archived"
       },
       "physical": "Physical Product",
@@ -531,6 +534,34 @@
     },
     "order-detail": {
       "title": "Order",
+      "tabs": {
+        "overview": "Overview",
+        "payments": "Payments",
+        "fulfillment": "Fulfillment",
+        "history": "History",
+        "attention": "Needs attention"
+      },
+      "summary": {
+        "total": "Total",
+        "payment": "Payment",
+        "fulfillment": "Fulfillment",
+        "shipping": "Shipping",
+        "date": "Date",
+        "player": "Player"
+      },
+      "attention": {
+        "title": "Needs Attention",
+        "view": "View",
+        "items": {
+          "delivery-failed": "{count} failed deliveries",
+          "shipment-problem": "{count} shipments with a problem",
+          "dispute-open": "{count} open disputes",
+          "refund-failed": "{count} failed refunds",
+          "payment-review": "{count} payments waiting for review",
+          "mail-failed": "{count} mails could not be sent"
+        }
+      },
+      "title-with-id": "Order #{id}",
       "back": "Orders",
       "expires": "Expires",
       "duplicate": "Duplicate",
@@ -610,9 +641,9 @@
         "display": "Shown To Buyer In"
       },
       "exchange-rate": {
-        "title": "Statistics exchange rate",
+        "title": "Statistics Exchange Rate",
         "placeholder": "Rate, e.g. 32.50",
-        "refresh": "Refresh rate from the market",
+        "refresh": "Refresh Rate From The Market",
         "stats-value": "Statistics value"
       },
       "customer": {
@@ -1248,6 +1279,8 @@
     "load-error-title": "Could Not Load Data",
     "try-again": "Try Again",
     "copy": "Copy",
+    "show": "Show",
+    "hide": "Hide",
     "copied": "Copied",
     "copy-failed": "Could not copy to the clipboard.",
     "never": "Never",
@@ -2800,7 +2833,7 @@
   "nav-overview": "Overview",
   "nav-catalog": "Products",
   "nav-customers": "Customers",
-  "nav-section-orders": "Orders",
+  "nav-section-orders": "All Orders",
   "nav-section-deliveries": "Deliveries",
   "nav-section-shipments": "Shipments",
   "nav-section-subscriptions": "Subscriptions",
@@ -3384,11 +3417,7 @@
     },
     "mc-plugin": {
       "title": "Minecraft Component Needs Attention",
-      "body": "Deliveries cannot run on these servers until the Pano component is ready.",
-      "missing": "does not have the Pano component installed.",
-      "mismatch": "runs component version {have}, version {want} is required.",
-      "offline": "is offline.",
-      "waiting": "{count, plural, one {# delivery is waiting.} other {# deliveries are waiting.}}",
+      "body": "Deliveries cannot run until the Pano component is installed and up to date.",
       "download": "Download"
     },
     "mail-host-too-old": {

@@ -11,7 +11,10 @@
           <FilterDropdown
             label={$_('common.status')}
             current={currentTab}
-            options={STATUS_TABS.map((tab) => ({ ...tab, label: $_(`pages.payment-events.tab.${tab.key}`) }))}
+            options={STATUS_TABS.map((tab) => ({
+              ...tab,
+              label: $_(`pages.payment-events.tab.${tab.key}`),
+            }))}
             onSelect={(tab) => go({ status: tab.value })} />
         </CardFilters>
       </CardHeader>
@@ -45,7 +48,10 @@
             </thead>
             <tbody>
               {#each events as event (event.id)}
-                <tr>
+                <tr
+                  class="row-action"
+                  use:rowLink={() => detailModal?.open(event)}
+                  title={$_('pages.payment-events.actions.view')}>
                   <th class="align-middle" scope="row">
                     <div class="dropdown position-static">
                       <button
@@ -56,8 +62,7 @@
                         aria-label={$_('common.actions')}>
                         <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
                       </button>
-                      <div
-                        class="dropdown-menu dropdown-menu-start">
+                      <div class="dropdown-menu dropdown-menu-start">
                         <button
                           type="button"
                           class="dropdown-item"
@@ -87,9 +92,20 @@
                         >{$_('pages.payment-events.unverified')}</span>
                     {/if}
                   </td>
-                  <td>{eventTypesText(event) || '—'}</td>
-                  <td>{event.responseStatus ?? '—'}</td>
-                  <td>{event.error || '—'}</td>
+                  <td class="text-nowrap">
+                    <div
+                      class="text-truncate"
+                      style="max-width: 240px;"
+                      title={eventTypesText(event) || '—'}>
+                      {eventTypesText(event) || '—'}
+                    </div>
+                  </td>
+                  <td class="text-nowrap">{event.responseStatus ?? '—'}</td>
+                  <td class="text-nowrap">
+                    <div class="text-truncate" style="max-width: 280px;" title={event.error || '—'}>
+                      {event.error || '—'}
+                    </div>
+                  </td>
                   <td class="text-nowrap">{event.remoteIp || '—'}</td>
                   <td class="text-nowrap">{dateText(event.createdAt)}</td>
                 </tr>
@@ -136,12 +152,7 @@
 <script>
   import FilterDropdown from '../components/FilterDropdown.svelte';
   import { api } from '@panomc/sdk/plugin-api';
-  import {
-    CardHeader,
-    CardFilters,
-    NoContent,
-    Pagination,
-  } from '@panomc/sdk/components/panel';
+  import { CardHeader, CardFilters, NoContent, Pagination } from '@panomc/sdk/components/panel';
   import { page } from '@panomc/sdk/svelte';
   import { _, showSuccessToast } from '../../i18n';
   import MarketLayout from '../layouts/MarketLayout.svelte';
@@ -154,6 +165,7 @@
   import { gotoList } from '../utils/list.js';
   import { pageOf } from '../utils/page.js';
   import { currentLocale } from '../utils/locale.js';
+  import { rowLink } from '../utils/row-link.js';
   import {
     STATUS_TABS,
     activeTab,

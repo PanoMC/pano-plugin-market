@@ -13,7 +13,11 @@
         {#each invoices as invoice (invoice.id)}
           <li class="list-group-item d-flex justify-content-between align-items-center gap-2">
             {#if canSeeInvoices(user)}
-              <a href={invoiceUrl(base, order.id, invoice)} target="_blank" rel="noopener">
+              <a
+                class="rounded focus-ring text-decoration-none"
+                href={invoiceUrl(base, order.id, invoice)}
+                target="_blank"
+                rel="noopener">
                 {invoice.number}
               </a>
             {:else}

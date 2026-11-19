@@ -1,3 +1,191 @@
+<MarketLayout area="discounts">
+  {#snippet heading()}
+    {#if creatorName}
+      <PlayerCell username={creatorName} />
+    {:else}
+      <span>{$_('pages.creator-detail.creator-id', { values: { id: data.id } })}</span>
+    {/if}
+    {#if summary}
+      <span class="badge text-bg-primary font-monospace">{summary.code}</span>
+      <span class="badge {summary.available < 0 ? 'text-bg-danger' : 'text-bg-info'} fs-6">
+        {$_('pages.creator-detail.available', {
+          values: { amount: fmt.money(summary.available, currency) },
+        })}
+      </span>
+    {/if}
+  {/snippet}
+  {#snippet right()}
+    {#if summary && canPayOut(summary, mayPay)}
+      <button type="button" class="btn btn-secondary" onclick={openPayout}>
+        <i class="fa-solid fa-money-bill-transfer" aria-hidden="true"></i>
+        <span class="d-lg-inline d-none ms-2">{$_('discounts.payouts.pay-out')}</span>
+      </button>
+    {/if}
+  {/snippet}
+
+  {#if error}
+    <LoadError {error} onRetry={() => refresh()} />
+  {:else}
+    <div class="card">
+      <CardHeader>
+        <div slot="left">
+          {$_('pages.creator-detail.earning-count', { values: { count: earningsPage.totalItems } })}
+        </div>
+        <CardFilters slot="right">
+          <FilterSelect
+            label={$_('common.status')}
+            current={state ?? 'ALL'}
+            options={FILTERS.map((filter) => ({
+              key: filter.value ?? 'ALL',
+              value: filter.value,
+              label: $_(filter.label),
+            }))}
+            onSelect={(filter) => goto(base + filterHref(filter.value))} />
+        </CardFilters>
+      </CardHeader>
+
+      {#if earnings.length === 0}
+        <NoContent icon="" />
+      {:else}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead>
+              <tr>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.creator-detail.table.order')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.creator-detail.table.base-amount')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.creator-detail.table.commission')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.creator-detail.table.amount')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.creator-detail.table.state')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.creator-detail.table.date')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each earnings as earning (earning.id)}
+                <tr
+                  class="row-action"
+                  use:rowLink={can(user, 'OV')
+                    ? `${base}/market/orders/detail/${earning.orderId}`
+                    : null}
+                  title={can(user, 'OV') ? $_('pages.orders.actions.view') : undefined}>
+                  <td class="align-middle text-nowrap">
+                    {#if can(user, 'OV')}
+                      <a
+                        class="rounded focus-ring text-decoration-none"
+                        href="{base}/market/orders/detail/{earning.orderId}">#{earning.orderId}</a>
+                    {:else}
+                      #{earning.orderId}
+                    {/if}
+                  </td>
+                  <td class="align-middle text-nowrap"
+                    >{fmt.money(earning.baseAmount, currency)}</td>
+                  <td class="align-middle text-nowrap">{fmt.percent(earning.commissionPercent)}</td>
+                  <td class="align-middle text-nowrap">{fmt.money(earning.amount, currency)}</td>
+                  <td class="align-middle text-nowrap">
+                    <StatusBadge kind="earning" value={earning.state} />
+                  </td>
+                  <td class="align-middle text-nowrap">{dateText(earning.createdAt)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+        {#if totalPage > 1}
+          <div class="card-footer">
+            <Pagination
+              page={currentPage}
+              {totalPage}
+              on:firstPageClick={() => onPageClick(1)}
+              on:lastPageClick={() => onPageClick(totalPage)}
+              on:pageLinkClick={(event) => onPageClick(event.detail.page)} />
+          </div>
+        {/if}
+      {/if}
+    </div>
+
+    <div class="card">
+      <CardHeader>
+        <div slot="left">
+          {$_('pages.creator-detail.payout-count', { values: { count: payouts.length } })}
+        </div>
+      </CardHeader>
+
+      {#if payouts.length === 0}
+        <NoContent icon="" />
+      {:else}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead>
+              <tr>
+                <th class="align-middle text-nowrap" scope="col" style="width: 50px;"></th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.creator-detail.table.amount')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.creator-detail.table.method')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.creator-detail.table.state')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.creator-detail.table.note')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.creator-detail.table.paid-by')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.creator-detail.table.paid-at')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each payouts as payout (payout.id)}
+                <tr>
+                  <th scope="row" class="align-middle">
+                    {#if canCancelPayout(payout, mayPay)}
+                      <div class="dropdown position-static">
+                        <button
+                          type="button"
+                          class="btn btn-link"
+                          data-bs-toggle="dropdown"
+                          title={$_('common.actions')}
+                          aria-label={$_('common.actions')}>
+                          <span class="fas fa-ellipsis-v"></span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-start">
+                          <button
+                            type="button"
+                            class="dropdown-item link-danger"
+                            onclick={() => cancelPayout(payout)}>
+                            <i class="fas fa-ban me-2"></i>
+                            {$_('pages.creator-detail.cancel')}
+                          </button>
+                        </div>
+                      </div>
+                    {/if}
+                  </th>
+                  <td class="align-middle text-nowrap"
+                    >{fmt.money(payout.amount, payout.currency || currency)}</td>
+                  <td class="align-middle text-nowrap"
+                    >{$_(`enums.payout-method.${payout.method}`)}</td>
+                  <td class="align-middle text-nowrap">
+                    <StatusBadge kind="payout" value={payout.state} />
+                  </td>
+                  <td class="align-middle text-nowrap"><div class="text-truncate" style="max-width: 280px;" title={payout.note ?? ''}>{payout.note ?? ''}</div></td>
+                  <td class="align-middle text-nowrap">{payout.paidBy ?? ''}</td>
+                  <td class="align-middle text-nowrap">{dateText(payout.paidAt)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </div>
+  {/if}
+</MarketLayout>
+
+<ConfirmModal bind:this={confirmModal} />
+<PayoutModal bind:this={payoutModal} {ctx} onSaved={() => refresh()} />
+
 <script module>
   import { buildQueryParams } from '@panomc/sdk/utils/api';
   import { api } from '@panomc/sdk/plugin-api';
@@ -25,7 +213,9 @@
   /** Joins the three bodies into the data of the page; the first failed one sets `error`. */
   function joinDetail(id, [earnings, payouts, report], state) {
     const failed = [earnings, payouts].find((body) => !isBody(body));
-    const row = isBody(report) ? (report.creators ?? []).find((c) => String(c.id) === String(id)) : null;
+    const row = isBody(report)
+      ? (report.creators ?? []).find((c) => String(c.id) === String(id))
+      : null;
     return {
       id,
       earningsPage: pageOf(isBody(earnings) ? earnings : null),
@@ -49,7 +239,10 @@
     const state = normalizeEarningState(event.url.searchParams.get('state'));
     const get = (options) => api.panel.get({ ...options, request: event });
 
-    let [bodies, ctx] = await Promise.all([detailRequests(get, id, requested, state), loadContext(event)]);
+    let [bodies, ctx] = await Promise.all([
+      detailRequests(get, id, requested, state),
+      loadContext(event),
+    ]);
     // A stale ?page= (bookmark, back button) points past the last page: refetch page 1 once.
     if (failureOf(bodies[0]) === 'PAGE_NOT_FOUND' && requested > 1) {
       bodies = await detailRequests(get, id, 1, state);
@@ -73,6 +266,7 @@
   import { canCancelPayout, canPayOut } from '../utils/discounts.js';
   import { currentLocale, fmt } from '../utils/locale.js';
   import { can } from '../utils/permissions.js';
+  import { rowLink } from '../utils/row-link.js';
   import { toastError } from '../utils/toast.js';
 
   let { data } = $props();
@@ -147,7 +341,12 @@
 
   function openPayout() {
     payoutModal?.open({
-      creator: { id: data.id, creator: creatorName ?? '', code: summary?.code ?? '', available: summary?.available },
+      creator: {
+        id: data.id,
+        creator: creatorName ?? '',
+        code: summary?.code ?? '',
+        available: summary?.available,
+      },
       currency,
     });
   }
@@ -163,168 +362,3 @@
     );
   }
 </script>
-
-<MarketLayout area="discounts">
-  {#snippet left()}
-    <div class="d-flex align-items-center gap-3 flex-wrap">
-      <a class="btn btn-link px-0" href="{base}/market/discounts?section=payouts">
-        <i class="fa-solid fa-arrow-left me-2" aria-hidden="true"></i>
-        {$_('common.back')}
-      </a>
-      {#if creatorName}
-        <PlayerCell username={creatorName} />
-      {:else}
-        <span>{$_('pages.creator-detail.creator-id', { values: { id: data.id } })}</span>
-      {/if}
-      {#if summary}
-        <span class="badge text-bg-secondary font-monospace">{summary.code}</span>
-        <span class="badge {summary.available < 0 ? 'text-bg-danger' : 'text-bg-info'} fs-6">
-          {$_('pages.creator-detail.available', {
-            values: { amount: fmt.money(summary.available, currency) },
-          })}
-        </span>
-      {/if}
-    </div>
-  {/snippet}
-  {#snippet right()}
-    {#if summary && canPayOut(summary, mayPay)}
-      <button type="button" class="btn btn-secondary" onclick={openPayout}>
-        <i class="fa-solid fa-money-bill-transfer" aria-hidden="true"></i>
-        <span class="d-lg-inline d-none ms-2">{$_('discounts.payouts.pay-out')}</span>
-      </button>
-    {/if}
-  {/snippet}
-
-  {#if error}
-    <LoadError {error} onRetry={() => refresh()} />
-  {:else}
-    <div class="card">
-      <CardHeader>
-        <div slot="left">
-          {$_('pages.creator-detail.earning-count', { values: { count: earningsPage.totalItems } })}
-        </div>
-        <CardFilters slot="right">
-          <FilterSelect
-            label={$_('common.status')}
-            current={state ?? 'ALL'}
-            options={FILTERS.map((filter) => ({ key: filter.value ?? 'ALL', value: filter.value, label: $_(filter.label) }))}
-            onSelect={(filter) => goto(base + filterHref(filter.value))} />
-        </CardFilters>
-      </CardHeader>
-
-      {#if earnings.length === 0}
-        <NoContent icon="" />
-      {:else}
-        <div class="table-responsive">
-          <table class="table table-hover align-middle">
-            <thead>
-              <tr>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.creator-detail.table.order')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.creator-detail.table.base-amount')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.creator-detail.table.commission')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.creator-detail.table.amount')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.creator-detail.table.state')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.creator-detail.table.date')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each earnings as earning (earning.id)}
-                <tr>
-                  <td class="align-middle text-nowrap">
-                    {#if can(user, 'OV')}
-                      <a href="{base}/market/orders/detail/{earning.orderId}">#{earning.orderId}</a>
-                    {:else}
-                      #{earning.orderId}
-                    {/if}
-                  </td>
-                  <td class="align-middle text-nowrap">{fmt.money(earning.baseAmount, currency)}</td>
-                  <td class="align-middle text-nowrap">{fmt.percent(earning.commissionPercent)}</td>
-                  <td class="align-middle text-nowrap">{fmt.money(earning.amount, currency)}</td>
-                  <td class="align-middle text-nowrap">
-                    <StatusBadge kind="earning" value={earning.state} />
-                  </td>
-                  <td class="align-middle text-nowrap">{dateText(earning.createdAt)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-        {#if totalPage > 1}
-          <div class="card-footer">
-            <Pagination
-              page={currentPage}
-              {totalPage}
-              on:firstPageClick={() => onPageClick(1)}
-              on:lastPageClick={() => onPageClick(totalPage)}
-              on:pageLinkClick={(event) => onPageClick(event.detail.page)} />
-          </div>
-        {/if}
-      {/if}
-    </div>
-
-    <div class="card">
-      <CardHeader>
-        <div slot="left">
-          {$_('pages.creator-detail.payout-count', { values: { count: payouts.length } })}
-        </div>
-      </CardHeader>
-
-      {#if payouts.length === 0}
-        <NoContent icon="" />
-      {:else}
-        <div class="table-responsive">
-          <table class="table table-hover align-middle">
-            <thead>
-              <tr>
-                <th class="align-middle text-nowrap" scope="col" style="width: 50px;"></th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.creator-detail.table.amount')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.creator-detail.table.method')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.creator-detail.table.state')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.creator-detail.table.note')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.creator-detail.table.paid-by')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.creator-detail.table.paid-at')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each payouts as payout (payout.id)}
-                <tr>
-                  <th scope="row" class="align-middle">
-                    {#if canCancelPayout(payout, mayPay)}
-                      <div class="dropdown position-static">
-                        <button
-                          type="button"
-                          class="btn btn-link"
-                          data-bs-toggle="dropdown"
-                          title={$_('common.actions')}
-                          aria-label={$_('common.actions')}>
-                          <span class="fas fa-ellipsis-v"></span>
-                        </button>
-                        <div class="dropdown-menu dropdown-menu-start">
-                          <button type="button" class="dropdown-item link-danger" onclick={() => cancelPayout(payout)}>
-                            <i class="fas fa-ban me-2"></i>
-                            {$_('pages.creator-detail.cancel')}
-                          </button>
-                        </div>
-                      </div>
-                    {/if}
-                  </th>
-                  <td class="align-middle text-nowrap">{fmt.money(payout.amount, payout.currency || currency)}</td>
-                  <td class="align-middle text-nowrap">{$_(`enums.payout-method.${payout.method}`)}</td>
-                  <td class="align-middle text-nowrap">
-                    <StatusBadge kind="payout" value={payout.state} />
-                  </td>
-                  <td class="align-middle" style="min-width: 160px;">{payout.note ?? ''}</td>
-                  <td class="align-middle">{payout.paidBy ?? ''}</td>
-                  <td class="align-middle text-nowrap">{dateText(payout.paidAt)}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      {/if}
-    </div>
-  {/if}
-</MarketLayout>
-
-<ConfirmModal bind:this={confirmModal} />
-<PayoutModal bind:this={payoutModal} {ctx} onSaved={() => refresh()} />

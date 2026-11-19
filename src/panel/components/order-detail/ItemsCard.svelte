@@ -41,24 +41,42 @@
               <th scope="row" class="align-middle">
                 <ControlDropdown items={menu(item)} />
               </th>
-              <td class="align-middle" class:ps-4={child}>
-                <div>{item.productName}</div>
+              <td class="align-middle text-nowrap" class:ps-4={child}>
+                <ProductLink productId={item.productId} name={item.productName} />
                 {#if item.variantName}
-                  <div class="text-body-secondary">{item.variantName}</div>
+                  <div
+                    class="text-body-secondary text-truncate"
+                    style="max-width: 240px;"
+                    title={item.variantName}>
+                    {item.variantName}
+                  </div>
                 {/if}
                 {#if item.sku}
-                  <div class="text-body-secondary">{item.sku}</div>
+                  <div
+                    class="text-body-secondary text-truncate"
+                    style="max-width: 200px;"
+                    title={item.sku}>
+                    {item.sku}
+                  </div>
                 {/if}
                 {#if fields.length > 0}
                   <dl class="row mb-0 small">
                     {#each fields as field (field.key)}
                       <dt class="col-sm-4 text-body-secondary fw-normal">{field.label}</dt>
-                      <dd class="col-sm-8 mb-0">{field.value}</dd>
+                      <dd
+                        class="col-sm-8 mb-0 text-truncate"
+                        style="max-width: 240px;"
+                        title={field.value}>
+                        {field.value}
+                      </dd>
                     {/each}
                   </dl>
                 {/if}
                 {#if server}
-                  <div class="small text-body-secondary">
+                  <div
+                    class="small text-body-secondary text-truncate"
+                    style="max-width: 240px;"
+                    title={server}>
                     <i class="fa-solid fa-server me-1" aria-hidden="true"></i>{server}
                   </div>
                 {/if}
@@ -92,7 +110,7 @@
               <td class="align-middle text-nowrap">
                 {child ? '—' : fmt.money(item.lineTotal, currency)}
               </td>
-              <td class="align-middle">
+              <td class="align-middle text-nowrap">
                 {#if state === 'none'}
                   <span class="text-body-secondary">—</span>
                 {:else}
@@ -115,6 +133,7 @@
   import { fmt } from '../../utils/locale.js';
   import { itemActions } from './actions.js';
   import ControlDropdown from './ControlDropdown.svelte';
+  import ProductLink from '../ProductLink.svelte';
   import {
     DELIVERY_STATE_KIND,
     fieldEntries,

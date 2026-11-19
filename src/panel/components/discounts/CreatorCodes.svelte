@@ -4,6 +4,7 @@
   import { buildQueryParams } from '@panomc/sdk/utils/api';
   import { _ } from '../../../i18n';
   import { currentLocale, fmt } from '../../utils/locale.js';
+  import { rowLink } from '../../utils/row-link.js';
 
   // All view state (page/search/status) is URL-driven: the page load() reads the
   // query params and passes the resulting list + the current filter values down as
@@ -108,7 +109,10 @@
         </thead>
         <tbody>
           {#each creatorCodes as item (item.id)}
-            <tr>
+            <tr
+              class="row-action"
+              use:rowLink={() => onEdit(item)}
+              title={$_('common.edit')}>
               <th scope="row">
                 <div class="dropdown position-static">
                   <button
@@ -120,7 +124,7 @@
                     <span class="fas fa-ellipsis-v"></span>
                   </button>
                   <div class="dropdown-menu dropdown-menu-start">
-                    <a class="dropdown-item" href="{base}/market/discounts/creator/{item.id}">
+                    <a class="dropdown-item rounded focus-ring text-decoration-none" href="{base}/market/discounts/creator/{item.id}">
                       <i class="fas fa-chart-line me-2"></i>
                       {$_('discounts.creators.view-earnings')}
                     </a>
@@ -139,17 +143,17 @@
                   </div>
                 </div>
               </th>
-              <td>
-                <button type="button" class="btn btn-link p-0 border-0 align-baseline text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCreatorCodeModal" onclick={() => onEdit(item)}>
-                  {item.creator}
+              <td class="text-nowrap">
+                <button type="button" class="btn btn-link p-0 border-0 align-baseline rounded text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCreatorCodeModal" onclick={() => onEdit(item)}>
+                  <span class="d-inline-block text-truncate align-bottom" style="max-width: 200px;" title={item.creator}>{item.creator}</span>
                 </button>
               </td>
-              <td>
-                <button type="button" class="btn btn-link p-0 border-0 align-baseline font-monospace text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCreatorCodeModal" onclick={() => onEdit(item)}>
+              <td class="text-nowrap">
+                <button type="button" class="btn btn-link p-0 border-0 align-baseline font-monospace rounded text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCreatorCodeModal" onclick={() => onEdit(item)}>
                   {item.code}
                 </button>
               </td>
-              <td>
+              <td class="text-nowrap">
                 <span class="font-monospace">
                   {#if item.unit === 'PERCENT'}
                     %{item.discount}
@@ -158,10 +162,10 @@
                   {/if}
                 </span>
               </td>
-              <td>
+              <td class="text-nowrap">
                 <span class="font-monospace text-success">%{item.commissionPercent}</span>
               </td>
-              <td>
+              <td class="text-nowrap">
                 <span class="font-monospace">
                   {#if item.redeemLimit == null}
                     {item.usedCount ?? 0} / ∞
@@ -170,17 +174,17 @@
                   {/if}
                 </span>
               </td>
-              <td>
+              <td class="text-nowrap">
                 <span class="font-monospace">{fmt.money(item.earnings, ctx?.currency)}</span>
               </td>
-              <td>
+              <td class="text-nowrap">
                 {#if item.status === 'ACTIVE'}
                   <span class="badge text-bg-success">{$_('common.active')}</span>
                 {:else}
                   <span class="badge text-bg-danger">{$_('common.inactive')}</span>
                 {/if}
               </td>
-              <td>
+              <td class="text-nowrap">
                 {#if !item.expiryDate}
                   <span class="text-body-secondary font-monospace" style="font-size: 0.85rem;">{$_('discounts.creators.no-expiry')}</span>
                 {:else}

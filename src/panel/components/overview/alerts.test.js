@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { alertsFor, mcPluginItems, safeUrl, MAX_MISSING_SHOWN } from './alerts.js';
+import {
+  MC_DOWNLOAD_URL,
+  alertsFor,
+  mcPluginNeedsAttention,
+  safeUrl,
+  MAX_MISSING_SHOWN,
+} from './alerts.js';
 
 const keys = (alerts) => alerts.map((a) => a.key);
 const HEALTHY = {
@@ -41,15 +47,9 @@ describe('alertsFor', () => {
     expect(without.links).toEqual([]);
   });
 
-  test('component missing and version mismatch: one item per server with count and download link', () => {
+  test('component needs attention: one alert with the downloads link', () => {
     const servers = [
-      {
-        id: 1,
-        name: 'Survival',
-        marketState: 'COMPONENT_MISSING',
-        waitingDeliveries: 4,
-        downloadUrl: 'https://panomc.com/dl',
-      },
+      { id: 1, name: 'Survival', marketState: 'COMPONENT_MISSING', waitingDeliveries: 4 },
       {
         id: 2,
         name: 'Skyblock',
@@ -57,38 +57,32 @@ describe('alertsFor', () => {
         mcComponentVersion: '1.0.0',
         requiredVersion: '1.2.0',
         waitingDeliveries: 0,
-        downloadUrl: 'https://panomc.com/dl2',
       },
       { id: 3, name: 'Fine', marketState: 'READY', waitingDeliveries: 9 },
     ];
     const [alert] = alertsFor(null, servers, {});
     expect(alert.key).toBe('mc-plugin');
     expect(alert.variant).toBe('warning');
-    expect(alert.items).toEqual([
-      { id: 1, name: 'Survival', count: 4, downloadUrl: 'https://panomc.com/dl', kind: 'missing' },
-      {
-        id: 2,
-        name: 'Skyblock',
-        count: 0,
-        downloadUrl: 'https://panomc.com/dl2',
-        kind: 'mismatch',
-        have: '1.0.0',
-        want: '1.2.0',
-      },
-    ]);
-    expect(alert.links[0].href).toBe('/market/deliveries?status=WAITING_SERVER');
+    expect(alert.downloadUrl).toBe(MC_DOWNLOAD_URL);
+    expect(alert.links).toEqual([]);
+    expect(alert.items).toBeUndefined();
   });
 
-  test('offline servers are listed only with waiting deliveries', () => {
+  test('offline servers only with waiting deliveries', () => {
     expect(
       alertsFor(null, [{ id: 1, name: 'A', marketState: 'OFFLINE', waitingDeliveries: 0 }], {}),
     ).toEqual([]);
+    expect(
+      mcPluginNeedsAttention([{ id: 1, name: 'A', marketState: 'OFFLINE', waitingDeliveries: 0 }]),
+    ).toBe(false);
     const [alert] = alertsFor(
       null,
       [{ id: 1, name: 'A', marketState: 'OFFLINE', waitingDeliveries: 2 }],
       {},
     );
-    expect(alert.items[0]).toMatchObject({ kind: 'offline', count: 2 });
+    expect(alert.key).toBe('mc-plugin');
+    expect(alert.downloadUrl).toBe(MC_DOWNLOAD_URL);
+    expect(mcPluginNeedsAttention([{ id: 1, name: 'A', marketState: 'OFFLINE', waitingDeliveries: 2 }])).toBe(true);
   });
 
   test('download url must be http(s)', () => {
@@ -97,10 +91,6 @@ describe('alertsFor', () => {
     expect(safeUrl('not a url')).toBeNull();
     expect(safeUrl(null)).toBeNull();
     expect(safeUrl('https://panomc.com/x')).toBe('https://panomc.com/x');
-    const items = mcPluginItems([
-      { id: 1, name: 'A', marketState: 'COMPONENT_MISSING', downloadUrl: 'javascript:alert(1)' },
-    ]);
-    expect(items[0].downloadUrl).toBeNull();
   });
 
   test('review orders link to the REVIEW list', () => {
@@ -242,14 +232,14 @@ describe('alert locale keys', () => {
   const info = alertsFor(null, [], { mailEnabled: false });
 
   for (const lang of ['en-US', 'tr', 'ru']) {
-    test(`${lang} has every title, body, link and item key`, () => {
+    test(`${lang} has every title, body, link and action key`, () => {
       const alerts = JSON.parse(readFileSync(`src/locales/panel/${lang}.json`, 'utf8')).alerts;
       const wanted = [];
       for (const a of [...everything, ...info]) {
-        wanted.push(a.title, a.body, ...a.links.map((l) => `actions.${l.label}`));
-        for (const item of a.items ?? []) wanted.push(`mc-plugin.${item.kind}`);
+        wanted.push(a.title, a.body, ...(a.links ?? []).map((l) => `actions.${l.label}`));
       }
-      wanted.push('more', 'mc-plugin.waiting', 'mc-plugin.download');
+      if (everything.some((a) => a.downloadUrl)) wanted.push('mc-plugin.download');
+      wanted.push('more');
       for (const key of wanted) expect(typeof lookup(alerts, key)).toBe('string');
     });
   }

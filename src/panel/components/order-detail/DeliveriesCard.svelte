@@ -43,7 +43,11 @@
               <th scope="row" class="align-middle">
                 <ControlDropdown items={menu(delivery)} />
               </th>
-              <td class="align-middle">{delivery.productName ?? '—'}</td>
+              <td class="align-middle text-nowrap">
+                <ProductLink
+                  productId={detail?.items?.find((i) => i.id === delivery.orderItemId)?.productId}
+                  name={delivery.productName} />
+              </td>
               <td class="align-middle text-nowrap">
                 {#if isKnownActionType(delivery.actionType)}
                   {$_(`enums.action-type.${delivery.actionType}`)}
@@ -51,18 +55,25 @@
                   {delivery.actionType ?? '—'}
                 {/if}
                 {#if delivery.phase && delivery.phase !== 'GRANT'}
-                  <span class="badge text-bg-secondary ms-1">
+                  <span class="badge text-bg-primary ms-1">
                     {isKnownPhase(delivery.phase)
                       ? $_(`enums.phase.${delivery.phase}`)
                       : delivery.phase}
                   </span>
                 {/if}
               </td>
-              <td class="align-middle">{delivery.serverName ?? '—'}</td>
-              <td class="align-middle">
+              <td class="align-middle text-nowrap">
+                <div
+                  class="text-truncate"
+                  style="max-width: 200px;"
+                  title={delivery.serverName ?? '—'}>
+                  {delivery.serverName ?? '—'}
+                </div>
+              </td>
+              <td class="align-middle text-nowrap">
                 <StatusBadge kind="delivery" value={delivery.status} />
                 {#if delivery.cancelRequested}
-                  <span class="badge text-bg-secondary ms-1">
+                  <span class="badge text-bg-primary ms-1">
                     {$_('pages.order-detail.cancel-requested')}
                   </span>
                 {/if}
@@ -77,8 +88,8 @@
                   <div class="small text-danger">{$_('pages.order-detail.may-have-run')}</div>
                 {/if}
               </td>
-              <td class="align-middle">{delivery.attempts ?? 0}</td>
-              <td class="align-middle">
+              <td class="align-middle text-nowrap">{delivery.attempts ?? 0}</td>
+              <td class="align-middle text-nowrap">
                 {#if delivery.lastErrorCode}
                   <span use:tooltip={delivery.lastError ? [delivery.lastError] : undefined}>
                     {isKnownDeliveryError(delivery.lastErrorCode)
@@ -117,6 +128,7 @@
   import { deliveryActions } from './actions.js';
   import CardMenu from './CardMenu.svelte';
   import ControlDropdown from './ControlDropdown.svelte';
+  import ProductLink from '../ProductLink.svelte';
   import { isKnownActionType, isKnownDeliveryError, isKnownPhase, mayHaveRun } from './model.js';
   import { can } from '../../utils/permissions.js';
 

@@ -3,7 +3,7 @@
     <i class="fa-solid {TYPE_ICON[action.type] ?? 'fa-bolt'}" aria-hidden="true"></i>
     <b class="flex-grow-1">{$_(`enums.action-type.${action.type}`)}</b>
     {#if action.id}
-      <span class="badge text-bg-secondary font-monospace">{action.id}</span>
+      <span class="badge text-bg-primary font-monospace">{action.id}</span>
     {/if}
     <!-- removing an action needs no extra right (11 §14.4): the button stays on a locked row -->
     <button

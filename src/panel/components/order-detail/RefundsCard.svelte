@@ -33,10 +33,15 @@
               <th scope="row" class="align-middle">
                 <ControlDropdown items={menu(refund)} />
               </th>
-              <td class="align-middle">
+              <td class="align-middle text-nowrap">
                 <StatusBadge kind="refund" value={refund.status} />
                 {#if refund.failureMessage}
-                  <div class="text-danger">{refund.failureMessage}</div>
+                  <div
+                    class="text-danger text-truncate"
+                    style="max-width: 280px;"
+                    title={refund.failureMessage}>
+                    {refund.failureMessage}
+                  </div>
                 {/if}
               </td>
               <td class="align-middle text-nowrap">
@@ -49,18 +54,27 @@
                   </div>
                 {/if}
               </td>
-              <td class="align-middle">
-                {#if refund.reason}{refund.reason}{:else}<span class="text-body-secondary">—</span
-                  >{/if}
+              <td class="align-middle text-nowrap">
+                {#if refund.reason}<div
+                    class="text-truncate"
+                    style="max-width: 280px;"
+                    title={refund.reason}>
+                    {refund.reason}
+                  </div>{:else}<span class="text-body-secondary">—</span>{/if}
               </td>
-              <td class="align-middle">
+              <td class="align-middle text-nowrap">
                 {#if refund.origin && isKnownRefundOrigin(refund.origin)}
                   {$_(`enums.refund-origin.${refund.origin}`)}
                 {:else}
                   {refund.origin ?? '—'}
                 {/if}
                 {#if refund.initiatedByUsername}
-                  <div class="text-body-secondary">{refund.initiatedByUsername}</div>
+                  <div
+                    class="text-body-secondary text-truncate"
+                    style="max-width: 200px;"
+                    title={refund.initiatedByUsername}>
+                    {refund.initiatedByUsername}
+                  </div>
                 {/if}
               </td>
               <td class="align-middle text-nowrap">

@@ -33,7 +33,9 @@
               </button>
               <div class="dropdown-menu dropdown-menu-end">
                 {#if view.actions.allOrders}
-                  <a class="dropdown-item" href="{base}{ordersLink(username)}">
+                  <a
+                    class="dropdown-item rounded focus-ring text-decoration-none"
+                    href="{base}{ordersLink(username)}">
                     <i class="fa-solid fa-list me-2" aria-hidden="true"></i>
                     {$_('pages.player-market.all-orders')}
                   </a>
@@ -51,13 +53,17 @@
                   </button>
                 {/if}
                 {#if view.actions.createOrder}
-                  <a class="dropdown-item" href="{base}{createOrderLink(username)}">
+                  <a
+                    class="dropdown-item rounded focus-ring text-decoration-none"
+                    href="{base}{createOrderLink(username)}">
                     <i class="fa-solid fa-cart-plus me-2" aria-hidden="true"></i>
                     {$_('pages.player-market.create-order')}
                   </a>
                 {/if}
                 {#if view.actions.block}
-                  <a class="dropdown-item link-danger" href="{base}{blocksLink(username)}">
+                  <a
+                    class="dropdown-item link-danger rounded focus-ring text-decoration-none"
+                    href="{base}{blocksLink(username)}">
                     <i class="fa-solid fa-ban me-2" aria-hidden="true"></i>
                     {$_('pages.player-market.block')}
                   </a>
@@ -89,10 +95,15 @@
             <tbody>
               {#each view.orders as order (order.id)}
                 {@const products = productsCell(order)}
-                <tr>
+                <tr
+                  class="row-action"
+                  use:rowLink={canOrders ? `${base}/market/orders/detail/${order.id}` : null}
+                  title={canOrders ? $_('pages.orders.actions.view') : undefined}>
                   <td class="align-middle text-nowrap">
                     {#if canOrders}
-                      <a href="{base}/market/orders/detail/{order.id}">#{order.id}</a>
+                      <a
+                        class="rounded focus-ring text-decoration-none"
+                        href="{base}/market/orders/detail/{order.id}">#{order.id}</a>
                     {:else}
                       #{order.id}
                     {/if}
@@ -100,15 +111,18 @@
                       <span class="badge text-bg-warning ms-1">{$_('common.test')}</span>
                     {/if}
                   </td>
-                  <td>
-                    {products.first || '—'}
-                    {#if products.more > 0}
-                      <span class="text-body-secondary">+{products.more}</span>
-                    {/if}
+                  <td class="text-nowrap">
+                    <div class="d-flex align-items-center gap-1" style="max-width: 240px;">
+                      <span class="text-truncate" title={products.first || '—'}
+                        >{products.first || '—'}</span>
+                      {#if products.more > 0}
+                        <span class="text-body-secondary flex-shrink-0">+{products.more}</span>
+                      {/if}
+                    </div>
                   </td>
                   <td class="align-middle text-nowrap"
                     >{fmt.money(order.totalPrice, order.currency)}</td>
-                  <td><StatusBadge kind="order" value={order.status} /></td>
+                  <td class="text-nowrap"><StatusBadge kind="order" value={order.status} /></td>
                   <td class="align-middle text-nowrap">
                     <DateComponent time={order.paidAt ?? order.createdAt} />
                   </td>
@@ -146,14 +160,29 @@
             </thead>
             <tbody>
               {#each view.entitlements as entitlement (entitlement.id)}
-                <tr>
-                  <td>
-                    {entitlement.productName ?? '—'}
-                    {#if entitlement.variantName}
-                      <span class="text-body-secondary">({entitlement.variantName})</span>
-                    {/if}
+                <tr
+                  class="row-action"
+                  use:rowLink={entitlement.orderId && canOrders
+                    ? `${base}/market/orders/detail/${entitlement.orderId}`
+                    : null}
+                  title={entitlement.orderId && canOrders
+                    ? $_('pages.orders.actions.view')
+                    : undefined}>
+                  <td class="text-nowrap">
+                    <div
+                      class="text-truncate"
+                      style="max-width: 240px;"
+                      title={entitlement.variantName
+                        ? `${entitlement.productName ?? '—'} (${entitlement.variantName})`
+                        : (entitlement.productName ?? '—')}>
+                      {entitlement.productName ?? '—'}
+                      {#if entitlement.variantName}
+                        <span class="text-body-secondary">({entitlement.variantName})</span>
+                      {/if}
+                    </div>
                   </td>
-                  <td><StatusBadge kind="entitlement" value={entitlement.status} /></td>
+                  <td class="text-nowrap"
+                    ><StatusBadge kind="entitlement" value={entitlement.status} /></td>
                   <td class="align-middle text-nowrap">{dateText(entitlement.startsAt)}</td>
                   <td class="align-middle text-nowrap">
                     {entitlement.expiresAt
@@ -162,7 +191,9 @@
                   </td>
                   <td class="align-middle text-nowrap">
                     {#if entitlement.orderId && canOrders}
-                      <a href="{base}/market/orders/detail/{entitlement.orderId}">
+                      <a
+                        class="rounded focus-ring text-decoration-none"
+                        href="{base}/market/orders/detail/{entitlement.orderId}">
                         #{entitlement.orderId}
                       </a>
                     {:else if entitlement.orderId}
@@ -204,19 +235,34 @@
             </thead>
             <tbody>
               {#each view.subscriptions as subscription (subscription.id)}
-                <tr>
-                  <td>
+                <tr
+                  class="row-action"
+                  use:rowLink={canOrders
+                    ? `${base}/market/subscriptions/detail/${subscription.id}`
+                    : null}
+                  title={canOrders ? $_('pages.subscriptions.actions.view') : undefined}>
+                  <td class="text-nowrap">
                     {#if canOrders}
-                      <a href="{base}/market/subscriptions/detail/{subscription.id}">
+                      <a
+                        class="rounded focus-ring text-decoration-none d-inline-block text-truncate align-bottom"
+                        style="max-width: 240px;"
+                        title={subscription.productName ?? `#${subscription.id}`}
+                        href="{base}/market/subscriptions/detail/{subscription.id}">
                         {subscription.productName ?? `#${subscription.id}`}
                       </a>
                     {:else}
-                      {subscription.productName ?? `#${subscription.id}`}
+                      <div
+                        class="text-truncate"
+                        style="max-width: 240px;"
+                        title={subscription.productName ?? `#${subscription.id}`}>
+                        {subscription.productName ?? `#${subscription.id}`}
+                      </div>
                     {/if}
                   </td>
                   <td class="align-middle text-nowrap"
                     >{priceText(subscription, fmt.money, duration)}</td>
-                  <td><StatusBadge kind="subscription" value={subscription.status} /></td>
+                  <td class="text-nowrap"
+                    ><StatusBadge kind="subscription" value={subscription.status} /></td>
                   <td class="align-middle text-nowrap"
                     >{dateText(subscription.currentPeriodEnd)}</td>
                 </tr>
@@ -252,8 +298,17 @@
               {#each view.blocks as block (block.id)}
                 <tr>
                   <td class="align-middle text-nowrap">{$_(`enums.block-type.${block.type}`)}</td>
-                  <td class="font-monospace text-break">{block.value}</td>
-                  <td>{block.reason || '—'}</td>
+                  <td class="font-monospace text-nowrap"
+                    ><div class="text-truncate" style="max-width: 200px;" title={block.value}>
+                      {block.value}
+                    </div></td>
+                  <td class="text-nowrap"
+                    ><div
+                      class="text-truncate"
+                      style="max-width: 280px;"
+                      title={block.reason || '—'}>
+                      {block.reason || '—'}
+                    </div></td>
                   <td class="align-middle text-nowrap">
                     {block.expiresAt ? dateText(block.expiresAt) : $_('common.never')}
                   </td>
@@ -290,6 +345,7 @@
     summaryPath,
   } from './summary.js';
   import { can } from '../../utils/permissions.js';
+  import { rowLink } from '../../utils/row-link.js';
 
   // Rendered by PlayerMarket.svelte (tab) and PlayerMarketCard.svelte (hook card).
   let { summary = null, username = '', ctx = null, error = null } = $props();

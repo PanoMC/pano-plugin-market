@@ -470,14 +470,14 @@ class DeliveryAdminService(
         val names = roster.snapshot(pool).names
         val pageArgs = ArrayList<Any?>(args).also { it += window.size; it += window.offset }
         val rows = pool.preparedQuery(
-            "SELECT d.*, i.`productName` AS itemProductName FROM ${table("market_delivery")} d LEFT JOIN ${table("market_order_item")} i ON i.`id` = d.`orderItemId` " +
+            "SELECT d.*, i.`productName` AS itemProductName, i.`productId` AS itemProductId FROM ${table("market_delivery")} d LEFT JOIN ${table("market_order_item")} i ON i.`id` = d.`orderItemId` " +
                 "$clause ORDER BY d.`id` DESC LIMIT ? OFFSET ?"
         ).execute(Tuple.from(pageArgs)).coAwait().map { r ->
             val serverId = r.getLong("serverId")
 
             JsonObject()
                 .put("id", r.getLong("id")).put("orderId", r.getLong("orderId")).put("orderItemId", r.getLong("orderItemId"))
-                .put("productName", r.getString("itemProductName")).put("playerUsername", r.getString("playerUsername"))
+                .put("productName", r.getString("itemProductName")).put("productId", r.getLong("itemProductId")).put("playerUsername", r.getString("playerUsername"))
                 .put("phase", r.getString("phase")).put("actionId", r.getString("actionId")).put("actionType", r.getString("actionType"))
                 .put("transport", r.getString("transport")).put("idempotencyKey", r.getString("idempotencyKey"))
                 .put("serverId", serverId).put("serverName", names[serverId]).put("status", r.getString("status")).put("attempts", r.getInteger("attempts"))

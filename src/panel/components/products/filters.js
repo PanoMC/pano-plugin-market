@@ -5,7 +5,7 @@ import { compact } from '../orders/filters.js';
 /** URL names forwarded to GET /products (page is handled by loadList). */
 export const PRODUCT_PARAMS = ['search', 'status', 'kind', 'categoryId'];
 
-export const STATUS_FILTERS = ['ACTIVE', 'INACTIVE', 'ARCHIVED'];
+export const STATUS_FILTERS = ['ACTIVE', 'INACTIVE', 'HIDDEN', 'ARCHIVED'];
 export const KIND_FILTERS = ['STANDARD', 'BUNDLE', 'CREDIT_PACK'];
 
 const present = (value) => value !== null && value !== undefined && String(value).trim() !== '';

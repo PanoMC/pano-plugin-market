@@ -62,7 +62,10 @@
         </thead>
         <tbody>
           {#each visible as row (row.id)}
-            <tr>
+            <tr
+              class="row-action"
+              use:rowLink={`${base}/market/discounts/creator/${row.id}`}
+              title={$_('discounts.payouts.view-earnings')}>
               <th scope="row" class="align-middle">
                 <div class="dropdown position-static">
                   <button
@@ -74,7 +77,9 @@
                     <span class="fas fa-ellipsis-v"></span>
                   </button>
                   <div class="dropdown-menu dropdown-menu-start">
-                    <a class="dropdown-item" href="{base}/market/discounts/creator/{row.id}">
+                    <a
+                      class="dropdown-item rounded focus-ring text-decoration-none"
+                      href="{base}/market/discounts/creator/{row.id}">
                       <i class="fas fa-chart-line me-2"></i>
                       {$_('discounts.payouts.view-earnings')}
                     </a>
@@ -87,8 +92,8 @@
                   </div>
                 </div>
               </th>
-              <td class="align-middle"><PlayerCell username={row.creator} /></td>
-              <td class="align-middle font-monospace">{row.code}</td>
+              <td class="align-middle text-nowrap"><PlayerCell username={row.creator} /></td>
+              <td class="align-middle font-monospace text-nowrap">{row.code}</td>
               <td class="align-middle text-nowrap">{row.uses}</td>
               <td class="align-middle text-nowrap">{fmt.money(row.revenue, currency)}</td>
               <td class="align-middle text-nowrap">{fmt.money(row.earned, currency)}</td>
@@ -133,6 +138,7 @@
   import { canPayOut, filterCreators } from '../../utils/discounts.js';
   import { gotoList } from '../../utils/list.js';
   import { fmt } from '../../utils/locale.js';
+  import { rowLink } from '../../utils/row-link.js';
   import DateRange from '../DateRange.svelte';
   import PlayerCell from '../PlayerCell.svelte';
   import { hideModal, showModal } from '../order-detail/send.js';

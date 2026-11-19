@@ -17,7 +17,7 @@ describe('filters', () => {
     expect(PRODUCT_PARAMS).toEqual(['search', 'status', 'kind', 'categoryId']);
   });
   test('unknown status / kind values and a non-numeric category are dropped', () => {
-    expect(normalizeFilters({ status: 'HIDDEN', kind: 'NOPE', categoryId: 'x' })).toEqual({
+    expect(normalizeFilters({ status: 'NOPE', kind: 'NOPE', categoryId: 'x' })).toEqual({
       search: '',
       status: '',
       kind: '',
@@ -74,6 +74,7 @@ describe('row helpers', () => {
     expect(statusTone('ACTIVE')).toBe('success');
     expect(statusTone('ARCHIVED')).toBe('dark');
     expect(statusTone('INACTIVE')).toBe('secondary');
+    expect(statusTone('HIDDEN')).toBe('secondary');
   });
   test('stock cell: null is unlimited, zero is a count', () => {
     expect(stockCell({ stock: null })).toEqual({ unlimited: true, count: null });

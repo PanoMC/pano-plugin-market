@@ -11,9 +11,8 @@ const TABLE = {
   order: {
     [SUCCESS]: ['COMPLETED'],
     [WARNING]: ['PENDING', 'REVIEW', 'PARTIALLY_REFUNDED'],
-    [DANGER]: ['FAILED', 'CHARGEBACK'],
+    [DANGER]: ['FAILED', 'CHARGEBACK', 'CANCELLED', 'EXPIRED'],
     [INFO]: ['REFUNDED'],
-    [SECONDARY]: ['CANCELLED', 'EXPIRED'],
   },
   payment: {
     [SUCCESS]: ['SUCCEEDED'],
@@ -37,14 +36,15 @@ const TABLE = {
   fulfillment: {
     [SUCCESS]: ['FULFILLED'],
     [WARNING]: ['PENDING', 'PARTIAL'],
-    [DANGER]: ['FAILED'],
-    [SECONDARY]: ['NONE', 'REVOKED'],
+    [DANGER]: ['FAILED', 'REVOKED'],
+    [SECONDARY]: ['NONE'],
   },
   shipping: {
     [SUCCESS]: ['DELIVERED'],
     [WARNING]: ['PENDING', 'PARTIAL'],
     [INFO]: ['SHIPPED'],
-    [SECONDARY]: ['NOT_REQUIRED', 'RETURNED'],
+    [DANGER]: ['RETURNED'],
+    [SECONDARY]: ['NOT_REQUIRED'],
   },
   shipment: {
     [SUCCESS]: ['DELIVERED'],
@@ -121,9 +121,9 @@ const LOOKUP = new Map(
   ]),
 );
 
-/** `text-bg-*` class; an unknown kind or value is `text-bg-secondary`. */
+/** `text-bg-*` class; an unknown kind or value is `text-bg-primary` (the default badge colour). */
 export function badgeClass(kind, value) {
-  return LOOKUP.get(kind)?.get(value) ?? SECONDARY;
+  return LOOKUP.get(kind)?.get(value) ?? PRIMARY;
 }
 
 /** True when the value is a known value of the kind (the badge shows the raw value otherwise). */

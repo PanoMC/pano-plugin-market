@@ -105,6 +105,6 @@ describe('renewalBadge', () => {
     expect(renewalBadge('PENDING')).toBe('text-bg-warning');
     expect(renewalBadge('FAILED')).toBe('text-bg-danger');
     expect(renewalBadge('SKIPPED')).toBe('text-bg-secondary');
-    expect(renewalBadge('WHAT')).toBe('text-bg-secondary');
+    expect(renewalBadge('WHAT')).toBe('text-bg-primary');
   });
 });

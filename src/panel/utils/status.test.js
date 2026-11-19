@@ -56,9 +56,9 @@ describe('status (13 25.1 test 15)', () => {
       expect(statusValues(kind).sort()).toEqual(text.split(' ').sort());
   });
 
-  test('unknown value or kind is text-bg-secondary and not known', () => {
-    expect(badgeClass('order', 'WHATEVER')).toBe('text-bg-secondary');
-    expect(badgeClass('nope', 'COMPLETED')).toBe('text-bg-secondary');
+  test('unknown value or kind is text-bg-primary and not known', () => {
+    expect(badgeClass('order', 'WHATEVER')).toBe('text-bg-primary');
+    expect(badgeClass('nope', 'COMPLETED')).toBe('text-bg-primary');
     expect(isKnownStatus('order', 'WHATEVER')).toBe(false);
   });
 
@@ -66,6 +66,10 @@ describe('status (13 25.1 test 15)', () => {
     expect(badgeClass('order', 'COMPLETED')).toBe('text-bg-success');
     expect(badgeClass('order', 'REFUNDED')).toBe('text-bg-info');
     expect(badgeClass('order', 'CHARGEBACK')).toBe('text-bg-danger');
+    expect(badgeClass('order', 'CANCELLED')).toBe('text-bg-danger');
+    expect(badgeClass('order', 'EXPIRED')).toBe('text-bg-danger');
+    expect(badgeClass('fulfillment', 'REVOKED')).toBe('text-bg-danger');
+    expect(badgeClass('shipping', 'RETURNED')).toBe('text-bg-danger');
     expect(badgeClass('delivery', 'SENT')).toBe('text-bg-info');
     expect(badgeClass('delivery', 'WAITING_SERVER')).toBe('text-bg-warning');
     expect(badgeClass('webhook', 'FAILED')).toBe('text-bg-warning');

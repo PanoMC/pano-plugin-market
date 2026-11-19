@@ -1,6 +1,6 @@
 <div class="form-control d-flex flex-wrap align-items-center gap-1 h-auto" class:is-invalid={flash}>
   {#each values as value (value)}
-    <span class="badge text-bg-secondary d-inline-flex align-items-center gap-1">
+    <span class="badge text-bg-primary d-inline-flex align-items-center gap-1">
       {value}
       <button
         class="btn-close btn-close-white"

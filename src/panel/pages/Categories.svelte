@@ -51,6 +51,7 @@
   import { call, errorKey } from '../utils/api.js';
   import { siblingMove } from '../utils/category-gift.js';
   import { pageOf } from '../utils/page.js';
+  import { rowLink } from '../utils/row-link.js';
 
   let { data } = $props();
 
@@ -593,7 +594,10 @@
         </thead>
         <tbody>
           {#each categories as category (category.id)}
-            <tr>
+            <tr
+              class="row-action"
+              use:rowLink={() => openEditModal(category)}
+              title={$_('common.edit')}>
               <th scope="row" class="align-middle text-center" style="width: 50px;">
                 <div class="dropdown position-static">
                   <button
@@ -614,7 +618,7 @@
                   </div>
                 </div>
               </th>
-              <td class="align-middle">
+              <td class="align-middle text-nowrap">
                 <a href="#" class="d-flex align-items-center justify-content-center bg-primary-subtle rounded overflow-hidden text-decoration-none focus-ring" style="width: 40px; height: 40px;" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
                   {#if category.image}
                     <img src={category.image} alt={category.name} class="w-100 h-100 object-fit-cover" />
@@ -629,25 +633,28 @@
                   {/if}
                 </a>
               </td>
-              <td class="align-middle">
-                <a href="#" class="d-flex align-items-center gap-3 text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
+              <td class="align-middle text-nowrap">
+                <a href="#" class="d-flex align-items-center gap-3 rounded text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCategoryModal" onclick={(e) => { e.preventDefault(); openEditModal(category); }}>
                   <div class="d-flex align-items-center justify-content-center bg-primary-subtle rounded" style="width: 32px; height: 32px; flex-shrink: 0;">
                     <i class="fas {category.icon} fs-6" style="color: {category.color}"></i>
                   </div>
-                  <div>
-                    <div class="">
+                  <div style="min-width: 0; max-width: 300px;">
+                    <div class="text-truncate" title={category.name}>
                       {category.name}
                       {#if category.tiered}
                         <span class="badge text-bg-info ms-1">{$_('pages.categories.tiered')}</span>
                       {/if}
                     </div>
-                    <div class="small text-truncate d-none d-md-block" style="max-width: 300px;">
+                    <div
+                      class="small text-truncate d-none d-md-block"
+                      style="max-width: 300px;"
+                      title={category.description || '-'}>
                       {category.description || '-'}
                     </div>
                   </div>
                 </a>
               </td>
-              <td class="align-middle text-center">
+              <td class="align-middle text-center text-nowrap">
                 {#if category.status === 'active'}
                   <span class="badge text-bg-success">{$_('common.active')}</span>
                 {:else if category.status === 'hidden'}
@@ -656,7 +663,7 @@
                   <span class="badge text-bg-danger">{$_('common.inactive')}</span>
                 {/if}
               </td>
-              <td class="align-middle text-center">
+              <td class="align-middle text-center text-nowrap">
                 <span>{$_('pages.categories.product-count-value', { values: { count: category.productsCount } })}</span>
               </td>
             </tr>

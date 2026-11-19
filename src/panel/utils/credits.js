@@ -127,7 +127,7 @@ export function creditBadgeClass(row) {
   const d = direction(row);
   if (d > 0) return 'text-bg-success';
   if (d < 0) return 'text-bg-danger';
-  return 'text-bg-secondary';
+  return 'text-bg-primary';
 }
 
 /** "+12.5" / "-3" / "7" in credits (no unit); `format` formats the absolute value. */

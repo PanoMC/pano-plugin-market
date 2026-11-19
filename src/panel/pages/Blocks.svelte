@@ -66,7 +66,12 @@
               {#each blocks as block (block.id)}
                 {@const actions = rowActions(block, user)}
                 {@const expiry = expiryState(block, now)}
-                <tr>
+                <tr
+                  class="row-action"
+                  use:rowLink={block.orderId
+                    ? `${base}/market/orders/detail/${block.orderId}`
+                    : null}
+                  title={block.orderId ? $_('pages.blocks.actions.view-order') : undefined}>
                   <th class="align-middle" scope="row">
                     {#if actions.length > 0}
                       <div class="dropdown position-static">
@@ -80,7 +85,9 @@
                         </button>
                         <div class="dropdown-menu dropdown-menu-start">
                           {#if actions.includes('view-order')}
-                            <a class="dropdown-item" href="{base}/market/orders/detail/{block.orderId}">
+                            <a
+                              class="dropdown-item rounded focus-ring text-decoration-none"
+                              href="{base}/market/orders/detail/{block.orderId}">
                               <i class="fa-solid fa-eye me-2" aria-hidden="true"></i>
                               {$_('pages.blocks.actions.view-order')}
                             </a>
@@ -99,8 +106,8 @@
                     {/if}
                   </th>
                   <td class="text-nowrap">{typeLabel(block.type)}</td>
-                  <td class="font-monospace text-break">{block.value}</td>
-                  <td>{block.reason || '—'}</td>
+                  <td class="font-monospace text-nowrap"><div class="text-truncate" style="max-width: 200px;" title={block.value}>{block.value}</div></td>
+                  <td class="text-nowrap"><div class="text-truncate" style="max-width: 280px;" title={block.reason || '—'}>{block.reason || '—'}</div></td>
                   <td class="text-nowrap">
                     {#if block.source === 'CHARGEBACK'}
                       <span class="badge text-bg-danger">{$_('enums.block-source.CHARGEBACK')}</span>
@@ -108,7 +115,7 @@
                       {sourceLabel(block.source)}
                     {/if}
                   </td>
-                  <td>{block.hitCount ?? 0}</td>
+                  <td class="text-nowrap">{block.hitCount ?? 0}</td>
                   <td class="text-nowrap">{dateText(block.lastHitAt)}</td>
                   <td class="text-nowrap">
                     {#if expiry === 'never'}
@@ -192,6 +199,7 @@
   import { gotoList } from '../utils/list.js';
   import { pageOf } from '../utils/page.js';
   import { currentLocale } from '../utils/locale.js';
+  import { rowLink } from '../utils/row-link.js';
   import { can } from '../utils/permissions.js';
   import { toastError } from '../utils/toast.js';
 

@@ -57,7 +57,7 @@
             <label class="form-check-label" for="setting-mailDisabledKinds-{kind}">
               {$_(`enums.mail-kind.${kind}`)}
               {#if isServiceMailKind(kind)}
-                <span class="badge text-bg-secondary ms-1"
+                <span class="badge text-bg-primary ms-1"
                   >{$_('settings.mail.service-badge')}</span>
               {/if}
             </label>

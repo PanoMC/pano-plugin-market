@@ -3,6 +3,12 @@
 export const REVOKE_PENDING_GRACE_MS = 10 * 60 * 1000;
 export const MAX_MISSING_SHOWN = 10;
 
+/**
+ * Where the component is installed from: the public downloads page. The alert is about the
+ * product, not about this panel's own jar, so its link never points at `server.downloadUrl`.
+ */
+export const MC_DOWNLOAD_URL = 'https://panomc.com/downloads';
+
 const BAD_PROVIDER_STATES = ['UNAVAILABLE', 'INCOMPATIBLE'];
 
 /** Only http(s) URLs may become a link target (the value comes from another system). */
@@ -16,29 +22,14 @@ export function safeUrl(value) {
   }
 }
 
-/** Server rows that need a banner entry: component missing / outdated, or offline with a backlog. */
-export function mcPluginItems(servers) {
-  const items = [];
-  for (const server of Array.isArray(servers) ? servers : []) {
-    const count = Number(server.waitingDeliveries) || 0;
-    const base = {
-      id: server.id,
-      name: server.name,
-      count,
-      downloadUrl: safeUrl(server.downloadUrl),
-    };
-    if (server.marketState === 'COMPONENT_MISSING') items.push({ ...base, kind: 'missing' });
-    else if (server.marketState === 'VERSION_MISMATCH') {
-      items.push({
-        ...base,
-        kind: 'mismatch',
-        have: String(server.mcComponentVersion ?? ''),
-        want: String(server.requiredVersion ?? ''),
-      });
-    } else if (server.marketState === 'OFFLINE' && count > 0)
-      items.push({ ...base, kind: 'offline' });
-  }
-  return items;
+/** True when a server needs the banner entry: component missing / outdated, or offline with a backlog. */
+export function mcPluginNeedsAttention(servers) {
+  return (Array.isArray(servers) ? servers : []).some((server) => {
+    if (server.marketState === 'COMPONENT_MISSING' || server.marketState === 'VERSION_MISMATCH') {
+      return true;
+    }
+    return server.marketState === 'OFFLINE' && (Number(server.waitingDeliveries) || 0) > 0;
+  });
 }
 
 function missingObjects(schema) {
@@ -98,12 +89,8 @@ export function alertsFor(health, servers, ctx, options = {}) {
     add('test-mode', 'warning', { links: link(['SET'], '/market/settings', 'open-settings') });
   }
 
-  const mcItems = mcPluginItems(servers);
-  if (mcItems.length > 0) {
-    add('mc-plugin', 'warning', {
-      items: mcItems,
-      links: link(['OV'], '/market/deliveries?status=WAITING_SERVER', 'open-deliveries'),
-    });
+  if (mcPluginNeedsAttention(servers)) {
+    add('mc-plugin', 'warning', { downloadUrl: MC_DOWNLOAD_URL });
   }
 
   const mailTooOld = health?.mail === 'HOST_TOO_OLD';

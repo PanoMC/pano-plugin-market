@@ -70,11 +70,11 @@
             {$_('common.save')}
           </button>
           <button
-            class="btn btn-outline-secondary"
+            class="btn btn-primary"
             type="button"
             disabled={busy}
+            title={$_('pages.order-detail.exchange-rate.refresh')}
             aria-label={$_('pages.order-detail.exchange-rate.refresh')}
-            use:tooltip={[$_('pages.order-detail.exchange-rate.refresh')]}
             onclick={refreshRate}>
             <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
           </button>

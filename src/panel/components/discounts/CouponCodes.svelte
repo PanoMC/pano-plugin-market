@@ -4,6 +4,7 @@
   import { buildQueryParams } from '@panomc/sdk/utils/api';
   import { _ } from '../../../i18n';
   import { currentLocale, fmt } from '../../utils/locale.js';
+  import { rowLink } from '../../utils/row-link.js';
 
   // All view state (page/search/status) is URL-driven: the page load() reads the
   // query params and passes the resulting list + the current filter values down as
@@ -105,7 +106,10 @@
         </thead>
         <tbody>
           {#each coupons as coupon (coupon.id)}
-            <tr>
+            <tr
+              class="row-action"
+              use:rowLink={() => onEdit(coupon)}
+              title={$_('common.edit')}>
               <th scope="row">
                 <div class="dropdown position-static">
                   <button
@@ -132,12 +136,12 @@
                   </div>
                 </div>
               </th>
-              <td>
-                <button type="button" class="btn btn-link p-0 border-0 align-baseline font-monospace text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCouponModal" onclick={() => onEdit(coupon)}>
+              <td class="text-nowrap">
+                <button type="button" class="btn btn-link p-0 border-0 align-baseline font-monospace rounded text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createCouponModal" onclick={() => onEdit(coupon)}>
                   {coupon.code}
                 </button>
               </td>
-              <td>
+              <td class="text-nowrap">
                 <span class="font-monospace">
                   {#if coupon.unit === 'PERCENT'}
                     %{coupon.discount}
@@ -146,7 +150,7 @@
                   {/if}
                 </span>
               </td>
-              <td>
+              <td class="text-nowrap">
                 <span class="font-monospace">
                   {#if coupon.redeemLimit == null}
                     {coupon.usedCount ?? 0} / ∞
@@ -155,14 +159,14 @@
                   {/if}
                 </span>
               </td>
-              <td>
+              <td class="text-nowrap">
                 {#if coupon.status === 'ACTIVE'}
                   <span class="badge text-bg-success">{$_('common.active')}</span>
                 {:else}
                   <span class="badge text-bg-danger">{$_('common.inactive')}</span>
                 {/if}
               </td>
-              <td>
+              <td class="text-nowrap">
                 {#if !coupon.expiryDate}
                   <span class="text-body-secondary font-monospace" style="font-size: 0.85rem;">{$_('discounts.coupons.validity-none')}</span>
                 {:else}

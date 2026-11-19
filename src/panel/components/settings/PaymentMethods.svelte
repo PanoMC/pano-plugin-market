@@ -201,7 +201,7 @@
                     </button>
                     {#if isHttpUrl(provider.descriptor?.docsUrl)}
                       <a
-                        class="dropdown-item"
+                        class="dropdown-item rounded focus-ring text-decoration-none"
                         href={provider.descriptor.docsUrl}
                         target="_blank"
                         rel="noopener">

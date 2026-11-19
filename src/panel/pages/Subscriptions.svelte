@@ -19,7 +19,10 @@
           <FilterDropdown
             label={$_('common.status')}
             current={currentTab}
-            options={STATUS_TABS.map((tab) => ({ ...tab, label: $_(`pages.subscriptions.tab.${tab.key}`) }))}
+            options={STATUS_TABS.map((tab) => ({
+              ...tab,
+              label: $_(`pages.subscriptions.tab.${tab.key}`),
+            }))}
             onSelect={(tab) => go({ status: tab.value })} />
         </CardFilters>
       </CardHeader>
@@ -32,20 +35,30 @@
             <thead>
               <tr>
                 <th class="align-middle text-nowrap" scope="col"></th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.subscriptions.table.id')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.subscriptions.table.player')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.subscriptions.table.product')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.subscriptions.table.price')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.subscriptions.table.id')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.subscriptions.table.player')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.subscriptions.table.product')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.subscriptions.table.price')}</th>
                 <th class="align-middle text-nowrap" scope="col">{$_('common.status')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.subscriptions.table.method')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.subscriptions.table.period-end')}</th>
-                <th class="align-middle text-nowrap" scope="col">{$_('pages.subscriptions.table.mode')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.subscriptions.table.method')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.subscriptions.table.period-end')}</th>
+                <th class="align-middle text-nowrap" scope="col"
+                  >{$_('pages.subscriptions.table.mode')}</th>
               </tr>
             </thead>
             <tbody>
               {#each subscriptions as subscription (subscription.id)}
                 {@const actions = actionsFor(subscription, user)}
-                <tr>
+                <tr
+                  class="row-action"
+                  use:rowLink={`${base}/market/subscriptions/detail/${subscription.id}`}
+                  title={$_('pages.subscriptions.actions.view')}>
                   <th class="align-middle" scope="row">
                     <div class="dropdown position-static">
                       <button
@@ -57,7 +70,9 @@
                         <i class="fas fa-ellipsis-v" aria-hidden="true"></i>
                       </button>
                       <div class="dropdown-menu dropdown-menu-start">
-                        <a class="dropdown-item" href="{base}/market/subscriptions/detail/{subscription.id}">
+                        <a
+                          class="dropdown-item rounded focus-ring text-decoration-none"
+                          href="{base}/market/subscriptions/detail/{subscription.id}">
                           <i class="fa-solid fa-eye me-2" aria-hidden="true"></i>
                           {$_('pages.subscriptions.actions.view')}
                         </a>
@@ -65,7 +80,8 @@
                           <button
                             type="button"
                             class="dropdown-item"
-                            onclick={() => confirmRetry(confirmModal, $_, subscription, () => go({}))}>
+                            onclick={() =>
+                              confirmRetry(confirmModal, $_, subscription, () => go({}))}>
                             <i class="fa-solid fa-rotate-right me-2" aria-hidden="true"></i>
                             {$_('pages.subscriptions.actions.retry')}
                           </button>
@@ -83,7 +99,11 @@
                     </div>
                   </th>
                   <td class="text-nowrap">
-                    <a href="{base}/market/subscriptions/detail/{subscription.id}">#{subscription.id}</a>
+                    <a
+                      class="rounded focus-ring text-decoration-none"
+                      href="{base}/market/subscriptions/detail/{subscription.id}">
+                      #{subscription.id}
+                    </a>
                   </td>
                   <td class="text-nowrap">
                     {#if subscription.playerUsername}
@@ -92,7 +112,11 @@
                       —
                     {/if}
                   </td>
-                  <td>{subscription.productName ?? '—'}</td>
+                  <td class="text-nowrap">
+                    <ProductLink
+                      productId={subscription.productId}
+                      name={subscription.productName} />
+                  </td>
                   <td class="text-nowrap">{priceText(subscription, fmt.money, duration)}</td>
                   <td class="text-nowrap">
                     <StatusBadge kind="subscription" value={subscription.status} />
@@ -102,10 +126,17 @@
                       </span>
                     {/if}
                     {#if subscription.testMode}
-                      <span class="badge text-bg-secondary ms-1">{$_('common.test')}</span>
+                      <span class="badge text-bg-warning ms-1">{$_('common.test')}</span>
                     {/if}
                   </td>
-                  <td class="text-nowrap">{methodText(subscription) || '—'}</td>
+                  <td class="text-nowrap">
+                    <div
+                      class="text-truncate"
+                      style="max-width: 200px;"
+                      title={methodText(subscription) || '—'}>
+                      {methodText(subscription) || '—'}
+                    </div>
+                  </td>
                   <td class="text-nowrap">{dateText(subscription.currentPeriodEnd)}</td>
                   <td class="text-nowrap">
                     {subscription.mode ? $_(`enums.subscription-mode.${subscription.mode}`) : '—'}
@@ -174,6 +205,8 @@
   import { gotoList } from '../utils/list.js';
   import { pageOf } from '../utils/page.js';
   import { currentLocale, fmt } from '../utils/locale.js';
+  import { rowLink } from '../utils/row-link.js';
+  import ProductLink from '../components/ProductLink.svelte';
   import {
     STATUS_TABS,
     actionsFor,
@@ -199,7 +232,8 @@
   const currentTab = $derived(activeTab(filters.status));
 
   const duration = (unit, count) => formatDuration(unit, count, $_);
-  const dateText = (epoch) => (epoch ? new Date(Number(epoch)).toLocaleString(currentLocale()) : '—');
+  const dateText = (epoch) =>
+    epoch ? new Date(Number(epoch)).toLocaleString(currentLocale()) : '—';
 
   // The URL is the source of truth; a filter or search change always drops `page`.
   function go(overrides) {

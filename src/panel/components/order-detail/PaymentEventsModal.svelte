@@ -4,7 +4,7 @@
       <div class="modal-header">
         <h5 class="modal-title">
           {$_('modals.payment-events.title')}
-          {#if payment}<span class="text-body-secondary">#{payment.id}</span>{/if}
+          {#if payment}<span>#{payment.id}</span>{/if}
         </h5>
         <button
           type="button"
@@ -58,23 +58,38 @@
                     <td class="align-middle text-nowrap">
                       <DateComponent time={event.createdAt} />
                     </td>
-                    <td class="align-middle">{event.direction ?? '—'}</td>
-                    <td class="align-middle">{event.channel ?? '—'}</td>
-                    <td class="align-middle">
-                      <div>{event.eventKey ?? '—'}</div>
+                    <td class="align-middle text-nowrap">{event.direction ?? '—'}</td>
+                    <td class="align-middle text-nowrap">{event.channel ?? '—'}</td>
+                    <td class="align-middle text-nowrap">
+                      <div
+                        class="text-truncate"
+                        style="max-width: 240px;"
+                        title={event.eventKey ?? '—'}>
+                        {event.eventKey ?? '—'}
+                      </div>
                       {#if event.eventTypes?.length}
-                        <div class="text-body-secondary">
-                          {Array.isArray(event.eventTypes)
-                            ? event.eventTypes.join(', ')
-                            : event.eventTypes}
+                        {@const types = Array.isArray(event.eventTypes)
+                          ? event.eventTypes.join(', ')
+                          : event.eventTypes}
+                        <div
+                          class="text-body-secondary text-truncate"
+                          style="max-width: 240px;"
+                          title={types}>
+                          {types}
                         </div>
                       {/if}
                       {#if event.error}
-                        <div class="text-danger">{event.error}</div>
+                        <div
+                          class="text-danger text-truncate"
+                          style="max-width: 280px;"
+                          title={event.error}>
+                          {event.error}
+                        </div>
                       {/if}
                     </td>
-                    <td class="align-middle"><StatusBadge kind="event" value={event.status} /></td>
-                    <td class="align-middle">
+                    <td class="align-middle text-nowrap"
+                      ><StatusBadge kind="event" value={event.status} /></td>
+                    <td class="align-middle text-nowrap">
                       <i
                         class="fa-solid {event.verified
                           ? 'fa-circle-check text-success'
@@ -82,7 +97,7 @@
                         role="img"
                         aria-label={event.verified ? $_('common.yes') : $_('common.no')}></i>
                     </td>
-                    <td class="align-middle">{event.responseStatus ?? '—'}</td>
+                    <td class="align-middle text-nowrap">{event.responseStatus ?? '—'}</td>
                     <td class="align-middle text-nowrap">{event.remoteIp ?? '—'}</td>
                   </tr>
                   {#if event.body !== undefined || event.headers !== undefined}

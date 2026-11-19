@@ -97,5 +97,7 @@ export function renewalBadge(status) {
   if (status === 'PAID') return 'text-bg-success';
   if (status === 'PENDING') return 'text-bg-warning';
   if (status === 'FAILED') return 'text-bg-danger';
-  return 'text-bg-secondary';
+  // SKIPPED is a passive state; anything unknown gets the default badge colour
+  if (status === 'SKIPPED') return 'text-bg-secondary';
+  return 'text-bg-primary';
 }

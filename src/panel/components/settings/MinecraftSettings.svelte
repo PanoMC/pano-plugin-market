@@ -257,7 +257,7 @@
                         {/if}
                         {#if row.downloadUrl}
                           <a
-                            class="dropdown-item"
+                            class="dropdown-item rounded focus-ring text-decoration-none"
                             href={row.downloadUrl}
                             target="_blank"
                             rel="noopener">
@@ -268,9 +268,13 @@
                       </div>
                     </div>
                   </th>
-                  <td class="align-middle">{row.name}</td>
-                  <td class="align-middle">{row.type}</td>
-                  <td class="align-middle">
+                  <td class="align-middle text-nowrap">
+                    <div class="text-truncate" style="max-width: 240px;" title={row.name}>
+                      {row.name}
+                    </div>
+                  </td>
+                  <td class="align-middle text-nowrap">{row.type}</td>
+                  <td class="align-middle text-nowrap">
                     {#if row.state}
                       <span class="badge {row.stateClass}">
                         {$_(`settings.minecraft.state.${row.state}`)}
@@ -284,13 +288,13 @@
                       })}
                     {/if}
                   </td>
-                  <td class="align-middle">
+                  <td class="align-middle text-nowrap">
                     {#each row.integrations as integration (integration)}
-                      <span class="badge text-bg-secondary me-1">{integration}</span>
+                      <span class="badge text-bg-primary me-1">{integration}</span>
                     {/each}
                   </td>
-                  <td class="align-middle">{row.waiting}</td>
-                  <td class="align-middle">
+                  <td class="align-middle text-nowrap">{row.waiting}</td>
+                  <td class="align-middle text-nowrap">
                     {#if row.overrides > 0}
                       <span class="badge text-bg-info">
                         {$_('settings.minecraft.servers.override-badge', {

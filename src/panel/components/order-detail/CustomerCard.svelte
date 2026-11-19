@@ -35,7 +35,8 @@
       <dt class="col-4 text-body-secondary fw-normal">{$_('pages.order-detail.customer.email')}</dt>
       <dd class="col-8 text-break">
         {#if order?.email}
-          {order.email}
+          {emailShown ? order.email : maskEmail(order.email)}
+          <RevealButton bind:revealed={emailShown} />
           <CopyButton text={order.email} />
         {:else}
           <span class="text-body-secondary">—</span>
@@ -60,7 +61,10 @@
 
       {#if order?.clientIp}
         <dt class="col-4 text-body-secondary fw-normal">{$_('pages.order-detail.customer.ip')}</dt>
-        <dd class="col-8">{order.clientIp}</dd>
+        <dd class="col-8 text-break">
+          {ipShown ? order.clientIp : maskIp(order.clientIp)}
+          <RevealButton bind:revealed={ipShown} />
+        </dd>
       {/if}
 
       {#if order?.legalAcceptedAt}
@@ -75,6 +79,12 @@
         </dd>
       {/if}
     </dl>
+    {#if order && 'billingInfo' in order}
+      <AddressCard address={order.billingInfo} billing embedded />
+    {/if}
+    {#if shipping && order && 'shippingAddress' in order}
+      <AddressCard address={order.shippingAddress} embedded />
+    {/if}
   </div>
 </div>
 
@@ -83,7 +93,15 @@
   import { _ } from '../../../i18n';
   import CopyButton from '../CopyButton.svelte';
   import PlayerCell from '../PlayerCell.svelte';
+  import RevealButton from '../RevealButton.svelte';
+  import { maskEmail, maskIp } from '../../utils/mask.js';
+  import AddressCard from './AddressCard.svelte';
   import { isKnownOrderSource } from './model.js';
 
-  let { order = null } = $props();
+  // shipping: the physical shipping feature is on (the shipping address is shown then, as before).
+  let { order = null, shipping = false } = $props();
+
+  // Email and IP are personal data: masked until the eye button reveals them.
+  let emailShown = $state(false);
+  let ipShown = $state(false);
 </script>

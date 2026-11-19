@@ -1,11 +1,4 @@
 <MarketLayout area="orders">
-  {#snippet left()}
-    <a class="btn btn-link px-0" href="{base}/market/orders">
-      <i class="fa-solid fa-arrow-left me-1" aria-hidden="true"></i>
-      {$_('pages.create-order.back')}
-    </a>
-  {/snippet}
-
   {#if data.error}
     <LoadError error={data.error} />
   {:else}

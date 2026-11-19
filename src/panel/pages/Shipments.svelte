@@ -20,7 +20,10 @@
           <FilterDropdown
             label={$_('common.status')}
             current={currentTab}
-            options={STATUS_TABS.map((tab) => ({ ...tab, label: $_(`pages.shipments.tab.${tab.key}`) }))}
+            options={STATUS_TABS.map((tab) => ({
+              ...tab,
+              label: $_(`pages.shipments.tab.${tab.key}`),
+            }))}
             onSelect={(tab) => (tab.href ? goto(base + tab.href) : go({ status: tab.value }))} />
         </CardFilters>
       </CardHeader>
@@ -54,7 +57,10 @@
             <tbody>
               {#each shipments as shipment (shipment.id)}
                 {@const actions = rowActions(shipment, user)}
-                <tr>
+                <tr
+                  class="row-action"
+                  use:rowLink={`${base}/market/orders/detail/${shipment.orderId}`}
+                  title={$_('pages.shipments.actions.view')}>
                   <th class="align-middle" scope="row">
                     <div class="dropdown position-static">
                       <button
@@ -66,12 +72,11 @@
                         aria-label={$_('common.actions')}>
                         <i class="fa-solid fa-ellipsis-vertical" aria-hidden="true"></i>
                       </button>
-                      <div
-                        class="dropdown-menu dropdown-menu-start">
+                      <div class="dropdown-menu dropdown-menu-start">
                         {#each actions as action (action)}
                           {#if action === 'label' || action === 'generic-label'}
                             <a
-                              class="dropdown-item"
+                              class="dropdown-item rounded focus-ring text-decoration-none"
                               href={labelPath(base, shipment.id, action === 'generic-label')}
                               target="_blank"
                               rel="noopener"
@@ -95,22 +100,44 @@
                     </div>
                   </th>
                   <td class="align-middle text-nowrap">
-                    <a href="{base}/market/orders/detail/{shipment.orderId}">#{shipment.orderId}</a>
+                    <a
+                      class="rounded focus-ring text-decoration-none"
+                      href="{base}/market/orders/detail/{shipment.orderId}">#{shipment.orderId}</a>
                   </td>
-                  <td class="align-middle">
+                  <td class="align-middle text-nowrap">
                     {#if shipment.toAddress}
-                      <div>{recipientName(shipment.toAddress) || '—'}</div>
-                      <div class="text-body-secondary">{shipment.toAddress.city ?? ''}</div>
+                      <div
+                        class="text-truncate"
+                        style="max-width: 240px;"
+                        title={recipientName(shipment.toAddress) || '—'}>
+                        {recipientName(shipment.toAddress) || '—'}
+                      </div>
+                      <div
+                        class="text-body-secondary text-truncate"
+                        style="max-width: 240px;"
+                        title={shipment.toAddress.city ?? ''}>
+                        {shipment.toAddress.city ?? ''}
+                      </div>
                     {:else}
                       —
                     {/if}
                   </td>
-                  <td class="align-middle text-nowrap"
-                    >{shipment.carrierName ?? shipment.providerId ?? '—'}</td>
+                  <td class="align-middle text-nowrap">
+                    <div
+                      class="text-truncate"
+                      style="max-width: 200px;"
+                      title={shipment.carrierName ?? shipment.providerId ?? '—'}>
+                      {shipment.carrierName ?? shipment.providerId ?? '—'}
+                    </div>
+                  </td>
                   <td class="align-middle text-nowrap">
                     {#if shipment.trackingNumber}
                       {#if isHttpUrl(shipment.trackingUrl)}
-                        <a href={shipment.trackingUrl} target="_blank" rel="noopener">
+                        <a
+                          class="rounded focus-ring text-decoration-none"
+                          href={shipment.trackingUrl}
+                          target="_blank"
+                          rel="noopener">
                           {shipment.trackingNumber}
                         </a>
                       {:else}
@@ -198,6 +225,7 @@
   import { gotoList } from '../utils/list.js';
   import { pageOf } from '../utils/page.js';
   import { currentLocale } from '../utils/locale.js';
+  import { rowLink } from '../utils/row-link.js';
   import {
     STATUS_TABS,
     activeTab,

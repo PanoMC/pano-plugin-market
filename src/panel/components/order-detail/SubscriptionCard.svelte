@@ -13,7 +13,9 @@
         {/if}
       </dl>
       <div>
-        <a class="btn btn-link px-0" href="{base}/market/subscriptions/detail/{subscription.id}">
+        <a
+          class="btn btn-link px-0 rounded focus-ring text-decoration-none"
+          href="{base}/market/subscriptions/detail/{subscription.id}">
           {$_('pages.order-detail.subscription.open')}
         </a>
       </div>

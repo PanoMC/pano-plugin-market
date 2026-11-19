@@ -34,15 +34,20 @@
               <th scope="row" class="align-middle">
                 <ControlDropdown items={menu(dispute)} />
               </th>
-              <td class="align-middle"><StatusBadge kind="dispute" value={dispute.status} /></td>
+              <td class="align-middle text-nowrap"
+                ><StatusBadge kind="dispute" value={dispute.status} /></td>
               <td class="align-middle text-nowrap">
                 {fmt.money(dispute.amount, dispute.currency ?? currency)}
               </td>
-              <td class="align-middle">
-                {#if dispute.reason}{dispute.reason}{:else}<span class="text-body-secondary">—</span
-                  >{/if}
+              <td class="align-middle text-nowrap">
+                {#if dispute.reason}<div
+                    class="text-truncate"
+                    style="max-width: 280px;"
+                    title={dispute.reason}>
+                    {dispute.reason}
+                  </div>{:else}<span class="text-body-secondary">—</span>{/if}
               </td>
-              <td class="align-middle">
+              <td class="align-middle text-nowrap">
                 {#if dispute.origin && isKnownDisputeOrigin(dispute.origin)}
                   {$_(`enums.dispute-origin.${dispute.origin}`)}
                 {:else}

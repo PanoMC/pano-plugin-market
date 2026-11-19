@@ -126,7 +126,7 @@ class SubscriptionViews(
 
     /** A row of the panel list (09 section 13). */
     fun panelRow(row: MarketSubscription): JsonObject = JsonObject()
-        .put("id", row.id).put("playerUsername", row.playerUsername).put("userId", row.userId).put("productName", row.productName).put("providerId", row.providerId)
+        .put("id", row.id).put("playerUsername", row.playerUsername).put("userId", row.userId).put("productId", row.productId).put("productName", row.productName).put("providerId", row.providerId)
         .put("mode", row.mode.name).put("status", row.status.name).put("price", MoneyUtil.toDecimal(row.price)).put("currency", row.currency)
         .put("intervalUnit", row.intervalUnit.name).put("intervalCount", row.intervalCount).put("cycleCount", row.cycleCount).put("maxCycles", row.maxCycles)
         .put("currentPeriodEnd", row.currentPeriodEnd).put("nextChargeAt", row.nextChargeAt).put("graceEndsAt", row.graceEndsAt)

@@ -9,6 +9,7 @@
         data-field="name"
         maxlength="255"
         autocomplete="off"
+        bind:this={nameInput}
         placeholder={$_('pages.create-product.name-placeholder')}
         aria-label={$_('pages.create-product.name-placeholder')}
         bind:value={product.name}
@@ -124,11 +125,16 @@
 </div>
 
 <script>
+  import { onMount } from 'svelte';
   import ClientEditor from '../ClientEditor.svelte';
   import { _ } from '../../../i18n';
   import { fieldErrorKey, slugify } from './model.js';
 
   let { product = $bindable(), errors = {} } = $props();
+
+  // The editor opens on the general tab, so the title is where typing starts.
+  let nameInput = $state(null);
+  onMount(() => nameInput?.focus());
 
   // The slug follows the name until the admin edits it; a saved product never changes its slug on
   // its own (the URL is public).

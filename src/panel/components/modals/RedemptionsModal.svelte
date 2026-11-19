@@ -48,12 +48,14 @@
                   <tr>
                     <td class="align-middle text-nowrap">
                       {#if can(user, 'OV')}
-                        <a href="{base}/market/orders/detail/{row.orderId}">#{row.orderId}</a>
+                        <a
+                          class="rounded focus-ring text-decoration-none"
+                          href="{base}/market/orders/detail/{row.orderId}">#{row.orderId}</a>
                       {:else}
                         #{row.orderId}
                       {/if}
                     </td>
-                    <td class="align-middle">
+                    <td class="align-middle text-nowrap">
                       {#if row.playerUsername}
                         <PlayerCell username={row.playerUsername} />
                       {:else}

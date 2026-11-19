@@ -105,7 +105,10 @@
                   </div>
                 </th>
                 <td class="text-nowrap">
-                  {zone.name}
+                  <span
+                    class="d-inline-block text-truncate align-bottom"
+                    style="max-width: 240px;"
+                    title={zone.name}>{zone.name}</span>
                   {#if zone.shadowedBy}
                     <i
                       class="fa-solid fa-triangle-exclamation text-warning ms-1"
@@ -118,7 +121,11 @@
                   {#if summary.everywhere}
                     {$_('settings.shipping-zones.everywhere')}
                   {:else}
-                    {summary.shown.join(', ')}{#if summary.more > 0}
+                    <span
+                      class="d-inline-block text-truncate align-bottom"
+                      style="max-width: 240px;"
+                      title={summary.shown.join(', ')}>{summary.shown.join(', ')}</span
+                    >{#if summary.more > 0}
                       <span class="text-body-secondary">
                         {$_('settings.shipping-zones.more', { values: { count: summary.more } })}
                       </span>

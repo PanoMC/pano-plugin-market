@@ -61,7 +61,7 @@
                     </button>
                     <div class="dropdown-menu dropdown-menu-start">
                       <a
-                        class="dropdown-item"
+                        class="dropdown-item rounded focus-ring text-decoration-none"
                         href="{base}/market/settings/shipping-method?id={method.id}">
                         <i class="fa-solid fa-pen me-2" aria-hidden="true"></i>
                         {$_('common.edit')}
@@ -93,7 +93,10 @@
                   </div>
                 </th>
                 <td class="text-nowrap">
-                  {method.name}
+                  <span
+                    class="d-inline-block text-truncate align-bottom"
+                    style="max-width: 240px;"
+                    title={method.name}>{method.name}</span>
                   {#if (method.rates ?? []).length === 0}
                     <span
                       class="badge text-bg-warning ms-1"
@@ -102,7 +105,14 @@
                     </span>
                   {/if}
                 </td>
-                <td class="text-nowrap">{providerLabel(method.providerId)}</td>
+                <td class="text-nowrap">
+                  <div
+                    class="text-truncate"
+                    style="max-width: 200px;"
+                    title={providerLabel(method.providerId)}>
+                    {providerLabel(method.providerId)}
+                  </div>
+                </td>
                 <td class="text-nowrap">
                   {$_(`enums.shipping-rate-source.${rateSourceOf(method.rateSource)}`)}
                 </td>
@@ -179,8 +189,7 @@
     if (!methodsResult.ok) return methodsResult.error;
     methods = Array.isArray(methodsResult.body.items) ? methodsResult.body.items : [];
     // names of the providers are a nicety: a failed carrier list falls back to the raw ids
-    if (carriersResult.ok)
-      carriers = carriersResult.body.items ?? [];
+    if (carriersResult.ok) carriers = carriersResult.body.items ?? [];
     return null;
   }
 

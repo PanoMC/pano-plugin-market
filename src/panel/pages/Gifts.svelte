@@ -60,6 +60,7 @@
   import { giftRedemptionTarget, usedCell } from '../utils/category-gift.js';
   import { currentLocale } from '../utils/locale.js';
   import { pageOf } from '../utils/page.js';
+  import { rowLink } from '../utils/row-link.js';
 
   let { data } = $props();
 
@@ -228,7 +229,10 @@
           </thead>
           <tbody>
             {#each gifts as gift (gift.id)}
-              <tr>
+              <tr
+                class="row-action"
+                use:rowLink={() => openEditModal(gift)}
+                title={$_('common.edit')}>
                 <th scope="row">
                   <div class="dropdown position-static">
                     <button
@@ -255,24 +259,24 @@
                     </div>
                   </div>
                 </th>
-                <td>{gift.name || '—'}</td>
-                <td>
-                  <a href="#" class="font-monospace text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createGiftModal" onclick={(e) => { e.preventDefault(); openEditModal(gift); }}>
+                <td class="text-nowrap"><div class="text-truncate" style="max-width: 240px;" title={gift.name || '—'}>{gift.name || '—'}</div></td>
+                <td class="text-nowrap">
+                  <a href="#" class="font-monospace rounded text-decoration-none focus-ring" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createGiftModal" onclick={(e) => { e.preventDefault(); openEditModal(gift); }}>
                     {gift.code}
                   </a>
                 </td>
-                <td>
-                  <a href="#" class="text-decoration-none focus-ring d-inline-block" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createGiftModal" onclick={(e) => { e.preventDefault(); openEditModal(gift); }}>
+                <td class="text-nowrap">
+                  <a href="#" class="rounded text-decoration-none focus-ring d-inline-block" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createGiftModal" onclick={(e) => { e.preventDefault(); openEditModal(gift); }}>
                     {#if gift.type === 'CREDIT'}
                       <span class="badge bg-primary px-2.5 py-1.5 fw-medium cursor-pointer"><i class="fas fa-coins me-1"></i>{$_('pages.gifts.credit-amount', { values: { amount: gift.creditAmount } })}</span>
                     {:else if gift.type === 'RANDOM'}
                       <span class="badge bg-primary px-2.5 py-1.5 fw-medium cursor-pointer"><i class="fas fa-shuffle me-1"></i>{$_('pages.gifts.random-gift', { values: { count: gift.productNames?.length ?? 0 } })}</span>
                     {:else}
-                      <span class="badge bg-primary px-2.5 py-1.5 fw-medium cursor-pointer"><i class="fas fa-box-open me-1"></i>{gift.productName || '-'}</span>
+                      <span class="badge bg-primary px-2.5 py-1.5 fw-medium cursor-pointer d-inline-block text-truncate align-bottom" style="max-width: 200px;" title={gift.productName || '-'}><i class="fas fa-box-open me-1"></i>{gift.productName || '-'}</span>
                     {/if}
                   </a>
                 </td>
-                <td>
+                <td class="text-nowrap">
                   {#if gift.status === 'ACTIVE'}
                     <span class="badge text-bg-success">{$_('common.active')}</span>
                   {:else}
@@ -280,7 +284,7 @@
                   {/if}
                 </td>
                 <td class="text-nowrap">{usedCell(gift)}</td>
-                <td>
+                <td class="text-nowrap">
                   {#if !gift.expiryDate}
                     <span class="text-body-secondary font-monospace" style="font-size: 0.85rem;">{$_('pages.gifts.no-expiry')}</span>
                   {:else}

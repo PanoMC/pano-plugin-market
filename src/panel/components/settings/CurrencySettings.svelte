@@ -1,3 +1,11 @@
+<style>
+  .currency-mode-option:focus-within {
+    z-index: 2;
+    box-shadow: var(--bs-focus-ring-x, 0) var(--bs-focus-ring-y, 0) var(--bs-focus-ring-blur, 0)
+      var(--bs-focus-ring-width) var(--bs-focus-ring-color);
+  }
+</style>
+
 <ConfirmModal bind:this={confirm} />
 
 {#if loadError}
@@ -22,8 +30,13 @@
                 bind:group={draft.currencyMode} />
               <span>
                 {$_(`enums.currency-mode.${mode}`)}
-                <span class={['form-text', 'd-block', 'mt-0', draft.currencyMode === mode ? 'text-white-50' : 'text-body-secondary']}
-                  >{$_(`settings.currencies.mode-hint.${mode}`)}</span>
+                <span
+                  class={[
+                    'form-text',
+                    'd-block',
+                    'mt-0',
+                    draft.currencyMode === mode ? 'text-white-50' : 'text-body-secondary',
+                  ]}>{$_(`settings.currencies.mode-hint.${mode}`)}</span>
               </span>
             </label>
           {/each}
@@ -38,7 +51,7 @@
           <div class="mb-2 text-capitalize">{$_('settings.currencies.additional')}</div>
           <div class="d-flex flex-wrap gap-2 mb-2">
             {#each draft.additionalCurrencies as code (code)}
-              <span class="badge text-bg-secondary d-inline-flex align-items-center">
+              <span class="badge text-bg-primary d-inline-flex align-items-center">
                 {code}
                 <button
                   type="button"
@@ -140,7 +153,7 @@
                             </div>
                           {/if}
                         {:else}
-                          <span class="text-body-secondary">
+                          <span class="text-body-secondary text-nowrap">
                             {row.rate === null ? '—' : formatRate(row.rate)}
                           </span>
                         {/if}
@@ -405,11 +418,3 @@
     persist();
   }
 </script>
-
-<style>
-  .currency-mode-option:focus-within {
-    z-index: 2;
-    box-shadow: var(--bs-focus-ring-x, 0) var(--bs-focus-ring-y, 0) var(--bs-focus-ring-blur, 0)
-      var(--bs-focus-ring-width) var(--bs-focus-ring-color);
-  }
-</style>

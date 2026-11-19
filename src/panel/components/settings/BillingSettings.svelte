@@ -1,3 +1,11 @@
+<style>
+  .billing-mode-option:focus-within {
+    z-index: 2;
+    box-shadow: var(--bs-focus-ring-x, 0) var(--bs-focus-ring-y, 0) var(--bs-focus-ring-blur, 0)
+      var(--bs-focus-ring-width) var(--bs-focus-ring-color);
+  }
+</style>
+
 <InvoiceSequenceModal bind:this={sequenceModal} onSaved={onSequenceSaved} />
 
 {#if sellerNameNotice(draft)}
@@ -31,7 +39,12 @@
               <span>
                 {$_(`enums.billing-info-mode.${mode}`)}
                 <span
-                  class={['form-text', 'd-block', 'mt-0', draft.billingInfoMode === mode ? 'text-white-50' : 'text-body-secondary']}>
+                  class={[
+                    'form-text',
+                    'd-block',
+                    'mt-0',
+                    draft.billingInfoMode === mode ? 'text-white-50' : 'text-body-secondary',
+                  ]}>
                   {$_(`settings.billing.info-mode-hint.${mode}`)}
                 </span>
               </span>
@@ -252,8 +265,12 @@
                       </div>
                     </div>
                   </th>
-                  <td class="align-middle">{sequence.series}</td>
-                  <td class="align-middle">{sequence.nextNumber}</td>
+                  <td class="align-middle text-nowrap">
+                    <div class="text-truncate" style="max-width: 200px;" title={sequence.series}>
+                      {sequence.series}
+                    </div>
+                  </td>
+                  <td class="align-middle text-nowrap">{sequence.nextNumber}</td>
                 </tr>
               {/each}
             </tbody>
@@ -355,11 +372,3 @@
     }
   }
 </script>
-
-<style>
-  .billing-mode-option:focus-within {
-    z-index: 2;
-    box-shadow: var(--bs-focus-ring-x, 0) var(--bs-focus-ring-y, 0) var(--bs-focus-ring-blur, 0)
-      var(--bs-focus-ring-width) var(--bs-focus-ring-color);
-  }
-</style>

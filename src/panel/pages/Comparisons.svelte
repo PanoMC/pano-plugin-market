@@ -58,6 +58,7 @@
   import FilterDropdown from '../components/FilterDropdown.svelte';
   import { currentLocale } from '../utils/locale.js';
   import { pageOf } from '../utils/page.js';
+  import { rowLink } from '../utils/row-link.js';
 
   const navUser = $derived($page.data?.user);
 
@@ -260,7 +261,10 @@
           </thead>
           <tbody>
             {#each comparisons as comp (comp.id)}
-              <tr>
+              <tr
+                class="row-action"
+                use:rowLink={() => editComparison(comp.id)}
+                title={$_('common.edit')}>
                 <th scope="row">
                   <div class="dropdown position-static">
                     <button
@@ -287,26 +291,27 @@
                     </div>
                   </div>
                 </th>
-                <td>
+                <td class="text-nowrap">
                   <button
                     type="button"
                     title={$_('common.edit')}
-                    class="btn btn-link p-0 border-0 text-decoration-none text-start fw-medium focus-ring"
+                    class="btn btn-link p-0 border-0 text-decoration-none text-start fw-medium rounded focus-ring"
                     onclick={() => editComparison(comp.id)}>
-                    {comp.name}
+                    <span class="d-inline-block text-truncate align-bottom" style="max-width: 240px;" title={comp.name}>{comp.name}</span>
                   </button>
                 </td>
-                <td>
-                  <div class="d-flex flex-wrap gap-1">
+                <td class="text-nowrap">
+                  <div class="d-flex flex-nowrap gap-1">
                     {#each comp.products as product}
-                      <span class="badge text-bg-primary">{product}</span>
+                      <span class="badge text-bg-primary text-truncate" style="max-width: 120px;" title={product}
+                        >{product}</span>
                     {/each}
                   </div>
                 </td>
-                <td class="text-body-secondary small">
+                <td class="text-body-secondary small text-nowrap">
                   {formatDate(comp.updatedAt)}
                 </td>
-                <td class="text-center">
+                <td class="text-center text-nowrap">
                   {#if comp.status === 'ACTIVE'}
                     <span class="badge text-bg-success">{$_('common.active')}</span>
                   {:else}

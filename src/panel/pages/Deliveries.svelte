@@ -26,7 +26,10 @@
           <FilterDropdown
             label={$_('common.status')}
             current={currentTab}
-            options={STATUS_TABS.map((tab) => ({ ...tab, label: $_(`pages.deliveries.tab.${tab.key}`) }))}
+            options={STATUS_TABS.map((tab) => ({
+              ...tab,
+              label: $_(`pages.deliveries.tab.${tab.key}`),
+            }))}
             onSelect={(tab) => go({ status: tab.value })} />
           <FilterDropdown
             class="ms-2"
@@ -72,7 +75,10 @@
               {#each deliveries as delivery (delivery.id)}
                 {@const actions = rowActions(delivery, user)}
                 {@const when = whenCell(delivery)}
-                <tr>
+                <tr
+                  class="row-action"
+                  use:rowLink={`${base}/market/orders/detail/${delivery.orderId}`}
+                  title={$_('pages.deliveries.actions.view-order')}>
                   <th scope="row">
                     <div class="dropdown position-static">
                       <button
@@ -85,13 +91,19 @@
                       </button>
                       <div class="dropdown-menu dropdown-menu-start">
                         {#if actions.includes('retry')}
-                          <button type="button" class="dropdown-item" onclick={() => askRetry(delivery)}>
+                          <button
+                            type="button"
+                            class="dropdown-item"
+                            onclick={() => askRetry(delivery)}>
                             <i class="fa-solid fa-rotate-right me-2" aria-hidden="true"></i>
                             {$_('pages.deliveries.actions.retry')}
                           </button>
                         {/if}
                         {#if actions.includes('offer-again')}
-                          <button type="button" class="dropdown-item" onclick={() => askRetry(delivery)}>
+                          <button
+                            type="button"
+                            class="dropdown-item"
+                            onclick={() => askRetry(delivery)}>
                             <i class="fa-solid fa-paper-plane me-2" aria-hidden="true"></i>
                             {$_('pages.deliveries.actions.offer-again')}
                           </button>
@@ -105,7 +117,9 @@
                             {$_('pages.deliveries.actions.cancel')}
                           </button>
                         {/if}
-                        <a class="dropdown-item" href="{base}/market/orders/detail/{delivery.orderId}">
+                        <a
+                          class="dropdown-item rounded focus-ring text-decoration-none"
+                          href="{base}/market/orders/detail/{delivery.orderId}">
                           <i class="fa-solid fa-eye me-2" aria-hidden="true"></i>
                           {$_('pages.deliveries.actions.view-order')}
                         </a>
@@ -113,7 +127,9 @@
                     </div>
                   </th>
                   <td class="text-nowrap">
-                    <a href="{base}/market/orders/detail/{delivery.orderId}">#{delivery.orderId}</a>
+                    <a
+                      class="rounded focus-ring text-decoration-none"
+                      href="{base}/market/orders/detail/{delivery.orderId}">#{delivery.orderId}</a>
                   </td>
                   <td class="text-nowrap">
                     {#if delivery.playerUsername}
@@ -122,11 +138,13 @@
                       —
                     {/if}
                   </td>
-                  <td>{delivery.productName ?? '—'}</td>
+                  <td class="text-nowrap">
+                    <ProductLink productId={delivery.productId} name={delivery.productName} />
+                  </td>
                   <td class="text-nowrap">
                     {$_(`enums.action-type.${delivery.actionType}`)}
                     {#if delivery.phase && delivery.phase !== 'GRANT'}
-                      <span class="badge text-bg-secondary ms-1">
+                      <span class="badge text-bg-primary ms-1">
                         {$_(`enums.phase.${delivery.phase}`)}
                       </span>
                     {/if}
@@ -146,10 +164,12 @@
                         aria-label={$_('pages.deliveries.requires-online')}></i>
                     {/if}
                   </td>
-                  <td>{delivery.attempts ?? 0}</td>
-                  <td>
+                  <td class="text-nowrap">{delivery.attempts ?? 0}</td>
+                  <td class="text-nowrap">
                     {#if delivery.lastErrorCode}
                       <span
+                        class="d-inline-block text-truncate align-bottom"
+                        style="max-width: 280px;"
                         class:text-warning-emphasis={mayHaveRun(delivery)}
                         title={delivery.lastError ?? ''}>
                         {#if mayHaveRun(delivery)}
@@ -251,6 +271,8 @@
   import { gotoList } from '../utils/list.js';
   import { pageOf } from '../utils/page.js';
   import { currentLocale } from '../utils/locale.js';
+  import { rowLink } from '../utils/row-link.js';
+  import ProductLink from '../components/ProductLink.svelte';
 
   let { data } = $props();
 
@@ -315,7 +337,9 @@
       description: $_(
         again ? 'pages.deliveries.offer-again-description' : 'pages.deliveries.retry-description',
       ),
-      confirmLabel: $_(again ? 'pages.deliveries.actions.offer-again' : 'pages.deliveries.actions.retry'),
+      confirmLabel: $_(
+        again ? 'pages.deliveries.actions.offer-again' : 'pages.deliveries.actions.retry',
+      ),
       onConfirm: () => run(`/deliveries/${delivery.id}/retry`, 'pages.deliveries.toast-retry'),
     });
   }

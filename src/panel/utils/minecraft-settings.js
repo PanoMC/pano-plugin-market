@@ -130,10 +130,11 @@ const STATE_CLASS = {
   VERSION_MISMATCH: 'text-bg-warning',
 };
 
-/** Badge class of a marketState; an unknown state is neutral. */
+/** Badge class of a marketState; an unknown state gets the default badge colour (primary). */
 export const stateClass = (state, secondaryClass = 'text-bg-secondary') => {
   const className = STATE_CLASS[state];
-  return className && className !== 'text-bg-secondary' ? className : secondaryClass;
+  if (!className) return 'text-bg-primary';
+  return className === 'text-bg-secondary' ? secondaryClass : className;
 };
 
 const hasSettings = (settings) =>

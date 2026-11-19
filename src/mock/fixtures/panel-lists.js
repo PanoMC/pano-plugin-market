@@ -189,6 +189,7 @@ export function deliveryRows(volume) {
               id: 0,
               orderId: order.id,
               orderItemId: item.id,
+              productId: item.productId,
               productName: item.productName,
               playerUsername: player,
               phase,
@@ -496,6 +497,7 @@ export function subscriptionRows(volume) {
         id: 200 + n - i,
         playerUsername: player,
         userId: 1 + PLAYERS.indexOf(player),
+        productId: 1 + product,
         productName: SUBSCRIPTION_PRODUCTS[product],
         providerId:
           mode === 'MANUAL'

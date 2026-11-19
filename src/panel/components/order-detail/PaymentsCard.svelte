@@ -37,8 +37,8 @@
               <th scope="row" class="align-middle">
                 <ControlDropdown items={menu(payment)} />
               </th>
-              <td class="align-middle">{payment.providerId}</td>
-              <td class="align-middle">
+              <td class="align-middle text-nowrap">{payment.providerId}</td>
+              <td class="align-middle text-nowrap">
                 <StatusBadge kind="payment" value={payment.status} />
                 {#if payment.duplicate}
                   <span class="badge text-bg-warning ms-1">
@@ -57,14 +57,22 @@
               </td>
               <td class="align-middle text-nowrap">
                 {#if payment.gatewayTransactionId}
-                  {payment.gatewayTransactionId}
-                  <CopyButton text={payment.gatewayTransactionId} />
+                  <div class="d-flex align-items-center">
+                    <span
+                      class="text-truncate"
+                      style="max-width: 200px;"
+                      title={payment.gatewayTransactionId}>{payment.gatewayTransactionId}</span>
+                    <span class="flex-shrink-0"
+                      ><CopyButton text={payment.gatewayTransactionId} /></span>
+                  </div>
                 {:else}
                   <span class="text-body-secondary">—</span>
                 {/if}
               </td>
-              <td class="align-middle">
-                {#if message}{message}{:else}<span class="text-body-secondary">—</span>{/if}
+              <td class="align-middle text-nowrap">
+                {#if message}<div class="text-truncate" style="max-width: 280px;" title={message}>
+                    {message}
+                  </div>{:else}<span class="text-body-secondary">—</span>{/if}
               </td>
               <td class="align-middle text-nowrap">
                 {#if paymentDate(payment)}

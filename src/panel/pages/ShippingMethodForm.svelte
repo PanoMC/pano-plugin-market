@@ -1,11 +1,4 @@
 <MarketLayout area="settings">
-  {#snippet left()}
-    <a class="btn btn-link px-0" href="{base}/market/settings?section=shipping-methods">
-      <i class="fa-solid fa-arrow-left me-1" aria-hidden="true"></i>
-      {$_('pages.shipping-method.back')}
-    </a>
-  {/snippet}
-
   {#if data.error}
     <LoadError error={data.error} />
   {:else}
@@ -25,7 +18,9 @@
           <div>
             <h5 class="alert-heading mb-2">{$_('common.warning')}</h5>
             <div>{$_('pages.shipping-method.no-zones')}</div>
-            <a class="alert-link d-inline-block mt-2 text-capitalize" href="{base}/market/settings?section=shipping-zones">
+            <a
+              class="alert-link d-inline-block mt-2 text-capitalize"
+              href="{base}/market/settings?section=shipping-zones">
               {$_('pages.shipping-method.open-zones')}
             </a>
           </div>

@@ -13,7 +13,7 @@
       {#each items as item (item.key)}
         {#if item.href}
           <a
-            class="dropdown-item"
+            class="dropdown-item rounded focus-ring text-decoration-none"
             href={item.href}
             target={item.blank ? '_blank' : undefined}
             rel={item.blank ? 'noopener' : undefined}

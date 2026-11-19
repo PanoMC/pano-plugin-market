@@ -1,18 +1,12 @@
 <MarketLayout area="orders">
-  {#snippet left()}
-    <div class="d-flex align-items-center flex-wrap gap-2">
-      <a class="btn btn-link px-0" href="{base}/market/orders">
-        <i class="fa-solid fa-arrow-left me-1" aria-hidden="true"></i>
-        {$_('pages.order-detail.back')}
-      </a>
-      {#if order}
-        <span class="fw-semibold">#{order.id}</span>
-        <StatusBadge kind="order" value={order.status} />
-        {#if order.testMode}
-          <span class="badge text-bg-warning">{$_('common.test')}</span>
-        {/if}
+  {#snippet heading()}
+    {#if order}
+      <span class="fw-semibold">#{order.id}</span>
+      <StatusBadge kind="order" value={order.status} />
+      {#if order.testMode}
+        <span class="badge text-bg-warning">{$_('common.test')}</span>
       {/if}
-    </div>
+    {/if}
   {/snippet}
 
   {#snippet right()}
@@ -47,70 +41,124 @@
   {#if data.error || !detail}
     <LoadError error={data.error ?? 'NETWORK_ERROR'} />
   {:else}
-    {#if (detail.revokePending ?? 0) > 0 || (detail.revokeFailed ?? 0) > 0}
-      <div class="alert alert-danger d-flex align-items-start mb-0" role="alert">
-        <i class="fa-solid fa-circle-exclamation me-3 mt-1" aria-hidden="true"></i>
+    {#if attention.length > 0}
+      <div
+        class="alert {attentionDanger
+          ? 'alert-danger'
+          : 'alert-warning'} d-flex align-items-start mb-0"
+        role="alert">
+        <i
+          class="fa-solid {attentionDanger
+            ? 'fa-circle-exclamation'
+            : 'fa-triangle-exclamation'} me-3 mt-1"
+          aria-hidden="true"></i>
         <div>
-          <h5 class="alert-heading mb-2">{$_('pages.order-detail.revoke-alert.title')}</h5>
-          <div>
-            {$_('pages.order-detail.revoke-alert.body', {
-              values: { pending: detail.revokePending ?? 0, failed: detail.revokeFailed ?? 0 },
-            })}
-          </div>
+          <h5 class="alert-heading mb-2">{$_('pages.order-detail.attention.title')}</h5>
+          <ul class="mb-0">
+            {#each attention as item (item.key)}
+              <li>
+                {item.key === 'revoke'
+                  ? $_('pages.order-detail.revoke-alert.body', { values: item.values })
+                  : $_(`pages.order-detail.attention.items.${item.key}`, { values: item.values })}
+                {#if item.tab !== tab}
+                  <button
+                    type="button"
+                    class="btn btn-link alert-link p-0 align-baseline ms-2 text-capitalize"
+                    onclick={() => selectTab(item.tab)}>
+                    {$_('pages.order-detail.attention.view')}
+                  </button>
+                {/if}
+              </li>
+            {/each}
+          </ul>
         </div>
       </div>
     {/if}
 
+    <SummaryCard {detail} {shipping} />
+
     <div class="row g-3">
       <div class="col-lg-8">
         <div class="vstack gap-3">
-          <ItemsCard
-            {detail}
-            {user}
-            onRerun={(item) => rerunModal?.open({ itemId: item.id })}
-            onRevoke={revokeItem} />
-          <TotalsCard order={detail.order} {ctx} {user} onMutate={mutate} />
-          <PaymentsCard
-            {detail}
-            {user}
-            onEvents={(payment) => paymentEvents?.open(payment)}
-            onQuery={queryPayment} />
-          <RefundsCard {detail} {ctx} {user} onRetry={retryRefund} onCancel={cancelRefund} />
-          <DeliveriesCard
-            {detail}
-            {user}
-            onRetry={retryDelivery}
-            onCancel={cancelDelivery}
-            onRerunAll={() => rerunModal?.open()}
-            onRevokeAll={revokeAll} />
-          {#if featureOn('physicalShipping')}
-            <ShipmentsCard
+          <ul class="nav nav-pills gap-1" role="tablist">
+            {#each TABS as key (key)}
+              <li class="nav-item" role="presentation">
+                <button
+                  type="button"
+                  class="nav-link"
+                  class:active={tab === key}
+                  role="tab"
+                  aria-selected={tab === key}
+                  onclick={() => selectTab(key)}>
+                  {$_(`pages.order-detail.tabs.${key}`)}
+                  {#if counts[key]}
+                    <span class="badge text-bg-primary ms-1">{counts[key]}</span>
+                  {/if}
+                  {#if needsAttention.has(key)}
+                    <i
+                      class="fa-solid fa-circle-exclamation text-danger ms-1"
+                      title={$_('pages.order-detail.tabs.attention')}
+                      aria-label={$_('pages.order-detail.tabs.attention')}></i>
+                  {/if}
+                </button>
+              </li>
+            {/each}
+          </ul>
+
+          <!-- Hidden tabs stay mounted (d-none): cards keep their state, #deliveries keeps its target. -->
+          <div class="vstack gap-3" class:d-none={tab !== 'overview'} role="tabpanel">
+            <ItemsCard
               {detail}
               {user}
-              onCreate={EXTERNAL_MODALS.createShipment
-                ? () => externalRefs.createShipment?.open()
-                : null}
-              onView={(shipment) => shipmentModal?.open(shipment.id)}
-              onTrack={trackShipment}
-              onRetry={retryShipment}
-              onCancel={cancelShipment} />
-          {/if}
-          <DisputesCard {detail} {user} onResolve={resolveDispute} />
-          <MailsCard {detail} {user} onRetry={retryMail} />
-          <TimelineCard {detail} />
+              onRerun={(item) => rerunModal?.open({ itemId: item.id })}
+              onRevoke={revokeItem} />
+            <TotalsCard order={detail.order} {ctx} {user} onMutate={mutate} />
+          </div>
+
+          <div class="vstack gap-3" class:d-none={tab !== 'payments'} role="tabpanel">
+            <PaymentsCard
+              {detail}
+              {user}
+              onEvents={(payment) => paymentEvents?.open(payment)}
+              onQuery={queryPayment} />
+            <RefundsCard {detail} {ctx} {user} onRetry={retryRefund} onCancel={cancelRefund} />
+            <DisputesCard {detail} {user} onResolve={resolveDispute} />
+          </div>
+
+          <div class="vstack gap-3" class:d-none={tab !== 'fulfillment'} role="tabpanel">
+            <DeliveriesCard
+              {detail}
+              {user}
+              onRetry={retryDelivery}
+              onCancel={cancelDelivery}
+              onRerunAll={() => rerunModal?.open()}
+              onRevokeAll={revokeAll} />
+            {#if shipping}
+              <ShipmentsCard
+                {detail}
+                {user}
+                onCreate={EXTERNAL_MODALS.createShipment
+                  ? () => externalRefs.createShipment?.open()
+                  : null}
+                onView={(shipment) => shipmentModal?.open(shipment.id)}
+                onTrack={trackShipment}
+                onRetry={retryShipment}
+                onCancel={cancelShipment} />
+            {/if}
+          </div>
+
+          <div class="vstack gap-3" class:d-none={tab !== 'history'} role="tabpanel">
+            <MailsCard {detail} {user} onRetry={retryMail} />
+            <TimelineCard {detail} />
+          </div>
+
           <PluginHook name="market:panel:order-detail:bottom" props={{ order: detail.order }} />
         </div>
       </div>
 
       <div class="col-lg-4">
         <div class="vstack gap-3">
-          <CustomerCard order={detail.order} />
-          {#if 'billingInfo' in detail.order}
-            <AddressCard address={detail.order.billingInfo} billing />
-          {/if}
-          {#if featureOn('physicalShipping') && 'shippingAddress' in detail.order}
-            <AddressCard address={detail.order.shippingAddress} />
-          {/if}
+          <CustomerCard order={detail.order} {shipping} />
           <SubscriptionCard subscription={detail.subscription} />
           <InvoicesCard {detail} {ctx} {user} onRegenerate={regenerateInvoice} />
           <NoteCard order={detail.order} {user} onMutate={mutate} />
@@ -176,14 +224,13 @@
   // The page header's right column scrolls sideways, which clips a menu hanging below it; a fixed menu is not clipped.
   const POPPER_FIXED = '{"strategy":"fixed"}';
 
-  import { base, page } from '@panomc/sdk/svelte';
+  import { page } from '@panomc/sdk/svelte';
   import { showToast } from '@panomc/sdk/toasts';
   import { _, showSuccessToast } from '../../i18n';
   import ConfirmModal from '../components/ConfirmModal.svelte';
   import LoadError from '../components/LoadError.svelte';
   import PluginHook from '../components/PluginHook.svelte';
   import StatusBadge from '../components/StatusBadge.svelte';
-  import AddressCard from '../components/order-detail/AddressCard.svelte';
   import CustomerCard from '../components/order-detail/CustomerCard.svelte';
   import DeliveriesCard from '../components/order-detail/DeliveriesCard.svelte';
   import DisputesCard from '../components/order-detail/DisputesCard.svelte';
@@ -195,6 +242,7 @@
   import PaymentsCard from '../components/order-detail/PaymentsCard.svelte';
   import RefundsCard from '../components/order-detail/RefundsCard.svelte';
   import ShipmentsCard from '../components/order-detail/ShipmentsCard.svelte';
+  import SummaryCard from '../components/order-detail/SummaryCard.svelte';
   import { featureOn } from '../utils/features.js';
   import SubscriptionCard from '../components/order-detail/SubscriptionCard.svelte';
   import TimelineCard from '../components/order-detail/TimelineCard.svelte';
@@ -228,6 +276,15 @@
   } from '../components/order-detail/requests.js';
   import { releaseRequest } from '../utils/shipments.js';
   import { createAnchorScroller } from '../components/order-detail/scroll.js';
+  import {
+    TABS,
+    attentionItems,
+    initialTab,
+    tabCounts,
+    tabHref,
+    tabsNeedingAttention,
+  } from '../components/order-detail/tabs.js';
+  import { tick } from 'svelte';
   import { anyModalOpen, fetchPath, send } from '../components/order-detail/send.js';
   import ShipmentModal from '../components/modals/ShipmentModal.svelte';
   import DisputeModal from '../components/modals/DisputeModal.svelte';
@@ -239,6 +296,14 @@
   import { toastError } from '../utils/toast.js';
 
   let { data } = $props();
+
+  // The panel title names the order ("Order #1007") once its id is known; load() set the bare one.
+  $effect(() => {
+    if (data.id === null || data.id === undefined) return;
+    $page.data?.pageTitle?.set?.(
+      $_('pages.order-detail.title-with-id', { values: { id: data.id } }),
+    );
+  });
 
   // 13 §1.4: a detail page never calls invalidateAll() after a mutation; it keeps the loaded object
   // and re-GETs it. The host remounts the page on every load() re-run, so the initial value is enough.
@@ -260,6 +325,24 @@
   const order = $derived(detail?.order ?? null);
   const actions = $derived(withAvailable(orderActions(detail, user), EXTERNAL_MODALS));
   const needsPolling = $derived(autoRefreshNeeded(detail));
+  const shipping = featureOn('physicalShipping');
+
+  // ---- tabs ------------------------------------------------------------------------------------
+  // Layout only: every card is still on the page (hidden tabs stay mounted), grouped by subject.
+
+  // svelte-ignore state_referenced_locally
+  let tab = $state(initialTab($page.url.search, ''));
+  const counts = $derived(tabCounts(detail, { shipping }));
+  const attention = $derived(attentionItems(detail, { shipping }));
+  const attentionDanger = $derived(attention.some((item) => item.danger));
+  const needsAttention = $derived(tabsNeedingAttention(attention));
+
+  /** Opens a tab and keeps it in the address (?tab=) so a reload or a shared link lands on it. */
+  function selectTab(key) {
+    tab = key;
+    // a plain history entry swap, as CreateProduct does for its hash: no load() re-run, no remount
+    history.replaceState(history.state, '', tabHref(window.location.href, key));
+  }
 
   // ---- data ------------------------------------------------------------------------------------
 
@@ -553,7 +636,13 @@
   const scrollToDeliveries = createAnchorScroller('deliveries', (id) =>
     document.getElementById(id),
   );
+  let anchorHandled = false;
   $effect(() => {
-    scrollToDeliveries(window.location.hash, !!detail);
+    const hash = window.location.hash;
+    if (anchorHandled || !detail || hash !== '#deliveries') return;
+    anchorHandled = true;
+    // the card sits on the Fulfillment tab: open it first, scroll once it is shown
+    tab = initialTab(window.location.search, hash);
+    tick().then(() => scrollToDeliveries(hash, true));
   });
 </script>

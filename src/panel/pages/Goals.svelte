@@ -34,7 +34,10 @@
             <tbody>
               {#each goals as goal (goal.id)}
                 {@const percent = progressPercent(goal)}
-                <tr>
+                <tr
+                  class="row-action"
+                  use:rowLink={() => goalModal?.open(goal)}
+                  title={$_('common.edit')}>
                   <th scope="row">
                     <div class="dropdown position-static">
                       <button
@@ -60,21 +63,24 @@
                       </div>
                     </div>
                   </th>
-                  <td>
+                  <td class="text-nowrap">
                     <button
                       type="button"
-                      class="btn btn-link p-0 text-start text-decoration-none"
+                      class="btn btn-link p-0 text-start text-decoration-none rounded focus-ring"
                       onclick={() => goalModal?.open(goal)}>
-                      {goal.name}
+                      <span class="d-inline-block text-truncate align-bottom" style="max-width: 300px;" title={goal.name}>{goal.name}</span>
                     </button>
                     {#if goal.description}
-                      <div class="small text-body-secondary text-truncate" style="max-width: 300px;">
+                      <div
+                        class="small text-body-secondary text-truncate"
+                        style="max-width: 300px;"
+                        title={goal.description}>
                         {goal.description}
                       </div>
                     {/if}
                   </td>
                   <td class="text-nowrap">{$_(`enums.goal-metric.${goal.metric}`)}</td>
-                  <td style="min-width: 180px;">
+                  <td class="text-nowrap" style="min-width: 180px;">
                     <div class="small">{progressText(goal)}</div>
                     <div
                       class="progress"
@@ -90,14 +96,14 @@
                   <td class="text-nowrap">
                     {goal.endsAt ? new Date(Number(goal.endsAt)).toLocaleString(currentLocale()) : '—'}
                   </td>
-                  <td>
+                  <td class="text-nowrap">
                     {#if goal.status === 'ACTIVE'}
                       <span class="badge text-bg-success">{$_('common.active')}</span>
                     {:else}
                       <span class="badge text-bg-secondary">{$_('common.inactive')}</span>
                     {/if}
                   </td>
-                  <td>{goal.showOnStore ? $_('common.yes') : $_('common.no')}</td>
+                  <td class="text-nowrap">{goal.showOnStore ? $_('common.yes') : $_('common.no')}</td>
                 </tr>
               {/each}
             </tbody>
@@ -140,6 +146,7 @@
   import { call, errorKey } from '../utils/api.js';
   import { fmt, currentLocale } from '../utils/locale.js';
   import { progressPercent } from '../utils/goals.js';
+  import { rowLink } from '../utils/row-link.js';
 
   let { data } = $props();
 

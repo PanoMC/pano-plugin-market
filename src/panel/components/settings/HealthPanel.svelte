@@ -69,7 +69,7 @@
           <tbody>
             <tr>
               <th scope="row" class="align-middle">{$_('settings.health.status.schema')}</th>
-              <td class="align-middle">
+              <td class="align-middle text-nowrap">
                 <span class="badge text-bg-{model.schemaOk ? 'success' : 'danger'}">
                   {$_(model.schemaOk ? 'settings.health.ok' : 'settings.health.problem')}
                 </span>
@@ -77,7 +77,7 @@
             </tr>
             <tr>
               <th scope="row" class="align-middle">{$_('settings.health.status.runtime')}</th>
-              <td class="align-middle">
+              <td class="align-middle text-nowrap">
                 <span class="badge {runtimeStateClass(model.runtimeState)}">
                   {model.runtimeState}
                 </span>
@@ -85,13 +85,13 @@
             </tr>
             <tr>
               <th scope="row" class="align-middle">{$_('settings.health.status.mail')}</th>
-              <td class="align-middle">
+              <td class="align-middle text-nowrap">
                 <span class="badge text-bg-{mailClass}">{mailText}</span>
               </td>
             </tr>
             <tr>
               <th scope="row" class="align-middle">{$_('settings.health.status.credits')}</th>
-              <td class="align-middle">
+              <td class="align-middle text-nowrap">
                 {#if model.credits}
                   <span class="badge text-bg-{model.credits.ok ? 'success' : 'danger'}">
                     {$_(model.credits.ok ? 'settings.health.ok' : 'settings.health.problem')}
@@ -104,7 +104,9 @@
                   {#if model.credits.problems.length > 0}
                     <ul class="mb-0 mt-2">
                       {#each model.credits.problems as problem, index (index)}
-                        <li>{problem}</li>
+                        <li class="text-truncate" style="max-width: 280px;" title={problem}>
+                          {problem}
+                        </li>
                       {/each}
                     </ul>
                   {/if}
@@ -115,7 +117,7 @@
             </tr>
             <tr>
               <th scope="row" class="align-middle">{$_('settings.health.status.ip-trust')}</th>
-              <td class="align-middle">
+              <td class="align-middle text-nowrap">
                 <span class="badge text-bg-{model.ipTrustWarning ? 'warning' : 'success'}">
                   {$_(model.ipTrustWarning ? 'settings.health.problem' : 'settings.health.ok')}
                 </span>
@@ -123,11 +125,11 @@
             </tr>
             <tr>
               <th scope="row" class="align-middle">{$_('settings.health.status.locked')}</th>
-              <td class="align-middle">{model.lockedSubjects}</td>
+              <td class="align-middle text-nowrap">{model.lockedSubjects}</td>
             </tr>
             <tr>
               <th scope="row" class="align-middle">{$_('settings.health.status.rejected')}</th>
-              <td class="align-middle">{model.rejectedEventsLastHour}</td>
+              <td class="align-middle text-nowrap">{model.rejectedEventsLastHour}</td>
             </tr>
           </tbody>
         </table>
@@ -164,7 +166,11 @@
             <tbody>
               {#each model.jobs as job, index (index)}
                 <tr>
-                  <td class="align-middle">{job.name}</td>
+                  <td class="align-middle text-nowrap">
+                    <div class="text-truncate" style="max-width: 240px;" title={job.name}>
+                      {job.name}
+                    </div>
+                  </td>
                   <td class="align-middle text-nowrap">
                     {#if job.lastRunAt}
                       <DateComponent time={job.lastRunAt} relativeFormat={true} />
@@ -179,7 +185,11 @@
                       })}
                     {/if}
                   </td>
-                  <td class="align-middle">{job.lastError}</td>
+                  <td class="align-middle text-nowrap">
+                    <div class="text-truncate" style="max-width: 280px;" title={job.lastError}>
+                      {job.lastError}
+                    </div>
+                  </td>
                 </tr>
               {/each}
             </tbody>
@@ -212,13 +222,12 @@
             <tbody>
               {#each model.providers as provider (provider.id)}
                 <tr>
-                  <td class="align-middle">{provider.id}</td>
-                  <td class="align-middle"
+                  <td class="align-middle text-nowrap">{provider.id}</td>
+                  <td class="align-middle text-nowrap"
                     ><StatusBadge
                       kind="provider"
                       value={provider.state}
-                      secondaryClass="text-bg-primary"
-                    /></td>
+                      secondaryClass="text-bg-primary" /></td>
                 </tr>
               {/each}
             </tbody>
@@ -254,15 +263,15 @@
             <tbody>
               {#each model.servers as server (server.id)}
                 <tr>
-                  <td class="align-middle">{server.id}</td>
-                  <td class="align-middle">
+                  <td class="align-middle text-nowrap">{server.id}</td>
+                  <td class="align-middle text-nowrap">
                     {#if server.marketState}
                       <span class="badge {stateClass(server.marketState, 'text-bg-primary')}">
                         {$_(`settings.minecraft.state.${server.marketState}`)}
                       </span>
                     {/if}
                   </td>
-                  <td class="align-middle">{server.waiting}</td>
+                  <td class="align-middle text-nowrap">{server.waiting}</td>
                 </tr>
               {/each}
             </tbody>

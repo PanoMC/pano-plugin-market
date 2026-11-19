@@ -10,7 +10,7 @@ import { fieldFromApi, serializeFields } from './fields.js';
 import { buildProviderMeta } from './provider-meta.js';
 
 export const KINDS = ['STANDARD', 'BUNDLE', 'CREDIT_PACK'];
-export const STATUSES = ['ACTIVE', 'INACTIVE', 'ARCHIVED'];
+export const STATUSES = ['ACTIVE', 'INACTIVE', 'HIDDEN', 'ARCHIVED'];
 export const BILLING_MODES = ['ONE_TIME', 'TIMED', 'SUBSCRIPTION'];
 export const TIMED_UNITS = ['MINUTE', 'HOUR', 'DAY', 'WEEK', 'MONTH', 'YEAR'];
 export const SUBSCRIPTION_UNITS = ['DAY', 'WEEK', 'MONTH', 'YEAR'];

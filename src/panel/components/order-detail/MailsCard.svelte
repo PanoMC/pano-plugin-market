@@ -32,15 +32,24 @@
               <th scope="row" class="align-middle">
                 <ControlDropdown items={menu(mail)} />
               </th>
-              <td class="align-middle">
+              <td class="align-middle text-nowrap">
                 {isKnownMailKind(mail.kind) ? $_(`enums.mail-kind.${mail.kind}`) : mail.kind}
               </td>
-              <td class="align-middle">{mail.recipient ?? '—'}</td>
-              <td class="align-middle"><StatusBadge kind="mail" value={mail.status} /></td>
-              <td class="align-middle">{mail.attempts ?? 0}</td>
-              <td class="align-middle">
-                {#if mail.lastError}{mail.lastError}{:else}<span class="text-body-secondary">—</span
-                  >{/if}
+              <td class="align-middle text-nowrap">
+                <div class="text-truncate" style="max-width: 240px;" title={mail.recipient ?? '—'}>
+                  {mail.recipient ?? '—'}
+                </div>
+              </td>
+              <td class="align-middle text-nowrap"
+                ><StatusBadge kind="mail" value={mail.status} /></td>
+              <td class="align-middle text-nowrap">{mail.attempts ?? 0}</td>
+              <td class="align-middle text-nowrap">
+                {#if mail.lastError}<div
+                    class="text-truncate"
+                    style="max-width: 280px;"
+                    title={mail.lastError}>
+                    {mail.lastError}
+                  </div>{:else}<span class="text-body-secondary">—</span>{/if}
               </td>
               <td class="align-middle text-nowrap">
                 {#if mail.sentAt}<DateComponent time={mail.sentAt} />{:else}<span
