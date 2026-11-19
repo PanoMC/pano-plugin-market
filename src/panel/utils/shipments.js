@@ -159,6 +159,16 @@ export function failureText($_, error, body) {
   return `${base} ${detail}`;
 }
 
+/**
+ * Text of a shipment's stored `lastErrorCode` (a carrier / provider error code, never a delivery one):
+ * `enums.provider-error.<code>` when known, else the raw code.
+ */
+export function shipmentErrorText($_, code) {
+  const key = `enums.provider-error.${code}`;
+  const text = $_(key);
+  return !text || text === key || text === `plugins.pano-plugin-market.${key}` ? code : text;
+}
+
 // ---- CreateShipmentModal ------------------------------------------------------------------------
 
 export const NOTE_MAX = 255;

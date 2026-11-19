@@ -11,6 +11,7 @@ import {
   createRequest,
   defaultProviderId,
   failureText,
+  shipmentErrorText,
   initialLines,
   initialParcels,
   labelPath,
@@ -418,5 +419,17 @@ describe('shipping address', () => {
     expect(error.city).toBe(true);
     expect(error.email).toBe(true);
     expect(addressRequest(3, { country: 'DE' }).error.postalCode).toBe(true);
+  });
+});
+
+describe('shipment error text', () => {
+  const en = JSON.parse(fs.readFileSync('src/locales/panel/en-US.json', 'utf8'));
+  const $_ = (key) => key.split('.').reduce((o, k) => o?.[k], en) ?? key;
+  test('carrier codes read from the provider-error texts', () => {
+    expect(shipmentErrorText($_, 'ADDRESS_INVALID')).toBe(
+      en.enums['provider-error'].ADDRESS_INVALID,
+    );
+    expect(shipmentErrorText($_, 'REJECTED')).toBe(en.enums['provider-error'].REJECTED);
+    expect(shipmentErrorText($_, 'NOPE_CODE')).toBe('NOPE_CODE');
   });
 });

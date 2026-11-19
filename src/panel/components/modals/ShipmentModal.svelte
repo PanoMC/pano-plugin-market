@@ -222,6 +222,7 @@
     initialEdit,
     isHttpUrl,
     recipientName,
+    shipmentErrorText,
     statusChoices,
     trackingReadOnly,
     updateRequest,
@@ -256,9 +257,7 @@
   }
 
   function errorLabel(code) {
-    const key = `enums.delivery-error.${code}`;
-    const text = $_(key);
-    return text === key || text === `plugins.pano-plugin-market.${key}` ? code : text;
+    return shipmentErrorText($_, code);
   }
 
   async function load(id) {
