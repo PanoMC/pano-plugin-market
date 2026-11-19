@@ -710,8 +710,13 @@ describe('buildQuoteBody', () => {
     });
     expect('items' in logged).toBe(false);
     expect('guest' in logged).toBe(false);
-    // a signed-in buyer says "no code" explicitly: the server would otherwise fall back to the codes stored on the cart
-    expect(logged).toEqual({ locale: 'tr', couponCode: '', creatorCode: '' });
+    // a signed-in buyer says "no code" and "no recipient" explicitly: the server would otherwise fall back to the values stored on the cart
+    expect(logged).toEqual({
+      locale: 'tr',
+      couponCode: '',
+      creatorCode: '',
+      recipientUsername: '',
+    });
   });
 
   test('a signed-in buyer who removed a code sends an empty code, a guest sends none', () => {
@@ -720,6 +725,7 @@ describe('buildQuoteBody', () => {
     expect(buildQuoteBody({ loggedIn: true, draft: removed })).toEqual({
       couponCode: '',
       creatorCode: 'YT',
+      recipientUsername: '',
     });
     expect(buildQuoteBody({ loggedIn: false, items: [], draft: removed })).toEqual({
       items: [],
@@ -728,6 +734,18 @@ describe('buildQuoteBody', () => {
     expect(buildQuoteBody({ topup: 5, loggedIn: true, draft: removed })).toEqual({
       creditTopUp: 5,
     });
+  });
+
+  test('a signed-in buyer who turned the gift off sends an empty recipient, a guest sends none', () => {
+    const off = draftWith({ isGift: false, giftMessage: 'hi' });
+
+    const logged = buildQuoteBody({ loggedIn: true, draft: off, recipientUsername: null });
+    expect(logged.recipientUsername).toBe('');
+    expect('giftMessage' in logged).toBe(false);
+
+    expect('recipientUsername' in buildQuoteBody({ loggedIn: false, items: [], draft: off })).toBe(
+      false,
+    );
   });
 
   test('a saved address id wins over the typed address; gift message needs a recipient', () => {

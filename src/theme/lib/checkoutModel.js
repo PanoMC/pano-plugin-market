@@ -673,10 +673,12 @@ export function buildQuoteBody({
   if (text(draft?.creatorCode)) body.creatorCode = text(draft.creatorCode);
   else if (loggedIn) body.creatorCode = '';
 
+  // The recipient falls back to the cart the same way: an empty name says "for myself", so a gift the buyer just turned off (or one the store no
+  // longer allows) does not keep blocking the quote with the recipient still stored on the cart.
   if (recipientUsername) {
     body.recipientUsername = recipientUsername;
     if (text(draft?.giftMessage)) body.giftMessage = text(draft.giftMessage);
-  }
+  } else if (loggedIn) body.recipientUsername = '';
 
   if (draft?.payWithCredits === true) body.payWithCredits = true;
   else if (

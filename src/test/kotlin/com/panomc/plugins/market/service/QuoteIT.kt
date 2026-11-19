@@ -1239,6 +1239,22 @@ class QuoteIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `an empty recipient means no gift and does not fall back to the recipient stored on the cart`(): Unit = runBlocking {
+        val noGift = fx.product().also { raw(it, "allowGift" to false) }
+        val (alex, caller) = user("Alex")
+        user("Bob")
+        val cartId = w.carts.ensure(alex.id, w.clock.now(), pool)
+
+        w.cartItems.upsertAdd(
+            com.panomc.plugins.market.db.model.MarketCartItem(cartId = cartId, productId = noGift.id, quantity = 1, lineKey = CartLine(noGift.id, 0, 1).lineKey, createdAt = 1, updatedAt = 1), pool
+        )
+        w.carts.updateFields(cartId, mapOf("recipientUsername" to "Bob"), w.clock.now(), pool)
+
+        assertEquals(listOf("GIFT_NOT_ALLOWED"), quote(caller = caller, items = null).lines.single().errors, "no recipient in the body: the cart's recipient is used")
+        assertTrue(quote(caller = caller, items = null, recipient = "").canCheckout, "an empty recipient is a purchase for oneself")
+    }
+
+    @Test
     fun `equal lines are summed quantities are clamped and more than 50 lines are refused`(): Unit = runBlocking {
         val p = fx.product(price = 100)
 
