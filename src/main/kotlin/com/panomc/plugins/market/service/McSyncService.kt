@@ -658,18 +658,24 @@ class McSyncService(
 
         val template = config().mcBroadcastTemplate
         val player = order.recipientUsername.ifBlank { order.playerUsername }
-        val text = renderAnnouncement(template, player, lines.joinToString(", ") { it.productName }, lines.sumOf { it.quantity }, storeName())
+        val products = lines.joinToString(", ") { it.productName }
+        val quantity = lines.sumOf { it.quantity }
+        val store = storeName()
         var queued = 0
-
-        if (text.isBlank()) return 0
 
         val targets = db.tx { conn ->
             val states = serverStates.getAll(conn).associateBy { it.serverId }
 
-            sessions.filter { (id, s) -> s.accepted && clock.now() - s.lastSyncAt <= SESSION_TTL_MS && effectiveBroadcast(states[id]) }.keys.toList()
+            sessions.filter { (id, s) -> s.accepted && clock.now() - s.lastSyncAt <= SESSION_TTL_MS && effectiveBroadcast(states[id]) }.keys
+                .map { it to (effectiveTemplate(states[it]) ?: template) }
         }
 
-        for (id in targets) {
+        // the per-server `mcBroadcastTemplate` override wins over the panel default (19 section 9), so the text is rendered for each server
+        for ((id, serverTemplate) in targets) {
+            val text = renderAnnouncement(serverTemplate, player, products, quantity, store)
+
+            if (text.isBlank()) continue
+
             broadcasts.offer(id, text)
 
             queued++
@@ -682,6 +688,13 @@ class McSyncService(
         val override = state?.settings?.takeIf { it.isNotBlank() }?.let { runCatching { JsonObject(it) }.getOrNull() }?.getValue("mcBroadcast")
 
         return (override as? Boolean) ?: config().mcBroadcast
+    }
+
+    /** The valid per-server `mcBroadcastTemplate` override of [state], `null` when there is none. */
+    private fun effectiveTemplate(state: MarketServerState?): String? {
+        val override = state?.settings?.takeIf { it.isNotBlank() }?.let { runCatching { JsonObject(it) }.getOrNull() }?.getValue(McSettingKeys.TEMPLATE)
+
+        return McSettingKeys.accept(McSettingKeys.TEMPLATE, override) as? String
     }
 
     // ===== helpers =========================================================================================================

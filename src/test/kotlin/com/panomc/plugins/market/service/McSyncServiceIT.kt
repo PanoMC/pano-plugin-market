@@ -1307,6 +1307,22 @@ class McSyncServiceIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `an announcement uses the per-server template override, an invalid override falls back to the panel default`(): Unit = runBlocking {
+        val (placed, _) = buy(command(), buyer = "Steve")
+
+        mc.sync()
+
+        w.serverStates.updateSettings(7, """{"mcBroadcastTemplate":"&6[Store] {player} -> {product}"}""", w.clock.now(), pool)
+        assertEquals(1, sync.announce(placed.order, placed.items))
+        assertEquals("§6[Store] Steve -> VIP", mc.sync().broadcasts.getJsonObject(0).getString("text"))
+
+        // a blank override is not a valid value: the panel default renders
+        w.serverStates.updateSettings(7, """{"mcBroadcastTemplate":"  "}""", w.clock.now(), pool)
+        assertEquals(1, sync.announce(placed.order, placed.items))
+        assertEquals("§aSteve §7bought §fVIP x1 §8@ Shop", mc.sync().broadcasts.getJsonObject(0).getString("text"))
+    }
+
+    @Test
     fun `the broadcast queue of a server holds at most 50 announcements and drops the oldest`(): Unit = runBlocking {
         val outbox = McBroadcastOutbox(w.clock)
         val ids = (1..60).map { outbox.offer(7, "text $it") }
