@@ -405,6 +405,21 @@ class InvoiceRendererTest {
         }
     }
 
+    @Test
+    fun `dates use the zone frozen in the snapshot, not the store zone of the moment`() {
+        // 2026-12-31 22:30 UTC = 2027-01-01 01:30 in Istanbul, still 2026-12-31 in New York
+        val issued = 1_798_756_200_000L
+        val snap = InvoiceSample.snapshot(false, "en-US", "EUR", "Europe/Istanbul", seller.copy(), "", issued)
+        val laterZone = MarketFormat(i18n, { "America/New_York" }, { "Credits" })
+        val texts = runBlocking { InvoiceTextsFactory.build(snap, "en-US", i18n, laterZone, "Credits") }
+
+        assertEquals("Jan 1, 2027", texts.date(issued))
+
+        val noZone = runBlocking { InvoiceTextsFactory.build(snap.copy().put("timeZone", ""), "en-US", i18n, laterZone, "Credits") }
+
+        assertEquals("Dec 31, 2026", noZone.date(issued), "a snapshot without a zone falls back to the store zone")
+    }
+
     // ----- T-PDF-7 -----------------------------------------------------------------------------------------------------------------
 
     @Test

@@ -99,7 +99,8 @@ object InvoiceTextsFactory {
         return PrecomputedTexts(
             templates = templates,
             amounts = amounts.associateWith { format.money(it, currency, locale) },
-            dates = times.associateWith { format.date(it, locale) },
+            // the zone frozen in the snapshot, so a re-render never moves the date of an issued document
+            dates = times.associateWith { format.date(it, locale, snapshot.getString("timeZone").orEmpty()) },
             percents = percents.associateWith { format.percent(it, locale) },
             creditName = creditName
         )

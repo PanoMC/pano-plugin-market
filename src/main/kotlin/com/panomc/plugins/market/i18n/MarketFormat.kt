@@ -19,6 +19,9 @@ class MarketFormat(
 ) {
     suspend fun date(ms: Long, locale: String): String = formatDate(ms, locale, "server-format.date", "yyyy-MM-dd")
 
+    /** [date] in the zone [zone] (a zone frozen in a document snapshot); empty = the store zone. */
+    suspend fun date(ms: Long, locale: String, zone: String): String = formatDate(ms, locale, "server-format.date", "yyyy-MM-dd", zone)
+
     suspend fun dateTime(ms: Long, locale: String): String = formatDate(ms, locale, "server-format.date-time", "yyyy-MM-dd HH:mm")
 
     /** [amount] is x100; fraction digits follow the currency exponent; a negative amount gets a leading `-`. */
@@ -76,9 +79,9 @@ class MarketFormat(
     private suspend fun setting(locale: String, key: String, default: String): String =
         if (i18n.has(locale, key)) i18n.t(locale, key) else default
 
-    private suspend fun formatDate(ms: Long, locale: String, key: String, fallback: String): String {
+    private suspend fun formatDate(ms: Long, locale: String, key: String, fallback: String, zoneOverride: String = ""): String {
         val zoneId = try {
-            zone().takeIf { it.isNotEmpty() }?.let { ZoneId.of(it) } ?: ZoneId.systemDefault()
+            zoneOverride.ifEmpty { zone() }.takeIf { it.isNotEmpty() }?.let { ZoneId.of(it) } ?: ZoneId.systemDefault()
         } catch (e: Exception) {
             ZoneId.systemDefault()
         }
