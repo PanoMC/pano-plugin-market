@@ -83,6 +83,7 @@
   import { onMount } from 'svelte';
   import { _ } from '../i18n.js';
   import { base, goto, invalidateAll } from '@panomc/sdk/svelte';
+  import ApiUtil from '@panomc/sdk/utils/api';
   import { COOKIE, cookieString, parseCookie } from './core.js';
   import { DEFAULT_VOLUME, VOLUMES } from './kit.js';
 
@@ -147,7 +148,26 @@
   function follow(e, p) {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
+    if (p.player) {
+      playerTab().then((path) => goto(`${base}${path}`));
+      return;
+    }
     goto(href(p));
+  }
+
+  /**
+   * The player page is the panel's own (it loads the player from the core API, which the preview does not fake), so the
+   * market tab opens for the first real player; with none the player list opens instead.
+   */
+  async function playerTab() {
+    try {
+      const body = await ApiUtil.get({ path: '/panel/players?page=1' });
+      const username = body?.items?.find((row) => row?.username)?.username;
+      if (username) return `/players/detail/${encodeURIComponent(username)}/market`;
+    } catch {
+      // fall through to the list
+    }
+    return '/players';
   }
 
   const PANEL_BASE = '/panel';

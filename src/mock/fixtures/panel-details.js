@@ -2,7 +2,7 @@
 // health), credits, blocks, discounts / coupons / creator codes, gifts, comparisons and goals.
 // Shapes mirror the Kotlin routes; money on the wire is a decimal number (MoneyUtil.toDecimal).
 import { DAY, NOW, PLAYERS, countFor, failure, listBody, matches, rng, rows } from '../kit.js';
-import { routes as listRoutes } from './panel-lists.js';
+import { routes as listRoutes, subscriptionRows } from './panel-lists.js';
 import {
   PAYMENT_METHODS,
   SERVERS,
@@ -1666,6 +1666,88 @@ export function goalRows(volume) {
 
 // ================================================================================== routes
 
+// ============================================================================ player summary
+
+/**
+ * `GET /players/:username/summary` (PlayerSummaryService): the market tab of the panel's player page. The player
+ * page itself is the panel's, so the preview opens it for a real player; any username gets the same sample history.
+ */
+function playerSummaryBody({ params, volume }) {
+  const username = String(params.username ?? '').trim();
+  if (!/^[A-Za-z0-9_]{1,16}$/.test(username)) return failure('INVALID', { fields: { username: 'INVALID' } });
+  const orders = orderRows(volume)
+    .filter((_, i) => i % 2 === 0)
+    .slice(0, volume === 'many' ? 12 : 5);
+  const paid = orders.filter((o) => PAID.has(o.status) || o.status === 'REFUNDED');
+  const spent = money(paid.reduce((total, o) => total + o.totalPrice, 0));
+  const refunded = money(orders.reduce((total, o) => total + o.refundedTotal, 0));
+  const subscriptions = subscriptionRows(volume).slice(0, volume === 'many' ? 3 : volume === 'empty' ? 0 : 1);
+  const entitlements = orders
+    .filter((o) => o.status === 'COMPLETED')
+    .flatMap((o) => o.items.slice(0, 1).map((item, at) => ({
+      id: o.id * 10 + at,
+      productId: item.productId,
+      productName: item.productName,
+      variantId: null,
+      orderId: o.id,
+      subscriptionId: null,
+      quantity: item.quantity,
+      startsAt: o.paidAt,
+      expiresAt: at % 2 === 0 ? null : o.paidAt + 30 * DAY,
+    })));
+  return {
+    user: volume === 'empty' ? null : { id: 1, username },
+    creditBalance: volume === 'empty' ? 0 : 125.5,
+    totals: { orders: orders.length, spent, refunded, currency: STORE_CURRENCY },
+    orders: orders.map((o, i) => ({
+      id: o.id,
+      publicId: o.publicId,
+      status: o.status,
+      source: o.source,
+      role: i % 5 === 4 ? 'RECIPIENT' : 'BUYER',
+      total: o.totalPrice,
+      currency: o.currency,
+      refundedTotal: o.refundedTotal,
+      isGift: i % 5 === 4,
+      testMode: o.testMode,
+      productNames: o.items.map((item) => item.productName),
+      createdAt: o.createdAt,
+      paidAt: o.paidAt,
+    })),
+    entitlements,
+    subscriptions: subscriptions.map((sub) => ({
+      id: sub.id,
+      productName: sub.productName,
+      status: sub.status,
+      mode: sub.mode,
+      price: sub.price,
+      currency: sub.currency,
+      intervalUnit: sub.intervalUnit,
+      intervalCount: sub.intervalCount,
+      currentPeriodEnd: sub.currentPeriodEnd,
+      nextChargeAt: sub.nextChargeAt,
+      cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+      createdAt: sub.createdAt,
+    })),
+    blocks:
+      volume === 'many'
+        ? [
+            {
+              id: 590,
+              type: 'PLAYER',
+              value: username,
+              reason: 'Chargeback on order',
+              source: 'CHARGEBACK',
+              orderId: orders[0]?.id ?? null,
+              hitCount: 2,
+              expiresAt: NOW + 20 * DAY,
+              createdAt: NOW - 3 * DAY,
+            },
+          ]
+        : [],
+  };
+}
+
 export const routes = [
   get('/orders/:id', ({ params, volume }) => orderDetail(volume, params.id)),
   get('/payments/:paymentId/events', paymentEvents),
@@ -1678,6 +1760,7 @@ export const routes = [
   get('/credits/transactions', creditTransactionsBody),
 
   get('/blocks', blocksBody),
+  get('/players/:username/summary', playerSummaryBody),
 
   get(
     '/discounts',
@@ -1727,4 +1810,6 @@ export const pages = [
   { side: 'panel', label: 'Comparisons', href: '/market/comparisons' },
   { side: 'panel', label: 'Edit comparison', href: '/market/comparisons/create-comparison?id=1' },
   { side: 'panel', label: 'Goals', href: '/market/goals' },
+  // The player page is the panel's own: the drawer opens the market tab of the first real player (DevPreview), /players without one.
+  { side: 'panel', label: 'Player page: market tab', href: '/players', player: true },
 ];

@@ -719,12 +719,39 @@ describe('determinism and the page list', () => {
 
   test('pages', () => {
     expect(pages.length).toBeGreaterThan(10);
-    expect(pages.every((p) => p.side === 'panel' && p.label && p.href.startsWith('/market'))).toBe(
-      true,
-    );
+    expect(
+      pages.every(
+        (p) => p.side === 'panel' && p.label && (p.player ? p.href === '/players' : p.href.startsWith('/market')),
+      ),
+    ).toBe(true);
+    expect(pages.filter((p) => p.player)).toHaveLength(1);
     const orderPage = pages.find((p) => p.href.startsWith('/market/orders/detail/'));
     const id = Number(orderPage.href.split('/').pop());
     expect(orderRows('few').some((o) => o.id === id)).toBe(true);
     expect(orderRows('many').some((o) => o.id === id)).toBe(true);
+  });
+});
+
+describe('player summary', () => {
+  test('the shape of PlayerSummaryService for every volume', () => {
+    for (const volume of VOLUMES) {
+      const body = get('/players/Steve/summary', volume);
+      expect(Object.keys(body).sort()).toEqual(
+        ['blocks', 'creditBalance', 'entitlements', 'orders', 'subscriptions', 'totals', 'user'].sort(),
+      );
+      expect(Object.keys(body.totals).sort()).toEqual(['currency', 'orders', 'refunded', 'spent']);
+      expect(body.totals.orders).toBe(body.orders.length);
+      for (const order of body.orders) {
+        expect(['BUYER', 'RECIPIENT']).toContain(order.role);
+        expect(Array.isArray(order.productNames)).toBe(true);
+      }
+    }
+    expect(get('/players/Steve/summary', 'empty').orders).toEqual([]);
+    expect(get('/players/Steve/summary', 'few').orders.length).toBeGreaterThan(0);
+    expect(get('/players/Steve/summary', 'few').user).toEqual({ id: 1, username: 'Steve' });
+  });
+
+  test('a username that cannot be a player is refused', () => {
+    expect(get('/players/a%20b/summary').error.code).toBe('INVALID');
   });
 });
