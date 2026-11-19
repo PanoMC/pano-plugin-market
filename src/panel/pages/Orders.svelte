@@ -63,7 +63,7 @@
       </CardHeader>
 
       {#if orders.length === 0}
-        <NoContent text={$_('common.no-content')} />
+        <NoContent />
       {:else}
         <OrdersTable {orders} {user} shippingEnabled={ctx?.shippingEnabled === true} />
 

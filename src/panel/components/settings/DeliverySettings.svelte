@@ -210,7 +210,7 @@
     {/if}
 
     {#if actions.length === 0}
-      <NoContent icon="" />
+      <NoContent />
     {:else}
       <div class="card-body vstack gap-3">
         {#each actions as action, index (action)}

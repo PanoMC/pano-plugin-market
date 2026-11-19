@@ -36,7 +36,7 @@
   </div>
 
   {#if ordered.length === 0}
-    <NoContent icon="" />
+    <NoContent />
   {:else}
     <div class="row g-3">
       {#each ordered as carrier (carrier.id)}

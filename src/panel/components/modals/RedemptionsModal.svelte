@@ -20,7 +20,7 @@
         {:else if error}
           <LoadError {error} onRetry={() => load(currentPage)} />
         {:else if redemptions.length === 0}
-          <NoContent icon="" />
+          <NoContent />
         {:else}
           <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">

@@ -166,7 +166,7 @@
 
       {#if section === 'accounts'}
         {#if accounts.length === 0}
-          <NoContent icon="" />
+          <NoContent />
         {:else}
           <div class="table-responsive">
             <table class="table table-hover align-middle">
@@ -243,7 +243,7 @@
           </div>
         {/if}
       {:else if transactions.length === 0}
-        <NoContent icon="" />
+        <NoContent />
       {:else}
         <div class="table-responsive">
           <table class="table table-hover align-middle">

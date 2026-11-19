@@ -28,7 +28,7 @@
       </CardHeader>
 
       {#if subscriptions.length === 0}
-        <NoContent text={$_('common.no-content')} />
+        <NoContent />
       {:else}
         <div class="table-responsive">
           <table class="table table-hover align-middle">

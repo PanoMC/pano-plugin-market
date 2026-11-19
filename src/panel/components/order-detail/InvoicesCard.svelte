@@ -7,7 +7,7 @@
       </div>
     </CardHeader>
     {#if invoices.length === 0}
-      <NoContent text={$_('common.no-content')} />
+      <NoContent />
     {:else}
       <ul class="list-group list-group-flush">
         {#each invoices as invoice (invoice.id)}

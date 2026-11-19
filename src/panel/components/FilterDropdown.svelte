@@ -1,3 +1,5 @@
+<!-- The trigger is the filter icon only; its name (and the chosen item) is the native title, and the
+     menu opens with the filter's name as its header. -->
 <div class="dropdown {extraClass}">
   <button
     type="button"
@@ -6,15 +8,12 @@
     data-bs-popper-config={POPPER_FIXED}
     aria-expanded="false"
     aria-haspopup="true"
-    aria-label={iconOnly && selected ? `${label}: ${selected.label}` : label}
-    title={selected ? `${label}: ${selected.label}` : label}>
-    <i class="fa-solid {icon}" class:me-2={!iconOnly} aria-hidden="true"></i>
-    {#if !iconOnly}
-      <span>{selected?.label ?? label}</span>
-    {/if}
+    aria-label={name}
+    title={name}>
+    <i class="fa-solid {icon}" aria-hidden="true"></i>
   </button>
   <div class="dropdown-menu dropdown-menu-end" role="menu" aria-label={label}>
-    <div class="dropdown-header" role="presentation">{label}</div>
+    <div class="dropdown-header text-capitalize" role="presentation">{label}</div>
     {#each options as option (option.key)}
       <button
         type="button"
@@ -35,17 +34,19 @@
 <script>
   const POPPER_FIXED = '{"strategy":"fixed"}';
 
+  // iconOnly is kept for callers that still pass it: every filter is icon-only now.
   let {
     options = [],
     current = null,
     label,
     onSelect,
     icon = 'fa-filter',
-    iconOnly = false,
+    iconOnly: _iconOnly = true,
     class: extraClass = '',
   } = $props();
 
   const selected = $derived(
     options.find((option) => option.key === current) ?? options[0] ?? null,
   );
+  const name = $derived(selected ? `${label}: ${selected.label}` : label);
 </script>

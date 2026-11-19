@@ -104,7 +104,7 @@
   </CardHeader>
 
   {#if discounts.length === 0}
-    <NoContent icon="" />
+    <NoContent />
   {:else}
     <div class="table-responsive">
       <table class="table table-hover align-middle text-nowrap">

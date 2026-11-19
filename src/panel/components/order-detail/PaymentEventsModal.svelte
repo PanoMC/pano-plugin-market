@@ -22,7 +22,7 @@
             <LoadError {error} onRetry={() => load(currentPage)} />
           </div>
         {:else if events.length === 0}
-          <NoContent icon="" />
+          <NoContent />
         {:else}
           <div class="table-responsive">
             <table class="table table-hover">

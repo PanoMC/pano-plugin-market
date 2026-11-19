@@ -143,7 +143,7 @@
         </div>
       </CardHeader>
       {#if model.jobs.length === 0}
-        <NoContent icon="" />
+        <NoContent />
       {:else}
         <div class="table-responsive">
           <table class="table table-hover">
@@ -205,7 +205,7 @@
         </div>
       </CardHeader>
       {#if model.providers.length === 0}
-        <NoContent icon="" />
+        <NoContent />
       {:else}
         <div class="table-responsive">
           <table class="table table-hover">
@@ -243,7 +243,7 @@
         </div>
       </CardHeader>
       {#if model.servers.length === 0}
-        <NoContent icon="" />
+        <NoContent />
       {:else}
         <div class="table-responsive">
           <table class="table table-hover">

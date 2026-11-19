@@ -25,7 +25,7 @@
     {/if}
 
     {#if product.bundleItems.length === 0}
-      <NoContent icon="" />
+      <NoContent />
     {:else}
       <div class="table-responsive">
         <table class="table table-hover">
