@@ -11,6 +11,10 @@ import com.panomc.plugins.market.support.Fixtures
 import com.panomc.plugins.market.support.TestWiring
 import com.panomc.plugins.market.util.OrderStatus
 import io.vertx.core.Vertx
+import io.vertx.sqlclient.PreparedQuery
+import io.vertx.sqlclient.Row
+import io.vertx.sqlclient.RowSet
+import io.vertx.sqlclient.SqlClient
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -53,8 +57,8 @@ internal class PlayerErasureITCredits : MarketDaoITBase() {
         assertTrue(result.ok, "the credit reconciler found ${result.problems}")
     }
 
-    private fun service() = PlayerErasureService(
-        clock = w.clock, db = c.ph.db, locks = c.ph.locks, orderService = c.orders, credits = c.credits, prefix = { w.orders.prefix() }, client = { w.pool },
+    private fun service(client: suspend () -> SqlClient = { w.pool }) = PlayerErasureService(
+        clock = w.clock, db = c.ph.db, locks = c.ph.locks, orderService = c.orders, credits = c.credits, prefix = { w.orders.prefix() }, client = client,
         endSubscriptions = { }, afterCommit = { after -> c.payments.runAfterCommit(after, w.pool) }
     )
 
@@ -134,5 +138,35 @@ internal class PlayerErasureITCredits : MarketDaoITBase() {
         assertEquals("user-delete:${alex.id}", keys[0])
         assertTrue(keys[1].startsWith("user-delete:${alex.id}:sweep:"), keys[1])
         assertNotNull(sql("SELECT 1 FROM `pano_market_order_event` WHERE `orderId` = ? AND `type` = 'PII_ERASED'", order.id).firstOrNull())
+    }
+
+    @Test
+    fun `when the hold check fails the account keeps its user and the marker stays`(): Unit = runBlocking {
+        val alex = w.fixtures.user("Alex")
+
+        c.h.emails[alex.id] = "alex@example.com"
+        w.fixtures.credit(alex, 10_000)
+        w.fixtures.paymentMethod("fake")
+        c.deferStart = true
+
+        val product = w.fixtures.product(price = 3_000, creditPrice = 2_500, stock = 3)
+        val order = c.orderOf(c.spend(product, QuoteCaller(alex.id)))
+        val attempt = c.attempts(order.id).single()
+
+        Fixtures.setColumns(pool, "market_payment", attempt.id, mapOf("status" to "PROCESSING"))
+
+        // the hold check hits a transient database error, every other statement works
+        val flaky = object : SqlClient by w.pool {
+            override fun preparedQuery(sql: String): PreparedQuery<RowSet<Row>> =
+                if (sql.contains("`reservationState` = 'HELD'")) throw IllegalStateException("lock wait timeout") else w.pool.preparedQuery(sql)
+        }
+        val report = service { flaky }.erase(alex.id)
+
+        assertTrue("hold-check" in report.failed, "failed ${report.failed}")
+        assertFalse(report.complete)
+        assertEquals(alex.id, one("market_credit_account", alex.accountId, "userId"), "the account is kept while the hold is unknown")
+        assertEquals(alex.id, c.order(order.id).userId)
+        assertEquals(0L, w.creditAccounts.getById(alex.accountId, pool)!!.balance, "what was spendable is revoked at once")
+        assertEquals(1L, count("market_sequence", "`name` = ?", PlayerErasureService.markerName(alex.id)))
     }
 }

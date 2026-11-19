@@ -104,9 +104,11 @@ class PlayerErasureService(
 
         // the orders that still hold credits are known only after step 1 ran
         var deferred = false
+        var holdKnown = false
 
-        step("hold-check") { deferred = holdsCredits(userId) }
-        step("credits") { closeCredits(userId, deferred) }
+        step("hold-check") { deferred = holdsCredits(userId); holdKnown = true }
+        // an unknown hold counts as a hold: the account keeps its user id, the next run (the marker stays) closes it
+        step("credits") { closeCredits(userId, deferred || !holdKnown) }
         step("cart-address") { db.tx { c -> cartAndAddresses(c, userId) } }
         step("orders") { db.tx { c -> orders(c, scope) } }
         step("recipient") { db.tx { c -> exec(c, "UPDATE ${t("market_order")} SET `recipientUserId` = NULL WHERE `recipientUserId` = ?", listOf(userId)) } }
