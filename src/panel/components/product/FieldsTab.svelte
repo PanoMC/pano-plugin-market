@@ -7,7 +7,7 @@
       <div slot="right">
         <button
           type="button"
-          class="btn btn-sm btn-link"
+          class="btn btn-sm btn-primary"
           disabled={product.fields.length >= MAX_FIELDS}
           onclick={() => fieldModal?.open({ siblings: product.fields })}>
           <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
@@ -25,7 +25,7 @@
     {/if}
 
     {#if product.fields.length === 0}
-      <NoContent icon="" />
+      <NoContent />
     {:else}
       <div class="table-responsive">
         <table class="table table-hover">

@@ -196,7 +196,6 @@
           autofocus
           initialValue={search}
           searching={isSearching}
-          placeholderKey="plugins.pano-plugin-market.search.gifts"
           onchange={onSearchChange} />
       </div>
       <CardFilters slot="right">

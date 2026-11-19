@@ -21,7 +21,6 @@
             autofocus
             initialValue={filters.search}
             searching={$navigating !== null}
-            placeholderKey="plugins.pano-plugin-market.search.blocks"
             debounceMs={300}
             onchange={(value) => go({ search: value })} />
         </div>

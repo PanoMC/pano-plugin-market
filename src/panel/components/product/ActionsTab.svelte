@@ -23,7 +23,7 @@
       <div slot="right">
         <button
           type="button"
-          class="btn btn-sm btn-link"
+          class="btn btn-sm btn-primary"
           disabled={product.actions.length >= MAX_ACTIONS}
           onclick={openModal}>
           <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
@@ -41,7 +41,7 @@
     {/if}
 
     {#if product.actions.length === 0}
-      <NoContent icon="" />
+      <NoContent />
     {/if}
   </div>
 
@@ -52,19 +52,22 @@
           ? $_('pages.create-product.actions.other-phase')
           : $_(`enums.phase.${group.phase}`)}
       </h6>
-      {#each group.items as item (item.index)}
-        <ActionEditor
-          bind:action={product.actions[item.index]}
-          disabled={actionLocked(item.action, user)}
-          {servers}
-          serverChoices={product.serverChoices}
-          {phases}
-          {variables}
-          errors={errorsOf(item.index)}
-          path="actions.{item.index}"
-          unknownVars={unknownVariables(item.action, product)}
-          onRemove={() => remove(item.index)} />
-      {/each}
+      <div class="accordion">
+        {#each group.items as item (item.index)}
+          <ActionEditor
+            accordion
+            bind:action={product.actions[item.index]}
+            disabled={actionLocked(item.action, user)}
+            {servers}
+            serverChoices={product.serverChoices}
+            {phases}
+            {variables}
+            errors={errorsOf(item.index)}
+            path="actions.{item.index}"
+            unknownVars={unknownVariables(item.action, product)}
+            onRemove={() => remove(item.index)} />
+        {/each}
+      </div>
     </div>
   {/each}
 </div>
@@ -81,20 +84,25 @@
           aria-label={$_('common.close')}></button>
       </div>
       <div class="modal-body">
-        <div class="row g-2">
+        <div class="list-group">
           {#each addableTypes as type (type)}
-            <div class="col-6">
-              <button
-                type="button"
-                class="btn btn-outline-secondary w-100 h-100 text-start p-3"
-                onclick={() => add(type)}>
-                <i class="fa-solid {TYPE_ICON[type]} mb-2 d-block fs-4" aria-hidden="true"></i>
-                <b class="d-block">{$_(`pages.create-product.action-type.${type}`)}</b>
-                <span class="small text-body-secondary">
-                  {$_(`pages.create-product.action-type-desc.${type}`)}
-                </span>
-              </button>
-            </div>
+            <button
+              type="button"
+              class="list-group-item list-group-item-action fw-normal d-flex align-items-center gap-3 py-3"
+              onclick={() => add(type)}>
+              <!-- emphasis on a subtle tile: the theme pairs these two, so the icon reads in light and dark -->
+              <span
+                class="d-inline-flex align-items-center justify-content-center rounded bg-primary-subtle text-primary-emphasis flex-shrink-0"
+                style="width: 2.5rem; height: 2.5rem;">
+                <i class="fa-solid {TYPE_ICON[type]} fs-5" aria-hidden="true"></i>
+              </span>
+              <span>
+                <span class="d-block text-body text-capitalize"
+                  >{$_(`pages.create-product.action-type.${type}`)}</span>
+                <span class="d-block text-body-secondary"
+                  >{$_(`pages.create-product.action-type-desc.${type}`)}</span>
+              </span>
+            </button>
           {/each}
         </div>
       </div>

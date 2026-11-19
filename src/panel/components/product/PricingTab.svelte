@@ -142,7 +142,7 @@
                 value={mode}
                 disabled={billingLocked}
                 bind:group={product.billingMode} />
-              <label class="btn btn-outline-secondary" for="product-billing-{mode}">
+              <label class="btn btn-outline-primary" for="product-billing-{mode}">
                 {$_(`enums.billing-mode.${mode}`)}
               </label>
             {/each}
@@ -234,7 +234,7 @@
               </span>
               <button
                 type="button"
-                class="btn btn-sm btn-secondary"
+                class="btn btn-sm btn-primary"
                 onclick={() => onAdjustStock(null)}>
                 {$_('pages.create-product.adjust-stock')}
               </button>

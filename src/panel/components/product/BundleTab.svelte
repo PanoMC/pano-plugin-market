@@ -7,7 +7,7 @@
       <div slot="right">
         <button
           type="button"
-          class="btn btn-sm btn-link"
+          class="btn btn-sm btn-primary"
           disabled={product.bundleItems.length >= MAX_BUNDLE_ROWS}
           onclick={openModal}>
           <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>

@@ -148,7 +148,6 @@
             <SearchInput
               initialValue={search}
               searching={$navigating !== null}
-              placeholderKey="plugins.pano-plugin-market.search.credit-accounts"
               onchange={onSearchChange}
               autofocus />
           {/if}

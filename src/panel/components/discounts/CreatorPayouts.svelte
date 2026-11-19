@@ -7,7 +7,6 @@
       <SearchInput
         initialValue={query}
         autofocus
-        placeholderKey="plugins.pano-plugin-market.search.creator-report"
         onchange={(value) => (query = value ?? '')} />
     </div>
     <div slot="right" class="dropdown">

@@ -12,7 +12,7 @@
       <div class="modal-body">
         {#if event}
           <dl class="row mb-0">
-            <dt class="col-sm-4">{$_('common.status')}</dt>
+            <dt class="col-sm-4 text-body-secondary">{$_('common.status')}</dt>
             <dd class="col-sm-8">
               <StatusBadge kind="event" value={event.status} />
               {#if isUnverified(event)}
@@ -20,19 +20,19 @@
               {/if}
             </dd>
             {#each rows as [key, value] (key)}
-              <dt class="col-sm-4">{$_(`modals.payment-event.rows.${key}`)}</dt>
+              <dt class="col-sm-4 text-body-secondary">{$_(`modals.payment-event.rows.${key}`)}</dt>
               <dd class="col-sm-8 text-break">{value === null || value === '' ? '—' : value}</dd>
             {/each}
-            <dt class="col-sm-4">{$_('modals.payment-event.date')}</dt>
+            <dt class="col-sm-4 text-body-secondary">{$_('modals.payment-event.date')}</dt>
             <dd class="col-sm-8">{dateText(event.createdAt)}</dd>
           </dl>
 
           {#if showBodies && headersText}
-            <h6 class="mt-4">{$_('modals.payment-event.headers')}</h6>
+            <h6 class="mt-4 text-body-secondary">{$_('modals.payment-event.headers')}</h6>
             <pre class="mb-0">{headersText}</pre>
           {/if}
           {#if showBodies && bodyText}
-            <h6 class="mt-4">{$_('modals.payment-event.body')}</h6>
+            <h6 class="mt-4 text-body-secondary">{$_('modals.payment-event.body')}</h6>
             <pre class="mb-0">{bodyText}</pre>
           {/if}
         {/if}

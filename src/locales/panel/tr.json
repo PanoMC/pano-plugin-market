@@ -1704,7 +1704,7 @@
       "title-add": "Özel Alan Ekle",
       "title-edit": "Özel Alanı Düzenle",
       "label": "Etiket",
-      "field-key": "Anahtar, örn. rank",
+      "field-key": "Alan Anahtarı",
       "key-locked": "Alan kaydedildikten sonra anahtar değiştirilemez.",
       "type": "Tür",
       "types": {
@@ -1717,19 +1717,19 @@
         "DISCORD_ID": "Discord kimliği"
       },
       "required": "Zorunlu",
-      "usable-in-commands": "Komutlarda kullanılabilir",
-      "help-text": "Yardım metni",
-      "placeholder": "Yer tutucu",
-      "default-value": "Varsayılan değer",
-      "default-none": "Varsayılan yok",
+      "usable-in-commands": "Komutlarda Kullanılabilir",
+      "help-text": "Yardım Metni",
+      "placeholder": "Yer Tutucu",
+      "default-value": "Varsayılan Değer",
+      "default-none": "Varsayılan Yok",
       "options": "Seçenekler",
       "option-value": "Değer",
       "option-label": "Etiket",
-      "pattern": "Desen (düzenli ifade)",
-      "min-length": "En az uzunluk",
-      "max-length": "En çok uzunluk",
-      "min-value": "En düşük değer",
-      "max-value": "En yüksek değer"
+      "pattern": "Regex Deseni",
+      "min-length": "En Az Uzunluk",
+      "max-length": "En Çok Uzunluk",
+      "min-value": "En Düşük Değer",
+      "max-value": "En Yüksek Değer"
     },
     "delivery-filters": {
       "title": "Teslimat Filtreleri",

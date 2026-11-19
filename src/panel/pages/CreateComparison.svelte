@@ -64,7 +64,7 @@
                         >{$_('pages.create-comparison.feature-name-header')}</th>
                       {#each comparison.selectedProducts as prodId, colIndex}
                         <th scope="col" class="text-center" style="min-width: 200px;">
-                          <div class="d-flex align-items-center gap-1">
+                          <div class="input-group flex-nowrap">
                             <select
                               class="form-select text-truncate"
                               value={prodId || ''}
@@ -82,10 +82,12 @@
                             </select>
                             <button
                               type="button"
-                              class="btn-close"
+                              class="btn btn-outline-danger"
                               onclick={() => removeColumn(colIndex)}
                               title={$_('pages.create-comparison.delete-column')}
-                              aria-label={$_('pages.create-comparison.delete-column')}></button>
+                              aria-label={$_('pages.create-comparison.delete-column')}>
+                              <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                            </button>
                           </div>
                         </th>
                       {/each}
@@ -104,11 +106,21 @@
                     {#each comparison.features as feature (feature.id)}
                       <tr>
                         <td>
-                          <input
-                            type="text"
-                            class="form-control"
-                            bind:value={feature.name}
-                            placeholder={$_('pages.create-comparison.feature-name-placeholder')} />
+                          <div class="input-group flex-nowrap">
+                            <input
+                              type="text"
+                              class="form-control"
+                              bind:value={feature.name}
+                              placeholder={$_('pages.create-comparison.feature-name-placeholder')} />
+                            <button
+                              type="button"
+                              class="btn btn-outline-danger"
+                              onclick={() => removeFeature(feature.id)}
+                              title={$_('pages.create-comparison.delete-row')}
+                              aria-label={$_('pages.create-comparison.delete-row')}>
+                              <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                            </button>
+                          </div>
                         </td>
                         {#each comparison.selectedProducts as prodId}
                           <td class="text-center">
@@ -116,7 +128,7 @@
                               {@const val =
                                 comparison.cellValues[`${feature.id}-${prodId}`] || 'yes'}
                               {#if val !== 'yes' && val !== 'no'}
-                                <div class="hstack gap-2 mx-auto" style="max-width: 160px;">
+                                <div class="input-group flex-nowrap mx-auto" style="max-width: 200px;">
                                   <input
                                     type="text"
                                     class="form-control text-center animate__animated animate__fadeIn animate__fast"
@@ -129,26 +141,37 @@
                                         e.target.value)} />
                                   <button
                                     type="button"
-                                    class="btn-close"
+                                    class="btn btn-link"
                                     onclick={() =>
                                       (comparison.cellValues[`${feature.id}-${prodId}`] = 'yes')}
                                     title={$_('pages.create-comparison.back-to-option')}
-                                    aria-label={$_('pages.create-comparison.back-to-option')}
-                                  ></button>
+                                    aria-label={$_('pages.create-comparison.back-to-option')}>
+                                    <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+                                  </button>
                                 </div>
                               {:else}
-                                <select
-                                  class="form-select text-center mx-auto"
-                                  value={val}
-                                  onchange={(e) =>
-                                    (comparison.cellValues[`${feature.id}-${prodId}`] =
-                                      e.target.value)}
-                                  style="max-width: 120px;">
-                                  <option value="yes">✔</option>
-                                  <option value="no">❌</option>
-                                  <option value="custom"
-                                    >{$_('pages.create-comparison.custom-define')}</option>
-                                </select>
+                                {@const group = `cell-${feature.id}-${prodId}`}
+                                <div class="btn-group" role="group">
+                                  {#each CELL_CHOICES as choice (choice.value)}
+                                    <input
+                                      type="radio"
+                                      class="btn-check"
+                                      name={group}
+                                      id="{group}-{choice.value}"
+                                      autocomplete="off"
+                                      checked={val === choice.value}
+                                      onchange={() =>
+                                        (comparison.cellValues[`${feature.id}-${prodId}`] =
+                                          choice.value)} />
+                                    <label
+                                      class="btn {choice.className}"
+                                      for="{group}-{choice.value}"
+                                      title={$_(choice.label)}>
+                                      <i class="fa-solid {choice.icon}" aria-hidden="true"></i>
+                                      <span class="visually-hidden">{$_(choice.label)}</span>
+                                    </label>
+                                  {/each}
+                                </div>
                               {/if}
                             {:else}
                               <span class="text-body-secondary font-monospace"
@@ -156,14 +179,7 @@
                             {/if}
                           </td>
                         {/each}
-                        <td class="text-center">
-                          <button
-                            type="button"
-                            class="btn-close"
-                            onclick={() => removeFeature(feature.id)}
-                            title={$_('pages.create-comparison.delete-row')}
-                            aria-label={$_('pages.create-comparison.delete-row')}></button>
-                        </td>
+                        <td></td>
                       </tr>
                     {/each}
 
@@ -290,6 +306,18 @@
 </script>
 
 <script>
+  // A cell is yes / no / a custom text; the custom choice opens the text input.
+  const CELL_CHOICES = [
+    { value: 'yes', icon: 'fa-check', className: 'btn-outline-success', label: 'common.yes' },
+    { value: 'no', icon: 'fa-xmark', className: 'btn-outline-danger', label: 'common.no' },
+    {
+      value: 'custom',
+      icon: 'fa-pen',
+      className: 'btn-link',
+      label: 'pages.create-comparison.custom-define',
+    },
+  ];
+
   import MarketLayout from '../layouts/MarketLayout.svelte';
   import { base, goto, page } from '@panomc/sdk/svelte';
   import { _, showSuccessToast, showErrorToast } from '../../i18n';

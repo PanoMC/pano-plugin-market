@@ -1704,7 +1704,7 @@
       "title-add": "Add Custom Field",
       "title-edit": "Edit Custom Field",
       "label": "Label",
-      "field-key": "Key, e.g. rank",
+      "field-key": "Field Key",
       "key-locked": "The key cannot change after the field is saved.",
       "type": "Type",
       "types": {
@@ -1717,19 +1717,19 @@
         "DISCORD_ID": "Discord ID"
       },
       "required": "Required",
-      "usable-in-commands": "Usable in commands",
-      "help-text": "Help text",
+      "usable-in-commands": "Usable In Commands",
+      "help-text": "Help Text",
       "placeholder": "Placeholder",
-      "default-value": "Default value",
-      "default-none": "No default",
+      "default-value": "Default Value",
+      "default-none": "No Default",
       "options": "Options",
       "option-value": "Value",
       "option-label": "Label",
-      "pattern": "Pattern (regular expression)",
-      "min-length": "Minimum length",
-      "max-length": "Maximum length",
-      "min-value": "Minimum value",
-      "max-value": "Maximum value"
+      "pattern": "Regex Pattern",
+      "min-length": "Min Length",
+      "max-length": "Max Length",
+      "min-value": "Min Value",
+      "max-value": "Max Value"
     },
     "delivery-filters": {
       "title": "Delivery Filters",

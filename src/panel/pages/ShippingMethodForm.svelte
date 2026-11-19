@@ -149,13 +149,13 @@
                         onchange={() => setRateSource(source)} />
                       {#if allowed}
                         <label
-                          class="btn btn-outline-secondary"
+                          class="btn btn-outline-primary"
                           for="shippingMethodRateSource-{source}">
                           {$_(`enums.shipping-rate-source.${source}`)}
                         </label>
                       {:else}
                         <label
-                          class="btn btn-outline-secondary disabled"
+                          class="btn btn-outline-primary disabled"
                           for="shippingMethodRateSource-{source}"
                           use:tooltip={[$_('pages.shipping-method.rate-source-needs-quote')]}>
                           {$_(`enums.shipping-rate-source.${source}`)}

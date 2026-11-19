@@ -10,7 +10,6 @@
         <div slot="middle" style="width: 250px;">
           <SearchInput
             autofocus
-            placeholderKey="plugins.pano-plugin-market.search.shipments"
             initialValue={filters.search}
             searching={$navigating !== null}
             debounceMs={300}

@@ -1,5 +1,5 @@
 <div class="modal fade" tabindex="-1" aria-hidden="true" bind:this={modalElement}>
-  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">
@@ -16,33 +16,39 @@
       <form onsubmit={submit} novalidate>
         <div class="modal-body vstack gap-3">
           <div>
-            <input
-              type="text"
-              class="form-control"
-              class:is-invalid={errors.label}
-              maxlength="255"
-              autocomplete="off"
-              data-field="label"
-              placeholder={$_('modals.product-field.label')}
-              aria-label={$_('modals.product-field.label')}
-              bind:value={draft.label}
-              oninput={onLabelInput} />
+            <div class="form-floating">
+              <input
+                type="text"
+                class="form-control"
+                class:is-invalid={errors.label}
+                maxlength="255"
+                autocomplete="off"
+                data-field="label"
+                placeholder={$_('modals.product-field.label')}
+                id="pf-label"
+                bind:value={draft.label}
+                oninput={onLabelInput} />
+              <label for="pf-label">{$_('modals.product-field.label')}</label>
+            </div>
             {@render feedback('label')}
           </div>
 
           <div>
-            <input
-              type="text"
-              class="form-control font-monospace"
-              class:is-invalid={errors.fieldKey}
-              maxlength="32"
-              autocomplete="off"
-              data-field="fieldKey"
-              readonly={!draft.isNew}
-              placeholder={$_('modals.product-field.field-key')}
-              aria-label={$_('modals.product-field.field-key')}
-              bind:value={draft.fieldKey}
-              oninput={() => (keyTouched = true)} />
+            <div class="form-floating">
+              <input
+                type="text"
+                class="form-control font-monospace"
+                class:is-invalid={errors.fieldKey}
+                maxlength="32"
+                autocomplete="off"
+                data-field="fieldKey"
+                readonly={!draft.isNew}
+                placeholder={$_('modals.product-field.field-key')}
+                id="pf-field-key"
+                bind:value={draft.fieldKey}
+                oninput={() => (keyTouched = true)} />
+              <label for="pf-field-key">{$_('modals.product-field.field-key')}</label>
+            </div>
             {@render feedback('fieldKey')}
             {#if !draft.isNew}
               <div class="form-text">{$_('modals.product-field.key-locked')}</div>
@@ -51,18 +57,19 @@
 
           <div class="row g-3 align-items-center">
             <div class="col-sm-6">
-              <label class="form-label mb-1" for="field-type"
-                >{$_('modals.product-field.type')}</label>
-              <select
-                id="field-type"
-                class="form-select"
-                data-field="type"
-                value={draft.type}
-                onchange={(e) => setType(e.currentTarget.value)}>
-                {#each FIELD_TYPES as type (type)}
-                  <option value={type}>{$_(`modals.product-field.types.${type}`)}</option>
-                {/each}
-              </select>
+              <div class="form-floating">
+                <select
+                  id="field-type"
+                  class="form-select"
+                  data-field="type"
+                  value={draft.type}
+                  onchange={(e) => setType(e.currentTarget.value)}>
+                  {#each FIELD_TYPES as type (type)}
+                    <option value={type}>{$_(`modals.product-field.types.${type}`)}</option>
+                  {/each}
+                </select>
+                <label for="field-type">{$_('modals.product-field.type')}</label>
+              </div>
             </div>
             <div class="col-sm-6">
               <div class="form-check form-switch">
@@ -93,68 +100,83 @@
           </div>
 
           <div>
-            <input
-              type="text"
-              class="form-control"
-              class:is-invalid={errors.helpText}
-              maxlength="512"
-              autocomplete="off"
-              data-field="helpText"
-              placeholder={$_('modals.product-field.help-text')}
-              aria-label={$_('modals.product-field.help-text')}
-              bind:value={draft.helpText} />
+            <div class="form-floating">
+              <input
+                type="text"
+                class="form-control"
+                class:is-invalid={errors.helpText}
+                maxlength="512"
+                autocomplete="off"
+                data-field="helpText"
+                placeholder={$_('modals.product-field.help-text')}
+                id="pf-help-text"
+                bind:value={draft.helpText} />
+              <label for="pf-help-text">{$_('modals.product-field.help-text')}</label>
+            </div>
             {@render feedback('helpText')}
           </div>
 
           <div class="row g-3">
             <div class="col-sm-6">
-              <input
-                type="text"
-                class="form-control"
-                class:is-invalid={errors.placeholder}
-                maxlength="255"
-                autocomplete="off"
-                data-field="placeholder"
-                placeholder={$_('modals.product-field.placeholder')}
-                aria-label={$_('modals.product-field.placeholder')}
-                bind:value={draft.placeholder} />
+              <div class="form-floating">
+                <input
+                  type="text"
+                  class="form-control"
+                  class:is-invalid={errors.placeholder}
+                  maxlength="255"
+                  autocomplete="off"
+                  data-field="placeholder"
+                  placeholder={$_('modals.product-field.placeholder')}
+                  id="pf-placeholder"
+                  bind:value={draft.placeholder} />
+                <label for="pf-placeholder">{$_('modals.product-field.placeholder')}</label>
+              </div>
               {@render feedback('placeholder')}
             </div>
             <div class="col-sm-6">
               {#if draft.type === 'CHECKBOX'}
-                <select
-                  class="form-select"
-                  class:is-invalid={errors.defaultValue}
-                  data-field="defaultValue"
-                  aria-label={$_('modals.product-field.default-value')}
-                  bind:value={draft.defaultValue}>
-                  <option value="">{$_('modals.product-field.default-none')}</option>
-                  <option value="true">{$_('common.yes')}</option>
-                  <option value="false">{$_('common.no')}</option>
-                </select>
+                <div class="form-floating">
+                  <select
+                    class="form-select"
+                    class:is-invalid={errors.defaultValue}
+                    data-field="defaultValue"
+                    id="pf-default-value"
+                    bind:value={draft.defaultValue}>
+                    <option value="">{$_('modals.product-field.default-none')}</option>
+                    <option value="true">{$_('common.yes')}</option>
+                    <option value="false">{$_('common.no')}</option>
+                  </select>
+                  <label for="pf-default-value">{$_('modals.product-field.default-value')}</label>
+                </div>
               {:else if draft.type === 'SELECT'}
-                <select
-                  class="form-select"
-                  class:is-invalid={errors.defaultValue}
-                  data-field="defaultValue"
-                  aria-label={$_('modals.product-field.default-value')}
-                  bind:value={draft.defaultValue}>
-                  <option value="">{$_('modals.product-field.default-none')}</option>
-                  {#each optionRows.filter((row) => row.key !== '') as row (row.key)}
-                    <option value={row.key}>{row.value || row.key}</option>
-                  {/each}
-                </select>
+                <div class="form-floating">
+                  <select
+                    class="form-select"
+                    class:is-invalid={errors.defaultValue}
+                    data-field="defaultValue"
+                    id="pf-default-value"
+                    bind:value={draft.defaultValue}>
+                    <option value="">{$_('modals.product-field.default-none')}</option>
+                    {#each optionRows.filter((row) => row.key !== '') as row (row.key)}
+                      <option value={row.key}>{row.value || row.key}</option>
+                    {/each}
+                  </select>
+                  <label for="pf-default-value">{$_('modals.product-field.default-value')}</label>
+                </div>
               {:else}
-                <input
-                  type="text"
-                  class="form-control"
-                  class:is-invalid={errors.defaultValue}
-                  maxlength="255"
-                  autocomplete="off"
-                  data-field="defaultValue"
-                  placeholder={$_('modals.product-field.default-value')}
-                  aria-label={$_('modals.product-field.default-value')}
-                  bind:value={draft.defaultValue} />
+                <div class="form-floating">
+                  <input
+                    type="text"
+                    class="form-control"
+                    class:is-invalid={errors.defaultValue}
+                    maxlength="255"
+                    autocomplete="off"
+                    data-field="defaultValue"
+                    placeholder={$_('modals.product-field.default-value')}
+                    id="pf-default-value"
+                    bind:value={draft.defaultValue} />
+                  <label for="pf-default-value">{$_('modals.product-field.default-value')}</label>
+                </div>
               {/if}
               {@render feedback('defaultValue')}
             </div>
@@ -178,45 +200,54 @@
 
           {#if draft.type === 'TEXT'}
             <div>
-              <input
-                type="text"
-                class="form-control font-monospace"
-                class:is-invalid={errors.pattern}
-                maxlength="255"
-                autocomplete="off"
-                data-field="pattern"
-                placeholder={$_('modals.product-field.pattern')}
-                aria-label={$_('modals.product-field.pattern')}
-                bind:value={draft.pattern} />
+              <div class="form-floating">
+                <input
+                  type="text"
+                  class="form-control font-monospace"
+                  class:is-invalid={errors.pattern}
+                  maxlength="255"
+                  autocomplete="off"
+                  data-field="pattern"
+                  placeholder={$_('modals.product-field.pattern')}
+                  id="pf-pattern"
+                  bind:value={draft.pattern} />
+                <label for="pf-pattern">{$_('modals.product-field.pattern')}</label>
+              </div>
               {@render feedback('pattern')}
             </div>
             <div class="row g-3">
               <div class="col-sm-6">
-                <input
-                  type="number"
-                  min="0"
-                  max="128"
-                  step="1"
-                  class="form-control"
-                  class:is-invalid={errors.minLength}
-                  data-field="minLength"
-                  placeholder={$_('modals.product-field.min-length')}
-                  aria-label={$_('modals.product-field.min-length')}
-                  bind:value={draft.minLength} />
+                <div class="form-floating">
+                  <input
+                    type="number"
+                    min="0"
+                    max="128"
+                    step="1"
+                    class="form-control"
+                    class:is-invalid={errors.minLength}
+                    data-field="minLength"
+                    placeholder={$_('modals.product-field.min-length')}
+                    id="pf-min-length"
+                    bind:value={draft.minLength} />
+                  <label for="pf-min-length">{$_('modals.product-field.min-length')}</label>
+                </div>
                 {@render feedback('minLength')}
               </div>
               <div class="col-sm-6">
-                <input
-                  type="number"
-                  min="0"
-                  max="128"
-                  step="1"
-                  class="form-control"
-                  class:is-invalid={errors.maxLength}
-                  data-field="maxLength"
-                  placeholder={$_('modals.product-field.max-length')}
-                  aria-label={$_('modals.product-field.max-length')}
-                  bind:value={draft.maxLength} />
+                <div class="form-floating">
+                  <input
+                    type="number"
+                    min="0"
+                    max="128"
+                    step="1"
+                    class="form-control"
+                    class:is-invalid={errors.maxLength}
+                    data-field="maxLength"
+                    placeholder={$_('modals.product-field.max-length')}
+                    id="pf-max-length"
+                    bind:value={draft.maxLength} />
+                  <label for="pf-max-length">{$_('modals.product-field.max-length')}</label>
+                </div>
                 {@render feedback('maxLength')}
               </div>
             </div>
@@ -225,27 +256,33 @@
           {#if draft.type === 'NUMBER'}
             <div class="row g-3">
               <div class="col-sm-6">
-                <input
-                  type="number"
-                  step="1"
-                  class="form-control"
-                  class:is-invalid={errors.minValue}
-                  data-field="minValue"
-                  placeholder={$_('modals.product-field.min-value')}
-                  aria-label={$_('modals.product-field.min-value')}
-                  bind:value={draft.minValue} />
+                <div class="form-floating">
+                  <input
+                    type="number"
+                    step="1"
+                    class="form-control"
+                    class:is-invalid={errors.minValue}
+                    data-field="minValue"
+                    placeholder={$_('modals.product-field.min-value')}
+                    id="pf-min-value"
+                    bind:value={draft.minValue} />
+                  <label for="pf-min-value">{$_('modals.product-field.min-value')}</label>
+                </div>
                 {@render feedback('minValue')}
               </div>
               <div class="col-sm-6">
-                <input
-                  type="number"
-                  step="1"
-                  class="form-control"
-                  class:is-invalid={errors.maxValue}
-                  data-field="maxValue"
-                  placeholder={$_('modals.product-field.max-value')}
-                  aria-label={$_('modals.product-field.max-value')}
-                  bind:value={draft.maxValue} />
+                <div class="form-floating">
+                  <input
+                    type="number"
+                    step="1"
+                    class="form-control"
+                    class:is-invalid={errors.maxValue}
+                    data-field="maxValue"
+                    placeholder={$_('modals.product-field.max-value')}
+                    id="pf-max-value"
+                    bind:value={draft.maxValue} />
+                  <label for="pf-max-value">{$_('modals.product-field.max-value')}</label>
+                </div>
                 {@render feedback('maxValue')}
               </div>
             </div>

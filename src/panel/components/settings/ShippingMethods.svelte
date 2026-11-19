@@ -14,7 +14,7 @@
         {$_('settings.shipping-methods.count', { values: { count: methods.length } })}
       </div>
       <div slot="right">
-        <a class="btn btn-sm btn-link" href="{base}/market/settings/shipping-method">
+        <a class="btn btn-sm btn-primary" href="{base}/market/settings/shipping-method">
           <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
           {$_('settings.shipping-methods.create')}
         </a>

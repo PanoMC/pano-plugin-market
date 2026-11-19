@@ -34,7 +34,7 @@
         <div slot="right">
           <button
             type="button"
-            class="btn btn-sm btn-link"
+            class="btn btn-sm btn-primary"
             disabled={axes.length >= MAX_AXES}
             onclick={addAxis}>
             <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
@@ -141,7 +141,7 @@
         <div slot="right">
           <button
             type="button"
-            class="btn btn-sm btn-link"
+            class="btn btn-sm btn-primary"
             disabled={product.variants.length >= MAX_VARIANTS}
             onclick={addVariant}>
             <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>

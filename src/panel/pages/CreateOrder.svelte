@@ -103,7 +103,7 @@
                 {$_('pages.create-order.items.title', { values: { count: lines.length } })}
               </div>
               <div slot="right">
-                <button type="button" class="btn btn-sm btn-link" onclick={() => itemModal?.open()}>
+                <button type="button" class="btn btn-sm btn-primary" onclick={() => itemModal?.open()}>
                   <i class="fa-solid fa-plus me-2" aria-hidden="true"></i>
                   {$_('pages.create-order.items.add')}
                 </button>

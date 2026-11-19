@@ -1,22 +1,52 @@
-<div class="card" data-field={path}>
-  <div class="card-header d-flex align-items-center gap-2">
-    <i class="fa-solid {TYPE_ICON[action.type] ?? 'fa-bolt'}" aria-hidden="true"></i>
-    <b class="flex-grow-1">{$_(`enums.action-type.${action.type}`)}</b>
-    {#if action.id}
-      <span class="badge text-bg-primary font-monospace">{action.id}</span>
-    {/if}
-    <!-- removing an action needs no extra right (11 §14.4): the button stays on a locked row -->
-    <button
-      type="button"
-      class="btn btn-sm btn-link link-danger"
-      aria-label={$_('components.action-editor.remove')}
-      use:tooltip={[$_('components.action-editor.remove')]}
-      onclick={() => onRemove()}>
-      <i class="fa-solid fa-trash" aria-hidden="true"></i>
-    </button>
-  </div>
+{#snippet removeButton()}
+  <!-- removing an action needs no extra right (11 §14.4): the button stays on a locked row -->
+  <button
+    type="button"
+    class="btn btn-sm btn-link link-danger"
+    aria-label={$_('components.action-editor.remove')}
+    title={$_('components.action-editor.remove')}
+    onclick={() => onRemove()}>
+    <i class="fa-solid fa-trash" aria-hidden="true"></i>
+  </button>
+{/snippet}
 
-  <fieldset class="card-body" {disabled}>
+{#if accordion}
+  <!-- an item of the parent's .accordion; open / closed is kept here, not by Bootstrap's collapse JS -->
+  <div class="accordion-item" data-field={path}>
+    <h2 class="accordion-header d-flex align-items-center">
+      <button
+        type="button"
+        class="accordion-button"
+        class:collapsed={!open}
+        aria-expanded={open}
+        aria-controls="{uid}-body"
+        onclick={() => (open = !open)}>
+        <span class="text-truncate">{$_(`enums.action-type.${action.type}`)}</span>
+        {#if action.id}
+          <span class="badge text-bg-primary font-monospace ms-2 flex-shrink-0">{action.id}</span>
+        {/if}
+      </button>
+      <div class="px-2 flex-shrink-0">{@render removeButton()}</div>
+    </h2>
+    <div id="{uid}-body" class="accordion-collapse collapse" class:show={open}>
+      {@render body('accordion-body')}
+    </div>
+  </div>
+{:else}
+  <div class="card" data-field={path}>
+    <div class="card-header d-flex align-items-center gap-2">
+      <b class="flex-grow-1">{$_(`enums.action-type.${action.type}`)}</b>
+      {#if action.id}
+        <span class="badge text-bg-primary font-monospace">{action.id}</span>
+      {/if}
+      {@render removeButton()}
+    </div>
+    {@render body('card-body')}
+  </div>
+{/if}
+
+{#snippet body(bodyClass)}
+  <fieldset class={bodyClass} {disabled}>
     {#if disabled}
       <div class="text-body-secondary small mb-3">{$_('components.action-editor.locked')}</div>
     {/if}
@@ -118,28 +148,28 @@
                 onblur={(e) => onCommandBlur(j, e.currentTarget)} />
               <button
                 type="button"
-                class="btn btn-outline-secondary"
+                class="btn btn-outline-primary"
                 disabled={j === 0}
                 aria-label={$_('common.move-up')}
-                use:tooltip={[$_('common.move-up')]}
+                title={$_('common.move-up')}
                 onclick={() => moveCommand(j, -1)}>
                 <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
               </button>
               <button
                 type="button"
-                class="btn btn-outline-secondary"
+                class="btn btn-outline-primary"
                 disabled={j === action.value.length - 1}
                 aria-label={$_('common.move-down')}
-                use:tooltip={[$_('common.move-down')]}
+                title={$_('common.move-down')}
                 onclick={() => moveCommand(j, 1)}>
                 <i class="fa-solid fa-arrow-down" aria-hidden="true"></i>
               </button>
               <button
                 type="button"
-                class="btn btn-outline-secondary"
+                class="btn btn-outline-primary"
                 disabled={action.value.length <= 1}
                 aria-label={$_('common.remove')}
-                use:tooltip={[$_('common.remove')]}
+                title={$_('common.remove')}
                 onclick={() => removeCommand(j)}>
                 <i class="fa-solid fa-xmark" aria-hidden="true"></i>
               </button>
@@ -154,7 +184,7 @@
           <div class="d-flex align-items-center gap-3">
             <button
               type="button"
-              class="btn btn-link btn-sm px-0"
+              class="btn btn-primary btn-sm"
               disabled={action.value.length >= MAX_COMMANDS}
               onclick={addCommand}>
               <i class="fa-solid fa-plus me-1" aria-hidden="true"></i>
@@ -258,7 +288,7 @@
                 bind:value={action.value.secret}
                 onfocus={onSecretFocus}
                 onblur={onSecretBlur} />
-              <button type="button" class="btn btn-outline-secondary" onclick={generate}>
+              <button type="button" class="btn btn-outline-primary" onclick={generate}>
                 {$_('components.action-editor.generate')}
               </button>
             </div>
@@ -318,7 +348,7 @@
                   value={mode}
                   bind:group={action.serverMode} />
                 <label
-                  class="btn btn-outline-secondary"
+                  class="btn btn-outline-primary"
                   class:border-danger={errors.serverMode && action.serverMode === mode}
                   for="{uid}-mode-{mode}">
                   {$_(`components.action-editor.mode-${mode}`)}
@@ -396,7 +426,7 @@
       </div>
     {/if}
   </fieldset>
-</div>
+{/snippet}
 
 {#snippet feedback(key)}
   {#if errors[key]}
@@ -448,16 +478,18 @@
     unknownVars = [],
     showPhase = true,
     disabled = false,
+    // accordion: render as an .accordion-item (product Actions tab) instead of a card
+    accordion = false,
     onRemove = () => {},
   } = $props();
 
+  // A new action (no id yet) starts open, a saved one closed; one with errors opens so they show.
+  let open = $state(untrack(() => !action?.id));
+  $effect(() => {
+    if (Object.keys(errors ?? {}).length > 0) open = true;
+  });
+
   const uid = $props.id();
-  const TYPE_ICON = {
-    CREDIT: 'fa-coins',
-    PERMISSION: 'fa-key',
-    COMMAND: 'fa-terminal',
-    WEBHOOK: 'fa-link',
-  };
 
   let inputs = $state([]);
   let lastFocus = $state(null);
