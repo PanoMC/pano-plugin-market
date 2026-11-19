@@ -31,7 +31,8 @@
               <input
                 id="credit-adjust-username"
                 type="text"
-                class="form-control"
+                class="form-control form-control-lg"
+                bind:this={usernameInput}
                 class:is-invalid={lookup.status === 'UNKNOWN' || shown.user}
                 autocomplete="off"
                 maxlength="64"
@@ -66,7 +67,8 @@
               id="credit-adjust-amount"
               type="text"
               inputmode="decimal"
-              class="form-control"
+              class="form-control form-control-lg"
+              bind:this={amountInput}
               class:is-invalid={shown.amount}
               autocomplete="off"
               placeholder={$_('modals.credit-adjust.amount')}
@@ -100,7 +102,7 @@
           <button
             type="submit"
             class="btn w-100"
-            class:btn-primary={currentMode !== 'revoke'}
+            class:btn-secondary={currentMode !== 'revoke'}
             class:btn-danger={currentMode === 'revoke'}
             disabled={saving || closing}>
             {#if saving}
@@ -138,6 +140,8 @@
   let { mode = 'grant', account = null, ctx = null, onSaved = () => {} } = $props();
 
   let modalElement = $state(null);
+  let amountInput = $state(null);
+  let usernameInput = $state(null);
   let currentMode = $state('grant');
   let currentAccount = $state(null);
   let username = $state('');
@@ -174,6 +178,13 @@
     saving = false;
     closing = false;
     resetIdempotency(idempotency);
+    // Focus once the modal is shown (Bootstrap moves focus to the dialog while it fades in): the
+    // amount when the account is known, the player name first when it has to be looked up.
+    modalElement?.addEventListener(
+      'shown.bs.modal',
+      () => (currentAccount ? amountInput : usernameInput)?.focus(),
+      { once: true },
+    );
     showModal(modalElement);
   }
 

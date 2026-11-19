@@ -11,13 +11,23 @@
   {/snippet}
   {#snippet right()}
     {#if !error}
-      <button type="button" class="btn btn-secondary" onclick={() => openAdjust('grant')}>
-        <i class="fa-solid fa-plus" aria-hidden="true"></i>
-        <span class="d-lg-inline d-none ms-2">{$_('pages.credits.grant')}</span>
-      </button>
-      <button type="button" class="btn btn-outline-danger" onclick={() => openAdjust('revoke')}>
+      <button
+        type="button"
+        class="btn btn-link link-danger text-decoration-none"
+        title={$_('pages.credits.revoke')}
+        aria-label={$_('pages.credits.revoke')}
+        onclick={() => openAdjust('revoke')}>
         <i class="fa-solid fa-minus" aria-hidden="true"></i>
         <span class="d-lg-inline d-none ms-2">{$_('pages.credits.revoke')}</span>
+      </button>
+      <button
+        type="button"
+        class="btn btn-secondary"
+        title={$_('modals.credit-adjust.title-grant')}
+        aria-label={$_('modals.credit-adjust.title-grant')}
+        onclick={() => openAdjust('grant')}>
+        <i class="fa-solid fa-plus" aria-hidden="true"></i>
+        <span class="d-lg-inline d-none ms-2">{$_('modals.credit-adjust.title-grant')}</span>
       </button>
     {/if}
   {/snippet}
