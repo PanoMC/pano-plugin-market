@@ -227,7 +227,7 @@ const CANCELLABLE_SHIPMENT = ['CREATED', 'LABEL_READY'];
 /** Shipment row (OM, 13 §20.1). `label` = stored label, `generic-label` otherwise. */
 export function shipmentActions(shipment, user) {
   if (!can(user, 'OM') || !shipment) return [];
-  const out = [shipment.labelFile ? 'label' : 'generic-label', 'track'];
+  const out = [(shipment.hasLabel ?? shipment.labelFile) ? 'label' : 'generic-label', 'track'];
   if (shipment.status === 'CREATED' && (shipment.lastErrorCode || shipment.lastError))
     out.push('retry');
   if (CANCELLABLE_SHIPMENT.includes(shipment.status)) out.push('cancel');

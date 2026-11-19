@@ -85,6 +85,12 @@ describe('list', () => {
       'label',
       'track',
     ]);
+    expect(rowActions({ status: 'IN_TRANSIT', hasLabel: true }, om)).toEqual([
+      'view',
+      'label',
+      'track',
+    ]);
+    expect(rowActions({ status: 'IN_TRANSIT', hasLabel: false }, om)).toContain('generic-label');
     expect(rowActions({ status: 'CANCELLED' }, om)).toEqual(['view', 'generic-label', 'track']);
     expect(
       rowActions({ status: 'CREATED', entryMode: 'CARRIER', lastErrorCode: 'TIMEOUT' }, om),

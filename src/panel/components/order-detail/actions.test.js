@@ -242,6 +242,10 @@ describe('row actions', () => {
       'cancel',
     ]);
     expect(shipmentActions({ status: 'IN_TRANSIT' }, om)).toEqual(['generic-label', 'track']);
+    expect(shipmentActions({ status: 'IN_TRANSIT', hasLabel: true }, om)).toEqual([
+      'label',
+      'track',
+    ]);
     expect(shipmentActions({ status: 'CREATED' }, pay)).toEqual([]);
   });
 

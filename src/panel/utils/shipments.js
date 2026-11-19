@@ -58,6 +58,9 @@ export const canRetry = (shipment) =>
 
 export const canCancel = (shipment) => CANCELLABLE_STATUSES.includes(shipment?.status);
 
+/** A carrier label is stored: `hasLabel` (shipment API) or `labelFile` (order detail API). */
+export const hasStoredLabel = (shipment) => Boolean(shipment?.hasLabel ?? shipment?.labelFile);
+
 /** Returned / lost parcel whose items are not freed yet (10 §9.6). `itemsReleased` unknown = offered. */
 export const canRelease = (shipment) =>
   RELEASABLE_STATUSES.includes(shipment?.status) && shipment?.itemsReleased !== true;
@@ -70,7 +73,7 @@ export function rowActions(shipment, user) {
   if (!shipment) return [];
   const out = ['view'];
   if (!can(user, 'OM')) return out;
-  out.push(shipment.labelFile ? 'label' : 'generic-label', 'track');
+  out.push(hasStoredLabel(shipment) ? 'label' : 'generic-label', 'track');
   if (canRetry(shipment)) out.push('retry');
   if (canRelease(shipment)) out.push('release');
   if (canCancel(shipment)) out.push('cancel');
