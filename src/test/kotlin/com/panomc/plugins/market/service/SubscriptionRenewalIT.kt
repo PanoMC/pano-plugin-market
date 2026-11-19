@@ -115,6 +115,9 @@ internal class RenewalWorld(val sw: SubscriptionWorld, val w: TestWiring, val ve
         build()
     }
 
+    /** A job of its own with a small [batch], for the tests of the batch limit. */
+    fun jobWithBatch(batch: Int) = SubscriptionJob(w.clock, sw.db, subs, w.subscriptions, payments, { settings() }, { w.pool }, sink, batch = batch)
+
     fun build() {
         val h = sw.h
         val config = { settings() }

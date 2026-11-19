@@ -286,28 +286,59 @@ class SubscriptionJob(
 
     // ================================================================================================== C and D: the period and the grace
 
+    /**
+     * Step C pages past the rows the machine leaves alone (a gateway whose provider is gone, the renewal slack, a failing row): they keep their
+     * `currentPeriodEnd`, so without the keyset they would hold the first [batch] slots on every tick and no later row would ever be judged. A tick stops
+     * after [batch] rows that moved or [PERIOD_SCAN_PAGES] pages; the cursor is kept for the next tick and reset once the end of the due rows was reached.
+     */
+    @Volatile
+    private var periodCursor: Pair<Long, Long>? = null
+
     private suspend fun periodOver(client: SqlClient): Int {
         val now = clock.now()
-        val due = (subscriptions.getPeriodEnded(SubscriptionStatus.ACTIVE, now, batch, client) + subscriptions.getPeriodEnded(SubscriptionStatus.PAUSED, now, batch, client))
-            .sortedWith(compareBy({ it.currentPeriodEnd }, { it.id }))
-            .take(batch)
+        var cursor = periodCursor
         var handled = 0
+        var moved = 0
+        var pages = 0
 
-        for (subscription in due) {
-            val ok = row("periodOver", subscription.id) {
-                var outcome = db.txRestartingOnOrderChange { conn -> subs.periodOver(conn, subscription.id, polled = false, providerUnavailable = unavailable(subscription, client)) }
+        while (moved < batch && pages < PERIOD_SCAN_PAGES) {
+            pages++
 
-                // a gateway row: ask the gateway first, apply what it says, then judge again (09 section 11, step C)
-                if (outcome is SubscriptionService.StepOutcome.PollFirst) {
-                    poll(subscriptions.getById(subscription.id, client) ?: subscription, client)
-                    outcome = db.txRestartingOnOrderChange { conn -> subs.periodOver(conn, subscription.id, polled = true, providerUnavailable = false) }
+            val due = (subscriptions.getPeriodEnded(SubscriptionStatus.ACTIVE, now, batch, client, cursor) +
+                subscriptions.getPeriodEnded(SubscriptionStatus.PAUSED, now, batch, client, cursor))
+                .sortedWith(compareBy({ it.currentPeriodEnd }, { it.id }))
+                .take(batch)
+
+            for (subscription in due) {
+                if (moved >= batch) break
+
+                cursor = subscription.currentPeriodEnd!! to subscription.id
+
+                val ok = row("periodOver", subscription.id) {
+                    var outcome = db.txRestartingOnOrderChange { conn -> subs.periodOver(conn, subscription.id, polled = false, providerUnavailable = unavailable(subscription, client)) }
+
+                    // a gateway row: ask the gateway first, apply what it says, then judge again (09 section 11, step C)
+                    if (outcome is SubscriptionService.StepOutcome.PollFirst) {
+                        poll(subscriptions.getById(subscription.id, client) ?: subscription, client)
+                        outcome = db.txRestartingOnOrderChange { conn -> subs.periodOver(conn, subscription.id, polled = true, providerUnavailable = false) }
+                    }
+
+                    if (outcome !is SubscriptionService.StepOutcome.Idle) moved++
+
+                    if (outcome is SubscriptionService.StepOutcome.Applied && outcome.ended) cleanup(subscription.id)
                 }
 
-                if (outcome is SubscriptionService.StepOutcome.Applied && outcome.ended) cleanup(subscription.id)
+                if (ok) handled++
             }
 
-            if (ok) handled++
+            if (due.size < batch) {
+                // the end of the due rows: the next tick starts again at the oldest
+                cursor = null
+                break
+            }
         }
+
+        periodCursor = cursor
 
         return handled
     }
@@ -493,6 +524,8 @@ class SubscriptionJob(
 
     companion object {
         const val BATCH = 50
+        /** Pages of [BATCH] rows step C may look at in one tick while it pages past rows it leaves alone. */
+        const val PERIOD_SCAN_PAGES = 10
         const val CALL_TIMEOUT_MS = 30_000L
         const val UNKNOWN_OUTCOME = "UNKNOWN_OUTCOME"
         const val REMOTE_CANCEL_REASON = "subscription ended"

@@ -116,8 +116,14 @@ class MarketSubscriptionDaoImpl : MarketSubscriptionDao() {
     override suspend fun getDueForCharge(status: SubscriptionStatus, now: Long, limit: Int, sqlClient: SqlClient): List<MarketSubscription> =
         many("`status` = ? AND `nextChargeAt` IS NOT NULL AND `nextChargeAt` <= ?", "`nextChargeAt` ASC, `id` ASC LIMIT $limit", Tuple.of(status.name, now), sqlClient)
 
-    override suspend fun getPeriodEnded(status: SubscriptionStatus, now: Long, limit: Int, sqlClient: SqlClient): List<MarketSubscription> =
-        many("`status` = ? AND `currentPeriodEnd` IS NOT NULL AND `currentPeriodEnd` <= ?", "`currentPeriodEnd` ASC, `id` ASC LIMIT $limit", Tuple.of(status.name, now), sqlClient)
+    override suspend fun getPeriodEnded(status: SubscriptionStatus, now: Long, limit: Int, sqlClient: SqlClient, after: Pair<Long, Long>?): List<MarketSubscription> =
+        if (after == null)
+            many("`status` = ? AND `currentPeriodEnd` IS NOT NULL AND `currentPeriodEnd` <= ?", "`currentPeriodEnd` ASC, `id` ASC LIMIT $limit", Tuple.of(status.name, now), sqlClient)
+        else
+            many(
+                "`status` = ? AND `currentPeriodEnd` IS NOT NULL AND `currentPeriodEnd` <= ? AND (`currentPeriodEnd` > ? OR (`currentPeriodEnd` = ? AND `id` > ?))",
+                "`currentPeriodEnd` ASC, `id` ASC LIMIT $limit", Tuple.of(status.name, now, after.first, after.first, after.second), sqlClient
+            )
 
     override suspend fun getDueForQuery(now: Long, limit: Int, sqlClient: SqlClient): List<MarketSubscription> =
         many("`nextQueryAt` IS NOT NULL AND `nextQueryAt` <= ?", "`nextQueryAt` ASC, `id` ASC LIMIT $limit", Tuple.of(now), sqlClient)

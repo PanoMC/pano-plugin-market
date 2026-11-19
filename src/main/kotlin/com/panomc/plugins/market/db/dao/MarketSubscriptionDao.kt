@@ -20,8 +20,11 @@ abstract class MarketSubscriptionDao : MarketDao<MarketSubscription>(MarketSubsc
     /** Subscriptions in [status] whose `nextChargeAt` is due (`idx_charge`), oldest first. */
     abstract suspend fun getDueForCharge(status: SubscriptionStatus, now: Long, limit: Int, sqlClient: SqlClient): List<MarketSubscription>
 
-    /** Subscriptions in [status] whose `currentPeriodEnd` has passed (`idx_period`), oldest first. */
-    abstract suspend fun getPeriodEnded(status: SubscriptionStatus, now: Long, limit: Int, sqlClient: SqlClient): List<MarketSubscription>
+    /**
+     * Subscriptions in [status] whose `currentPeriodEnd` has passed (`idx_period`), oldest first. [after] is a keyset cursor
+     * (`currentPeriodEnd`, `id`): only rows ordered after it are returned.
+     */
+    abstract suspend fun getPeriodEnded(status: SubscriptionStatus, now: Long, limit: Int, sqlClient: SqlClient, after: Pair<Long, Long>? = null): List<MarketSubscription>
 
     /** Subscriptions whose gateway status poll or remote-cancel retry is due (`idx_query`), oldest first. */
     abstract suspend fun getDueForQuery(now: Long, limit: Int, sqlClient: SqlClient): List<MarketSubscription>

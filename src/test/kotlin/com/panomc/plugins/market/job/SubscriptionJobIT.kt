@@ -999,6 +999,35 @@ internal class SubscriptionJobIT : RenewalITBase() {
     }
 
     @Test
+    fun `gateway rows whose provider is gone do not hold step C, a later manual row is still past due and they are judged again later`(): Unit = runBlocking {
+        val stuck = listOf(gatewayRow("User1", "sub_gw1").third, gatewayRow("User2", "sub_gw2").third)
+
+        w.clock.advance(2 * day)
+
+        val manual = activeManual(name = "User3")
+
+        assertTrue(manual.sub.currentPeriodEnd!! > stuck.maxOf { it.currentPeriodEnd!! }, "the manual row ends after the gateway rows")
+
+        sw.lookup.remove("fake")
+        w.clock.set(manual.sub.currentPeriodEnd!! + 25 * 3_600_000L)
+
+        // a batch of 2: both slots would go to the gateway rows that nobody can judge
+        val job = rw.jobWithBatch(2)
+
+        job.runOnce()
+
+        assertEquals(SubscriptionStatus.PAST_DUE, subscription(manual.sub.id).status, "the manual row behind them is judged")
+        assertTrue(stuck.all { subscription(it.id).status == SubscriptionStatus.ACTIVE }, "an unavailable provider is never a reason to fail a renewal")
+
+        // the provider is back: the next ticks still reach the gateway rows
+        sw.lookup.add(sw.first)
+        job.runOnce()
+        job.runOnce()
+
+        assertTrue(stuck.all { subscription(it.id).status == SubscriptionStatus.PAST_DUE })
+    }
+
+    @Test
     fun `69 a renewal webhook and the grace end racing on one row end in exactly one of renewed and expired, never in both deliveries`(): Unit = runBlocking {
         val outcomes = mutableListOf<SubscriptionStatus>()
 
