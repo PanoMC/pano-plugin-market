@@ -216,7 +216,7 @@ class WidgetService(
  * back, and when a goal counts an order at all.
  *
  * Rules: a goal counts the order of a moment `at` when it is `ACTIVE`, `startsAt <= at`, `at < endsAt` and, for a `WEEKLY` / `MONTHLY` goal, `at` is not before
- * the current period's `periodStart`. Only lines of kind `PRODUCT` / `BUNDLE` are products (not bundle children, not credit top-ups); `productIds = null` means
+ * the current period's `periodStart`; a `ONE_TIME` goal counts nothing paid before its `periodStart` (its last reset) or, without one, its `createdAt`. Only lines of kind `PRODUCT` / `BUNDLE` are products (not bundle children, not credit top-ups); `productIds = null` means
  * every product. `ORDERS` adds 1 per order (with a product filter: when a line matches); `PRODUCT_SALES` adds the quantity of the matching lines; `REVENUE`
  * adds the money the gateway received (`gatewayAmount`, in the base currency: divided by `fxRate`), for a product filter the matching share of the goods
  * (lines' `lineTotal`). A refund takes back the same amounts: `REVENUE` the refund's gateway part (same share), `PRODUCT_SALES` the refunded quantities of
@@ -253,7 +253,8 @@ object GoalMath {
     fun counts(goal: MarketGoal, zone: ZoneId, at: Long, now: Long): Boolean {
         if (goal.status != "ACTIVE" || !inWindow(goal, at)) return false
 
-        val current = periodStart(goal.period, zone, now) ?: return true
+        // a one-time goal counts what was paid since it was created (or last reset): a refund of an older order never took part in its progress
+        val current = periodStart(goal.period, zone, now) ?: return at >= (goal.periodStart ?: goal.createdAt)
 
         // a periodic goal counts what was paid since it began and since its current period began
         return at >= current && at >= (goal.periodStart ?: 0L)

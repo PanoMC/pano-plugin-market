@@ -173,8 +173,8 @@ class StatsBucketsTest {
 
     // ---- goal arithmetic ----
 
-    private fun goal(metric: GoalMetric, productIds: String? = null, period: GoalPeriod = GoalPeriod.ONE_TIME, periodStart: Long? = null, startsAt: Long? = null, endsAt: Long? = null, status: String = "ACTIVE") =
-        MarketGoal(id = 1, metric = metric, productIds = productIds, target = 1000, period = period, periodStart = periodStart, startsAt = startsAt, endsAt = endsAt, status = status)
+    private fun goal(metric: GoalMetric, productIds: String? = null, period: GoalPeriod = GoalPeriod.ONE_TIME, periodStart: Long? = null, startsAt: Long? = null, endsAt: Long? = null, status: String = "ACTIVE", createdAt: Long = 0) =
+        MarketGoal(id = 1, metric = metric, productIds = productIds, target = 1000, period = period, periodStart = periodStart, startsAt = startsAt, endsAt = endsAt, status = status, createdAt = createdAt)
 
     private fun item(id: Long, productId: Long?, quantity: Int, lineTotal: Long, kind: OrderItemKind = OrderItemKind.PRODUCT) =
         MarketOrderItem(id = id, productId = productId, quantity = quantity, lineTotal = lineTotal, kind = kind)
@@ -247,5 +247,20 @@ class StatsBucketsTest {
         assertFalse(GoalMath.stale(weekly, utc, now))
         assertTrue(GoalMath.stale(goal(GoalMetric.ORDERS, period = GoalPeriod.WEEKLY, periodStart = at(utc, 2026, 9, 28)), utc, now))
         assertFalse(GoalMath.stale(goal(GoalMetric.ORDERS), utc, now))
+    }
+
+    @Test
+    fun `a one-time goal does not count an order paid before it was created or last reset, so its refund takes nothing back`() {
+        val now = at(utc, 2026, 11, 20)
+        val created = at(utc, 2026, 11, 10)
+        val oneTime = goal(GoalMetric.REVENUE, createdAt = created)
+
+        assertFalse(GoalMath.counts(oneTime, utc, at(utc, 2026, 11, 1), now), "paid before the goal existed")
+        assertTrue(GoalMath.counts(oneTime, utc, at(utc, 2026, 11, 12), now))
+
+        val reset = goal(GoalMetric.REVENUE, periodStart = at(utc, 2026, 11, 15), createdAt = created)
+
+        assertFalse(GoalMath.counts(reset, utc, at(utc, 2026, 11, 12), now), "paid before the last reset")
+        assertTrue(GoalMath.counts(reset, utc, at(utc, 2026, 11, 16), now))
     }
 }
