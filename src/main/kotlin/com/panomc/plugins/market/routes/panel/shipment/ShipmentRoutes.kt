@@ -128,7 +128,7 @@ class PanelUpdateOrderShippingAddressAPI(plugin: MarketPlugin) : ShipmentRoute(p
     }
 }
 
-/** `GET /shipments` (`P:OV`): q `status` (csv), `providerId`, `stale`, `search`, `page`, `pageSize`. */
+/** `GET /shipments` (`P:OV`): q `status` (csv), `providerId`, `stale`, `search`, `page`, `pageSize`; the recipient summary only with `OM` or `PAY`. */
 @Endpoint
 class PanelGetShipmentsAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(MarketNode.ORDERS_VIEW)) {
     override val paths = listOf(Path("/shipments", RouteType.GET))
@@ -157,7 +157,7 @@ class PanelGetShipmentsAPI(plugin: MarketPlugin) : ShipmentRoute(plugin, setOf(M
 
         val page = service.listShipments(
             ShippingService.ShipmentFilter(statuses, parameters.queryParameter("providerId")?.string?.takeIf { it.isNotBlank() }, stale, parameters.queryParameter("search")?.string),
-            window, sql()
+            window, sql(), canSeeAddress(context)
         )
         return Successful(Paging.response(page.shipments, page.count, window))
     }

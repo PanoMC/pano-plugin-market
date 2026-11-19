@@ -1798,6 +1798,13 @@ class ShippingServiceIT : MarketDaoITBase() {
         assertEquals(3, page2.count)
         assertEquals(1, page2.shipments.size)
         assertFalse(page2.shipments.single().containsKey("toAddress"), "the list carries no address")
+
+        val recipient = service.listShipments(ShippingService.ShipmentFilter(), PageRequest(1, 10), pool, withRecipient = true).shipments.first().getJsonObject("toAddress")
+
+        assertEquals("Hans", recipient.getString("firstName"))
+        assertEquals("Berlin", recipient.getString("city"))
+        assertFalse(recipient.containsKey("line1"), "the recipient summary carries no street line")
+        assertFalse(recipient.containsKey("phone"), "the recipient summary carries no phone")
     }
 
     @Test

@@ -2393,8 +2393,11 @@ class ShippingService(
 
     class ShipmentPage(val shipments: List<JsonObject>, val count: Long)
 
-    /** `GET /shipments` (10 section 9.9): newest first. `search` matches tracking number, merchant / carrier reference, order id, `publicId` and player name. */
-    suspend fun listShipments(filter: ShipmentFilter, window: PageRequest, sqlClient: SqlClient): ShipmentPage {
+    /**
+     * `GET /shipments` (10 section 9.9): newest first. `search` matches tracking number, merchant / carrier reference, order id, `publicId` and player name.
+     * [withRecipient] (`OM` or `PAY`) adds a recipient summary as `toAddress` (name, city, country; never the street lines).
+     */
+    suspend fun listShipments(filter: ShipmentFilter, window: PageRequest, sqlClient: SqlClient, withRecipient: Boolean = false): ShipmentPage {
         val where = ArrayList<String>()
         val values = ArrayList<Any?>()
 
@@ -2429,7 +2432,20 @@ class ShippingService(
         val ids = sqlClient.preparedQuery("SELECT s.`id` AS id $from ORDER BY s.`createdAt` DESC, s.`id` DESC LIMIT ? OFFSET ?")
             .execute(Tuple.from(values + window.size.toLong() + window.offset)).coAwait().map { it.getLong("id") }
 
-        return ShipmentPage(ids.mapNotNull { id -> fx().shipments.getById(id, sqlClient)?.let { shipmentJson(it, false, sqlClient, false) } }, count)
+        return ShipmentPage(
+            ids.mapNotNull { id ->
+                fx().shipments.getById(id, sqlClient)?.let { row ->
+                    shipmentJson(row, false, sqlClient, false).also { json -> if (withRecipient) json.put("toAddress", recipientSummary(row.toAddress)) }
+                }
+            },
+            count
+        )
+    }
+
+    private fun recipientSummary(toAddress: String?): JsonObject? {
+        val to = parse(toAddress) ?: return null
+
+        return JsonObject().put("firstName", to.getValue("firstName")).put("lastName", to.getValue("lastName")).put("city", to.getValue("city")).put("country", to.getValue("country"))
     }
 
     // ================================================================================================ tracking (MK-134; 10 sections 7.2, 10)
