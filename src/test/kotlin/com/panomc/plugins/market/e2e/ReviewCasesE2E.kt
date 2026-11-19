@@ -1387,24 +1387,18 @@ class ReviewCasesE2E : E2eTestBase() {
         ask(server, MarketAdminRequest(server.componentVersion, operationId = operationId, op = AdminOp.GIVE_CREDITS, actor = actor, target = AdminTarget(target), amount = amount, productId = null, quantity = null, note = "e2e v17"), MarketAdminMessage::class.java)
 
     @Test
-    fun `V-17 a FakeMcServer - a COMMAND delivery to CONFIRMED behind a version mismatch, an in-game credit purchase, an admin command with and without the linked permission`() {
-        // a component of an old version is refused, the sale goes on and the row waits
+    fun `V-17 a FakeMcServer - a COMMAND delivery to CONFIRMED on a component of another release, an in-game credit purchase, an admin command with and without the linked permission`() {
+        // a component of an older release that speaks the same protocol is served: the row is delivered and confirmed
         val server = fakeServer(awaitReady = false, version = "0.0.1-v17-old")
         val required = server.requiredVersion()
 
         assertNotEquals(required, "0.0.1-v17-old")
-        Await.until(60_000, 200, "marketState is VERSION_MISMATCH") { server.view().getString("marketState") == "VERSION_MISMATCH" }
+        Await.until(60_000, 200, "marketState is READY") { server.view().getString("marketState") == "READY" }
 
         val buyer = buyer()
         val commandId = commandProduct(server)
         val (publicId, orderId) = payOrder(buyer.client, cart(line(commandId)))
 
-        Await.untilValue(120_000, 200, "the delivery waits for the server") { deliveryRows(orderId, "GRANT").singleOrNull()?.takeIf { it.getString("status") == "WAITING_SERVER" } }
-        assertEquals(emptyList<String>(), server.platform.console, "nothing was handed to a component that Pano refused")
-
-        // the plugin is updated: the version Pano asks for, the row is delivered and confirmed
-        server.restart(required)
-        Await.until(60_000, 200, "marketState is READY") { server.view().getString("marketState") == "READY" }
         awaitDeliveries(orderId, "GRANT")
         assertEquals("CONFIRMED", deliveryRows(orderId, "GRANT").single().getString("status"))
         Await.until(60_000, 200, "the order is FULFILLED") { orderRow(publicId).getString("fulfillmentStatus") == "FULFILLED" }

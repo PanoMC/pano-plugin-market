@@ -1375,7 +1375,7 @@
       "connected": "Connected",
       "disconnected": "Disconnected",
       "no-plugin": "The Pano Market Minecraft plugin is not installed on this server.",
-      "version-mismatch": "The server runs version {have} of the Pano Market Minecraft plugin, version {want} is required.",
+      "version-mismatch": "The Pano Market Minecraft plugin on the server ({have}) is not compatible with this Market. Install version {want}.",
       "version-mismatch-label": "The Pano Market Minecraft plugin version does not match.",
       "offline": "Offline",
       "unknown": "Unknown server #{id}"

@@ -1375,7 +1375,7 @@
       "connected": "Bağlı",
       "disconnected": "Bağlı değil",
       "no-plugin": "Pano Market Minecraft plugini bu sunucuda kurulu değil.",
-      "version-mismatch": "Sunucuda Pano Market Minecraft plugininin {have} sürümü çalışıyor, {want} sürümü gerekli.",
+      "version-mismatch": "Sunucudaki Pano Market Minecraft plugini ({have}) bu Market ile uyumlu değil. {want} sürümünü kurun.",
       "version-mismatch-label": "Pano Market Minecraft plugininin sürümü uyuşmuyor.",
       "offline": "Çevrimdışı",
       "unknown": "Bilinmeyen sunucu #{id}"

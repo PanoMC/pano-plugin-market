@@ -155,10 +155,9 @@ class McBroadcastOutbox(clock: Clock, private val capPerServer: Int = CAP) {
  * The Pano side of `MARKET_SYNC` (08 section 8): the pull protocol through which the market's own Minecraft component receives its deliveries. Nothing here
  * sends to a server: the component asks, [handle] answers.
  *
- * [handle] is the algorithm of 08 section 8.3: refuse (`MARKET_NOT_READY`, `PROTOCOL_UNSUPPORTED`), record what the component reports
- * (`market_server_state`, written at most every 30 s unless a value changed, and the in-memory session), apply every result (each in its own transaction, the
- * order lock before the delivery row, **before** the version check, so a component that is updated late loses nothing), refuse a version that differs from the
- * market's (`VERSION_MISMATCH`, exact string comparison), then answer with the keys to cancel and the offers: due rows of the server in `PENDING`,
+ * [handle] is the algorithm of 08 section 8.3: refuse (`MARKET_NOT_READY`), record what the component reports
+ * (`market_server_state`, written at most every 30 s unless a value changed, and the in-memory session), refuse a component that speaks another [PROTOCOL] (`PROTOCOL_UNSUPPORTED`; the server reads `VERSION_MISMATCH`), apply every result (each in its own transaction, the
+ * order lock before the delivery row), then answer with the keys to cancel and the offers: due rows of the server in `PENDING`,
  * `WAITING_SERVER` and `SENT` rows whose acknowledgement time ran out (D8 / D9), at most `capacity`, and never more than 100 KB. Rows over the re-offer
  * budget are set aside and failed afterwards with the order lock (D10, `UNKNOWN_OUTCOME`; a late `DONE` still wins, D12).
  *
@@ -211,19 +210,19 @@ class McSyncService(
 
         if (!ready()) return refusal(REASON_NOT_READY, version)
 
-        if (request.protocol != PROTOCOL) return refusal(REASON_PROTOCOL, version)
-
         val now = clock.now()
+        val compatible = request.protocol == PROTOCOL
 
         recordState(server.id, request, now)
 
-        sessions[server.id] = Session(request.componentVersion, request.componentVersion == version, now)
+        sessions[server.id] = Session(request.componentVersion, compatible, now)
+
+        // Another protocol may shape its results differently: nothing is applied, the component keeps them and reports them again once it is updated.
+        if (!compatible) return refusal(REASON_PROTOCOL, version)
 
         val acked = LinkedHashSet<String>()
 
         for (result in request.results.take(MAX_RESULTS)) if (applyResult(server, result)) acked += result.key
-
-        if (request.componentVersion != version) return refusal(REASON_VERSION, version, acked.toList())
 
         val cancel = cancelKeys(server.id)
         val capacity = request.capacity.coerceIn(0, MAX_CAPACITY)
@@ -705,11 +704,16 @@ class McSyncService(
     )
 
     companion object {
+        /**
+         * The wire contract between Pano and the market's Minecraft component. The versions of the two never have to match: a component of another
+         * release works as long as it speaks this protocol. Bump it only for a change an older component or an older Pano would misread (a renamed or
+         * removed field, a changed meaning); an added optional field is not one, as both sides decode with Gson, which skips unknown keys and leaves
+         * absent ones at their defaults. Bump `MarketWire.PROTOCOL` on the Minecraft side with it.
+         */
         const val PROTOCOL = 1
 
         const val REASON_NOT_READY = "MARKET_NOT_READY"
         const val REASON_PROTOCOL = "PROTOCOL_UNSUPPORTED"
-        const val REASON_VERSION = "VERSION_MISMATCH"
 
         /** The component syncs every 5 s; a server without a sync for this long is `COMPONENT_MISSING` (08 section 8.5). */
         const val SESSION_TTL_MS = 60_000L
@@ -737,8 +741,8 @@ class McSyncService(
         private val RELEASED_VERSION = Regex("""\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?""")
 
         /**
-         * The Pano Market Minecraft plugin file of [version] on GitHub (the Fabric jar when [fabric]): the file the servers need, as `MARKET_SYNC`
-         * requires the same version. A build that was never released (`local-build`) has no such file and gets the release list.
+         * The Pano Market Minecraft plugin file of [version] on GitHub (the Fabric jar when [fabric]): the build released with this market, which always
+         * speaks its protocol. A build that was never released (`local-build`) has no such file and gets the release list.
          */
         fun githubDownloadUrl(version: String, fabric: Boolean): String {
             if (!RELEASED_VERSION.matches(version)) return GITHUB_RELEASES_URL
@@ -748,7 +752,7 @@ class McSyncService(
 
         private val logger = LoggerFactory.getLogger(McSyncService::class.java)
 
-        /** `accepted = false` with a [reason] and, for a version mismatch, the results that were applied before the check (08 section 8.3 step 4). */
+        /** `accepted = false` with a [reason] and the results that were applied before it, if any. */
         fun refusal(reason: String, marketVersion: String?, acked: List<String> = emptyList()): MarketSyncEventResponse =
             MarketSyncEventResponse(accepted = false, reason = reason, marketVersion = marketVersion, acked = acked, pollAfterMs = POLL_MS)
 

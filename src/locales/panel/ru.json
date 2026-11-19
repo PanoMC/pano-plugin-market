@@ -1375,7 +1375,7 @@
       "connected": "Подключён",
       "disconnected": "Не подключён",
       "no-plugin": "Minecraft-плагин Pano Market не установлен на этом сервере.",
-      "version-mismatch": "На сервере работает Minecraft-плагин Pano Market версии {have}, требуется {want}.",
+      "version-mismatch": "Плагин Pano Market для Minecraft на сервере ({have}) несовместим с этим Market. Установите версию {want}.",
       "version-mismatch-label": "Версия Minecraft-плагина Pano Market не совпадает.",
       "offline": "Не в сети",
       "unknown": "Неизвестный сервер #{id}"

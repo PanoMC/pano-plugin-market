@@ -254,7 +254,6 @@ class McGameService(
     /** Writes the activity log of an in-game admin action (the actor is a Pano user); never throws for the caller's sake, a failure is logged. */
     private val activity: suspend (PluginActivityLog) -> Unit,
     private val pluginId: String,
-    private val marketVersion: () -> String,
     /** The site's base URL (`storeUrl` of `MARKET_CONFIG`; the component appends `/store/<slug>` and `/register`), `null` while the platform has none. */
     private val storeUrl: () -> String?,
     /** `market.product` with `{slug}` left in (the front-end URL map); `null` = the page has no address, the component keeps appending to [storeUrl]. */
@@ -277,10 +276,9 @@ class McGameService(
     private fun table(name: String) = "`${orders.prefix()}$name`"
 
     /** The gates of 04 section 3.1 in their order; `null` = the request may proceed. */
-    private fun gate(componentVersion: String, protocol: Int): String? = when {
+    private fun gate(protocol: Int): String? = when {
         !ready() -> REASON_NOT_READY
         protocol != PROTOCOL -> REASON_PROTOCOL
-        componentVersion != marketVersion() -> REASON_VERSION
         else -> null
     }
 
@@ -288,7 +286,7 @@ class McGameService(
 
     /** The merged settings, the texts and the identity values of [server], hashed; an unchanged hash answers without the body (the component keeps what it holds). */
     suspend fun config(request: MarketConfigEventRequest, server: Server): MarketConfigEventResponse {
-        gate(request.componentVersion, request.protocol)?.let { return MarketConfigEventResponse(accepted = false, reason = it) }
+        gate(request.protocol)?.let { return MarketConfigEventResponse(accepted = false, reason = it) }
 
         val view = configView(server.id)
         val hash = hashOf(view)
@@ -416,7 +414,7 @@ class McGameService(
     // ===== MARKET_QUERY (19 section 7.2) ==================================================================================
 
     suspend fun query(request: MarketQueryEventRequest, server: Server): MarketQueryEventResponse {
-        gate(request.componentVersion, request.protocol)?.let { return MarketQueryEventResponse(accepted = false, reason = it) }
+        gate(request.protocol)?.let { return MarketQueryEventResponse(accepted = false, reason = it) }
 
         if (!queryBucket.tryTake(server.id)) return MarketQueryEventResponse(accepted = false, reason = REASON_RATE_LIMITED)
 
@@ -651,7 +649,7 @@ class McGameService(
     // ===== MARKET_PURCHASE (19 section 7.3) ===============================================================================
 
     suspend fun purchase(request: MarketPurchaseEventRequest, server: Server): MarketPurchaseEventResponse {
-        gate(request.componentVersion, request.protocol)?.let { return MarketPurchaseEventResponse(accepted = false, reason = it) }
+        gate(request.protocol)?.let { return MarketPurchaseEventResponse(accepted = false, reason = it) }
 
         val username = request.player.username.trim()
 
@@ -734,7 +732,7 @@ class McGameService(
     // ===== MARKET_ADMIN (19 section 7.4) ==================================================================================
 
     suspend fun admin(request: MarketAdminEventRequest, server: Server): MarketAdminEventResponse {
-        gate(request.componentVersion, request.protocol)?.let { return MarketAdminEventResponse(accepted = false, reason = it) }
+        gate(request.protocol)?.let { return MarketAdminEventResponse(accepted = false, reason = it) }
 
         if (!adminBucket.tryTake(server.id)) return MarketAdminEventResponse(accepted = false, reason = REASON_RATE_LIMITED)
 
@@ -889,7 +887,7 @@ class McGameService(
     // ===== MARKET_ECONOMY (19 section 7.5) ================================================================================
 
     suspend fun economy(request: MarketEconomyEventRequest, server: Server): MarketEconomyEventResponse {
-        gate(request.componentVersion, request.protocol)?.let { return MarketEconomyEventResponse(accepted = false, reason = it) }
+        gate(request.protocol)?.let { return MarketEconomyEventResponse(accepted = false, reason = it) }
 
         val op = request.op
 
@@ -1057,7 +1055,6 @@ class McGameService(
 
         const val REASON_NOT_READY = McSyncService.REASON_NOT_READY
         const val REASON_PROTOCOL = McSyncService.REASON_PROTOCOL
-        const val REASON_VERSION = McSyncService.REASON_VERSION
         const val REASON_RATE_LIMITED = "RATE_LIMITED"
         const val REASON_BAD_REQUEST = "BAD_REQUEST"
         const val REASON_UNSUPPORTED_TYPE = "UNSUPPORTED_TYPE"

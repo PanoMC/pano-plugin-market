@@ -191,7 +191,7 @@ class McGameServiceIT : MarketDaoITBase() {
             db = c.ph.db, clock = w.clock, config = { cfg() }, serverStates = w.serverStates, credits = c.credits, creditTxs = w.creditTxs, checkout = c.service, users = directory,
             permissions = McPermissions { userId, node -> node in granted[userId].orEmpty() }, orders = w.orders, orderItems = w.orderItems, products = w.products,
             categories = w.categories, store = store, widgets = widgets, read = { w.pool }, activity = { logs += it }, pluginId = "pano-plugin-market",
-            marketVersion = { version }, storeUrl = { storeUrl }, productUrlTemplate = { productUrlTemplate }, registerUrl = { registerUrl }, texts = { locale -> texts[locale].orEmpty() }, textLocales = { listOf("en-US", "tr", "ru") },
+            storeUrl = { storeUrl }, productUrlTemplate = { productUrlTemplate }, registerUrl = { registerUrl }, texts = { locale -> texts[locale].orEmpty() }, textLocales = { listOf("en-US", "tr", "ru") },
             announce = { order, _ -> announced += order.publicId!! }, ready = { ready.get() }
         )
     }
@@ -516,7 +516,6 @@ class McGameServiceIT : MarketDaoITBase() {
         ready.set(true)
 
         assertEquals("PROTOCOL_UNSUPPORTED", game.purchase(request.copy(protocol = 2), server7).also { assertFalse(it.accepted) }.reason)
-        assertEquals("VERSION_MISMATCH", game.purchase(request.copy(componentVersion = "1.3.9"), server7).also { assertFalse(it.accepted) }.reason)
 
         assertFailed("BAD_REQUEST", game.purchase(request.copy(operationId = "x"), server7))
         assertFailed("BAD_REQUEST", game.purchase(request.copy(quantity = 0), server7))
@@ -550,7 +549,7 @@ class McGameServiceIT : MarketDaoITBase() {
             db = c.ph.db, clock = w.clock, config = { cfg() }, serverStates = w.serverStates, credits = c.credits, creditTxs = w.creditTxs, checkout = c.service, users = directory,
             permissions = McPermissions { _, _ -> false }, orders = w.orders, orderItems = w.orderItems, products = w.products, categories = w.categories,
             store = StoreQueryService({ cfg() }, w.clock, w.categories, w.products, w.variants, w.prices, w.fields, w.bundleItems, w.discounts, w.currencyRates, w.comparisons, w.orderItems, w.entitlements),
-            widgets = WidgetService({ cfg() }, w.clock, w.goals, { w.goals.prefix() }), read = { w.pool }, activity = { }, pluginId = "pano-plugin-market", marketVersion = { version },
+            widgets = WidgetService({ cfg() }, w.clock, w.goals, { w.goals.prefix() }), read = { w.pool }, activity = { }, pluginId = "pano-plugin-market",
             storeUrl = { null }, announce = { _, _ -> throw IllegalStateException("the broadcast queue is gone") }, ready = { true }
         )
         val p = product()
@@ -1025,8 +1024,7 @@ class McGameServiceIT : MarketDaoITBase() {
 
         val request = MarketAdminEventRequest("MARKET_ADMIN", "9.9.9", 1, op(), McGameService.OP_GIVE, GameActor(console = true), GameTarget("Steve"), 1.0, null, null, null)
 
-        assertEquals("VERSION_MISMATCH", game.admin(request, server7).reason)
-        assertEquals("PROTOCOL_UNSUPPORTED", game.admin(request.copy(componentVersion = version, protocol = 0), server7).reason)
+        assertEquals("PROTOCOL_UNSUPPORTED", game.admin(request.copy(protocol = 0), server7).reason)
         assertEquals(1_000, balance(user("Probe")) + 1_000)
         assertEquals(emptyList<String>(), txKeys())
     }
@@ -1351,8 +1349,9 @@ class McGameServiceIT : MarketDaoITBase() {
 
         val request = MarketEconomyEventRequest("MARKET_ECONOMY", "0.0.1", 1, op(), "BALANCE", GamePlayer("Steve"), null, null)
 
-        assertEquals("VERSION_MISMATCH", game.economy(request, server7).reason)
-        assertEquals("PROTOCOL_UNSUPPORTED", game.economy(request.copy(componentVersion = version, protocol = 7), server7).reason)
+        // another release of the component is fine as long as it speaks the protocol
+        assertTrue(game.economy(request, server7).accepted)
+        assertEquals("PROTOCOL_UNSUPPORTED", game.economy(request.copy(protocol = 7), server7).reason)
     }
 
     // ===================================================================================== MARKET_CONFIG (MC-E7)
@@ -1503,7 +1502,7 @@ class McGameServiceIT : MarketDaoITBase() {
 
         ready.set(true)
 
-        assertEquals("VERSION_MISMATCH", game.config(MarketConfigEventRequest("MARKET_CONFIG", "0.9", 1, null), server7).reason)
+        assertTrue(game.config(MarketConfigEventRequest("MARKET_CONFIG", "0.9", 1, null), server7).accepted)
         assertEquals("PROTOCOL_UNSUPPORTED", game.config(MarketConfigEventRequest("MARKET_CONFIG", version, 3, null), server7).reason)
     }
 
@@ -1795,8 +1794,8 @@ class McGameServiceIT : MarketDaoITBase() {
 
         val request = MarketQueryEventRequest("MARKET_QUERY", "0.1", 1, "BALANCE", GamePlayer("Steve"), null, null)
 
-        assertEquals("VERSION_MISMATCH", game.query(request, server7).reason)
-        assertEquals("PROTOCOL_UNSUPPORTED", game.query(request.copy(componentVersion = version, protocol = 5), server7).reason)
+        assertTrue(game.query(request, server7).accepted)
+        assertEquals("PROTOCOL_UNSUPPORTED", game.query(request.copy(protocol = 5), server7).reason)
 
         // the gates and the unsupported type above took tokens or none: start from a fresh bucket on server 8
         var accepted = 0

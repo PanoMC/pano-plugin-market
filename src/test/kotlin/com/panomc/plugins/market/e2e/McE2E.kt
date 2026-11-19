@@ -222,40 +222,24 @@ class McE2E : E2eTestBase() {
     // ---- MC-E2 -----------------------------------------------------------------------------------------------------
 
     @Test
-    fun `MC-E2 a version mismatch is refused and the rows wait, after the version is updated they are delivered`() {
+    fun `MC-E2 a component of another release that speaks the protocol is served`() {
         val server = server(version = "0.0.1-e2e-old")
         val required = server.requiredVersion()
 
         assertNotEquals(required, "0.0.1-e2e-old")
 
-        // {accepted: false, VERSION_MISMATCH} on the wire, and the panel list says so
-        val refusal = Await.untilValue(60_000, 200, "a refused sync answer") {
-            server.received("MARKET_SYNC").firstOrNull { it.getBoolean("accepted") == false }
-        }
-
-        assertEquals("VERSION_MISMATCH", refusal.getString("reason"))
-        assertEquals(required, refusal.getString("marketVersion"))
-        Await.until(60_000, 200, "marketState is VERSION_MISMATCH") { server.view().getString("marketState") == "VERSION_MISMATCH" }
-        assertEquals(false, server.component.runtime.status().engine.accepted, "the component knows it was refused")
+        // the versions differ, the protocol is the same: Pano accepts it and the panel lists the server as ready
+        Await.until(60_000, 200, "marketState is READY") { server.view().getString("marketState") == "READY" }
+        assertEquals(true, server.component.runtime.status().engine.accepted, "the component is accepted")
 
         val productId = commandProduct(server, listOf("give {username} emerald"))
         val buyer = buyer()
         val publicId = payAndAwaitCompleted(buyer, productId)
 
-        // the sale is not blocked, the row waits (a PENDING row becomes WAITING_SERVER after 15 s)
-        awaitDelivery(publicId, "WAITING_SERVER")
-        assertEquals("VERSION_MISMATCH", server.view().getString("marketState"))
-        assertTrue(server.view().getLong("waitingDeliveries") >= 1, "the panel counts the waiting row")
-        assertEquals(emptyList<String>(), server.platform.console, "nothing was handed to a component that Pano refused")
-
-        // the plugin is updated and restarted: the same state directory, the version Pano asks for
-        server.restart(required)
-
-        Await.until(60_000, 200, "marketState is READY") { server.view().getString("marketState") == "READY" }
         awaitDelivery(publicId, "CONFIRMED")
         Await.until(60_000, 200, "order $publicId is FULFILLED") { orderRow(publicId).getString("fulfillmentStatus") == "FULFILLED" }
         assertEquals(listOf("give ${buyer.username} emerald"), server.platform.console)
-        assertEquals(required, server.view().getString("mcComponentVersion"), "Pano recorded the updated version")
+        assertEquals("0.0.1-e2e-old", server.view().getString("mcComponentVersion"), "Pano recorded the version the component runs")
     }
 
     // ---- MC-E3 -----------------------------------------------------------------------------------------------------

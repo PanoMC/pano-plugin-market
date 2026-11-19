@@ -34,7 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * `McSyncService` (08 section 8) driven by [FakeMcComponent] on a real MariaDB (MK-103; tests 56 to 63 of 08 section 20, 19 section 13): the offer of a due
- * server row (D8), the lost offer and the lost result, "requires online" (D11, D12), the version gate and what it keeps (results first), the readiness
+ * server row (D8), the lost offer and the lost result, "requires online" (D11, D12), the readiness
  * (`COMPONENT_MISSING`, `OFFLINE`, `VERSION_MISMATCH`, D7), the cancel of a queued row (D17, D15), the re-offer budget and the late positive result (D9, D10, D12),
  * the removed server (D20), the runtime gate and the protocol gate, capacity, the 100 KB budget, the undo gate and D22 before an offer, the wait expiry (D14), `GET /servers` and the
  * purchase announcements. The component is the in-memory twin of the nine requirements of 08 section 8.2; both sides speak the real wire (Gson in, the
@@ -483,22 +483,22 @@ class McSyncServiceIT : MarketDaoITBase() {
         assertEquals(codes, rows.map { row(it.id) }.map { it.result }.map { JsonObject(it).getString("code") })
     }
 
-    // ===== version gate, runtime gate, protocol gate ====================================================================
+    // ===== protocol gate, runtime gate ===================================================================================
 
     @Test
-    fun `a version that differs from the market version is refused, nothing is offered and the row waits (WAITING_SERVER)`(): Unit = runBlocking {
+    fun `a component that speaks another protocol is refused, nothing is offered and the row waits (WAITING_SERVER)`(): Unit = runBlocking {
         val (_, rows) = buy(command())
         val r = rows.single()
 
-        mc.version = "1.3.9"
+        mc.protocol = 2
 
         val refused = mc.sync()
 
         assertFalse(refused.accepted)
-        assertEquals("VERSION_MISMATCH", refused.reason)
+        assertEquals("PROTOCOL_UNSUPPORTED", refused.reason)
         assertEquals(version, refused.wire.getString("marketVersion"))
         assertTrue(refused.deliveries.isEmpty)
-        assertEquals("VERSION_MISMATCH", mc.lastRefusal)
+        assertEquals("PROTOCOL_UNSUPPORTED", mc.lastRefusal)
         assertEquals(DeliveryStatus.PENDING, row(r.id).status)
         assertEquals(ServerReadiness.VERSION_MISMATCH, sync.readiness(7))
 
@@ -521,11 +521,9 @@ class McSyncServiceIT : MarketDaoITBase() {
 
         assertEquals(ServerReadiness.VERSION_MISMATCH, view.marketState)
         assertEquals(1L, view.waitingDeliveries)
-        assertEquals("1.3.9", view.mcComponentVersion)
-        assertEquals(version, view.requiredVersion)
 
         // the component is updated: the next accepted sync picks the row up straight from WAITING_SERVER (D8)
-        mc.version = version
+        mc.protocol = McSyncService.PROTOCOL
 
         val ok = mc.sync()
 
@@ -541,25 +539,26 @@ class McSyncServiceIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `results are applied before the version check, so a component updated late loses nothing`(): Unit = runBlocking {
+    fun `a component of another release that speaks the protocol is served`(): Unit = runBlocking {
         val (_, rows) = buy(command())
         val r = rows.single()
 
-        mc.sync()
-        assertEquals(DeliveryStatus.SENT, row(r.id).status)
-
-        // the component was replaced by another build before it could report DONE
         mc.version = "1.3.9"
 
-        val refused = mc.sync()
+        val ok = mc.sync()
 
-        assertFalse(refused.accepted)
-        assertEquals("VERSION_MISMATCH", refused.reason)
-        assertEquals(listOf(r.idempotencyKey), refused.resultKeys)
-        assertEquals(listOf(r.idempotencyKey), refused.acked)
-        assertTrue(refused.deliveries.isEmpty)
+        assertTrue(ok.accepted)
+        assertEquals(listOf(r.idempotencyKey), ok.offeredKeys)
+
+        mc.sync()
+
         assertEquals(DeliveryStatus.CONFIRMED, row(r.id).status)
-        assertTrue(mc.sync().resultKeys.isEmpty(), "the refusal's acknowledgement was honoured")
+        assertEquals(ServerReadiness.READY, sync.readiness(7))
+
+        val view = sync.servers().single()
+
+        assertEquals("1.3.9", view.mcComponentVersion)
+        assertEquals(version, view.requiredVersion)
     }
 
     @Test
@@ -588,9 +587,12 @@ class McSyncServiceIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `an unsupported protocol is refused before anything is recorded or applied`(): Unit = runBlocking {
+    fun `a component that speaks another protocol is recorded, but none of its results is applied`(): Unit = runBlocking {
         val (_, rows) = buy(command())
         val r = rows.single()
+
+        mc.sync()
+        assertEquals(DeliveryStatus.SENT, row(r.id).status)
 
         mc.protocol = 2
 
@@ -598,10 +600,17 @@ class McSyncServiceIT : MarketDaoITBase() {
 
         assertFalse(refused.accepted)
         assertEquals("PROTOCOL_UNSUPPORTED", refused.reason)
+        assertEquals(listOf(r.idempotencyKey), refused.resultKeys, "the component still holds the result")
+        assertTrue(refused.acked.isEmpty(), "the result was not applied, so it is not acknowledged")
         assertTrue(refused.deliveries.isEmpty)
-        assertEquals(DeliveryStatus.PENDING, row(r.id).status)
-        assertEquals(0L, count("market_server_state"))
-        assertEquals(ServerReadiness.COMPONENT_MISSING, sync.readiness(7))
+        assertEquals(DeliveryStatus.SENT, row(r.id).status)
+        assertEquals(1L, count("market_server_state"))
+        assertEquals(ServerReadiness.VERSION_MISMATCH, sync.readiness(7))
+
+        mc.protocol = McSyncService.PROTOCOL
+        mc.sync()
+
+        assertEquals(DeliveryStatus.CONFIRMED, row(r.id).status)
     }
 
     // ===== readiness =====================================================================================================

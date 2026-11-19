@@ -22,7 +22,11 @@ import java.util.UUID
  * their values are the constants below.
  */
 object MarketWire {
-    /** `protocol` of every request (08 section 8.1); a Pano that does not speak it answers PROTOCOL_UNSUPPORTED. */
+    /**
+     * `protocol` of every request (08 section 8.1); a Pano that does not speak it answers PROTOCOL_UNSUPPORTED. This, not the version, decides whether
+     * a component works with a Pano Market: bump it (with `McSyncService.PROTOCOL`) only for a change an older side would misread, never for an added
+     * optional field.
+     */
     const val PROTOCOL = 1
 
     const val EVENT_SYNC = "MARKET_SYNC"

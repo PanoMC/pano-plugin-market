@@ -696,11 +696,13 @@ class DeliveryEngine(
         lastRejection = signature
         log.warn(
             when (reason) {
+                // only an older Pano Market answers this: it still wants the exact same version
                 RefusalReason.VERSION_MISMATCH ->
-                    "Pano runs Market ${nullable(r.marketVersion) ?: "?"} but this component is $componentVersion. Deliveries wait until both are exactly the same; " +
-                        "download the matching jar in the panel (Market > Servers) and replace this one."
+                    "Pano runs Market ${nullable(r.marketVersion) ?: "?"} but this component is $componentVersion, and that Market still needs both to be the same. " +
+                        "Update Market on Pano, or download the matching jar in the panel (Market > Servers) or from $RELEASES_URL. Deliveries wait."
                 RefusalReason.PROTOCOL_UNSUPPORTED ->
-                    "Pano does not speak protocol ${MarketWire.PROTOCOL} of this component ($componentVersion); update the component. Deliveries wait."
+                    "Pano runs Market ${nullable(r.marketVersion) ?: "?"}, which speaks another protocol than this component ($componentVersion, protocol ${MarketWire.PROTOCOL}). " +
+                        "Update the older one: Market on Pano, or this jar from the panel (Market > Servers) or $RELEASES_URL. Deliveries wait."
                 RefusalReason.MARKET_NOT_READY -> "The Market plugin on Pano is not ready yet; deliveries wait."
                 else -> "Pano refused the Market sync: $reason. Deliveries wait."
             }
@@ -750,6 +752,9 @@ class DeliveryEngine(
     private fun <T> list(value: List<T>?): List<T> = value ?: emptyList()
 
     companion object {
+        /** Where every released Pano Market Minecraft plugin jar can be downloaded. */
+        const val RELEASES_URL = "https://github.com/PanoMC/pano-plugin-market/releases"
+
         const val UUID_TOKEN = "{uuid}"
         private const val MAX_UNKNOWN_REPORTS = 1000
     }

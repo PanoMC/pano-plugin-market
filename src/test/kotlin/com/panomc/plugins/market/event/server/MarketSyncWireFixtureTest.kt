@@ -169,14 +169,14 @@ class MarketSyncWireFixtureTest {
 
     @Test
     fun `a refusal names the reason, carries the applied keys and offers nothing`() {
-        val refused = McSyncService.refusal(McSyncService.REASON_VERSION, "1.4.0", listOf("812:a1:4:0:GRANT:0"))
+        val refused = McSyncService.refusal(McSyncService.REASON_PROTOCOL, "1.4.0", listOf("812:a1:4:0:GRANT:0"))
 
         assertFalse(refused.accepted)
-        assertEquals("VERSION_MISMATCH", refused.reason)
+        assertEquals("PROTOCOL_UNSUPPORTED", refused.reason)
         assertEquals("1.4.0", refused.marketVersion)
         assertEquals(listOf("812:a1:4:0:GRANT:0"), refused.acked)
         assertTrue(refused.deliveries.isEmpty() && refused.cancel.isEmpty() && refused.broadcasts.isEmpty())
-        assertEquals(setOf("MARKET_NOT_READY", "PROTOCOL_UNSUPPORTED", "VERSION_MISMATCH"), setOf(McSyncService.REASON_NOT_READY, McSyncService.REASON_PROTOCOL, McSyncService.REASON_VERSION))
+        assertEquals(setOf("MARKET_NOT_READY", "PROTOCOL_UNSUPPORTED"), setOf(McSyncService.REASON_NOT_READY, McSyncService.REASON_PROTOCOL))
     }
 
     // ===== the announcement text (19 section 9) ==================================================================================

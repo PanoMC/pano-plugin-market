@@ -70,7 +70,6 @@ private fun buildMcGameService(plugin: MarketPlugin): McGameService {
         products = context.getBean(MarketProductDao::class.java), categories = context.getBean(MarketCategoryDao::class.java), store = storeQueryService(plugin),
         widgets = widgetService(plugin), read = { pool() },
         activity = { log -> databaseManager().panelActivityLogDao.add(log, pool()) }, pluginId = plugin.pluginId,
-        marketVersion = { marketVersion(plugin) },
         storeUrl = { runCatching { plugin.applicationContext.getBean(ConfigManager::class.java).config.websiteUrl }.getOrNull() },
         productUrlTemplate = { MarketLinks.platform.productTemplate() }, registerUrl = { MarketLinks.platform.register() },
         orderLocale = { username -> manualOrderLocale(plugin, username) },
