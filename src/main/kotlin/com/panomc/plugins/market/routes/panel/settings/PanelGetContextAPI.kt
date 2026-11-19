@@ -127,7 +127,7 @@ class PanelGetContextAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
             .getOrDefault("")
 
         val input = marketContextInput(
-            config, storeUrl = marketStoreUrl(websiteUrl, if (websiteUrl.isBlank()) StoreLinks.NONE else MarketLinks.platform), mailEnabled = MarketRuntime.capabilities.mail, shippingEnabled = shippingEnabled(), runtimeState = MarketRuntime.state.name
+            config, storeUrl = marketStoreUrl(websiteUrl, if (websiteUrl.isBlank()) StoreLinks.NONE else MarketLinks.platform), mailEnabled = MarketRuntime.capabilities.mailEnabled(platformMailSwitchOn(plugin)), shippingEnabled = shippingEnabled(), runtimeState = MarketRuntime.state.name
         ).copy(featurePreview = developmentMode())
 
         return Successful(marketContextBody(input, includeProductMeta = has(context, MarketNode.CATALOG)))

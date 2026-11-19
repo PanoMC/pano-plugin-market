@@ -1,6 +1,7 @@
 package com.panomc.plugins.market.routes.panel.settings
 
 import com.panomc.platform.annotation.Endpoint
+import com.panomc.platform.config.ConfigManager
 import com.panomc.platform.model.Path
 import com.panomc.platform.model.Result
 import com.panomc.platform.model.Route
@@ -29,7 +30,8 @@ fun marketHealthBody(
     health: MarketRuntime.Health,
     ipTrust: String,
     routes: List<Map<String, Any?>>,
-    extras: HealthExtras = HealthExtras.EMPTY
+    extras: HealthExtras = HealthExtras.EMPTY,
+    mailSwitchOn: Boolean = true
 ): Map<String, Any?> {
     val unfixed = health.unfixed.filterValues { it > 0 }.keys.toList().sorted()
 
@@ -46,14 +48,18 @@ fun marketHealthBody(
         "providers" to extras.providers,
         "servers" to extras.servers,
         "credits" to extras.credits,
-        "mail" to health.capabilities.mailStatus,
-        "mailEnabled" to health.capabilities.mail,
+        "mail" to health.capabilities.mailStatus(mailSwitchOn),
+        "mailEnabled" to health.capabilities.mailEnabled(mailSwitchOn),
         "ipTrust" to ipTrust,
         "lockedSubjects" to extras.lockedSubjects,
         "rejectedEventsLastHour" to extras.rejectedEventsLastHour,
         "routes" to routes
     )
 }
+
+/** The platform mail switch (`email.enabled` of the platform config); off while the config cannot be read, like the mail outbox. */
+internal fun platformMailSwitchOn(plugin: MarketPlugin): Boolean =
+    runCatching { plugin.applicationContext.getBean(ConfigManager::class.java).config.email.enabled }.getOrDefault(false)
 
 /** The reader of the live sections on the plugin's beans. */
 internal fun healthReader(plugin: MarketPlugin): MarketHealthReader {
@@ -101,7 +107,7 @@ class PanelGetHealthAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
             HealthExtras.EMPTY
         }
 
-        return Successful(marketHealthBody(MarketRuntime.health(), ClientIpResolver.ipTrust(), registeredRoutes(), extras))
+        return Successful(marketHealthBody(MarketRuntime.health(), ClientIpResolver.ipTrust(), registeredRoutes(), extras, platformMailSwitchOn(plugin)))
     }
 
     /** Every route the plugin registered, with its auth class, so the permission-matrix test can prove none is missing. */

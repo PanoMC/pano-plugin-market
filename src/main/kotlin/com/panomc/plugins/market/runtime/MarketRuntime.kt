@@ -22,6 +22,12 @@ object MarketRuntime {
     data class HostCapabilities(val mail: Boolean, val notifications: Boolean) {
         /** `health.mail`: `"OK"` or `"HOST_TOO_OLD"`. */
         val mailStatus: String get() = if (mail) "OK" else "HOST_TOO_OLD"
+
+        /** `health.mail` with the platform mail switch: `"HOST_TOO_OLD"` first, then `"DISABLED"` while the switch is off, else `"OK"`. */
+        fun mailStatus(switchOn: Boolean): String = if (!mail) "HOST_TOO_OLD" else if (switchOn) "OK" else "DISABLED"
+
+        /** Mail can go out: the host has the mail classes and the platform mail switch is on. */
+        fun mailEnabled(switchOn: Boolean): Boolean = mail && switchOn
     }
 
     /** What `GET /health` reports besides the state: what the verifier found and what the bootstrap swallowed. */

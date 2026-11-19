@@ -49,7 +49,7 @@ class PanelGetSettingsAPI(
             .put("paymentMethods", paymentMethods)
             .put("currencySymbol", Currencies.symbol(config.currency))
             .put("statsCurrencySymbol", Currencies.symbol(config.statsCurrency))
-            .put("mailEnabled", MarketRuntime.capabilities.mail)
+            .put("mailEnabled", MarketRuntime.capabilities.mailEnabled(platformMailSwitchOn(plugin)))
             .put("invoiceSequences", invoiceWiring(plugin).endpoints.sequences(plugin.applicationContext.getBean(DatabaseManager::class.java).getSqlClient()))
 
         return Successful(response.map)

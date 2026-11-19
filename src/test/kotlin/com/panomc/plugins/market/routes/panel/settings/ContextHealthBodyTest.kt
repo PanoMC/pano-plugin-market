@@ -126,6 +126,24 @@ class ContextHealthBodyTest {
     }
 
     @Test
+    fun `mail reports the platform switch when the host can send mail`() {
+        val caps = MarketRuntime.HostCapabilities(mail = true, notifications = true)
+        val health = MarketRuntime.Health(MarketRuntime.State.READY, emptyList(), emptyMap(), emptyList(), caps)
+
+        val off = marketHealthBody(health, "OK", emptyList(), mailSwitchOn = false)
+        assertEquals("DISABLED", off["mail"])
+        assertEquals(false, off["mailEnabled"])
+
+        val on = marketHealthBody(health, "OK", emptyList(), mailSwitchOn = true)
+        assertEquals("OK", on["mail"])
+        assertEquals(true, on["mailEnabled"])
+
+        val old = marketHealthBody(health(MarketRuntime.State.READY), "OK", emptyList(), mailSwitchOn = false)
+        assertEquals("HOST_TOO_OLD", old["mail"], "a host without mail wins over the switch")
+        assertEquals(false, old["mailEnabled"])
+    }
+
+    @Test
     fun `a degraded market lists what is missing and what is unfixed, zero counts are not unfixed`() {
         val body = marketHealthBody(
             health(MarketRuntime.State.DEGRADED, listOf("MISSING_TABLE pano_market_coupon"), mapOf("b" to 2L, "a" to 1L, "z" to 0L)),
