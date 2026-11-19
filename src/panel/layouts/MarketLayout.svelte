@@ -21,7 +21,7 @@
   </PageNav>
 {/snippet}
 
-<div class="container vstack gap-3" bind:this={root}>
+<div class="container vstack gap-3 pb-5" bind:this={root}>
   <PageActions>
     <div slot="left">
       {@render (left || defaultLeft)()}
