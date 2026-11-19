@@ -22,7 +22,10 @@ class EngineHarness(
     val settings: TestSettings = TestSettings(),
     val callbacks: RecordingCallbacks = RecordingCallbacks()
 ) {
-    var store: StateStore = StateStore.open(dir, clock, log, storeOptions)
+    /** The directory locks of the stores this harness opened: a crash releases them, as the dead process would. */
+    private val held = OpenSinks()
+
+    var store: StateStore = StateStore.open(dir, clock, log, held.trackLocks(storeOptions))
         private set
     var engine: DeliveryEngine = newEngine()
         private set
@@ -53,13 +56,15 @@ class EngineHarness(
     fun crash() = reopen()
 
     private fun reopen() {
-        store = StateStore.open(dir, clock, log, storeOptions)
+        held.releaseLocks()
+        store = StateStore.open(dir, clock, log, held.trackLocks(storeOptions))
         engine = newEngine()
     }
 
     /** Replaces the store (and engine) by one opened from another directory state, e.g. a copy taken mid-dispatch. */
     fun openCopy(copy: Path) {
-        store = StateStore.open(copy, clock, log, storeOptions)
+        held.releaseLocks()
+        store = StateStore.open(copy, clock, log, held.trackLocks(storeOptions))
         engine = newEngine()
     }
 }

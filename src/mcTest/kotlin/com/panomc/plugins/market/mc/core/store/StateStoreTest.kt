@@ -342,4 +342,17 @@ class StateStoreTest {
         assertNull(reopened.recovery, "the half line is the last line: a torn tail")
         assertEquals(before, reopened.dump())
     }
+
+    @Test
+    fun `a second store is refused on a directory another open store still holds, and opens once it is closed`() {
+        val first = StateStore.open(dir, clock, log)
+        first.commit(JournalOp.Received(record("k1", 1)))
+
+        assertThrows(StoreLockedException::class.java) { StateStore.open(dir, clock, log) }
+
+        first.close()
+        val second = StateStore.open(dir, clock, log)
+        assertNotNull(second.get("k1"))
+        second.close()
+    }
 }

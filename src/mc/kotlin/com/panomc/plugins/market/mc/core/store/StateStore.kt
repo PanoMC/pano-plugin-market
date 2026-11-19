@@ -7,6 +7,7 @@ import com.panomc.plugins.market.mc.core.platform.McLog
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
+import java.nio.channels.OverlappingFileLockException
 import java.nio.charset.StandardCharsets
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -51,8 +52,45 @@ class FileAppendSink(path: Path) : AppendSink {
 data class StoreOptions(
     /** The journal is compacted into the snapshot when it grows past this size (19 section 5: 1 MB). */
     val maxJournalBytes: Long = 1_048_576L,
-    val sinkFactory: (Path) -> AppendSink = { FileAppendSink(it) }
+    val sinkFactory: (Path) -> AppendSink = { FileAppendSink(it) },
+    /** Takes the lock of a base directory; closing the answer releases it. Throws [StoreLockedException] while another store holds it. */
+    val lockFactory: (Path) -> AutoCloseable = { StoreLock.acquire(it) }
 )
+
+/** Another store still holds the directory (an old instance after a `/reload` whose engine thread has not closed its store yet). */
+class StoreLockedException(message: String) : IOException(message)
+
+/**
+ * The exclusive lock on `<baseDir>/state.lock`: one open store per directory, in this process and across processes. Without it a store opened by a reloaded
+ * plugin and the store of the old engine thread that is still finishing a command would append to (and compact) the same journal.
+ */
+object StoreLock {
+    const val FILE = "state.lock"
+
+    fun acquire(baseDir: Path): AutoCloseable {
+        Files.createDirectories(baseDir)
+        val channel = FileChannel.open(baseDir.resolve(FILE), StandardOpenOption.CREATE, StandardOpenOption.WRITE)
+        val lock = try {
+            channel.tryLock()
+        } catch (_: OverlappingFileLockException) {
+            null
+        } catch (e: IOException) {
+            channel.close()
+            throw e
+        }
+        if (lock == null) {
+            channel.close()
+            throw StoreLockedException("the Market state in $baseDir is in use by another instance")
+        }
+        return AutoCloseable {
+            try {
+                lock.release()
+            } finally {
+                channel.close()
+            }
+        }
+    }
+}
 
 /** What is known about a lost store: the component is in recovery mode until an operator confirms (19 section 6.4). */
 data class RecoveryInfo(
@@ -92,6 +130,7 @@ class StateStore private constructor(
     private val reportKeys = LinkedHashSet<String>()
 
     private var sink: AppendSink? = null
+    private var lock: AutoCloseable? = null
     private var seq: Long = 0
     private var snapshotSeq: Long = 0
     private var broken = false
@@ -349,6 +388,11 @@ class StateStore private constructor(
             } catch (_: IOException) {
             }
             sink = null
+            try {
+                lock?.close()
+            } catch (_: Exception) {
+            }
+            lock = null
         }
     }
 
@@ -501,18 +545,30 @@ class StateStore private constructor(
          * `recovery.pending` until the operator confirms).
          */
         fun open(baseDir: Path, clock: McClock, log: McLog, options: StoreOptions = StoreOptions()): StateStore {
-            var store = StateStore(baseDir, clock, log, options)
+            // The lock first: nothing is read while another store may still write (released by [close]).
+            val lock = options.lockFactory(baseDir)
             try {
-                store.load()
-            } catch (e: StoreCorruptException) {
-                store.closeQuietly()
-                store = StateStore(baseDir, clock, log, options)
-                store.quarantine(e)
+                var store = StateStore(baseDir, clock, log, options)
+                store.lock = lock
+                try {
+                    store.load()
+                } catch (e: StoreCorruptException) {
+                    store.closeQuietly()
+                    store = StateStore(baseDir, clock, log, options)
+                    store.lock = lock
+                    store.quarantine(e)
+                    return store
+                }
+                store.recovery = store.readMarker()
+                store.settleInterrupted("INTERRUPTED", INTERRUPTED_MESSAGE)
                 return store
+            } catch (t: Throwable) {
+                try {
+                    lock.close()
+                } catch (_: Exception) {
+                }
+                throw t
             }
-            store.recovery = store.readMarker()
-            store.settleInterrupted("INTERRUPTED", INTERRUPTED_MESSAGE)
-            return store
         }
     }
 

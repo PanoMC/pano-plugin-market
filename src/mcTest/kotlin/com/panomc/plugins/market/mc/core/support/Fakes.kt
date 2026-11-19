@@ -242,14 +242,26 @@ class FlakySink(private val delegate: AppendSink) : AppendSink {
  */
 class OpenSinks {
     private val open = ArrayList<AppendSink>()
+    private val locks = ArrayList<AutoCloseable>()
 
-    /** [options] with every sink it opens recorded here. */
+    /** [options] with every sink and every directory lock it opens recorded here. */
     fun track(options: StoreOptions = StoreOptions()): StoreOptions =
-        options.copy(sinkFactory = { path -> options.sinkFactory(path).also { open.add(it) } })
+        trackLocks(options).copy(sinkFactory = { path -> options.sinkFactory(path).also { open.add(it) } })
 
-    /** The process that held them is gone: every recorded sink is closed. */
+    /** [options] with only its directory locks recorded here. */
+    fun trackLocks(options: StoreOptions = StoreOptions()): StoreOptions =
+        options.copy(lockFactory = { path -> options.lockFactory(path).also { locks.add(it) } })
+
+    /** The process that held them is gone: every recorded sink is closed and every lock released. */
     fun crash() {
         open.forEach { runCatching { it.close() } }
         open.clear()
+        releaseLocks()
+    }
+
+    /** The locks of a dead process are released by the operating system. */
+    fun releaseLocks() {
+        locks.forEach { runCatching { it.close() } }
+        locks.clear()
     }
 }

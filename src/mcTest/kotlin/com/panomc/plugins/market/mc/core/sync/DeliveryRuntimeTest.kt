@@ -2,6 +2,7 @@ package com.panomc.plugins.market.mc.core.sync
 
 import com.panomc.plugins.market.mc.core.platform.SingleThreadScheduler
 import com.panomc.plugins.market.mc.core.platform.SystemMcClock
+import com.panomc.plugins.market.mc.core.store.StateStore
 import com.panomc.plugins.market.mc.core.support.FakeMcPlatform
 import com.panomc.plugins.market.mc.core.support.FakeTransport
 import com.panomc.plugins.market.mc.core.support.RecordingCallbacks
@@ -27,13 +28,13 @@ class DeliveryRuntimeTest {
 
     private val log = TestLog()
 
-    private class Rig(dir: Path, val log: TestLog) {
+    private class Rig(dir: Path, val log: TestLog, options: RuntimeOptions = RuntimeOptions()) {
         val platform = FakeMcPlatform()
         val transport = FakeTransport()
         val callbacks = RecordingCallbacks()
         val runtime = DeliveryRuntime(
             dir, platform, TestSettings(), transport, callbacks, log, "1.4.0", SystemMcClock,
-            SingleThreadScheduler("PanoMarket-test", log)
+            SingleThreadScheduler("PanoMarket-test", log), options
         )
     }
 
@@ -160,6 +161,25 @@ class DeliveryRuntimeTest {
         await("failure noticed") { rig.runtime.status().failed }
         assertEquals(0, rig.transport.sent)
         assertTrue(log.has("stays idle"))
+        rig.runtime.stop()
+    }
+
+    @Test
+    fun `after a reload the new instance waits while the old one still holds the state, then starts on it`() {
+        // the old instance: its engine thread is still busy with a command, its store is open
+        val old = StateStore.open(dir, SystemMcClock, log)
+        val rig = Rig(dir, log, RuntimeOptions(lockRetryMs = 20))
+        rig.runtime.start()
+        rig.runtime.connectionChanged(true)
+        await("lock noticed") { log.has("still in use by the previous instance") }
+        Thread.sleep(100)
+        assertFalse(rig.runtime.status().started)
+        assertEquals(0, rig.transport.sent)
+
+        // the old engine finished and closed its store: the new one opens the same files
+        old.close()
+        await("started") { rig.runtime.status().started }
+        await("request") { rig.transport.sent >= 1 }
         rig.runtime.stop()
     }
 

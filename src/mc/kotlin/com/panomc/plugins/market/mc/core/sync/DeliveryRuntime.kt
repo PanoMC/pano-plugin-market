@@ -10,6 +10,7 @@ import com.panomc.plugins.market.mc.core.platform.SingleThreadScheduler
 import com.panomc.plugins.market.mc.core.platform.SyncTransport
 import com.panomc.plugins.market.mc.core.platform.SystemMcClock
 import com.panomc.plugins.market.mc.core.store.StateStore
+import com.panomc.plugins.market.mc.core.store.StoreLockedException
 import com.panomc.plugins.market.mc.core.store.StoreOptions
 import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
@@ -31,7 +32,9 @@ data class RuntimeOptions(
     /** The retention purge (19 section 5: a daily task). */
     val purgeEveryMs: Long = 24L * 60 * 60 * 1000,
     val purgeFirstAfterMs: Long = 60_000,
-    val stopWaitMs: Long = 5_000
+    val stopWaitMs: Long = 5_000,
+    /** While the state is still locked by an old instance (a `/reload` whose engine thread is finishing a command), the open is retried this often. */
+    val lockRetryMs: Long = 1_000
 )
 
 /**
@@ -90,31 +93,37 @@ class DeliveryRuntime(
     }
 
     fun start() {
-        scheduler.execute {
-            if (stopped || started) return@execute
+        scheduler.execute { open(0) }
+    }
+
+    private fun open(attempt: Int) {
+        if (stopped || started) return
+        try {
+            val s = StateStore.open(baseDir, clock, log, options.store)
+            val e = DeliveryEngine(s, platform, settings, clock, log, wiredCallbacks, componentVersion, options.engine)
+            val l = SyncLoop(e, transport, scheduler, log, options.loop)
+            store = s
+            engine = e
+            loop = l
+            started = true
+            l.startNow()
+            if (connected) l.connectionNow(true)
+            expireTimer = scheduler.schedule(options.expireEveryMs) { expireTick() }
+            purgeTimer = scheduler.schedule(options.purgeFirstAfterMs) { purgeTick() }
+            // Players who are online already (a /reload, a late enable) never produce a join event: run what waits for them.
             try {
-                val s = StateStore.open(baseDir, clock, log, options.store)
-                val e = DeliveryEngine(s, platform, settings, clock, log, wiredCallbacks, componentVersion, options.engine)
-                val l = SyncLoop(e, transport, scheduler, log, options.loop)
-                store = s
-                engine = e
-                loop = l
-                started = true
-                l.startNow()
-                if (connected) l.connectionNow(true)
-                expireTimer = scheduler.schedule(options.expireEveryMs) { expireTick() }
-                purgeTimer = scheduler.schedule(options.purgeFirstAfterMs) { purgeTick() }
-                // Players who are online already (a /reload, a late enable) never produce a join event: run what waits for them.
-                try {
-                    e.releasePresent()
-                } catch (t: Throwable) {
-                    log.error("Running the Market queue of the players who are already online failed: ${t.message}", t)
-                }
-                lastEngineStatus = e.status()
+                e.releasePresent()
             } catch (t: Throwable) {
-                log.error("The Market delivery component could not open its state in $baseDir and stays idle: ${t.message}", t)
-                failed = true
+                log.error("Running the Market queue of the players who are already online failed: ${t.message}", t)
             }
+            lastEngineStatus = e.status()
+        } catch (_: StoreLockedException) {
+            // The old instance closes its store once its last command returned: wait for it, never open the same files twice.
+            if (attempt == 0) log.warn("The Market state in $baseDir is still in use by the previous instance; the delivery component starts once it is released.")
+            scheduler.schedule(options.lockRetryMs) { open(attempt + 1) }
+        } catch (t: Throwable) {
+            log.error("The Market delivery component could not open its state in $baseDir and stays idle: ${t.message}", t)
+            failed = true
         }
     }
 
