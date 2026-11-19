@@ -1134,6 +1134,25 @@ class OrderReviewIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `mark paid keeps a manual order's own label and localizes the default label`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+
+        val turkish = orderOf(buy(fx.product(price = 1000, stock = 5)))
+        val cash = orderOf(buy(fx.product(price = 1000, stock = 5)))
+
+        sql("DELETE FROM `pano_market_payment` WHERE `orderId` IN (?, ?)", turkish.id, cash.id)
+        sql("UPDATE `pano_market_order` SET `locale` = 'tr-TR' WHERE `id` = ?", turkish.id)
+        sql("UPDATE `pano_market_order` SET `paymentMethodId` = 'manual', `paymentLabel` = 'Cash', `locale` = 'tr-TR' WHERE `id` = ?", cash.id)
+
+        review.setStatus(turkish.id, OrderStatus.COMPLETED, null, admin)
+        review.setStatus(cash.id, OrderStatus.COMPLETED, null, admin)
+
+        assertEquals("Manuel ödeme", order(turkish.id).paymentLabel)
+        assertEquals("Cash", order(cash.id).paymentLabel)
+        assertEquals(OrderStatus.COMPLETED, order(cash.id).status)
+    }
+
+    @Test
     fun `FAILED and CANCELLED release the reservation and close the open attempts, nothing is delivered`(): Unit = runBlocking {
         fake.caps = PaymentCapabilities().also { it.cancelPending = true }
         fx.paymentMethod("fake")

@@ -157,7 +157,10 @@ class OrderReviewService(
     }
 
     private suspend fun markManual(conn: io.vertx.sqlclient.SqlConnection, before: MarketOrder, hadAttempts: Boolean) {
-        orderService.updateOrder(conn, before.id, linkedMapOf("paymentMethodId" to MANUAL_METHOD, "paymentLabel" to MANUAL_LABEL))
+        // a manual order keeps its own label (custom or localized); any other order gets the default in its locale
+        val label = before.paymentLabel.takeIf { before.paymentMethodId == MANUAL_METHOD && it.isNotBlank() } ?: CheckoutService.manualLabel(before.locale)
+
+        orderService.updateOrder(conn, before.id, linkedMapOf("paymentMethodId" to MANUAL_METHOD, "paymentLabel" to label))
 
         val now = clock.now()
 
@@ -181,7 +184,6 @@ class OrderReviewService(
     companion object {
         const val NOT_IN_REVIEW = "NOT_IN_REVIEW"
         const val MANUAL_METHOD = "manual"
-        const val MANUAL_LABEL = "Manual payment"
         const val MARKED_PAID_NOTE = "MARKED_PAID"
 
         /** `market_order_event.message` holds 512 characters. */

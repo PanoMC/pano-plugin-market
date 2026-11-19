@@ -2016,13 +2016,6 @@ class CheckoutService(
         )
     }
 
-    /** `paymentLabel` default: "Manual payment" in the order locale. */
-    private fun manualLabel(locale: String): String = when (locale.lowercase(Locale.ROOT).substringBefore('-')) {
-        "tr" -> "Manuel ödeme"
-        "ru" -> "Ручная оплата"
-        else -> "Manual payment"
-    }
-
 
     // ----- rate limits L1, L3, L4 (11 section 11): L1 IP before the replay lookup, L1 buyer after it; L4 and L3 before the order transaction
 
@@ -2790,6 +2783,13 @@ class CheckoutService(
         private const val ANON_ORDER_SUBJECT = "ip:anon"
 
         const val DEFAULT_LOCALE = "en-US"
+
+        /** `paymentLabel` default: "Manual payment" in the order locale. */
+        fun manualLabel(locale: String?): String = when (locale.orEmpty().lowercase(Locale.ROOT).substringBefore('-')) {
+            "tr" -> "Manuel ödeme"
+            "ru" -> "Ручная оплата"
+            else -> "Manual payment"
+        }
         const val CODE_ATTEMPTS_LOCKED = "CODE_ATTEMPTS_LOCKED"
 
         private const val PRODUCT_UNAVAILABLE = LineCode.PRODUCT_UNAVAILABLE
