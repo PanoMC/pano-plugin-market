@@ -612,6 +612,27 @@ class StoreQueryServiceIT : MarketDaoITBase() {
         assertTrue(page("base", viewer = StoreViewer(user.id)).getJsonObject("purchasable").getBoolean("ok"))
     }
 
+    @Test
+    fun `a deleted required product no longer blocks the purchase, as at checkout`(): Unit = runBlocking {
+        val user = fx.user()
+        val base = fx.product(slug = "base", name = "Base")
+        val other = fx.product(slug = "other", name = "Other")
+        val addon = fx.product(slug = "addon", name = "Addon")
+        raw(addon, "requiredProducts" to "[${base.id}]")
+        val either = fx.product(slug = "either", name = "Either")
+        raw(either, "requiredProducts" to "[${base.id},${other.id}]", "requireOnlyOne" to true)
+        raw(base, "deletedAt" to w.clock.now())
+
+        val addonPage = page("addon", viewer = StoreViewer(user.id))
+        assertTrue(addonPage.getJsonObject("purchasable").getBoolean("ok"))
+        assertEquals(0, addonPage.getJsonArray("requiredProducts").size())
+
+        val eitherPage = page("either", viewer = StoreViewer(user.id))
+        assertEquals("REQUIREMENT_NOT_MET", eitherPage.getJsonObject("purchasable").getString("reason"), "the live prerequisite still counts")
+        entitlement(user.id, other)
+        assertTrue(page("either", viewer = StoreViewer(user.id)).getJsonObject("purchasable").getBoolean("ok"))
+    }
+
     // ------------------------------------------------------------------------------------------------ product page
 
     @Test

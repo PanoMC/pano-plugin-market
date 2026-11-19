@@ -291,7 +291,9 @@ class StoreQueryService(
         val owned: List<MarketEntitlement>,
         val bundleChildren: Map<Long, List<Pair<ChildStock, Int>>>,
         /** Products with a required custom field (the card then links to the page). */
-        val requiredFieldProducts: Set<Long>
+        val requiredFieldProducts: Set<Long>,
+        /** Prerequisite ids that still exist; a deleted prerequisite is ignored, as at checkout (06 section 6.4). */
+        val liveRequired: Set<Long>
     ) {
         val categoryIds: Set<Long> = categories.map { it.id }.toSet()
 
@@ -403,8 +405,10 @@ class StoreQueryService(
 
             if (!viewer.loggedIn && needsAccount) return false to "LOGIN_REQUIRED"
 
-            if (viewer.loggedIn && p.requiredProducts.isNotEmpty()) {
-                val satisfied = if (p.requireOnlyOne) p.requiredProducts.any { it in ownedProductIds } else p.requiredProducts.all { it in ownedProductIds }
+            val required = p.requiredProducts.filter { it in liveRequired }
+
+            if (viewer.loggedIn && required.isNotEmpty()) {
+                val satisfied = if (p.requireOnlyOne) required.any { it in ownedProductIds } else required.all { it in ownedProductIds }
 
                 if (!satisfied) return false to "REQUIREMENT_NOT_MET"
             }
@@ -658,9 +662,11 @@ class StoreQueryService(
         }
 
         val requiredFieldIds = if (visible.isEmpty()) emptySet() else fields.getByProductIds(visible.map { it.id }, sqlClient).filter { it.required }.map { it.productId }.toSet()
+        val requiredIds = visible.flatMap { it.requiredProducts }.distinct()
+        val liveRequired = if (requiredIds.isEmpty()) emptySet() else products.getByIds(requiredIds, sqlClient).filter { it.deletedAt == null }.map { it.id }.toSet()
         val catalog = Catalog(
             c, marketPricingConfig(c, rates), now, currency?.trim()?.takeIf { it.isNotEmpty() }, viewer, reachable, visible,
-            variantsByProduct, pricesByProduct, automatic, owned, bundleChildren, requiredFieldIds
+            variantsByProduct, pricesByProduct, automatic, owned, bundleChildren, requiredFieldIds, liveRequired
         )
 
         return catalog
