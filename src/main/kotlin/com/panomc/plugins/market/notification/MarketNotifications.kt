@@ -42,7 +42,7 @@ data class MarketDeliveryWaitingNotification(
     val deliveryId: Long? = null,
     val urgent: Boolean = false,
     val failed: Boolean = false,
-    /** `WAITING`, `UNDO_FAILED` or `UNDO_WAITING`: picks the text (an ICU select in the locale files). */
+    /** `WAITING`, `UNDO_FAILED`, `UNDO_WAITING`, `UNDO_FAILED_INLINE` or `UNDO_WAITING_INLINE`: picks the text (an ICU select in the locale files). */
     val kind: String = "WAITING",
     val href: String? = null,
     val faIcon: String? = "fa-box-open"

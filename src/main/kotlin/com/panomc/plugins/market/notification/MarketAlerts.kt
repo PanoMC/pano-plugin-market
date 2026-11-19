@@ -96,14 +96,18 @@ class MarketAlerts(
         )
     )
 
-    /** A `REVOKE` / `EXPIRE` row that failed or waits too long: immediately, once per row, no per-server throttle. Returns whether a notification was sent. */
+    /**
+     * A `REVOKE` / `EXPIRE` row that failed or waits too long: immediately, once per row, no per-server throttle. Returns whether a notification was sent. An inline
+     * row (server 0: permission via Pano, credit, webhook) has no server to name, so it takes the `_INLINE` text; a server that is gone is named by its id.
+     */
     suspend fun deliveryUrgent(orderId: Long, deliveryId: Long, serverId: Long, serverName: String?, failed: Boolean): Boolean = raise(
         "row:$deliveryId", ROW_WINDOW_MINUTES,
         AlertMessage(
             AlertTypes.DELIVERY_WAITING, AlertAudience.FULFILMENT,
             mapOf(
-                "serverId" to serverId, "serverName" to serverName, "orderId" to orderId, "deliveryId" to deliveryId, "urgent" to true, "failed" to failed,
-                "kind" to if (failed) "UNDO_FAILED" else "UNDO_WAITING",
+                "serverId" to serverId, "serverName" to (serverName ?: if (serverId == 0L) null else "#$serverId"), "orderId" to orderId, "deliveryId" to deliveryId,
+                "urgent" to true, "failed" to failed,
+                "kind" to (if (failed) "UNDO_FAILED" else "UNDO_WAITING") + if (serverId == 0L) "_INLINE" else "",
                 "href" to orderHref(orderId)
             )
         )

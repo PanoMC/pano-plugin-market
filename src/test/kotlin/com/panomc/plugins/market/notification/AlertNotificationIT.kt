@@ -290,6 +290,21 @@ class AlertNotificationIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `an inline undo row takes the text without a server, a server that is gone is named by its id`() = runBlocking {
+        val inline = delivery(0, "FAILED", "REVOKE", 7, age = 1 * minute)
+        val gone = delivery(5, "FAILED", "REVOKE", 8, age = 1 * minute)
+
+        assertEquals(2, sweep(listOf(server(3, "Lobby", ServerReadiness.READY, 0))).runOnce())
+
+        val byRow = sink.sent.associateBy { (it.fields["deliveryId"] as Number).toLong() }
+
+        assertEquals("UNDO_FAILED_INLINE", byRow.getValue(inline).fields["kind"])
+        assertEquals(null, byRow.getValue(inline).fields["serverName"])
+        assertEquals("UNDO_FAILED", byRow.getValue(gone).fields["kind"])
+        assertEquals("#5", byRow.getValue(gone).fields["serverName"])
+    }
+
+    @Test
     fun `the sweep reads and sends nothing without the registry`() = runBlocking {
         enabled = false
         delivery(3, "FAILED", "REVOKE", 7, age = 1 * minute)
