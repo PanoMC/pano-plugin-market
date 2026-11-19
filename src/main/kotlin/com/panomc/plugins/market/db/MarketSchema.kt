@@ -1238,6 +1238,11 @@ object MarketSchema {
         timestamps()
         unique("uq_sub_period", "subscriptionId", "periodIndex")
         key("idx_due", "status", "nextAttemptAt")
+        // The instrument a hand payment of the renewal order delivered (ENC JSON with the paying attempt's id), kept until the order is accepted: an admin's accept
+        // of an order in review can come after a restart (09 section 8.4 step 4).
+        added {
+            text("paidStoredMethod") // ENC
+        }
     }
 
     val BLOCK = table("market_block", "Market block list table.") {

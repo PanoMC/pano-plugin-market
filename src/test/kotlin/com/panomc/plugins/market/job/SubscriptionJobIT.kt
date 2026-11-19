@@ -241,6 +241,53 @@ internal class SubscriptionJobIT : RenewalITBase() {
         assertEquals(2, paid.cycleCount)
     }
 
+    @Test
+    fun `a hand payment with a new card that waits in review keeps the new card and the automatic renewal when it is accepted after a restart`(): Unit = runBlocking {
+        val a = activeMerchant(cardExpiresInDays = 10)
+
+        w.clock.set(a.sub.nextChargeAt!!)
+        rw.job.runOnce()
+
+        val renewalOrder = renewalOrderOf(a.sub.id)
+
+        assertEquals(SubscriptionStatus.PAST_DUE, subscription(a.sub.id).status)
+
+        // the paid renewal order goes to review instead of being completed
+        rw.extraGuards = listOf(com.panomc.plugins.market.service.PaidGuard { _, _, order ->
+            if (order.id == renewalOrder.id) com.panomc.plugins.market.service.PaidDiversion(com.panomc.plugins.market.spi.payment.ReviewReason.OTHER, "held") else null
+        })
+        rw.build()
+        rw.payments.pay(renewalOrder, PayRequest("fake", null, null), PayCaller(), pool)
+
+        val paying = attempts(renewalOrder.id).last()
+        val event = PaymentEvent.Succeeded(PaymentTarget.Attempt(paying.id), Money(paying.amount, paying.currency)).also {
+            it.storedMethod = StoredPaymentMethod("tok_new").also { m -> m.label = "Mastercard 5555"; m.expiresAt = w.clock.now() + 400 * day }
+        }
+
+        rw.payments.applyEvent(renewalOrder.id, paying.id, PaymentEventMapper.attemptEvent(event)!!, AttemptFacts.of(event, sw.cipher))
+
+        assertEquals(OrderStatus.REVIEW, order(renewalOrder.id).status)
+        assertEquals(SubscriptionStatus.PAST_DUE, subscription(a.sub.id).status)
+
+        // a restart: every service is built again, then the admin accepts the order
+        rw.extraGuards = emptyList()
+        rw.build()
+        sw.db.txRestartingOnOrderChange { conn ->
+            sw.locks.forOrder(conn, renewalOrder.id, com.panomc.plugins.market.db.tx.OrderLockScope.RELEASE) { locked ->
+                rw.orderService.transition(conn, locked, com.panomc.plugins.market.core.order.OrderEvent.ReviewAccepted(false))
+            }
+        }
+
+        val paid = subscription(a.sub.id)
+
+        assertEquals(SubscriptionStatus.ACTIVE, paid.status)
+        assertEquals(SubscriptionMode.MERCHANT, paid.mode, "the subscription still renews automatically")
+        assertEquals("tok_new", JsonObject(sw.cipher.decrypt(paid.storedMethod!!)!!).getString("token"))
+        assertEquals("Mastercard 5555", paid.storedMethodLabel)
+        assertEquals(paid.currentPeriodEnd, paid.nextChargeAt)
+        assertNull(sql("SELECT `paidStoredMethod` FROM `pano_market_subscription_renewal` WHERE `subscriptionId` = ?", a.sub.id).single().getString("paidStoredMethod"), "the token is not kept twice")
+    }
+
     // ==================================================================================== in flight, unknown outcome
 
     @Test

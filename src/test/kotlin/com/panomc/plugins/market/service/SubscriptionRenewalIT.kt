@@ -86,6 +86,10 @@ internal class RenewalWorld(val sw: SubscriptionWorld, val w: TestWiring, val ve
     @Volatile
     var blocks: BuyerBlocks = BuyerBlocks.NONE
 
+    /** Guards after [SubscriptionClosedGuard] that may send a paid order to review; read when the world is built, so a test sets it and calls [build]. */
+    @Volatile
+    var extraGuards: List<PaidGuard> = emptyList()
+
     /** The settings the checkout harness's `Cfg` does not carry; every service of this world reads them at call time. */
     @Volatile
     var autoRefundDuplicatePayments = true
@@ -150,7 +154,7 @@ internal class RenewalWorld(val sw: SubscriptionWorld, val w: TestWiring, val ve
             payments = w.payments, methods = w.paymentMethods, creditAccounts = w.creditAccounts, currencyRates = w.currencyRates, lookup = sw.lookup, cipher = sw.cipher,
             contexts = PaymentContexts { provider, settings, testMode -> com.panomc.plugins.market.spi.testkit.TestContexts.payment(provider.id, settings, vertx, testMode) },
             orderService = orderService, site = { com.panomc.plugins.market.spi.testkit.TestContexts.defaultSite() }, readClient = { w.pool }, products = w.products,
-            entitlements = w.entitlements, extraPaidGuards = listOf(SubscriptionClosedGuard { subs }), subscriptionHooks = subs
+            entitlements = w.entitlements, extraPaidGuards = listOf(SubscriptionClosedGuard { subs }) + extraGuards, subscriptionHooks = subs
         )
 
         h.useStarter(payments)

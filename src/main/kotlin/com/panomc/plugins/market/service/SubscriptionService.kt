@@ -377,7 +377,7 @@ class SubscriptionService(
 
         // a renewal order has no pending row to write: what the payment delivered (the instrument of a hand payment) waits for the transition of the order
         if (order.source == OrderSource.RENEWAL) {
-            recordRenewalPayment(order, attempt, facts)
+            recordRenewalPayment(conn, order, attempt, facts)
 
             return null
         }
@@ -1358,13 +1358,6 @@ class SubscriptionService(
 
     // ================================================================================================ 09 section 8.4: a paid renewal
 
-    /** What a hand payment of a renewal order says about the instrument (09 section 8.4 step 4), kept between [onPaid] and the order transition of the same transaction. */
-    private class PaidFacts(val attemptId: Long, val stored: StoredPaymentMethod?)
-
-    private val paidFacts: MutableMap<Long, PaidFacts> = java.util.Collections.synchronizedMap(object : LinkedHashMap<Long, PaidFacts>() {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, PaidFacts>?): Boolean = size > PAID_FACTS_MAX
-    })
-
     /** `SubscriptionOnOrderPaid` of a renewal order (O2 / O4): the renewal row becomes `PAID`, the period moves, the mode and the next charge follow (09 section 8.4). */
     private suspend fun onRenewalPaid(conn: SqlConnection, order: MarketOrder) {
         val subscriptionId = order.subscriptionId ?: return
@@ -1376,10 +1369,10 @@ class SubscriptionService(
 
         val payment = order.paymentId?.let { payments.getById(it, conn) }
         val caps = payment?.let { capabilities(it.providerId, conn) }
-        val recorded = paidFacts.remove(order.id)?.takeIf { it.attemptId == payment?.id }
+        val recorded = payment?.let { paidStoredMethodOf(conn, renewal.id, it.id) }
         val charged = payment?.subscriptionId != null
         val modeAfter = when {
-            caps != null -> ModeResolver.atRenewal(row.mode, caps, recorded?.stored != null, charged)
+            caps != null -> ModeResolver.atRenewal(row.mode, caps, recorded != null, charged)
             row.mode == SubscriptionMode.GATEWAY -> SubscriptionMode.GATEWAY
             row.mode == SubscriptionMode.MERCHANT && charged -> SubscriptionMode.MERCHANT
             else -> SubscriptionMode.MANUAL
@@ -1393,7 +1386,7 @@ class SubscriptionService(
                 else logger.warn("subscription {}: the paid renewal order {} was ignored ({})", subscriptionId, order.id, decision.reason)
 
             is SubTransition.Apply -> {
-                apply(conn, row, decision, Context(initial, OrderActorType.SYSTEM, order, renewal, storedMethod = recorded?.stored))
+                apply(conn, row, decision, Context(initial, OrderActorType.SYSTEM, order, renewal, storedMethod = recorded))
                 endGatewayForBlockedBuyer(conn, subscriptionId, initial)
             }
 
@@ -1435,7 +1428,7 @@ class SubscriptionService(
         val stored = context.storedMethod
 
         // 2. the renewal row
-        conn.preparedQuery("UPDATE ${table("market_subscription_renewal")} SET `status` = 'PAID', `orderId` = ?, `paymentId` = COALESCE(?, `paymentId`), `nextAttemptAt` = NULL, `updatedAt` = ? WHERE `id` = ?")
+        conn.preparedQuery("UPDATE ${table("market_subscription_renewal")} SET `status` = 'PAID', `orderId` = ?, `paymentId` = COALESCE(?, `paymentId`), `nextAttemptAt` = NULL, `paidStoredMethod` = NULL, `updatedAt` = ? WHERE `id` = ?")
             .execute(Tuple.of(order.id, payment?.id, now, renewal.id)).coAwait()
 
         // 3. the period moves; the new price is what the buyer paid (09 section 8.4, last paragraph)
@@ -1485,10 +1478,37 @@ class SubscriptionService(
 
     /**
      * What an admin or a hand payment of a renewal order says to the instrument, recorded when the success is applied (hook of [PaymentService.applyIn]): the
-     * subscription row is not touched here, the transition of the order reads it back at O2 / O4.
+     * subscription row is not touched here, the transition of the order reads it back at O2 / O4. It is written to the renewal row (`paidStoredMethod`, ENC,
+     * with the attempt's id), not kept in memory: an order in review is accepted in a later transaction, possibly after a restart.
      */
-    private fun recordRenewalPayment(order: MarketOrder, attempt: MarketPayment, facts: AttemptFacts) {
-        paidFacts[order.id] = PaidFacts(attempt.id, facts.storedMethod)
+    private suspend fun recordRenewalPayment(conn: SqlConnection, order: MarketOrder, attempt: MarketPayment, facts: AttemptFacts) {
+        val renewal = renewalOf(conn, order) ?: return
+        val stored = facts.storedMethod
+        val value = stored?.let {
+            cipher.encrypt(
+                JsonObject().put("attemptId", attempt.id).put("token", it.token).put("label", it.label).put("expiresAt", it.expiresAt)
+                    .put("gatewayCustomerId", it.gatewayCustomerId).encode()
+            )
+        }
+
+        conn.preparedQuery("UPDATE ${table("market_subscription_renewal")} SET `paidStoredMethod` = ?, `updatedAt` = ? WHERE `id` = ?")
+            .execute(Tuple.of(value, clock.now(), renewal.id)).coAwait()
+    }
+
+    /** The instrument [recordRenewalPayment] wrote for the renewal row [renewalId], `null` when there is none or it belongs to another attempt than [attemptId]. */
+    private suspend fun paidStoredMethodOf(conn: SqlClient, renewalId: Long, attemptId: Long): StoredPaymentMethod? {
+        val value = conn.preparedQuery("SELECT `paidStoredMethod` FROM ${table("market_subscription_renewal")} WHERE `id` = ?")
+            .execute(Tuple.of(renewalId)).coAwait().firstOrNull()?.getString("paidStoredMethod")
+        val json = value?.let { cipher.decrypt(it) }?.let { runCatching { JsonObject(it) }.getOrNull() } ?: return null
+
+        if (json.getLong("attemptId") != attemptId) return null
+        val token = json.getString("token")?.takeIf { it.isNotBlank() } ?: return null
+
+        return StoredPaymentMethod(token).also {
+            it.label = json.getString("label")
+            it.expiresAt = json.getLong("expiresAt")
+            it.gatewayCustomerId = json.getString("gatewayCustomerId")
+        }
     }
 
     // ================================================================================================ 09 section 8.6: manual renewal, notices
@@ -2316,7 +2336,6 @@ class SubscriptionService(
         const val IDEM_PREFIX = "renewal:"
         private const val ACCESS_TOKEN_BYTES = 20
         private const val MAX_ID_TRIES = 8
-        private const val PAID_FACTS_MAX = 512
         private const val CLEANUP_BATCH = 50
 
         /** The lease of a charge on `nextChargeAt` and `renewal.nextAttemptAt`: a crashed run is noticed after this long, never charged twice (09 section 8.3). */
