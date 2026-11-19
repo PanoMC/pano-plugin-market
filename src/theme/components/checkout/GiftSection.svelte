@@ -31,11 +31,18 @@
 
       {#if showDetails && isGift}
         <div class="market-gift-section__fields vstack gap-3">
-          <div class="market-gift-section__input-group input-group flex-column">
-            <div class="form-floating flex-grow-1 w-100">
+          <!-- One joined block: the recipient on top, the message below, a single line between them. -->
+          <div class="market-gift-section__input-group vstack">
+            <div class="form-floating">
               <input
                 id={recipientId}
-                class={['market-gift-section__input', 'form-control', errors.recipient && 'is-invalid']}
+                class={[
+                  'market-gift-section__input',
+                  'form-control',
+                  'rounded-bottom-0',
+                  !errors.recipient && 'border-bottom-0',
+                  errors.recipient && 'is-invalid',
+                ]}
                 type="text"
                 maxlength="32"
                 autocomplete="off"
@@ -54,10 +61,15 @@
                 <span class="text-danger" aria-hidden="true">*</span>
               </label>
             </div>
-            <div class="form-floating flex-grow-1 w-100">
+            <div class="form-floating">
               <textarea
                 id={messageId}
-                class={['market-gift-section__input-2', 'form-control', errors.message && 'is-invalid']}
+                class={[
+                  'market-gift-section__input-2',
+                  'form-control',
+                  'rounded-top-0',
+                  errors.message && 'is-invalid',
+                ]}
                 rows="3"
                 maxlength={GIFT_MESSAGE_MAX}
                 placeholder=" "
