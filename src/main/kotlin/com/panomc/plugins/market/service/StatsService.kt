@@ -160,7 +160,7 @@ class StatsService(
         val monthSeries = series(months, conversion, client)
         val top = topProducts(from, to, 5, conversion, client)
         val methods = paymentMethods(from, to, client)
-        val currencies = currencies(from, to, client)
+        val currencies = currencies(from, to, conversion, client)
 
         return JsonObject()
             .put("summary", JsonObject(summary))
@@ -312,12 +312,12 @@ class StatsService(
         return rows.map { it.getString("label") to it.getLong("cnt") }
     }
 
-    /** Collected revenue per order currency, unconverted (decimal amounts of that currency), largest first. */
-    private suspend fun currencies(from: Long?, to: Long?, client: SqlClient): List<Pair<String, Double>> {
-        val args = ArrayList<Any?>()
+    /** Collected revenue per order currency, converted into the stats currency (decimal amounts of the stats currency), largest first. */
+    private suspend fun currencies(from: Long?, to: Long?, conversion: Conversion, client: SqlClient): List<Pair<String, Double>> {
+        val args = ArrayList<Any?>(conversion.args())
         val condition = range("o.`paidAt`", from, to, args)
         val rows = client.preparedQuery(
-            "SELECT o.`currency` AS currency, COALESCE(SUM($REVENUE), 0) AS revenue FROM ${table("market_order")} o WHERE $PAID$condition GROUP BY o.`currency` " +
+            "SELECT o.`currency` AS currency, COALESCE(SUM($REVENUE * $FACTOR), 0) AS revenue FROM ${table("market_order")} o WHERE $PAID$condition GROUP BY o.`currency` " +
                 "ORDER BY revenue DESC, currency ASC"
         ).execute(Tuple.from(args)).coAwait()
 

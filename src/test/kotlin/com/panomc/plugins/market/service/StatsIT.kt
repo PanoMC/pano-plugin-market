@@ -300,8 +300,8 @@ class StatsIT : MarketDaoITBase() {
         assertEquals(1L, refunds.getLong("count"), "only the succeeded refund of a real order")
         assertEquals(25.0, refunds.getDouble("amount"), 0.001)
         assertEquals(2L, body.getJsonObject("summary").getLong("activeSubscriptions"))
-        assertEquals(listOf("USD", "EUR"), currencies.getJsonArray("labels").map { it.toString() }, "largest first, unconverted")
-        assertEquals(listOf(200.0, 100.0), currencies.getJsonArray("values").map { (it as Number).toDouble() })
+        assertEquals(listOf("USD", "EUR"), currencies.getJsonArray("labels").map { it.toString() }, "largest first, converted into the stats currency")
+        assertEquals(listOf(180.0, 100.0), currencies.getJsonArray("values").map { (it as Number).toDouble() })
         assertEquals("EUR", body.getString("statsCurrency"))
         assertEquals("€", body.getString("statsCurrencySymbol"))
     }
