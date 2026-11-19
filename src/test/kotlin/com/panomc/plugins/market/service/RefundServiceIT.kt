@@ -1402,6 +1402,37 @@ class RefundServiceIT : MarketDaoITBase() {
     // ===== validation =============================================================================================================
 
     @Test
+    fun `the units a refund still in flight takes cannot be refunded again until it settles`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000), RefundLine(1000, quantity = 2), RefundLine(1000)))
+        val single = paid.items[0].id
+        val double = paid.items[1].id
+
+        r.fake.onRefund = { RefundResult.Pending() }
+
+        assertEquals(RefundStatus.PENDING, service.request(paid.order.id, RefundInput(items = listOf(RefundMath.ItemRequest(single, 1))), r.key(), null).refund.status)
+
+        // the order still has 20.00 left, but not that unit
+        assertThrows(RequestValueException::class.java) {
+            runBlocking { service.request(paid.order.id, RefundInput(items = listOf(RefundMath.ItemRequest(single, 1))), r.key(), null) }
+        }
+        assertEquals(1, r.refunds(paid.order.id).size)
+
+        // of a line of two units one unit is in flight: one more is there (the last one, at the rest of the line), two are not
+        assertEquals(RefundStatus.PENDING, service.request(paid.order.id, RefundInput(items = listOf(RefundMath.ItemRequest(double, 1))), r.key(), null).refund.status)
+        assertThrows(RequestValueException::class.java) {
+            runBlocking { service.request(paid.order.id, RefundInput(items = listOf(RefundMath.ItemRequest(double, 2))), r.key(), null) }
+        }
+
+        val second = service.request(paid.order.id, RefundInput(items = listOf(RefundMath.ItemRequest(double, 1))), r.key(), null).refund
+
+        assertEquals(500, second.amount)
+        assertThrows(RequestValueException::class.java) {
+            runBlocking { service.request(paid.order.id, RefundInput(items = listOf(RefundMath.ItemRequest(double, 1))), r.key(), null) }
+        }
+        assertEquals(3, r.refunds(paid.order.id).size)
+    }
+
+    @Test
     fun `a request must name items or an amount, never both, and only lines of the order`(): Unit = runBlocking {
         val paid = r.place(steve(), listOf(RefundLine(1000, quantity = 2)))
         val line = paid.items[0].id

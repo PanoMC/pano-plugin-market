@@ -233,7 +233,9 @@ private class Plan(
     val revoke: Boolean,
     val becomesFull: Boolean,
     val dependents: List<UpgradeDependent>,
-    val notSupported: Boolean
+    val notSupported: Boolean,
+    /** Units per order item that the order's other refunds still in flight hold (not yet in `refundedQuantity`). */
+    val held: Map<Long, Int> = emptyMap()
 )
 
 // ================================================================================================================ the service
@@ -392,6 +394,23 @@ class RefundService(
     private fun books(order: MarketOrder, rows: List<MarketRefund>) =
         rows.filter { !moneyOnly(order, it) }.map { RefundMath.RefundAmounts(it.id, it.status, it.amount, it.gatewayAmount, it.creditAmount) }
 
+    private class Held(val quantity: Int, val amount: Long)
+
+    /** What the `market_refund_item` rows of the order's other refunds still in flight (`REQUESTED` / `PENDING`, not [excluding]) take of each line. */
+    private suspend fun heldByInFlight(conn: SqlClient, order: MarketOrder, rows: List<MarketRefund>, excluding: Long?): Map<Long, Held> {
+        val out = LinkedHashMap<Long, Held>()
+
+        for (row in rows) {
+            if (row.id == excluding || (row.status != RefundStatus.REQUESTED && row.status != RefundStatus.PENDING) || moneyOnly(order, row)) continue
+
+            for (r in refundItems.getByRefundId(row.id, conn)) {
+                out.merge(r.orderItemId, Held(r.quantity, r.amount)) { a, b -> Held(a.quantity + b.quantity, a.amount + b.amount) }
+            }
+        }
+
+        return out
+    }
+
     private suspend fun plan(conn: SqlClient, order: MarketOrder, items: List<MarketOrderItem>, rows: List<MarketRefund>, input: RefundInput, excluding: Long? = null): Plan {
         if (order.status != OrderStatus.COMPLETED && order.status != OrderStatus.PARTIALLY_REFUNDED) throw InvalidOrderTransition(reason = order.status.name)
 
@@ -401,7 +420,14 @@ class RefundService(
         if (input.manual && (reason == null || reason.length < REASON_MIN)) throw RequestValueException("reason", "REQUIRED")
 
         val unit = CreditMath.unit(order.currency)
-        val lines = items.map { RefundMath.Line(it.id, it.quantity, it.lineTotal, it.refundedQuantity, it.refundedAmount) }
+        // the units and money of a line that another refund still in flight takes are not there to take again
+        val held = heldByInFlight(conn, order, rows, excluding)
+        val lines = items.map {
+            val h = held[it.id]
+
+            RefundMath.Line(it.id, it.quantity, it.lineTotal, it.refundedQuantity + (h?.quantity ?: 0), it.refundedAmount + (h?.amount ?: 0L))
+        }
+        val heldUnits = held.mapValues { it.value.quantity }
         var requested = input.amount
         var itemRows = emptyList<RefundMath.ItemAmount>()
 
@@ -428,7 +454,7 @@ class RefundService(
         suspend fun finish(split: RefundSplit.Split, limits: RefundSplit.Limits, warnings: List<RefundSplit.Warning>, notSupported: Boolean): Plan {
             val full = emptiesOrder(order, split.amount, split.creditPart)
 
-            return Plan(order, items, attempt, split, limits, warnings, itemRows, revoke, full, dependentsOf(conn, order, items, itemRows, full), notSupported)
+            return Plan(order, items, attempt, split, limits, warnings, itemRows, revoke, full, dependentsOf(conn, order, items, itemRows, full, heldUnits), notSupported, heldUnits)
         }
 
         return when (val result = RefundSplit.compute(splitOrder, request, capability)) {
@@ -455,7 +481,9 @@ class RefundService(
         e.replacedById != null && (e.status == EntitlementStatus.UPGRADED || (e.status == EntitlementStatus.REVOKED && e.endReason == END_REASON_REFUND))
 
     /** 21 section 5.4: the refunded lines whose entitlement was upgraded and whose last units go back (an amount-only refund counts when it empties the order). */
-    private suspend fun dependentsOf(conn: SqlClient, order: MarketOrder, items: List<MarketOrderItem>, itemRows: List<RefundMath.ItemAmount>, full: Boolean): List<UpgradeDependent> {
+    private suspend fun dependentsOf(
+        conn: SqlClient, order: MarketOrder, items: List<MarketOrderItem>, itemRows: List<RefundMath.ItemAmount>, full: Boolean, held: Map<Long, Int> = emptyMap()
+    ): List<UpgradeDependent> {
         val touched = LinkedHashMap<Long, Long>()
 
         if (itemRows.isNotEmpty()) {
@@ -464,7 +492,7 @@ class RefundService(
             for (r in itemRows) {
                 val item = byId[r.itemId] ?: continue
 
-                if (item.refundedQuantity + r.quantity >= item.quantity) touched[item.id] = r.amount
+                if (item.refundedQuantity + (held[item.id] ?: 0) + r.quantity >= item.quantity) touched[item.id] = r.amount
             }
         } else if (full) {
             for (item in items) touched[item.id] = maxOf(0L, item.lineTotal - item.refundedAmount)
@@ -563,7 +591,7 @@ class RefundService(
         when {
             revokeFirst -> {
                 // 21 section 3.5: the REVOKE rows are planned now, the row waits for them (the reconcile job looks every 60 s)
-                val targets = revokeTargets(plan.items, plan.itemRows.map { MarketRefundItem(orderItemId = it.itemId, quantity = it.quantity, amount = it.amount) }, plan.becomesFull)
+                val targets = revokeTargets(plan.items, plan.itemRows.map { MarketRefundItem(orderItemId = it.itemId, quantity = it.quantity, amount = it.amount) }, plan.becomesFull, plan.held)
 
                 if (targets.isNotEmpty()) entitlementService.revoke(conn, deliveryService, order, plan.items, targets, END_REASON_REFUND, DeliveryError.ORDER_REVOKED)
 
@@ -837,6 +865,18 @@ class RefundService(
 
                     if (row.amount > rem.total || row.gatewayAmount > rem.gateway || row.creditAmount > rem.credit || row.creditValue > rem.creditValue) {
                         throw InvalidRefundAmount(MoneyUtil.toDecimal(rem.total), MoneyUtil.toDecimal(rem.gateway), MoneyUtil.toDecimal(rem.credit))
+                    }
+
+                    // the units of its lines must still be there: another refund may have taken them since this one failed
+                    val held = heldByInFlight(conn, order, refunds.getByOrderId(order.id, conn), row.id)
+                    val byItem = orderItems.getByOrderIds(listOf(order.id), conn).associateBy { it.id }
+
+                    for (r in refundItems.getByRefundId(row.id, conn)) {
+                        val item = byItem[r.orderItemId] ?: continue
+
+                        if (r.quantity > 0 && item.refundedQuantity + (held[item.id]?.quantity ?: 0) + r.quantity > item.quantity) {
+                            throw RequestValueException("items", RefundMath.ItemsProblem.QUANTITY_OUT_OF_RANGE.name)
+                        }
                     }
                 }
 
@@ -1117,9 +1157,19 @@ class RefundService(
             if (delta > 0) clipped[id] = delta
         }
 
+        // a line never gives back more money than it holds
+        val clippedAmounts = LinkedHashMap<Long, Long>()
+
+        for ((id, a) in amountsOf) {
+            val item = byId.getValue(id)
+            val delta = minOf(a, maxOf(0L, item.lineTotal - item.refundedAmount))
+
+            if (delta > 0L) clippedAmounts[id] = delta
+        }
+
         for (item in items.sortedBy { it.id }) {
             val q = clipped[item.id] ?: 0
-            val a = amountsOf[item.id] ?: 0L
+            val a = clippedAmounts[item.id] ?: 0L
 
             if (q == 0 && a == 0L) continue
 
@@ -1146,7 +1196,7 @@ class RefundService(
             }
         }
 
-        return LineDeltas(clipped, amountsOf)
+        return LineDeltas(clipped, clippedAmounts)
     }
 
     /**
@@ -1215,8 +1265,11 @@ class RefundService(
         return items.filter { it.id in parents || it.parentItemId?.let { p -> p in parents } == true }.map { it.id }.toSet()
     }
 
-    /** The units a revoke of this refund covers (08 section 11.2): the refunded range of every named line, or every not-yet-revoked unit of every line once the order is empty. */
-    private fun revokeTargets(items: List<MarketOrderItem>, itemRows: List<MarketRefundItem>, fully: Boolean): Map<Long, IntRange?> {
+    /**
+     * The units a revoke of this refund covers (08 section 11.2): the refunded range of every named line, or every not-yet-revoked unit of every line once the order
+     * is empty. A range starts after the units of the line that other refunds still in flight hold ([held]).
+     */
+    private fun revokeTargets(items: List<MarketOrderItem>, itemRows: List<MarketRefundItem>, fully: Boolean, held: Map<Long, Int> = emptyMap()): Map<Long, IntRange?> {
         val out = LinkedHashMap<Long, IntRange?>()
         val byId = items.associateBy { it.id }
 
@@ -1225,7 +1278,9 @@ class RefundService(
 
             if (item.kind == OrderItemKind.CREDIT_TOPUP || r.quantity <= 0) continue
 
-            out[item.id] = item.refundedQuantity until minOf(item.refundedQuantity + r.quantity, item.quantity)
+            val from = minOf(item.refundedQuantity + (held[item.id] ?: 0), item.quantity)
+
+            out[item.id] = from until minOf(from + r.quantity, item.quantity)
         }
 
         if (fully) {
