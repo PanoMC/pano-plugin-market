@@ -100,6 +100,26 @@ describe('list', () => {
     expect(rowActions({ status: 'LABEL_READY' }, om)).toContain('cancel');
     expect(rowActions({ status: 'IN_TRANSIT' }, om)).not.toContain('cancel');
   });
+  test("row actions follow the server's allowed{} when the row carries it", () => {
+    const manual = { status: 'IN_TRANSIT', entryMode: 'MANUAL' };
+    expect(
+      rowActions({ ...manual, allowed: { cancel: true, track: false, retry: false } }, om),
+    ).toEqual(['view', 'generic-label', 'cancel']);
+    expect(
+      rowActions(
+        {
+          status: 'CREATED',
+          entryMode: 'CARRIER',
+          lastErrorCode: 'RATE_EXPIRED',
+          allowed: { retry: false, cancel: true, track: true },
+        },
+        om,
+      ),
+    ).toEqual(['view', 'generic-label', 'track', 'cancel']);
+    expect(rowActions({ status: 'LOST', allowed: { releaseItems: false } }, om)).not.toContain(
+      'release',
+    );
+  });
   test('release only for returned / lost parcels not yet released', () => {
     expect(canRelease({ status: 'RETURNED' })).toBe(true);
     expect(canRelease({ status: 'RETURNED', itemsReleased: true })).toBe(false);

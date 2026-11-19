@@ -50,20 +50,35 @@ export function listParams(filters, overrides = {}) {
 export const CANCELLABLE_STATUSES = ['CREATED', 'LABEL_READY'];
 export const RELEASABLE_STATUSES = ['RETURNED', 'LOST'];
 
+/**
+ * The server's verdict for one action when the row carries `allowed{}` (10 §9.9), else `undefined`
+ * so the caller falls back to the status rules (the order detail rows carry no `allowed{}`).
+ */
+export const allowedFlag = (shipment, key) =>
+  shipment?.allowed && typeof shipment.allowed === 'object'
+    ? shipment.allowed[key] === true
+    : undefined;
+
 /** True when the shipment creation failed and a retry is possible (13 §20.1). */
 export const canRetry = (shipment) =>
-  shipment?.entryMode !== 'MANUAL' &&
-  shipment?.status === 'CREATED' &&
-  Boolean(shipment?.lastErrorCode || shipment?.lastError);
+  allowedFlag(shipment, 'retry') ??
+  (shipment?.entryMode !== 'MANUAL' &&
+    shipment?.status === 'CREATED' &&
+    Boolean(shipment?.lastErrorCode || shipment?.lastError));
 
-export const canCancel = (shipment) => CANCELLABLE_STATUSES.includes(shipment?.status);
+export const canCancel = (shipment) =>
+  allowedFlag(shipment, 'cancel') ?? CANCELLABLE_STATUSES.includes(shipment?.status);
+
+/** Tracking can be pulled from the carrier now (never for a provider without tracking pull). */
+export const canTrack = (shipment) => allowedFlag(shipment, 'track') ?? true;
 
 /** A carrier label is stored: `hasLabel` (shipment API) or `labelFile` (order detail API). */
 export const hasStoredLabel = (shipment) => Boolean(shipment?.hasLabel ?? shipment?.labelFile);
 
 /** Returned / lost parcel whose items are not freed yet (10 §9.6). `itemsReleased` unknown = offered. */
 export const canRelease = (shipment) =>
-  RELEASABLE_STATUSES.includes(shipment?.status) && shipment?.itemsReleased !== true;
+  allowedFlag(shipment, 'releaseItems') ??
+  (RELEASABLE_STATUSES.includes(shipment?.status) && shipment?.itemsReleased !== true);
 
 /**
  * Row actions in menu order. `view` needs only OV (the page itself); everything else needs OM.
@@ -73,7 +88,8 @@ export function rowActions(shipment, user) {
   if (!shipment) return [];
   const out = ['view'];
   if (!can(user, 'OM')) return out;
-  out.push(hasStoredLabel(shipment) ? 'label' : 'generic-label', 'track');
+  out.push(hasStoredLabel(shipment) ? 'label' : 'generic-label');
+  if (canTrack(shipment)) out.push('track');
   if (canRetry(shipment)) out.push('retry');
   if (canRelease(shipment)) out.push('release');
   if (canCancel(shipment)) out.push('cancel');

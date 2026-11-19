@@ -247,6 +247,22 @@ describe('row actions', () => {
       'track',
     ]);
     expect(shipmentActions({ status: 'CREATED' }, pay)).toEqual([]);
+    expect(
+      shipmentActions(
+        { status: 'IN_TRANSIT', entryMode: 'MANUAL', allowed: { cancel: true, track: false } },
+        om,
+      ),
+    ).toEqual(['generic-label', 'cancel']);
+    expect(
+      shipmentActions(
+        {
+          status: 'CREATED',
+          lastErrorCode: 'RATE_EXPIRED',
+          allowed: { retry: false, track: true },
+        },
+        om,
+      ),
+    ).toEqual(['generic-label', 'track']);
   });
 
   test('invoices card: hidden without invoicing and without documents', () => {
