@@ -894,11 +894,12 @@ class DeliveryService(
         val itemId = undo.orderItemId ?: return false
         val snapshot = orderItems.getById(itemId, conn)?.snapshot?.takeIf { it.isNotBlank() }?.let { runCatching { JsonObject(it) }.getOrNull() }
         val action = ActionParser.parseStored(snapshot?.getJsonArray("actions")?.encode()).actions.firstOrNull { it.id == undo.actionId }
-        // an explicit EXPIRE / REVOKE action undoes the item as a whole; an automatic inverse refers to the one action it inverts
+        // an explicit EXPIRE / REVOKE action undoes the item as a whole; an automatic inverse refers to the one action it inverts on its own server (the planner
+        // makes one inverse row per server that took the grant, and the gate is per server, so a grant confirmed on another server must not let it run here)
         val explicit = action != null && (action.phase == DeliveryPhase.EXPIRE || action.phase == DeliveryPhase.REVOKE)
         val sql = "SELECT COUNT(*) AS n FROM $deliveryTable WHERE `orderItemId` = ? AND `phase` IN ('GRANT','RENEW') " +
-            "AND (`status` = 'CONFIRMED' OR (`status` = 'FAILED' AND `lastErrorCode` = 'UNKNOWN_OUTCOME'))" + if (explicit) "" else " AND `actionId` = ?"
-        val args = if (explicit) Tuple.of(itemId) else Tuple.of(itemId, undo.actionId)
+            "AND (`status` = 'CONFIRMED' OR (`status` = 'FAILED' AND `lastErrorCode` = 'UNKNOWN_OUTCOME'))" + if (explicit) "" else " AND `actionId` = ? AND `serverId` = ?"
+        val args = if (explicit) Tuple.of(itemId) else Tuple.of(itemId, undo.actionId, undo.serverId)
 
         return conn.preparedQuery(sql).execute(args).coAwait().first().getLong("n") == 0L
     }

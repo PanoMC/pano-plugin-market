@@ -3,6 +3,7 @@ package com.panomc.plugins.market.service
 import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.core.delivery.DeliveryError
 import com.panomc.plugins.market.core.delivery.DeliveryEvent
+import com.panomc.plugins.market.core.delivery.PermissionVia
 import com.panomc.plugins.market.core.delivery.ProductAction
 import com.panomc.plugins.market.core.delivery.ResultStatus
 import com.panomc.plugins.market.db.MarketDaoITBase
@@ -1013,6 +1014,42 @@ class McSyncServiceIT : MarketDaoITBase() {
         assertEquals(DeliveryStatus.CANCELLED, row(undo.id).status)
         assertEquals(DeliveryError.NOTHING_TO_REVOKE, row(undo.id).lastErrorCode)
         assertTrue(mc.commandLog.isEmpty())
+    }
+
+    @Test
+    fun `the automatic undo on a server whose grant was cancelled is cancelled, a grant confirmed on another server does not let it run (D22)`(): Unit = runBlocking {
+        val other = FakeMcComponent(sync, 8, w.clock, version)
+
+        link.add(8)
+        d.roster.granted = listOf(7L, 8L)
+
+        val node = ProductAction(id = "p1", type = DeliveryActionType.PERMISSION, via = PermissionVia.SERVER, nodes = listOf("group.vip"), targetServers = listOf(7L, 8L))
+        val (placed, rows) = buy(node)
+        val on7 = rows.single { it.serverId == 7L }
+        val on8 = rows.single { it.serverId == 8L }
+
+        // server 8 runs and confirms its grant; server 7 has its grant offered (SENT) when the refund comes
+        other.sync()
+        other.sync()
+        assertEquals(DeliveryStatus.CONFIRMED, row(on8.id).status)
+
+        mc.sync()
+        assertEquals(DeliveryStatus.SENT, row(on7.id).status)
+
+        d.revoke(placed)
+
+        val undo7 = d.rows(placed.order.id).single { it.phase == DeliveryPhase.REVOKE && it.serverId == 7L }
+        val undo8 = d.rows(placed.order.id).single { it.phase == DeliveryPhase.REVOKE && it.serverId == 8L }
+
+        // server 7 answers that its grant was cancelled before it ran
+        serverResult(on7, ResultStatus.CANCELLED)
+        assertEquals(DeliveryStatus.CANCELLED, row(on7.id).status)
+
+        d.service.classify()
+
+        assertEquals(DeliveryStatus.CANCELLED, row(undo7.id).status)
+        assertEquals(DeliveryError.NOTHING_TO_REVOKE, row(undo7.id).lastErrorCode)
+        assertTrue(row(undo8.id).status != DeliveryStatus.CANCELLED, "the grant of server 8 took effect, so its undo still runs")
     }
 
     @Test
