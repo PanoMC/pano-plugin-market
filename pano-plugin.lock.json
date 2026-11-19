@@ -394,14 +394,13 @@
       "classes": [
         "market-cart-offcanvas",
         "market-cart-offcanvas__action",
-        "market-cart-offcanvas__action-2",
         "market-cart-offcanvas__body",
         "market-cart-offcanvas__checkout",
         "market-cart-offcanvas__header",
         "market-cart-offcanvas__list",
         "market-cart-offcanvas__title"
       ],
-      "contract": 2,
+      "contract": 3,
       "hooks": [],
       "props": {},
       "slots": []

@@ -70,13 +70,6 @@
         onclick={close}>
         <i class="fa-solid fa-lock me-2" aria-hidden="true"></i>{$_('theme.cart.checkout')}
       </a>
-    {:else if view === 'EMPTY'}
-      <button
-        type="button"
-        class="market-cart-offcanvas__action-2 btn btn-secondary text-capitalize w-100"
-        disabled>
-        <i class="fa-solid fa-lock me-2" aria-hidden="true"></i>{$_('theme.cart.checkout')}
-      </button>
     {/if}
   </div>
 </div>
@@ -85,7 +78,7 @@
 
 <script module>
   // hook injection (doc 01 section 2): mounted outside the navbar DOM, without a load
-  export const view = { hook: 'theme:top', skipLoad: true, contract: 2 };
+  export const view = { hook: 'theme:top', skipLoad: true, contract: 3 };
 </script>
 
 <script>
