@@ -529,7 +529,8 @@
         "top-products": "En Çok Satan Ürünler",
         "payment-methods": "Ödeme Yöntemleri",
         "currencies": "Para Birimine Göre Gelir",
-        "week-label": "{week}. Hafta"
+        "week-label": "{week}. Hafta",
+        "no-data": "Henüz veri yok"
       }
     },
     "order-detail": {

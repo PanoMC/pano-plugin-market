@@ -3,12 +3,19 @@
     {#each charts as chart (chart.key)}
       <div class="col-md-6">
         <p class="mb-2">{$_(`pages.overview.chart.${chart.key}`)}</p>
-        <div class="p-3 border rounded-3">
+        <div class="p-3 border rounded-3 position-relative">
           <ChartCanvas
             type={chart.type}
             data={chart.data}
             options={chart.options}
             label={$_(`pages.overview.chart.${chart.key}`)} />
+          {#if chart.empty}
+            <div
+              class="position-absolute top-50 start-50 translate-middle text-muted small text-center"
+              style="pointer-events: none;">
+              {$_('pages.overview.chart.no-data')}
+            </div>
+          {/if}
         </div>
       </div>
     {/each}
@@ -65,20 +72,40 @@
     };
   };
 
-  const doughnut = (labels, values, label) => ({
+  // Nothing to share out: Chart.js would draw nothing at all, so an empty grey ring keeps the
+  // card the same shape as with data (the "no data yet" text sits in its middle).
+  const emptyDoughnut = () => ({
     type: 'doughnut',
+    empty: true,
     data: {
-      labels,
-      datasets: [{ data: values, backgroundColor: palette(values.length), borderWidth: 0 }],
+      labels: [''],
+      datasets: [
+        { data: [1], backgroundColor: [withAlpha(themeColor('secondary'), 0.2)], borderWidth: 0 },
+      ],
     },
     options: {
       cutout: '65%',
-      plugins: {
-        legend: { position: 'bottom' },
-        tooltip: { callbacks: { label } },
-      },
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
     },
   });
+
+  const doughnut = (labels, values, label) =>
+    !values.some((v) => v > 0)
+      ? emptyDoughnut()
+      : {
+          type: 'doughnut',
+          data: {
+            labels,
+            datasets: [{ data: values, backgroundColor: palette(values.length), borderWidth: 0 }],
+          },
+          options: {
+            cutout: '65%',
+            plugins: {
+              legend: { position: 'bottom' },
+              tooltip: { callbacks: { label } },
+            },
+          },
+        };
 
   const charts = $derived.by(() => {
     const c = stats?.charts ?? {};

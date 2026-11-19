@@ -529,7 +529,8 @@
         "top-products": "Самые продаваемые товары",
         "payment-methods": "Способы оплаты",
         "currencies": "Выручка по валютам",
-        "week-label": "Неделя {week}"
+        "week-label": "Неделя {week}",
+        "no-data": "Пока нет данных"
       }
     },
     "order-detail": {

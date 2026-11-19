@@ -529,7 +529,8 @@
         "top-products": "Best-Selling Products",
         "payment-methods": "Payment Methods",
         "currencies": "Revenue by Currency",
-        "week-label": "Week {week}"
+        "week-label": "Week {week}",
+        "no-data": "No data yet"
       }
     },
     "order-detail": {
