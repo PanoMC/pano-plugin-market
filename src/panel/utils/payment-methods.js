@@ -217,12 +217,31 @@ export function buildConfig(form, { capabilities = null, original = {} } = {}) {
   return out;
 }
 
+/**
+ * Splits an `INVALID_PROVIDER_SETTINGS` answer: schema field keys go to `schemaErrors`, the
+ * provider's general message (`settings`, a LocalizedText) to `message`, and the rules errors
+ * (sent as `config.<key>`) to `configErrors` under their bare key with a known code.
+ */
+export function splitProviderErrors(fieldErrors, schema) {
+  const schemaKeys = new Set((schema?.fields ?? []).map((f) => f.key));
+  const schemaErrors = {};
+  const configErrors = {};
+  let message = null;
+  for (const [key, value] of Object.entries(fieldErrors ?? {})) {
+    if (schemaKeys.has(key)) schemaErrors[key] = value;
+    else if (key === 'settings') message = value;
+    else configErrors[key.startsWith('config.') ? key.slice(7) : key] = configErrorCode(value);
+  }
+  return { schemaErrors, configErrors, message };
+}
+
 /** Tab holding the first invalid key of an `INVALID_PROVIDER_SETTINGS` answer: `settings` or `rules`. */
 export function tabOfFirstError(fieldErrors, schema) {
   const keys = Object.keys(fieldErrors ?? {});
   if (keys.length === 0) return 'settings';
   const schemaKeys = new Set((schema?.fields ?? []).map((f) => f.key));
-  const first = keys.find((k) => schemaKeys.has(k));
+  // the provider's general message (`settings`) is shown on the settings tab too
+  const first = keys.find((k) => schemaKeys.has(k) || k === 'settings');
   if (first) return 'settings';
   return 'rules';
 }

@@ -18,6 +18,7 @@ import {
   regionOf,
   rowBehavior,
   sortProviders,
+  splitProviderErrors,
   tabOfFirstClientError,
   tabOfFirstError,
   testModeControl,
@@ -260,9 +261,32 @@ describe('error tabs, status rows and actions', () => {
     expect(tabOfFirstError({ feePercent: 'x' }, schema)).toBe('rules');
     expect(tabOfFirstError({ feePercent: 'x', merchantId: 'y' }, schema)).toBe('settings');
     expect(tabOfFirstError({}, schema)).toBe('settings');
+    expect(tabOfFirstError({ 'config.maxAmount': 'OUT_OF_RANGE' }, schema)).toBe('rules');
+    expect(tabOfFirstError({ settings: { default: 'Credentials rejected' } }, schema)).toBe(
+      'settings',
+    );
     expect(tabOfFirstClientError({ a: 'X' }, { b: 'Y' })).toBe('settings');
     expect(tabOfFirstClientError({}, { b: 'Y' })).toBe('rules');
     expect(tabOfFirstClientError({}, {})).toBeNull();
+  });
+  test('server errors: config.* keys lose the prefix, the general message is kept apart', () => {
+    const split = splitProviderErrors(
+      {
+        apiKey: { default: 'bad key' },
+        'config.maxAmount': 'OUT_OF_RANGE',
+        'config.customLabel': 'SOMETHING_NEW',
+        settings: { default: 'Credentials rejected by gateway' },
+      },
+      schema,
+    );
+    expect(split.schemaErrors).toEqual({ apiKey: { default: 'bad key' } });
+    expect(split.configErrors).toEqual({ maxAmount: 'OUT_OF_RANGE', customLabel: 'INVALID' });
+    expect(split.message).toEqual({ default: 'Credentials rejected by gateway' });
+    expect(splitProviderErrors({}, schema)).toEqual({
+      schemaErrors: {},
+      configErrors: {},
+      message: null,
+    });
   });
   test('capability rows', () => {
     const rows = capabilityRows({ refund: 'PARTIAL', recurring: 'GATEWAY_MANAGED', statusQuery: true, guests: false, currencies: ['USD'] });

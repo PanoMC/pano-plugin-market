@@ -57,6 +57,16 @@
                 </dl>
               {/if}
 
+              {#if settingsMessage}
+                <div class="alert alert-danger d-flex align-items-start" role="alert">
+                  <i class="fa-solid fa-circle-exclamation me-3 mt-1" aria-hidden="true"></i>
+                  <div>
+                    <h5 class="alert-heading mb-2">{$_('common.error')}</h5>
+                    <div>{txt(settingsMessage)}</div>
+                  </div>
+                </div>
+              {/if}
+
               {#key seedCount}
                 <SchemaForm
                   schema={provider.schema}
@@ -417,13 +427,13 @@
     actionBlocked,
     buildConfig,
     capabilityRows,
-    configErrorCode,
     configToForm,
     currencyChoices,
     importedCounts,
     pricingLocked,
     providerName,
     rowBehavior,
+    splitProviderErrors,
     tabOfFirstClientError,
     tabOfFirstError,
     testModeControl,
@@ -456,6 +466,8 @@
   let form = $state(configToForm());
   let schemaErrors = $state({});
   let configErrors = $state({});
+  // the provider's general validation message (`fieldErrors.settings`), shown on the settings tab
+  let settingsMessage = $state.raw(null);
   let tab = $state('settings');
   let saving = $state(false);
   let runningAction = $state(null);
@@ -492,6 +504,7 @@
     form = configToForm(next.config ?? {});
     schemaErrors = {};
     configErrors = {};
+    settingsMessage = null;
   }
 
   export async function open(next) {
@@ -513,6 +526,7 @@
     const nextConfigErrors = validateConfig(form, { capabilities: caps });
     schemaErrors = nextSchemaErrors;
     configErrors = nextConfigErrors;
+    settingsMessage = null;
     const failing = tabOfFirstClientError(nextSchemaErrors, nextConfigErrors);
     if (failing) {
       tab = failing;
@@ -538,15 +552,10 @@
     if (!result.ok) {
       if (result.error === 'INVALID_PROVIDER_SETTINGS') {
         const fieldErrors = result.body.fieldErrors ?? {};
-        const schemaKeys = new Set((provider.schema?.fields ?? []).map((f) => f.key));
-        schemaErrors = Object.fromEntries(
-          Object.entries(fieldErrors).filter(([key]) => schemaKeys.has(key)),
-        );
-        configErrors = Object.fromEntries(
-          Object.entries(fieldErrors)
-            .filter(([key]) => !schemaKeys.has(key))
-            .map(([key, value]) => [key, configErrorCode(value)]),
-        );
+        const split = splitProviderErrors(fieldErrors, provider.schema);
+        schemaErrors = split.schemaErrors;
+        configErrors = split.configErrors;
+        settingsMessage = split.message;
         tab = tabOfFirstError(fieldErrors, provider.schema);
       }
       toastError($_, result);

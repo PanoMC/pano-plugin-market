@@ -57,6 +57,16 @@
                 </dl>
               {/if}
 
+              {#if settingsMessage}
+                <div class="alert alert-danger d-flex align-items-start" role="alert">
+                  <i class="fa-solid fa-circle-exclamation me-3 mt-1" aria-hidden="true"></i>
+                  <div>
+                    <h5 class="alert-heading mb-2">{$_('common.error')}</h5>
+                    <div>{txt(settingsMessage)}</div>
+                  </div>
+                </div>
+              {/if}
+
               {#key seedCount}
                 <SchemaForm
                   schema={carrier.schema}
@@ -234,7 +244,12 @@
   import SchemaForm from '../schema/SchemaForm.svelte';
   import { call } from '../../utils/api.js';
   import { currentLocale, fmt } from '../../utils/locale.js';
-  import { actionBlocked, providerName, testModeControl } from '../../utils/payment-methods.js';
+  import {
+    actionBlocked,
+    providerName,
+    splitProviderErrors,
+    testModeControl,
+  } from '../../utils/payment-methods.js';
   import {
     buildSettingsPayload,
     initialValues,
@@ -260,6 +275,8 @@
   // bumped on every seed: the form remounts so reveal / prompt state never leaks between carriers
   let seedCount = $state(0);
   let schemaErrors = $state({});
+  // the carrier's general validation message (`fieldErrors.settings`), shown on the settings tab
+  let settingsMessage = $state.raw(null);
   let testMode = $state(false);
   let tab = $state('settings');
   let saving = $state(false);
@@ -292,6 +309,7 @@
     seedCount++;
     testMode = Boolean(next.config?.testMode);
     schemaErrors = {};
+    settingsMessage = null;
   }
 
   export async function open(next) {
@@ -333,11 +351,9 @@
 
     if (!result.ok) {
       if (result.error === 'INVALID_PROVIDER_SETTINGS') {
-        const fieldErrors = result.body.fieldErrors ?? {};
-        const schemaKeys = new Set((carrier.schema?.fields ?? []).map((f) => f.key));
-        schemaErrors = Object.fromEntries(
-          Object.entries(fieldErrors).filter(([key]) => schemaKeys.has(key)),
-        );
+        const split = splitProviderErrors(result.body.fieldErrors ?? {}, carrier.schema);
+        schemaErrors = split.schemaErrors;
+        settingsMessage = split.message;
         tab = 'settings';
       }
       toastError($_, result);
