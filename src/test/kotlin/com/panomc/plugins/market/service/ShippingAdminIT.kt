@@ -88,6 +88,7 @@ class ShippingAdminIT : MarketDaoITBase() {
     private class Carrier(override val id: String = "ups") : ShippingProvider {
         val order = ArrayList<String>()
         var caps = ShippingCapabilities().also { it.rateQuote = true; it.createShipment = true; it.prepaidBalance = true }
+        var capsOf: ((ProviderSettings) -> ShippingCapabilities)? = null
         var validation: () -> SettingsValidation = { SettingsValidation.ok() }
         var onSaved: () -> ActionResult = { ActionResult.none() }
         var failSaved: ProviderException? = null
@@ -107,7 +108,7 @@ class ShippingAdminIT : MarketDaoITBase() {
             action("ping") { label = LocalizedText.of("Ping"); requiresSavedSettings = false }
         }
 
-        override fun capabilities(settings: ProviderSettings): ShippingCapabilities = caps
+        override fun capabilities(settings: ProviderSettings): ShippingCapabilities = capsOf?.invoke(settings) ?: caps
 
         override suspend fun validateSettings(ctx: ShippingContext, settings: ProviderSettings): SettingsValidation {
             order.add("validate")
@@ -427,6 +428,24 @@ class ShippingAdminIT : MarketDaoITBase() {
         assertEquals("UNAVAILABLE", method(id).getString("providerState"))
         service.updateMethod(id, obj("name" to "UPS renamed"))
         assertEquals("CARRIER_WITH_FALLBACK", method(id).getString("rateSource"))
+    }
+
+    @Test
+    fun `a carrier that quotes only once configured is judged by its stored settings`(): Unit = runBlocking {
+        val z = zone()
+
+        carrier("dhl") { capsOf = { settings -> ShippingCapabilities().also { it.rateQuote = settings.string("accountId") != null } } }
+
+        val refused = assertThrows<InvalidSettings> {
+            runBlocking { service.createMethod(obj("name" to "DHL", "providerId" to "dhl", "rateSource" to "CARRIER", "rates" to JsonArray().add(rate(z, "FLAT")))) }
+        }
+        assertEquals("RATE_QUOTE_NOT_SUPPORTED", fieldErrors(refused).getString("rateSource"))
+
+        service.saveCarrier("dhl", obj("accountId" to "A", "apiKey" to "key-0123456789"), null)
+        val id = service.createMethod(obj("name" to "DHL", "providerId" to "dhl", "rateSource" to "CARRIER", "rates" to JsonArray().add(rate(z, "FLAT", price = 0))))
+
+        assertEquals("CARRIER", method(id).getString("rateSource"))
+        service.updateMethod(id, obj("name" to "DHL renamed"))
     }
 
     @Test

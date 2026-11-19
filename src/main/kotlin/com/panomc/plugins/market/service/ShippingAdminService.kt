@@ -558,12 +558,14 @@ class ShippingAdminService(
     }
 
     /** What the method rules need to know about the provider: whether it is usable and may quote. */
-    private fun methodContext(form: JsonObject, currentProvider: String? = null): ShippingAdminRules.MethodContext {
+    private suspend fun methodContext(form: JsonObject, currentProvider: String? = null): ShippingAdminRules.MethodContext {
         val providerId = (form.getValue("providerId") as? String) ?: currentProvider ?: ManualShippingProvider.ID
         val resolved = lookup.shipping(providerId)
+        // the carrier's stored settings, the same input describe() and the checkout quoter use (empty when not saved yet)
+        val stored = resolved?.let { db.tx { conn -> carriers.getByProviderId(providerId, conn) }?.let { storedOf(it) } }
         val caps = resolved?.let { r ->
             try {
-                r.provider.capabilities(SettingsCodec(r.provider.settingsSchema(), cipher).decrypt(null))
+                r.provider.capabilities(SettingsCodec(r.provider.settingsSchema(), cipher).decrypt(stored))
             } catch (e: Exception) {
                 null
             }
