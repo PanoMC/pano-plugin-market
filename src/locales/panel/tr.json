@@ -1374,9 +1374,9 @@
     "server-picker": {
       "connected": "Bağlı",
       "disconnected": "Bağlı değil",
-      "no-plugin": "Pano Market bileşeni bu sunucuda kurulu değil.",
-      "version-mismatch": "Sunucuda bileşen sürümü {have} çalışıyor, {want} sürümü gerekli.",
-      "version-mismatch-label": "Bileşen sürümü uyuşmuyor.",
+      "no-plugin": "Pano Market Minecraft plugini bu sunucuda kurulu değil.",
+      "version-mismatch": "Sunucuda Pano Market Minecraft plugininin {have} sürümü çalışıyor, {want} sürümü gerekli.",
+      "version-mismatch-label": "Pano Market Minecraft plugininin sürümü uyuşmuyor.",
       "offline": "Çevrimdışı",
       "unknown": "Bilinmeyen sunucu #{id}"
     }
@@ -2505,8 +2505,8 @@
     "minecraft": {
       "info": {
         "title": "Sunucu Ayarları Önceliklidir",
-        "body": "Bir sunucunun yerel yapılandırma dosyası her özelliği yine de kapatabilir ve market bileşeni her sunucuya elle kurulmalıdır.",
-        "download": "Bileşeni İndir"
+        "body": "Bir sunucunun yerel yapılandırma dosyası her özelliği yine de kapatabilir ve Pano Market Minecraft plugini her sunucuya elle kurulmalıdır.",
+        "download": "Minecraft Pluginini İndir"
       },
       "vault-provider-warning": {
         "title": "Her Ekonomi Çağrısı Pano'ya Gider",
@@ -2573,13 +2573,13 @@
         "name": "Ad",
         "type": "Tür",
         "state": "Durum",
-        "version": "Bileşen",
+        "version": "Minecraft Plugini",
         "integrations": "Entegrasyonlar",
         "waiting": "Bekleyen",
         "override": "Geçersiz Kılma",
         "override-settings": "Ayarları Geçersiz Kıl…",
         "clear-override": "Geçersiz Kılmayı Temizle",
-        "download": "Bileşeni İndir",
+        "download": "Minecraft Pluginini İndir",
         "version-pair": "{have} / {want}",
         "override-badge": "{count} Ayar",
         "toast-cleared": "Geçersiz kılma temizlendi."
@@ -2587,7 +2587,7 @@
       "state": {
         "READY": "Hazır",
         "OFFLINE": "Çevrimdışı",
-        "COMPONENT_MISSING": "Bileşen Yok",
+        "COMPONENT_MISSING": "Minecraft Plugini Yok",
         "VERSION_MISMATCH": "Sürüm Uyuşmuyor"
       }
     },
@@ -3410,8 +3410,8 @@
       "body": "Siparişler gerçek değildir ve gerçek para tahsil edilmez."
     },
     "mc-plugin": {
-      "title": "Minecraft Bileşeni Dikkat Gerektiriyor",
-      "body": "Pano bileşeni kurulu ve güncel olana kadar teslimatlar çalışmaz.",
+      "title": "Pano Market Minecraft Plugini Dikkat Gerektiriyor",
+      "body": "Pano Market Minecraft plugini kurulu ve güncel olana kadar teslimatlar çalışmaz.",
       "download": "İndir"
     },
     "mail-host-too-old": {

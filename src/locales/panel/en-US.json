@@ -1374,9 +1374,9 @@
     "server-picker": {
       "connected": "Connected",
       "disconnected": "Disconnected",
-      "no-plugin": "The Pano Market component is not installed on this server.",
-      "version-mismatch": "The server runs component version {have}, version {want} is required.",
-      "version-mismatch-label": "The component version does not match.",
+      "no-plugin": "The Pano Market Minecraft plugin is not installed on this server.",
+      "version-mismatch": "The server runs version {have} of the Pano Market Minecraft plugin, version {want} is required.",
+      "version-mismatch-label": "The Pano Market Minecraft plugin version does not match.",
       "offline": "Offline",
       "unknown": "Unknown server #{id}"
     }
@@ -2505,8 +2505,8 @@
     "minecraft": {
       "info": {
         "title": "Server Settings Win",
-        "body": "A server's local config file can still turn any feature off, and the market component must be installed on each server by hand.",
-        "download": "Download Component"
+        "body": "A server's local config file can still turn any feature off, and the Pano Market Minecraft plugin must be installed on each server by hand.",
+        "download": "Download Minecraft Plugin"
       },
       "vault-provider-warning": {
         "title": "Every Economy Call Goes To Pano",
@@ -2573,13 +2573,13 @@
         "name": "Name",
         "type": "Type",
         "state": "State",
-        "version": "Component",
+        "version": "Minecraft Plugin",
         "integrations": "Integrations",
         "waiting": "Waiting",
         "override": "Override",
         "override-settings": "Override Settings…",
         "clear-override": "Clear Override",
-        "download": "Download Component",
+        "download": "Download Minecraft Plugin",
         "version-pair": "{have} / {want}",
         "override-badge": "{count} Overrides",
         "toast-cleared": "The override was cleared."
@@ -2587,7 +2587,7 @@
       "state": {
         "READY": "Ready",
         "OFFLINE": "Offline",
-        "COMPONENT_MISSING": "Component Missing",
+        "COMPONENT_MISSING": "Minecraft Plugin Missing",
         "VERSION_MISMATCH": "Version Mismatch"
       }
     },
@@ -3410,8 +3410,8 @@
       "body": "Orders are not real and no real money is collected."
     },
     "mc-plugin": {
-      "title": "Minecraft Component Needs Attention",
-      "body": "Deliveries cannot run until the Pano component is installed and up to date.",
+      "title": "Pano Market Minecraft Plugin Needs Attention",
+      "body": "Deliveries cannot run until the Pano Market Minecraft plugin is installed and up to date.",
       "download": "Download"
     },
     "mail-host-too-old": {

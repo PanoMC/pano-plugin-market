@@ -1374,9 +1374,9 @@
     "server-picker": {
       "connected": "Подключён",
       "disconnected": "Не подключён",
-      "no-plugin": "Компонент Pano Market не установлен на этом сервере.",
-      "version-mismatch": "На сервере версия компонента {have}, требуется {want}.",
-      "version-mismatch-label": "Версия компонента не совпадает.",
+      "no-plugin": "Minecraft-плагин Pano Market не установлен на этом сервере.",
+      "version-mismatch": "На сервере работает Minecraft-плагин Pano Market версии {have}, требуется {want}.",
+      "version-mismatch-label": "Версия Minecraft-плагина Pano Market не совпадает.",
       "offline": "Не в сети",
       "unknown": "Неизвестный сервер #{id}"
     }
@@ -2505,8 +2505,8 @@
     "minecraft": {
       "info": {
         "title": "Настройки Сервера Главнее",
-        "body": "Локальный файл конфигурации сервера всё равно может отключить любую функцию, а компонент магазина нужно установить на каждый сервер вручную.",
-        "download": "Скачать Компонент"
+        "body": "Локальный файл конфигурации сервера всё равно может отключить любую функцию, а Minecraft-плагин Pano Market нужно установить на каждый сервер вручную.",
+        "download": "Скачать Minecraft-Плагин"
       },
       "vault-provider-warning": {
         "title": "Каждый Вызов Экономики Идёт В Pano",
@@ -2573,13 +2573,13 @@
         "name": "Название",
         "type": "Тип",
         "state": "Состояние",
-        "version": "Компонент",
+        "version": "Minecraft-плагин",
         "integrations": "Интеграции",
         "waiting": "Ожидают",
         "override": "Переопределение",
         "override-settings": "Переопределить настройки…",
         "clear-override": "Сбросить переопределение",
-        "download": "Скачать компонент",
+        "download": "Скачать Minecraft-плагин",
         "version-pair": "{have} / {want}",
         "override-badge": "Переопределений: {count}",
         "toast-cleared": "Переопределение сброшено."
@@ -2587,7 +2587,7 @@
       "state": {
         "READY": "Готов",
         "OFFLINE": "Не в сети",
-        "COMPONENT_MISSING": "Нет компонента",
+        "COMPONENT_MISSING": "Нет Minecraft-плагина",
         "VERSION_MISMATCH": "Версия не совпадает"
       }
     },
@@ -3410,8 +3410,8 @@
       "body": "Заказы не настоящие, реальные деньги не принимаются."
     },
     "mc-plugin": {
-      "title": "Компонент Minecraft Требует Внимания",
-      "body": "Пока компонент Pano не установлен и не обновлён, доставки не выполняются.",
+      "title": "Minecraft-Плагин Pano Market Требует Внимания",
+      "body": "Пока Minecraft-плагин Pano Market не установлен и не обновлён, доставки не выполняются.",
       "download": "Скачать"
     },
     "mail-host-too-old": {
