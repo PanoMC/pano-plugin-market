@@ -1885,13 +1885,16 @@ class PaymentService(
             val fresh = payments.getById(attempt.id, sqlClient) ?: attempt
             val ctx = contexts.create(resolved.provider, resolved.settings, fresh.testMode)
             val byItem = items.associateBy { it.id }
+            // the money goes back in the currency the gateway took it in (a SYSTEM refund of a payment in another currency); lines are priced in the order
+            // currency, so such a refund is sent as an amount only
+            val currency = refundCurrency(refund, order)
             val parts = com.panomc.plugins.market.core.money.Rounding.allocate(refund.gatewayAmount.coerceAtMost(lines.sumOf { it.amount }), lines.map { it.amount }, 1L)
-            val refundLines = if (lines.isEmpty() || parts.sum() == 0L) emptyList() else lines.mapIndexed { i, line ->
+            val refundLines = if (lines.isEmpty() || parts.sum() == 0L || currency != order.currency) emptyList() else lines.mapIndexed { i, line ->
                 com.panomc.plugins.market.spi.payment.RefundLine(line.orderItemId, byItem[line.orderItemId]?.gatewayItemRef, line.quantity, Money(parts[i], order.currency))
             }
             val request = RefundRequest(
                 refundId = refund.id, idempotencyKey = refund.idempotencyKey, attempt = attemptView(fresh, order.publicId ?: ""), order = spiSnapshot(order, items),
-                amount = Money(refund.gatewayAmount, order.currency), full = full, lines = refundLines, reason = refund.reason, paidAt = fresh.paidAt ?: order.paidAt ?: clock.now()
+                amount = Money(refund.gatewayAmount, currency), full = full, lines = refundLines, reason = refund.reason, paidAt = fresh.paidAt ?: order.paidAt ?: clock.now()
             )
 
             try {
@@ -1910,7 +1913,7 @@ class PaymentService(
             val fresh = payments.getById(attempt.id, sqlClient) ?: attempt
             val ctx = contexts.create(resolved.provider, resolved.settings, fresh.testMode)
             val request = com.panomc.plugins.market.spi.payment.QueryRefundRequest(
-                refund.id, refund.idempotencyKey, refund.gatewayRefundId, attemptView(fresh, order.publicId ?: ""), Money(refund.gatewayAmount, order.currency)
+                refund.id, refund.idempotencyKey, refund.gatewayRefundId, attemptView(fresh, order.publicId ?: ""), Money(refund.gatewayAmount, refundCurrency(refund, order))
             )
 
             try {
@@ -1920,6 +1923,9 @@ class PaymentService(
             }
         }
     }
+
+    /** The currency of [refund]'s money: the row's own (the paid currency of a SYSTEM refund), the order's for a row without one. */
+    private fun refundCurrency(refund: com.panomc.plugins.market.db.model.MarketRefund, order: MarketOrder): String = refund.currency.ifBlank { order.currency }
 
     companion object {
         const val REFUND_TIMEOUT_MS = 30_000L

@@ -838,6 +838,36 @@ class RefundServiceIT : MarketDaoITBase() {
         assertEquals(1000, r.attempt(paid.attempt.id).refundedAmount)
     }
 
+    @Test
+    fun `the money of a rejected review paid in another currency is sent back in that currency, as an amount only`(): Unit = runBlocking {
+        val paid = r.place(steve(), listOf(RefundLine(1000)), grant = false)
+        val now = w.clock.now()
+
+        // the gateway took 12.00 USD for the 10.00 EUR order (CURRENCY_MISMATCH), the review was rejected with refund
+        MarketTestDb.sql(
+            pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_order` SET `status` = 'CANCELLED', `reservationState` = 'RELEASED', `paymentId` = ? WHERE `id` = ?", paid.attempt.id, paid.order.id
+        )
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_product` SET `soldCount` = 0 WHERE `id` = ?", paid.products[0].id)
+        MarketTestDb.sql(pool, "UPDATE `${MarketTestDb.TABLE_PREFIX}market_payment` SET `paidAmount` = 1200, `paidCurrency` = 'USD' WHERE `id` = ?", paid.attempt.id)
+
+        w.refunds.add(
+            com.panomc.plugins.market.db.model.MarketRefund(
+                orderId = paid.order.id, paymentId = paid.attempt.id, providerId = "fake", status = RefundStatus.REQUESTED, origin = RefundOrigin.SYSTEM,
+                idempotencyKey = "sys:reject:${paid.order.id}:${paid.attempt.id}", amount = 1200, gatewayAmount = 1200, currency = "USD", reason = "review rejected", revoke = false,
+                createdAt = now, updatedAt = now
+            ),
+            pool
+        )!!
+
+        assertEquals(1, r.job.run().sent)
+
+        val request = r.fake.calls(Op.REFUND).single().request as com.panomc.plugins.market.spi.payment.RefundRequest
+
+        assertEquals("USD", request.amount.currency)
+        assertEquals(1200, request.amount.amount)
+        assertTrue(request.lines.isEmpty(), "the lines are priced in EUR")
+    }
+
     // ===== the other effects of O10: webhook, mail, credit note, creator, cashback, clawback ================================================
 
     @Test
