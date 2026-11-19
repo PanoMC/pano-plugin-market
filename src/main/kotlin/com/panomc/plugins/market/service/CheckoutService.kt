@@ -2368,7 +2368,7 @@ class CheckoutService(
 
         return CouponInput(
             found = true, id = row.id, code = row.code, active = row.status == MarketStatus.ACTIVE, discount = row.discount, unit = row.unit,
-            scope = row.scope, productIds = row.productIds.orEmpty().toSet(), categoryIds = emptySet(), minPaymentAmount = row.minPaymentAmount,
+            scope = row.scope, productIds = row.productIds.orEmpty().toSet(), categoryIds = row.categoryIds.orEmpty().toSet(), minPaymentAmount = row.minPaymentAmount,
             startDate = row.startDate, expiryDate = row.expiryDate, redeemLimit = row.redeemLimit, customerRedeemLimit = row.customerRedeemLimit,
             usedCount = row.usedCount, buyerUses = uses
         )

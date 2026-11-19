@@ -11,6 +11,7 @@ open class MarketCoupon(
     val code: String = "",
     val scope: CouponScope = CouponScope.ALL,
     val productIds: List<Long>? = null,
+    val categoryIds: List<Long>? = null,
     val discount: Long = 0,                // ×100
     val unit: DiscountUnit = DiscountUnit.PERCENT,
     val minPaymentAmount: Long? = null,    // ×100

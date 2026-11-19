@@ -779,6 +779,26 @@ class QuoteIT : MarketDaoITBase() {
         assertEquals(0L, q.credits!!.applied)
     }
 
+    @Test
+    fun `a SELECTED coupon with only categories discounts the products of those categories`(): Unit = runBlocking {
+        val ranks = fx.category("Ranks")
+        val other = fx.category("Other")
+        val rank = fx.product(price = 10_000, categoryId = ranks.id)
+        val plain = fx.product(price = 10_000, categoryId = other.id)
+        val coupon = fx.coupon("RANKS10", discount = 1000)
+            .also { rawRow("market_coupon", it.id, "scope" to "SELECTED", "productIds" to "[]", "categoryIds" to "[${ranks.id}]") }
+
+        val hit = quote(line(rank), line(plain), code = coupon.code)
+
+        assertTrue(hit.coupon!!.valid)
+        assertEquals(1000L, hit.couponDiscount, "only the Ranks product is discounted")
+
+        val miss = quote(line(plain), code = coupon.code)
+
+        assertFalse(miss.coupon!!.valid)
+        assertEquals("COUPON_NOT_APPLICABLE", miss.coupon!!.reason)
+    }
+
     // ============================================================================================ money rules
 
     @Test

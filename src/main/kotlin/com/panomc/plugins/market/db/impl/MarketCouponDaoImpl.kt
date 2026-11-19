@@ -26,7 +26,7 @@ class MarketCouponDaoImpl : MarketCouponDao() {
 
     override suspend fun add(coupon: MarketCoupon, sqlClient: SqlClient): Long {
         val query =
-            "INSERT INTO `${prefix() + tableName}` (`name`, `code`, `scope`, `productIds`, `discount`, `unit`, `minPaymentAmount`, `startDate`, `expiryDate`, `redeemLimit`, `customerRedeemLimit`, `usedCount`, `status`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO `${prefix() + tableName}` (`name`, `code`, `scope`, `productIds`, `categoryIds`, `discount`, `unit`, `minPaymentAmount`, `startDate`, `expiryDate`, `redeemLimit`, `customerRedeemLimit`, `usedCount`, `status`, `createdAt`, `updatedAt`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
         val rows: RowSet<Row> = sqlClient
             .preparedQuery(query)
@@ -36,6 +36,7 @@ class MarketCouponDaoImpl : MarketCouponDao() {
                     coupon.code,
                     coupon.scope.name,
                     coupon.productIds?.let { JsonArray(it).encode() },
+                    coupon.categoryIds?.let { JsonArray(it).encode() },
                     coupon.discount,
                     coupon.unit.name,
                     coupon.minPaymentAmount,
@@ -58,7 +59,7 @@ class MarketCouponDaoImpl : MarketCouponDao() {
     // they change only through guarded atomic statements, never from a stale read.
     override suspend fun update(coupon: MarketCoupon, sqlClient: SqlClient) {
         val query =
-            "UPDATE `${prefix() + tableName}` SET `name` = ?, `code` = ?, `scope` = ?, `productIds` = ?, `discount` = ?, `unit` = ?, `minPaymentAmount` = ?, `startDate` = ?, `expiryDate` = ?, `redeemLimit` = ?, `customerRedeemLimit` = ?, `status` = ?, `updatedAt` = ? WHERE `id` = ?"
+            "UPDATE `${prefix() + tableName}` SET `name` = ?, `code` = ?, `scope` = ?, `productIds` = ?, `categoryIds` = ?, `discount` = ?, `unit` = ?, `minPaymentAmount` = ?, `startDate` = ?, `expiryDate` = ?, `redeemLimit` = ?, `customerRedeemLimit` = ?, `status` = ?, `updatedAt` = ? WHERE `id` = ?"
 
         sqlClient
             .preparedQuery(query)
@@ -68,6 +69,7 @@ class MarketCouponDaoImpl : MarketCouponDao() {
                     coupon.code,
                     coupon.scope.name,
                     coupon.productIds?.let { JsonArray(it).encode() },
+                    coupon.categoryIds?.let { JsonArray(it).encode() },
                     coupon.discount,
                     coupon.unit.name,
                     coupon.minPaymentAmount,
