@@ -55,10 +55,11 @@ export const giftDatesReversed = (startEpoch, endEpoch) =>
 /**
  * Day inputs of the gift modal -> { startDate, expiryDate } epochs. Unlimited or empty = null, sent
  * as an explicit null: PUT /gifts/:id is partial, a missing key keeps the stored date.
+ * The expiry day is included (local 23:59:59.999), like coupons and discounts.
  */
 export function giftDates(unlimited, startText, expiryText) {
   if (unlimited) return { startDate: null, expiryDate: null };
-  return { startDate: dayToEpoch(startText, false), expiryDate: dayToEpoch(expiryText, false) };
+  return { startDate: dayToEpoch(startText, false), expiryDate: dayToEpoch(expiryText, true) };
 }
 
 /** `usedCount / redeemLimit ?? '∞'`. */

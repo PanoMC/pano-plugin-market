@@ -25,16 +25,10 @@
   let loading = $state(false);
 
   // Epoch millis -> date-input (YYYY-MM-DD) in local time, matching how the
-  // value is reparsed (as local midnight) on save.
+  // value is reparsed on save (start = local midnight, expiry = local end of day).
   function epochToDateInput(epoch) {
     const d = new Date(epoch);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
-
-  // date-input (YYYY-MM-DD) -> epoch millis at local midnight.
-  function dateInputToEpoch(value) {
-    const [year, month, day] = value.split('-').map(Number);
-    return new Date(year, month - 1, day).getTime();
   }
 
   function initForm() {
@@ -103,7 +97,10 @@
     !isExpiryUnlimited &&
       startDate !== '' &&
       expiryDate !== '' &&
-      giftDatesReversed(dateInputToEpoch(startDate), dateInputToEpoch(expiryDate)),
+      giftDatesReversed(
+        giftDates(false, startDate, expiryDate).startDate,
+        giftDates(false, startDate, expiryDate).expiryDate,
+      ),
   );
 
   async function saveGift() {

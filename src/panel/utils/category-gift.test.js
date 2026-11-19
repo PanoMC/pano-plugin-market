@@ -109,3 +109,13 @@ describe('giftDates', () => {
     expect(giftDates(false, '2026-12-01', '').startDate).toBe(new Date(2026, 11, 1).getTime());
   });
 });
+
+describe('gift expiry day', () => {
+  test('the expiry day is redeemable until its end and a one-day gift has an open window', () => {
+    const { startDate, expiryDate } = giftDates(false, '2026-12-25', '2026-12-25');
+    expect(startDate).toBe(new Date(2026, 11, 25).getTime());
+    expect(expiryDate).toBe(new Date(2026, 11, 25, 23, 59, 59, 999).getTime());
+    expect(expiryDate).toBeGreaterThan(startDate);
+    expect(giftDatesReversed(startDate, expiryDate)).toBe(false);
+  });
+});
