@@ -54,11 +54,15 @@ export function statusTone(status) {
   return 'secondary';
 }
 
-/** Stock cell: 'unlimited' for null / undefined, otherwise the number. */
+/**
+ * Stock cell: 'per variant' for a product with variants (its stock lives on the variants, the
+ * product column is unused), 'unlimited' for null / undefined, otherwise the number.
+ */
 export function stockCell(product) {
+  if (product.hasVariants === true) return { perVariant: true, unlimited: false, count: null };
   return product.stock === null || product.stock === undefined
-    ? { unlimited: true, count: null }
-    : { unlimited: false, count: Number(product.stock) };
+    ? { perVariant: false, unlimited: true, count: null }
+    : { perVariant: false, unlimited: false, count: Number(product.stock) };
 }
 
 /** Page to show after a delete: one step back when the last row of a later page was removed. */

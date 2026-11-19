@@ -77,10 +77,17 @@ describe('row helpers', () => {
     expect(statusTone('HIDDEN')).toBe('secondary');
   });
   test('stock cell: null is unlimited, zero is a count', () => {
-    expect(stockCell({ stock: null })).toEqual({ unlimited: true, count: null });
-    expect(stockCell({})).toEqual({ unlimited: true, count: null });
-    expect(stockCell({ stock: 0 })).toEqual({ unlimited: false, count: 0 });
-    expect(stockCell({ stock: 12 })).toEqual({ unlimited: false, count: 12 });
+    expect(stockCell({ stock: null })).toEqual({ perVariant: false, unlimited: true, count: null });
+    expect(stockCell({})).toEqual({ perVariant: false, unlimited: true, count: null });
+    expect(stockCell({ stock: 0 })).toEqual({ perVariant: false, unlimited: false, count: 0 });
+    expect(stockCell({ stock: 12 })).toEqual({ perVariant: false, unlimited: false, count: 12 });
+    // a product with variants keeps its stock on the variants: never 'Unlimited' or a stale number
+    expect(stockCell({ stock: null, hasVariants: true })).toEqual({
+      perVariant: true,
+      unlimited: false,
+      count: null,
+    });
+    expect(stockCell({ stock: 5, hasVariants: true }).perVariant).toBe(true);
   });
   test('deleting the last row of a later page steps back one page', () => {
     expect(pageAfterDelete(1, 3)).toBe(2);

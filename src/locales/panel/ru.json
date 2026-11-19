@@ -97,6 +97,7 @@
       },
       "uncategorized": "Без категории",
       "stock-count": "{count} шт.",
+      "stock-per-variant": "По вариантам",
       "confirm-delete": "Вы уверены, что хотите удалить товар «{name}»?",
       "toast-load-error": "Произошла ошибка при загрузке товаров.",
       "toast-clone-error": "Произошла ошибка при клонировании товара.",

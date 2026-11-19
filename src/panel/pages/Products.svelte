@@ -200,7 +200,9 @@
                     {/if}
                   </td>
                   <td class="align-middle text-nowrap">
-                    {#if stock.unlimited}
+                    {#if stock.perVariant}
+                      {$_('pages.products.stock-per-variant')}
+                    {:else if stock.unlimited}
                       {$_('common.unlimited')}
                     {:else}
                       {$_('pages.products.stock-count', { values: { count: stock.count } })}

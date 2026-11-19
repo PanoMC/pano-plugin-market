@@ -97,6 +97,7 @@
       },
       "uncategorized": "Kategorisiz",
       "stock-count": "{count} Adet",
+      "stock-per-variant": "Varyanta göre",
       "confirm-delete": "\"{name}\" ürününü silmek istediğinize emin misiniz?",
       "toast-load-error": "Ürünler yüklenirken bir hata oluştu.",
       "toast-clone-error": "Ürün klonlanırken bir hata oluştu.",

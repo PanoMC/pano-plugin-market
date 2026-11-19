@@ -97,6 +97,7 @@
       },
       "uncategorized": "Uncategorized",
       "stock-count": "{count} pcs",
+      "stock-per-variant": "Per variant",
       "confirm-delete": "Are you sure you want to delete the product \"{name}\"?",
       "toast-load-error": "An error occurred while loading products.",
       "toast-clone-error": "An error occurred while cloning the product.",
