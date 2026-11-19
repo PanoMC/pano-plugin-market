@@ -1615,6 +1615,9 @@ const productHref = (index) => `/store/${few.products[index].slug}`;
 const orderHref = (status) => `/store/order/${fewOrders.find((o) => o.status === status).publicId}`;
 
 export const pages = [
+  // The theme's own pages that carry market widgets in their sidebars (`view.sidebar: ['home', 'profile']`).
+  { side: 'theme', label: 'Home: sidebar widgets', href: '/' },
+  { side: 'theme', label: 'Profile: sidebar widgets', href: '/profile' },
   { side: 'theme', label: 'Store', href: '/store' },
   { side: 'theme', label: 'Store: category', href: '/store?category=1' },
   {
