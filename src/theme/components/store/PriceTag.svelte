@@ -11,7 +11,7 @@
     {#if suffix}
       <span class="small text-body-secondary">{suffix}</span>
     {/if}
-    {#if showCredits && settings.creditsEnabled && product.creditPrice != null && Number(product.price) !== 0}
+    {#if showCredits && settings.creditsEnabled && Number(product.creditPrice) > 0 && Number(product.price) !== 0}
       <span class="market-price-tag__badge badge rounded-pill text-bg-info text-wrap text-start">
         <i class="fa-solid fa-coins me-1" aria-hidden="true"></i>{formatCredits(
           product.creditPrice,

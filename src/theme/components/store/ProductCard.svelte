@@ -47,7 +47,7 @@
       <p class="small text-body-secondary text-truncate mb-1">{product.shortDescription}</p>
     {/if}
     <PriceTag {product} {settings} showCredits={false} />
-    {#if settings.creditsEnabled && product.creditPrice != null && Number(product.price) !== 0}
+    {#if settings.creditsEnabled && Number(product.creditPrice) > 0 && Number(product.price) !== 0}
       <div class="d-flex justify-content-end">
         <span class="market-product-card__credits badge rounded-pill text-bg-info text-capitalize text-wrap text-start">
           <i class="fa-solid fa-coins me-1" aria-hidden="true"></i>{formatCredits(
