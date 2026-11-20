@@ -2,6 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import {
   MC_DOWNLOAD_URL,
   mcReleaseUrl,
+  mcDownloads,
+  mcJarOf,
+  MC_JARS,
   alertsFor,
   mcPluginNeedsAttention,
   safeUrl,
@@ -239,11 +242,42 @@ describe('alert locale keys', () => {
       for (const a of [...everything, ...info]) {
         wanted.push(a.title, a.body, ...(a.links ?? []).map((l) => `actions.${l.label}`));
       }
-      if (everything.some((a) => a.downloadUrl)) wanted.push('mc-plugin.download');
+      if (everything.some((a) => a.downloadUrl)) wanted.push('mc-plugin.download', 'mc-plugin.releases');
+      if (everything.some((a) => a.downloads?.length)) wanted.push(...MC_JARS.map((jar) => `mc-plugin.platforms.${jar}`));
       wanted.push('more');
       for (const key of wanted) expect(typeof lookup(alerts, key)).toBe('string');
     });
   }
+});
+
+describe('mcDownloads', () => {
+  const href = (jar) => `/api/plugins/pano-plugin-market/panel/mc-component/download?platform=${jar}`;
+
+  test('every bundled jar, the platforms of the servers that need attention first', () => {
+    const servers = [
+      { id: 1, type: 'VELOCITY', marketState: 'COMPONENT_MISSING' },
+      { id: 2, type: 'PAPER', platform: 'FABRIC', marketState: 'VERSION_MISMATCH' },
+      { id: 3, type: 'BUNGEECORD', marketState: 'READY' },
+      { id: 4, type: 'FOLIA', marketState: 'OFFLINE', waitingDeliveries: 0 },
+    ];
+    expect(mcDownloads(servers)).toEqual(
+      ['velocity', 'fabric', 'spigot', 'bungee'].map((platform) => ({ platform, href: href(platform) })),
+    );
+    expect(mcDownloads(null).map((d) => d.platform)).toEqual(MC_JARS);
+  });
+
+  test('the jar of a server: the reported platform wins over the type, no jar for Vanilla', () => {
+    expect(mcJarOf({ type: 'PURPUR' })).toBe('spigot');
+    expect(mcJarOf({ type: 'WATERFALL' })).toBe('bungee');
+    expect(mcJarOf({ type: 'PAPER', platform: 'FABRIC' })).toBe('fabric');
+    expect(mcJarOf({ type: 'VANILLA' })).toBeNull();
+    expect(mcJarOf(null)).toBeNull();
+  });
+
+  test('the alert carries the downloads', () => {
+    const [alert] = alertsFor(null, [{ id: 1, type: 'BUNGEECORD', marketState: 'COMPONENT_MISSING' }], {});
+    expect(alert.downloads[0]).toEqual({ platform: 'bungee', href: href('bungee') });
+  });
 });
 
 describe('mcReleaseUrl', () => {

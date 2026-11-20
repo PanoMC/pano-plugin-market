@@ -20,13 +20,23 @@
         </ul>
       {/if}
 
+      {#if alert.downloads?.length}
+        <div class="d-flex flex-wrap gap-2 mt-2">
+          {#each alert.downloads as item (item.platform)}
+            <a class="btn alert-btn" href={item.href} download>
+              {$_(`alerts.mc-plugin.platforms.${item.platform}`)}
+            </a>
+          {/each}
+        </div>
+      {/if}
+
       {#if alert.downloadUrl}
         <a
-          class="btn alert-btn mt-2"
+          class="alert-link d-inline-block mt-2"
           href={alert.downloadUrl}
           target="_blank"
           rel="noopener noreferrer">
-          {$_('alerts.mc-plugin.download')}
+          {$_(alert.downloads?.length ? 'alerts.mc-plugin.releases' : 'alerts.mc-plugin.download')}
         </a>
       {/if}
 

@@ -3422,7 +3422,14 @@
     "mc-plugin": {
       "title": "Pano Market Minecraft Plugini Kurulu Değil veya Eski",
       "body": "Pano Market Minecraft plugini kurulu ve güncel olana kadar teslimatlar çalışmaz.",
-      "download": "İndir"
+      "download": "İndir",
+      "releases": "Tüm Sürümler (GitHub)",
+      "platforms": {
+        "spigot": "Spigot / Paper / Folia İçin İndir",
+        "bungee": "BungeeCord İçin İndir",
+        "velocity": "Velocity İçin İndir",
+        "fabric": "Fabric İçin İndir"
+      }
     },
     "mail-host-too-old": {
       "body": "Mağazanın e-posta gönderebilmesi için Pano güncellenmelidir."

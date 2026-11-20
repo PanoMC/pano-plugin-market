@@ -3422,7 +3422,14 @@
     "mc-plugin": {
       "title": "Minecraft-Плагин Pano Market Не Установлен или Устарел",
       "body": "Пока Minecraft-плагин Pano Market не установлен и не обновлён, доставки не выполняются.",
-      "download": "Скачать"
+      "download": "Скачать",
+      "releases": "Все Версии (GitHub)",
+      "platforms": {
+        "spigot": "Скачать для Spigot / Paper / Folia",
+        "bungee": "Скачать для BungeeCord",
+        "velocity": "Скачать для Velocity",
+        "fabric": "Скачать для Fabric"
+      }
     },
     "mail-host-too-old": {
       "body": "Чтобы магазин мог отправлять почту, нужно обновить Pano."

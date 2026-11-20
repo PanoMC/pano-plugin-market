@@ -1,5 +1,6 @@
 // The attention alerts of 13 §4.2 as plain data, in display order. Pure: the component renders the
 // result, the unit test covers every row of the table.
+import { PANEL_URL } from '../../utils/api.js';
 export const REVOKE_PENDING_GRACE_MS = 10 * 60 * 1000;
 export const MAX_MISSING_SHOWN = 10;
 
@@ -31,13 +32,51 @@ export function safeUrl(value) {
 }
 
 /** True when a server needs the banner entry: component missing / outdated, or offline with a backlog. */
+/** The Minecraft plugin jars the market bundles, one per platform (19 §2.3). */
+export const MC_JARS = ['spigot', 'bungee', 'velocity', 'fabric'];
+
+const JAR_OF_PLATFORM = {
+  SPIGOT: 'spigot',
+  PAPER: 'spigot',
+  FOLIA: 'spigot',
+  BUKKIT: 'spigot',
+  PURPUR: 'spigot',
+  BUNGEECORD: 'bungee',
+  WATERFALL: 'bungee',
+  VELOCITY: 'velocity',
+  FABRIC: 'fabric',
+};
+
+/** The jar a server runs: from the platform its component reports, else its server type; `null` when no Market jar runs there. */
+export function mcJarOf(server) {
+  return JAR_OF_PLATFORM[String(server?.platform ?? server?.type ?? '').toUpperCase()] ?? null;
+}
+
+/**
+ * The download buttons of the Minecraft plugin: the jars bundled with the running market (always the version it needs),
+ * those of the servers that need attention first, then the others.
+ */
+export function mcDownloads(servers) {
+  const first = [];
+  for (const server of Array.isArray(servers) ? servers : []) {
+    const jar = serverNeedsAttention(server) ? mcJarOf(server) : null;
+    if (jar && !first.includes(jar)) first.push(jar);
+  }
+  return [...first, ...MC_JARS.filter((jar) => !first.includes(jar))].map((platform) => ({
+    platform,
+    href: `${PANEL_URL}/mc-component/download?platform=${platform}`,
+  }));
+}
+
+function serverNeedsAttention(server) {
+  if (server?.marketState === 'COMPONENT_MISSING' || server?.marketState === 'VERSION_MISMATCH') {
+    return true;
+  }
+  return server?.marketState === 'OFFLINE' && (Number(server?.waitingDeliveries) || 0) > 0;
+}
+
 export function mcPluginNeedsAttention(servers) {
-  return (Array.isArray(servers) ? servers : []).some((server) => {
-    if (server.marketState === 'COMPONENT_MISSING' || server.marketState === 'VERSION_MISMATCH') {
-      return true;
-    }
-    return server.marketState === 'OFFLINE' && (Number(server.waitingDeliveries) || 0) > 0;
-  });
+  return (Array.isArray(servers) ? servers : []).some(serverNeedsAttention);
 }
 
 function missingObjects(schema) {
@@ -98,7 +137,7 @@ export function alertsFor(health, servers, ctx, options = {}) {
   }
 
   if (mcPluginNeedsAttention(servers)) {
-    add('mc-plugin', 'warning', { downloadUrl: mcReleaseUrl(servers) });
+    add('mc-plugin', 'warning', { downloads: mcDownloads(servers), downloadUrl: mcReleaseUrl(servers) });
   }
 
   const mailTooOld = health?.mail === 'HOST_TOO_OLD';

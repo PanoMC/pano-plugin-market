@@ -3422,7 +3422,14 @@
     "mc-plugin": {
       "title": "Pano Market Minecraft Plugin Missing or Outdated",
       "body": "Deliveries cannot run until the Pano Market Minecraft plugin is installed and up to date.",
-      "download": "Download"
+      "download": "Download",
+      "releases": "All Releases (GitHub)",
+      "platforms": {
+        "spigot": "Download for Spigot / Paper / Folia",
+        "bungee": "Download for BungeeCord",
+        "velocity": "Download for Velocity",
+        "fabric": "Download for Fabric"
+      }
     },
     "mail-host-too-old": {
       "body": "Pano must be updated before the store can send e-mail."
