@@ -42,6 +42,9 @@ class PanelDeleteGoalAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
 
         databaseManager.panelActivityLogDao.add(DeletedMarketGoalLog(userId, username, plugin.pluginId, name), sqlClient)
 
+        // the goal placeholders on the game servers follow now (MARKET_WAKE)
+        com.panomc.plugins.market.routes.panel.server.mcPush(plugin).wakeAll(com.panomc.plugins.market.service.McPush.PLACEHOLDERS)
+
         return Successful()
     }
 }

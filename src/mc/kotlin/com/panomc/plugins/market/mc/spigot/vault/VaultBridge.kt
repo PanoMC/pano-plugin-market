@@ -76,7 +76,8 @@ class VaultBridge(
         uuidOf = { tracker.uuid(it) },
         presentNames = { tracker.presentNames() },
         timeoutMs = providerTimeoutMs,
-        refreshMs = refreshMs
+        refreshMs = refreshMs,
+        pushActive = { features.pushActive() }
     )
 
     private val commands = VaultCommands(ops, { settings.current() }, texts, features.messages) { serverEconomy() }
@@ -113,7 +114,43 @@ class VaultBridge(
         features.commands.registerSub("credits", "deposit", Feature.VAULT) { sender, args -> commands.deposit(sender, args) }
         credit.start()
         apply(onServerThread = true)
+        // event based: the mode follows every accepted MARKET_CONFIG, the Vault plugin's arrival or departure, and a balance push
+        features.onConfigApplied { if (running) safeApply() }
+        features.onBalanceChanged { names -> if (running) credit.onBalanceChanged(names) }
+        try {
+            plugin.server.pluginManager.registerEvents(vaultWatcher, plugin)
+        } catch (t: Throwable) {
+            if (t is VirtualMachineError) throw t
+            log.warn("Vault: the Vault plugin's arrival cannot be watched (${t.message}); it is checked on the timer instead.")
+            watcherMissing = true
+        }
         schedulePoll()
+    }
+
+    @Volatile
+    private var watcherMissing = false
+
+    private val vaultWatcher = object : org.bukkit.event.Listener {
+        @org.bukkit.event.EventHandler
+        fun onEnable(event: org.bukkit.event.server.PluginEnableEvent) {
+            if (running && event.plugin.name == "Vault") safeApply()
+        }
+
+        @org.bukkit.event.EventHandler
+        fun onDisable(event: org.bukkit.event.server.PluginDisableEvent) {
+            if (running && event.plugin.name == "Vault") safeApply()
+        }
+    }
+
+    private fun safeApply() {
+        engineScheduler.execute {
+            try {
+                apply(onServerThread = false)
+            } catch (t: Throwable) {
+                if (t is VirtualMachineError) throw t
+                log.warn("Vault: the mode check failed: ${t.message}")
+            }
+        }
     }
 
     fun stop() {
@@ -135,7 +172,8 @@ class VaultBridge(
         if (!running) return
         pollTimer = engineScheduler.schedule(pollMs) {
             try {
-                apply(onServerThread = false)
+                // only a stand-in for a pano-mc-plugin that cannot pass Pano's pushes on: with them the mode follows MARKET_CONFIG
+                if (!features.pushActive() || watcherMissing) apply(onServerThread = false)
             } catch (t: Throwable) {
                 if (t is VirtualMachineError) throw t
                 log.warn("Vault: the mode check failed: ${t.message}")
@@ -271,7 +309,7 @@ class VaultBridge(
     }
 
     private fun notify(entry: VaultEntry, notice: Notice, code: String?) {
-        val locale = host.localeOf(entry.username)
+        val locale = features.localeOf(entry.username)
         val text = when (notice) {
             Notice.DEPOSIT_ARRIVED -> texts.text(VaultMsg.LATE_DEPOSITED, locale, "credits" to com.panomc.plugins.market.mc.core.feature.MarketCommands.number(entry.credits))
             Notice.CONVERSION_UNDONE -> texts.text(VaultMsg.LATE_UNDONE, locale)

@@ -32,7 +32,9 @@ class CreditEconomy(
     private val presentNames: () -> List<String>,
     private val timeoutMs: Long = DEFAULT_TIMEOUT_MS,
     private val refreshMs: Long = DEFAULT_REFRESH_MS,
-    private val evictAfterMs: Long = 10 * 60_000L
+    private val evictAfterMs: Long = 10 * 60_000L,
+    /** Pano pushes balance changes ([onBalanceChanged]): then the timer no longer reloads balances, it only drops old entries. */
+    private val pushActive: () -> Boolean = { false }
 ) {
     private class Entry(val balance: Double, val registered: Boolean, val at: Long)
 
@@ -182,10 +184,17 @@ class CreditEconomy(
         }
     }
 
+    /** Pano says these players' balances changed: the ones this server holds are loaded again at once. */
+    fun onBalanceChanged(names: List<String>) {
+        if (!running) return
+        val present = presentNames().map { key(it) }.toSet()
+        names.filter { key(it) in present || cache.containsKey(key(it)) }.forEach { load(it) }
+    }
+
     /** One refresh round (the timer calls it; public so a test can run a round without waiting). */
     fun refreshPresent() {
         val present = presentNames()
-        present.forEach { load(it) }
+        if (!pushActive()) present.forEach { load(it) }
         val keep = present.map { key(it) }.toSet()
         val now = clock.now()
         cache.entries.removeIf { it.key !in keep && now - it.value.at > evictAfterMs }

@@ -13,7 +13,13 @@ data class LoopOptions(
     val watchdogMs: Long = 30_000,
     /** More than this many `pollAfterMs = 0` answers in a row are slowed down by [zeroPollDelayMs]. */
     val zeroPollsBeforeDelay: Int = 20,
-    val zeroPollDelayMs: Long = 1_000
+    val zeroPollDelayMs: Long = 1_000,
+    /**
+     * Whether Pano pushes its news (`MARKET_WAKE`). Then a quiet sync waits [heartbeatMs] instead of Pano's `pollAfterMs`: it only
+     * tells Pano the component is alive (Pano's readiness window is 60 s) and catches a push lost in a reconnect.
+     */
+    val pushActive: () -> Boolean = { false },
+    val heartbeatMs: Long = 30_000
 )
 
 /**
@@ -85,6 +91,12 @@ class SyncLoop(
         scheduleNext(0)
     }
 
+    private fun pushOn(): Boolean = try {
+        options.pushActive()
+    } catch (_: Throwable) {
+        false
+    }
+
     private fun scheduleNext(delayMs: Long) {
         timer?.cancel()
         timer = scheduler.schedule(delayMs.coerceAtLeast(0)) {
@@ -144,6 +156,7 @@ class SyncLoop(
                 if (zeroPolls > options.zeroPollsBeforeDelay) delay = options.zeroPollDelayMs
             } else {
                 zeroPolls = 0
+                if (outcome != null && outcome.accepted && delay > 0L && pushOn()) delay = maxOf(delay, options.heartbeatMs)
             }
         }
         if (wakeQueued) {

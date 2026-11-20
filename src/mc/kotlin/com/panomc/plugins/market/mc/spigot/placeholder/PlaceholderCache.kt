@@ -40,7 +40,9 @@ class PlaceholderCache(
     private val clock: McClock = SystemMcClock,
     private val executor: (Runnable) -> Unit = DEFAULT_EXECUTOR,
     private val isOnline: (String) -> Boolean = { true },
-    private val refreshMs: Long = REFRESH_MS
+    private val refreshMs: Long = REFRESH_MS,
+    /** Pano pushes changes ([invalidate]): then a snapshot stays good for [PUSHED_REFRESH_MS], a stand-in for a lost push only. */
+    private val pushActive: () -> Boolean = { false }
 ) {
     private class Snapshot(val data: MarketQueryData, val at: Long)
 
@@ -81,9 +83,20 @@ class PlaceholderCache(
         return (players[username] ?: players.entries.firstOrNull { it.key.equals(username, true) }?.value)?.balance
     }
 
+    /** Pano says the values changed (a paid order, a goal, a balance): fetched again now, the old values stay until the answer. */
+    fun invalidate() {
+        stale = true
+        lastAttempt = NEVER
+        requestRefreshIfStale(clock.now())
+    }
+
+    @Volatile
+    private var stale = false
+
     private fun requestRefreshIfStale(now: Long) {
         val taken = snapshot
-        val fresh = taken != null && now - taken.at < refreshMs
+        val window = if (pushActive()) PUSHED_REFRESH_MS else refreshMs
+        val fresh = !stale && taken != null && now - taken.at < window
         if (fresh || (lastAttempt != NEVER && now - lastAttempt < refreshMs)) return
         if (!scheduled.compareAndSet(false, true)) return
         try {
@@ -116,7 +129,10 @@ class PlaceholderCache(
             link.request(request, MarketQueryMessage::class.java) { answer ->
                 try {
                     val data = answer?.takeIf { it.accepted }?.data
-                    if (data != null) snapshot = Snapshot(data, clock.now())
+                    if (data != null) {
+                        snapshot = Snapshot(data, clock.now())
+                        stale = false
+                    }
                 } finally {
                     refreshing.set(false)
                 }
@@ -129,6 +145,7 @@ class PlaceholderCache(
 
     companion object {
         const val REFRESH_MS = 30_000L
+        const val PUSHED_REFRESH_MS = 10 * 60_000L
         private const val NEVER = -1L
         private const val WANTED_MS = 2 * 60_000L
         private const val MAX_PLAYERS = 100

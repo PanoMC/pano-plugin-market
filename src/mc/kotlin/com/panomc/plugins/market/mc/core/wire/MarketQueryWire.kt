@@ -89,7 +89,9 @@ data class MarketQueryData(
     val players: Map<String, QueryPlayerBalance>? = null,
     // PENDING
     val deliveriesQueued: Int? = null,
-    val gifts: List<QueryGift>? = null
+    val gifts: List<QueryGift>? = null,
+    /** Every type with a player: the language of the player's Pano account (`tr`, `en-US`), `null` without an account or from an older Pano. */
+    val locale: String? = null
 )
 
 data class MarketQueryMessage(

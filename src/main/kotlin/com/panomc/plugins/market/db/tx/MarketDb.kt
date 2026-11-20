@@ -90,7 +90,19 @@ class MarketDb(
             isolationPending = true
             transaction = conn.begin().coAwait()
             isolationPending = false
-            val result = block(conn)
+            val afterCommit = AfterCommit()
+            // the block's own throwable leaves outside withContext: crossing it would hand the caller a copy (coroutine stack recovery)
+            var failure: Throwable? = null
+            val outcome = withContext(afterCommit) {
+                try {
+                    Result.success(block(conn))
+                } catch (e: Throwable) {
+                    failure = e
+                    null
+                }
+            }
+            failure?.let { throw it }
+            val result = outcome!!.getOrThrow()
             // The server ends a transaction on its own when it picks this one as a deadlock victim; a block that
             // swallowed that error carried on in autocommit mode and a COMMIT would then "succeed". Fail loudly.
             val open = runCatching {
@@ -101,6 +113,7 @@ class MarketDb(
             }
             transaction.commit().coAwait()
             transaction = null
+            afterCommit.runAll()
             return result
         } catch (e: Throwable) {
             val pending = transaction

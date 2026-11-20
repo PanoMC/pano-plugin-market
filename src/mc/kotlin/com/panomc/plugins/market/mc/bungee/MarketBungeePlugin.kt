@@ -72,10 +72,10 @@ class MarketBungeePlugin : Plugin(), Listener {
                 neverJoinedUuid = { n -> panoMain.getNeverJoinedPlayerUniqueId(n) }
             )
             val c = MarketComponent(
-                dataFolder.toPath(), platform, CorePanoLink { CorePanoLink.managerOf(panoMain) }, log, description.version,
+                dataFolder.toPath(), platform, CorePanoLink(log) { CorePanoLink.managerOf(panoMain) }, log, description.version,
                 settings = f.settings, callbacks = f.callbacks
             )
-            f.attach(c.runtime.asControl())
+            f.attach(c)
             component = c
             commands = BungeeCommands(this, f).also { it.register() }
             proxy.pluginManager.registerListener(this, this)
@@ -106,5 +106,6 @@ class MarketBungeePlugin : Plugin(), Listener {
     @EventHandler
     fun onDisconnect(event: PlayerDisconnectEvent) {
         rules?.onQuit(event.player.name)
+        features?.onPlayerLeft(event.player.name)
     }
 }

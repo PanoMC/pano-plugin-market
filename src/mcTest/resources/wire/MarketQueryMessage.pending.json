@@ -2,6 +2,7 @@
   "accepted": true,
   "data": {
     "deliveriesQueued": 2,
+    "locale": "tr",
     "gifts": [
       {
         "from": "Alex",

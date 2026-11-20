@@ -165,7 +165,9 @@ data class MarketQueryData(
     val players: Map<String, GamePlayerBalance>? = null,
     // PENDING
     val deliveriesQueued: Int? = null,
-    val gifts: List<GameGift>? = null
+    val gifts: List<GameGift>? = null,
+    /** Every type with a player: the language of the player's Pano account, so the component answers in it (an addition: older components ignore it). */
+    val locale: String? = null
 )
 
 data class MarketQueryEventResponse(

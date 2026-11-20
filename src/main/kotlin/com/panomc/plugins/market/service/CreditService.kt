@@ -132,7 +132,9 @@ class CreditService(
     private val clock: Clock,
     private val accounts: MarketCreditAccountDao,
     private val txs: MarketCreditTxDao,
-    private val entries: MarketCreditEntryDao
+    private val entries: MarketCreditEntryDao,
+    /** Told about every change of a player's balance inside its transaction; the wiring pushes `MARKET_WAKE BALANCE` after the commit. */
+    private val userBalanceChanged: (suspend (userId: Long, c: SqlClient) -> Unit)? = null
 ) : CreditSettlement {
     // ----- balance and locks ---------------------------------------------------------------------------------------------
 
@@ -243,6 +245,8 @@ class CreditService(
         val after = account.balance + delta
 
         entries.add(MarketCreditEntry(txId = txId, accountId = account.id, amount = delta, balanceAfter = after, createdAt = now, updatedAt = now), c)
+
+        if (delta != 0L) account.userId?.let { userBalanceChanged?.invoke(it, c) }
 
         return after
     }

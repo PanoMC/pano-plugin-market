@@ -198,6 +198,23 @@ class MarketCommandsTest {
         assertEquals(listOf("Магазин: https://shop.example.com"), ru.plain())
     }
 
+    @Test
+    fun `the language of the player's Pano account beats the client language once Pano told it`() {
+        val r = rig()
+        val s = FakeSender(name = "Ali", locale = "en_us")
+        r.link.handler = { MarketQueryMessage(true, null, MarketQueryData(orders = emptyList(), locale = "tr")) }
+        r.run("store", s, "history")
+        assertEquals(listOf("Henüz satın alımın yok."), s.plain(), "the answer that brought the language is already in it")
+
+        val again = FakeSender(name = "ali", locale = "en_us")
+        r.run("store", again)
+        assertEquals(listOf("Mağaza: https://shop.example.com"), again.plain(), "remembered for later commands, by name")
+
+        val console = console()
+        r.run("store", console)
+        assertEquals(listOf("Store: https://shop.example.com"), console.plain(), "the console keeps the default")
+    }
+
     // ---- failures of the Pano round trip -------------------------------------------------------------------------
 
     @Test

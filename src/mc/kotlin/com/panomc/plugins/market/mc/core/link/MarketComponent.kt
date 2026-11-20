@@ -36,14 +36,29 @@ class MarketComponent(
 ) {
     private val transport = PanoLinkTransport(link, log, transportTimeoutMs)
 
-    val runtime = DeliveryRuntime(baseDir, platform, settings, transport, callbacks, log, componentVersion, clock, engineScheduler, options)
+    val runtime = DeliveryRuntime(
+        baseDir, platform, settings, transport, callbacks, log, componentVersion, clock, engineScheduler,
+        // with Pano's pushes the sync is a heartbeat only: news arrive as MARKET_WAKE
+        options.copy(loop = options.loop.copy(pushActive = link::pushActive))
+    )
 
     private val monitor = ConnectionMonitor(link::connected, monitorScheduler, log, { runtime.connectionChanged(it) }, monitorIntervalMs)
 
+    /** `false` while the link said why it cannot work here (logged at [start]). */
+    @Volatile
+    var started = false
+        private set
+
     fun start() {
         try {
+            link.requirementProblem()?.let { problem ->
+                log.error(problem)
+                return
+            }
             runtime.start()
-            monitor.start()
+            // event based when pano-mc-plugin reports its connection; the once-a-second probe only for a link without events (tests)
+            if (!link.onConnectionChanged { runtime.connectionChanged(it) }) monitor.start()
+            started = true
         } catch (t: Throwable) {
             log.error("The Market component could not start: ${t.message}", t)
         }
@@ -51,6 +66,7 @@ class MarketComponent(
 
     fun stop() {
         try {
+            link.closePush()
             monitor.stop()
             runtime.stop()
         } catch (t: Throwable) {
@@ -63,4 +79,26 @@ class MarketComponent(
 
     /** From the platform's authenticated join / arrival event. */
     fun playerPresent(username: String) = runtime.playerPresent(username)
+
+    /** Whether Pano's pushes reach this component (else everything polls as before). */
+    fun pushActive(): Boolean = link.pushActive()
+
+    /**
+     * Pano's `MARKET_WAKE`: `SYNC` makes the delivery runtime sync now; every reason (with the players it names) also goes to [listener]
+     * (the in-game features: settings, balances, placeholders). Runs on the socket's thread: everything it calls only schedules work.
+     */
+    fun onWake(listener: (reasons: List<String>, players: List<String>) -> Unit) {
+        link.onWake { reasons, players ->
+            try {
+                if (WAKE_SYNC in reasons) runtime.syncSoon()
+                listener(reasons, players)
+            } catch (t: Throwable) {
+                log.warn("A Market push could not be handled: ${t.message}")
+            }
+        }
+    }
+
+    companion object {
+        const val WAKE_SYNC = "SYNC"
+    }
 }

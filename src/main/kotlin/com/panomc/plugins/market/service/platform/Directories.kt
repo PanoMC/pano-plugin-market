@@ -16,6 +16,9 @@ interface UserDirectory {
 
     /** The platform permission check for a node of the user (global scope). A user that does not exist has no permission. */
     suspend fun hasPermission(userId: Long, node: String): Boolean
+
+    /** The language the user chose on the website (`tr`, `en-US`), `null` when none is stored. */
+    suspend fun localeOf(userId: Long, sqlClient: SqlClient): String? = null
 }
 
 class DirectoryUser(val id: Long, val username: String)

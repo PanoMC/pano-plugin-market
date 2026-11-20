@@ -132,10 +132,10 @@ class MarketFabricMod : DedicatedServerModInitializer {
                 neverJoinedUuid = { n -> main.getNeverJoinedPlayerUniqueId(n) }
             )
             val c = MarketComponent(
-                FabricLoader.getInstance().configDir.resolve("panomarket"), platform, CorePanoLink { CorePanoLink.managerOf(main) }, log, modVersion,
+                FabricLoader.getInstance().configDir.resolve("panomarket"), platform, CorePanoLink(log) { CorePanoLink.managerOf(main) }, log, modVersion,
                 settings = f.settings, callbacks = f.callbacks
             )
-            f.attach(c.runtime.asControl())
+            f.attach(c)
             component = c
             // Players online already produce no join event (there are none at SERVER_STARTED, kept for a late start).
             s.playerList.players.forEach { onJoin(it, s) }
@@ -168,6 +168,7 @@ class MarketFabricMod : DedicatedServerModInitializer {
         val name = FabricFeatureHost.playerName(player)
         rules?.onQuit(name)
         host?.forget(name)
+        features?.onPlayerLeft(name)
     }
 
     companion object {

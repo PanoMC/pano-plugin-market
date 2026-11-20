@@ -89,10 +89,10 @@ class MarketVelocityPlugin @Inject constructor(
                 neverJoinedUuid = { n -> panoMain.getNeverJoinedPlayerUniqueId(n) }
             )
             val c = MarketComponent(
-                dataDirectory, platform, CorePanoLink { CorePanoLink.managerOf(panoMain) }, log, version,
+                dataDirectory, platform, CorePanoLink(log) { CorePanoLink.managerOf(panoMain) }, log, version,
                 settings = f.settings, callbacks = f.callbacks
             )
-            f.attach(c.runtime.asControl())
+            f.attach(c)
             component = c
             commands = VelocityCommands(server, this, f).also { it.register() }
             server.allPlayers.filter { it.currentServer.isPresent }.forEach { presenceRules.onJoin(it.username, it.uniqueId.toString()) }
@@ -123,5 +123,6 @@ class MarketVelocityPlugin @Inject constructor(
     @Subscribe
     fun onDisconnect(event: DisconnectEvent) {
         rules?.onQuit(event.player.username)
+        features?.onPlayerLeft(event.player.username)
     }
 }

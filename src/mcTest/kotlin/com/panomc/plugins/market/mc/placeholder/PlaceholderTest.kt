@@ -117,6 +117,24 @@ class PlaceholderTest {
     }
 
     @Test
+    fun `with Pano's pushes a push refreshes at once and the snapshot no longer expires every 30 seconds`() {
+        val c = PlaceholderCache(config(), link, "1.4.0", log, clock, { queued.add(it) }, { true }, pushActive = { true })
+        link.handler = { MarketQueryMessage(true, null, data) }
+        c.resolve("last_buyer", null)
+        drain()
+        assertEquals("Alex", c.resolve("last_buyer", null))
+        clock.now += 5 * 60_000
+        c.resolve("last_buyer", null)
+        assertEquals(0, queued.size, "no 30 s expiry: news come as MARKET_WAKE")
+
+        link.handler = { MarketQueryMessage(true, null, data.copy(lastBuyer = "Bob")) }
+        c.invalidate()
+        assertEquals(1, queued.size, "a push fetches at once, without waiting for a placeholder to be asked")
+        drain()
+        assertEquals("Bob", c.resolve("last_buyer", null))
+    }
+
+    @Test
     fun `the snapshot is valid for 30 seconds then one refresh is handed out and the old value stays meanwhile`() {
         val c = cache()
         c.resolve("last_buyer", null)

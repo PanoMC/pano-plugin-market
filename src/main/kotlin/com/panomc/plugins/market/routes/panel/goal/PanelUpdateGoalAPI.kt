@@ -53,6 +53,9 @@ class PanelUpdateGoalAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
 
         databaseManager.panelActivityLogDao.add(UpdatedMarketGoalLog(userId, username, plugin.pluginId, goal.name), sqlClient)
 
+        // the goal placeholders on the game servers follow now (MARKET_WAKE)
+        com.panomc.plugins.market.routes.panel.server.mcPush(plugin).wakeAll(com.panomc.plugins.market.service.McPush.PLACEHOLDERS)
+
         return Successful()
     }
 }

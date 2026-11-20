@@ -78,6 +78,9 @@ internal class PlatformUserDirectory(private val databaseManager: () -> Database
 
     override suspend fun emailOf(userId: Long, sqlClient: SqlClient): String? = databaseManager().userDao.getEmailFromUserId(userId, sqlClient)
 
+    override suspend fun localeOf(userId: Long, sqlClient: SqlClient): String? =
+        databaseManager().userDao.getLocaleCodeById(userId, sqlClient)?.takeIf { it.isNotBlank() }
+
     override suspend fun hasPermission(userId: Long, node: String): Boolean =
         applicationContext.getBean(PermissionManager::class.java).hasPermissionNode(userId, node, null)
 }

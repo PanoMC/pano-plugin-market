@@ -133,7 +133,8 @@ class FabricSender(
 
     override val name: String get() = player?.let { FabricFeatureHost.playerName(it) } ?: "CONSOLE"
     override val uuid: String? get() = player?.uuid?.toString()
-    override val locale: String? get() = player?.let { host.localeOf(FabricFeatureHost.playerName(it)) }
+    /** Read live (the player may have changed the language since the join); the host remembers it for the engine's thread. */
+    override val locale: String? get() = player?.let { host.remember(it); host.localeOf(FabricFeatureHost.playerName(it)) }
 
     override fun hasPermission(node: String): Boolean {
         if (isConsole) return true

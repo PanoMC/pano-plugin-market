@@ -94,7 +94,9 @@ class SpigotSender(private val sender: CommandSender, private val host: SpigotFe
     /** A player or the console; anything else is refused by [MarketBukkitCommand]. */
     val supported: Boolean get() = sender is Player || isConsole
     override val uuid: String? get() = (sender as? Player)?.uniqueId?.toString()
-    override val locale: String? get() = if (sender is Player) host.localeOf(sender.name) else null
+    /** Read live (a command runs on the player's thread): the remembered value can be stale when the client sent its language after the join. */
+    override val locale: String?
+        get() = if (sender is Player) SpigotMessages.localeOf(sender)?.also { host.remember(sender.name, it) } ?: host.localeOf(sender.name) else null
 
     override fun hasPermission(node: String): Boolean = isConsole || sender.hasPermission(node)
 

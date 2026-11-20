@@ -186,7 +186,9 @@ class McSyncService(
     private val configHash: suspend (serverId: Long) -> String? = { null },
     /** The store name for the `{store}` of a purchase announcement. */
     private val storeName: () -> String = { "" },
-    val broadcasts: McBroadcastOutbox = McBroadcastOutbox(clock)
+    val broadcasts: McBroadcastOutbox = McBroadcastOutbox(clock),
+    /** `MARKET_WAKE`: a queued announcement goes out at once, a paid order refreshes the placeholders (last buyer, top supporter, goals). */
+    private val push: (() -> McPush?)? = null
 ) {
     private class Session(val version: String, val accepted: Boolean, val lastSyncAt: Long)
 
@@ -650,7 +652,12 @@ class McSyncService(
      * number of servers it queued for.
      */
     suspend fun announce(order: MarketOrder, items: List<MarketOrderItem>): Int {
-        if (order.hideFromBroadcast || order.testMode) return 0
+        if (order.testMode) return 0
+
+        // a paid order moves the purchase placeholders whether or not it is announced
+        push?.invoke()?.wakeAll(McPush.PLACEHOLDERS)
+
+        if (order.hideFromBroadcast) return 0
 
         val lines = items.filter { it.kind == OrderItemKind.PRODUCT || it.kind == OrderItemKind.BUNDLE }
 
@@ -677,6 +684,7 @@ class McSyncService(
             if (text.isBlank()) continue
 
             broadcasts.offer(id, text)
+            push?.invoke()?.wake(id, McPush.SYNC)
 
             queued++
         }

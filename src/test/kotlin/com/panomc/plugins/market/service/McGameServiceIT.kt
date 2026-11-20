@@ -166,7 +166,12 @@ class McGameServiceIT : MarketDaoITBase() {
         override suspend fun emailOf(userId: Long, sqlClient: SqlClient): String? = c.h.emails[userId]
 
         override suspend fun hasPermission(userId: Long, node: String): Boolean = false
+
+        override suspend fun localeOf(userId: Long, sqlClient: SqlClient): String? = accountLocales[userId]
     }
+
+    /** The language each test user chose on the website. */
+    private val accountLocales = HashMap<Long, String>()
 
     /** The configuration the service sees: the checkout switches of the harness plus the in-game knobs of this test. */
     private fun cfg(): MarketConfig {
@@ -278,6 +283,19 @@ class McGameServiceIT : MarketDaoITBase() {
         else fx.product(slug = slug, price = price, creditPrice = creditPrice, stock = stock, columns = columns, categoryId = categoryId, name = name ?: slug)
 
     // ===================================================================================== MARKET_PURCHASE (MC-E4)
+
+    @Test
+    fun `every answer about a player carries the language of their Pano account`(): Unit = runBlocking {
+        val alex = user("Alex", credit = 1_000)
+        user("Steve", credit = 1_000)
+        accountLocales[alex.id] = "tr"
+
+        assertEquals("tr", queryOf("BALANCE", "Alex").data!!.locale)
+        assertEquals("tr", queryOf("PURCHASES", "alex").data!!.locale, "the name is matched case-insensitively")
+        assertEquals("tr", queryOf("PENDING", "Alex").data!!.locale, "the join query teaches the language")
+        assertNull(queryOf("BALANCE", "Steve").data!!.locale, "an account without a stored language")
+        assertNull(queryOf("PENDING", "Nobody").data!!.locale, "a player without an account")
+    }
 
     @Test
     fun `a purchase is a full-credit INGAME order through the checkout, debits the credits and a replayed operationId returns the same order`(): Unit = runBlocking {

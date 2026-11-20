@@ -64,6 +64,30 @@ class MarketDbTxIT : MarketDbTestBase() {
     }
 
     @Test
+    fun `after-commit work runs once the data is visible, never for a rolled back attempt, and at once outside a transaction`(): Unit = runBlocking {
+        val seen = ArrayList<Int?>()
+
+        marketDb().tx { conn ->
+            conn.insert(7, 70)
+            com.panomc.plugins.market.db.tx.AfterCommit.run { seen += runBlocking { pool.n(7) } }
+            assertEquals(emptyList<Int?>(), seen, "nothing runs inside the transaction")
+        }
+        assertEquals(listOf<Int?>(70), seen, "after COMMIT another connection already sees the row")
+
+        runCatching {
+            marketDb().tx { conn ->
+                conn.insert(8, 80)
+                com.panomc.plugins.market.db.tx.AfterCommit.run { seen += -1 }
+                throw IllegalStateException("rolled back")
+            }
+        }
+        assertEquals(listOf<Int?>(70), seen, "a rolled back attempt drops its after-commit work")
+
+        com.panomc.plugins.market.db.tx.AfterCommit.run { seen += 0 }
+        assertEquals(listOf<Int?>(70, 0), seen, "no transaction: at once")
+    }
+
+    @Test
     fun `a throwable rolls back all statements and is rethrown unchanged`(): Unit = runBlocking {
         val boom = IllegalStateException("boom")
         val attempts = AtomicInteger()

@@ -5,6 +5,7 @@ import com.panomc.plugins.market.mc.core.platform.SyncTransport
 import com.panomc.plugins.market.mc.core.wire.MarketSyncMessage
 import com.panomc.plugins.market.mc.core.wire.MarketSyncRequest
 import com.panomc.plugins.pano.core.helper.PanoPluginMain
+import com.panomc.plugins.pano.core.platform.PlatformExtensions
 import com.panomc.plugins.pano.core.platform.PlatformManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,21 @@ interface PanoLink {
 
     /** One request / response; throws on a missing connection, a write failure, an undecodable answer or after [timeoutMs]. */
     suspend fun awaitSync(request: MarketSyncRequest, timeoutMs: Long): MarketSyncMessage
+
+    /** Where Pano's `MARKET_WAKE` pushes go (reasons, players). A link that cannot receive pushes ignores it. */
+    fun onWake(listener: (reasons: List<String>, players: List<String>) -> Unit) {}
+
+    /** Whether Pano's pushes reach this component right now; while `false` the component polls as it always did. */
+    fun pushActive(): Boolean = false
+
+    /** Stops receiving pushes (the component stops). */
+    fun closePush() {}
+
+    /** Reports every connection change to [listener]; `false` when the link has no such events (then the component polls [connected]). */
+    fun onConnectionChanged(listener: (Boolean) -> Unit): Boolean = false
+
+    /** Why this link cannot work on this server, `null` when it can. */
+    fun requirementProblem(): String? = null
 }
 
 /**
@@ -83,10 +99,48 @@ class PanoLinkTransport(
  * every call because Pano replaces it when it re-initialises itself (a `/pano` reload); a lookup that fails is "not
  * connected".
  */
-class CorePanoLink(private val platformManager: () -> PlatformManager?) : PanoLink {
-    override fun connected(): Boolean {
-        val pm = platformManager() ?: return false
-        return pm.isPlatformConfigured() && pm.getWebSocket() != null
+/**
+ * The real link over `pano-mc-plugin` (its `PlatformExtensions`, so it needs a pano-mc-plugin that has them, see [requirementProblem]):
+ * the connection and Pano's pushes arrive as events, nothing is polled. [log] given: the pushes are received too.
+ */
+class CorePanoLink(private val log: McLog? = null, private val platformManager: () -> PlatformManager?) : PanoLink {
+    @Volatile
+    private var wakeListener: ((List<String>, List<String>) -> Unit)? = null
+
+    @Volatile
+    private var connectionListener: ((Boolean) -> Unit)? = null
+
+    private val handler = MarketWakeHandler { reasons, players -> wakeListener?.invoke(reasons, players) }
+
+    @Volatile
+    private var registered = false
+
+    override fun connected(): Boolean = PlatformExtensions.isConnected() && platformManager() != null
+
+    override fun onConnectionChanged(listener: (Boolean) -> Unit): Boolean {
+        val wrapped: (Boolean) -> Unit = { up -> listener(up && platformManager() != null) }
+        connectionListener = wrapped
+        PlatformExtensions.addConnectionListener(wrapped)
+        return true
+    }
+
+    override fun onWake(listener: (reasons: List<String>, players: List<String>) -> Unit) {
+        wakeListener = listener
+        if (log == null) return
+        registered = PlatformExtensions.registerMessageHandler(handler)
+        if (!registered) log.warn("pano-mc-plugin refused the Market push handler; the Market component checks Pano for news on a timer instead.")
+    }
+
+    override fun pushActive(): Boolean = registered && wakeListener != null
+
+    override fun requirementProblem(): String? = Companion.requirementProblem()
+
+    override fun closePush() {
+        wakeListener = null
+        registered = false
+        PlatformExtensions.unregisterMessageHandler(handler)
+        connectionListener?.let { PlatformExtensions.removeConnectionListener(it) }
+        connectionListener = null
     }
 
     override suspend fun awaitSync(request: MarketSyncRequest, timeoutMs: Long): MarketSyncMessage {
@@ -95,11 +149,29 @@ class CorePanoLink(private val platformManager: () -> PlatformManager?) : PanoLi
     }
 
     companion object {
+        /** The pano-mc-plugin release whose `PlatformExtensions` this component needs (the build compiles against it). */
+        const val REQUIRED_PANO_MC = "1.2.0"
+
+        /** Where pano-mc-plugin is downloaded. */
+        const val PANO_MC_RELEASES = "https://github.com/PanoMC/pano-mc-plugin/releases"
+
         /** The manager of the running Pano core of [main] (`getPano()` builds it on first use), `null` while unavailable. */
         fun managerOf(main: PanoPluginMain): PlatformManager? = try {
             main.getPano().platformManager
         } catch (_: Throwable) {
             null
         }
+
+        /** Why this server's pano-mc-plugin cannot run the component (it predates `PlatformExtensions`), `null` when it can. */
+        fun requirementProblem(): String? = try {
+            // a call, not the constant (a const is copied into this class and would never load PlatformExtensions)
+            PlatformExtensions.isConnected()
+            null
+        } catch (_: LinkageError) {
+            tooOld()
+        }
+
+        private fun tooOld() =
+            "Pano Market needs pano-mc-plugin $REQUIRED_PANO_MC or newer, this server runs an older one. Update it from the panel or $PANO_MC_RELEASES; the Market component stays off until then."
     }
 }

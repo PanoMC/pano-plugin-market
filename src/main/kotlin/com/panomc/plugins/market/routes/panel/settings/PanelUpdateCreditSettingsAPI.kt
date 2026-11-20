@@ -59,6 +59,8 @@ class PanelUpdateCreditSettingsAPI(
 
         val merged = applyCreditSettings(body, JsonObject.mapFrom(configManager.config))
         configManager.saveConfig(merged)
+        // the in-game settings changed: the game servers pull them now (MARKET_WAKE), not at their next heartbeat
+        com.panomc.plugins.market.routes.panel.server.mcPush(plugin).wakeAll(com.panomc.plugins.market.service.McPush.CONFIG)
 
         val sqlClient = getSqlClient()
         val adminUserId = authProvider.getUserIdFromRoutingContext(context)

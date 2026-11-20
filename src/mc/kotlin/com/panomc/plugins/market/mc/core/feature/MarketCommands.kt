@@ -40,7 +40,8 @@ class MarketCommands(
     private val control: () -> RuntimeControl?,
     private val componentVersion: String,
     private val clock: McClock = SystemMcClock,
-    private val cooldownMs: Long = 1_000
+    private val cooldownMs: Long = 1_000,
+    private val accountLocales: AccountLocales = AccountLocales()
 ) {
     private class Sub(val feature: Feature, val run: (McSender, List<String>) -> Unit)
 
@@ -55,7 +56,9 @@ class MarketCommands(
         subs["${command.lowercase()}/${sub.lowercase()}"] = Sub(feature, run)
     }
 
-    fun execute(command: String, sender: McSender, args: List<String>) {
+    fun execute(command: String, player: McSender, args: List<String>) {
+        // every reply (and every sub-command) speaks the language of the player's Pano account when Pano told us one
+        val sender = accountLocales.wrap(player)
         try {
             when (command.lowercase()) {
                 "store" -> store(sender, args)
@@ -337,6 +340,9 @@ class MarketCommands(
         link.request(request, type) { answer ->
             try {
                 if (answer == null) return@request onNoAnswer()
+                if (answer is MarketQueryMessage && answer.accepted && request is MarketQueryRequest && !sender.isConsole) {
+                    request.player?.username?.let { accountLocales.record(it, answer.data?.locale) }
+                }
                 val (ok, reason) = accepted(answer)
                 if (!ok) return@request sender.send(refusal(sender, reason))
                 onOk(answer)

@@ -23,8 +23,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
+import org.bukkit.event.Event
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.player.PlayerEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.plugin.java.JavaPlugin
@@ -102,12 +104,13 @@ class MarketSpigotPlugin : JavaPlugin(), Listener {
                 placeholderProbe = { placeholdersOn.get() }
             )
             val c = MarketComponent(
-                dataFolder.toPath(), platform, CorePanoLink { CorePanoLink.managerOf(panoMain) }, log, description.version,
+                dataFolder.toPath(), platform, CorePanoLink(log) { CorePanoLink.managerOf(panoMain) }, log, description.version,
                 settings = f.settings, callbacks = f.callbacks
             )
-            f.attach(c.runtime.asControl())
+            f.attach(c)
             component = c
             server.pluginManager.registerEvents(this, this)
+            hookLocaleChanges()
             if (bridge.installed()) {
                 // Without the login events nobody could ever become present after the login: then fall back to "online".
                 authActive = bridge.registerEvents({ p -> if (p.isOnline) presenceRules.onAuthLogin(p.name, p.uniqueId.toString()) }, { p -> presenceRules.onAuthLogout(p.name) })
@@ -152,7 +155,10 @@ class MarketSpigotPlugin : JavaPlugin(), Listener {
     /** PlaceholderAPI (MC-06): the expansion is registered only when the plugin is enabled and the feature is on. */
     private fun installPlaceholders(f: MarketFeatures, link: CoreGameLink, log: JulMcLog) {
         if (!f.config.local.features.allows(Feature.PLACEHOLDERS)) return
-        val cache = PlaceholderCache(f.config, link, description.version, log, isOnline = { name -> Bukkit.getPlayerExact(name) != null })
+        val cache = PlaceholderCache(f.config, link, description.version, log, isOnline = { name -> Bukkit.getPlayerExact(name) != null }, pushActive = { f.pushActive() })
+        // event based: a paid order, a goal edit or a balance change on Pano refreshes the values now
+        f.onPlaceholdersChanged { cache.invalidate() }
+        f.onBalanceChanged { cache.invalidate() }
         val hook = PlaceholderHook(cache, description.version, log)
         hook.install()
         placeholdersOn.set(hook.registered)
@@ -180,6 +186,25 @@ class MarketSpigotPlugin : JavaPlugin(), Listener {
         tracker.clear()
     }
 
+    /**
+     * `PlayerLocaleChangeEvent` (Spigot 1.12+, reached by reflection: the compile API is 1.8.8) keeps the remembered language right: the client sends its
+     * language after the join on some versions (the join then reads `en_us`) and again whenever the player changes it.
+     */
+    private fun hookLocaleChanges() {
+        val type = try {
+            Class.forName("org.bukkit.event.player.PlayerLocaleChangeEvent").asSubclass(Event::class.java)
+        } catch (_: Throwable) {
+            return
+        }
+        val getLocale = type.getMethod("getLocale")
+        server.pluginManager.registerEvent(type, this, EventPriority.MONITOR, { _, event ->
+            if (type.isInstance(event)) {
+                val locale = try { getLocale.invoke(event) as? String } catch (_: Throwable) { null }
+                host?.remember((event as PlayerEvent).player.name, locale)
+            }
+        }, this)
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     fun onJoin(event: PlayerJoinEvent) {
         val p: Player = event.player
@@ -191,5 +216,6 @@ class MarketSpigotPlugin : JavaPlugin(), Listener {
     fun onQuit(event: PlayerQuitEvent) {
         rules?.onQuit(event.player.name)
         host?.forget(event.player.name)
+        features?.onPlayerLeft(event.player.name)
     }
 }

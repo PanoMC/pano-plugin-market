@@ -423,7 +423,7 @@ class McGameService(
 
         if (!queryBucket.tryTake(server.id)) return MarketQueryEventResponse(accepted = false, reason = REASON_RATE_LIMITED)
 
-        return when (request.type) {
+        val response = when (request.type) {
             QUERY_BALANCE -> balance(request)
             QUERY_PURCHASES -> purchases(request)
             QUERY_CATALOG -> catalog(request, server)
@@ -431,6 +431,17 @@ class McGameService(
             QUERY_PENDING -> pending(request, server)
             else -> MarketQueryEventResponse(accepted = false, reason = REASON_UNSUPPORTED_TYPE)
         }
+
+        return withAccountLocale(response, request)
+    }
+
+    /** An answer about a player also carries the language of their Pano account: the component talks to them in it, not in the client's. */
+    private suspend fun withAccountLocale(response: MarketQueryEventResponse, request: MarketQueryEventRequest): MarketQueryEventResponse {
+        val data = response.data?.takeIf { response.accepted } ?: return response
+        val client = read()
+        val user = userOf(request.player?.username, client) ?: return response
+
+        return response.copy(data = data.copy(locale = users.localeOf(user.id, client)))
     }
 
     private suspend fun userOf(username: String?, c: SqlClient): DirectoryUser? {

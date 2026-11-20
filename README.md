@@ -20,6 +20,9 @@ release). Install the ones you need next to this plugin.
 Deliveries to a game server (commands, ranks, items) are executed by a small component on the Minecraft server. It is
 required whenever a product is delivered to a server, and it must speak the market's protocol.
 
+It needs [pano-mc-plugin](https://github.com/PanoMC/pano-mc-plugin/releases) 1.2.0 or newer on the same server (it receives Pano's
+updates through it the moment they happen); with an older one the component stays off and says so in the console.
+
 There is one jar per platform, attached to every GitHub release and downloadable from the panel (Market > Servers).
 Drop the one for your server into its `plugins` (or `mods`) folder:
 

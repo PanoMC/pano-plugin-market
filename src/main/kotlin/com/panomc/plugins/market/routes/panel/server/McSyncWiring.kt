@@ -61,6 +61,31 @@ private fun buildMcSyncService(plugin: MarketPlugin): McSyncService {
                 null
             }
         },
-        storeName = { currentConfig(plugin).storeName }
+        storeName = { currentConfig(plugin).storeName },
+        push = { mcPush(plugin) }
     )
+}
+
+@Volatile
+private var cachedPush: Pair<MarketPlugin, com.panomc.plugins.market.service.McPush>? = null
+
+/** The `MARKET_WAKE` sender of the plugin instance: pushes "act now" to the connected game servers (no polling for news). */
+internal fun mcPush(plugin: MarketPlugin): com.panomc.plugins.market.service.McPush {
+    cachedPush?.takeIf { it.first === plugin }?.let { return it.second }
+
+    return synchronized(McSyncWiringHolder) {
+        cachedPush?.takeIf { it.first === plugin }?.second ?: run {
+            val serverManager = { plugin.applicationContext.getBean(ServerManager::class.java) }
+
+            com.panomc.plugins.market.service.McPush(
+                vertx = { runCatching { plugin.applicationContext.getBean(io.vertx.core.Vertx::class.java) }.getOrNull() },
+                // the Server overload exists in every Pano this market supports (the id-keyed one is newer)
+                send = { serverId, message ->
+                    val manager = serverManager()
+                    manager.getConnectedServers().keys.firstOrNull { it.id == serverId }?.let { manager.sendMessage(message, it); true } ?: false
+                },
+                connectedServers = { serverManager().getConnectedServers().keys.map { it.id } }
+            ).also { cachedPush = plugin to it }
+        }
+    }
 }

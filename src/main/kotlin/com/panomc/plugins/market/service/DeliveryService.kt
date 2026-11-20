@@ -132,7 +132,9 @@ class DeliveryService(
     /** `ORDER_DELIVERED` (MK-142, 12 section 4.1): told when the fulfillment of an order becomes `FULFILLED`, inside the transaction that did it. */
     private val fulfilledMails: FulfillmentMails = FulfillmentMails.NONE,
     /** The creator payouts of `method = ACTION` (21 section 7.4, MK-114): told when one of the order-less rows of a payout changes, so the payout follows its rows. */
-    private val payouts: PayoutSettlement = PayoutSettlement.NONE
+    private val payouts: PayoutSettlement = PayoutSettlement.NONE,
+    /** `MARKET_WAKE` after the commit when a server row needs its component (a new offer, a cancel): the server acts now, not at its next heartbeat. */
+    private val push: (() -> McPush?)? = null
 ) {
     private fun table(name: String) = "`${deliveries.prefix()}$name`"
 
@@ -505,6 +507,10 @@ class DeliveryService(
             inserted += id
             p.orderId?.let { touched += it }
 
+            if (p.isServerRow && (p.status == DeliveryStatus.PENDING || p.status == DeliveryStatus.WAITING_SERVER)) {
+                wakeServer(p.serverId, listOfNotNull(p.runAfter, p.nextAttemptAt).maxOrNull())
+            }
+
             if (p.status == DeliveryStatus.FAILED && p.orderId != null) recordFailed(conn, p.orderId, id, p.lastErrorCode ?: DeliveryError.REJECTED, now)
         }
 
@@ -749,6 +755,11 @@ class DeliveryService(
 
         if (changed == 0) return false
 
+        // a row the component has to act on: offered again (retry, requeue, the server came back) or asked to be cancelled
+        if (row.isMarketServerRow && (move.to == DeliveryStatus.PENDING || move.to == DeliveryStatus.WAITING_SERVER || move.effects.any { it is DeliveryEffect.RequestCancel })) {
+            wakeServer(row.serverId, move.effects.filterIsInstance<DeliveryEffect.SetNextAttemptAt>().lastOrNull()?.at)
+        }
+
         val orderId = row.orderId
 
         if (orderId != null) {
@@ -761,6 +772,21 @@ class DeliveryService(
         }
 
         return true
+    }
+
+    private val PlannedDelivery.isServerRow: Boolean
+        get() = serverId > 0 && transport == DeliveryTransport.MARKET_MC
+
+    private val MarketDelivery.isMarketServerRow: Boolean
+        get() = serverId > 0 && (transport ?: DeliveryTransport.MARKET_MC) == DeliveryTransport.MARKET_MC
+
+    /** Wakes [serverId] once the transaction commits, or at [dueAt] for a row that only becomes due later. */
+    private suspend fun wakeServer(serverId: Long, dueAt: Long?) {
+        val p = push?.invoke() ?: return
+
+        com.panomc.plugins.market.db.tx.AfterCommit.run {
+            if (dueAt != null && dueAt > clock.now()) p.wakeAt(serverId, dueAt) else p.wake(serverId, McPush.SYNC)
+        }
     }
 
     private fun MarketDelivery.toRow() = DeliveryRow(

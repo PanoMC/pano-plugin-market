@@ -16,11 +16,11 @@ class SyncLoopTest {
     @TempDir
     lateinit var dir: Path
 
-    private class Rig(dir: Path) {
+    private class Rig(dir: Path, pushed: () -> Boolean = { false }) {
         val h = EngineHarness(dir)
         val scheduler = ManualScheduler(h.clock)
         val transport = FakeTransport()
-        val loop = SyncLoop(h.engine, transport, scheduler, h.log)
+        val loop = SyncLoop(h.engine, transport, scheduler, h.log, LoopOptions(pushActive = pushed))
 
         init {
             h.callbacks.hook = { loop.wake() }
@@ -62,6 +62,32 @@ class SyncLoopTest {
         assertEquals(1, r.transport.sent)
         r.scheduler.advance(1)
         assertEquals(2, r.transport.sent)
+    }
+
+    @Test
+    fun `with Pano's pushes a quiet sync is a 30 s heartbeat, a push wakes it at once, and without them pollAfterMs counts again`() {
+        var pushed = true
+        val r = Rig(dir) { pushed }
+        r.connect()
+        r.answer(0, response(pollAfterMs = 5000))
+        r.scheduler.advance(29_999)
+        assertEquals(1, r.transport.sent, "no poll every 5 s: news come as MARKET_WAKE")
+        r.scheduler.advance(1)
+        assertEquals(2, r.transport.sent, "the heartbeat keeps Pano's readiness (60 s window)")
+
+        r.answer(1, response(pollAfterMs = 5000))
+        r.loop.wake()
+        r.scheduler.runUntilIdle()
+        assertEquals(3, r.transport.sent, "a push (wake) syncs at once")
+
+        pushed = false
+        r.answer(2, response(pollAfterMs = 5000))
+        r.scheduler.advance(5_000)
+        assertEquals(4, r.transport.sent, "an older pano-mc-plugin: Pano's pollAfterMs again")
+
+        pushed = true
+        r.answer(3, response(pollAfterMs = 0))
+        assertEquals(5, r.transport.sent, "more waiting on Pano is still fetched at once")
     }
 
     @Test

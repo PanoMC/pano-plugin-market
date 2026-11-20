@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.api.order
 
+import com.panomc.plugins.market.service.McPush
 import com.panomc.plugins.market.core.abuse.AbuseLimits
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.platform.api.webhook.DirectWebhook
@@ -209,6 +210,8 @@ private fun buildDeliveryService(plugin: MarketPlugin): DeliveryService {
         webhookQueue = actionWebhookQueue(plugin), webhookSecret = { paymentWiring(plugin).cipher.decrypt(it) }, discordLabels = discordLabelSource(plugin),
         // MK-142: ORDER_DELIVERED when the fulfillment becomes FULFILLED
         fulfilledMails = orderMails(plugin),
+        // event based delivery to the game servers: the component is woken after the commit instead of finding the row at its next heartbeat
+        push = { com.panomc.plugins.market.routes.panel.server.mcPush(plugin) },
         // MK-114: an ACTION creator payout follows its rows (the creator service is looked up when the first row changes, it needs this service itself)
         payouts = object : PayoutSettlement {
             override suspend fun lock(conn: io.vertx.sqlclient.SqlClient, payoutId: Long) = creatorService(plugin).lock(conn, payoutId)
@@ -285,7 +288,17 @@ private fun buildCreditService(plugin: MarketPlugin): CreditService {
     val context = plugin.beans
 
     return CreditService(
-        SystemClock, context.getBean(MarketCreditAccountDao::class.java), context.getBean(MarketCreditTxDao::class.java), context.getBean(MarketCreditEntryDao::class.java)
+        SystemClock, context.getBean(MarketCreditAccountDao::class.java), context.getBean(MarketCreditTxDao::class.java), context.getBean(MarketCreditEntryDao::class.java),
+        // the game servers refresh the balance of this player now (Vault economy, placeholders) instead of on a timer
+        userBalanceChanged = { userId, c ->
+            val name = context.getBean(DatabaseManager::class.java).userDao.getUsernameFromUserId(userId, c)
+
+            if (name != null) {
+                com.panomc.plugins.market.db.tx.AfterCommit.run {
+                    com.panomc.plugins.market.routes.panel.server.mcPush(plugin).wakeAll(McPush.BALANCE, McPush.PLACEHOLDERS, players = listOf(name))
+                }
+            }
+        }
     )
 }
 

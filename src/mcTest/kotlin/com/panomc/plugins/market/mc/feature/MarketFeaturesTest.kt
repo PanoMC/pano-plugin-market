@@ -239,14 +239,59 @@ class MarketFeaturesBroadcastAndJoinTest {
         panel.features.callbacks.onQueueDrained("Steve", listOf(done("k1", "Steve", gift("O1"))))
         panel.features.onPlayerPresent("Steve")
         assertTrue(panel.host.sent.isEmpty())
-        assertTrue(panel.link.requests.isEmpty(), "no query is sent for a switched-off feature")
+        // the join query still goes out: its answer carries the language of the player's Pano account
+        assertEquals(listOf(QueryType.PENDING), panel.link.requests.map { (it as MarketQueryRequest).type })
 
         val local = FeatureRig(dir.resolve("l"), "features:\n  join-notifications: false\n")
         local.loadConfig(panoConfig("h", MarketMcSettings(mcJoinNotifications = true)))
         local.features.callbacks.onQueueDrained("Steve", listOf(done("k1", "Steve", gift("O1"))))
         local.features.onPlayerPresent("Steve")
         assertTrue(local.host.sent.isEmpty())
-        assertTrue(local.link.requests.isEmpty())
+        assertEquals(listOf(QueryType.PENDING), local.link.requests.map { (it as MarketQueryRequest).type })
+    }
+
+    @Test
+    fun `the join answer teaches the language of the player's Pano account, which beats the client's until they leave`() {
+        val r = FeatureRig(dir)
+        r.host.locales["steve"] = "en_us"
+        r.link.handler = { MarketQueryMessage(true, null, MarketQueryData(deliveriesQueued = 1, locale = "tr")) }
+        r.features.onPlayerPresent("Steve")
+        assertEquals("tr", r.features.localeOf("Steve"))
+        assertTrue(r.host.sent.single().second.contains("gelmekte"), r.host.sent.toString())
+
+        r.features.onPlayerLeft("Steve")
+        assertEquals("en_us", r.features.localeOf("Steve"), "after leaving the client language is used until Pano answers again")
+
+        // no account (or an older Pano): the client language stays
+        r.link.handler = { MarketQueryMessage(true, null, MarketQueryData(deliveriesQueued = 0, locale = null)) }
+        r.features.onPlayerPresent("Steve")
+        assertEquals("en_us", r.features.localeOf("Steve"))
+    }
+
+    @Test
+    fun `MARKET_WAKE pulls the settings at once and hands balances and placeholders to their listeners`() {
+        val r = FeatureRig(dir)
+        val balances = ArrayList<List<String>>()
+        var placeholders = 0
+        var applied = 0
+        r.features.onBalanceChanged { balances += it }
+        r.features.onPlaceholdersChanged { placeholders++ }
+        r.features.onConfigApplied { applied++ }
+        r.link.configRequests.clear()
+
+        r.features.onWake(listOf("CONFIG"), emptyList())
+        assertEquals(1, r.link.configRequests.size, "CONFIG asks for the settings now")
+        r.loadConfig(panoConfig("h-new", MarketMcSettings(mcBroadcast = false)))
+        assertTrue(applied >= 1, "an accepted MARKET_CONFIG tells its listeners")
+
+        r.features.onWake(listOf("BALANCE", "PLACEHOLDERS"), listOf("Steve"))
+        assertEquals(listOf(listOf("Steve")), balances)
+        assertEquals(1, placeholders)
+
+        r.features.onWake(listOf("BALANCE"), emptyList())
+        assertEquals(1, balances.size, "a balance push without players changes nothing")
+        r.features.onWake(listOf("SOMETHING_NEW"), emptyList())
+        assertFalse(r.features.pushActive(), "no component attached: the features keep their timers")
     }
 
     @Test

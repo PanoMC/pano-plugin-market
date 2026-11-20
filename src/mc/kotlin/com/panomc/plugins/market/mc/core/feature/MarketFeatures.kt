@@ -41,13 +41,24 @@ class MarketFeatures(
     private val pulling = AtomicBoolean(false)
     private val announcedGifts = ConcurrentHashMap<String, Long>()
 
-    val commands = MarketCommands(config, messages, link, { control }, componentVersion, clock)
+    /** The language of each player's Pano account (it wins over the client language, 19 section 9). */
+    val accountLocales = AccountLocales()
+
+    val commands = MarketCommands(config, messages, link, { control }, componentVersion, clock, accountLocales = accountLocales)
+
+    /** The language to talk to [username] in: their Pano account's, else the client's. */
+    fun localeOf(username: String): String? = accountLocales.resolve(username, host.localeOf(username))
+
+    /** A player left: their account language is asked again at the next join (it may have changed on the website). */
+    fun onPlayerLeft(username: String) = accountLocales.forget(username)
 
     /**
      * Why the platform main must NOT start the component, or `null` when it may. A file that could not be read gives
      * the same "stay off" as `enabled: false`, so nothing is synced and no delivery is answered DISABLED_LOCALLY.
      */
     fun offReason(): String? {
+        // the component is built on pano-mc-plugin's events (connection, pushes): an older pano-mc-plugin cannot run it
+        com.panomc.plugins.market.mc.core.link.CorePanoLink.requirementProblem()?.let { return it }
         val local = config.local
         if (local.enabled) return null
         return local.error?.let { "The Market component stays OFF (not started, deliveries stay queued on Pano) because $it" }
@@ -56,6 +67,55 @@ class MarketFeatures(
 
     /** The live switches the delivery engine reads. */
     val settings: DeliverySettings get() = config.deliverySettings
+
+    /** The component of this installation: its runtime drives the commands, its link brings Pano's pushes ([onWake]). */
+    fun attach(component: com.panomc.plugins.market.mc.core.link.MarketComponent) {
+        attach(component.runtime.asControl())
+        pushActive = component::pushActive
+        component.onWake(::onWake)
+    }
+
+    // ---- MARKET_WAKE (event based: Pano says when something changed, nothing here asks on a timer) --------------------------
+
+    /** Whether Pano's pushes reach this component; the timers of the features only stand in while this is `false`. */
+    @Volatile
+    var pushActive: () -> Boolean = { false }
+        private set
+
+    private val configListeners = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
+    private val balanceListeners = java.util.concurrent.CopyOnWriteArrayList<(List<String>) -> Unit>()
+    private val placeholderListeners = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
+
+    /** Runs after every accepted `MARKET_CONFIG` (the Vault mode follows the panel at once). */
+    fun onConfigApplied(listener: () -> Unit) {
+        configListeners += listener
+    }
+
+    /** Pano says the credit balance of these players changed (Vault economy cache). */
+    fun onBalanceChanged(listener: (List<String>) -> Unit) {
+        balanceListeners += listener
+    }
+
+    /** Pano says the purchase placeholders changed (last buyer, top supporter, goals, balances). */
+    fun onPlaceholdersChanged(listener: () -> Unit) {
+        placeholderListeners += listener
+    }
+
+    /** One `MARKET_WAKE` (`SYNC` is handled by the component itself). Only schedules work: it runs on the socket's thread. */
+    fun onWake(reasons: List<String>, players: List<String>) {
+        if (WAKE_CONFIG in reasons) pullConfig()
+        if (WAKE_BALANCE in reasons && players.isNotEmpty()) balanceListeners.forEach { safely("balance") { it(players) } }
+        if (WAKE_PLACEHOLDERS in reasons) placeholderListeners.forEach { safely("placeholders") { it() } }
+    }
+
+    private inline fun safely(what: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Throwable) {
+            if (e is VirtualMachineError) throw e
+            log.warn("Reacting to Pano's $what push failed: ${e.message}")
+        }
+    }
 
     fun attach(runtime: RuntimeControl) {
         control = runtime
@@ -124,6 +184,7 @@ class MarketFeatures(
                 registerUrl = pick(m.registerUrl, previous?.registerUrl)
             )
         )
+        configListeners.forEach { safely("settings") { it() } }
     }
 
     private fun limitTexts(texts: Map<String, Map<String, String>>): Map<String, Map<String, String>> {
@@ -141,7 +202,7 @@ class MarketFeatures(
         if (!config.enabled(Feature.JOIN_NOTIFICATIONS)) return
         val done = records.filter { it.state == RecordState.DONE }
         if (done.isEmpty()) return
-        val locale = host.localeOf(username)
+        val locale = localeOf(username)
         host.sendTo(username, messages.text(Msg.JOIN_DELIVERED, locale, "count" to done.size))
         for (r in done) {
             val d = r.display ?: continue
@@ -151,9 +212,12 @@ class MarketFeatures(
         }
     }
 
-    /** An authenticated join (19 section 6.2 "pending-delivery / gift notices"): `MARKET_QUERY PENDING`. */
+    /**
+     * An authenticated join (19 section 6.2 "pending-delivery / gift notices"): `MARKET_QUERY PENDING`. Asked even with the join notices
+     * off, because its answer also carries the language of the player's Pano account.
+     */
     fun onPlayerPresent(username: String) {
-        if (!config.enabled(Feature.JOIN_NOTIFICATIONS) || !link.connected()) return
+        if (!link.connected()) return
         val request = MarketQueryRequest(componentVersion, type = QueryType.PENDING, player = PlayerRef(username, uuidOf(username)), page = null, args = null)
         try {
             link.request(request, MarketQueryMessage::class.java) { m ->
@@ -171,8 +235,9 @@ class MarketFeatures(
 
     private fun announcePending(username: String, m: MarketQueryMessage?) {
         val data = m?.takeIf { it.accepted }?.data ?: return
+        accountLocales.record(username, data.locale)
         if (!config.enabled(Feature.JOIN_NOTIFICATIONS)) return
-        val locale = host.localeOf(username)
+        val locale = localeOf(username)
         val queued = data.deliveriesQueued ?: 0
         if (queued > 0) host.sendTo(username, messages.text(Msg.JOIN_PENDING, locale, "count" to queued))
         for (g in data.gifts ?: emptyList()) {
@@ -189,6 +254,10 @@ class MarketFeatures(
     }
 
     companion object {
+        const val WAKE_CONFIG = "CONFIG"
+        const val WAKE_BALANCE = "BALANCE"
+        const val WAKE_PLACEHOLDERS = "PLACEHOLDERS"
+
         private const val MAX_TEXTS = 300
         private const val MAX_TEXT_LENGTH = 512
         private const val GIFT_WINDOW_MS = 10 * 60 * 1000L

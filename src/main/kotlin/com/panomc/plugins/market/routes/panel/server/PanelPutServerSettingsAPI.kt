@@ -61,6 +61,9 @@ class PanelPutServerSettingsAPI(private val plugin: MarketPlugin) : MarketPanelA
 
         if (errors.isNotEmpty()) throw InvalidSettings(errors)
 
+        // this server pulls its new override now (MARKET_WAKE)
+        mcPush(plugin).wake(serverId, com.panomc.plugins.market.service.McPush.CONFIG)
+
         val adminUserId = plugin.applicationContext.getBean(AuthProvider::class.java).getUserIdFromRoutingContext(context)
         val adminUsername = databaseManager.userDao.getUsernameFromUserId(adminUserId, sqlClient)!!
 

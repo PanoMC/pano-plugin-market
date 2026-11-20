@@ -196,22 +196,17 @@ class VaultBridgeTest {
     }
 
     @Test
-    fun `the mode is read live - a change in the panel registers and unregisters on the next check`() {
+    fun `the mode follows every accepted MARKET_CONFIG at once - registers and unregisters without waiting for a timer`() {
         val b = bridge(pollMs = 5_000)
         b.start()
         assertTrue(economyRegs().isEmpty())
         setMode("PROVIDER")
-        assertTrue(economyRegs().isEmpty(), "not before the next check")
-        engine.advance(5_000)
-        assertEquals(1, economyRegs().size)
+        assertEquals(1, economyRegs().size, "at once: the accepted MARKET_CONFIG applies the mode")
         setMode("CONVERT")
-        engine.advance(5_000)
         assertTrue(economyRegs().isEmpty(), "unregistered again")
         setMode("PROVIDER", rate = 3.0)
-        engine.advance(5_000)
         assertEquals(1, economyRegs().size)
         setMode("OFF")
-        engine.advance(5_000)
         assertTrue(economyRegs().isEmpty())
         assertTrue(log.has("no longer the server economy"))
     }
@@ -333,16 +328,14 @@ class VaultBridgeTest {
     }
 
     @Test
-    fun `PROVIDER - the first MARKET_CONFIG that says otherwise unregisters it at the next check and that is remembered`() {
+    fun `PROVIDER - the first MARKET_CONFIG that says otherwise unregisters it at once and that is remembered`() {
         runWithPanelMode("PROVIDER")
         val fresh = restartedFeatures()
         val b = bridgeOn(fresh)
         b.start()
         assertEquals(1, economyRegs().size)
         fresh.loadConfig(panoConfig(hash = "h-off", settings = MarketMcSettings(mcVaultMode = "OFF")))
-        assertEquals(1, economyRegs().size, "not before the next check")
-        engine.advance(5_000)
-        assertTrue(economyRegs().isEmpty())
+        assertTrue(economyRegs().isEmpty(), "at once, no timer")
         b.stop()
         val third = restartedFeatures()
         bridgeOn(third).start()

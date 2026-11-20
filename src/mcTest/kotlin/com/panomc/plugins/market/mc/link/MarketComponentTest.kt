@@ -102,6 +102,80 @@ class MarketComponentTest {
         throw AssertionError("timed out waiting for: $what")
     }
 
+    /** A link with pano-mc-plugin's events: the connection and the pushes are told, never polled. */
+    private class EventLink(private val problem: String? = null) : PanoLink {
+        @Volatile
+        var up = false
+        @Volatile
+        var probes = 0
+        val requests = CopyOnWriteArrayList<MarketSyncRequest>()
+        var connection: ((Boolean) -> Unit)? = null
+        var wake: ((List<String>, List<String>) -> Unit)? = null
+
+        override fun connected(): Boolean {
+            probes++
+            return up
+        }
+
+        override suspend fun awaitSync(request: MarketSyncRequest, timeoutMs: Long): MarketSyncMessage {
+            requests.add(request)
+            return response()
+        }
+
+        override fun onConnectionChanged(listener: (Boolean) -> Unit): Boolean {
+            connection = listener
+            return true
+        }
+
+        override fun onWake(listener: (reasons: List<String>, players: List<String>) -> Unit) {
+            wake = listener
+        }
+
+        override fun pushActive() = wake != null
+        override fun requirementProblem() = problem
+
+        fun connect(value: Boolean) {
+            up = value
+            connection!!(value)
+        }
+    }
+
+    @Test
+    fun `with pano-mc-plugin's events the connection is never polled and a push syncs at once`() {
+        val link = EventLink()
+        val c = MarketComponent(dir, FakeMcPlatform(), link, log, "1.4.0", monitorIntervalMs = 20, options = RuntimeOptions(expireEveryMs = 50))
+        component = c
+        val reasons = CopyOnWriteArrayList<List<String>>()
+        c.onWake { r, _ -> reasons += r }
+        c.start()
+        Thread.sleep(150)
+        assertEquals(0, link.probes, "no once-a-second probe")
+        assertTrue(link.requests.isEmpty())
+
+        link.connect(true)
+        await("first sync on the connection event") { link.requests.size == 1 }
+        Thread.sleep(200)
+        assertEquals(1, link.requests.size, "the next sync is the heartbeat, not 5 s later")
+
+        link.wake!!(listOf("SYNC", "CONFIG"), emptyList())
+        await("a push syncs at once") { link.requests.size == 2 }
+        assertEquals(listOf(listOf("SYNC", "CONFIG")), reasons, "the features hear every reason")
+
+        link.connect(false)
+        await("paused") { !c.runtime.status().connected }
+    }
+
+    @Test
+    fun `an older pano-mc-plugin keeps the component off and says why`() {
+        val link = EventLink(problem = "Pano Market needs pano-mc-plugin 1.1.0 or newer")
+        val c = MarketComponent(dir, FakeMcPlatform(), link, log, "1.4.0", monitorIntervalMs = 20)
+        component = c
+        c.start()
+        assertFalse(c.started)
+        assertTrue(link.connection == null, "nothing is hooked")
+        assertTrue(log.has("ERROR Pano Market needs pano-mc-plugin"), log.lines.toString())
+    }
+
     @Test
     fun `nothing is requested while Pano is not connected, the first connected second starts the sync`() {
         val r = rig()
