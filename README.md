@@ -1,77 +1,59 @@
 <div align="center">
   <img src=".github/assets/icon.png" width="96" alt="Pano Market icon" />
   <h1>Pano Market</h1>
-  <p><b>A complete store for your Minecraft server: sell ranks, kits and coins, and deliver them in game the moment they are paid.</b></p>
+  <p><b>Open a store on your website and get paid for ranks, kits and coins. Players get what they bought in game right away.</b></p>
   <p>
     <a href="https://panomc.com/addons/pano-plugin-market"><img src="https://img.shields.io/badge/Get%20it%20on-panomc.com-4f46e5?style=for-the-badge" alt="Get it on panomc.com" /></a>
     <img src="https://img.shields.io/badge/price-free-22c55e?style=for-the-badge" alt="Free" />
     <img src="https://img.shields.io/github/license/PanoMC/pano-plugin-market?style=for-the-badge" alt="License" />
   </p>
-  <p>
-    <img src="https://img.shields.io/badge/Paper%20%C2%B7%20Spigot%20%C2%B7%20Folia-supported-0ea5e9?style=flat-square" alt="Paper, Spigot and Folia" />
-    <img src="https://img.shields.io/badge/BungeeCord%20%C2%B7%20Velocity-supported-0ea5e9?style=flat-square" alt="BungeeCord and Velocity" />
-    <img src="https://img.shields.io/badge/Fabric-supported-0ea5e9?style=flat-square" alt="Fabric" />
-  </p>
 </div>
 
-<p align="center"><img src=".github/assets/hero.png" alt="The Pano Market store on a Pano website" width="900" /></p>
+<p align="center"><img src=".github/assets/hero.png" alt="The store on a Pano website" width="900" /></p>
 
-Pano Market turns your Pano website into a real store. Players browse your products, pay with the methods you choose or with store credits, and get their rank, items or coins on your server right away, even if they were offline when they paid. You run everything from the Pano panel: products, orders, refunds, discounts, invoices and statistics.
+Pano Market adds a store to your Pano website. Your players pick what they want, pay, and receive it on your Minecraft server within seconds, even if they were offline at the time. You manage everything from your panel.
 
-<h3 align="center">Features</h3>
+<h3 align="center">What you get</h3>
 
-- 🛒 **A full storefront**: Categories, search, featured products, sale prices, a cart and a one-page checkout.
-- ⚡ **Instant delivery**: Commands, ranks, items and coins reach your game server the second a purchase is paid.
-- 💤 **Offline players covered**: A purchase for someone who is offline waits and is delivered when they join.
-- 🪙 **Store credits**: Sell coin packs, let players pay with credits, and give cashback on purchases.
-- 🔁 **Subscriptions**: Monthly ranks that renew on their own and end cleanly when the player stops paying.
-- 🎁 **Gifts**: Players buy a product for a friend, who gets a message in game when it arrives.
-- 🏷️ **Discounts that sell**: Coupons, creator codes, sales, bundles, tiered upgrades and store-wide promotions.
-- 🧾 **Orders and refunds**: Full order history, partial refunds, automatic take-back of what was delivered, PDF invoices.
-- 📦 **Physical products too**: Shipping zones, shipping methods and carriers for merch.
-- 🎮 **In game**: `/store`, `/store history`, `/credits`, a chest menu, purchase announcements and PlaceholderAPI placeholders.
-- 🌍 **Speaks your players' language**: In-game messages follow the language each player picked on your website.
-- 📊 **Know your numbers**: Revenue, top products, payment methods and currencies on the overview page.
+- 🛒 **Your own store**: Products in categories, sales, a cart and an easy checkout.
+- ⚡ **Instant rewards**: Ranks, items and coins arrive in game as soon as the payment goes through.
+- 🪙 **Store coins**: Sell coin packs and let players spend them in your store.
+- 🔁 **Monthly ranks**: Subscriptions that renew by themselves.
+- 🎁 **Gifts**: Players can buy something for a friend.
+- 🏷️ **Coupons and sales**: Discount codes, creator codes and limited-time offers.
+- 📊 **Clear numbers**: See your sales and best sellers at a glance.
+- 🌍 **In your players' language**: Messages in game follow the language each player uses on your website.
 
 <h3 align="center">Screenshots</h3>
 
-<p align="center"><img src=".github/assets/product.png" alt="A product page in the store" width="900" /></p>
-<p align="center"><i>Every product has its own page with sale prices, quantity and one-click buying.</i></p>
+<p align="center"><img src=".github/assets/product.png" alt="A product page" width="900" /></p>
+<p align="center"><i>A clean page for every product.</i></p>
 
-<p align="center"><img src=".github/assets/panel-overview.png" alt="The Market overview in the Pano panel" width="900" /></p>
-<p align="center"><i>Revenue and the latest orders at a glance in your panel.</i></p>
+<p align="center"><img src=".github/assets/panel-overview.png" alt="Your sales in the Pano panel" width="900" /></p>
+<p align="center"><i>Your sales and latest orders in your panel.</i></p>
 
-<p align="center"><img src=".github/assets/panel-products.png" alt="The product list in the Pano panel" width="900" /></p>
-<p align="center"><i>Add products and decide what each one does: run commands, give a rank, add coins or call a webhook.</i></p>
-
-<p align="center"><img src=".github/assets/panel-settings.png" alt="Market settings in the Pano panel" width="900" /></p>
-<p align="center"><i>Checkout, currencies, billing, payment methods, credits, delivery and shipping, all in one place.</i></p>
+<p align="center"><img src=".github/assets/panel-products.png" alt="Products in the Pano panel" width="900" /></p>
+<p align="center"><i>Add a product in a minute and choose what the player gets.</i></p>
 
 <h3 align="center">Get started</h3>
 
 1. Open your Pano panel and go to **Addons**.
 2. Find **Pano Market** and click **Install**.
-3. Turn on a payment method under **Market > Settings** (bank transfer and credits are built in, card gateways are addons), then create your first products under **Market > Products**.
-4. To deliver to a game server, install the Market plugin on it (see below).
+3. Under **Market > Settings**, choose how players pay. Bank transfer and store coins work right away; card payments come as separate addons.
+4. Add your first products under **Market > Products**.
 
-<h3 align="center">On your Minecraft server</h3>
+<h3 align="center">Game integration</h3>
 
-Deliveries run through a small plugin on each server, next to [pano-mc-plugin](https://github.com/PanoMC/pano-mc-plugin/releases) **1.2.0 or newer**. Download the right one from **Market > Servers** in your panel (it always matches your Market version) or from the [releases](https://github.com/PanoMC/pano-plugin-market/releases), and drop it into the server's `plugins` (or `mods`) folder:
+To give players what they bought in game, put the **Pano Market Minecraft plugin** on your server, next to the [Pano plugin](https://github.com/PanoMC/pano-mc-plugin/releases/latest) (version 1.2.0 or newer).
 
-| Server | File |
-|---|---|
-| Paper, Spigot, Folia, Purpur | `pano-plugin-market-spigot-<version>.jar` |
-| BungeeCord, Waterfall | `pano-plugin-market-bungee-<version>.jar` |
-| Velocity | `pano-plugin-market-velocity-<version>.jar` |
-| Fabric | `pano-plugin-market-fabric-<version>.jar` |
+| Your server | Minecraft versions | Download |
+|---|---|---|
+| Paper, Spigot, Folia, Purpur | 1.13 and newer | [Spigot file](https://github.com/PanoMC/pano-plugin-market/releases) |
+| BungeeCord, Waterfall | Current versions | [BungeeCord file](https://github.com/PanoMC/pano-plugin-market/releases) |
+| Velocity | Velocity 3 | [Velocity file](https://github.com/PanoMC/pano-plugin-market/releases) |
+| Fabric | 26.1 and newer (with Fabric API) | [Fabric file](https://github.com/PanoMC/pano-plugin-market/releases) |
 
-<h3 align="center">Payment methods and shipping</h3>
-
-Bank transfer and store credits are built in. Card payments and other gateways, and every shipping carrier, are separate addons you install next to Market, so you only add what your store needs. Developers can build their own against the Market API jar (`pano-plugin-market-api-<version>.jar`, attached to every release) and the [payment](https://github.com/PanoMC/pano-plugin-market-payment-template) and [shipping](https://github.com/PanoMC/pano-plugin-market-shipping-template) templates.
-
-<h3 align="center">For developers</h3>
-
-Needs JDK 21, Bun and the Gradle wrapper. `./gradlew build -Pfabric` builds the plugin jar (`build/libs`), the API jar (`build/api`) and the Minecraft jars (`build/mc`; the Fabric one only with `-Pfabric`). The database test tier needs MariaDB (`PANO_IT_MARIADB`). Releases are made by CI (semantic-release) on `dev` (prerelease) and `main`.
+The easiest way: open **Market > Servers** in your panel and click **Download**. You always get the file that matches your store. Put it in your server's `plugins` folder (`mods` on Fabric) and restart the server.
 
 <h3 align="center">Support</h3>
 
@@ -79,4 +61,4 @@ Questions or ideas? Join our [Discord](https://panomc.com/discord) or visit [pan
 
 <h3 align="center">License</h3>
 
-Released under the MIT License.
+Free and open source under the MIT License.
