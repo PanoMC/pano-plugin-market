@@ -2074,49 +2074,54 @@ class McGameServiceIT : MarketDaoITBase() {
 
     // ===================================================================================== the component download
 
-    private fun jar(bytes: Int): java.nio.file.Path {
-        val file = Files.createTempFile("pano-plugin-market-test", ".jar")
+    private fun bundle(vararg jars: Pair<String, ByteArray?>): (String) -> ByteArray? {
+        val byResource = jars.associate { (jar, bytes) -> McComponentDownload.resource(jar) to bytes }
 
-        Files.write(file, ByteArray(bytes) { (it * 31 + 7).toByte() })
-        file.toFile().deleteOnExit()
-
-        return file
+        return { byResource[it] }
     }
 
     @Test
-    fun `the download is the running jar under the name of the version, the Fabric jar only when it was bundled`() {
-        val running = jar(4_096)
+    fun `the download is the bundled jar of the platform under the name of the version, Fabric only when it was bundled`() {
+        val spigot = byteArrayOf(1, 1, 1)
+        val bungee = byteArrayOf(2, 2)
+        val velocity = byteArrayOf(3)
         val fabric = byteArrayOf(1, 2, 3, 4, 5)
-        val d = McComponentDownload({ running }, { fabric }, { "1.4.0-alpha.7" })
+        val d = McComponentDownload(bundle("spigot" to spigot, "bungee" to bungee, "velocity" to velocity, "fabric" to fabric), { "1.4.0-alpha.7" })
 
-        val plain = d.resolve(null) as McDownload.OnDisk
+        val plain = d.resolve(null)!!
 
-        assertEquals(running, plain.path)
-        assertEquals("pano-plugin-market-1.4.0-alpha.7.jar", plain.fileName)
-        assertEquals(plain.path, (d.resolve("  ") as McDownload.OnDisk).path)
+        assertEquals(spigot.toList(), plain.bytes.toList(), "no platform: the Spigot jar")
+        assertEquals("pano-plugin-market-spigot-1.4.0-alpha.7.jar", plain.fileName)
+        assertEquals("pano-plugin-market-spigot-1.4.0-alpha.7.jar", d.resolve("  ")!!.fileName)
+        assertEquals("pano-plugin-market-spigot-1.4.0-alpha.7.jar", d.resolve("PAPER")!!.fileName)
+        assertEquals("pano-plugin-market-spigot-1.4.0-alpha.7.jar", d.resolve(" folia ")!!.fileName)
+        assertEquals(bungee.toList(), d.resolve("bungee")!!.bytes.toList())
+        assertEquals("pano-plugin-market-bungee-1.4.0-alpha.7.jar", d.resolve("WATERFALL")!!.fileName)
+        assertEquals(velocity.toList(), d.resolve("VELOCITY")!!.bytes.toList())
+        assertEquals("pano-plugin-market-velocity-1.4.0-alpha.7.jar", d.resolve("velocity")!!.fileName)
 
-        val fab = d.resolve("fabric") as McDownload.InMemory
+        val fab = d.resolve("fabric")!!
 
         assertEquals(fabric.toList(), fab.bytes.toList())
         assertEquals("pano-plugin-market-fabric-1.4.0-alpha.7.jar", fab.fileName)
-        assertEquals("pano-plugin-market-fabric-1.4.0-alpha.7.jar", (d.resolve(" FABRIC ") as McDownload.InMemory).fileName)
+        assertEquals("pano-plugin-market-fabric-1.4.0-alpha.7.jar", d.resolve(" FABRIC ")!!.fileName)
 
-        assertNull(d.resolve("spigot"), "no other platform has its own jar")
-        assertNull(McComponentDownload({ running }, { null }, { "1" }).resolve("fabric"), "a build without -Pfabric: 404")
-        assertNull(McComponentDownload({ running }, { ByteArray(0) }, { "1" }).resolve("fabric"))
-        assertNull(McComponentDownload({ null }, { fabric }, { "1" }).resolve(null), "the running jar cannot be found")
-        assertNull(McComponentDownload({ running.resolveSibling("does-not-exist.jar") }, { fabric }, { "1" }).resolve(null))
+        assertNull(d.resolve("vanilla"), "no Market jar runs on Vanilla")
+        assertNull(d.resolve("bedrock"))
+        assertNull(McComponentDownload(bundle("spigot" to spigot), { "1" }).resolve("fabric"), "a build without -Pfabric: 404")
+        assertNull(McComponentDownload(bundle("spigot" to spigot, "fabric" to ByteArray(0)), { "1" }).resolve("fabric"))
+        assertNull(McComponentDownload(bundle(), { "1" }).resolve(null), "nothing bundled")
 
         // the version never breaks out of the header
-        assertEquals("pano-plugin-market-1.0_x_.jar", (McComponentDownload({ running }, { null }, { "1.0\"x\r" }).resolve(null) as McDownload.OnDisk).fileName)
-        assertEquals("pano-plugin-market-unknown.jar", (McComponentDownload({ running }, { null }, { "" }).resolve(null) as McDownload.OnDisk).fileName)
+        assertEquals("pano-plugin-market-spigot-1.0_x_.jar", McComponentDownload(bundle("spigot" to spigot), { "1.0\"x\r" }).resolve(null)!!.fileName)
+        assertEquals("pano-plugin-market-spigot-unknown.jar", McComponentDownload(bundle("spigot" to spigot), { "" }).resolve(null)!!.fileName)
     }
 
     @Test
-    fun `the download streams the running jar byte for byte as an attachment, the Fabric jar from memory`(): Unit = runBlocking {
-        val running = jar(300_000)
+    fun `the download streams the bundled jar byte for byte as an attachment`(): Unit = runBlocking {
+        val spigot = ByteArray(300_000) { (it * 31 + 7).toByte() }
         val fabric = ByteArray(2_048) { (it % 251).toByte() }
-        val downloads = McComponentDownload({ running }, { fabric }, { "2.0.0" })
+        val downloads = McComponentDownload(bundle("spigot" to spigot, "fabric" to fabric), { "2.0.0" })
         val server = vertx.createHttpServer()
             .requestHandler { request ->
                 scope.launch {
@@ -2132,8 +2137,8 @@ class McGameServiceIT : MarketDaoITBase() {
             val jarResponse = client.get(server.actualPort(), "127.0.0.1", "/download").send().coAwait()
 
             assertEquals(200, jarResponse.statusCode())
-            assertEquals(Files.readAllBytes(running).toList(), jarResponse.body().bytes.toList(), "the file Pano runs, byte for byte")
-            assertEquals("attachment; filename=\"pano-plugin-market-2.0.0.jar\"", jarResponse.getHeader("Content-Disposition"))
+            assertEquals(spigot.toList(), jarResponse.body().bytes.toList(), "the bundled Spigot jar, byte for byte")
+            assertEquals("attachment; filename=\"pano-plugin-market-spigot-2.0.0.jar\"", jarResponse.getHeader("Content-Disposition"))
             assertEquals("application/java-archive", jarResponse.getHeader("Content-Type"))
             assertEquals("nosniff", jarResponse.getHeader("X-Content-Type-Options"))
 

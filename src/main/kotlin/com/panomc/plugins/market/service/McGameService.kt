@@ -64,8 +64,6 @@ import io.vertx.sqlclient.Tuple
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
 import java.math.BigDecimal
-import java.nio.file.Files
-import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.Locale
 import java.util.TreeMap
@@ -142,53 +140,60 @@ object McSettingKeys {
     }
 }
 
-/** What a download of the Minecraft component is: a file on disk (the running jar) or bytes (the bundled Fabric jar), with the name the browser saves it under. */
-sealed class McDownload(val fileName: String) {
-    class OnDisk(val path: Path, fileName: String) : McDownload(fileName)
-
-    class InMemory(val bytes: ByteArray, fileName: String) : McDownload(fileName)
-}
+/** A download of the Minecraft component: one of the platform jars bundled into the market jar, with the name the browser saves it under. */
+class McDownload(val bytes: ByteArray, val fileName: String)
 
 /**
- * `GET /mc-component/download` (19 section 2.3): the **running market jar itself** (it is also the Spigot / Paper / Folia / BungeeCord / Velocity plugin, so the
- * version always matches what the gate of `MARKET_SYNC` requires), or with `platform=fabric` the bundled resource `mc/pano-plugin-market-fabric.jar`. [resolve]
- * answers `null` (404 `NOT_FOUND`) when the Fabric jar was not bundled (a build without `-Pfabric`) or the running jar cannot be found. Never a path from the
- * request: the file is [runningJar] or the one bundled resource.
+ * `GET /mc-component/download` (19 section 2.3): one of the Minecraft plugin jars this market build bundles as `mc/pano-plugin-market-<platform>.jar`
+ * (`spigot` for Spigot / Paper / Folia / Purpur, `bungee` for BungeeCord / Waterfall, `velocity`, and `fabric` in a build with `-Pfabric`). They are built
+ * from the same sources in the same build, so the version always matches what the gate of `MARKET_SYNC` requires. [resolve] answers `null` (404 `NOT_FOUND`)
+ * for a platform this build did not bundle. Never a path from the request: the file is one of the fixed bundled resources.
  */
 class McComponentDownload(
-    private val runningJar: () -> Path?,
-    private val fabricJar: () -> ByteArray?,
+    private val bundled: (resource: String) -> ByteArray?,
     private val version: () -> String
 ) {
+    /** [platform] is a jar name (`spigot`, ...) or a server type (`PAPER`, ...); none = the Spigot jar (the market jar used to be the Spigot plugin). */
     fun resolve(platform: String?): McDownload? {
+        val jar = if (platform.isNullOrBlank()) SPIGOT else jarOf(platform) ?: return null
         val safe = version().map { if (it.isLetterOrDigit() || it == '.' || it == '-' || it == '_' || it == '+') it else '_' }.joinToString("").ifEmpty { "unknown" }
 
-        return when (platform?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() }) {
-            null -> runningJar()?.takeIf { Files.isRegularFile(it) }?.let { McDownload.OnDisk(it, "pano-plugin-market-$safe.jar") }
-            FABRIC -> fabricJar()?.takeIf { it.isNotEmpty() }?.let { McDownload.InMemory(it, "pano-plugin-market-fabric-$safe.jar") }
-            else -> null
-        }
+        return bundled(resource(jar))?.takeIf { it.isNotEmpty() }?.let { McDownload(it, "pano-plugin-market-$jar-$safe.jar") }
     }
 
-    /** Writes [download] to [response]: an attachment of the jar (a file on disk is sent by the server's own file transfer, never read into memory). */
+    /** Writes [download] to [response]: an attachment of the jar. */
     suspend fun send(response: io.vertx.core.http.HttpServerResponse, download: McDownload) {
         response
             .putHeader("Content-Type", "application/java-archive")
             .putHeader("Content-Disposition", "attachment; filename=\"${download.fileName}\"")
             .putHeader("X-Content-Type-Options", "nosniff")
             .putHeader("Cache-Control", "no-store")
-
-        when (download) {
-            is McDownload.OnDisk -> response.sendFile(download.path.toAbsolutePath().toString()).coAwait()
-            is McDownload.InMemory -> response.end(io.vertx.core.buffer.Buffer.buffer(download.bytes)).coAwait()
-        }
+            .end(io.vertx.core.buffer.Buffer.buffer(download.bytes)).coAwait()
     }
 
     companion object {
+        const val SPIGOT = "spigot"
+        const val BUNGEE = "bungee"
+        const val VELOCITY = "velocity"
         const val FABRIC = "fabric"
 
-        /** The classpath resource the build bundles with `-Pfabric` (MC-08). */
-        const val FABRIC_RESOURCE = "mc/pano-plugin-market-fabric.jar"
+        /** The platform jars, in the order the panel lists them. */
+        val JARS = listOf(SPIGOT, BUNGEE, VELOCITY, FABRIC)
+
+        /** The classpath resource of the [jar] the build bundles (MC-08). */
+        fun resource(jar: String): String = "mc/pano-plugin-market-$jar.jar"
+
+        /**
+         * The jar for [platform]: a jar name as is, or a server type (Pano's `ServerType`, or the platform name the component reports). `null` for a server
+         * no Market jar runs on (Vanilla, Forge, ...).
+         */
+        fun jarOf(platform: String?): String? = when (platform?.trim()?.uppercase(Locale.ROOT)) {
+            "SPIGOT", "PAPER", "FOLIA", "BUKKIT", "PURPUR" -> SPIGOT
+            "BUNGEE", "BUNGEECORD", "WATERFALL" -> BUNGEE
+            "VELOCITY" -> VELOCITY
+            "FABRIC" -> FABRIC
+            else -> null
+        }
     }
 }
 

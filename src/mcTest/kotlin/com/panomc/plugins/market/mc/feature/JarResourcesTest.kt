@@ -13,18 +13,18 @@ import java.io.File
 import java.net.URLClassLoader
 import java.util.zip.ZipFile
 
-/** The real market jar carries the config and the lang files, byte for byte what is in the source tree. */
+/** Every real platform jar carries the config and the lang files, byte for byte what is in the source tree. */
 class JarResourcesTest {
-    private val jar = File(System.getProperty("market.jar"))
+    private val jars = listOf("spigot", "bungee", "velocity").map { File(System.getProperty("market.mcJar.$it")) }
 
     @Test
-    fun `the jar ships mc config yml and the three lang files identical to the sources`() {
-        assertTrue(jar.isFile, "market jar missing: $jar")
+    fun `each platform jar ships mc config yml and the three lang files identical to the sources`() = jars.forEach { jar ->
+        assertTrue(jar.isFile, "platform jar missing: $jar")
         ZipFile(jar).use { z ->
             val names = listOf("mc/config.yml") + Messages.KNOWN.map { "mc/lang/$it.yml" }
             names.forEach { n ->
                 val entry = z.getEntry(n)
-                assertNotNull(entry, "$n is not in the jar")
+                assertNotNull(entry, "$n is not in ${jar.name}")
                 val inJar = z.getInputStream(entry).use { it.readBytes() }
                 assertEquals(File(ShippedResources.root, n).readText(Charsets.UTF_8), String(inJar, Charsets.UTF_8), n)
             }
@@ -32,7 +32,7 @@ class JarResourcesTest {
     }
 
     @Test
-    fun `read through a class loader the way the platform mains do, the files parse and the keys are complete`() {
+    fun `read through a class loader the way the platform mains do, the files parse and the keys are complete`() = jars.forEach { jar ->
         URLClassLoader(arrayOf(jar.toURI().toURL()), null).use { loader ->
             val read = com.panomc.plugins.market.mc.core.feature.ResourceFiles.reader(loader)
             val config = LocalConfig.parse(read("mc/config.yml")!!)

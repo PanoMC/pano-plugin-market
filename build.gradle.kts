@@ -126,8 +126,9 @@ val fakeProvider: SourceSet = sourceSets.create("fakeProvider") {
     compileClasspath += sourceSets.main.get().output + sourceSets.main.get().compileClasspath
 }
 
-// Minecraft-side component (19 section 2.1): the same jar is also the plugin on Spigot / Paper / Folia, BungeeCord and
-// Velocity. `mc` (Java 11) and `mcVelocity` (Java 17) are compiled into the market jar, `mcTest` (T7) is not.
+// Minecraft-side component (19 section 2.1): one jar per platform, built from `mc` (Java 11) and `mcVelocity` (Java 17):
+// pano-plugin-market-spigot (Spigot / Paper / Folia), -bungee (BungeeCord) and -velocity, plus -fabric (mc-fabric/).
+// They are written to build/mc and bundled into the market jar as resources; `mcTest` (T7) is in none of them.
 // They never see the platform or `main`; `main` never sees them (verifyJar scans both directions).
 val spigotApiVersion = property("spigotApiVersion") as String
 val bungeecordApiVersion = property("bungeecordApiVersion") as String
@@ -425,11 +426,7 @@ tasks {
 
         archiveFileName.set("$pluginId-$version.jar")
 
-        // Minecraft-side component (19 section 2.2): classes, descriptors and resources at the jar root.
-        // The kapt run of the mc source sets writes an empty META-INF/extensions.idx next to the one of main; two entries of that
-        // name make Paper's plugin remapper refuse the jar ("Duplicate entries detected"), so only main's one is kept.
-        from(mc.output) { exclude("META-INF/extensions.idx") }
-        from(mcVelocity.output) { exclude("META-INF/extensions.idx") }
+        // The Minecraft-side component is not part of this jar: it ships as one jar per platform (build/mc, bundled below).
 
         dependencies {
             exclude(dependency("io.vertx:vertx-core"))
@@ -812,8 +809,7 @@ val verifyJar = tasks.register("verifyJar") {
             require("fonts/NotoSans-Regular.ttf" in names && "fonts/NotoSans-Bold.ttf" in names && "fonts/OFL.txt" in names) {
                 "the Noto Sans fonts and OFL.txt must be in the jar"
             }
-            // Java 11 bytecode (00 section 10): class major version of every market class must be <= 55
-            // (mc.velocity is Java 17, 19 section 2).
+            // Java 11 bytecode (00 section 10): class major version of every market class must be <= 55.
             z.entries().asSequence().filter { it.name.endsWith(".class") && !it.name.startsWith("META-INF/") }.forEach { e ->
                 val major = z.getInputStream(e).use { s ->
                     val b = ByteArray(8)
@@ -825,113 +821,147 @@ val verifyJar = tasks.register("verifyJar") {
                     }
                     ((b[6].toInt() and 0xff) shl 8) or (b[7].toInt() and 0xff)
                 }
-                val limit = if (e.name.startsWith("com/panomc/plugins/market/mc/velocity/")) 61 else 55
-                require(major <= limit) { "${e.name} is class major $major (> $limit)" }
-            }
-            // Minecraft side (19 section 2): once mc sources exist the descriptors sit at the jar root with the
-            // version filled in, mc never references the platform or a market package outside mc.**, main never
-            // references mc, and neither the Minecraft APIs nor Core are bundled.
-            val mcSrc = layout.projectDirectory.dir("src/mc/kotlin").asFile
-            val mcVelocitySrc = layout.projectDirectory.dir("src/mcVelocity/kotlin").asFile
-            if (mcSrc.walkTopDown().any { it.isFile } || layout.projectDirectory.dir("src/mc/resources").asFile.walkTopDown().any { it.isFile }) {
-                for (f in listOf("plugin.yml", "bungee.yml", "velocity-plugin.json")) {
-                    require(f in names) { "$f missing at the jar root" }
-                    val text = z.getInputStream(z.getEntry(f)).use { String(it.readBytes(), Charsets.UTF_8) }
-                    require(text.contains(version.toString())) { "$f does not carry the version ${version}" }
-                    require(!text.contains("\${")) { "$f still holds an unexpanded placeholder" }
-                }
-                val bundled = listOf(
-                    "com/panomc/plugins/pano/core/", "org/bukkit/", "org/spigotmc/", "net/md_5/", "net/luckperms/",
-                    "com/velocitypowered/", "net/milkbowl/", "me/clip/"
-                )
-                val bundledHit = names.filter { n -> bundled.any { n.startsWith(it) } }
-                require(bundledHit.isEmpty()) { "market jar bundles Minecraft-side libraries: ${bundledHit.take(5)}" }
-                val platformRef = "com/panomc/platform/"
-                val mcRef = "com/panomc/plugins/market/mc/"
-                val otherMarketRef = Regex("com/panomc/plugins/market/(?!mc/)")
-                names.filter { it.endsWith(".class") && it.startsWith("com/panomc/plugins/market/") }.forEach { n ->
-                    val body = String(z.getInputStream(z.getEntry(n)).use { it.readBytes() }, Charsets.ISO_8859_1)
-                    if (n.startsWith(mcRef)) {
-                        require(!body.contains(platformRef)) { "$n references $platformRef" }
-                        require(!otherMarketRef.containsMatchIn(body)) { "$n references a market package outside mc.**" }
-                    } else {
-                        require(!body.contains(mcRef)) { "$n (main) references $mcRef" }
-                    }
-                }
-                // A platform whose sources exist must have the main class its descriptor names in the jar.
-                val descriptors = mapOf(
-                    "plugin.yml" to Regex("(?m)^main:\\s*(\\S+)"),
-                    "bungee.yml" to Regex("(?m)^main:\\s*(\\S+)"),
-                    "velocity-plugin.json" to Regex("\"main\"\\s*:\\s*\"([^\"]+)\"")
-                )
-                val platformDirs = mapOf(
-                    "plugin.yml" to File(mcSrc, "com/panomc/plugins/market/mc/spigot"),
-                    "bungee.yml" to File(mcSrc, "com/panomc/plugins/market/mc/bungee"),
-                    "velocity-plugin.json" to File(mcVelocitySrc, "com/panomc/plugins/market/mc/velocity")
-                )
-                descriptors.forEach { (file, regex) ->
-                    if (platformDirs.getValue(file).walkTopDown().any { it.isFile }) {
-                        val text = z.getInputStream(z.getEntry(file)).use { String(it.readBytes(), Charsets.UTF_8) }
-                        val main = regex.find(text)?.groupValues?.get(1)
-                        require(main != null) { "$file names no main class" }
-                        require(names.contains(main.replace('.', '/') + ".class")) { "$file names $main, which is not in the jar" }
-                    }
-                }
+                require(major <= 55) { "${e.name} is class major $major (> 55)" }
             }
         }
     }
 }
 tasks.named("check") { dependsOn(verifyJar, "mcTest") }
 
-// Fabric jar (19 section 2.1, 2.3): only with -Pfabric (always in CI releases). `mc-fabric` is a sibling subproject that
-// settings.gradle.kts includes for -Pfabric only; its jar is bundled into the market jar as the resource
-// mc/pano-plugin-market-fabric.jar, which GET /api/panel/market/mc-component/download?platform=fabric streams. Without
-// -Pfabric nothing of this exists: the jar has no such entry (the endpoint answers 404 then) and the embedded platform
-// build (GM jar) never sees mc-fabric.
-//
-// The jar is appended to the finished market jar instead of being put into the resources: shadow unpacks every *.jar
-// file it is given as a source, which would merge the Fabric classes into the market jar.
-val fabricJarEntry = "mc/pano-plugin-market-fabric.jar"
-val fabricJarFile = layout.buildDirectory.file("mc/pano-plugin-market-fabric-$version.jar")
-// Whether the Fabric jar is bundled is an input of shadowJar: a build without -Pfabric after one with it must write a clean jar.
-tasks.shadowJar { inputs.property("withFabric", project.hasProperty("fabric")) }
-if (project.hasProperty("fabric")) {
-    tasks.shadowJar {
-        dependsOn(":mc-fabric:shadowJar")
-        inputs.file(fabricJarFile).withPropertyName("fabricJar")
-        doLast {
-            val target = archiveFile.get().asFile.toPath()
-            FileSystems.newFileSystem(target).use { fs ->
-                Files.createDirectories(fs.getPath("mc"))
-                Files.copy(
-                    fabricJarFile.get().asFile.toPath(), fs.getPath(fabricJarEntry), StandardCopyOption.REPLACE_EXISTING
-                )
+// Minecraft-side jars (19 section 2.1, 2.3): one per platform, written to build/mc (released as GitHub assets) and bundled into the
+// market jar as mc/pano-plugin-market-<platform>.jar, which GET /api/panel/market/mc-component/download?platform=<platform> streams.
+// The market jar itself carries no Minecraft class and no plugin descriptor.
+//   spigot   = mc (core + spigot) + plugin.yml            (Spigot / Paper / Folia / Purpur)
+//   bungee   = mc (core + bungee) + bungee.yml            (BungeeCord / Waterfall)
+//   velocity = mc (core) + mcVelocity + velocity-plugin.json
+//   fabric   = mc-fabric/ (only with -Pfabric, always in CI releases)
+// The jars are appended to the finished market jar instead of being put into the resources: shadow unpacks every *.jar
+// file it is given as a source, which would merge their classes into the market jar.
+val mcPlatforms = listOf("spigot", "bungee", "velocity")
+val mcDescriptors = mapOf("spigot" to "plugin.yml", "bungee" to "bungee.yml", "velocity" to "velocity-plugin.json")
+fun mcJarFile(platform: String) = layout.buildDirectory.file("mc/$pluginId-$platform-$version.jar")
+fun mcJarEntry(platform: String) = "mc/$pluginId-$platform.jar"
+val mcJars = mcPlatforms.associateWith { platform ->
+    tasks.register<Jar>("mc${platform.replaceFirstChar { it.uppercase() }}Jar") {
+        group = "build"
+        description = "The Pano Market Minecraft plugin for $platform."
+        archiveFileName.set("$pluginId-$platform-$version.jar")
+        destinationDirectory.set(layout.buildDirectory.dir("mc"))
+        // The kapt run of the mc source sets writes an empty META-INF/extensions.idx; it means nothing on a Minecraft server.
+        from(mc.output) {
+            exclude("META-INF/extensions.idx")
+            mcDescriptors.filterKeys { it != platform }.values.forEach { exclude(it) }
+            listOf("spigot", "bungee").filter { it != platform }.forEach { exclude("com/panomc/plugins/market/mc/$it/**") }
+        }
+        if (platform == "velocity") from(mcVelocity.output) { exclude("META-INF/extensions.idx") }
+        includeEmptyDirs = false
+        manifest { attributes("Implementation-Title" to "$pluginId-$platform", "Implementation-Version" to version.toString()) }
+    }
+}
+val fabricJarFile = layout.buildDirectory.file("mc/$pluginId-fabric-$version.jar")
+val withFabric = project.hasProperty("fabric")
+val bundledMcJars: Map<String, Provider<RegularFile>> =
+    mcPlatforms.associateWith { mcJarFile(it) } + (if (withFabric) mapOf("fabric" to fabricJarFile) else emptyMap())
+
+tasks.shadowJar {
+    // Whether the Fabric jar is bundled is an input: a build without -Pfabric after one with it must write a clean jar.
+    inputs.property("withFabric", withFabric)
+    mcJars.values.forEach { dependsOn(it) }
+    if (withFabric) dependsOn(":mc-fabric:shadowJar")
+    bundledMcJars.forEach { (platform, file) -> inputs.file(file).withPropertyName("mcJar-$platform") }
+    doLast {
+        val target = archiveFile.get().asFile.toPath()
+        FileSystems.newFileSystem(target).use { fs ->
+            Files.createDirectories(fs.getPath("mc"))
+            bundledMcJars.forEach { (platform, file) ->
+                Files.copy(file.get().asFile.toPath(), fs.getPath(mcJarEntry(platform)), StandardCopyOption.REPLACE_EXISTING)
             }
         }
     }
+}
+tasks.named("build") {
+    mcJars.values.forEach { dependsOn(it) }
     // `build` also runs the tests and the jar rules of the Fabric jar.
-    tasks.named("build") { dependsOn(":mc-fabric:build") }
+    if (withFabric) dependsOn(":mc-fabric:build")
 }
 
-// The bundle is part of the market jar exactly when -Pfabric is given, and then it is the jar `:mc-fabric:build` wrote.
+// Every Minecraft jar is bundled byte for byte (the Fabric one exactly when -Pfabric is given), and no Minecraft class or
+// descriptor sits in the market jar itself. Each platform jar carries its own descriptor and classes only.
 tasks.named("verifyJar") {
-    val withFabric = project.hasProperty("fabric")
+    mcJars.values.forEach { dependsOn(it) }
+    val mcSrc = layout.projectDirectory.dir("src/mc/kotlin").asFile
+    val mcVelocitySrc = layout.projectDirectory.dir("src/mcVelocity/kotlin").asFile
     doLast {
         val jar = tasks.shadowJar.get().archiveFile.get().asFile
         ZipFile(jar).use { z ->
-            val entry = z.getEntry(fabricJarEntry)
-            if (!withFabric) {
-                require(entry == null) { "$fabricJarEntry is in the jar of a build without -Pfabric" }
-            } else {
-                require(entry != null) { "$fabricJarEntry is missing from the jar of a -Pfabric build" }
+            val names = z.entries().asSequence().map { it.name }.toList()
+            require(names.none { it.startsWith("com/panomc/plugins/market/mc/") }) { "Minecraft classes are in the market jar" }
+            require(names.none { it in mcDescriptors.values || it == "fabric.mod.json" }) { "a Minecraft plugin descriptor is in the market jar" }
+            names.filter { it.endsWith(".class") && it.startsWith("com/panomc/plugins/market/") }.forEach { n ->
+                val body = String(z.getInputStream(z.getEntry(n)).use { it.readBytes() }, Charsets.ISO_8859_1)
+                require(!body.contains("com/panomc/plugins/market/mc/")) { "$n (main) references com/panomc/plugins/market/mc/" }
+            }
+            if (!withFabric) require(z.getEntry(mcJarEntry("fabric")) == null) { "${mcJarEntry("fabric")} is in the jar of a build without -Pfabric" }
+            bundledMcJars.forEach { (platform, file) ->
+                val entry = z.getEntry(mcJarEntry(platform)) ?: error("${mcJarEntry(platform)} is missing from the market jar")
                 val bundled = z.getInputStream(entry).use { it.readBytes() }
-                val built = fabricJarFile.get().asFile.readBytes()
-                require(bundled.contentEquals(built)) { "$fabricJarEntry differs from build/mc/pano-plugin-market-fabric-$version.jar" }
-                require(bundled.size in 1_000..2_000_000) { "$fabricJarEntry has an implausible size ${bundled.size}" }
-                require(z.entries().asSequence().none { it.name.startsWith("com/panomc/plugins/market/mc/fabric/") || it.name == "fabric.mod.json" }) {
-                    "the Fabric classes or fabric.mod.json were unpacked into the market jar"
+                require(bundled.contentEquals(file.get().asFile.readBytes())) { "${mcJarEntry(platform)} differs from ${file.get().asFile.name}" }
+                require(bundled.size in 1_000..2_000_000) { "${mcJarEntry(platform)} has an implausible size ${bundled.size}" }
+            }
+        }
+
+        val bundledLibs = listOf(
+            "com/panomc/plugins/pano/core/", "org/bukkit/", "org/spigotmc/", "net/md_5/", "net/luckperms/",
+            "com/velocitypowered/", "net/milkbowl/", "me/clip/", "kotlin/", "kotlinx/", "com/panomc/platform/", "com/google/gson/", "io/vertx/"
+        )
+        val mainPatterns = mapOf(
+            "plugin.yml" to Regex("(?m)^main:\\s*(\\S+)"),
+            "bungee.yml" to Regex("(?m)^main:\\s*(\\S+)"),
+            "velocity-plugin.json" to Regex("\"main\"\\s*:\\s*\"([^\"]+)\"")
+        )
+        val otherMarketRef = Regex("com/panomc/plugins/market/(?!mc/)")
+        mcPlatforms.forEach { platform ->
+            val file = mcJarFile(platform).get().asFile
+            ZipFile(file).use { z ->
+                val names = z.entries().asSequence().map { it.name }.toList()
+                val own = mcDescriptors.getValue(platform)
+                require(own in names) { "$own missing at the root of ${file.name}" }
+                val text = z.getInputStream(z.getEntry(own)).use { String(it.readBytes(), Charsets.UTF_8) }
+                require(text.contains(version.toString())) { "$own of ${file.name} does not carry the version $version" }
+                require(!text.contains("\${")) { "$own of ${file.name} still holds an unexpanded placeholder" }
+                mcDescriptors.values.filter { it != own }.forEach { require(it !in names) { "${file.name} carries $it" } }
+                mcPlatforms.filter { it != platform }.forEach { other ->
+                    require(names.none { it.startsWith("com/panomc/plugins/market/mc/$other/") }) { "${file.name} carries the $other classes" }
+                }
+                require(names.any { it.startsWith("com/panomc/plugins/market/mc/core/") }) { "${file.name} has no mc.core classes" }
+                require("mc/lang/en-US.yml" in names) { "${file.name} has no mc/lang/en-US.yml" }
+                val libHit = names.filter { n -> bundledLibs.any { n.startsWith(it) } }
+                require(libHit.isEmpty()) { "${file.name} bundles libraries: ${libHit.take(5)}" }
+                names.filter { it.endsWith(".class") && !it.startsWith("META-INF/") }.forEach { n ->
+                    val bytes = z.getInputStream(z.getEntry(n)).use { it.readBytes() }
+                    val major = ((bytes[6].toInt() and 0xff) shl 8) or (bytes[7].toInt() and 0xff)
+                    val limit = if (n.startsWith("com/panomc/plugins/market/mc/velocity/")) 61 else 55
+                    require(major <= limit) { "$n in ${file.name} is class major $major (> $limit)" }
+                    val body = String(bytes, Charsets.ISO_8859_1)
+                    require(!body.contains("com/panomc/platform/")) { "$n in ${file.name} references com/panomc/platform/" }
+                    require(!otherMarketRef.containsMatchIn(body)) { "$n in ${file.name} references a market package outside mc.**" }
+                }
+                val platformDir = if (platform == "velocity") File(mcVelocitySrc, "com/panomc/plugins/market/mc/velocity")
+                    else File(mcSrc, "com/panomc/plugins/market/mc/$platform")
+                if (platformDir.walkTopDown().any { it.isFile }) {
+                    val main = mainPatterns.getValue(own).find(text)?.groupValues?.get(1)
+                    require(main != null) { "$own names no main class" }
+                    require(names.contains(main.replace('.', '/') + ".class")) { "$own names $main, which is not in ${file.name}" }
                 }
             }
         }
+    }
+}
+
+// The Minecraft-side tests (JarRulesTest, JarResourcesTest, VaultWiringTest) read the real platform jars.
+tasks.named<Test>("mcTest") {
+    mcJars.forEach { (platform, jar) ->
+        dependsOn(jar)
+        systemProperty("market.mcJar.$platform", mcJarFile(platform).get().asFile.absolutePath)
     }
 }

@@ -18,10 +18,10 @@ import io.vertx.json.schema.SchemaRepository
 import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
 /**
- * `GET /api/panel/market/mc-component/download` (04 section 8, any market node; 19 section 2.3): streams **the running market jar itself**, the file PF4J loaded,
- * as `pano-plugin-market-<version>.jar`: it is also the Spigot / Paper / Folia / BungeeCord / Velocity plugin, so the downloaded file is by construction the
- * version `MARKET_SYNC` requires. `?platform=fabric` streams the bundled `mc/pano-plugin-market-fabric.jar`; 404 `NOT_FOUND` when this build did not bundle it
- * (the panel then links the release). No path ever comes from the request.
+ * `GET /api/panel/market/mc-component/download` (04 section 8, any market node; 19 section 2.3): streams the Minecraft plugin jar of `?platform=` (`spigot`,
+ * `bungee`, `velocity`, `fabric`, or a server type such as `PAPER`; none = `spigot`) that this market build bundles, as
+ * `pano-plugin-market-<platform>-<version>.jar`: built with this market, so it is by construction the version `MARKET_SYNC` requires. 400 for a platform no
+ * Market jar runs on, 404 `NOT_FOUND` when this build did not bundle it (the Fabric jar of a build without `-Pfabric`). No path ever comes from the request.
  */
 @Endpoint
 class PanelGetMcComponentDownloadAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
@@ -34,9 +34,9 @@ class PanelGetMcComponentDownloadAPI(private val plugin: MarketPlugin) : MarketP
         ValidationHandlerBuilder.create(schemaRepository).queryParameter(optionalParam("platform", stringSchema())).build()
 
     override suspend fun handleAuthorized(context: RoutingContext): Result? {
-        val platform = context.request().getParam("platform")?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
+        val platform = context.request().getParam("platform")?.trim()?.takeIf { it.isNotEmpty() }
 
-        if (platform != null && platform != McComponentDownload.FABRIC) throw BadRequest()
+        if (platform != null && McComponentDownload.jarOf(platform) == null) throw BadRequest()
 
         val downloads = mcComponentDownload(plugin)
         val download = downloads.resolve(platform) ?: throw NotFound()

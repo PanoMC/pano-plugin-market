@@ -12,7 +12,7 @@ import java.util.zip.ZipFile
  */
 class VaultWiringTest {
     private val kotlinRoot = File(System.getProperty("market.mcResources")).parentFile.resolve("kotlin/com/panomc/plugins/market/mc")
-    private val jar = File(System.getProperty("market.jar"))
+    private val jar = File(System.getProperty("market.mcJar.spigot"))
 
     private fun source(path: String) = File(kotlinRoot, path).readText()
 

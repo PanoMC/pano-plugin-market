@@ -100,11 +100,10 @@ internal class PlatformMcPermissions(private val plugin: MarketPlugin) : McPermi
     }
 }
 
-/** The download of the Minecraft component (19 section 2.3): the running jar, or the bundled Fabric jar. */
+/** The download of the Minecraft component (19 section 2.3): one of the platform jars bundled into the market jar. */
 internal fun mcComponentDownload(plugin: MarketPlugin): McComponentDownload =
     McComponentDownload(
-        runningJar = { plugin.applicationContext.getBean(PluginManager::class.java).getPlugin(plugin.pluginId)?.pluginPath },
-        fabricJar = { MarketPlugin::class.java.classLoader.getResourceAsStream(McComponentDownload.FABRIC_RESOURCE)?.use { it.readBytes() } },
+        bundled = { resource -> MarketPlugin::class.java.classLoader.getResourceAsStream(resource)?.use { it.readBytes() } },
         version = { marketVersion(plugin) }
     )
 
