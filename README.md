@@ -39,8 +39,21 @@ Pano Market adds a store to your Pano website. Your players pick what they want,
 
 1. Open your Pano panel and go to **Addons**.
 2. Find **Pano Market** and click **Install**.
-3. Under **Market > Settings**, choose how players pay. Bank transfer and store coins work right away; card payments come as separate addons.
+3. Under **Market > Settings**, choose how players pay (see the payment methods below).
 4. Add your first products under **Market > Products**.
+
+<h3 align="center">Payment methods</h3>
+
+Bank transfer and store coins work out of the box. For card and online payments, add the payment method you want from **Addons**:
+
+| Region | Payment methods |
+|---|---|
+| 🌍 Worldwide | [Stripe](https://panomc.com/addons/pano-plugin-market-stripe) · [PayPal](https://panomc.com/addons/pano-plugin-market-paypal) · [Tebex](https://panomc.com/addons/pano-plugin-market-tebex) · [PayNow](https://panomc.com/addons/pano-plugin-market-paynow) · [Paymentwall](https://panomc.com/addons/pano-plugin-market-paymentwall) · [Skrill](https://panomc.com/addons/pano-plugin-market-skrill) |
+| 🇪🇺 Europe | [Mollie](https://panomc.com/addons/pano-plugin-market-mollie) · [Przelewy24](https://panomc.com/addons/pano-plugin-market-przelewy24) |
+| 🇹🇷 Türkiye | [iyzico](https://panomc.com/addons/pano-plugin-market-iyzico) · [PayTR](https://panomc.com/addons/pano-plugin-market-paytr) · [Shopier](https://panomc.com/addons/pano-plugin-market-shopier) · [Param](https://panomc.com/addons/pano-plugin-market-param) · [Sipay](https://panomc.com/addons/pano-plugin-market-sipay) · [Moka United](https://panomc.com/addons/pano-plugin-market-moka-united) · [Esnekpos](https://panomc.com/addons/pano-plugin-market-esnekpos) · [Paynet](https://panomc.com/addons/pano-plugin-market-paynet) · [Tami](https://panomc.com/addons/pano-plugin-market-tami) · [weepay](https://panomc.com/addons/pano-plugin-market-weepay) · [Paywant](https://panomc.com/addons/pano-plugin-market-paywant) · [Mobil Ödeme](https://panomc.com/addons/pano-plugin-market-mobil-odeme) |
+| 🌎 Latin America | [Mercado Pago](https://panomc.com/addons/pano-plugin-market-mercado-pago) |
+| 🇷🇺 Russia | [YooKassa](https://panomc.com/addons/pano-plugin-market-yookassa) |
+| ₿ Crypto | [Coinbase](https://panomc.com/addons/pano-plugin-market-coinbase-commerce) · [BTCPay Server](https://panomc.com/addons/pano-plugin-market-btcpay) · [NOWPayments](https://panomc.com/addons/pano-plugin-market-nowpayments) |
 
 <h3 align="center">Game integration</h3>
 
