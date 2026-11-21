@@ -4,6 +4,9 @@ build
 functions
 node_modules
 .svelte-kit
-agent-guide
 CLAUDE.md
 AGENTS.md
+docs
+GEMINI.md
+REPO-NOTES.md
+.github/copilot-instructions.md
