@@ -67,7 +67,9 @@ class PaymentMethodService(
     private val lookup: ProviderLookup,
     private val cipher: SecretCipher,
     private val contexts: PaymentContexts,
-    private val site: () -> SiteInfo
+    private val site: () -> SiteInfo,
+    /** Writes a catalogue an import action returned (`providerId`, result) ([CatalogImporter]); `null` = not available. */
+    private val catalogImport: (suspend (String, ActionResult.CatalogImport) -> CatalogImporter.Result)? = null
 ) {
     /** Outcome of [save]: the text `onSettingsSaved` returned for the admin, if any. */
     class SaveResult(val message: LocalizedText?)
@@ -312,8 +314,8 @@ class PaymentMethodService(
             is ActionResult.None -> ActionOutcome(true, null)
             is ActionResult.Message -> ActionOutcome(result.success, result.text)
             is ActionResult.SettingsPatch -> ActionOutcome(true, applyResult(id, codec, result))
-            // The catalogue import is written by the catalogue slice (it needs CatalogService); nothing is stored here.
-            is ActionResult.CatalogImport -> ActionOutcome(false, LocalizedText.of("The catalog import is not available yet.", "tr" to "Katalog içe aktarma henüz kullanılamıyor.", "ru" to "Импорт каталога пока недоступен."))
+            is ActionResult.CatalogImport -> catalogImport?.invoke(provider.id, result)?.let { ActionOutcome(it.success, it.text) }
+                ?: ActionOutcome(false, LocalizedText.of("The catalog import is not available yet.", "tr" to "Katalog içe aktarma henüz kullanılamıyor.", "ru" to "Импорт каталога пока недоступен."))
         }
     }
 

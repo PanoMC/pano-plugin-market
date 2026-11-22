@@ -8,7 +8,10 @@ import com.panomc.platform.db.DatabaseManager
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.core.abuse.Redactor
 import com.panomc.plugins.market.core.time.SystemClock
+import com.panomc.plugins.market.db.dao.MarketCategoryDao
 import com.panomc.plugins.market.db.dao.MarketPaymentMethodDao
+import com.panomc.plugins.market.db.dao.MarketProductDao
+import com.panomc.plugins.market.db.dao.MarketProductProviderMetaDao
 import com.panomc.plugins.market.db.dao.MarketProviderStateDao
 import com.panomc.plugins.market.db.dao.MarketThrottleDao
 import com.panomc.plugins.market.db.model.ProviderStateKind
@@ -23,6 +26,9 @@ import com.panomc.plugins.market.provider.ProviderRegistry
 import com.panomc.plugins.market.provider.ProviderStateStoreImpl
 import com.panomc.plugins.market.provider.SecretCipher
 import com.panomc.plugins.market.provider.StoredProviderSettings
+import com.panomc.plugins.market.routes.panel.product.catalogService
+import com.panomc.plugins.market.routes.panel.settings.currentConfig
+import com.panomc.plugins.market.service.CatalogImporter
 import com.panomc.plugins.market.service.PaymentContexts
 import com.panomc.plugins.market.service.PaymentMethodService
 import com.panomc.plugins.market.spi.MarketSpi
@@ -176,6 +182,16 @@ private fun buildService(plugin: MarketPlugin): PaymentMethodService {
         lookup = providerLookup(plugin),
         cipher = wiring.cipher,
         contexts = wiring.contexts,
-        site = wiring.site
+        site = wiring.site,
+        catalogImport = { providerId, result ->
+            CatalogImporter(
+                db = db,
+                config = { currentConfig(plugin) },
+                catalog = catalogService(plugin),
+                categories = context.getBean(MarketCategoryDao::class.java),
+                products = context.getBean(MarketProductDao::class.java),
+                providerMeta = context.getBean(MarketProductProviderMetaDao::class.java)
+            ).import(providerId, result)
+        }
     )
 }
