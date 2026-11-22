@@ -2256,6 +2256,8 @@
       "unavailable": "Bu ödeme yönteminin eklentisi çalışmıyor. Ayarları korunuyor.",
       "unavailable-hint": "Yöntemi tekrar kullanmak için eklentiyi başlatın.",
       "open-addons": "Eklentileri Aç",
+      "currency-unsupported-base": "Bu yöntem {currency} ile ödeme alamıyor (desteklenen: {supported}), bu yüzden alıcılar ödeme sayfasında görmez. Mağaza para birimini değiştirin ya da başka bir yöntem kullanın.",
+      "currency-unsupported-some": "{currencies} siparişlerinde gösterilmez: bu yöntem bu para birimlerini desteklemiyor.",
       "external-pricing-title": "Fiyatı Ödeme Altyapısı Belirler",
       "external-pricing": "Fiyatı ödeme altyapısı belirlediği için komisyon ve tutar sınırları buradan değiştirilemez.",
       "test-mode-title": "Test Modu",

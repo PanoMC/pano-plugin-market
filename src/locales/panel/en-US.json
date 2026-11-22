@@ -2256,6 +2256,8 @@
       "unavailable": "The plugin of this payment method is not running. Its settings are kept.",
       "unavailable-hint": "Start the plugin to use this method again.",
       "open-addons": "Open Addons",
+      "currency-unsupported-base": "This method can't take payments in {currency} (it takes {supported}), so buyers won't see it at checkout. Change the store currency or use another method.",
+      "currency-unsupported-some": "Not offered for orders in {currencies}: this method doesn't support them.",
       "external-pricing-title": "Pricing Set By Gateway",
       "external-pricing": "The gateway sets the price, so fees and amount limits cannot be changed here.",
       "test-mode-title": "Test Mode",

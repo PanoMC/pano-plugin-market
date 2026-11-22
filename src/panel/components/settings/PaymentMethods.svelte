@@ -145,6 +145,19 @@
                 </div>
               {/if}
 
+              {#if currencyGap(provider, ctx).length}
+                <div class="small text-warning-emphasis">
+                  <i class="fa-solid fa-triangle-exclamation me-1" aria-hidden="true"></i>
+                  {currencyGap(provider, ctx).includes(String(ctx.currency).toUpperCase())
+                    ? $_('settings.payments.currency-unsupported-base', {
+                        values: { currency: String(ctx.currency).toUpperCase(), supported: provider.capabilities.currencies.join(', ') },
+                      })
+                    : $_('settings.payments.currency-unsupported-some', {
+                        values: { currencies: currencyGap(provider, ctx).join(', ') },
+                      })}
+                </div>
+              {/if}
+
               <div class="d-flex align-items-center gap-2 mt-auto">
                 {#snippet toggle()}
                   <div class="form-check form-switch m-0">
@@ -296,6 +309,16 @@
   );
 
   const findProvider = (id) => providers.find((p) => p.id === id) ?? null;
+
+  // Store currencies the method cannot charge: its plugin lists `capabilities.currencies` (null or empty = no list, nothing
+  // shown). The base currency always counts; the additional ones only in MULTI mode (DISPLAY only converts the shown prices).
+  const currencyGap = (provider, context) => {
+    const supported = provider.capabilities?.currencies;
+    if (!Array.isArray(supported) || supported.length === 0 || !context?.currency) return [];
+    const can = new Set(supported.map((c) => String(c).toUpperCase()));
+    const charged = [context.currency, ...(context.currencyMode === 'MULTI' ? (context.additionalCurrencies ?? []) : [])];
+    return [...new Set(charged.map((c) => String(c).toUpperCase()))].filter((c) => !can.has(c));
+  };
 
   // Built-in providers name a bare icon ("coins"), plugin providers a full class ("fa-solid fa-credit-card").
   const iconClass = (icon) =>
