@@ -7,7 +7,7 @@
             <img
               src="{base}/api/plugins/pano-plugin-market/products/image/{encodeURIComponent(
                 item.imageFileName,
-              )}?thumbnail=true"
+              )}?thumbnail=true&v=2"
               width="48"
               height="48"
               alt=""

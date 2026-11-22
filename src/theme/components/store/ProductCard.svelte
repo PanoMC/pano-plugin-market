@@ -7,7 +7,7 @@
           <img
             src="{base}/api/plugins/pano-plugin-market/products/image/{encodeURIComponent(
               product.imageFileName,
-            )}?thumbnail=true"
+            )}?thumbnail=true&v=2"
             alt={product.name}
             class="market-product-card__image object-fit-cover"
             loading="lazy" />

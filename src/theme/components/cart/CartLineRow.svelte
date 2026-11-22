@@ -4,7 +4,7 @@
       <div class="ratio ratio-1x1 bg-body-tertiary rounded overflow-hidden">
         {#if row.imageFileName}
           <img
-            src="{base}/api/plugins/pano-plugin-market/products/image/{row.imageFileName}?thumbnail=true"
+            src="{base}/api/plugins/pano-plugin-market/products/image/{row.imageFileName}?thumbnail=true&v=2"
             alt=""
             class="market-cart-line-row__image object-fit-cover rounded" />
         {:else}

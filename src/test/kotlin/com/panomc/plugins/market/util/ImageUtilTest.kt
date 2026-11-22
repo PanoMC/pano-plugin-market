@@ -57,6 +57,6 @@ class ImageUtilTest {
         assertEquals("png", ImageUtil.detectImageExtension(img))
         val thumbs = File(dir.toFile(), "thumbs")
         assertTrue(ImageUtil.generateThumbnail(img, thumbs))
-        assertEquals(128, ImageIO.read(File(thumbs, "ok.png")).width)
+        assertEquals(400, ImageIO.read(File(thumbs, "ok.png")).width, "smaller than the thumbnail size: kept as it is")
     }
 }

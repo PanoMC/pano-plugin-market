@@ -24,7 +24,7 @@
               <div class="flex-shrink-0 bg-body-tertiary rounded overflow-hidden">
                 {#if line.imageFileName}
                   <img
-                    src="{base}/api/plugins/pano-plugin-market/products/image/{line.imageFileName}?thumbnail=true"
+                    src="{base}/api/plugins/pano-plugin-market/products/image/{line.imageFileName}?thumbnail=true&v=2"
                     width="40"
                     height="40"
                     alt=""

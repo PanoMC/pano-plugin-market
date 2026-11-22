@@ -323,7 +323,7 @@
   }
 
   function imageUrl(fileName) {
-    return `${PANEL_URL}/products/image/${encodeURIComponent(fileName)}?thumbnail=true`;
+    return `${PANEL_URL}/products/image/${encodeURIComponent(fileName)}?thumbnail=true&v=2`;
   }
 
   function editProduct(id) {

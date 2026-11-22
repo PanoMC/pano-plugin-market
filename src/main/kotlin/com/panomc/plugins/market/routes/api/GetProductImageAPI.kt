@@ -55,6 +55,8 @@ class GetProductImageAPI(
         ValidationHandlerBuilder.create(schemaRepository)
             .pathParameter(param("fileName", stringSchema()))
             .queryParameter(optionalParam("thumbnail", booleanSchema()))
+            // The thumbnail version (ImageUtil.THUMBNAIL_VERSION) in the URL, so a browser fetches new thumbnails at once.
+            .queryParameter(optionalParam("v", stringSchema()))
             .build()
 
     override suspend fun handleMarket(context: RoutingContext): Result? {
@@ -81,9 +83,9 @@ class GetProductImageAPI(
             return null
         }
 
-        val etag = "\"$storedName\""
+        val etag = ImageUtil.etag(storedName, isThumbnail)
         // Force a safe image Content-Type from the allowlisted stored extension — never svg/html.
-        val mimeType = ImageUtil.getSafeMimeType(file.name)
+        val mimeType = ImageUtil.servedMimeType(file)
 
         val response = context.response()
 
