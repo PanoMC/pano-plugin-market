@@ -8,12 +8,15 @@ import com.panomc.plugins.market.core.catalog.SlugRules
 import com.panomc.plugins.market.db.dao.MarketCategoryDao
 import com.panomc.plugins.market.db.dao.MarketProductDao
 import com.panomc.plugins.market.db.dao.MarketProductProviderMetaDao
+import com.panomc.plugins.market.db.model.BillingMode
 import com.panomc.plugins.market.db.model.MarketCategory
+import com.panomc.plugins.market.db.model.PeriodUnit
 import com.panomc.plugins.market.db.tx.MarketDb
 import com.panomc.plugins.market.error.SlugAlreadyExists
 import com.panomc.plugins.market.spi.common.LocalizedText
 import com.panomc.plugins.market.spi.payment.ActionResult
 import com.panomc.plugins.market.spi.payment.ImportedCategory
+import com.panomc.plugins.market.spi.payment.IntervalUnit
 import com.panomc.plugins.market.util.HtmlSanitizer
 import io.vertx.core.json.JsonObject
 import org.slf4j.LoggerFactory
@@ -25,7 +28,9 @@ import org.slf4j.LoggerFactory
  * - Products are matched by their product-level provider meta (the provider's package link); a match is updated (name,
  *   description, price, category), anything else is created with the provider meta set. Other settings an admin made
  *   (actions, status, other providers' meta) are never touched; an image is added only to a product that has none.
- * - Recurring packages are skipped: their interval has to be set up by hand.
+ * - A recurring package becomes a subscription product billed every `intervalCount` `intervalUnit`. On a match the
+ *   interval is updated only when the product is a subscription already: an admin's choice of another billing mode
+ *   stays. A recurring package without a usable interval (count 1 to [ProductRules.MAX_PERIOD_COUNT]) is skipped.
  * - Every product is saved on its own: one invalid package does not stop the rest.
  */
 class CatalogImporter(
@@ -81,10 +86,13 @@ class CatalogImporter(
         var failed = 0
 
         for (product in data.products) {
-            if (product.intervalUnit != null) {
+            val unit = product.intervalUnit
+            val count = product.intervalCount?.takeIf { it in 1..ProductRules.MAX_PERIOD_COUNT }
+            if (unit != null && count == null) {
                 skipped++
                 continue
             }
+            val interval = if (unit != null && count != null) periodUnitOf(unit) to count else null
 
             val name = product.name.trim().take(255)
             if (name.isEmpty()) {
@@ -100,6 +108,12 @@ class CatalogImporter(
 
             val linkedId = links.firstOrNull { it.first == product.meta }?.second
             val existing = linkedId?.let { id -> db.tx { conn -> products.getById(id, conn) } }?.takeIf { it.deletedAt == null }
+
+            if (interval != null && (existing == null || existing.billingMode == BillingMode.SUBSCRIPTION)) {
+                scalars["billingMode"] = BillingMode.SUBSCRIPTION
+                scalars["periodUnit"] = interval.first
+                scalars["periodCount"] = interval.second
+            }
 
             val image = if (existing?.imageFileName == null) product.imageUrl?.let { url -> images?.fetch(url) } else null
             val imageChange = image?.let { ImageChange.Set(it) } ?: ImageChange.Keep
@@ -142,6 +156,13 @@ class CatalogImporter(
     companion object {
         const val MAX_SLUG_TRIES = 50
 
+        fun periodUnitOf(unit: IntervalUnit): PeriodUnit = when (unit) {
+            IntervalUnit.DAY -> PeriodUnit.DAY
+            IntervalUnit.WEEK -> PeriodUnit.WEEK
+            IntervalUnit.MONTH -> PeriodUnit.MONTH
+            IntervalUnit.YEAR -> PeriodUnit.YEAR
+        }
+
         /** [list] ordered so that every parent comes before its children; a cycle or a missing parent is placed at the top level. */
         fun parentsFirst(list: List<ImportedCategory>): List<ImportedCategory> {
             val ids = list.map { it.externalId }.toSet()
@@ -171,13 +192,13 @@ class CatalogImporter(
 
         fun summary(created: Int, updated: Int, skipped: Int, failed: Int, categories: Int): LocalizedText = LocalizedText.of(
             "Import finished: $created products created, $updated updated, $categories categories created" +
-                (if (skipped > 0) ", $skipped skipped (subscriptions are not imported: create them by hand)" else "") +
+                (if (skipped > 0) ", $skipped skipped (no name, or a subscription without a renewal period)" else "") +
                 (if (failed > 0) ", $failed could not be saved (see the log)" else "") + ".",
             "tr" to "İçe aktarma bitti: $created ürün oluşturuldu, $updated güncellendi, $categories kategori oluşturuldu" +
-                (if (skipped > 0) ", $skipped atlandı (abonelikler içe aktarılmaz: elle oluşturun)" else "") +
+                (if (skipped > 0) ", $skipped atlandı (adı yok veya yenilenme süresi olmayan bir abonelik)" else "") +
                 (if (failed > 0) ", $failed kaydedilemedi (günlüğe bakın)" else "") + ".",
             "ru" to "Импорт завершён: создано товаров: $created, обновлено: $updated, создано категорий: $categories" +
-                (if (skipped > 0) ", пропущено: $skipped (подписки не импортируются: создайте их вручную)" else "") +
+                (if (skipped > 0) ", пропущено: $skipped (нет названия или подписка без периода продления)" else "") +
                 (if (failed > 0) ", не удалось сохранить: $failed (см. журнал)" else "") + "."
         )
     }

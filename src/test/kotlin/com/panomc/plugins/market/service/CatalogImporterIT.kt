@@ -1,6 +1,8 @@
 package com.panomc.plugins.market.service
 
 import com.panomc.plugins.market.db.MarketDaoITBase
+import com.panomc.plugins.market.db.model.BillingMode
+import com.panomc.plugins.market.db.model.PeriodUnit
 import com.panomc.plugins.market.spi.common.Money
 import com.panomc.plugins.market.spi.payment.ActionResult
 import com.panomc.plugins.market.spi.payment.ImportedCategory
@@ -40,11 +42,12 @@ class CatalogImporterIT : MarketDaoITBase() {
 
     @Test
     fun `first import creates categories and products, a second import updates them in place`(): Unit = runBlocking {
-        val first = importer.import("tebex", catalogue(product("10", "VIP", 500, "c1"), product("11", "Starter Kit", 250, "c2"), product("12", "Monthly", 300, "c1", recurring = true)))
+        val first = importer.import("tebex", catalogue(product("10", "VIP", 500, "c1"), product("11", "Starter Kit", 250, "c2")))
 
         assertTrue(first.success)
         assertEquals(2L, count("market_product"))
         assertEquals(2L, count("market_category"))
+        assertEquals(BillingMode.ONE_TIME, catalog.get(w.db.tx { c -> w.providerMeta.getByProviderId("tebex", c) }.first().productId).product.billingMode)
 
         val all = w.db.tx { c -> w.categories.getAll(null, c) }
         val ranks = all.first { it.name == "Ranks" }
@@ -68,6 +71,51 @@ class CatalogImporterIT : MarketDaoITBase() {
         val updated = catalog.get(vipId).product
         assertEquals("VIP+", updated.name)
         assertEquals(900L, updated.price)
+    }
+
+    @Test
+    fun `a recurring package becomes a subscription, one without a usable interval is skipped`(): Unit = runBlocking {
+        fun recurring(id: String, unit: IntervalUnit, count: Int?) = ImportedProduct(
+            id, "Rank $id", null, Money(300, "EUR"), "c1", null, unit, count, JsonObject().put("packageId", id)
+        )
+
+        val result = importer.import(
+            "tebex",
+            catalogue(recurring("50", IntervalUnit.MONTH, 1), recurring("51", IntervalUnit.YEAR, 2), recurring("52", IntervalUnit.MONTH, null), recurring("53", IntervalUnit.DAY, 0))
+        )
+
+        assertTrue(result.success)
+        assertEquals(2L, count("market_product"))
+        val metas = w.db.tx { c -> w.providerMeta.getByProviderId("tebex", c) }.associate { JsonObject(it.meta).getString("packageId") to it.productId }
+        val monthly = catalog.get(metas.getValue("50")).product
+        assertEquals(BillingMode.SUBSCRIPTION, monthly.billingMode)
+        assertEquals(PeriodUnit.MONTH, monthly.periodUnit)
+        assertEquals(1, monthly.periodCount)
+        val yearly = catalog.get(metas.getValue("51")).product
+        assertEquals(PeriodUnit.YEAR, yearly.periodUnit)
+        assertEquals(2, yearly.periodCount)
+
+        // A re-import updates the interval of a subscription.
+        importer.import("tebex", catalogue(recurring("50", IntervalUnit.WEEK, 3)))
+        catalog.get(metas.getValue("50")).product.also {
+            assertEquals(PeriodUnit.WEEK, it.periodUnit)
+            assertEquals(3, it.periodCount)
+        }
+    }
+
+    @Test
+    fun `a product the admin made one-time stays one-time when its package is recurring`(): Unit = runBlocking {
+        importer.import("tebex", catalogue(product("60", "VIP", 500, "c1")))
+        val id = w.db.tx { c -> w.providerMeta.getByProviderId("tebex", c) }.single().productId
+
+        val result = importer.import("tebex", catalogue(product("60", "VIP Monthly", 600, "c1", recurring = true)))
+
+        assertTrue(result.success)
+        catalog.get(id).product.also {
+            assertEquals(BillingMode.ONE_TIME, it.billingMode)
+            assertEquals("VIP Monthly", it.name)
+            assertEquals(600L, it.price)
+        }
     }
 
     @Test
