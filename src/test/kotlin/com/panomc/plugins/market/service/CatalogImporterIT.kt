@@ -88,6 +88,38 @@ class CatalogImporterIT : MarketDaoITBase() {
         assertEquals(0L, count("market_category"))
     }
 
+    private class FakeImages : ProductImageFetcher {
+        val fetched = mutableListOf<String>()
+        val discarded = mutableListOf<String>()
+        override suspend fun fetch(url: String): String? = if (url.endsWith("broken")) null else "img-${fetched.size + 1}.png".also { fetched += url }
+        override fun discard(fileName: String) { discarded += fileName }
+    }
+
+    @Test
+    fun `images are stored on create, a product that already has one keeps it`(): Unit = runBlocking {
+        val images = FakeImages()
+        val withImages = CatalogImporter(w.db, { w.config }, catalog, w.categories, w.products, w.providerMeta, images)
+        fun pkg(id: String, url: String?) = ImportedProduct(id, "P$id", null, Money(100, "EUR"), null, url, null, null, JsonObject().put("packageId", id))
+
+        withImages.import("tebex", ActionResult.CatalogImport(emptyList(), listOf(pkg("40", "https://cdn.example/a.png"), pkg("41", "https://cdn.example/broken"), pkg("42", null))))
+
+        val metas = w.db.tx { c -> w.providerMeta.getByProviderId("tebex", c) }.associate { JsonObject(it.meta).getString("packageId") to it.productId }
+        assertEquals("img-1.png", catalog.get(metas.getValue("40")).product.imageFileName)
+        assertNull(catalog.get(metas.getValue("41")).product.imageFileName)
+        assertNull(catalog.get(metas.getValue("42")).product.imageFileName)
+
+        withImages.import("tebex", ActionResult.CatalogImport(emptyList(), listOf(pkg("40", "https://cdn.example/b.png"))))
+        assertEquals("img-1.png", catalog.get(metas.getValue("40")).product.imageFileName)
+        assertEquals(listOf("https://cdn.example/a.png"), images.fetched)
+    }
+
+    @Test
+    fun `internal addresses are refused for catalog images`() {
+        listOf("127.0.0.1", "10.1.2.3", "192.168.1.1", "172.16.0.1", "169.254.169.254", "100.64.0.1", "::1", "fd00::1", "fe80::1", "0.0.0.0")
+            .forEach { assertTrue(RemoteProductImageFetcher.isInternal(java.net.InetAddress.getByName(it)), it) }
+        listOf("1.1.1.1", "2606:4700:4700::1111").forEach { assertFalse(RemoteProductImageFetcher.isInternal(java.net.InetAddress.getByName(it)), it) }
+    }
+
     @Test
     fun `parents come first, a cycle does not loop`() {
         val ordered = CatalogImporter.parentsFirst(

@@ -30,6 +30,7 @@ import com.panomc.plugins.market.routes.panel.product.catalogService
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.service.CatalogImporter
 import com.panomc.plugins.market.service.PaymentContexts
+import com.panomc.plugins.market.service.RemoteProductImageFetcher
 import com.panomc.plugins.market.service.PaymentMethodService
 import com.panomc.plugins.market.spi.MarketSpi
 import com.panomc.plugins.market.spi.common.ProviderContext
@@ -190,7 +191,8 @@ private fun buildService(plugin: MarketPlugin): PaymentMethodService {
                 catalog = catalogService(plugin),
                 categories = context.getBean(MarketCategoryDao::class.java),
                 products = context.getBean(MarketProductDao::class.java),
-                providerMeta = context.getBean(MarketProductProviderMetaDao::class.java)
+                providerMeta = context.getBean(MarketProductProviderMetaDao::class.java),
+                images = RemoteProductImageFetcher(context.getBean(WebClient::class.java), plugin.uploadsDir)
             ).import(providerId, result)
         }
     )

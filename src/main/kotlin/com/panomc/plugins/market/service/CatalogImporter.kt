@@ -1,6 +1,7 @@
 package com.panomc.plugins.market.service
 
 import com.panomc.plugins.market.config.MarketConfig
+import com.panomc.plugins.market.core.catalog.ImageChange
 import com.panomc.plugins.market.core.catalog.ProductInput
 import com.panomc.plugins.market.core.catalog.ProductRules
 import com.panomc.plugins.market.core.catalog.SlugRules
@@ -23,7 +24,7 @@ import org.slf4j.LoggerFactory
  * - Categories are matched by name under the same parent (case-insensitive) and created when missing.
  * - Products are matched by their product-level provider meta (the provider's package link); a match is updated (name,
  *   description, price, category), anything else is created with the provider meta set. Other settings an admin made
- *   (actions, status, images, other providers' meta) are never touched.
+ *   (actions, status, other providers' meta) are never touched; an image is added only to a product that has none.
  * - Recurring packages are skipped: their interval has to be set up by hand.
  * - Every product is saved on its own: one invalid package does not stop the rest.
  */
@@ -33,7 +34,9 @@ class CatalogImporter(
     private val catalog: CatalogService,
     private val categories: MarketCategoryDao,
     private val products: MarketProductDao,
-    private val providerMeta: MarketProductProviderMetaDao
+    private val providerMeta: MarketProductProviderMetaDao,
+    /** Stores a package's image; `null` = products are imported without images. */
+    private val images: ProductImageFetcher? = null
 ) {
     class Result(val success: Boolean, val text: LocalizedText)
 
@@ -98,16 +101,20 @@ class CatalogImporter(
             val linkedId = links.firstOrNull { it.first == product.meta }?.second
             val existing = linkedId?.let { id -> db.tx { conn -> products.getById(id, conn) } }?.takeIf { it.deletedAt == null }
 
+            val image = if (existing?.imageFileName == null) product.imageUrl?.let { url -> images?.fetch(url) } else null
+            val imageChange = image?.let { ImageChange.Set(it) } ?: ImageChange.Keep
+
             try {
                 if (existing != null) {
-                    catalog.update(existing.id, ProductInput(scalars))
+                    catalog.update(existing.id, ProductInput(scalars, image = imageChange))
                     updated++
                 } else {
-                    createWithFreeSlug(scalars, name, mapOf(providerId to product.meta.encode()))
+                    createWithFreeSlug(scalars, name, mapOf(providerId to product.meta.encode()), imageChange)
                     created++
                 }
             } catch (e: Throwable) {
                 if (e is Error || e is kotlinx.coroutines.CancellationException) throw e
+                image?.let { images?.discard(it) }
                 failed++
                 logger.warn("Catalog import ($providerId): package ${product.externalId} not saved: ${e.javaClass.simpleName} ${e.message.orEmpty()}")
             }
@@ -117,14 +124,14 @@ class CatalogImporter(
     }
 
     /** A new product; a slug another product holds gets `-2`, `-3` … (up to 50 tries). */
-    private suspend fun createWithFreeSlug(scalars: Map<String, Any?>, name: String, meta: Map<String, String>) {
+    private suspend fun createWithFreeSlug(scalars: Map<String, Any?>, name: String, meta: Map<String, String>, image: ImageChange) {
         val base = SlugRules.resolve(null, name)
 
         for (n in 1..MAX_SLUG_TRIES) {
             val withSlug = if (n == 1) scalars else scalars + ("slug" to "$base-$n")
 
             try {
-                catalog.create(ProductInput(withSlug, providerMeta = meta))
+                catalog.create(ProductInput(withSlug, providerMeta = meta, image = image))
                 return
             } catch (e: SlugAlreadyExists) {
                 if (n == MAX_SLUG_TRIES) throw e
