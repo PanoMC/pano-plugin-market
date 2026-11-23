@@ -481,6 +481,20 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a settings patch of an action stores a provider derived secret encrypted`(): Unit = runBlocking {
+        gateway { action = { ActionResult.SettingsPatch(mapOf("webhookSecret" to "whsec_registered"), LocalizedText.of("Webhook registered")) } }
+        service.save("gate", settings(), null)
+
+        val outcome = service.runAction("gate", "test-connection", JsonObject())
+        val stored = JsonObject(row()!!.settings).getString("webhookSecret")
+
+        assertTrue(outcome.success)
+        assertEquals("Webhook registered", outcome.message!!.fallback)
+        assertTrue(stored.startsWith("v1:"), "encrypted at rest like every other secret")
+        assertEquals("whsec_registered", cipher.decrypt(stored))
+    }
+
+    @Test
     fun `a message of onSettingsSaved is returned and a gateway failure keeps the settings and marks the row`(): Unit = runBlocking {
         val g = gateway()
         g.onSaved = { ActionResult.Message(LocalizedText.of("Saved, webhook registered"), true) }

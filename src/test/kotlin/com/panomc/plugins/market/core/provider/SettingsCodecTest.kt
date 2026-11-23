@@ -427,6 +427,16 @@ class SettingsCodecTest {
         assertFalse(removed.settings.containsKey("accountCurrency"))
     }
 
+    @Test
+    fun `a patch writes a provider derived secret form field encrypted (BTCPay webhook secret)`() {
+        val r = codec.applyPatch(first(), mapOf("webhookSecret" to "whsec_from_gateway", "instructions" to "x"))
+        assertEquals(setOf("webhookSecret"), r.applied)
+        assertEquals(setOf("instructions"), r.rejected, "a plain form field still belongs to the admin")
+        assertTrue(r.settings.getString("webhookSecret").startsWith("v1:"))
+        assertEquals("whsec_from_gateway", codec.decrypt(r.settings).string("webhookSecret"))
+        assertEquals("********", codec.mask(r.settings).getString("webhookSecret"))
+    }
+
     // ---- configured?
 
     @Test

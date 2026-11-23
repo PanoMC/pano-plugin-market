@@ -176,15 +176,16 @@ class SettingsCodec(val schema: SettingsSchema, private val cipher: SecretCipher
     }
 
     /**
-     * Writes provider derived values (`ActionResult.SettingsPatch`) into [stored]: only HIDDEN fields accept them (a
-     * `null` value removes the field), `hiddenSecret` fields are encrypted. Other keys are [SettingsPatchResult.rejected].
+     * Writes provider derived values (`ActionResult.SettingsPatch`) into [stored]: only HIDDEN fields and stored secret
+     * fields accept them (02 `ActionResult.SettingsPatch`: "a webhook secret returned by a registration call", e.g. BTCPay's `webhookSecret`;
+     * a `null` value removes the field), secrets are encrypted. Other keys are [SettingsPatchResult.rejected].
      */
     fun applyPatch(stored: JsonObject?, values: Map<String, String?>): SettingsPatchResult {
         val out = (stored ?: JsonObject()).copy()
         val applied = LinkedHashSet<String>()
         val rejected = LinkedHashSet<String>()
         for ((key, value) in values) {
-            val field = hiddenFields.firstOrNull { it.key == key }
+            val field = hiddenFields.firstOrNull { it.key == key } ?: formFields.firstOrNull { it.key == key && it.secret }
             if (field == null) {
                 rejected.add(key)
                 continue
