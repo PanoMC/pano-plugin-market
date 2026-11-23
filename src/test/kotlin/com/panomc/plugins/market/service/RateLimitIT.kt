@@ -418,6 +418,34 @@ class RateLimitIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `L4 the quote already shows the held-unit cap of an offline method as a line error, so Pay is not offered`(): Unit = runBlocking {
+        val limited = fx.product("limited", price = 100, stock = 100)
+
+        fx.paymentMethod("fake")
+        h.fake.caps = PaymentCapabilities().apply { longPending = true }
+
+        val alice = user("Alice")
+
+        suspend fun quote(quantity: Int) = h.service.quote(QuoteInput(items = listOf(CartLine(limited.id, 0, quantity, emptyMap(), null)), paymentMethodId = "fake"), alice, pool)
+
+        quote(11).let {
+            assertEquals(listOf("MAX_QUANTITY"), it.lines.single().errors)
+            assertEquals(false, it.canCheckout)
+        }
+        quote(10).let {
+            assertTrue(it.lines.single().errors.isEmpty())
+            assertTrue(it.canCheckout)
+        }
+
+        // an online method (no longPending) is not touched by this rule
+        h.fake.caps = PaymentCapabilities()
+        quote(11).let {
+            assertTrue(it.lines.single().errors.isEmpty())
+            assertTrue(it.canCheckout)
+        }
+    }
+
+    @Test
     fun `L4 the held-unit cap sums a product over lines that differ in field values, and every contributing line is named`(): Unit = runBlocking {
         val limited = fx.product("limited-lines", price = 100, stock = 100)
 

@@ -742,7 +742,10 @@ class CheckoutService(
         val legalText = legalView?.let { QuoteLegal(c.legalTextRequired, it.id, it.version, it.title) }
 
         // ---- the lines of the answer
-        val quoteLines = quoteLines(rules.lines, lines, breakdown, catalog, separateCreditOrders(c, breakdown))
+        // L4: an offline method's held-unit cap is a line error of the quote too, so the buyer sees it before pressing Pay (failOn keeps its own check)
+        val offline = selected?.id == OrderTimings.BANK_TRANSFER_PROVIDER || selected?.caps?.longPending == true
+        val hoarded = if (offline) heldUnitLineErrors(items.lines, catalog) else emptyMap()
+        val quoteLines = quoteLines(rules.lines, lines, breakdown, catalog, separateCreditOrders(c, breakdown), hoarded)
         if (codeLock != null) messages += QuoteMessage(CODE_ATTEMPTS_LOCKED, LineRules.ERROR)
 
         val distinct = messages.distinct()
@@ -923,14 +926,14 @@ class CheckoutService(
      * L4 held-unit cap on stock subjects: `MAX_QUANTITY` for every cart line that contributes units to a stock-limited subject whose sum exceeds
      * `AbuseLimits.heldUnitsCap` of the subject's product. A subject without stock (a variant with NULL stock, a product without stock) is never capped.
      */
-    private fun heldUnitLineErrors(a: Assessment): Map<String, List<String>> {
+    private fun heldUnitLineErrors(lines: List<PricedLine>, catalog: Catalog): Map<String, List<String>> {
         class Held(var units: Long = 0, val cap: Int, val lines: MutableSet<String> = LinkedHashSet())
 
         val subjects = LinkedHashMap<Pair<Boolean, Long>, Held>()
 
-        for (l in a.items.lines) {
-            val product = l.productId?.let { a.catalog.products[it] } ?: continue
-            val variant = if (l.variantId != 0L) a.catalog.variants[l.variantId] else null
+        for (l in lines) {
+            val product = l.productId?.let { catalog.products[it] } ?: continue
+            val variant = if (l.variantId != 0L) catalog.variants[l.variantId] else null
             val stock = if (l.variantId != 0L) variant?.stock else product.stock
 
             if (stock == null) continue
@@ -979,7 +982,7 @@ class CheckoutService(
         // The subjects are the ones the reservation takes (06 section 7.1): the variant when the line names one, else the product, and every
         // child of a bundle on its own row with `line quantity x child quantity`; the units of all lines (and of a bundle's children) add up
         val offline = a.selected?.id == OrderTimings.BANK_TRANSFER_PROVIDER || a.selected?.caps?.longPending == true
-        val hoarded = if (!offline) emptyMap() else heldUnitLineErrors(a)
+        val hoarded = if (!offline) emptyMap() else heldUnitLineErrors(a.items.lines, a.catalog)
 
         if (hoarded.isNotEmpty()) throw InvalidCart(hoarded)
 
@@ -2453,7 +2456,10 @@ class CheckoutService(
         c.creditsEnabled && c.onlyAcceptCredits &&
             CreditEligibility.classify(breakdown.lines.filter { it.parentLineKey == null }.map { it.lineKind }) == CreditEligibility.CartClass.COMBINED
 
-    private fun quoteLines(verdicts: List<LineVerdict>, lines: List<CartLine>, breakdown: PriceBreakdown, catalog: Catalog, separateOrders: Boolean): List<QuoteLine> {
+    private fun quoteLines(
+        verdicts: List<LineVerdict>, lines: List<CartLine>, breakdown: PriceBreakdown, catalog: Catalog, separateOrders: Boolean,
+        extraErrors: Map<String, List<String>> = emptyMap()
+    ): List<QuoteLine> {
         val priced = breakdown.lines.associateBy { it.lineKey }
         val childrenOf = breakdown.lines.filter { it.parentLineKey != null }.groupBy { it.parentLineKey!! }
         val byKey = lines.associateBy { it.lineKey }
@@ -2467,6 +2473,7 @@ class CheckoutService(
             val errors = LinkedHashSet<String>(verdict.errors)
 
             pricedLine?.errors?.forEach { errors += it.name }
+            extraErrors[verdict.lineKey]?.let { errors += it }
 
             if (separateOrders && pricedLine?.lineKind == LineKind.CREDIT_PACK) errors += CREDIT_PACK_SEPARATE_ORDER
 
