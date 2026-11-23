@@ -4,7 +4,20 @@
     text={$_(messageKey(data.code))}
     onretry={() => location.reload()} />
 {:else if gone}
-  <StoreStateCard icon="fa-solid fa-receipt fa-3x" text={$_('theme.order.not-found')} />
+  <div class="vstack gap-3">
+    <StoreStateCard icon="fa-solid fa-receipt fa-3x" text={$_('theme.order.not-found')} />
+    {#if loginHref}
+      <div class="text-center">
+        <a class="market-order-page__login btn btn-outline-primary" href={loginHref}>
+          {$_('theme.order.sign-in')}
+        </a>
+      </div>
+    {/if}
+  </div>
+{:else if locked}
+  <div class="market-order-page__locked text-center py-5" role="status" aria-busy="true">
+    <span class="spinner-border text-body-secondary" aria-hidden="true"></span>
+  </div>
 {:else}
   <div class="market-order-page vstack gap-4" aria-busy={loading ? 'true' : 'false'}>
     <OrderStatusBlock {view} {order} {extras} {left} {loginHref} />
@@ -151,6 +164,8 @@
   let mountedAt = $state(0);
   let loading = $state(false);
   let gone = $state(false);
+  // the server answered 404 to the load (it never sends the access token): the browser asks once more with the token
+  let locked = $state(init.state === 'LOCKED');
   let refreshFailed = $state('');
   let pollStatus = $state('RUNNING');
   let offline = $state(false);
@@ -266,7 +281,29 @@
     document.addEventListener('visibilitychange', onVisibility);
 
     (async () => {
-      // 2. a limited view with a known token is fetched again with the header
+      // 2. an order the load could not see is fetched again with the token; without one it stays unseen
+      if (locked && !token) gone = true;
+
+      if (locked && token) {
+        let ok = await fetchOrder();
+
+        // the link token did not unlock the order: try the token that was stored before it once
+        if (!ok && stored && stored !== token) {
+          gone = false;
+          orderTokens.save(id, stored);
+          token = stored;
+          ok = await fetchOrder();
+        }
+
+        if (!ok) {
+          orderTokens.remove(id);
+          token = null;
+        }
+
+        locked = false;
+      }
+
+      // (an older server may still send a limited view: fetch it again with the token as before)
       if (currentOrder.limited === true && token) {
         let ok = await fetchOrder();
         let verdict = tokenAfterRefetch({ ok, limited: currentOrder.limited === true });

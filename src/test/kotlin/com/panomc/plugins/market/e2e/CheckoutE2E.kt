@@ -60,9 +60,7 @@ class CheckoutE2E : E2eTestBase() {
         assertEquals("g:" + username.lowercase(), row.getString("buyerKey"))
         assertEquals("COMPLETED", row.getString("status"))
 
-        val limited = order(guest, publicId)
-        assertEquals(true, limited.getBoolean("limited"), "without the token the order is the limited view")
-        assertEquals(null, limited.getString("email"), "the limited view carries no e-mail")
+        assertEquals(404, guest.get("${MarketPaths.SITE_ROOT}/orders/$publicId").status, "without the token the order is not shown")
 
         val full = order(guest, publicId, token)
         assertEquals(false, full.getBoolean("limited"), "with X-Order-Token the order is complete")

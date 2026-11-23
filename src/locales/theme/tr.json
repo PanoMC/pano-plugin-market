@@ -329,7 +329,7 @@
       "sign-in": "Giriş yap",
       "poll-offline": "Bağlantı koptu. Tekrar çevrimiçi olduğunuzda durum güncellenecek.",
       "refresh-status": "Durumu yenile",
-      "not-found": "Bu sipariş bulunamadı.",
+      "not-found": "Bu siparişi bulamadık. Siparişi verdiğiniz hesapla giriş yapın ya da sipariş e-postanızdaki linki açın.",
       "items": "Ürünler",
       "shipments": "Gönderiler",
       "shipping-address": "Teslimat adresi",

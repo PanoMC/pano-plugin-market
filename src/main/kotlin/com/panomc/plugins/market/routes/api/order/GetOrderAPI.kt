@@ -14,6 +14,7 @@ import com.panomc.platform.model.RouteType
 import com.panomc.platform.model.Successful
 import com.panomc.plugins.market.MarketPlugin
 import com.panomc.plugins.market.routes.base.MarketApi
+import com.panomc.plugins.market.routes.api.OrderRole
 import io.vertx.ext.web.RoutingContext
 import io.vertx.ext.web.validation.ValidationHandler
 import com.panomc.platform.schema.dsl.Parameters.optionalParam
@@ -50,6 +51,11 @@ class GetOrderAPI(private val plugin: MarketPlugin) : MarketApi() {
     override suspend fun handleMarket(context: RoutingContext): Result {
         val sqlClient = databaseManager.getSqlClient()
         val access = resolveOrder(plugin, context, getParameters(context).pathParameter("publicId").string, sqlClient)
+
+        // only the owner (session or order token) and the gift recipient see an order; anyone else gets 404, which does not
+        // even tell that the order exists
+        if (access.role == OrderRole.LIMITED) throw NotFound()
+
         val view = paymentService(plugin).viewFor(access.order, access.role, payCaller(plugin, context), sqlClient)
 
         noStore(context)

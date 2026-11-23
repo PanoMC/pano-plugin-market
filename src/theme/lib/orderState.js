@@ -119,9 +119,23 @@ export function resolveOrderLoad({
   loadedAt = 0,
 }) {
   if (!id) return { notFound: true };
-  if (res && res.ok === false && res.code === 'NOT_FOUND') return { notFound: true };
 
   const urlToken = isUsableToken(token) ? token : null;
+
+  // Only the owner and the gift recipient may see an order; the server answers 404 to everyone else and the load never
+  // sends the access token. LOCKED lets the page ask once more in the browser with the stored or the link token before
+  // it says the order cannot be found.
+  if (res && res.ok === false && res.code === 'NOT_FOUND') {
+    const locked = {
+      data: { state: 'LOCKED', id, urlToken, returnHint, settings: settings || {}, loadedAt: 0 },
+      pageTitle: { title: ORDER_TITLE_PLAIN_KEY },
+    };
+
+    if (features.meta === true)
+      locked.meta = { robots: 'noindex,nofollow', referrer: 'no-referrer' };
+
+    return locked;
+  }
 
   if (!res || !res.ok || !isObject(res.order)) {
     return {

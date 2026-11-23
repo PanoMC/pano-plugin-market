@@ -711,13 +711,22 @@ describe('load', () => {
       expect(parseReturnHint(bad)).toBeNull();
   });
 
-  test('a bad id or NOT_FOUND is a 404', () => {
+  test('a bad id is a 404, NOT_FOUND is LOCKED so the browser can ask again with the token', () => {
     expect(resolveOrderLoad({ id: null, res: { ok: true, order: order() } })).toEqual({
       notFound: true,
     });
-    expect(resolveOrderLoad({ id: ID, res: { ok: false, code: 'NOT_FOUND' } })).toEqual({
-      notFound: true,
+
+    const locked = resolveOrderLoad({
+      id: ID,
+      token: 'tok-abc',
+      res: { ok: false, code: 'NOT_FOUND' },
+      features: { meta: true },
     });
+
+    expect(locked.data.state).toBe('LOCKED');
+    expect(locked.data.urlToken).toBe('tok-abc');
+    expect(locked.data.order).toBeUndefined();
+    expect(locked.meta).toEqual({ robots: 'noindex,nofollow', referrer: 'no-referrer' });
   });
 
   test('ok => READY with the url token, hint, settings, title values and meta', () => {

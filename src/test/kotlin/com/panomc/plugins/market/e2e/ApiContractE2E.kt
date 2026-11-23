@@ -492,19 +492,13 @@ class ApiContractE2E : E2eTestBase() {
         // the owner: the full view
         assertEquals(false, order(owner.client, publicId).getBoolean("limited"), "owner view")
 
-        // a wrong token, another logged-in user, a stranger: the limited view (status, items, totals; no e-mail)
-        val views = mapOf(
-            "stranger with a wrong token" to order(stranger, publicId, "0".repeat(40)),
-            "stranger without a token" to order(stranger, publicId),
-            "another user without a token" to order(other.client, publicId),
-            "another user with a wrong token" to order(other.client, publicId, "wrong-token")
-        )
-
-        for ((who, view) in views) {
-            assertEquals(true, view.getBoolean("limited"), "$who gets the limited view")
-            assertEquals(null, view.getString("email"), "$who: no e-mail")
-            assertEquals(publicId, view.getString("publicId"))
-        }
+        // a wrong token, another logged-in user, a stranger: 404, the order is not even confirmed to exist
+        val url = "${MarketPaths.SITE_ROOT}/orders/$publicId"
+        assertEnvelope(stranger.get(url, mapOf("X-Order-Token" to "0".repeat(40))), 404, "NOT_FOUND", "stranger with a wrong token")
+        assertEnvelope(stranger.get(url), 404, "NOT_FOUND", "stranger without a token")
+        assertEnvelope(other.client.get(url), 404, "NOT_FOUND", "another user without a token")
+        assertEnvelope(other.client.get(url, mapOf("X-Order-Token" to "wrong-token")), 404, "NOT_FOUND", "another user with a wrong token")
+        assertEnvelope(stranger.get("$url/status"), 404, "NOT_FOUND", "stranger, status")
 
         // the token opens the full view for anybody who holds it
         assertEquals(false, order(stranger, publicId, token).getBoolean("limited"), "the token holder")

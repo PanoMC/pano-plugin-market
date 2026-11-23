@@ -329,7 +329,7 @@
       "sign-in": "Sign in",
       "poll-offline": "Connection lost. The status will update when you are back online.",
       "refresh-status": "Refresh status",
-      "not-found": "We could not find this order.",
+      "not-found": "We could not find this order. Sign in with the account you ordered with, or open the link in your order e-mail.",
       "items": "Items",
       "shipments": "Shipments",
       "shipping-address": "Shipping address",

@@ -55,6 +55,9 @@ class GetOrderStatusAPI(private val plugin: MarketPlugin) : MarketApi() {
 
         val sqlClient = databaseManager.getSqlClient()
         val access = resolveOrder(plugin, context, getParameters(context).pathParameter("publicId").string, sqlClient)
+
+        if (access.role == OrderRole.LIMITED) throw NotFound()
+
         val body = paymentService(plugin).status(access.order, access.role == OrderRole.OWNER, sqlClient)
 
         noStore(context)
