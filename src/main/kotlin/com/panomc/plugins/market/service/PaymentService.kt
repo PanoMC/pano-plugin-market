@@ -68,6 +68,7 @@ import com.panomc.plugins.market.error.OrderNotCancellable
 import com.panomc.plugins.market.error.OrderNotPayable
 import com.panomc.plugins.market.error.PaymentMethodUnavailable
 import com.panomc.plugins.market.error.PaymentProviderError
+import com.panomc.plugins.market.i18n.ProviderTexts
 import com.panomc.plugins.market.provider.ProviderLookup
 import com.panomc.plugins.market.provider.SecretCipher
 import com.panomc.plugins.market.provider.SettingsCodec
@@ -1386,7 +1387,7 @@ class PaymentService(
 
         if (resolved == null) return if (methodId == MethodInput.CREDITS) "credits" else methodId
 
-        return resolved.row?.customLabel?.takeIf { it.isNotBlank() } ?: resolved.provider.descriptor.displayName.resolve(locale)
+        return resolved.row?.customLabel?.takeIf { it.isNotBlank() } ?: ProviderTexts.resolve(resolved.provider.descriptor.displayName, resolved.provider, locale)
     }
 
     private fun money(amount: Long): Double = amount / 100.0
@@ -1872,12 +1873,13 @@ class PaymentService(
 
             options.add(
                 PaymentMethodOption(
-                    id = row.methodId, label = row.customLabel?.takeIf { it.isNotBlank() } ?: descriptor.displayName.resolve(locale),
-                    description = row.customDescription?.takeIf { it.isNotBlank() } ?: descriptor.description.resolve(locale), hint = descriptor.checkoutHint?.resolve(locale),
+                    id = row.methodId, label = row.customLabel?.takeIf { it.isNotBlank() } ?: ProviderTexts.resolve(descriptor.displayName, resolved.provider, locale),
+                    description = row.customDescription?.takeIf { it.isNotBlank() } ?: ProviderTexts.resolve(descriptor.description, resolved.provider, locale),
+                    hint = descriptor.checkoutHint?.let { ProviderTexts.resolve(it, resolved.provider, locale) },
                     icon = descriptor.icon, logoUrl = if (descriptor.logo != null) MarketPaths.site("/payment-providers/${row.methodId}/logo") else null, color = descriptor.color,
                     feeAmount = tender?.paymentFee ?: 0L, available = reason == null, unavailableReason = reason, providerCode = providerCode,
                     pricing = resolved.caps.priceAuthority.let { if (it == com.panomc.plugins.market.spi.payment.PriceAuthority.MARKET) "MARKET" else it.name },
-                    recurring = recurring, testMode = resolved.testMode, notices = descriptor.storefrontNotices.map { it.label.resolve(locale) to it.url },
+                    recurring = recurring, testMode = resolved.testMode, notices = descriptor.storefrontNotices.map { ProviderTexts.resolve(it.label, resolved.provider, locale) to it.url },
                     requiredBuyerFields = resolved.caps.requiredBuyerFields.map { it.name }
                 ).toJson()
             )

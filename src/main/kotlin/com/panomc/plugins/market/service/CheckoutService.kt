@@ -145,6 +145,7 @@ import com.panomc.plugins.market.error.ShippingUnavailable
 import com.panomc.plugins.market.error.SubscriptionMustBeAlone
 import com.panomc.plugins.market.error.CodeAttemptsLocked
 import com.panomc.plugins.market.error.TooManyRequests
+import com.panomc.plugins.market.i18n.ProviderTexts
 import com.panomc.plugins.market.provider.ProviderLookup
 import com.panomc.plugins.market.provider.SecretCipher
 import com.panomc.plugins.market.provider.SettingsCodec
@@ -1376,7 +1377,7 @@ class CheckoutService(
         val credits = checkNotNull(gift.creditAmount)
         val currency = c.currency
         val timings = TimingConfig(c.orderExpiryMinutes, c.bankTransferExpiryHours)
-        val label = lookup.payment(MethodInput.FREE)?.provider?.descriptor?.displayName?.resolve(locale) ?: MethodInput.FREE
+        val label = lookup.payment(MethodInput.FREE)?.provider?.let { ProviderTexts.resolve(it.descriptor.displayName, it, locale) } ?: MethodInput.FREE
         val name = gift.name.ifBlank { "${topUpAmount(credits)} ${c.creditName.ifBlank { "credits" }}" }
         val window = OrderTimings.providerWindowMs(MethodInput.FREE, null, timings)
         val item = DraftItem("gift", null, false) { orderId, _, stockReserved ->
@@ -1613,9 +1614,9 @@ class CheckoutService(
     private fun labelOf(a: Assessment, methodId: String): String {
         val selected = a.selected
 
-        if (selected != null) return selected.row.customLabel?.takeIf { it.isNotBlank() } ?: selected.provider.descriptor.displayName.resolve(a.locale)
+        if (selected != null) return selected.row.customLabel?.takeIf { it.isNotBlank() } ?: ProviderTexts.resolve(selected.provider.descriptor.displayName, selected.provider, a.locale)
 
-        return lookup.payment(methodId)?.provider?.descriptor?.displayName?.resolve(a.locale) ?: methodId
+        return lookup.payment(methodId)?.provider?.let { ProviderTexts.resolve(it.descriptor.displayName, it, a.locale) } ?: methodId
     }
 
     // ----- phase C and the answer
@@ -2698,14 +2699,14 @@ class CheckoutService(
                     if (offer is ModeOffer.Unavailable) {
                         reason = offer.reason
                         providerCode = eligibility.code
-                        providerDetail = eligibility.reason?.resolve(locale)
+                        providerDetail = eligibility.reason?.let { ProviderTexts.resolve(it, candidate.provider, locale) }
                     }
                 }
 
                 !eligibility.eligible -> {
                     reason = ModeResolver.PROVIDER_INELIGIBLE
                     providerCode = eligibility.code
-                    providerDetail = eligibility.reason?.resolve(locale)
+                    providerDetail = eligibility.reason?.let { ProviderTexts.resolve(it, candidate.provider, locale) }
                 }
             }
         }
@@ -2717,9 +2718,9 @@ class CheckoutService(
 
         return PaymentMethodOption(
             id = candidate.id,
-            label = candidate.row.customLabel?.takeIf { it.isNotBlank() } ?: descriptor.displayName.resolve(locale),
-            description = candidate.row.customDescription?.takeIf { it.isNotBlank() } ?: descriptor.description.resolve(locale),
-            hint = descriptor.checkoutHint?.resolve(locale),
+            label = candidate.row.customLabel?.takeIf { it.isNotBlank() } ?: ProviderTexts.resolve(descriptor.displayName, candidate.provider, locale),
+            description = candidate.row.customDescription?.takeIf { it.isNotBlank() } ?: ProviderTexts.resolve(descriptor.description, candidate.provider, locale),
+            hint = descriptor.checkoutHint?.let { ProviderTexts.resolve(it, candidate.provider, locale) },
             icon = descriptor.icon,
             logoUrl = if (descriptor.logo != null) MarketPaths.site("/payment-providers/${candidate.id}/logo") else null,
             color = descriptor.color,
@@ -2730,7 +2731,7 @@ class CheckoutService(
             pricing = evaluation.pricing.name,
             recurring = recurring,
             testMode = candidate.testMode,
-            notices = descriptor.storefrontNotices.map { it.label.resolve(locale) to it.url },
+            notices = descriptor.storefrontNotices.map { ProviderTexts.resolve(it.label, candidate.provider, locale) to it.url },
             requiredBuyerFields = caps.requiredBuyerFields.map { it.name },
             unavailableDetail = providerDetail?.takeIf { it.isNotBlank() && reason != null }
         )
