@@ -52,6 +52,7 @@ sealed interface ReplayResult {
  * Steps 3 to 7 can be run again on the stored raw request ([retry], [replay]): the retry job and the panel recover rows this way.
  * The provider's reply is sent verbatim, except for a `RETURN`: its answer is always the 303 to the order page (a browser must never be sent
  * anywhere a provider names; the one exception is the `STEP` hop of a gateway that needs an intermediate redirect, 02 section 3 `AttemptUrls.step`).
+ * The return of an `IFRAME` attempt gets market's own page that loads the same order page in the whole window instead of the 303 (it lands in the frame).
  */
 class InboundDispatcher(
     private val store: InboundEventStore,
@@ -455,14 +456,14 @@ class InboundDispatcher(
         if (call.kind == InboundKind.RETURN) HttpReply.redirect(storeUrl()) else HttpReply.retryLater(503)
 
     private suspend fun deferredReply(call: InboundCall, attempt: MarketPayment?): HttpReply =
-        if (call.kind == InboundKind.RETURN) orderPage(attempt, call.outcome) else HttpReply.retryLater(503)
+        if (call.kind == InboundKind.RETURN) returnPage(attempt, call.outcome) else HttpReply.retryLater(503)
 
     private suspend fun failureReply(call: InboundCall, attempt: MarketPayment?, status: Int): HttpReply =
-        if (call.kind == InboundKind.RETURN) orderPage(attempt, call.outcome) else HttpReply.retryLater(status)
+        if (call.kind == InboundKind.RETURN) returnPage(attempt, call.outcome) else HttpReply.retryLater(status)
 
     private suspend fun finalReply(call: InboundCall, provider: HttpReply, attempt: MarketPayment?): HttpReply = when {
         // the browser only ever lands on the order page; the outcome is an untrusted hint for the UI (never the access token)
-        call.kind == InboundKind.RETURN && call.outcome != ReturnOutcome.STEP -> orderPage(attempt, call.outcome)
+        call.kind == InboundKind.RETURN && call.outcome != ReturnOutcome.STEP -> returnPage(attempt, call.outcome)
 
         call.kind == InboundKind.RETURN -> stepReply(provider, attempt)
 
@@ -475,9 +476,26 @@ class InboundDispatcher(
     private suspend fun stepReply(provider: HttpReply, attempt: MarketPayment?): HttpReply {
         val location = provider.headers.entries.firstOrNull { it.key.equals("location", ignoreCase = true) }?.value
 
-        if (provider.orderPage || provider.status !in 300..399 || location == null || !ABSOLUTE_URL.matches(location)) return orderPage(attempt, null)
+        if (provider.orderPage || provider.status !in 300..399 || location == null || !ABSOLUTE_URL.matches(location)) return returnPage(attempt, null)
 
         return sanitized(provider)
+    }
+
+    /**
+     * Where a browser coming back goes: the 303 to the order page. The return of an `IFRAME` attempt runs inside the gateway's frame, so it gets
+     * market's own small page instead, which loads the order page in the whole window (a 303 would open the order page inside the frame).
+     */
+    private suspend fun returnPage(attempt: MarketPayment?, outcome: ReturnOutcome?): HttpReply {
+        val reply = orderPage(attempt, outcome)
+        val location = reply.headers["Location"]
+
+        if (attempt?.startKind != IFRAME_START || location == null) return reply
+
+        val nonce = ids.hexToken(16)
+
+        return HttpReply(200, "text/html; charset=utf-8", AttemptPages.breakOutDocument(location, nonce).toByteArray(Charsets.UTF_8)).also {
+            it.headers = AttemptPages.breakOutHeaders(nonce)
+        }
     }
 
     private suspend fun orderPage(attempt: MarketPayment?, outcome: ReturnOutcome?): HttpReply {
@@ -558,6 +576,7 @@ class InboundDispatcher(
         const val SUB_CHANNEL_MAX = 64
         private const val MAX_CLAIM_ROUNDS = 8
         private const val STEP_PREFIX = "step:"
+        private const val IFRAME_START = "IFRAME"
         private const val DEFAULT_CHANNEL = "default"
         private val ABSOLUTE_URL = Regex("^https?://[^\\s]+$", RegexOption.IGNORE_CASE)
         private val DROPPED_HEADERS = setOf("set-cookie", "set-cookie2", "content-length", "transfer-encoding", "connection", "keep-alive", "host", "upgrade")

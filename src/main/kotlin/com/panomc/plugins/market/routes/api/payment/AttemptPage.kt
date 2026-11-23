@@ -5,6 +5,7 @@ import com.panomc.plugins.market.db.model.MarketPayment
 import com.panomc.plugins.market.db.model.PaymentStatus
 import com.panomc.plugins.market.provider.SecretCipher
 import io.vertx.core.json.JsonArray
+import io.vertx.core.json.Json
 import io.vertx.core.json.JsonObject
 import kotlinx.coroutines.CancellationException
 import org.slf4j.LoggerFactory
@@ -168,6 +169,20 @@ object AttemptPages {
 
             "<script" + (if (selfClosing) attributes.trimEnd().removeSuffix("/") else attributes) + " nonce=\"$nonce\"" + if (selfClosing) "/>" else ">"
         }
+
+    /**
+     * Market's page for the return of an `IFRAME` attempt: it runs inside the payment frame and sends the whole window to [url] (a link with
+     * `target="_top"` when scripts do not run). The page is framed by the store itself, so it has no `frame-ancestors`.
+     */
+    fun breakOutDocument(url: String, nonce: String): String = buildString {
+        append("<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"referrer\" content=\"no-referrer\"><title>&#8230;</title></head><body>")
+        append("<p><a target=\"_top\" href=\"").append(escape(url)).append("\">&#8594;</a></p>")
+        append("<script nonce=\"").append(nonce).append("\">window.top.location.replace(").append(Json.encode(url).replace("<", "\\u003c")).append(");</script></body></html>")
+    }
+
+    fun breakOutHeaders(nonce: String): Map<String, String> = base() + mapOf(
+        "Content-Security-Policy" to "default-src 'none'; script-src 'nonce-$nonce'; base-uri 'none'"
+    )
 
     private fun base() = mapOf(
         "Content-Type" to "text/html; charset=utf-8",

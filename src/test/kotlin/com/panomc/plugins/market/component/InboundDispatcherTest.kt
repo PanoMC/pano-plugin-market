@@ -245,7 +245,7 @@ internal class FakeAttempts : InboundAttempts {
     private fun current(a: MarketPayment?): MarketPayment? = a?.let {
         MarketPayment(
             id = it.id, orderId = it.orderId, providerId = it.providerId, status = status.getValue(it.id), reference = it.reference, token = it.token, amount = it.amount,
-            currency = it.currency, testMode = it.testMode, startPayload = it.startPayload, gatewayTransactionId = it.gatewayTransactionId
+            currency = it.currency, testMode = it.testMode, startKind = it.startKind, startPayload = it.startPayload, gatewayTransactionId = it.gatewayTransactionId
         )
     }
 
@@ -1010,6 +1010,43 @@ class InboundDispatcherTest {
             assertEquals(0, reply.body.size)
             assertFalse(reply.headers["Location"]!!.contains("token"))
         }
+    }
+
+    @Test
+    fun `the return of an IFRAME attempt leaves the payment frame with a page that loads the order page in the whole window`(): Unit = runBlocking {
+        attempts.addRaw(
+            MarketPayment(
+                id = 1, orderId = 1, providerId = "fake", status = PaymentStatus.PENDING, reference = "REF%017d".format(1L), token = token, amount = 1000, currency = "EUR",
+                startKind = "IFRAME"
+            )
+        )
+        fake.onInbound = { ok(reply = HttpReply.text("ignored by a return")) }
+
+        val reply = dispatcher.handle(call(InboundKind.RETURN, outcome = ReturnOutcome.SUCCESS))
+        val html = String(reply.body, Charsets.UTF_8)
+        val csp = reply.headers.getValue("Content-Security-Policy")
+        val nonce = Regex("script-src 'nonce-([0-9a-f]+)'").find(csp)!!.groupValues[1]
+
+        assertEquals(200, reply.status)
+        assertEquals("text/html; charset=utf-8", reply.contentType)
+        assertEquals("no-store", reply.headers["Cache-Control"])
+        assertFalse(reply.headers.containsKey("Location"))
+        assertFalse(csp.contains("frame-ancestors"), "the page runs inside the store's own payment frame")
+        assertTrue(html.contains("<script nonce=\"$nonce\">window.top.location.replace(\"https://shop.example/store/order/ORDER000000000000001?return=success\");</script>"), html)
+        assertTrue(html.contains("<a target=\"_top\" href=\"https://shop.example/store/order/ORDER000000000000001?return=success\">"), html)
+
+        fake.onInbound = { throw IllegalStateException("boom") }
+
+        assertEquals(200, dispatcher.handle(call(InboundKind.RETURN, outcome = ReturnOutcome.CANCEL)).status, "a failed run leaves the frame too")
+        assertTrue(String(dispatcher.handle(call(InboundKind.RETURN, outcome = ReturnOutcome.CANCEL)).body, Charsets.UTF_8).contains("?return=cancel"))
+    }
+
+    @Test
+    fun `a URL is written into the break-out page so that it cannot leave the script or the attribute`() {
+        val html = AttemptPages.breakOutDocument("https://shop.example/o?a=1&b=</script>\"'", "abc")
+
+        assertTrue(html.contains("href=\"https://shop.example/o?a=1&amp;b=&lt;/script&gt;&quot;&#39;\""), html)
+        assertEquals(1, Regex("</script>").findAll(html).count(), html)
     }
 
     @Test
