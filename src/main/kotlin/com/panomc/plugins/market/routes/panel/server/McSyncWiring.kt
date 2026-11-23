@@ -69,6 +69,15 @@ private fun buildMcSyncService(plugin: MarketPlugin): McSyncService {
 @Volatile
 private var cachedPush: Pair<MarketPlugin, com.panomc.plugins.market.service.McPush>? = null
 
+/** Stop / disable: cancels the `MARKET_WAKE` timers of [plugin] and forgets its sender, the next start builds a new one. */
+internal fun releaseMcPush(plugin: MarketPlugin) {
+    val push = synchronized(McSyncWiringHolder) {
+        cachedPush?.takeIf { it.first === plugin }?.second?.also { cachedPush = null }
+    } ?: return
+
+    push.cancelAll(runCatching { plugin.applicationContext.getBean(io.vertx.core.Vertx::class.java) }.getOrNull())
+}
+
 /** The `MARKET_WAKE` sender of the plugin instance: pushes "act now" to the connected game servers (no polling for news). */
 internal fun mcPush(plugin: MarketPlugin): com.panomc.plugins.market.service.McPush {
     cachedPush?.takeIf { it.first === plugin }?.let { return it.second }

@@ -34,9 +34,15 @@ class McPush(
 
     private val pending = ConcurrentHashMap<Long, Pending>()
 
+    // armed timer ids, so a stop / disable can cancel them (a timer left behind pins the old plugin's classes for up to an hour)
+    private val timers = ConcurrentHashMap.newKeySet<Long>()
+
+    @Volatile
+    private var stopped = false
+
     /** Wakes [serverId] for [reasons]; [players] are the names a [BALANCE] wake is about. */
     fun wake(serverId: Long, vararg reasons: String, players: Collection<String> = emptyList()) {
-        if (serverId <= 0 || reasons.isEmpty()) return
+        if (stopped || serverId <= 0 || reasons.isEmpty()) return
 
         var first = false
         val entry = pending.computeIfAbsent(serverId) { first = true; Pending() }
@@ -50,7 +56,7 @@ class McPush(
 
         val v = vertx()
 
-        if (v == null || coalesceMs <= 0) flush(serverId) else v.setTimer(coalesceMs) { flush(serverId) }
+        if (v == null || coalesceMs <= 0) flush(serverId) else arm(v, coalesceMs) { flush(serverId) }
     }
 
     /** Wakes every connected server. */
@@ -63,6 +69,8 @@ class McPush(
      * further away than [MAX_TIMER_MS] are left to the component's heartbeat, which offers them as soon as they are due.
      */
     fun wakeAt(serverId: Long, at: Long, reason: String = SYNC) {
+        if (stopped) return
+
         val wait = at - now()
 
         if (wait <= 0) return wake(serverId, reason)
@@ -70,7 +78,39 @@ class McPush(
 
         val v = vertx() ?: return
 
-        v.setTimer(wait + 50) { wake(serverId, reason) }
+        arm(v, wait + 50) { wake(serverId, reason) }
+    }
+
+    /**
+     * Cancels every armed timer and drops the waiting wakes (plugin stop / disable). Wakes asked for afterwards are ignored; the plugin
+     * builds a new [McPush] when it starts again.
+     */
+    fun cancelAll(vertx: Vertx? = this.vertx()) {
+        stopped = true
+
+        for (id in timers.toList()) {
+            if (!timers.remove(id)) continue
+
+            try {
+                vertx?.cancelTimer(id)
+            } catch (e: Exception) {
+                logger.debug("MARKET_WAKE timer {} was not cancelled: {}", id, e.message)
+            }
+        }
+
+        pending.clear()
+    }
+
+    private fun arm(v: Vertx, delayMs: Long, action: () -> Unit) {
+        var id = -1L
+        id = v.setTimer(delayMs) {
+            timers.remove(id)
+            if (!stopped) action()
+        }
+        timers += id
+
+        // cancelAll ran while this timer was being armed
+        if (stopped && timers.remove(id)) v.cancelTimer(id)
     }
 
     private fun flush(serverId: Long) {

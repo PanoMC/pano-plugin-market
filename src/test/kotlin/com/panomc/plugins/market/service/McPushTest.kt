@@ -46,6 +46,16 @@ class McPushTest {
     }
 
     @Test
+    fun `nothing is sent after cancelAll`() {
+        val p = push()
+        p.cancelAll(null)
+        p.wake(7, McPush.SYNC)
+        p.wakeAll(McPush.CONFIG)
+        p.wakeAt(3, now - 1)
+        assertTrue(sent.isEmpty())
+    }
+
+    @Test
     fun `the event name is MARKET_WAKE`() {
         assertEquals("MARKET_WAKE", MarketWakeMessage(listOf("SYNC")).getResponseName())
     }

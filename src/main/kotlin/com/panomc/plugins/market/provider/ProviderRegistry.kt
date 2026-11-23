@@ -185,8 +185,15 @@ class ProviderRegistry(
         return lastSnapshot
     }
 
-    private fun started(): List<PluginExtension> =
-        snapshot().filter { isStarted(it.pluginId) }.sortedBy { it.pluginId }
+    private fun started(): List<PluginExtension> {
+        val all = snapshot()
+        val live = all.filter { isStarted(it.pluginId) }
+
+        // the fallback snapshot must not keep the extensions (and classes) of plugins that are gone
+        if (live.size != all.size && lastSnapshot === all) lastSnapshot = live
+
+        return live.sortedBy { it.pluginId }
+    }
 
     private fun isStarted(pluginId: String): Boolean = try {
         pluginState(pluginId) == PluginState.STARTED

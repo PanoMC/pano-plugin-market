@@ -77,6 +77,9 @@ class MarketPlugin : PanoPlugin() {
     @Volatile
     private var jobScheduler: MarketScheduler? = null
 
+    @Volatile
+    private var secretsRetryTimerId: Long? = null
+
     // The six server events of the Minecraft component (MARKET_SYNC of 08 section 8.1 and the five game events of 19 section 7): registered at start, removed at stop / disable.
     @Volatile
     private var serverEvents: List<ServerEvent<*, *>>? = null
@@ -168,9 +171,17 @@ class MarketPlugin : PanoPlugin() {
     private suspend fun encryptLegacySecrets() {
         runSecretsPass()
 
-        vertx.setTimer(SECRETS_RETRY_MS) {
-            CoroutineScope(vertx.dispatcher()).launch { runSecretsPass() }
+        secretsRetryTimerId?.let { vertx.cancelTimer(it) }
+        secretsRetryTimerId = vertx.setTimer(SECRETS_RETRY_MS) {
+            secretsRetryTimerId = null
+
+            if (isRunning) CoroutineScope(vertx.dispatcher()).launch { runSecretsPass() }
         }
+    }
+
+    private fun cancelSecretsRetry() {
+        secretsRetryTimerId?.let { vertx.cancelTimer(it) }
+        secretsRetryTimerId = null
     }
 
     private suspend fun runSecretsPass() {
@@ -307,6 +318,8 @@ class MarketPlugin : PanoPlugin() {
         unregisterServerEvents()
         stopExchangeRateScheduler()
         stopJobScheduler()
+        cancelSecretsRetry()
+        com.panomc.plugins.market.routes.panel.server.releaseMcPush(this)
     }
 
     override suspend fun onDisable() {
@@ -314,6 +327,13 @@ class MarketPlugin : PanoPlugin() {
         MarketRuntime.stopped()
         unregisterServerEvents()
         stopExchangeRateScheduler()
+        // onStop does not run after a failed start: stop the jobs here too and build a new scheduler on the next enable
+        stopJobScheduler()
+        jobScheduler = null
+        cancelSecretsRetry()
+        com.panomc.plugins.market.routes.panel.server.releaseMcPush(this)
+        // the config retriever of this enable cycle polls the file every 5 s until it is closed
+        runCatching { pluginBeanContext.getBean(PluginConfigManager::class.java).close() }
         isInitialized = false
     }
 
