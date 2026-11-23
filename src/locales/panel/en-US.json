@@ -1426,6 +1426,8 @@
       "toast-invalid-credit": "Please enter a valid credit amount.",
       "toast-select-at-least-one": "Please select at least one product.",
       "toast-code-exists": "This code is already in use.",
+      "toast-code-too-short": "A gift code needs at least 8 characters.",
+      "toast-code-invalid-format": "A gift code may only contain letters, digits, _ and - (at most 64 characters).",
       "toast-save-error": "An error occurred while saving the gift.",
       "toast-updated": "Gift updated.",
       "toast-created": "Gift created.",

@@ -1426,6 +1426,8 @@
       "toast-invalid-credit": "Lütfen geçerli bir kredi miktarı girin.",
       "toast-select-at-least-one": "Lütfen en az bir ürün seçin.",
       "toast-code-exists": "Bu kod zaten kullanılıyor.",
+      "toast-code-too-short": "Hediye kodu en az 8 karakter olmalıdır.",
+      "toast-code-invalid-format": "Hediye kodu yalnızca harf, rakam, _ ve - içerebilir (en fazla 64 karakter).",
       "toast-save-error": "Hediye kaydedilirken bir hata oluştu.",
       "toast-updated": "Hediye güncellendi.",
       "toast-created": "Hediye oluşturuldu.",

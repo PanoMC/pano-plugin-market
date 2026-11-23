@@ -2,7 +2,14 @@
   import { api } from '@panomc/sdk/plugin-api';
   import ProductSelector from '../ProductSelector.svelte';
   import { _, showSuccessToast, showErrorToast } from '../../../i18n';
-  import { giftDates, giftDatesReversed, validateGiftLimits } from '../../utils/category-gift.js';
+  import {
+    giftCodeError,
+    giftCodeErrorKey,
+    giftDates,
+    giftDatesReversed,
+    validateGiftLimits,
+  } from '../../utils/category-gift.js';
+  import { errorDetails } from '../../utils/api.js';
 
   let { isEdit = false, gift = null, onSaved = () => {} } = $props();
 
@@ -107,8 +114,9 @@
     submitted = true;
     if (Object.keys(limits.errors).length > 0 || datesReversed) return;
 
-    if (!giftCode || giftCode.trim() === '') {
-      showErrorToast($_('modals.gift.toast-code-required'));
+    const codeError = giftCodeError(giftCode);
+    if (codeError) {
+      showErrorToast($_(giftCodeErrorKey(codeError)));
       return;
     }
 
@@ -165,11 +173,10 @@
       }
 
       if (result.error) {
-        if (result.error?.code === 'CODE_ALREADY_EXISTS') {
-          showErrorToast($_('modals.gift.toast-code-exists'));
-        } else {
-          showErrorToast($_('modals.gift.toast-save-error'));
-        }
+        const key =
+          giftCodeErrorKey(result.error?.code) ??
+          giftCodeErrorKey(errorDetails(result).fieldErrors?.code);
+        showErrorToast($_(key ?? 'modals.gift.toast-save-error'));
         return;
       }
 

@@ -1,29 +1,60 @@
 import { describe, expect, test } from 'bun:test';
-import { changedCategoryFields, formValue, giftDates, giftDatesReversed, usedCell, validateGiftLimits } from './category-gift.js';
+import {
+  changedCategoryFields,
+  formValue,
+  giftDates,
+  giftDatesReversed,
+  usedCell,
+  validateGiftLimits,
+} from './category-gift.js';
 
-const base = { name: 'A', description: 'd', icon: 'fa-folder', color: '#000', status: 'ACTIVE', tiered: false, upgradeMode: 'DIFFERENCE' };
+const base = {
+  name: 'A',
+  description: 'd',
+  icon: 'fa-folder',
+  color: '#000',
+  status: 'ACTIVE',
+  tiered: false,
+  upgradeMode: 'DIFFERENCE',
+};
 
 describe('changedCategoryFields', () => {
   test('nothing changed sends nothing', () => {
     expect(changedCategoryFields(base, { ...base })).toEqual({});
   });
   test('only changed keys are sent', () => {
-    expect(changedCategoryFields(base, { ...base, name: 'B', color: '#fff' })).toEqual({ name: 'B', color: '#fff' });
+    expect(changedCategoryFields(base, { ...base, name: 'B', color: '#fff' })).toEqual({
+      name: 'B',
+      color: '#fff',
+    });
   });
   test('turning tiered on sends tiered and the mode', () => {
-    expect(changedCategoryFields(base, { ...base, tiered: true, upgradeMode: 'FULL' })).toEqual({ tiered: true, upgradeMode: 'FULL' });
-    expect(changedCategoryFields(base, { ...base, tiered: true })).toEqual({ tiered: true, upgradeMode: 'DIFFERENCE' });
+    expect(changedCategoryFields(base, { ...base, tiered: true, upgradeMode: 'FULL' })).toEqual({
+      tiered: true,
+      upgradeMode: 'FULL',
+    });
+    expect(changedCategoryFields(base, { ...base, tiered: true })).toEqual({
+      tiered: true,
+      upgradeMode: 'DIFFERENCE',
+    });
   });
   test('turning tiered off never sends the mode', () => {
     const tiered = { ...base, tiered: true, upgradeMode: 'FULL' };
-    expect(changedCategoryFields(tiered, { ...tiered, tiered: false, upgradeMode: 'FULL' })).toEqual({ tiered: false });
+    expect(
+      changedCategoryFields(tiered, { ...tiered, tiered: false, upgradeMode: 'FULL' }),
+    ).toEqual({ tiered: false });
   });
   test('changing only the mode of a tiered category', () => {
     const tiered = { ...base, tiered: true, upgradeMode: 'FULL' };
-    expect(changedCategoryFields(tiered, { ...tiered, upgradeMode: 'DIFFERENCE' })).toEqual({ upgradeMode: 'DIFFERENCE' });
+    expect(changedCategoryFields(tiered, { ...tiered, upgradeMode: 'DIFFERENCE' })).toEqual({
+      upgradeMode: 'DIFFERENCE',
+    });
   });
   test('create (no original) sends every given key', () => {
-    expect(changedCategoryFields(null, { name: 'N', tiered: false })).toEqual({ name: 'N', tiered: false });
+    expect(changedCategoryFields(null, { name: 'N', tiered: false })).toEqual({
+      name: 'N',
+      tiered: false,
+    });
   });
   test('formValue serialises booleans', () => {
     expect(formValue(true)).toBe('true');
@@ -41,8 +72,13 @@ describe('validateGiftLimits', () => {
   test('integers >= 1 only', () => {
     expect(validateGiftLimits({ redeemLimit: 0 }).errors.redeemLimit).toBe('INVALID');
     expect(validateGiftLimits({ redeemLimit: '2.5' }).errors.redeemLimit).toBe('INVALID');
-    expect(validateGiftLimits({ customerRedeemLimit: 0 }).errors.customerRedeemLimit).toBe('INVALID');
-    expect(validateGiftLimits({ redeemLimit: 5, customerRedeemLimit: 2 }).values).toMatchObject({ redeemLimit: 5, customerRedeemLimit: 2 });
+    expect(validateGiftLimits({ customerRedeemLimit: 0 }).errors.customerRedeemLimit).toBe(
+      'INVALID',
+    );
+    expect(validateGiftLimits({ redeemLimit: 5, customerRedeemLimit: 2 }).values).toMatchObject({
+      redeemLimit: 5,
+      customerRedeemLimit: 2,
+    });
   });
   test('name is limited to 255', () => {
     expect(validateGiftLimits({ name: 'x'.repeat(256) }).errors.name).toBe('TOO_LONG');
@@ -64,7 +100,13 @@ import { siblingMove } from './category-gift.js';
 
 describe('siblingMove', () => {
   const tree = [
-    { id: 1, children: [{ id: 11, children: [] }, { id: 12, children: [] }] },
+    {
+      id: 1,
+      children: [
+        { id: 11, children: [] },
+        { id: 12, children: [] },
+      ],
+    },
     { id: 2, children: [] },
     { id: 3, children: [] },
   ];
@@ -102,7 +144,10 @@ describe('giftRedemptionTarget', () => {
 
 describe('giftDates', () => {
   test('unlimited or empty dates are an explicit null so an edit can clear them', () => {
-    expect(giftDates(true, '2026-12-01', '2026-12-31')).toEqual({ startDate: null, expiryDate: null });
+    expect(giftDates(true, '2026-12-01', '2026-12-31')).toEqual({
+      startDate: null,
+      expiryDate: null,
+    });
     const open = giftDates(false, '', '');
     expect('startDate' in open && 'expiryDate' in open).toBe(true);
     expect(open).toEqual({ startDate: null, expiryDate: null });
@@ -117,5 +162,27 @@ describe('gift expiry day', () => {
     expect(expiryDate).toBe(new Date(2026, 11, 25, 23, 59, 59, 999).getTime());
     expect(expiryDate).toBeGreaterThan(startDate);
     expect(giftDatesReversed(startDate, expiryDate)).toBe(false);
+  });
+});
+
+import { giftCodeError, giftCodeErrorKey } from './category-gift.js';
+
+describe('gift code rules (backend PromotionRules)', () => {
+  test('short, malformed and good codes', () => {
+    expect(giftCodeError('')).toBe('REQUIRED');
+    expect(giftCodeError('   ')).toBe('REQUIRED');
+    expect(giftCodeError('XMAS24')).toBe('TOO_SHORT');
+    expect(giftCodeError('free rank')).toBe('INVALID_FORMAT');
+    expect(giftCodeError('A'.repeat(65))).toBe('INVALID_FORMAT');
+    expect(giftCodeError(' xmas-2024 ')).toBeNull();
+    expect(giftCodeError('ABCDEFGH')).toBeNull();
+  });
+
+  test('error keys for the toast, from the local check or the save fieldErrors.code', () => {
+    expect(giftCodeErrorKey('TOO_SHORT')).toBe('modals.gift.toast-code-too-short');
+    expect(giftCodeErrorKey('INVALID_FORMAT')).toBe('modals.gift.toast-code-invalid-format');
+    expect(giftCodeErrorKey('CODE_ALREADY_EXISTS')).toBe('modals.gift.toast-code-exists');
+    expect(giftCodeErrorKey('OUT_OF_RANGE')).toBeNull();
+    expect(giftCodeErrorKey(undefined)).toBeNull();
   });
 });

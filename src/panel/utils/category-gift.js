@@ -22,7 +22,8 @@ export function changedCategoryFields(original, current) {
 }
 
 /** FormData value of a field (booleans as 'true' / 'false'). */
-export const formValue = (value) => (typeof value === 'boolean' ? String(value) : String(value ?? ''));
+export const formValue = (value) =>
+  typeof value === 'boolean' ? String(value) : String(value ?? '');
 
 const NAME_MAX = 255;
 
@@ -46,6 +47,32 @@ export function validateGiftLimits({ name = '', redeemLimit = '', customerRedeem
   if (Number.isNaN(perCustomer)) errors.customerRedeemLimit = 'INVALID';
   values.customerRedeemLimit = perCustomer ?? 1;
   return { errors, values };
+}
+
+const GIFT_CODE_FORMAT = /^[A-Z0-9_-]{1,64}$/;
+const GIFT_CODE_MIN = 8;
+
+/**
+ * The backend rule of a gift code (PromotionRules: trimmed and upper-cased, `[A-Z0-9_-]{1,64}`, at least 8 for a
+ * gift): REQUIRED, INVALID_FORMAT, TOO_SHORT, or null when the code is accepted.
+ */
+export function giftCodeError(code) {
+  const value = String(code ?? '')
+    .trim()
+    .toUpperCase();
+  if (value === '') return 'REQUIRED';
+  if (!GIFT_CODE_FORMAT.test(value)) return 'INVALID_FORMAT';
+  if (value.length < GIFT_CODE_MIN) return 'TOO_SHORT';
+  return null;
+}
+
+/** Locale key (under `modals.gift.`) of a gift code error, from giftCodeError or the save's `fieldErrors.code`; null for others. */
+export function giftCodeErrorKey(code) {
+  if (code === 'REQUIRED') return 'modals.gift.toast-code-required';
+  if (code === 'TOO_SHORT') return 'modals.gift.toast-code-too-short';
+  if (code === 'INVALID_FORMAT') return 'modals.gift.toast-code-invalid-format';
+  if (code === 'CODE_ALREADY_EXISTS') return 'modals.gift.toast-code-exists';
+  return null;
 }
 
 /** Gift dates are epoch ms; both set and start after end is invalid. */
@@ -87,7 +114,9 @@ export function siblingMove(tree, id, dir) {
     return index > 0 ? { id, position: 'BEFORE', targetId: items[index - 1].id } : null;
   }
   if (dir === 'down') {
-    return index < items.length - 1 ? { id, position: 'AFTER', targetId: items[index + 1].id } : null;
+    return index < items.length - 1
+      ? { id, position: 'AFTER', targetId: items[index + 1].id }
+      : null;
   }
   return null;
 }
