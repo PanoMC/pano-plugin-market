@@ -736,7 +736,13 @@ describe('load', () => {
       urlToken: 'tok-abc',
       returnHint: 'success',
       settings: { removeCents: true },
+      loadedAt: 0,
     });
+    // the read time is kept so the server-rendered page can already count down
+    expect(
+      resolveOrderLoad({ id: ID, res: { ok: true, order: order() }, loadedAt: 1700000000000 }).data
+        .loadedAt,
+    ).toBe(1700000000000);
     expect(res.pageTitle).toEqual({
       title: 'plugins.pano-plugin-market.theme.order.title',
       titleValues: { number: 42 },

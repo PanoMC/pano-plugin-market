@@ -160,7 +160,9 @@
   let expiryPolled = false;
   let poller = null;
 
-  const nowMs = $derived(clock.state.now);
+  // the shared clock is 0 until it ticks in the browser (and always on the server): until then the time the order was
+  // read stands in, so the countdown is part of the first render
+  const nowMs = $derived(clock.state.now || init.loadedAt || 0);
   const view = $derived(viewState(order, init.returnHint, nowMs, mountedAt));
   const extras = $derived(orderExtras(order));
   const left = $derived(expiryLeft(order, nowMs));

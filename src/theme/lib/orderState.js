@@ -116,6 +116,7 @@ export function resolveOrderLoad({
   res,
   settings = null,
   features = {},
+  loadedAt = 0,
 }) {
   if (!id) return { notFound: true };
   if (res && res.ok === false && res.code === 'NOT_FOUND') return { notFound: true };
@@ -140,6 +141,9 @@ export function resolveOrderLoad({
       urlToken,
       returnHint,
       settings: settings || {},
+      // when the order was read (epoch ms): the page counts down from it until the shared clock ticks, so the
+      // server-rendered page already shows "expires in" instead of the line appearing after hydration
+      loadedAt: Number.isFinite(loadedAt) && loadedAt > 0 ? loadedAt : 0,
     },
     pageTitle:
       number !== null && number !== undefined && number !== ''

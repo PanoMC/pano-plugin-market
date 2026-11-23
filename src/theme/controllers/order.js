@@ -35,6 +35,7 @@ export default defineController({
       res,
       settings: settingsRes.ok && settingsRes.settings ? settingsRes.settings : null,
       features: { meta: host.feature('page-meta') },
+      loadedAt: host.now(),
     });
   },
 });
