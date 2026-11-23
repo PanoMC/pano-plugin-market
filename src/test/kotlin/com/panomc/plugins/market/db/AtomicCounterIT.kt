@@ -377,7 +377,7 @@ class AtomicCounterIT : MarketDaoITBase() {
         ),
         MarketCouponDao::class.java to setOf("add", "update", "deleteById", "getById", "getByCode", "getAll", "count"),
         MarketGiftDao::class.java to setOf("add", "update", "deleteById", "getById", "getByCode", "getAll", "count"),
-        MarketCreatorCodeDao::class.java to setOf("add", "update", "deleteById", "getById", "getByCode", "getAll", "count"),
+        MarketCreatorCodeDao::class.java to setOf("add", "update", "deleteById", "getById", "getByCode", "getCreatorUserId", "getAll", "count"),
         MarketDiscountDao::class.java to setOf("add", "update", "deleteById", "getById", "getAll", "count", "getAutomatic")
     )
 
