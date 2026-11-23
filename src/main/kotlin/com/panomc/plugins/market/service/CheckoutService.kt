@@ -831,9 +831,13 @@ class CheckoutService(
         limitIp(caller)
 
         orders.getByBuyerAndIdempotencyKey(payer.key, request.idempotencyKey, sqlClient)?.let { existing ->
-            // A key protects against a second order while the first can still be paid (or was paid). An order that can never be paid
-            // any more (expired, cancelled, failed) gives the key back: the buyer pressing Pay again gets a new order, not the dead one.
-            if (existing.status !in DEAD_ORDER_STATUSES || !orders.releaseIdempotencyKey(existing.id, request.idempotencyKey, sqlClient)) {
+            // A key protects against a second order while the first can still be paid (or was paid). On the web checkout an order that
+            // can never be paid any more (expired, cancelled, failed) gives the key back: the buyer pressing Pay again (a key a browser
+            // kept) gets a new order, not the dead one. An in-game purchase keeps the definite refusal: its key is the game's operation
+            // id, and a late retry of an operation the player cancelled or let expire must never buy.
+            val release = request.source == OrderSource.STOREFRONT && existing.status in DEAD_ORDER_STATUSES
+
+            if (!release || !orders.releaseIdempotencyKey(existing.id, request.idempotencyKey, sqlClient)) {
                 return replay(orders.getById(existing.id, sqlClient) ?: existing, request, deps, sqlClient)
             }
         }
