@@ -3,7 +3,7 @@
     {@const values = valuesOf(entry)}
     <div class="card" data-field="providerMeta.{entry.providerId}">
       <CardHeader>
-        <div slot="left">{entry.name}</div>
+        <div slot="left">{text(entry.name)}</div>
       </CardHeader>
       <div class="card-body p-4 vstack gap-3">
         {#each groupFields(entry.schema) as block (block.key ?? '')}

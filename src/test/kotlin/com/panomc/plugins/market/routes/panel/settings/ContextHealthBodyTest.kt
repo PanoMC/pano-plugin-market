@@ -79,6 +79,10 @@ class ContextHealthBodyTest {
     fun `product meta schemas are for catalogue holders only`() {
         assertFalse(marketContextBody(input, includeProductMeta = false).containsKey("productMetaSchemas"))
         assertTrue(marketContextBody(input, includeProductMeta = true).containsKey("productMetaSchemas"))
+
+        val schemas = listOf(mapOf("providerId" to "tebex", "name" to "Tebex", "schema" to mapOf("fields" to emptyList<Any>())))
+        assertEquals(schemas, marketContextBody(input, includeProductMeta = true, productMetaSchemas = schemas)["productMetaSchemas"])
+        assertFalse(marketContextBody(input, includeProductMeta = false, productMetaSchemas = schemas).containsKey("productMetaSchemas"))
     }
 
     @Test

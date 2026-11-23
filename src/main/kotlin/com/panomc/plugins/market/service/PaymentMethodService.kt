@@ -101,6 +101,35 @@ class PaymentMethodService(
         return entries.sortedBy { it.first }.map { it.second }
     }
 
+    /**
+     * `productMetaSchemas[{providerId, name, schema}]` of `GET /context` (04 section 8, 13 section 7): every usable payment
+     * provider that declares a per-product schema for its stored settings, in method order. `name` is the method's custom
+     * label, else the provider's display name (LocalizedText JSON). A provider that throws is left out.
+     */
+    suspend fun productMetaSchemas(): List<Map<String, Any?>> {
+        val rows = db.tx { conn -> methods.getAll(conn) }.associateBy { it.methodId }
+        val seen = HashSet<String>()
+        val entries = ArrayList<Pair<Int, Map<String, Any?>>>()
+
+        for (resolved in lookup.allPayment()) {
+            if (!seen.add(resolved.id)) continue
+
+            val provider = resolved.provider
+            val row = rows[resolved.id]
+            val schema = try {
+                val codec = SettingsCodec(provider.settingsSchema(), cipher)
+                provider.productMetaSchema(codec.decrypt(row?.let { storedOf(it) }))?.toJson()
+            } catch (e: Exception) {
+                null
+            } ?: continue
+            val name: Any? = row?.customLabel?.takeIf { it.isNotBlank() } ?: provider.descriptor.displayName.toJson().map
+
+            entries.add((row?.position ?: 0) to mapOf("providerId" to resolved.id, "name" to name, "schema" to schema.map))
+        }
+
+        return entries.sortedBy { it.first }.map { it.second }
+    }
+
     /** `paymentMethods{<id>: {enabled, settings}}` of `GET /settings` (masked), built from the registry. */
     suspend fun settingsSummary(): JsonObject {
         val rows = db.tx { conn -> methods.getAll(conn) }.associateBy { it.methodId }

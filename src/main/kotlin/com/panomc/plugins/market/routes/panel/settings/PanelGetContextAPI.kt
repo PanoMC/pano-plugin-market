@@ -18,6 +18,7 @@ import com.panomc.plugins.market.config.MarketConfig
 import com.panomc.plugins.market.db.dao.MarketShippingMethodDao
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.base.MarketPanelApi
+import com.panomc.plugins.market.routes.panel.settings.payment.paymentMethodService
 import com.panomc.plugins.market.runtime.MarketRuntime
 import com.panomc.plugins.market.runtime.beans
 import io.vertx.ext.web.RoutingContext
@@ -68,8 +69,15 @@ fun marketCurrencies(): List<Map<String, Any?>> =
         Currencies.all().filter { it !in PREFERRED_CURRENCIES }.sorted())
         .map { mapOf("code" to it, "symbol" to Currencies.symbol(it), "exponent" to Currencies.exponent(it)) }
 
-/** The `GET /context` body without `result`. `productMetaSchemas` is only present for [includeProductMeta] (CAT holders). */
-fun marketContextBody(input: MarketContextInput, includeProductMeta: Boolean): Map<String, Any?> {
+/**
+ * The `GET /context` body without `result`. `productMetaSchemas` ([productMetaSchemas], the payment providers' per-product
+ * schemas) is only present for [includeProductMeta] (CAT holders).
+ */
+fun marketContextBody(
+    input: MarketContextInput,
+    includeProductMeta: Boolean,
+    productMetaSchemas: List<Map<String, Any?>> = emptyList()
+): Map<String, Any?> {
     val body = linkedMapOf<String, Any?>(
         "currency" to input.currency,
         "currencySymbol" to input.currencySymbol,
@@ -98,7 +106,7 @@ fun marketContextBody(input: MarketContextInput, includeProductMeta: Boolean): M
         "runtimeState" to input.runtimeState
     )
 
-    if (includeProductMeta) body["productMetaSchemas"] = emptyList<Any>()
+    if (includeProductMeta) body["productMetaSchemas"] = productMetaSchemas
 
     return body
 }
@@ -130,8 +138,19 @@ class PanelGetContextAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
             config, storeUrl = marketStoreUrl(websiteUrl, if (websiteUrl.isBlank()) StoreLinks.NONE else MarketLinks.platform), mailEnabled = MarketRuntime.capabilities.mailEnabled(platformMailSwitchOn(plugin)), shippingEnabled = shippingEnabled(), runtimeState = MarketRuntime.state.name
         ).copy(featurePreview = developmentMode())
 
-        return Successful(marketContextBody(input, includeProductMeta = has(context, MarketNode.CATALOG)))
+        val includeProductMeta = has(context, MarketNode.CATALOG)
+        val schemas = if (includeProductMeta) productMetaSchemas() else emptyList()
+
+        return Successful(marketContextBody(input, includeProductMeta, schemas))
     }
+
+    /** The payment providers' per-product schemas; empty while the market or its database is not ready (the context must still answer). */
+    private suspend fun productMetaSchemas(): List<Map<String, Any?>> =
+        try {
+            paymentMethodService(plugin).productMetaSchemas()
+        } catch (e: Exception) {
+            emptyList()
+        }
 
     private fun developmentMode(): Boolean =
         runCatching { plugin.applicationContext.getBean(ConfigManager::class.java).config.developmentMode }.getOrDefault(false)

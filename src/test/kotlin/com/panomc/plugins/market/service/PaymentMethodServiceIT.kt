@@ -96,6 +96,7 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
         var failSaved: ProviderException? = null
         var failAction: Throwable? = null
         var secretsSeenByValidate: Map<String, String?> = emptyMap()
+        var productMeta: ((ProviderSettings) -> SettingsSchema?)? = null
 
         override val descriptor = ProviderDescriptor(LocalizedText.of("Gate"), LocalizedText.of("A gate"), "credit-card").also {
             it.logo = ProviderAsset("image/png", byteArrayOf(1, 2, 3))
@@ -113,6 +114,8 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
         }
 
         override fun capabilities(settings: ProviderSettings): PaymentCapabilities = caps
+
+        override fun productMetaSchema(settings: ProviderSettings): SettingsSchema? = productMeta?.invoke(settings)
 
         override suspend fun validateSettings(ctx: PaymentContext, settings: ProviderSettings): SettingsValidation {
             order.add("validate")
@@ -496,6 +499,31 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
         assertEquals("GATEWAY_REJECTED", row()!!.lastError)
         assertNotNull(row()!!.lastErrorAt)
         assertEquals("GATEWAY_REJECTED", entry().getString("lastError"))
+    }
+
+    // ---- product meta schemas (GET /context)
+
+    @Test
+    fun `productMetaSchemas lists every provider that declares a per-product schema for its stored settings`(): Unit = runBlocking {
+        gateway("plain")
+        val g = gateway("tebex") {
+            // like Tebex: the package id field exists only in catalogue mode, which comes from the stored settings
+            productMeta = { s -> if (s.string("note") == "catalogue") settingsSchema { text("packageId") { label = LocalizedText.of("Package") } } else null }
+        }
+        gateway("broken") { productMeta = { error("boom") } }
+
+        assertTrue(service.productMetaSchemas().isEmpty(), "nothing is declared before the settings ask for it")
+
+        service.save("tebex", settings("note" to "catalogue"), json("customLabel" to "Tebex store"))
+        val entry = service.productMetaSchemas().single()
+
+        assertEquals("tebex", entry["providerId"])
+        assertEquals("Tebex store", entry["name"])
+        assertEquals("packageId", JsonObject(entry["schema"] as Map<String, Any?>).getJsonArray("fields").getJsonObject(0).getString("key"))
+
+        service.save("tebex", null, json("customLabel" to ""))
+        assertEquals("Gate", (service.productMetaSchemas().single()["name"] as Map<*, *>)["default"], "the display name without a custom label")
+        assertTrue(g.saved.isNotEmpty())
     }
 
     // ---- availability
