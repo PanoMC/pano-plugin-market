@@ -489,6 +489,41 @@ describe('panelModel', () => {
     },
   );
 
+  test('"pay another way" toggle: only next to a start UI and only with another method to pick', () => {
+    const withStart = (methods) =>
+      panelModel({
+        order: order({ paymentMethods: methods }),
+        view: view(),
+        now: 1000,
+        context: ctx,
+      });
+    const current = order().payment.methodId;
+
+    expect(withStart([{ id: current }, { id: 'other-method' }]).otherToggle).toBe(true);
+    expect(withStart([{ id: current }]).otherToggle).toBe(false);
+    expect(withStart([{ id: current }, { id: 'other-method', available: false }]).otherToggle).toBe(
+      false,
+    );
+
+    // no start UI: the list is the way to pay, shown open and without the toggle
+    const failed = order({ payment: { methodId: current, status: 'FAILED', start: null } });
+    const model = panelModel({ order: failed, view: view(), now: 1000, context: ctx });
+    expect(model.methodsOpen).toBe(true);
+    expect(model.otherToggle).toBe(false);
+  });
+
+  test('a refused player name gets its own alert, other provider errors the generic one', () => {
+    expect(
+      payFailure({ code: 'PAYMENT_PROVIDER_ERROR', providerCode: 'INVALID_BUYER' }).alertKey,
+    ).toBe('theme.order.state.attempt-failed-buyer');
+    expect(
+      continueFailure({ code: 'PAYMENT_PROVIDER_ERROR', providerCode: 'INVALID_BUYER' }).alertKey,
+    ).toBe('theme.order.state.attempt-failed-buyer');
+    expect(payFailure({ code: 'PAYMENT_PROVIDER_ERROR', providerCode: 'NOT_FOUND' }).alertKey).toBe(
+      'theme.errors.PAYMENT_PROVIDER_ERROR',
+    );
+  });
+
   test('an expired start counts as no start', () => {
     const o = order({
       payment: { methodId: 'stripe', status: 'PENDING', start: iframeStart({ expiresAt: 500 }) },

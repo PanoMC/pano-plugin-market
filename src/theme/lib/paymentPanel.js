@@ -240,6 +240,14 @@ export function startUsable(order, start, now = 0) {
   );
 }
 
+/** An available method other than the one the order is paid with now. */
+const hasOtherMethod = (order) =>
+  Array.isArray(order?.paymentMethods) &&
+  order.paymentMethods.some(
+    (method) =>
+      isObject(method) && method.available !== false && method.id !== order?.payment?.methodId,
+  );
+
 /** `order.canRetryPayment` with something to choose from. */
 export const canRetry = (order) =>
   order?.canRetryPayment === true &&
@@ -247,9 +255,11 @@ export const canRetry = (order) =>
   order.paymentMethods.some((method) => isObject(method) && method.available !== false);
 
 /**
- * `{ show, readonly, mode, start, canRetry, methodsOpen }` of the panel. AWAITING_PAYMENT (`view.panels.payment`)
+ * `{ show, readonly, mode, start, canRetry, methodsOpen, otherToggle }` of the panel. AWAITING_PAYMENT (`view.panels.payment`)
  * renders the start UI and the "pay another way" part; PROCESSING (`view.panels.instructions`) renders the
- * instructions read-only. "Pay another way" starts expanded when there is no usable start (14 §11.4).
+ * instructions read-only. "Pay another way" starts expanded when there is no usable start (14 §11.4). Its toggle
+ * (`otherToggle`) shows only next to a working start UI and only when another method than the current one can be
+ * chosen; without a start UI the method list is the way to pay and is shown without a "pay another way" button.
  */
 export function panelModel({ order, view, now = 0, override = null, context = {} } = {}) {
   const hidden = {
@@ -259,6 +269,7 @@ export function panelModel({ order, view, now = 0, override = null, context = {}
     start: null,
     canRetry: false,
     methodsOpen: false,
+    otherToggle: false,
   };
 
   if (!isObject(order) || !isObject(view) || view.limited === true) return hidden;
@@ -278,6 +289,7 @@ export function panelModel({ order, view, now = 0, override = null, context = {}
       start: usable ? start : null,
       canRetry: retry,
       methodsOpen: retry && noUi,
+      otherToggle: retry && !noUi && hasOtherMethod(order),
     };
   }
 
@@ -512,13 +524,19 @@ export function waitSeconds(value) {
  * `POST …/payment/continue` failed: `{ alertKey, seconds?, refetch, openMethods }`. The gateway's own text is never
  * shown (`message` of the answer is ignored).
  */
+/** The alert of PAYMENT_PROVIDER_ERROR: a player name the provider refused (INVALID_BUYER) says so, anything else is generic. */
+const providerErrorKey = (res) =>
+  res?.providerCode === 'INVALID_BUYER'
+    ? 'theme.order.state.attempt-failed-buyer'
+    : messageKey('PAYMENT_PROVIDER_ERROR');
+
 export function continueFailure(res) {
   const code = res?.code ?? 'NETWORK';
 
   if (code === 'BAD_REQUEST')
     return { alertKey: 'theme.order.payment-form-invalid', refetch: false, openMethods: false };
   if (code === 'PAYMENT_PROVIDER_ERROR')
-    return { alertKey: messageKey(code), refetch: true, openMethods: true };
+    return { alertKey: providerErrorKey(res), refetch: true, openMethods: true };
   if (code === 'ORDER_NOT_PAYABLE')
     return { alertKey: messageKey(code), refetch: true, openMethods: false };
   if (code === 'TOO_MANY_REQUESTS')
@@ -676,7 +694,7 @@ export function payFailure(res) {
         : [],
     };
   if (code === 'PAYMENT_PROVIDER_ERROR')
-    return { ...base, alertKey: messageKey(code), refetch: true };
+    return { ...base, alertKey: providerErrorKey(res), refetch: true };
   if (code === 'INSUFFICIENT_CREDITS')
     return { ...base, alertKey: messageKey(code), clearCredits: true, refetch: true };
   if (code === 'TOO_MANY_REQUESTS')

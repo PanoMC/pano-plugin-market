@@ -59,16 +59,18 @@
 
         {#if model.canRetry}
           <div class="vstack gap-3">
-            <div>
-              <button
-                type="button"
-                class="market-payment-panel__payment-other btn btn-link px-0"
-                aria-expanded={methodsOpen ? 'true' : 'false'}
-                aria-controls="market-order-payment-other"
-                onclick={() => (userOpen = !methodsOpen)}>
-                {$_('theme.order.payment-other')}
-              </button>
-            </div>
+            {#if model.otherToggle || uiFailed}
+              <div>
+                <button
+                  type="button"
+                  class="market-payment-panel__payment-other btn btn-link px-0"
+                  aria-expanded={methodsOpen ? 'true' : 'false'}
+                  aria-controls="market-order-payment-other"
+                  onclick={() => (userOpen = !methodsOpen)}>
+                  {$_('theme.order.payment-other')}
+                </button>
+              </div>
+            {/if}
 
             {#if methodsOpen}
               <div class="vstack gap-3" id="market-order-payment-other">
