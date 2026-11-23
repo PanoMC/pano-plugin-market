@@ -51,6 +51,12 @@ sealed class PaymentAttemptEvent {
     data object Pending : PaymentAttemptEvent()
 
     /**
+     * `Pending` with `AWAITING_BUYER`: the buyer opened the gateway page but has not paid. Nothing is in flight yet, so the attempt
+     * stays as it is and the pay link, "pay another way" and cancel stay available.
+     */
+    data object AwaitingBuyer : PaymentAttemptEvent()
+
+    /**
      * `Succeeded` (also the `Completed` start result). [eventTestMode] is the environment the gateway states
      * (`PaymentEvent.testMode`), `null` = not stated.
      */
@@ -178,6 +184,8 @@ object PaymentStateMachine {
                 if (status == PaymentStatus.CREATED || status == PaymentStatus.PENDING)
                     PaymentTransition.Move(PaymentStatus.PROCESSING, emptyList())
                 else PaymentTransition.NoOp
+
+            PaymentAttemptEvent.AwaitingBuyer -> PaymentTransition.NoOp
 
             is PaymentAttemptEvent.Succeeded -> succeeded(attempt, order, event, policy)
 

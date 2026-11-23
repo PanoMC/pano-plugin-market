@@ -13,6 +13,10 @@ import com.panomc.plugins.market.core.payment.PaymentTransition.NoOp
 import com.panomc.plugins.market.db.model.PaymentStatus
 import com.panomc.plugins.market.db.model.PaymentStatus.*
 import com.panomc.plugins.market.db.model.ReservationState
+import com.panomc.plugins.market.service.PaymentEventMapper
+import com.panomc.plugins.market.spi.payment.PaymentEvent
+import com.panomc.plugins.market.spi.payment.PaymentTarget
+import com.panomc.plugins.market.spi.payment.PendingReason
 import com.panomc.plugins.market.spi.payment.PriceAuthority
 import com.panomc.plugins.market.spi.payment.ReviewReason
 import com.panomc.plugins.market.util.OrderStatus
@@ -74,6 +78,21 @@ class PaymentStateMachineTest {
     }
 
     @Test
+    fun `AwaitingBuyer never moves an attempt, an open checkout stays payable and cancellable`() {
+        for (s in statuses) assertEquals(NoOp, decide(attempt(s), order(), AwaitingBuyer), s.name)
+    }
+
+    @Test
+    fun `only a Pending with AWAITING_BUYER maps to AwaitingBuyer, every other reason keeps Pending`() {
+        val target = PaymentTarget.Attempt(1)
+        for (reason in PendingReason.values()) {
+            val mapped = PaymentEventMapper.attemptEvent(PaymentEvent.Pending(target, reason))
+            val expected = if (reason == PendingReason.AWAITING_BUYER) AwaitingBuyer else Pending
+            assertEquals(expected, mapped, reason.name)
+        }
+    }
+
+    @Test
     fun `Failed Cancelled Expired and Replaced close an open attempt to their own status and leave the order pending`() {
         val cases = listOf(Failed(false) to FAILED, Cancelled to CANCELLED, Replaced to CANCELLED, Expired to EXPIRED)
         for ((event, target) in cases) {
@@ -100,7 +119,7 @@ class PaymentStateMachineTest {
     fun `events on an attempt that already SUCCEEDED change nothing`() {
         val done = attempt(SUCCEEDED)
         val all = listOf(
-            Started, StartFailed, Pending, Succeeded(1000, eur), NeedsReview(ReviewReason.OTHER), Failed(true), Cancelled, Expired, Replaced
+            Started, StartFailed, Pending, AwaitingBuyer, Succeeded(1000, eur), NeedsReview(ReviewReason.OTHER), Failed(true), Cancelled, Expired, Replaced
         )
         for (o in OrderStatus.values()) for (e in all) {
             assertEquals(NoOp, decide(done, order(o), e), "$e with order $o")

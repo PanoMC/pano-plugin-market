@@ -91,6 +91,7 @@ import com.panomc.plugins.market.spi.payment.OrderLine
 import com.panomc.plugins.market.spi.payment.PaymentAttemptView
 import com.panomc.plugins.market.spi.payment.PaymentCapabilities
 import com.panomc.plugins.market.spi.payment.PaymentEvent
+import com.panomc.plugins.market.spi.payment.PendingReason
 import com.panomc.plugins.market.spi.payment.PaymentTarget
 import com.panomc.plugins.market.spi.payment.PaymentContext
 import com.panomc.plugins.market.spi.payment.PaymentProvider
@@ -314,7 +315,7 @@ class AppliedEvent(val attemptStatus: PaymentStatus, val orderStatus: OrderStatu
 object PaymentEventMapper {
     fun attemptEvent(event: PaymentEvent): PaymentAttemptEvent? = when (event) {
         is PaymentEvent.Succeeded -> PaymentAttemptEvent.Succeeded(event.paid.amount, event.paid.currency, event.testMode)
-        is PaymentEvent.Pending -> PaymentAttemptEvent.Pending
+        is PaymentEvent.Pending -> if (event.reason == PendingReason.AWAITING_BUYER) PaymentAttemptEvent.AwaitingBuyer else PaymentAttemptEvent.Pending
         is PaymentEvent.Failed -> PaymentAttemptEvent.Failed(event.final)
         is PaymentEvent.Cancelled -> PaymentAttemptEvent.Cancelled
         is PaymentEvent.Expired -> PaymentAttemptEvent.Expired
