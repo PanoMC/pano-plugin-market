@@ -5,7 +5,7 @@ import { get } from 'svelte/store';
 import { mount, tick } from 'svelte';
 import { invalidateAll } from '@panomc/sdk/svelte';
 import { notify } from './seam.js';
-import { gate, readVolume, SAVED_NOTHING } from './core.js';
+import { gate, readScenario, readVolume, SAVED_NOTHING } from './core.js';
 import { PREVIEW_HOOK } from '../theme/lib/api.js';
 
 let mounted = false;
@@ -138,9 +138,11 @@ function installThemeHook() {
     const volume = readVolume();
     if (!volume) return undefined;
     const router = await import('./router.js').then((m) => m.router);
+    const scenario = readScenario();
     if (method === 'GET' || router.isSafe(method, path))
-      return router.answer(method, path, volume, body);
+      return router.answer(method, path, volume, body, scenario);
     notify();
-    return router.answer(method, path, volume, body) ?? SAVED_NOTHING;
+    // a handler that throws stands for a lost answer: the theme's call() reports NETWORK
+    return router.answer(method, path, volume, body, scenario) ?? SAVED_NOTHING;
   };
 }

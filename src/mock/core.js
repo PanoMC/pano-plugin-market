@@ -3,7 +3,7 @@
 // The seam (seam.js) replaces `@panomc/sdk/utils/api` for the whole plugin at build time. With the
 // cookie absent it is a pass-through; with the cookie present it asks the host whether the platform
 // runs in development mode and only then loads the fixtures (dynamic import) and answers from them.
-import { DEFAULT_VOLUME, VOLUMES, queryOf } from './kit.js';
+import { DEFAULT_SCENARIO, DEFAULT_VOLUME, SCENARIOS, VOLUMES, queryOf } from './kit.js';
 
 export const COOKIE = 'pano_market_mock';
 
@@ -34,6 +34,38 @@ export function readVolume(event, doc = typeof document !== 'undefined' ? docume
   return parseCookie(header);
 }
 
+/** Cookie of the checkout scenario the preview answers POST /checkout (and /pay, /payment/continue) with. */
+export const SCENARIO_COOKIE = 'pano_market_mock_checkout';
+
+/** The scenario of a cookie header; an unknown or missing value is the default (success with the method's start). */
+export function parseScenario(header) {
+  if (header) {
+    for (const part of String(header).split(';')) {
+      const [name, ...rest] = part.trim().split('=');
+      if (name === SCENARIO_COOKIE) {
+        const scenario = decodeURIComponent(rest.join('='));
+        return SCENARIOS.includes(scenario) ? scenario : DEFAULT_SCENARIO;
+      }
+    }
+  }
+  return DEFAULT_SCENARIO;
+}
+
+export function scenarioCookieString(scenario) {
+  if (!scenario || scenario === DEFAULT_SCENARIO)
+    return `${SCENARIO_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+  return `${SCENARIO_COOKIE}=${encodeURIComponent(scenario)}; Path=/; Max-Age=86400; SameSite=Lax`;
+}
+
+/** The scenario cookie in the browser (document) or on the server (SvelteKit event / request). */
+export function readScenario(event, doc = typeof document !== 'undefined' ? document : null) {
+  if (doc) return parseScenario(doc.cookie);
+  const fromKit = event?.cookies?.get?.(SCENARIO_COOKIE);
+  if (fromKit) return parseScenario(`${SCENARIO_COOKIE}=${fromKit}`);
+  const header = event?.request?.headers?.get?.('cookie') ?? event?.headers?.get?.('cookie');
+  return parseScenario(header);
+}
+
 /** '/orders/detail/:id' style pattern to a RegExp + param names. */
 function compile(pattern) {
   const names = [];
@@ -52,7 +84,8 @@ function compile(pattern) {
 }
 
 /**
- * Route table. A route is { method, path, handler({ query, params, volume, body, method }), safe? }.
+ * Route table. A route is { method, path, handler({ query, params, volume, body, method, scenario }), safe? }.
+ * `scenario` is the checkout scenario of the drawer (SCENARIOS of kit.js); a handler may throw to stand for a lost answer.
  * `safe` marks a POST that only reads (a quote): it is answered from the fixture without the toast.
  */
 export function createRouter(routes) {
@@ -77,10 +110,10 @@ export function createRouter(routes) {
     routes: compiled,
     find,
     /** Fixture body for a GET (or safe POST), or undefined when the path has no fixture. */
-    answer(method, fullPath, volume, body) {
+    answer(method, fullPath, volume, body, scenario = DEFAULT_SCENARIO) {
       const hit = find(method, fullPath);
       if (!hit) return undefined;
-      return hit.route.handler({ ...hit, volume, body, method });
+      return hit.route.handler({ ...hit, volume, body, method, scenario });
     },
     isSafe(method, fullPath) {
       return find(method, fullPath)?.route.safe === true;
@@ -108,7 +141,14 @@ export const SAVED_NOTHING = { id: 1 };
  *   notify      () => void, the "nothing was saved" toast
  * Returns an ApiUtil-shaped object (get / post / put / delete / customRequest + the rest of real).
  */
-export function createSeam({ real, getDevMode, loadRouter, notify, readVolumeFn = readVolume }) {
+export function createSeam({
+  real,
+  getDevMode,
+  loadRouter,
+  notify,
+  readVolumeFn = readVolume,
+  readScenarioFn = readScenario,
+}) {
   // The gate: cookie first (free), then the development-mode check, then the fixtures.
   async function activeVolume(event) {
     let volume;
@@ -132,13 +172,20 @@ export function createSeam({ real, getDevMode, loadRouter, notify, readVolumeFn 
 
     const router = await loadRouter();
     const path = options?.path ?? '';
+    let scenario;
+    try {
+      scenario = readScenarioFn(options?.request);
+    } catch {
+      scenario = undefined;
+    }
+    const body = parseBody(options?.body);
     if (method === 'GET' || router.isSafe(method, path)) {
-      const answered = router.answer(method, path, volume, parseBody(options?.body));
+      const answered = router.answer(method, path, volume, body, scenario);
       return answered === undefined ? passthrough() : answered;
     }
     // POST / PUT / DELETE never reach the backend while the preview is on.
     notify();
-    return router.answer(method, path, volume, parseBody(options?.body)) ?? SAVED_NOTHING;
+    return router.answer(method, path, volume, body, scenario) ?? SAVED_NOTHING;
   }
 
   const wrapped = Object.create(real);

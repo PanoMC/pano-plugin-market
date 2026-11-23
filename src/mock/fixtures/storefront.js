@@ -1206,7 +1206,7 @@ function orderRow(o) {
   };
 }
 
-function orderView(o) {
+export function orderView(o) {
   const pending = o.status === 'PENDING';
   const vat = Math.round((o.total * VAT_BP) / (10000 + VAT_BP));
   const view = {
@@ -1293,13 +1293,13 @@ const findOrder = (volume, publicId) =>
   orders('few').find((o) => o.publicId === publicId) ||
   null;
 
-function orderBody({ params, volume }) {
+export function orderBody({ params, volume }) {
   const o = findOrder(volume, params.publicId);
 
   return o ? { order: orderView(o) } : failure('NOT_FOUND');
 }
 
-function orderStatusBody({ params, volume }) {
+export function orderStatusBody({ params, volume }) {
   const o = findOrder(volume, params.publicId);
 
   if (!o) return failure('NOT_FOUND');

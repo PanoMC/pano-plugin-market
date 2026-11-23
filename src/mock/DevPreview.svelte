@@ -51,6 +51,25 @@
       </select>
     </div>
 
+    <div class="mb-3">
+      <label class="form-label" for="market-mock-scenario">{$_('mock.scenario')}</label>
+      <select
+        class="form-select"
+        id="market-mock-scenario"
+        disabled={!active}
+        value={scenario}
+        onchange={(e) => applyScenario(e.currentTarget.value)}>
+        {#each [[SUCCESS_SCENARIOS, 'mock.scenario-success'], [FAILURE_SCENARIOS, 'mock.scenario-failure']] as [list, group] (group)}
+          <optgroup label={$_(group)}>
+            {#each list as s (s)}
+              <option value={s}>{$_(`mock.scenario-${s}`)}</option>
+            {/each}
+          </optgroup>
+        {/each}
+      </select>
+      <div class="form-text">{$_('mock.scenario-hint')}</div>
+    </div>
+
     {#each [[panelPages, 'mock.panel'], [storePages, 'mock.storefront']] as [list, title] (title)}
       {#if list.length}
         <h6 class="mt-3">{$_(title)}</h6>
@@ -84,14 +103,27 @@
   import { _ } from '../i18n.js';
   import { base, goto, invalidateAll } from '@panomc/sdk/svelte';
   import ApiUtil from '@panomc/sdk/utils/api';
-  import { COOKIE, cookieString, parseCookie } from './core.js';
-  import { DEFAULT_VOLUME, VOLUMES } from './kit.js';
+  import {
+    COOKIE,
+    cookieString,
+    parseCookie,
+    parseScenario,
+    scenarioCookieString,
+  } from './core.js';
+  import {
+    DEFAULT_SCENARIO,
+    DEFAULT_VOLUME,
+    FAILURE_SCENARIOS,
+    SUCCESS_SCENARIOS,
+    VOLUMES,
+  } from './kit.js';
 
   /** Where the drawer is mounted: 'panel' or 'theme'. */
   let { side = 'panel' } = $props();
 
   let open = $state(false);
   let volume = $state(null);
+  let scenario = $state(DEFAULT_SCENARIO);
   let pages = $state([]);
 
   const active = $derived(volume !== null);
@@ -119,6 +151,7 @@
 
   onMount(() => {
     volume = parseCookie(document.cookie);
+    scenario = parseScenario(document.cookie);
     const onKey = (e) => e.key === 'Escape' && (open = false);
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -137,8 +170,17 @@
     window.dispatchEvent(new CustomEvent('pano-market-mock-changed'));
   }
 
+  /** The checkout scenario only changes what the next checkout / payment answers: no reload needed. */
+  function applyScenario(next) {
+    scenario = next;
+    document.cookie = scenarioCookieString(next);
+  }
+
   const toggle = () => apply(active ? null : DEFAULT_VOLUME);
-  const reset = () => apply(null);
+  const reset = () => {
+    applyScenario(DEFAULT_SCENARIO);
+    apply(null);
+  };
   // Pages of this app get its base; panel pages opened from the site go to the panel (Pano serves it under
   // /panel), site pages opened from the panel go to the site root.
   /**

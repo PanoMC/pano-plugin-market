@@ -5,6 +5,32 @@
 export const VOLUMES = ['empty', 'few', 'many'];
 export const DEFAULT_VOLUME = 'few';
 
+/**
+ * Checkout scenarios of the drawer: what POST /checkout (and /orders/:id/pay, /payment/continue) answers. `auto` = a
+ * success with the start of the chosen method (card: redirect, bank transfer: instructions, all in credits: paid); the
+ * other lower-case ones force one start kind; the upper-case ones are failures (error codes of theme/lib/errorMap.js,
+ * `NETWORK` = no answer at all).
+ */
+export const SUCCESS_SCENARIOS = [
+  'auto',
+  'redirect',
+  'iframe',
+  'embedded-component',
+  'embedded-form',
+  'instructions',
+  'paid',
+];
+export const FAILURE_SCENARIOS = [
+  'PAYMENT_PROVIDER_ERROR',
+  'PAYMENT_PROVIDER_ERROR-INVALID_BUYER',
+  'PRICE_CHANGED',
+  'OUT_OF_STOCK',
+  'BUYER_INFO_REQUIRED',
+  'NETWORK',
+];
+export const SCENARIOS = [...SUCCESS_SCENARIOS, ...FAILURE_SCENARIOS];
+export const DEFAULT_SCENARIO = 'auto';
+
 /** Row count of a list per volume. */
 export function countFor(volume, few = 7, many = 83) {
   if (volume === 'empty') return 0;
