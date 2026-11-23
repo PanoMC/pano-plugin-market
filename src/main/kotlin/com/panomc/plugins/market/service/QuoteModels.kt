@@ -128,7 +128,10 @@ class QuoteLine(
         .put("errors", JsonArray(errors))
 }
 
-/** `PaymentMethodOption` (04 section 2). [providerCode] is the code a provider gave when it refused (`PROVIDER_INELIGIBLE`). */
+/**
+ * `PaymentMethodOption` (04 section 2). [providerCode] is the code a provider gave when it refused (`PROVIDER_INELIGIBLE`),
+ * [unavailableDetail] the provider's own reason text for it, so the buyer and the owner see why the method cannot be used.
+ */
 class PaymentMethodOption(
     val id: String,
     val label: String,
@@ -145,7 +148,8 @@ class PaymentMethodOption(
     val recurring: String?,
     val testMode: Boolean,
     val notices: List<Pair<String, String>>,
-    val requiredBuyerFields: List<String>
+    val requiredBuyerFields: List<String>,
+    val unavailableDetail: String? = null
 ) {
     fun toJson(): JsonObject = JsonObject()
         .put("id", id)
@@ -164,6 +168,7 @@ class PaymentMethodOption(
         .put("notices", JsonArray(notices.map { JsonObject().put("label", it.first).put("url", it.second) }))
         .put("requiredBuyerFields", JsonArray(requiredBuyerFields))
         .apply { providerCode?.let { put("providerCode", it) } }
+        .apply { unavailableDetail?.let { put("unavailableDetail", it) } }
 }
 
 class QuoteCredits(

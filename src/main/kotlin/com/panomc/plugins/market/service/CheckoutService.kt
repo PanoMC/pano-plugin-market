@@ -2654,6 +2654,7 @@ class CheckoutService(
         val descriptor = candidate.provider.descriptor
         var reason: String? = evaluation.unavailableReason?.name
         var providerCode: String? = null
+        var providerDetail: String? = null
         var recurring: String? = null
 
         if (reason == null && !caps.guests && !ctx.caller.loggedIn) reason = GUESTS_NOT_SUPPORTED
@@ -2687,12 +2688,14 @@ class CheckoutService(
                     if (offer is ModeOffer.Unavailable) {
                         reason = offer.reason
                         providerCode = eligibility.code
+                        providerDetail = eligibility.reason?.resolve(locale)
                     }
                 }
 
                 !eligibility.eligible -> {
                     reason = ModeResolver.PROVIDER_INELIGIBLE
                     providerCode = eligibility.code
+                    providerDetail = eligibility.reason?.resolve(locale)
                 }
             }
         }
@@ -2718,7 +2721,8 @@ class CheckoutService(
             recurring = recurring,
             testMode = candidate.testMode,
             notices = descriptor.storefrontNotices.map { it.label.resolve(locale) to it.url },
-            requiredBuyerFields = caps.requiredBuyerFields.map { it.name }
+            requiredBuyerFields = caps.requiredBuyerFields.map { it.name },
+            unavailableDetail = providerDetail?.takeIf { it.isNotBlank() && reason != null }
         )
     }
 

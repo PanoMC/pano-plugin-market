@@ -93,6 +93,20 @@ export function unavailableKey(reason) {
   return key === 'theme.errors.GENERIC' ? messageKey('PAYMENT_METHOD_UNAVAILABLE') : key;
 }
 
+/**
+ * The provider's own words on why a method cannot be used: its reason text (`unavailableDetail`), else its code
+ * (`providerCode`), else ''. Shown under the reason so the buyer and the store owner see why.
+ */
+export function unavailableDetail(method) {
+  if (!isObject(method) || method.available !== false) return '';
+
+  const text = typeof method.unavailableDetail === 'string' ? method.unavailableDetail.trim() : '';
+
+  if (text) return text;
+
+  return typeof method.providerCode === 'string' ? method.providerCode.trim() : '';
+}
+
 /** The method with `id` out of `quote.paymentMethods`, or null. */
 export function selectedMethod(quote, id) {
   if (id === null || id === undefined || !Array.isArray(quote?.paymentMethods)) return null;

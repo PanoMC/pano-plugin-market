@@ -22,6 +22,7 @@ import {
   selectMethodPatch,
   selectedMethod,
   splitLegalLabel,
+  unavailableDetail,
   unavailableKey,
 } from '../paymentModel.js';
 import { applyQuoteSelections } from '../checkoutModel.js';
@@ -157,6 +158,31 @@ describe('payment methods', () => {
       pickerView({ gatewayAmount: 5, paymentMethods: methods }).methods.map((m) => m.id),
     ).toEqual(['z', 'a']);
     expect(pickerView({ gatewayAmount: 5, paymentMethods: methods }).mode).toBe('LIST');
+  });
+
+  test('nothing available still lists every method with its reason and the provider detail', () => {
+    const methods = [
+      {
+        id: 'tebex',
+        available: false,
+        unavailableReason: 'PROVIDER_INELIGIBLE',
+        providerCode: 'unlinked',
+        unavailableDetail: 'A product in this cart has no Tebex package ID.',
+      },
+      { id: 'stripe', available: false, unavailableReason: 'PROVIDER_INELIGIBLE', providerCode: 'PROVIDER_ERROR' },
+      { id: 'paypal', available: false, unavailableReason: 'TEST_MODE' },
+    ];
+    const view = pickerView({ gatewayAmount: 10, paymentMethods: methods });
+
+    expect(view.mode).toBe('NO_METHOD');
+    expect(view.methods.map((m) => m.id)).toEqual(['tebex', 'stripe', 'paypal']);
+    expect(view.methods.map(unavailableDetail)).toEqual([
+      'A product in this cart has no Tebex package ID.',
+      'PROVIDER_ERROR',
+      '',
+    ]);
+    expect(unavailableDetail({ available: true, unavailableDetail: 'x' })).toBe('');
+    expect(unavailableDetail(null)).toBe('');
   });
 
   test('unavailableKey: a known reason, else the generic method text', () => {

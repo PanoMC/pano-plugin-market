@@ -1509,6 +1509,7 @@ class QuoteIT : MarketDaoITBase() {
         assertFalse(refused.available)
         assertEquals("PROVIDER_INELIGIBLE", refused.unavailableReason)
         assertEquals("TOO_SMALL", refused.toJson().getString("providerCode"))
+        assertEquals("no", refused.toJson().getString("unavailableDetail"), "the provider's own reason reaches the buyer")
 
         val snapshot = picky.seen!!
 
@@ -1526,6 +1527,7 @@ class QuoteIT : MarketDaoITBase() {
         picky.throwing = true
 
         assertEquals("PROVIDER_INELIGIBLE", quote(line(p), caller = caller).paymentMethods.single().unavailableReason)
+        assertNull(quote(line(p), caller = caller).paymentMethods.single().toJson().getString("unavailableDetail"))
         picky.throwing = false
 
         // a guest snapshot

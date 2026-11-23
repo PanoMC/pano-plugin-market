@@ -24,6 +24,20 @@
           {$_('theme.checkout.no-payment-method')}
         </div>
       </div>
+      {#if view.methods.length > 0}
+        <ul class="market-payment-method-picker__unavailable list-group list-group-flush">
+          {#each view.methods as method (method.id)}
+            {@const detail = unavailableDetail(method)}
+            <li class="market-payment-method-picker__item list-group-item">
+              <span class="fw-bold d-block">{method.label}</span>
+              <small class="d-block text-danger">{$_(unavailableKey(method.unavailableReason))}</small>
+              {#if detail}
+                <small class="d-block text-body-secondary">{detail}</small>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
     {:else}
       <div
         class="market-payment-method-picker__list list-group list-group-flush"
@@ -73,8 +87,12 @@
                 <small class="d-block text-body-secondary">{method.hint}</small>
               {/if}
               {#if unavailable}
+                {@const detail = unavailableDetail(method)}
                 <small class="d-block text-danger"
                   >{$_(unavailableKey(method.unavailableReason))}</small>
+                {#if detail}
+                  <small class="d-block text-body-secondary">{detail}</small>
+                {/if}
               {/if}
             </span>
             {#if Number(method.feeAmount) > 0}
@@ -128,6 +146,7 @@
     safeColor,
     safeIcon,
     selectedMethod,
+    unavailableDetail,
     unavailableKey,
   } from '../../lib/paymentModel.js';
 
