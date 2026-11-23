@@ -35,4 +35,8 @@ open class MarketPaymentMethod(
     val lastError: String? = null,
     val lastErrorAt: Long? = null,
     val settingsUpdatedAt: Long? = null,
+    /** Replaces the provider's checkout hint (scheme version 12). */
+    val customHint: String? = null,
+    /** No hint line under the method at checkout. */
+    val hideHint: Boolean = false,
 ) : DBEntity()

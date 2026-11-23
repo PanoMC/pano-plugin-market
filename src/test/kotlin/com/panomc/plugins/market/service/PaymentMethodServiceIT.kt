@@ -852,7 +852,7 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
         val callback = e.getJsonObject("schema").getJsonArray("fields").map { it as JsonObject }.first { it.getString("key") == "callback" }
         assertEquals("https://shop.example${MarketPaths.SITE_ROOT}/payments/gate/webhook", callback.getJsonObject("readonly").getString("value"))
         assertTrue(e.containsKey("lastInboundAt") && e.containsKey("lastError") && e.containsKey("lastErrorAt") && e.containsKey("productMetaSchema"))
-        assertEquals(setOf("enabled", "position", "customLabel", "customDescription", "feeMode", "feePercent", "feeFixed", "minAmount", "maxAmount", "currencies", "testMode", "readOnly"), e.getJsonObject("config").fieldNames())
+        assertEquals(setOf("enabled", "position", "customLabel", "customDescription", "customHint", "hideHint", "feeMode", "feePercent", "feeFixed", "minAmount", "maxAmount", "currencies", "testMode", "readOnly"), e.getJsonObject("config").fieldNames())
     }
 
     @Test

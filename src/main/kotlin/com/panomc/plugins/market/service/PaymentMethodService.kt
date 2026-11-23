@@ -495,7 +495,9 @@ class PaymentMethodService(
             maxAmount = config.maxAmount,
             currencies = config.currencies?.let { JsonArray(it).encode() },
             testMode = config.testMode,
-            settingsUpdatedAt = if (touchSettings) now else row?.settingsUpdatedAt
+            settingsUpdatedAt = if (touchSettings) now else row?.settingsUpdatedAt,
+            customHint = config.customHint,
+            hideHint = config.hideHint
         )
 
     private fun unavailableEntry(row: MarketPaymentMethod): JsonObject = JsonObject()
@@ -628,6 +630,8 @@ class PaymentMethodService(
                 .put("position", r.position)
                 .put("customLabel", r.customLabel)
                 .put("customDescription", r.customDescription)
+                .put("customHint", r.customHint)
+                .put("hideHint", r.hideHint)
                 .put("feeMode", r.feeMode.name)
                 .put("feePercent", PaymentMethodRules.toDecimal(r.feePercent))
                 .put("feeFixed", PaymentMethodRules.toDecimal(r.feeFixed))
@@ -716,29 +720,47 @@ object PaymentMethodRules {
         val minAmount: Long?,
         val maxAmount: Long?,
         val currencies: List<String>?,
-        val testMode: Boolean
+        val testMode: Boolean,
+        /** Replaces the provider's checkout hint; `null` = the provider's own. */
+        val customHint: String? = null,
+        /** No hint line at checkout. */
+        val hideHint: Boolean = false
     ) {
         companion object {
             fun of(row: MarketPaymentMethod?): State = State(
                 row?.position ?: 0, row?.customLabel, row?.customDescription, row?.feeMode ?: PaymentFeeMode.NONE, row?.feePercent ?: 0,
                 row?.feeFixed ?: 0, row?.minAmount, row?.maxAmount,
-                row?.currencies?.let { runCatching { JsonArray(it).map { c -> c.toString() } }.getOrNull() }, row?.testMode ?: false
+                row?.currencies?.let { runCatching { JsonArray(it).map { c -> c.toString() } }.getOrNull() }, row?.testMode ?: false,
+                row?.customHint, row?.hideHint ?: false
             )
         }
     }
 
     class Parsed(val state: State, val errors: Map<String, String>)
 
-    val KEYS = setOf("position", "customLabel", "customDescription", "feeMode", "feePercent", "feeFixed", "minAmount", "maxAmount", "currencies", "testMode")
+    val KEYS = setOf("position", "customLabel", "customDescription", "feeMode", "feePercent", "feeFixed", "minAmount", "maxAmount", "currencies", "testMode", "customHint", "hideHint")
 
     const val MAX_LABEL = 255
     const val MAX_DESCRIPTION = 512
+    const val MAX_HINT = 255
     const val MAX_POSITION = 1_000_000L
 
     /** Largest amount (in whole units) a rule may hold. */
     private val MAX_UNITS = BigDecimal("1000000000")
 
     fun toDecimal(x100: Long): BigDecimal = BigDecimal.valueOf(x100, 2)
+
+    /**
+     * The description a buyer sees under a method (checkout, order page): only the admin's own text. The provider's
+     * `descriptor.description` is written for the admin ("Sell your Tebex catalog ...") and stays in the panel.
+     */
+    fun buyerDescription(row: MarketPaymentMethod?): String? = row?.customDescription?.takeIf { it.isNotBlank() }
+
+    /** The hint line a buyer sees: none when the admin hid it, else the admin's text, else the provider's [providerHint]. */
+    fun buyerHint(row: MarketPaymentMethod?, providerHint: () -> String?): String? = when {
+        row?.hideHint == true -> null
+        else -> row?.customHint?.takeIf { it.isNotBlank() } ?: providerHint()
+    }
 
     /**
      * Lays [form] over [base]. [legacyTestMode] is the old catalogue flag (`sandbox` / `testMode`) found in the stored
@@ -774,6 +796,21 @@ object PaymentMethodRules {
                 is String -> if (v.trim().length <= MAX_DESCRIPTION) description = v.trim().ifEmpty { null } else errors["customDescription"] = "TOO_LONG"
                 else -> errors["customDescription"] = "INVALID"
             }
+        }
+
+        var hint = base.customHint
+        if (has("customHint")) {
+            when (val v = form.getValue("customHint")) {
+                null -> hint = null
+                is String -> if (v.trim().length <= MAX_HINT) hint = v.trim().ifEmpty { null } else errors["customHint"] = "TOO_LONG"
+                else -> errors["customHint"] = "INVALID"
+            }
+        }
+
+        var hideHint = base.hideHint
+        if (has("hideHint")) {
+            val v = form.getValue("hideHint")
+            if (v is Boolean) hideHint = v else errors["hideHint"] = "INVALID"
         }
 
         var feeMode = base.feeMode
@@ -849,7 +886,7 @@ object PaymentMethodRules {
             if (max != null && !errors.containsKey("maxAmount")) errors["maxAmount"] = "EXTERNAL_PRICING"
         }
 
-        return Parsed(State(position, label, description, feeMode, feePercent, feeFixed, min, max, currencies, testMode), errors)
+        return Parsed(State(position, label, description, feeMode, feePercent, feeFixed, min, max, currencies, testMode, hint, hideHint), errors)
     }
 
     /** `ids*[]` of the sort request: provider ids (`[a-z0-9-]{2,32}`), 1..[max], no duplicates. Throws [IllegalArgumentException] with the reason code. */

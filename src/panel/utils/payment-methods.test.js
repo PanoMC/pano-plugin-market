@@ -237,6 +237,8 @@ describe('rules form', () => {
     expect(buildConfig(form)).toEqual({
       customLabel: 'Card',
       customDescription: null,
+      customHint: null,
+      hideHint: false,
       feeMode: 'BUYER',
       feePercent: 2.9,
       feeFixed: 0.3,
@@ -247,6 +249,18 @@ describe('rules form', () => {
     });
     expect(buildConfig({ ...base(), allCurrencies: false, currencies: ['EUR'] }).currencies).toEqual(['EUR']);
     expect(buildConfig({ ...base(), feeBuyer: false }).feeMode).toBe('NONE');
+  });
+  test('the checkout hint can be replaced or hidden', () => {
+    const form = configToForm({ customHint: 'Pay on the next page', hideHint: true });
+    expect(form.customHint).toBe('Pay on the next page');
+    expect(form.hideHint).toBe(true);
+    expect(configToForm({}).hideHint).toBe(false);
+    const sent = buildConfig({ ...base(), customHint: '  Pay by card  ', hideHint: true });
+    expect(sent.customHint).toBe('Pay by card');
+    expect(sent.hideHint).toBe(true);
+    expect(buildConfig({ ...base(), customHint: '   ' }).customHint).toBe(null);
+    expect(validateConfig({ ...base(), customHint: 'x'.repeat(256) }).customHint).toBe('TOO_LONG');
+    expect(validateConfig({ ...base(), customHint: 'x'.repeat(255) }).customHint).toBeUndefined();
   });
   test('buildConfig keeps the loaded values while the gateway owns the price and the test flag it cannot edit', () => {
     const original = { feeMode: 'BUYER', feePercent: 3, feeFixed: 1, minAmount: 2, maxAmount: 99, testMode: true };

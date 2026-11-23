@@ -494,6 +494,12 @@ object MarketSchema {
             bigint("lastErrorAt", nullable = true)
             bigint("settingsUpdatedAt", nullable = true)
         }
+        // Scheme version 12: the checkout line under a method's name can be replaced or hidden. Keep it the last block:
+        // MarketMigration11to12 runs its alters (MarketMigration5to6 runs every alter of the table, all idempotent).
+        added {
+            str("customHint", 255, nullable = true)
+            flag("hideHint", 0)
+        }
     }
 
     val PRODUCT = table("market_product", "Market product table.") {

@@ -193,6 +193,37 @@
           {$_(`modals.provider.error.${configErrors.customDescription}`)}
         </div>
       {/if}
+      <div class="form-text">{$_('modals.provider.custom-description-help')}</div>
+    </div>
+
+    <div>
+      <input
+        id="pm-rules-hint"
+        type="text"
+        class="form-control"
+        class:is-invalid={configErrors.customHint}
+        autocomplete="off"
+        placeholder={txt(provider.descriptor?.checkoutHint) || $_('modals.provider.custom-hint')}
+        aria-label={$_('modals.provider.custom-hint')}
+        disabled={readOnly || form.hideHint}
+        bind:value={form.customHint} />
+      {#if configErrors.customHint}
+        <div class="invalid-feedback d-block">{$_(`modals.provider.error.${configErrors.customHint}`)}</div>
+      {/if}
+      <div class="form-text">{$_('modals.provider.custom-hint-help')}</div>
+    </div>
+
+    <div class="form-check form-switch">
+      <input
+        id="pm-rules-hide-hint"
+        class="form-check-input"
+        type="checkbox"
+        role="switch"
+        disabled={readOnly}
+        bind:checked={form.hideHint} />
+      <label class="form-check-label user-select-none" for="pm-rules-hide-hint">
+        {$_('modals.provider.hide-hint')}
+      </label>
     </div>
 
     {#if locked}

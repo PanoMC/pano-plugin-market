@@ -7,6 +7,7 @@ import { resolveText } from './schema-form.js';
 
 export const CUSTOM_LABEL_MAX = 255;
 export const CUSTOM_DESCRIPTION_MAX = 512;
+export const CUSTOM_HINT_MAX = 255;
 export const REGIONS = ['all', 'tr', 'global'];
 
 /** Provider states of 02 §11. */
@@ -136,6 +137,8 @@ export function configToForm(config = {}) {
   return {
     customLabel: config.customLabel ?? '',
     customDescription: config.customDescription ?? '',
+    customHint: config.customHint ?? '',
+    hideHint: Boolean(config.hideHint),
     feeBuyer: config.feeMode === 'BUYER',
     feePercent: config.feePercent ?? 0,
     feeFixed: config.feeFixed ?? 0,
@@ -165,6 +168,7 @@ export function validateConfig(form, { capabilities = null } = {}) {
   if (String(form.customLabel ?? '').length > CUSTOM_LABEL_MAX) errors.customLabel = 'TOO_LONG';
   if (String(form.customDescription ?? '').length > CUSTOM_DESCRIPTION_MAX)
     errors.customDescription = 'TOO_LONG';
+  if (String(form.customHint ?? '').length > CUSTOM_HINT_MAX) errors.customHint = 'TOO_LONG';
 
   if (!pricingLocked(capabilities)) {
     const optional = (key, value) => {
@@ -203,9 +207,12 @@ export function buildConfig(form, { capabilities = null, original = {} } = {}) {
   const control = testModeControl(capabilities);
   const label = String(form.customLabel ?? '').trim();
   const description = String(form.customDescription ?? '').trim();
+  const hint = String(form.customHint ?? '').trim();
   const out = {
     customLabel: label === '' ? null : label,
     customDescription: description === '' ? null : description,
+    customHint: hint === '' ? null : hint,
+    hideHint: Boolean(form.hideHint),
     feeMode: locked ? (original.feeMode ?? 'NONE') : form.feeBuyer ? 'BUYER' : 'NONE',
     feePercent: locked ? (original.feePercent ?? 0) : (form.feePercent ?? 0),
     feeFixed: locked ? (original.feeFixed ?? 0) : (form.feeFixed ?? 0),

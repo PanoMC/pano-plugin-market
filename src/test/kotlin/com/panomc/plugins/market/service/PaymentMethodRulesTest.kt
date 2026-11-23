@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.service
 
+import com.panomc.plugins.market.db.model.MarketPaymentMethod
 import com.panomc.plugins.market.db.model.PaymentFeeMode
 import com.panomc.plugins.market.provider.ProviderAvailability
 import com.panomc.plugins.market.routes.panel.settings.payment.siteInfoOf
@@ -229,5 +230,34 @@ class PaymentMethodRulesTest {
         assertTrue(siteInfoOf("http://172.32.1.1", "x").publiclyReachable)
         assertFalse(siteInfoOf("", "x").publiclyReachable)
         assertFalse(siteInfoOf("http://shop.example.com", "x").https)
+    }
+    @Test
+    fun `the checkout hint is replaced, cleared or hidden`() {
+        val set = parse("customHint" to "  Pay on the next page  ", "hideHint" to true)
+        assertTrue(set.errors.isEmpty())
+        assertEquals("Pay on the next page", set.state.customHint)
+        assertTrue(set.state.hideHint)
+
+        assertNull(parse("customHint" to "   ", from = set.state).state.customHint)
+        assertEquals("TOO_LONG", parse("customHint" to "x".repeat(256)).errors["customHint"])
+        assertEquals("INVALID", parse("hideHint" to "yes").errors["hideHint"])
+        // an empty form keeps both
+        assertEquals("Pay on the next page", parse(from = set.state).state.customHint)
+        assertTrue(parse(from = set.state).state.hideHint)
+    }
+
+    @Test
+    fun `buyers see only the admin's description and the hint the admin chose`() {
+        val provider = { "Pay securely on the Tebex checkout page" }
+
+        // the provider's own description is admin text: never shown to buyers
+        assertNull(PaymentMethodRules.buyerDescription(MarketPaymentMethod()))
+        assertNull(PaymentMethodRules.buyerDescription(MarketPaymentMethod(customDescription = "  ")))
+        assertEquals("Pay with Tebex", PaymentMethodRules.buyerDescription(MarketPaymentMethod(customDescription = "Pay with Tebex")))
+
+        assertEquals("Pay securely on the Tebex checkout page", PaymentMethodRules.buyerHint(MarketPaymentMethod(), provider))
+        assertEquals("Card or PayPal", PaymentMethodRules.buyerHint(MarketPaymentMethod(customHint = "Card or PayPal"), provider))
+        assertNull(PaymentMethodRules.buyerHint(MarketPaymentMethod(customHint = "Card or PayPal", hideHint = true), provider))
+        assertNull(PaymentMethodRules.buyerHint(MarketPaymentMethod(hideHint = true), provider))
     }
 }

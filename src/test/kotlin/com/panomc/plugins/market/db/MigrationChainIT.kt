@@ -9,6 +9,7 @@ import com.panomc.plugins.market.db.migration.MarketMigration6to7
 import com.panomc.plugins.market.db.migration.MarketMigration7to8
 import com.panomc.plugins.market.db.migration.MarketMigration8to9
 import com.panomc.plugins.market.db.migration.MarketMigration9to10
+import com.panomc.plugins.market.db.migration.MarketMigration11to12
 import com.panomc.plugins.market.support.MarketMigrationTestBase
 import com.panomc.plugins.market.support.MarketTestDb
 import io.vertx.kotlin.coroutines.coAwait
@@ -26,7 +27,7 @@ import org.junit.jupiter.api.Test
  * interrupted half-way. Each later migration slice appends its step to [chain]; `2 -> 3`, `3 -> 4`, `4 -> 5` (orders) and `5 -> 6` (payments) and `6 -> 7` (credits) are in.
  */
 class MigrationChainIT : MarketMigrationTestBase() {
-    private val chain: List<() -> DatabaseMigration> = listOf({ MarketMigration2to3() }, { MarketMigration3to4() }, { MarketMigration4to5() }, { MarketMigration5to6() }, { MarketMigration6to7() }, { MarketMigration7to8() }, { MarketMigration8to9() }, { MarketMigration9to10() })
+    private val chain: List<() -> DatabaseMigration> = listOf({ MarketMigration2to3() }, { MarketMigration3to4() }, { MarketMigration4to5() }, { MarketMigration5to6() }, { MarketMigration6to7() }, { MarketMigration7to8() }, { MarketMigration8to9() }, { MarketMigration9to10() }, { MarketMigration11to12() })
 
     private suspend fun runChain(client: SqlClient = pool) {
         for (step in chain) step().migrate(client)
@@ -348,9 +349,10 @@ class MigrationChainIT : MarketMigrationTestBase() {
         assertEquals(5, migration.from)
         assertEquals(6, migration.to)
         assertTrue(migration.isMigratable(5) && !migration.isMigratable(4))
-        // payment method: 14 columns; CREATE payment, payment_event, refund, refund_item, dispute, provider_state
-        assertEquals(14 + 6, migration.handlers.size)
-        assertEquals(14, MarketSchema.PAYMENT_METHOD.alters.size)
+        // payment method: 14 columns of version 6 + 2 of version 12 (idempotent, also run by 11 -> 12); CREATE payment,
+        // payment_event, refund, refund_item, dispute, provider_state
+        assertEquals(16 + 6, migration.handlers.size)
+        assertEquals(16, MarketSchema.PAYMENT_METHOD.alters.size)
         assertTrue(MarketSchema.PAYMENT_METHOD.alters.all { it.contains("ADD COLUMN IF NOT EXISTS") })
         assertTrue(MarketSchema.PAYMENT_METHOD.alters.none { it.trim().startsWith("UPDATE", ignoreCase = true) || it.trim().startsWith("INSERT", ignoreCase = true) })
     }
@@ -563,7 +565,7 @@ class MigrationChainIT : MarketMigrationTestBase() {
         assertEquals(10, second.handlers.size)
         val statements = MarketMigration8to9.statements() + MarketMigration9to10.statements()
         assertTrue(statements.map { it("pano_") }.all { it.startsWith("CREATE TABLE IF NOT EXISTS") })
-        assertEquals(10, chain.last()().to)
+        assertEquals(12, chain.last()().to)
     }
 
     @Test

@@ -1874,8 +1874,8 @@ class PaymentService(
             options.add(
                 PaymentMethodOption(
                     id = row.methodId, label = row.customLabel?.takeIf { it.isNotBlank() } ?: ProviderTexts.resolve(descriptor.displayName, resolved.provider, locale),
-                    description = row.customDescription?.takeIf { it.isNotBlank() } ?: ProviderTexts.resolve(descriptor.description, resolved.provider, locale),
-                    hint = descriptor.checkoutHint?.let { ProviderTexts.resolve(it, resolved.provider, locale) },
+                    description = PaymentMethodRules.buyerDescription(row),
+                    hint = PaymentMethodRules.buyerHint(row) { descriptor.checkoutHint?.let { ProviderTexts.resolve(it, resolved.provider, locale) } },
                     icon = descriptor.icon, logoUrl = if (descriptor.logo != null) MarketPaths.site("/payment-providers/${row.methodId}/logo") else null, color = descriptor.color,
                     feeAmount = tender?.paymentFee ?: 0L, available = reason == null, unavailableReason = reason, providerCode = providerCode,
                     pricing = resolved.caps.priceAuthority.let { if (it == com.panomc.plugins.market.spi.payment.PriceAuthority.MARKET) "MARKET" else it.name },

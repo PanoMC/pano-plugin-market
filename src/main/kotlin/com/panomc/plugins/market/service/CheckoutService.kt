@@ -2719,8 +2719,8 @@ class CheckoutService(
         return PaymentMethodOption(
             id = candidate.id,
             label = candidate.row.customLabel?.takeIf { it.isNotBlank() } ?: ProviderTexts.resolve(descriptor.displayName, candidate.provider, locale),
-            description = candidate.row.customDescription?.takeIf { it.isNotBlank() } ?: ProviderTexts.resolve(descriptor.description, candidate.provider, locale),
-            hint = descriptor.checkoutHint?.let { ProviderTexts.resolve(it, candidate.provider, locale) },
+            description = PaymentMethodRules.buyerDescription(candidate.row),
+            hint = PaymentMethodRules.buyerHint(candidate.row) { descriptor.checkoutHint?.let { ProviderTexts.resolve(it, candidate.provider, locale) } },
             icon = descriptor.icon,
             logoUrl = if (descriptor.logo != null) MarketPaths.site("/payment-providers/${candidate.id}/logo") else null,
             color = descriptor.color,

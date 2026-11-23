@@ -51,19 +51,20 @@ class MarketPaymentMethodDaoImpl : MarketPaymentMethodDao() {
     override suspend fun saveConfig(row: MarketPaymentMethod, sqlClient: SqlClient) {
         val query = """
             INSERT INTO `${prefix() + tableName}` (`methodId`, `enabled`, `settings`, `createdAt`, `updatedAt`, `position`, `customLabel`,
-                `customDescription`, `feeMode`, `feePercent`, `feeFixed`, `minAmount`, `maxAmount`, `currencies`, `testMode`, `settingsUpdatedAt`)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `customDescription`, `feeMode`, `feePercent`, `feeFixed`, `minAmount`, `maxAmount`, `currencies`, `testMode`, `settingsUpdatedAt`, `customHint`, `hideHint`)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE `enabled` = VALUES(`enabled`), `settings` = VALUES(`settings`), `updatedAt` = VALUES(`updatedAt`),
                 `position` = VALUES(`position`), `customLabel` = VALUES(`customLabel`), `customDescription` = VALUES(`customDescription`),
                 `feeMode` = VALUES(`feeMode`), `feePercent` = VALUES(`feePercent`), `feeFixed` = VALUES(`feeFixed`),
                 `minAmount` = VALUES(`minAmount`), `maxAmount` = VALUES(`maxAmount`), `currencies` = VALUES(`currencies`),
-                `testMode` = VALUES(`testMode`), `settingsUpdatedAt` = VALUES(`settingsUpdatedAt`)
+                `testMode` = VALUES(`testMode`), `settingsUpdatedAt` = VALUES(`settingsUpdatedAt`),
+                `customHint` = VALUES(`customHint`), `hideHint` = VALUES(`hideHint`)
         """.trimIndent()
         val tuple = Tuple.tuple()
             .addValue(row.methodId).addValue(row.enabled).addValue(row.settings).addValue(row.createdAt).addValue(row.updatedAt)
             .addValue(row.position).addValue(row.customLabel).addValue(row.customDescription).addValue(row.feeMode.name)
             .addValue(row.feePercent).addValue(row.feeFixed).addValue(row.minAmount).addValue(row.maxAmount).addValue(row.currencies)
-            .addValue(row.testMode).addValue(row.settingsUpdatedAt)
+            .addValue(row.testMode).addValue(row.settingsUpdatedAt).addValue(row.customHint).addValue(row.hideHint)
         sqlClient.preparedQuery(query).execute(tuple).coAwait()
     }
 

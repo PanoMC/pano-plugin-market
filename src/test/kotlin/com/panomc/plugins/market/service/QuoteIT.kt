@@ -1358,13 +1358,24 @@ class QuoteIT : MarketDaoITBase() {
         assertEquals(listOf("fake-two", "fake"), q.paymentMethods.map { it.id })
         assertEquals("Second gate", q.paymentMethods[0].label)
         assertEquals("Fake payment", q.paymentMethods[1].label)
-        assertEquals("Scriptable test provider", q.paymentMethods[1].description)
+        // the provider's description is admin text, buyers see only the admin's own one
+        assertNull(q.paymentMethods[1].description)
         assertTrue(q.paymentMethods.all { it.available && it.unavailableReason == null && it.pricing == "MARKET" })
 
         // a provider that disappears is not offered
         lookup.remove("fake-two")
 
         assertEquals(listOf("fake"), quote(line(fx.product())).paymentMethods.map { it.id })
+
+        // the admin's description and hint replace the provider's, and the hint can be hidden
+        val id = w.paymentMethods.getByMethodId("fake", pool)!!.id
+        Fixtures.setColumns(pool, "market_payment_method", id, mapOf("customDescription" to "Pay by card", "customHint" to "Takes a minute"))
+        quote(line(fx.product())).paymentMethods.single().also {
+            assertEquals("Pay by card", it.description)
+            assertEquals("Takes a minute", it.hint)
+        }
+        Fixtures.setColumns(pool, "market_payment_method", id, mapOf("hideHint" to true))
+        assertNull(quote(line(fx.product())).paymentMethods.single().hint)
     }
 
     @Test
