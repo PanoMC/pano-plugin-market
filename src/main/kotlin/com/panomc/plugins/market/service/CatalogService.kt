@@ -163,6 +163,7 @@ class CatalogService(
         if (input.fields != null && base != null) checkFieldIds(conn, base.id, input.fields, errors)
         if (input.bundleItems != null) checkBundleChildren(conn, base?.id, input.bundleItems, errors)
         checkBundleMembership(conn, base, product, errors)
+        checkBundleServerChoices(conn, product, input.bundleItems?.map { it.productId } ?: existingBundle.map { it.productId }, errors)
 
         if (errors.isNotEmpty()) throw InvalidProduct(errors)
 
@@ -349,6 +350,25 @@ class CatalogService(
                 if (variant == null || variant.productId != item.productId || variant.deletedAt != null) errors["$path.variantId"] = "NOT_FOUND"
             }
         }
+    }
+
+    /**
+     * A bundle whose child lets the buyer pick the server (`BUYER_CHOICE`) needs its own `serverChoices`: checkout and delivery
+     * check the buyer's choice against the bundle's list (owner decision), so without one nobody could buy the bundle. The
+     * child test is the one checkout uses ([CheckoutService.buyerChoice]).
+     */
+    private suspend fun checkBundleServerChoices(conn: SqlClient, product: MarketProduct, childIds: List<Long>, errors: MutableMap<String, String>) {
+        if (product.kind != ProductKind.BUNDLE || ProductActionRules.idList(product.serverChoices).isNotEmpty() || "serverChoices" in errors) return
+
+        val ids = childIds.filter { it > 0 }.distinct()
+
+        if (ids.isEmpty()) return
+
+        val buyerChoice = products.getByIds(ids, conn).any { child ->
+            child.deletedAt == null && CheckoutService.buyerChoice(child.actions)
+        }
+
+        if (buyerChoice) errors["serverChoices"] = "SERVER_CHOICES_REQUIRED"
     }
 
     /**

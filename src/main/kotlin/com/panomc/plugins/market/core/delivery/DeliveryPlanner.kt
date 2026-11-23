@@ -47,8 +47,9 @@ class Coverage(val endedEntitlementId: Long, val chainEnd: Long?)
 
 /**
  * One order line as planning reads it. [actions] are the snapshot actions read with [ActionParser.parseStored]
- * (what was sold, not what the catalogue says now). For a `BUNDLE_CHILD`, [fields] and [targetServerId] of the parent
- * line are used (08 section 5.2); [serverChoices] stay the child product's own.
+ * (what was sold, not what the catalogue says now). For a `BUNDLE_CHILD`, [fields], [targetServerId] and [serverChoices]
+ * of the parent line are used (08 section 5.2): the bundle's own server list is the one checkout checked the buyer's
+ * choice against (owner decision: the bundle's list decides).
  *
  * [priorRows] are the item's existing delivery rows, read after the end flow cancelled the unsent ones: an automatic
  * inverse (`REMOVE` of a permission, credit reversal) is planned only for an action that has a `SENDING`, `CONFIRMED`,
@@ -461,7 +462,7 @@ object DeliveryPlanner {
         val covered: IntRange
     ) {
         private val src get() = c.source
-        private val itemTarget = TargetResolver.ItemTarget(parent?.targetServerId ?: item?.targetServerId, item?.serverChoices.orEmpty())
+        private val itemTarget = TargetResolver.ItemTarget(parent?.targetServerId ?: item?.targetServerId, (parent ?: item)?.serverChoices.orEmpty())
 
         /** One `FAILED` row per stored action that no longer converts, so an admin can see and retry it. */
         fun droppedRows(

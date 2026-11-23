@@ -267,7 +267,7 @@ class DeliveryPlannerTest {
     fun `a bundle plans the parent first, then its children with the parent's fields and the bundle name (case 21)`() {
         val fields = mapOf("nick" to FieldValue(ProductFieldType.USERNAME, "Alex"))
 
-        val parent = item(1, command("a1", "say {bundle.name} for {field.nick} x{quantity}"), quantity = 2, kind = OrderItemKind.BUNDLE, name = "Starter Pack", fields = fields, target = 2L)
+        val parent = item(1, command("a1", "say {bundle.name} for {field.nick} x{quantity}"), quantity = 2, kind = OrderItemKind.BUNDLE, name = "Starter Pack", fields = fields, target = 2L, choices = listOf(1L, 2L))
 
         val child = item(
             2, command("b1", "give {field.nick} diamond {quantity} from {bundle.name}", mode = ServerMode.BUYER_CHOICE, targets = emptyList()),
@@ -282,6 +282,23 @@ class DeliveryPlannerTest {
             // child quantity = bundle quantity x per-bundle quantity; field values and server choice come from the parent line
             assertEquals("give Alex diamond 6 from Starter Pack", commandsOf(rows[1]).single())
         }
+    }
+
+    @Test
+    fun `a bundle child's BUYER_CHOICE target is checked against the bundle's own server list, the one checkout checked`() {
+        val parent = item(1, command("a1", "say bundle"), kind = OrderItemKind.BUNDLE, name = "Starter Pack", target = 5L, choices = listOf(2L, 5L))
+
+        // the child product lists only server 1; the bundle offers 2 and 5 and the buyer chose 5
+        val child = item(
+            2, command("b1", "say child", mode = ServerMode.BUYER_CHOICE, targets = emptyList()),
+            kind = OrderItemKind.BUNDLE_CHILD, parent = 1, name = "Diamonds", choices = listOf(1L)
+        )
+
+        val rows = plan(parent, child)
+        val childRow = rows.single { it.orderItemId == 2L }
+
+        assertEquals(DeliveryStatus.PENDING, childRow.status)
+        assertEquals(5L, childRow.serverId)
     }
 
     @Test

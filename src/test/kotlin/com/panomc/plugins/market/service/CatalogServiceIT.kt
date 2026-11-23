@@ -1041,6 +1041,23 @@ class CatalogServiceIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a bundle with a child where the buyer picks the server needs its own server list`(): Unit = runBlocking {
+        val choice = w.fixtures.product(
+            actions = """[{"id":"a1","type":"COMMAND","phase":"GRANT","via":"SERVER","serverMode":"BUYER_CHOICE","commands":["give {player} diamond"]}]"""
+        )
+        val plain = w.fixtures.product()
+
+        val errors = fieldErrors { create("kind" to "BUNDLE", "bundleItems" to """[{"productId":${plain.id},"quantity":1},{"productId":${choice.id},"quantity":1}]""") }
+
+        assertEquals("SERVER_CHOICES_REQUIRED", errors["serverChoices"])
+
+        // a bundle of children with fixed servers needs no list of its own
+        val ok = create("kind" to "BUNDLE", "bundleItems" to """[{"productId":${plain.id},"quantity":1}]""")
+
+        assertEquals(1, w.bundleItems.getByBundleProductId(ok.id, pool).size)
+    }
+
+    @Test
     fun `a bundle cannot contain a physical child, a subscription or a credit pack`(): Unit = runBlocking {
         val physical = w.fixtures.product(columns = mapOf("physical" to true))
         val subscription = w.fixtures.product(columns = mapOf("billingMode" to "SUBSCRIPTION"))
