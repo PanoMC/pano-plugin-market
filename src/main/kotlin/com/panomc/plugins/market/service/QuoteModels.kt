@@ -192,9 +192,9 @@ class QuoteCredits(
         .put("appliedValue", money(appliedValue))
 }
 
-/** `Quote.coupon` / `Quote.creatorCode`. */
-class QuoteCode(val code: String, val valid: Boolean, val reason: String?) {
-    fun toJson(): JsonObject = JsonObject().put("code", code).put("valid", valid).put("reason", reason)
+/** `Quote.coupon` / `Quote.creatorCode`. [retryAfter] (seconds) is set while code attempts are locked (`CODE_ATTEMPTS_LOCKED`). */
+class QuoteCode(val code: String, val valid: Boolean, val reason: String?, val retryAfter: Long? = null) {
+    fun toJson(): JsonObject = JsonObject().put("code", code).put("valid", valid).put("reason", reason).apply { if (retryAfter != null) put("retryAfter", retryAfter) }
 }
 
 class QuoteLegal(val required: Boolean, val id: Long, val version: Int, val title: String) {

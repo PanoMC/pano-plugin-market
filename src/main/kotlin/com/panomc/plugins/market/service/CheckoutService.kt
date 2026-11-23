@@ -781,9 +781,9 @@ class CheckoutService(
             total = breakdown.total,
             credits = breakdown.credits?.let { QuoteCredits(true, c.creditName, it.balance, it.payableInCredits, it.creditTotal, it.maxApplicable, it.applied, it.appliedValue) },
             gatewayAmount = breakdown.gatewayAmount,
-            coupon = if (codeLock != null && rawCoupon != null) QuoteCode(CartLimits.normalizeCode(rawCoupon) ?: rawCoupon, false, CODE_ATTEMPTS_LOCKED)
+            coupon = if (codeLock != null && rawCoupon != null) QuoteCode(CartLimits.normalizeCode(rawCoupon) ?: rawCoupon, false, CODE_ATTEMPTS_LOCKED, guard?.retryAfterSeconds(codeLock))
             else items.coupon?.let { QuoteCode(it.code, it.valid, it.reason?.name) },
-            creatorCode = if (codeLock != null && rawCreator != null) QuoteCode(CartLimits.normalizeCode(rawCreator) ?: rawCreator, false, CODE_ATTEMPTS_LOCKED)
+            creatorCode = if (codeLock != null && rawCreator != null) QuoteCode(CartLimits.normalizeCode(rawCreator) ?: rawCreator, false, CODE_ATTEMPTS_LOCKED, guard?.retryAfterSeconds(codeLock))
             else items.creatorCode?.let { QuoteCode(it.code, it.valid, it.reason?.name) },
             requiresShipping = items.requiresShipping,
             shippingOptions = shippingQuote.options,

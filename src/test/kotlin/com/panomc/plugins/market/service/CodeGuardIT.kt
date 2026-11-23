@@ -131,6 +131,8 @@ class CodeGuardIT : MarketDaoITBase() {
         assertTrue(locked(q))
         assertFalse(q.coupon!!.valid)
         assertEquals("REAL10", q.coupon!!.code)
+        assertEquals(900L, q.coupon!!.retryAfter, "the real lock (15 minutes) in seconds, so the storefront countdown matches it")
+        assertEquals(900L, q.coupon!!.toJson().getLong("retryAfter"))
         assertTrue(q.messages.any { it.code == "CODE_ATTEMPTS_LOCKED" && it.level == "error" })
         assertEquals(1000L, q.total, "the rest of the quote is computed without the code")
         assertEquals(1L, count("market_throttle", "`scope` = 'COUPON' AND `lockedUntil` IS NOT NULL AND `subject` = 'b:u:${w.users.idOf("Alice")}'"))
