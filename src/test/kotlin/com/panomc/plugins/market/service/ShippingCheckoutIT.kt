@@ -591,6 +591,23 @@ class ShippingCheckoutIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a CARRIER method with a bare carrier code takes that carrier's cheapest carrier-service rate`(): Unit = runBlocking {
+        val shirt = shirt()
+        val z = zone()
+
+        // EasyPost / Shippo: listServices gives the bare carrier ("USPS"), rates come as "carrier:service"
+        carrierWithSender()
+        carrier.onQuote = { QuoteResult(listOf(rate("USPS:Priority", 1200), rate("USPS:Ground", 900), rate("UPS:Ground", 700))) }
+
+        val usps = method("USPS", listOf(z), source = ShippingRateSource.CARRIER, providerId = carrier.id, serviceCode = "USPS")
+
+        val q = quote(shirt to 1, address = de)
+
+        assertEquals(listOf(usps.id), q.shippingOptions.map { it.getLong("methodId") })
+        assertEquals(listOf(9.0), q.shippingOptions.map { it.getDouble("price") })
+    }
+
+    @Test
     fun `the carrier request carries the sender, the buyer address, one parcel, the items and the order value`(): Unit = runBlocking {
         val shirt = shirt(price = 2000, weight = 250, columns = mapOf("lengthMm" to 300, "widthMm" to 200, "heightMm" to 100))
         val z = zone()

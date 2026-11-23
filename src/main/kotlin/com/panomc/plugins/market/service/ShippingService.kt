@@ -616,7 +616,8 @@ class ShippingService(
 
             r to inBase
         }
-        val matching = if (method.serviceCode != null) usable.filter { it.first.serviceCode == method.serviceCode } else usable
+        val code = method.serviceCode
+        val matching = if (code != null) usable.filter { serviceMatches(it.first.serviceCode, code) } else usable
 
         return matching.minByOrNull { it.second }?.first
     }
@@ -2614,6 +2615,15 @@ class ShippingService(
          */
         fun giftCodeRefusal(products: Collection<MarketProduct>): InvalidGiftCode? =
             if (products.any { it.physical }) InvalidGiftCode("PHYSICAL_NOT_SUPPORTED") else null
+
+        /**
+         * A method's stored `serviceCode` against a rate's code. EasyPost and Shippo list bare carrier codes (`USPS`: that
+         * carrier's cheapest service) but quote `carrier:service` codes, so a code without `:` matches every service of that
+         * carrier (case-insensitive); a code with `:` matches exactly.
+         */
+        internal fun serviceMatches(rateCode: String, serviceCode: String): Boolean =
+            rateCode == serviceCode ||
+                (':' !in serviceCode && (rateCode.equals(serviceCode, ignoreCase = true) || rateCode.startsWith("$serviceCode:", ignoreCase = true)))
 
         private const val TIMEOUT = "TIMEOUT"
         private const val INTERNAL = "INTERNAL"
