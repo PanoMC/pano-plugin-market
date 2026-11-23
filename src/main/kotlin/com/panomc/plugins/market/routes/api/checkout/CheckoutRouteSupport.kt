@@ -169,7 +169,8 @@ internal fun checkoutService(plugin: MarketPlugin, withCheckout: Boolean = false
         codeGuard = abuse.codeGuard,
         rateLimits = abuse.rateLimits,
         openOrders = abuse.openOrders,
-        throttle = abuse.throttle
+        throttle = abuse.throttle,
+        providerMeta = context.getBean(MarketProductProviderMetaDao::class.java)
     )
 }
 

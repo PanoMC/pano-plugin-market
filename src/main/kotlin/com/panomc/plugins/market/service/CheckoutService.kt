@@ -441,7 +441,9 @@ class CheckoutService(
     /** L4: unpaid held orders per buyer, recipient, e-mail and IP bucket; `null` = not enforced. */
     private val openOrders: OpenOrderLimit? = null,
     /** L3: orders created per IP and hour (`market_throttle`); `null` = not enforced. */
-    private val throttle: ThrottleService? = null
+    private val throttle: ThrottleService? = null,
+    /** The product links of payment providers (`{"packageId": …}`), read by the quote too; `null` = [CheckoutDeps.providerMeta]. */
+    private val providerMeta: MarketProductProviderMetaDao? = null
 ) {
     private val limits: MarketRateLimits = rateLimits ?: MarketRateLimits(config)
 
@@ -708,8 +710,9 @@ class CheckoutService(
 
         // ---- the method list
         val subscriptionLine = lines.firstOrNull { catalog.products[it.productId]?.billingMode == BillingMode.SUBSCRIPTION }
+        val lineMeta = if (evaluations.isEmpty()) emptyMap() else providerMetaOf(items.lines.mapNotNull { it.productId }.distinct(), sqlClient)
         val eligibilityBase = EligibilityContext(
-            c, caller, payerKey, payerName ?: "", orderEmail, recipient, locale, breakdown, items.lines, catalog, subscriptionLine, input
+            c, caller, payerKey, payerName ?: "", orderEmail, recipient, locale, breakdown, items.lines, catalog, subscriptionLine, input, lineMeta
         )
         val options = ArrayList<PaymentMethodOption>()
 
@@ -1422,27 +1425,33 @@ class CheckoutService(
 
     private class BuiltItems(val items: List<DraftItem>, val demands: List<StockDemand>)
 
-    /** The order items (bundle line first, its children after it) and the stock each of them needs (06 section 7.1). */
-    private suspend fun itemsOf(a: Assessment, deps: CheckoutDeps, conn: SqlClient): BuiltItems {
+    /**
+     * `{providerId: {...}}` of each product (the product level first, then the variant level on top). The quote and the
+     * order items read the same map, so a payment method's eligibility sees the links the order will carry.
+     */
+    private suspend fun providerMetaOf(productIds: Collection<Long>, conn: SqlClient): Map<Long, JsonObject> {
+        val dao = providerMeta ?: checkout?.providerMeta ?: return emptyMap()
         val meta = HashMap<Long, JsonObject>()
 
-        deps.providerMeta?.let { dao ->
-            for (id in productIdsOf(a)) {
-                val rows = dao.getByProductId(id, conn)
-                val product = JsonObject()
+        for (id in productIds) {
+            val product = JsonObject()
 
-                // the product level first, then the variant level on top
-                for (row in rows.sortedBy { it.variantId }) {
-                    val obj = runCatching { JsonObject(row.meta) }.getOrNull() ?: continue
-                    val existing = product.getJsonObject(row.providerId) ?: JsonObject().also { product.put(row.providerId, it) }
+            for (row in dao.getByProductId(id, conn).sortedBy { it.variantId }) {
+                val obj = runCatching { JsonObject(row.meta) }.getOrNull() ?: continue
+                val existing = product.getJsonObject(row.providerId) ?: JsonObject().also { product.put(row.providerId, it) }
 
-                    existing.mergeIn(obj)
-                }
-
-                meta[id] = product
+                existing.mergeIn(obj)
             }
+
+            meta[id] = product
         }
 
+        return meta
+    }
+
+    /** The order items (bundle line first, its children after it) and the stock each of them needs (06 section 7.1). */
+    private suspend fun itemsOf(a: Assessment, deps: CheckoutDeps, conn: SqlClient): BuiltItems {
+        val meta = providerMetaOf(productIdsOf(a), conn)
         val items = ArrayList<DraftItem>()
         val demands = ArrayList<StockDemand>()
         val children = a.items.lines.filter { it.parentLineKey != null }.groupBy { it.parentLineKey!! }
@@ -2635,7 +2644,9 @@ class CheckoutService(
         val priced: List<PricedLine>,
         val catalog: Catalog,
         val subscriptionLine: CartLine?,
-        val input: QuoteInput
+        val input: QuoteInput,
+        /** `{providerId: {...}}` per product id, see [providerMetaOf]. */
+        val providerMeta: Map<Long, JsonObject>
     )
 
     private fun option(candidate: Candidate, evaluation: MethodEvaluation, ctx: EligibilityContext, locale: String): PaymentMethodOption {
@@ -2741,7 +2752,8 @@ class CheckoutService(
             OrderLine(
                 orderItemId = 0, productId = l.productId, name = product?.name ?: "Credits", sku = variant?.sku ?: product?.sku, variantName = variant?.name,
                 quantity = l.quantity, unitPrice = Money(l.unitPrice, currency), total = Money(l.lineTotal, currency), vatPercent = l.vatPercent,
-                physical = product?.physical == true, categoryName = null, providerMeta = null
+                physical = product?.physical == true, categoryName = null,
+                providerMeta = l.productId?.let { ctx.providerMeta[it] }?.getJsonObject(candidate.id)
             )
         }
         val fee = evaluation.feeAmount

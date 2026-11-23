@@ -47,6 +47,7 @@ import com.panomc.plugins.market.support.TestWiring
 import com.panomc.plugins.market.util.DiscountUnit
 import com.panomc.plugins.market.util.MarketStatus
 import io.vertx.core.Vertx
+import com.panomc.plugins.market.db.model.MarketProductProviderMeta
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.sqlclient.SqlClient
@@ -120,7 +121,8 @@ class QuoteIT : MarketDaoITBase() {
                 shippingRequest = request
 
                 shippingResult ?: ShippingQuote(null)
-            }
+            },
+            providerMeta = w.providerMeta
         )
 
     /** The service reads the provider list at call time, so a test swaps `lookup` freely. */
@@ -1549,6 +1551,23 @@ class QuoteIT : MarketDaoITBase() {
 
         picky.verdict = Eligibility.ineligible("BAD", LocalizedText.of("no"))
         assertEquals("PROVIDER_INELIGIBLE", quote(line(sub), caller = caller).paymentMethods.single().unavailableReason)
+    }
+
+    @Test
+    fun `checkEligibility sees only its own product link (Tebex packageId) in the quote`(): Unit = runBlocking {
+        lookup = StaticProviderLookup(listOf(picky))
+        method()
+        val linked = fx.product(price = 500, name = "Tokens")
+        val unlinked = fx.product(price = 500, name = "Key")
+
+        w.providerMeta.upsert(MarketProductProviderMeta(productId = linked.id, providerId = picky.id, meta = "{\"packageId\":\"1001\"}"), pool)
+        w.providerMeta.upsert(MarketProductProviderMeta(productId = linked.id, providerId = "other", meta = "{\"packageId\":\"9\"}"), pool)
+
+        quote(line(linked))
+        assertEquals(JsonObject().put("packageId", "1001"), picky.seen!!.order.lines.single().providerMeta)
+
+        quote(line(unlinked))
+        assertNull(picky.seen!!.order.lines.single().providerMeta)
     }
 
     @Test

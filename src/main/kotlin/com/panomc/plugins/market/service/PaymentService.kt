@@ -728,7 +728,8 @@ class PaymentService(
 
     // ======================================================================================== the provider request
 
-    private fun spiSnapshot(order: MarketOrder, items: List<MarketOrderItem>): SpiOrderSnapshot {
+    /** The order as [providerId] sees it: each line carries only that provider's `providerMeta` (`{"packageId": …}`), not the whole map. */
+    private fun spiSnapshot(order: MarketOrder, items: List<MarketOrderItem>, providerId: String): SpiOrderSnapshot {
         val currency = order.currency
         val lines = items.filter { it.kind != OrderItemKind.BUNDLE_CHILD }.map { item ->
             val snapshot = item.snapshot?.let { runCatching { JsonObject(it) }.getOrNull() }
@@ -736,7 +737,7 @@ class PaymentService(
             OrderLine(
                 orderItemId = item.id, productId = item.productId, name = item.productName, sku = item.sku, variantName = item.variantName,
                 quantity = item.quantity, unitPrice = Money(item.unitPrice, currency), total = Money(item.lineTotal, currency), vatPercent = item.vatPercent,
-                physical = item.physical, categoryName = snapshot?.getString("categoryName"), providerMeta = snapshot?.getJsonObject("providerMeta")
+                physical = item.physical, categoryName = snapshot?.getString("categoryName"), providerMeta = snapshot?.getJsonObject("providerMeta")?.getJsonObject(providerId)
             )
         }
 
@@ -753,7 +754,7 @@ class PaymentService(
     private fun requestFor(
         order: MarketOrder, items: List<MarketOrderItem>, attempt: MarketPayment, replaces: MarketPayment?, resolved: Resolved, plan: SubscriptionPlan?
     ): StartPaymentRequest {
-        val snapshot = spiSnapshot(order, items)
+        val snapshot = spiSnapshot(order, items, resolved.provider.id)
         val billing = order.billingInfo?.let { runCatching { JsonObject(it) }.getOrNull() }
         val locale = order.locale ?: site().defaultLocale
 
@@ -1311,7 +1312,7 @@ class PaymentService(
 
             val plan = if (offer is ModeOffer.Auto) pending?.at(tender.total) else null
             val eligibility = try {
-                target.provider.checkEligibility(contexts.create(target.provider, target.settings, target.testMode), snapshotOf(order, items, tender, plan))
+                target.provider.checkEligibility(contexts.create(target.provider, target.settings, target.testMode), snapshotOf(order, items, target.provider.id, tender, plan))
             } catch (e: Exception) {
                 null
             }
@@ -1416,9 +1417,10 @@ class PaymentService(
     }
 
     private fun snapshotOf(
-        order: MarketOrder, items: List<MarketOrderItem>, tender: com.panomc.plugins.market.core.pricing.TenderBreakdown, plan: SubscriptionPlan? = null
+        order: MarketOrder, items: List<MarketOrderItem>, providerId: String, tender: com.panomc.plugins.market.core.pricing.TenderBreakdown,
+        plan: SubscriptionPlan? = null
     ): CheckoutSnapshot {
-        val base = spiSnapshot(order, items)
+        val base = spiSnapshot(order, items, providerId)
         val currency = order.currency
 
         return CheckoutSnapshot(
@@ -1783,7 +1785,7 @@ class PaymentService(
 
         return com.panomc.plugins.market.spi.payment.RecurringChargeRequest(
             attempt = AttemptRef(attempt.id, attempt.reference, attempt.token), amount = Money(attempt.amount, attempt.currency), subscription = subscription,
-            storedMethod = stored, order = spiSnapshot(order, items), buyer = buyerOf(order, null, null, billing, locale), idempotencyKey = idempotencyKey,
+            storedMethod = stored, order = spiSnapshot(order, items, attempt.providerId), buyer = buyerOf(order, null, null, billing, locale), idempotencyKey = idempotencyKey,
             notifyUrl = urlsFor(attempt, order.publicId ?: "", attempt.providerId).notify
         )
     }
@@ -1893,7 +1895,7 @@ class PaymentService(
                 com.panomc.plugins.market.spi.payment.RefundLine(line.orderItemId, byItem[line.orderItemId]?.gatewayItemRef, line.quantity, Money(parts[i], order.currency))
             }
             val request = RefundRequest(
-                refundId = refund.id, idempotencyKey = refund.idempotencyKey, attempt = attemptView(fresh, order.publicId ?: ""), order = spiSnapshot(order, items),
+                refundId = refund.id, idempotencyKey = refund.idempotencyKey, attempt = attemptView(fresh, order.publicId ?: ""), order = spiSnapshot(order, items, fresh.providerId),
                 amount = Money(refund.gatewayAmount, currency), full = full, lines = refundLines, reason = refund.reason, paidAt = fresh.paidAt ?: order.paidAt ?: clock.now()
             )
 
