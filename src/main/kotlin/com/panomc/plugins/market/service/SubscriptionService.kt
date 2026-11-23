@@ -1028,7 +1028,7 @@ class SubscriptionService(
                 fxRate = initial.fxRate, displayCurrency = initial.displayCurrency, displayRate = initial.displayRate, pricingMode = initial.pricingMode,
                 pricesIncludeVat = initial.pricesIncludeVat, subtotal = lineTotal, paymentFee = fee, paymentFeeVatPercent = initial.paymentFeeVatPercent,
                 paymentFeeVatAmount = feeVat, vatTotal = vat + feeVat, creditAmount = 0, creditValue = 0, gatewayAmount = price, testMode = row.testMode,
-                billingInfo = initial.billingInfo, subscriptionId = row.id
+                billingInfo = initial.billingInfo, subscriptionId = row.id, fulfillmentBy = initial.fulfillmentBy
             )
             val id = orders.tryAdd(candidate, conn)
 
