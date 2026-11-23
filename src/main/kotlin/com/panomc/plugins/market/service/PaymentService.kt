@@ -1888,7 +1888,7 @@ class PaymentService(
             // the money goes back in the currency the gateway took it in (a SYSTEM refund of a payment in another currency); lines are priced in the order
             // currency, so such a refund is sent as an amount only
             val currency = refundCurrency(refund, order)
-            val parts = com.panomc.plugins.market.core.money.Rounding.allocate(refund.gatewayAmount.coerceAtMost(lines.sumOf { it.amount }), lines.map { it.amount }, 1L)
+            val parts = refundLineShares(refund.gatewayAmount.coerceAtMost(lines.sumOf { it.amount }), lines.map { it.amount }, order.currency)
             val refundLines = if (lines.isEmpty() || parts.sum() == 0L || currency != order.currency) emptyList() else lines.mapIndexed { i, line ->
                 com.panomc.plugins.market.spi.payment.RefundLine(line.orderItemId, byItem[line.orderItemId]?.gatewayItemRef, line.quantity, Money(parts[i], order.currency))
             }
@@ -1957,6 +1957,18 @@ class PaymentService(
         const val TEST_MODE = "TEST_MODE"
         const val GUESTS_NOT_SUPPORTED = "GUESTS_NOT_SUPPORTED"
         const val PROVIDER_INELIGIBLE = "PROVIDER_INELIGIBLE"
+
+        /**
+         * The gateway part of an itemized refund spread over its lines, in whole units of [currency] (100 minor units for a zero-decimal currency, so
+         * every share is a valid [Money]). When the amount or a line is not a whole unit, every share is 0 and the refund goes out as an amount only.
+         */
+        internal fun refundLineShares(amount: Long, weights: List<Long>, currency: String): List<Long> {
+            val unit = com.panomc.plugins.market.core.credit.CreditMath.unit(currency)
+
+            if (amount % unit != 0L || weights.any { it % unit != 0L }) return weights.map { 0L }
+
+            return com.panomc.plugins.market.core.money.Rounding.allocate(amount, weights, unit)
+        }
 
         private val logger = LoggerFactory.getLogger(PaymentService::class.java)
     }
