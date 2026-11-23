@@ -475,6 +475,20 @@ class PaymentServiceIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `a refused player name is INVALID_BUYER on the order page and leaves the method's error alone`(): Unit = runBlocking {
+        fx.paymentMethod("fake")
+        fake.failNext(FakePaymentProvider.Op.START, ProviderException(ProviderErrorCode.INVALID_BUYER, "refused", adminMessage = "Invalid Username provided"))
+
+        val body = expect("PAYMENT_PROVIDER_ERROR", 424) { buy(fx.product(price = 1000)) }
+
+        assertEquals("INVALID_BUYER", body.getString("code"))
+        assertEquals("FAILED", body.getJsonObject("order").getJsonObject("payment").getString("status"))
+        assertEquals("INVALID_BUYER", body.getJsonObject("order").getJsonObject("payment").getString("failureCode"))
+        assertEquals("Invalid Username provided", ph.attempts(onlyOrder().id).single().adminMessage)
+        assertNull(w.paymentMethods.getByMethodId("fake", pool)!!.lastError, "a buyer's own detail is not a method error")
+    }
+
+    @Test
     fun `an unexpected exception is an INTERNAL failure, an unregistered provider a CONFIGURATION failure`(): Unit = runBlocking {
         fx.paymentMethod("fake")
         fake.onStart = { throw IllegalStateException("boom with secret-token-1") }

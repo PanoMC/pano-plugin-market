@@ -87,5 +87,11 @@ class ProviderException(
 /** New values only at the end; both sides treat an unknown value as `INTERNAL`. */
 enum class ProviderErrorCode {
     CONFIGURATION, AUTHENTICATION, IP_NOT_ALLOWED, GATEWAY_UNREACHABLE, GATEWAY_REJECTED, RATE_LIMITED,
-    INVALID_REQUEST, UNSUPPORTED, NOT_FOUND, INTERNAL
+    INVALID_REQUEST, UNSUPPORTED, NOT_FOUND, INTERNAL,
+    /**
+     * The gateway refused the buyer's own details (for example Tebex: a player name that is not a real Minecraft account).
+     * The buyer is told to fix them; added in market 1.4.0, so a provider built for older markets must resolve it by name
+     * (`ProviderErrorCode.entries.firstOrNull { it.name == "INVALID_BUYER" } ?: INVALID_REQUEST`).
+     */
+    INVALID_BUYER
 }

@@ -301,9 +301,11 @@ export function viewState(order, returnHint = null, now = 0, mountedAt = 0) {
         subKey:
           returnHint === 'cancel'
             ? `${STATE_PREFIX}cancelled-at-gateway`
-            : ps === 'FAILED' || ps === 'EXPIRED'
-              ? `${STATE_PREFIX}attempt-failed`
-              : null,
+            : ps === 'FAILED' && order?.payment?.failureCode === 'INVALID_BUYER'
+              ? `${STATE_PREFIX}attempt-failed-buyer`
+              : ps === 'FAILED' || ps === 'EXPIRED'
+                ? `${STATE_PREFIX}attempt-failed`
+                : null,
         showCountdown: true,
         panels: { ...PLAIN_PANELS, payment: true, cancel: true },
       });

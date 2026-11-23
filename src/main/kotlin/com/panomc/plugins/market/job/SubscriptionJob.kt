@@ -208,7 +208,7 @@ class SubscriptionJob(
             ProviderErrorCode.GATEWAY_REJECTED -> null
             ProviderErrorCode.UNSUPPORTED -> AttemptFacts.RECURRING_UNSUPPORTED
             ProviderErrorCode.CONFIGURATION, ProviderErrorCode.AUTHENTICATION, ProviderErrorCode.IP_NOT_ALLOWED, ProviderErrorCode.GATEWAY_UNREACHABLE,
-            ProviderErrorCode.RATE_LIMITED, ProviderErrorCode.INVALID_REQUEST, ProviderErrorCode.NOT_FOUND -> AttemptFacts.RECURRING_TECHNICAL
+            ProviderErrorCode.RATE_LIMITED, ProviderErrorCode.INVALID_REQUEST, ProviderErrorCode.NOT_FOUND, ProviderErrorCode.INVALID_BUYER -> AttemptFacts.RECURRING_TECHNICAL
 
             ProviderErrorCode.INTERNAL -> {
                 logger.warn("chargeRecurring of subscription {} failed internally, the outcome is unknown", prepared.subscription.id)

@@ -156,6 +156,13 @@ describe('viewState: one case per row of 14 §11.3', () => {
     expect(v.subKey).toBe('theme.order.state.attempt-failed');
   });
 
+  test('8 AWAITING_PAYMENT: a player name the provider refused gets its own sub-line', () => {
+    const o = pending('FAILED');
+    const v = viewState({ ...o, payment: { ...o.payment, failureCode: 'INVALID_BUYER' } });
+    expect(v.state).toBe('AWAITING_PAYMENT');
+    expect(v.subKey).toBe('theme.order.state.attempt-failed-buyer');
+  });
+
   test('8 AWAITING_PAYMENT: a CANCELLED attempt has no failure sub-line', () => {
     expect(viewState(pending('CANCELLED')).subKey).toBeNull();
   });

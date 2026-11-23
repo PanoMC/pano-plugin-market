@@ -378,6 +378,7 @@
         "awaiting": "Ödemeniz bekleniyor",
         "cancelled-at-gateway": "Ödemeyi iptal ettiniz. Tekrar deneyebilir veya başka bir yöntemle ödeyebilirsiniz.",
         "attempt-failed": "Son ödeme denemesi tamamlanamadı. Tekrar deneyebilir veya başka bir yöntemle ödeyebilirsiniz.",
+        "attempt-failed-buyer": "Ödeme sağlayıcısı oyuncu adınızı kabul etmedi. Gerçek Minecraft hesabınızla giriş yaptığınızdan emin olun, sonra tekrar deneyin ya da başka bir yolla ödeyin.",
         "refunded": "Bu sipariş iade edildi.",
         "chargeback": "Bu ödemeye banka nezdinde itiraz edildi.",
         "FAILED": "Bu sipariş başarısız oldu.",

@@ -126,7 +126,8 @@ class InboundAndProviderTypesTest {
         assertEquals("rejected", e.message); assertEquals("bad key", e.adminMessage); assertTrue(e.retryable); assertEquals(cause, e.cause)
         val plain = ProviderException(ProviderErrorCode.CONFIGURATION, "missing")
         assertNull(plain.adminMessage); assertFalse(plain.retryable); assertNull(plain.cause)
-        assertEquals(10, ProviderErrorCode.values().size)
+        assertEquals(11, ProviderErrorCode.values().size)
+        assertEquals(ProviderErrorCode.INVALID_BUYER, ProviderErrorCode.values().last(), "new values only at the end")
     }
 
     @Test

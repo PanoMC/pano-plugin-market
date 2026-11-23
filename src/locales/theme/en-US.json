@@ -378,6 +378,7 @@
         "awaiting": "Waiting for your payment",
         "cancelled-at-gateway": "You canceled the payment. You can try again or pay another way.",
         "attempt-failed": "The last payment attempt did not go through. You can try again or pay another way.",
+        "attempt-failed-buyer": "The payment provider did not accept your player name. Make sure you are signed in with your real Minecraft account, then try again or pay another way.",
         "refunded": "This order was refunded.",
         "chargeback": "This payment was disputed with the bank.",
         "FAILED": "This order failed.",

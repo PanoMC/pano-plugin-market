@@ -548,7 +548,8 @@ class PaymentService(
                     ProviderMoneyPolicy(), OrderActor.SYSTEM, after
                 )
 
-                methods.setLastError(attempt.providerId, code.name, clock.now(), conn)
+                // a buyer's own refused detail (INVALID_BUYER) says nothing about the method's health
+                if (code != ProviderErrorCode.INVALID_BUYER) methods.setLastError(attempt.providerId, code.name, clock.now(), conn)
             }
         }
     }

@@ -534,7 +534,9 @@ class OrderService(
             .put("isGift", order.isGift)
             .put(
                 "payment",
-                newest?.let { JsonObject().put("methodId", order.paymentMethodId).put("label", order.paymentLabel).put("status", it.status.name).put("start", start) }
+                newest?.let { JsonObject().put("methodId", order.paymentMethodId).put("label", order.paymentLabel).put("status", it.status.name).put("start", start)
+                    // the ProviderErrorCode of a failed attempt (a code, never the gateway's text): the order page explains INVALID_BUYER
+                    .put("failureCode", it.failureCode?.takeIf { _ -> it.status == PaymentStatus.FAILED }) }
             )
             .put("shipping", order.shippingMethodName?.let { JsonObject().put("methodName", it).put("minDays", shippingDays(order, "minDays")).put("maxDays", shippingDays(order, "maxDays")) })
             .put("shipments", shipmentViews.forOrder(order.id, sqlClient))
