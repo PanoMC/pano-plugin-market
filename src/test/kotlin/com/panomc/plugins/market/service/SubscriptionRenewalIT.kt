@@ -519,6 +519,47 @@ internal class SubscriptionRenewalIT : RenewalITBase() {
     }
 
     @Test
+    fun `a gateway renewal keeps the gateway's delivery and its refs, so it is not delivered twice and its refunds find the renewal attempt`(): Unit = runBlocking {
+        val product = subProduct()
+
+        fx.paymentMethod("fake")
+        sw.caps(RecurringSupport.GATEWAY_MANAGED) { fulfillment = com.panomc.plugins.market.spi.payment.FulfillmentAuthority.GATEWAY }
+
+        val (_, caller) = user("Alex")
+        val first = buy(product, caller)
+        val end = w.clock.now() + 30 * day
+
+        assertEquals(com.panomc.plugins.market.db.model.FulfillmentBy.GATEWAY, first.fulfillmentBy)
+
+        succeed(first, subscription = gatewayState("sub_gw", periodStart = w.clock.now(), periodEnd = end))
+
+        val active = subscription(first.subscriptionId!!)
+
+        w.clock.set(end + 60_000)
+
+        val event = PaymentEvent.SubscriptionRenewed("sub_gw", Money(active.price, active.currency)).also {
+            it.gatewayTransactionId = "SALE-RENEW-1"
+            it.gatewayRefs = mapOf("capture" to "SALE-RENEW-1", "subscription" to "sub_gw")
+            it.periodStart = end
+            it.periodEnd = end + 30 * day
+        }
+
+        rw.sink.apply(event, null, com.panomc.plugins.market.routes.api.payment.InboundEventContext(1, "fake", null, null, w.clock.now()))
+
+        val renewalOrder = renewalOrderOf(active.id)
+        val attempt = attempts(renewalOrder.id).single()
+
+        assertEquals(OrderStatus.COMPLETED, renewalOrder.status)
+        assertEquals(com.panomc.plugins.market.db.model.FulfillmentBy.GATEWAY, renewalOrder.fulfillmentBy, "the gateway delivers the renewal as it delivered the first order")
+        assertTrue(sw.dw.rows(renewalOrder.id).isEmpty(), "the market plans no delivery of its own for a gateway-delivered renewal")
+
+        val refs = JsonObject(attempt.gatewayRefs!!)
+
+        assertEquals("SALE-RENEW-1", refs.getString("capture"), "a refund or dispute webhook naming the capture finds the renewal attempt")
+        assertEquals("sub_gw", refs.getString("subscription"))
+    }
+
+    @Test
     fun `a gateway renewal of an unknown or pending subscription is skipped and an underpaid one waits in review without moving the period`(): Unit = runBlocking {
         val product = subProduct()
 

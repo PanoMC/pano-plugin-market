@@ -1682,6 +1682,8 @@ class SubscriptionService(
 
             val success = PaymentEvent.Succeeded(com.panomc.plugins.market.spi.payment.PaymentTarget.Attempt(attempt.id), event.paid).also {
                 it.gatewayTransactionId = transaction
+                it.gatewayRefs = event.gatewayRefs
+                it.providerData = event.providerData
                 it.gatewayFee = event.gatewayFee
                 it.net = event.net
                 it.methodDetail = event.methodDetail
