@@ -1051,6 +1051,13 @@ class CatalogServiceIT : MarketDaoITBase() {
 
         assertEquals("SERVER_CHOICES_REQUIRED", errors["serverChoices"])
 
+        // a bundle nobody can buy (INACTIVE) is saved without the list, and edited or switched off again; making it ACTIVE needs the list
+        val off = create("kind" to "BUNDLE", "status" to "INACTIVE", "bundleItems" to """[{"productId":${choice.id},"quantity":1}]""")
+
+        service.update(off.id, input("name" to "Renamed bundle"))
+        service.update(off.id, input("status" to "INACTIVE"))
+        assertEquals("SERVER_CHOICES_REQUIRED", fieldErrors { service.update(off.id, input("status" to "ACTIVE")) }["serverChoices"])
+
         // a bundle of children with fixed servers needs no list of its own
         val ok = create("kind" to "BUNDLE", "bundleItems" to """[{"productId":${plain.id},"quantity":1}]""")
 

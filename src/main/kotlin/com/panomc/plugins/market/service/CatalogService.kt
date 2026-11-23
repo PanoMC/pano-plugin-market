@@ -355,10 +355,11 @@ class CatalogService(
     /**
      * A bundle whose child lets the buyer pick the server (`BUYER_CHOICE`) needs its own `serverChoices`: checkout and delivery
      * check the buyer's choice against the bundle's list (owner decision), so without one nobody could buy the bundle. The
-     * child test is the one checkout uses ([CheckoutService.buyerChoice]).
+     * child test is the one checkout uses ([CheckoutService.buyerChoice]). Only a bundle the save leaves `ACTIVE` (buyable) is held to it, so such a
+     * bundle can still be saved as `INACTIVE` (or archived) while its list is missing.
      */
     private suspend fun checkBundleServerChoices(conn: SqlClient, product: MarketProduct, childIds: List<Long>, errors: MutableMap<String, String>) {
-        if (product.kind != ProductKind.BUNDLE || ProductActionRules.idList(product.serverChoices).isNotEmpty() || "serverChoices" in errors) return
+        if (product.kind != ProductKind.BUNDLE || product.status != MarketStatus.ACTIVE || ProductActionRules.idList(product.serverChoices).isNotEmpty() || "serverChoices" in errors) return
 
         val ids = childIds.filter { it > 0 }.distinct()
 
