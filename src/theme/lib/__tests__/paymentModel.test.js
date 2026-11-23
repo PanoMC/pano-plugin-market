@@ -399,13 +399,16 @@ describe('credits radio and mixed controls', () => {
     expect(visible({ method: null })).toBe(true);
   });
 
+  test('the mixed controls stay while paying in credits, to switch to part of the order', () => {
+    expect(visible({ payWithCredits: true })).toBe(true);
+  });
+
   test.each([
     ['mixed credit off', { config: { mixedCredit: false } }],
     ['no config', { config: null }],
     ['nothing applicable', { credits: credits({ maxApplicable: 0 }) }],
     ['credits disabled', { credits: credits({ enabled: false }) }],
     ['no credits', { credits: null }],
-    ['paying in credits', { payWithCredits: true }],
     ['EXTERNAL pricing', { method: { pricing: 'EXTERNAL' } }],
     ['EXTERNAL_TAX pricing', { method: { pricing: 'EXTERNAL_TAX' } }],
     [

@@ -70,9 +70,11 @@
             checked={active}
             {disabled}
             onchange={(event) =>
-              onchange({
-                useCredits: event.currentTarget.checked ? credits.maxApplicable : null,
-              })} />
+              onchange(
+                event.currentTarget.checked
+                  ? { useCredits: credits.maxApplicable, payWithCredits: false }
+                  : { useCredits: null },
+              )} />
           <label class="form-check-label" for={useId}>
             {$_('theme.checkout.credits-use', { values: { name: credits.name } })}
           </label>

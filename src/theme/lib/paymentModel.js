@@ -154,7 +154,7 @@ export function mixedControlsVisible({ config, credits, payWithCredits = false, 
   if (config?.mixedCredit !== true) return false;
   if (!isObject(credits) || credits.enabled !== true) return false;
   if (!(Number(credits.maxApplicable) > 0)) return false;
-  if (payWithCredits === true) return false;
+  // stays while "pay with credits" is chosen: ticking it switches to paying only part of the order in credits
   if (method && method.pricing !== undefined && method.pricing !== 'MARKET') return false;
   if (method && method.unavailableReason === 'MIXED_CREDIT_NOT_SUPPORTED') return false;
 
@@ -194,7 +194,8 @@ export function creditsPatchAfterQuote({ draft, quote, config }) {
   const paying = patch.payWithCredits === undefined ? draft?.payWithCredits === true : false;
 
   if (mixedActive(draft)) {
-    const allowed = mixedControlsVisible({ config, credits, payWithCredits: paying, method });
+    // paying the whole order in credits and a part of it in credits exclude each other
+    const allowed = !paying && mixedControlsVisible({ config, credits, method });
     if (!allowed) patch.useCredits = null;
   }
 
