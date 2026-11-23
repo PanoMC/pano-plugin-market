@@ -25,7 +25,7 @@ import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 /**
  * `POST /api/panel/market/payment-methods/:id/toggle` (`P:SET`). Enabling needs a usable provider (409 `PROVIDER_UNAVAILABLE`),
  * every required setting (`PAYMENT_METHOD_NOT_CONFIGURED`), a public https site where the provider needs one (400
- * `PUBLIC_URL_REQUIRED`) and a passing `validateSettings`.
+ * `PUBLIC_URL_REQUIRED`), a passing `validateSettings` and a provider that can take at least one currency.
  */
 @Endpoint
 class PanelTogglePaymentMethodAPI(private val plugin: MarketPlugin) : MarketPanelApi() {

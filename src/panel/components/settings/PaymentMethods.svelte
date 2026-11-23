@@ -236,7 +236,7 @@
   import { base, page, goto } from '@panomc/sdk/svelte';
   import { tooltip } from '@panomc/sdk/utils/tooltip';
   import { _ as rawI18n } from '@panomc/sdk/utils/language';
-  import { _, showSuccessToast } from '../../../i18n';
+  import { _, showErrorToast, showSuccessToast } from '../../../i18n';
   import LoadError from '../LoadError.svelte';
   import StatusBadge from '../StatusBadge.svelte';
   import PaymentMethodModal from '../modals/PaymentMethodModal.svelte';
@@ -255,6 +255,7 @@
     regionOf,
     rowBehavior,
     sortProviders,
+    toggleMessage,
   } from '../../utils/payment-methods.js';
   import { resolveText } from '../../utils/schema-form.js';
   import { toastError } from '../../utils/toast.js';
@@ -377,7 +378,10 @@
     if (!result.ok) {
       delete pending[provider.id];
       input.checked = rowBehavior(provider).switchOn;
-      toastError($_, result);
+      // a refusal with the general settings message (no currency, provider validation) says why
+      const message = toggleMessage(result);
+      if (message) showErrorToast(txt(message));
+      else toastError($_, result);
       if (result.error === 'PROVIDER_UNAVAILABLE' || result.error === 'NOT_FOUND') await refresh();
       return;
     }

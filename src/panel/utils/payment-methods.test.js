@@ -24,6 +24,7 @@ import {
   tabOfFirstClientError,
   tabOfFirstError,
   testModeControl,
+  toggleMessage,
   validateConfig,
   webhookRows,
 } from './payment-methods.js';
@@ -289,6 +290,12 @@ describe('error tabs, status rows and actions', () => {
       configErrors: {},
       message: null,
     });
+  });
+  test('a refused toggle shows the general settings message', () => {
+    const message = { default: 'Accepts no currency', translations: { tr: 'Para birimi yok' } };
+    expect(toggleMessage({ ok: false, error: 'INVALID_PROVIDER_SETTINGS', body: { fieldErrors: { settings: message } } })).toEqual(message);
+    expect(toggleMessage({ ok: false, error: 'INVALID_PROVIDER_SETTINGS', body: { fieldErrors: { apiKey: { default: 'x' } } } })).toBeNull();
+    expect(toggleMessage({ ok: false, error: 'PUBLIC_URL_REQUIRED', body: {} })).toBeNull();
   });
   test('capability rows', () => {
     const rows = capabilityRows({ refund: 'PARTIAL', recurring: 'GATEWAY_MANAGED', statusQuery: true, guests: false, currencies: ['USD'] });

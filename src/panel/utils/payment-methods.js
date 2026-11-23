@@ -235,6 +235,15 @@ export function splitProviderErrors(fieldErrors, schema) {
   return { schemaErrors, configErrors, message };
 }
 
+/**
+ * The general message (`fieldErrors.settings`, a LocalizedText) of a failed toggle that answered
+ * `INVALID_PROVIDER_SETTINGS`, e.g. "accepts no currency with its current settings"; `null` otherwise.
+ */
+export function toggleMessage(result) {
+  if (result?.error !== 'INVALID_PROVIDER_SETTINGS') return null;
+  return result.body?.fieldErrors?.settings ?? null;
+}
+
 /** Tab holding the first invalid key of an `INVALID_PROVIDER_SETTINGS` answer: `settings` or `rules`. */
 export function tabOfFirstError(fieldErrors, schema) {
   const keys = Object.keys(fieldErrors ?? {});

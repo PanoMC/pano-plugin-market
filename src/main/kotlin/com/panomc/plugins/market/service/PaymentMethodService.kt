@@ -243,7 +243,7 @@ class PaymentMethodService(
 
     // ---- toggle
 
-    /** `POST /payment-methods/:id/toggle`. Enabling needs a usable provider, all required settings, a public URL where needed, and a passing `validateSettings`. */
+    /** `POST /payment-methods/:id/toggle`. Enabling needs a usable provider, all required settings, a public URL where needed, a passing `validateSettings` and at least one currency the provider can take. */
     suspend fun toggle(id: String, enabled: Boolean) {
         val resolved = requireUsable(id)
         val provider = resolved.provider
@@ -268,6 +268,10 @@ class PaymentMethodService(
                 validation.message?.let { fieldErrors["settings"] = it.toJson().map }
                 throw InvalidProviderSettings(fieldErrors)
             }
+
+            // `currencies = emptySet()` (not `null` = any): the provider can take no currency with these settings (e.g. a
+            // provider-derived HIDDEN value is missing), so checkout would never offer the method; it is not enabled.
+            if (capabilities.currencies?.isEmpty() == true) throw InvalidProviderSettings(mapOf("settings" to NO_CURRENCY.toJson().map))
         }
 
         db.tx { conn -> methods.upsertByMethodId(id, enabled, row?.settings ?: "{}", conn) }
@@ -402,6 +406,12 @@ class PaymentMethodService(
     private object ProviderErrorCodes {
         const val INTERNAL = "INTERNAL"
     }
+
+    private val NO_CURRENCY = LocalizedText.of(
+        "This payment method accepts no currency with its current settings. Save its settings again so the provider can read your account, then turn it on.",
+        "tr" to "Bu ödeme yöntemi mevcut ayarlarıyla hiçbir para birimini kabul etmiyor. Sağlayıcının hesabınızı okuyabilmesi için ayarlarını yeniden kaydedin, sonra etkinleştirin.",
+        "ru" to "С текущими настройками этот способ оплаты не принимает ни одной валюты. Сохраните его настройки ещё раз, чтобы провайдер прочитал ваш аккаунт, затем включите его."
+    )
 
     private fun storedOf(row: MarketPaymentMethod): JsonObject = try {
         JsonObject(row.settings)

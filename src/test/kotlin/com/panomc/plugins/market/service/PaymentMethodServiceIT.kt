@@ -654,6 +654,25 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
         assertFalse(row()!!.enabled)
     }
 
+    @Test
+    fun `toggle refuses a provider that can take no currency with its settings`(): Unit = runBlocking {
+        val g = gateway()
+        service.save("gate", settings(), null)
+        g.caps = PaymentCapabilities().also { it.currencies = emptySet() }
+
+        val e = assertThrows<InvalidProviderSettings> { runBlocking { service.toggle("gate", true) } }
+        assertTrue(fieldErrors(e).getJsonObject("settings").getString("default").contains("no currency"))
+        assertFalse(row()!!.enabled)
+
+        g.caps = PaymentCapabilities().also { it.currencies = setOf("USD") }
+        service.toggle("gate", true)
+        assertTrue(row()!!.enabled)
+
+        g.caps = PaymentCapabilities().also { it.currencies = emptySet() }
+        service.toggle("gate", false)
+        assertFalse(row()!!.enabled, "disabling is always allowed")
+    }
+
     // ---- sort
 
     @Test
