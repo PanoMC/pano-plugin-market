@@ -1290,7 +1290,7 @@ class CheckoutServiceIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `a replay of an order whose start failed answers 502 with the order`(): Unit = runBlocking {
+    fun `a replay of an order whose start failed answers 424 with the order`(): Unit = runBlocking {
         val p = fx.product(price = 1000, stock = 9)
 
         fx.paymentMethod("fake")
@@ -1298,11 +1298,11 @@ class CheckoutServiceIT : MarketDaoITBase() {
 
         val (_, caller) = user("Alice")
         val body = json("items" to listOf(line(p)), "paymentMethodId" to "fake")
-        val first = expect("PAYMENT_PROVIDER_ERROR", 502) { h.checkout(body, key = "failed-key-00000001", caller = caller) }
+        val first = expect("PAYMENT_PROVIDER_ERROR", 424) { h.checkout(body, key = "failed-key-00000001", caller = caller) }
 
         h.starter.failure = null
 
-        val replay = expect("PAYMENT_PROVIDER_ERROR", 502) { h.checkout(body, key = "failed-key-00000001", caller = caller) }
+        val replay = expect("PAYMENT_PROVIDER_ERROR", 424) { h.checkout(body, key = "failed-key-00000001", caller = caller) }
 
         assertEquals("GATEWAY_REJECTED", replay.getString("code"))
         assertEquals(first.getJsonObject("order").getString("publicId"), replay.getJsonObject("order").getString("publicId"))
@@ -1318,7 +1318,7 @@ class CheckoutServiceIT : MarketDaoITBase() {
         fx.paymentMethod("fake")
         h.starter.failure = PaymentStartFailed("GATEWAY_UNREACHABLE")
 
-        val extras = expect("PAYMENT_PROVIDER_ERROR", 502) { h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake")) }
+        val extras = expect("PAYMENT_PROVIDER_ERROR", 424) { h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake")) }
         val order = orders().single()
 
         assertEquals("GATEWAY_UNREACHABLE", extras.getString("code"))
@@ -1335,7 +1335,7 @@ class CheckoutServiceIT : MarketDaoITBase() {
         h.starter.failure = null
         h.starter.crash = IllegalStateException("boom")
 
-        assertEquals("INTERNAL", expect("PAYMENT_PROVIDER_ERROR", 502) { h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake")) }.getString("code"))
+        assertEquals("INTERNAL", expect("PAYMENT_PROVIDER_ERROR", 424) { h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake")) }.getString("code"))
         assertEquals(2, rows("market_order"))
     }
 

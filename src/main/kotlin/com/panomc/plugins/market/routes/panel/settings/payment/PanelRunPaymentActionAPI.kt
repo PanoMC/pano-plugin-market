@@ -25,7 +25,7 @@ import io.vertx.json.schema.common.dsl.Schemas.stringSchema
 
 /**
  * `POST /api/panel/market/payment-methods/:id/actions/:actionId` (`P:SET`): runs a settings action of the provider
- * (`test-connection`, `register-webhooks`, `import-catalog`). A gateway failure is 502 `PAYMENT_PROVIDER_ERROR`.
+ * (`test-connection`, `register-webhooks`, `import-catalog`). A gateway failure is 424 `PAYMENT_PROVIDER_ERROR`.
  */
 @Endpoint
 class PanelRunPaymentActionAPI(private val plugin: MarketPlugin) : MarketPanelApi() {

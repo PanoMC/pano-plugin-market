@@ -306,7 +306,7 @@ class CurrencyRateService(
 
     /**
      * `POST /refresh`: one provider request, then every `AUTO` currency (the settings' list plus stored `AUTO` rows) that
-     * the provider knows is upserted. `MANUAL` rows are never touched. [ExchangeRateFetchFailed] (502) when the provider
+     * the provider knows is upserted. `MANUAL` rows are never touched. [ExchangeRateFetchFailed] (424) when the provider
      * is unreachable; the stored rows stay.
      */
     suspend fun refresh(sqlClient: SqlClient): View {

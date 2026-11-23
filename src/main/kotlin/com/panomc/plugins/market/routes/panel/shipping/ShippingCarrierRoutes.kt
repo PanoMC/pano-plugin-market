@@ -101,7 +101,7 @@ class PanelRevealShippingSecretAPI(plugin: MarketPlugin) : ShippingAdminRoute(pl
     }
 }
 
-/** `POST /shipping/carriers/:id/actions/:actionId`: runs a settings action; a carrier failure is 502 `SHIPPING_PROVIDER_ERROR`. */
+/** `POST /shipping/carriers/:id/actions/:actionId`: runs a settings action; a carrier failure is 424 `SHIPPING_PROVIDER_ERROR`. */
 @Endpoint
 class PanelRunShippingActionAPI(plugin: MarketPlugin) : ShippingAdminRoute(plugin) {
     override val feature: MarketFeature? = MarketFeature.SHIPPING_CARRIERS

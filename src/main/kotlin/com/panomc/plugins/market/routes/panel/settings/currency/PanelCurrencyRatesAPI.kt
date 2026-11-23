@@ -90,7 +90,7 @@ class PanelCurrencyRatesAPI(private val plugin: MarketPlugin) : MarketPanelApi()
     }
 }
 
-/** `POST /api/panel/market/settings/currencies/refresh` (`P:SET`): refreshes the `AUTO` rates from the provider; 502 `EXCHANGE_RATE_FETCH_FAILED` when it is down. */
+/** `POST /api/panel/market/settings/currencies/refresh` (`P:SET`): refreshes the `AUTO` rates from the provider; 424 `EXCHANGE_RATE_FETCH_FAILED` when it is down. */
 @Endpoint
 class PanelRefreshCurrencyRatesAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
     override val nodes: Set<MarketNode> = setOf(MarketNode.SETTINGS)

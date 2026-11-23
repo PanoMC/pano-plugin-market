@@ -87,7 +87,7 @@ class PanelGetSubscriptionAPI(private val plugin: MarketPlugin) : MarketPanelApi
 
 /**
  * `POST /api/panel/market/subscriptions/:id/cancel` (`P:PAY`, 09 section 10.1): `atPeriodEnd?` (default `true`), `reason?` (at most 255, kept in the order event and the
- * activity log); `{}`. A terminal row whose remote cancel gave up (`FAILED`) is put back in the queue. 409 `SUBSCRIPTION_NOT_CANCELLABLE`; 502 `PAYMENT_PROVIDER_ERROR`.
+ * activity log); `{}`. A terminal row whose remote cancel gave up (`FAILED`) is put back in the queue. 409 `SUBSCRIPTION_NOT_CANCELLABLE`; 424 `PAYMENT_PROVIDER_ERROR`.
  */
 @Endpoint
 class PanelCancelSubscriptionAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
@@ -121,7 +121,7 @@ class PanelCancelSubscriptionAPI(private val plugin: MarketPlugin) : MarketPanel
 
 /**
  * `POST /api/panel/market/subscriptions/:id/retry` (`P:PAY`, 09 section 9.3): retry a failed renewal now. `MERCHANT` always (the charge of 09 section 8.3 runs at once),
- * `GATEWAY` with `capabilities.recurringRetry`; `{}`. A declined charge is not an error (it is in the subscription). 409 `SUBSCRIPTION_NOT_RETRYABLE`; 502 `PAYMENT_PROVIDER_ERROR`.
+ * `GATEWAY` with `capabilities.recurringRetry`; `{}`. A declined charge is not an error (it is in the subscription). 409 `SUBSCRIPTION_NOT_RETRYABLE`; 424 `PAYMENT_PROVIDER_ERROR`.
  */
 @Endpoint
 class PanelRetrySubscriptionAPI(private val plugin: MarketPlugin) : MarketPanelApi() {

@@ -154,7 +154,7 @@ class PaymentEventAdmin(
 
     /**
      * `POST /payments/:paymentId/query`: asks the provider about the attempt now and applies what it reports; `{status}` is the attempt's status afterwards.
-     * 404 for an unknown attempt, 400 `STATUS_QUERY_NOT_SUPPORTED` when the provider cannot be asked, 502 `PAYMENT_PROVIDER_ERROR` when it cannot be reached.
+     * 404 for an unknown attempt, 400 `STATUS_QUERY_NOT_SUPPORTED` when the provider cannot be asked, 424 `PAYMENT_PROVIDER_ERROR` when it cannot be reached.
      */
     suspend fun query(paymentId: Long, client: SqlClient): JsonObject {
         val attempt: MarketPayment = payments.getById(paymentId, client) ?: throw NotFound()

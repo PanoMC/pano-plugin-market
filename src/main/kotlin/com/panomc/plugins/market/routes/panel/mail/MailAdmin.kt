@@ -258,7 +258,7 @@ class MailAdmin(
 
     /**
      * `POST /mails/:id/retry`: a `FAILED` or `SKIPPED` row goes back to `PENDING` (attempts 0, forced, so neither the relevance check nor the age limit
-     * ends it) and is sent right away. 404 unknown row, 409 `INVALID_STATE {state}` for any other status, 409 `MAIL_DISABLED`, 502 `MAIL_SEND_FAILED` when the
+     * ends it) and is sent right away. 404 unknown row, 409 `INVALID_STATE {state}` for any other status, 409 `MAIL_DISABLED`, 424 `MAIL_SEND_FAILED` when the
      * send did not succeed (the row then keeps its error and, for a retryable failure, the job's backoff).
      */
     suspend fun retry(id: Long, client: SqlClient): MarketMailOutbox {
@@ -297,7 +297,7 @@ class MailAdmin(
     /**
      * `POST /settings/mail/test`: one mail straight through the gateway (no outbox row). Without [rawKind] a plain test mail, with one a sample of that kind
      * (a sample order marked as a test order, so the subject carries `[TEST] `). The recipient is [rawRecipient], else [adminEmail]. 400 `INVALID_MAIL_KIND`,
-     * 400 `MAIL_RECIPIENT_REQUIRED`, 409 `MAIL_DISABLED`, 502 `MAIL_SEND_FAILED` (never the mail server's own text).
+     * 400 `MAIL_RECIPIENT_REQUIRED`, 409 `MAIL_DISABLED`, 424 `MAIL_SEND_FAILED` (never the mail server's own text).
      */
     suspend fun sendTest(rawKind: String?, rawRecipient: String?, adminEmail: String?) {
         val kind = rawKind?.trim()?.takeIf { it.isNotEmpty() }?.let { parseKind(it) ?: throw InvalidMailKind() }

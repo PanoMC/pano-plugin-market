@@ -1265,7 +1265,7 @@ class ShippingService(
     /**
      * `POST /orders/:id/shipments` (10 section 9.3): validates, allocates the units under the order lock, inserts the shipment and, for a
      * manual entry, marks it `IN_TRANSIT` in the same transaction. A carrier shipment is created after the commit, outside any
-     * transaction: a carrier failure answers 502 `SHIPPING_PROVIDER_ERROR` and leaves the row `CREATED` with its units allocated.
+     * transaction: a carrier failure answers 424 `SHIPPING_PROVIDER_ERROR` and leaves the row `CREATED` with its units allocated.
      * Returns the panel `shipment` JSON.
      */
     suspend fun createShipment(orderId: Long, body: JsonObject, actorUserId: Long?, sqlClient: SqlClient): JsonObject {

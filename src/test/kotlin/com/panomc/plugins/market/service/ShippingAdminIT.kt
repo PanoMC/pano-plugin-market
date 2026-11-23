@@ -808,7 +808,7 @@ class ShippingAdminIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `an action failure is 502 SHIPPING_PROVIDER_ERROR and recorded`(): Unit = runBlocking {
+    fun `an action failure is 424 SHIPPING_PROVIDER_ERROR and recorded`(): Unit = runBlocking {
         carrier("ups") { failAction = ProviderException(ProviderErrorCode.AUTHENTICATION, "bad key") }
         service.saveCarrier("ups", obj("accountId" to "A", "apiKey" to "key-0123456789"), null)
 
@@ -830,7 +830,7 @@ class ShippingAdminIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `a failing or hanging listServices is 502 SHIPPING_PROVIDER_ERROR`(): Unit = runBlocking {
+    fun `a failing or hanging listServices is 424 SHIPPING_PROVIDER_ERROR`(): Unit = runBlocking {
         val c = carrier("ups") { services = { throw ProviderException(ProviderErrorCode.GATEWAY_UNREACHABLE, "down") } }
         service.saveCarrier("ups", obj("accountId" to "A", "apiKey" to "key-0123456789"), null)
 

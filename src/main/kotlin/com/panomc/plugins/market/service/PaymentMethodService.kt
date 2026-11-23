@@ -323,7 +323,7 @@ class PaymentMethodService(
 
     // ---- actions
 
-    /** `POST /payment-methods/:id/actions/:actionId`. A provider failure is a 502 `PAYMENT_PROVIDER_ERROR`. */
+    /** `POST /payment-methods/:id/actions/:actionId`. A provider failure is a 424 `PAYMENT_PROVIDER_ERROR`. */
     suspend fun runAction(id: String, actionId: String, input: JsonObject): ActionOutcome {
         val resolved = requireUsable(id)
         val provider = resolved.provider

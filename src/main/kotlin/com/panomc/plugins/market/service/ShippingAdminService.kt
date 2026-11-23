@@ -477,7 +477,7 @@ class ShippingAdminService(
 
     // ---- carriers: actions and services
 
-    /** `POST /shipping/carriers/:id/actions/:actionId`. A carrier failure is a 502 `SHIPPING_PROVIDER_ERROR`. */
+    /** `POST /shipping/carriers/:id/actions/:actionId`. A carrier failure is a 424 `SHIPPING_PROVIDER_ERROR`. */
     suspend fun runCarrierAction(id: String, actionId: String, input: JsonObject): ActionOutcome {
         val provider = requireUsable(id).provider
         val schema = provider.settingsSchema()
@@ -507,7 +507,7 @@ class ShippingAdminService(
         }
     }
 
-    /** `GET /shipping/carriers/:id/services`: `listServices` with a 10 s timeout; any failure is 502 `SHIPPING_PROVIDER_ERROR`. */
+    /** `GET /shipping/carriers/:id/services`: `listServices` with a 10 s timeout; any failure is 424 `SHIPPING_PROVIDER_ERROR`. */
     suspend fun carrierServices(id: String): List<JsonObject> {
         val provider = requireUsable(id).provider
         val row = db.tx { conn -> carriers.getByProviderId(id, conn) }

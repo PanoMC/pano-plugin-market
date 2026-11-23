@@ -834,9 +834,9 @@ class ApiContractE2E : E2eTestBase() {
                 val answer = fixture.probe(g)!!
 
                 if (answer.status != 200) {
-                    // the two rate refreshes reach an outside service; when it is unreachable the honest answer is 502 and nothing is compared
-                    if (g.path.endsWith("exchange-rate/refresh") && answer.status == 502) {
-                        unobserved += "${g.key} (502 ${answer.error}: exchange-rate service unreachable)"
+                    // the two rate refreshes reach an outside service; when it is unreachable the honest answer is 424 and nothing is compared
+                    if (g.path.endsWith("exchange-rate/refresh") && answer.status == 424) {
+                        unobserved += "${g.key} (424 ${answer.error}: exchange-rate service unreachable)"
 
                         continue
                     }

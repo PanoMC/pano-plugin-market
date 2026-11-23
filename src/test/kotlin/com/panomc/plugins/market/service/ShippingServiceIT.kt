@@ -772,7 +772,7 @@ class ShippingServiceIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `a failed carrier create is 502 with the code, the row stays CREATED with its units, the retry sends the same merchantReference`(): Unit = runBlocking {
+    fun `a failed carrier create is 424 with the code, the row stays CREATED with its units, the retry sends the same merchantReference`(): Unit = runBlocking {
         val calls = AtomicInteger()
 
         carrier.onCreate = { r ->
@@ -788,7 +788,7 @@ class ShippingServiceIT : MarketDaoITBase() {
 
         val o = order(Line("Shirt", 2))
         val item = o.items.single()
-        val failure = expect("SHIPPING_PROVIDER_ERROR", 502) { carrierShip(o, item to 2) }
+        val failure = expect("SHIPPING_PROVIDER_ERROR", 424) { carrierShip(o, item to 2) }
         val row = w.shipments.getByOrderId(o.id, pool).single()
 
         assertEquals("INSUFFICIENT_BALANCE", failure.getString("code"))
@@ -826,7 +826,7 @@ class ShippingServiceIT : MarketDaoITBase() {
         val o = order(Line("Shirt", 3))
         val item = o.items.single()
 
-        expect("SHIPPING_PROVIDER_ERROR", 502) { carrierShip(o, item to 1) }.let { assertEquals("GATEWAY_UNREACHABLE", it.getString("code")) }
+        expect("SHIPPING_PROVIDER_ERROR", 424) { carrierShip(o, item to 1) }.let { assertEquals("GATEWAY_UNREACHABLE", it.getString("code")) }
 
         val first = w.shipments.getByOrderId(o.id, pool).single()
 
@@ -835,13 +835,13 @@ class ShippingServiceIT : MarketDaoITBase() {
 
         carrier.onCreate = { throw IllegalStateException("boom with internals") }
 
-        expect("SHIPPING_PROVIDER_ERROR", 502) { carrierShip(o, item to 1) }.let { assertEquals("INTERNAL", it.getString("code")) }
+        expect("SHIPPING_PROVIDER_ERROR", 424) { carrierShip(o, item to 1) }.let { assertEquals("INTERNAL", it.getString("code")) }
         assertFalse(w.shipments.getByOrderId(o.id, pool).last().lastError!!.contains("internals"), "an unexpected exception's text is not stored")
 
         service = newService(createTimeoutMs = 150)
         carrier.onCreate = { delay(2_000); CreateShipmentResult.Created("late") }
 
-        val t = expect("SHIPPING_PROVIDER_ERROR", 502) { carrierShip(o, item to 1) }
+        val t = expect("SHIPPING_PROVIDER_ERROR", 424) { carrierShip(o, item to 1) }
 
         assertEquals("TIMEOUT", t.getString("code"))
         assertEquals("TIMEOUT", w.shipments.getByOrderId(o.id, pool).last().lastErrorCode)
@@ -858,7 +858,7 @@ class ShippingServiceIT : MarketDaoITBase() {
         expect("INVALID_SHIPMENT_TRANSITION", 400) { service.retryShipment(id(m), 7, pool) }
 
         carrier.onCreate = { CreateShipmentResult.Failed(ShipmentErrorCode.RATE_EXPIRED, "expired") }
-        expect("SHIPPING_PROVIDER_ERROR", 502) { carrierShip(o, item to 1) }
+        expect("SHIPPING_PROVIDER_ERROR", 424) { carrierShip(o, item to 1) }
 
         val expired = w.shipments.getByOrderId(o.id, pool).last()
 
@@ -937,7 +937,7 @@ class ShippingServiceIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `a provider that refuses the cancel is 502 and changes nothing, force cancels locally`(): Unit = runBlocking {
+    fun `a provider that refuses the cancel is 424 and changes nothing, force cancels locally`(): Unit = runBlocking {
         carrier.caps = ScriptedCarrier.caps(cancel = true)
         carrier.onCreate = { r -> CreateShipmentResult.Created("CAR-${r.shipmentId}") }
         carrier.onCancel = { CancelShipmentResult.refused("already picked up") }
@@ -946,7 +946,7 @@ class ShippingServiceIT : MarketDaoITBase() {
         val item = o.items.single()
         val s = carrierShip(o, item to 2)
 
-        expect("SHIPPING_PROVIDER_ERROR", 502) { service.cancelShipment(id(s), false, 7, pool) }.let {
+        expect("SHIPPING_PROVIDER_ERROR", 424) { service.cancelShipment(id(s), false, 7, pool) }.let {
             assertEquals("GATEWAY_REJECTED", it.getString("code"))
             assertEquals(id(s), it.getLong("shipmentId"))
         }
@@ -982,7 +982,7 @@ class ShippingServiceIT : MarketDaoITBase() {
         val b = carrierShip(o, item to 1)
         val c = carrierShip(o, item to 1)
 
-        expect("SHIPPING_PROVIDER_ERROR", 502) { service.cancelShipment(id(a), false, 7, pool) }.let { assertEquals("GATEWAY_REJECTED", it.getString("code")) }
+        expect("SHIPPING_PROVIDER_ERROR", 424) { service.cancelShipment(id(a), false, 7, pool) }.let { assertEquals("GATEWAY_REJECTED", it.getString("code")) }
         service.cancelShipment(id(a), true, 7, pool)
 
         assertEquals(ShipmentStatus.CANCELLED, shipmentNow(id(a)).status)
@@ -1075,7 +1075,7 @@ class ShippingServiceIT : MarketDaoITBase() {
     private suspend fun failedCarrierRow(o: Ref, item: Long): Long {
         carrier.onCreate = { CreateShipmentResult.Failed(ShipmentErrorCode.SERVICE_UNAVAILABLE, "down") }
 
-        expect("SHIPPING_PROVIDER_ERROR", 502) { carrierShip(o, item to 1) }
+        expect("SHIPPING_PROVIDER_ERROR", 424) { carrierShip(o, item to 1) }
 
         carrier.creates.clear()
 
@@ -1268,8 +1268,8 @@ class ShippingServiceIT : MarketDaoITBase() {
         sql("CREATE TRIGGER `$trigger` BEFORE UPDATE ON `pano_market_shipment` FOR EACH ROW IF NEW.`status` = 'LABEL_READY' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'boom'; END IF")
 
         try {
-            expect("SHIPPING_PROVIDER_ERROR", 502) { carrierShip(o, o.items.single() to 2) }.let { assertEquals("INTERNAL", it.getString("code")) }
-            expect("SHIPPING_PROVIDER_ERROR", 502) { carrierShip(o2, o2.items.single() to 1) }
+            expect("SHIPPING_PROVIDER_ERROR", 424) { carrierShip(o, o.items.single() to 2) }.let { assertEquals("INTERNAL", it.getString("code")) }
+            expect("SHIPPING_PROVIDER_ERROR", 424) { carrierShip(o2, o2.items.single() to 1) }
 
             failed = w.shipments.getByOrderId(o.id, pool).single().id
             failed2 = w.shipments.getByOrderId(o2.id, pool).single().id
@@ -1674,7 +1674,7 @@ class ShippingServiceIT : MarketDaoITBase() {
         assertNull(after.getLong("nextPollAt"), "a terminal shipment is not polled again")
 
         carrier.onTrack = { throw ProviderException(ProviderErrorCode.GATEWAY_UNREACHABLE, "down") }
-        expect("SHIPPING_PROVIDER_ERROR", 502) { service.trackShipment(id(s), pool) }.let { assertEquals("GATEWAY_UNREACHABLE", it.getString("code")) }
+        expect("SHIPPING_PROVIDER_ERROR", 424) { service.trackShipment(id(s), pool) }.let { assertEquals("GATEWAY_UNREACHABLE", it.getString("code")) }
 
         val manualShipment = ship(o, item to 1)
 
@@ -1763,17 +1763,17 @@ class ShippingServiceIT : MarketDaoITBase() {
         assertEquals("DE", carrier.quotes.single().to.country)
 
         carrier.onQuote = { throw ProviderException(ProviderErrorCode.RATE_LIMITED, "slow down") }
-        expect("SHIPPING_PROVIDER_ERROR", 502) { service.orderRates(o.id, JsonObject().put("providerId", carrier.id).put("parcels", JsonArray().add(JsonObject().put("weightGrams", 700))), pool) }
+        expect("SHIPPING_PROVIDER_ERROR", 424) { service.orderRates(o.id, JsonObject().put("providerId", carrier.id).put("parcels", JsonArray().add(JsonObject().put("weightGrams", 700))), pool) }
             .let { assertEquals("RATE_LIMITED", it.getString("code")) }
 
         carrier.caps = ScriptedCarrier.caps(rateQuote = false)
-        expect("SHIPPING_PROVIDER_ERROR", 502) { service.orderRates(o.id, JsonObject().put("providerId", carrier.id).put("parcels", JsonArray().add(JsonObject().put("weightGrams", 700))), pool) }
+        expect("SHIPPING_PROVIDER_ERROR", 424) { service.orderRates(o.id, JsonObject().put("providerId", carrier.id).put("parcels", JsonArray().add(JsonObject().put("weightGrams", 700))), pool) }
             .let { assertEquals("UNSUPPORTED", it.getString("code")) }
 
         service = newService(ratesTimeoutMs = 100)
         carrier.caps = ScriptedCarrier.caps(rateQuote = true)
         carrier.onQuote = { delay(1_500); QuoteResult(emptyList()) }
-        expect("SHIPPING_PROVIDER_ERROR", 502) { service.orderRates(o.id, JsonObject().put("providerId", carrier.id).put("parcels", JsonArray().add(JsonObject().put("weightGrams", 700))), pool) }
+        expect("SHIPPING_PROVIDER_ERROR", 424) { service.orderRates(o.id, JsonObject().put("providerId", carrier.id).put("parcels", JsonArray().add(JsonObject().put("weightGrams", 700))), pool) }
             .let { assertEquals("TIMEOUT", it.getString("code")) }
 
         expect("PROVIDER_UNAVAILABLE", 409) { service.orderRates(o.id, JsonObject().put("providerId", "nosuch").put("parcels", JsonArray().add(JsonObject().put("weightGrams", 700))), pool) }

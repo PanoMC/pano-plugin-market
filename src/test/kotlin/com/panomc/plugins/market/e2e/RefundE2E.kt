@@ -375,7 +375,7 @@ class RefundE2E : E2eTestBase() {
 
         val failed = refund(paid.orderId, JsonObject().put("amount", 4.00))
 
-        assertEquals(502, failed.status, "the gateway refused this very call")
+        assertEquals(424, failed.status, "the gateway refused this very call")
         assertEquals("PAYMENT_PROVIDER_ERROR", failed.error)
 
         val row = refundRows(paid.orderId).single()

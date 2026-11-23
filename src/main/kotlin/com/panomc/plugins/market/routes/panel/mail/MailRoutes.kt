@@ -135,7 +135,7 @@ class PanelGetMailsAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
     }
 }
 
-/** `POST /api/panel/market/mails/:id/retry` (`P:OM`): `{}`; 409 `INVALID_STATE`, `MAIL_DISABLED`; 502 `MAIL_SEND_FAILED`. Log `RETRIED_MARKET_MAIL`. */
+/** `POST /api/panel/market/mails/:id/retry` (`P:OM`): `{}`; 409 `INVALID_STATE`, `MAIL_DISABLED`; 424 `MAIL_SEND_FAILED`. Log `RETRIED_MARKET_MAIL`. */
 @Endpoint
 class PanelRetryMailAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
     override val paths = listOf(Path("/mails/:id/retry", RouteType.POST))
@@ -156,7 +156,7 @@ class PanelRetryMailAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
     }
 }
 
-/** `POST /api/panel/market/settings/mail/test` (`P:SET`): `kind?`, `recipient?` (default: the admin's e-mail); `{}`; 409 `MAIL_DISABLED`; 502 `MAIL_SEND_FAILED`. Log `SENT_MARKET_TEST_MAIL`. */
+/** `POST /api/panel/market/settings/mail/test` (`P:SET`): `kind?`, `recipient?` (default: the admin's e-mail); `{}`; 409 `MAIL_DISABLED`; 424 `MAIL_SEND_FAILED`. Log `SENT_MARKET_TEST_MAIL`. */
 @Endpoint
 class PanelSendTestMailAPI(private val plugin: MarketPlugin) : MarketPanelApi() {
     override val paths = listOf(Path("/settings/mail/test", RouteType.POST))

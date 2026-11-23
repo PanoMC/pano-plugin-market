@@ -1645,7 +1645,7 @@ class CheckoutService(
      * A request that was already placed (06 section 5.1): another body for the key is `IDEMPOTENCY_CONFLICT`; the same body gets the order
      * as it is now: the stored start of the newest attempt when it is `PENDING` / `PROCESSING`, a wait of up to
      * [CheckoutDeps.replayWaitMs] while it is still `CREATED` (the first request is talking to the gateway; then `payment: null`), a
-     * 502 with the order when it `FAILED`, `{kind: COMPLETED}` for a completed order.
+     * 424 with the order when it `FAILED`, `{kind: COMPLETED}` for a completed order.
      */
     private suspend fun replay(existing: MarketOrder, request: CheckoutRequest, deps: CheckoutDeps, sqlClient: SqlClient): CheckoutResult {
         if (existing.idempotencyHash != request.bodyHash) throw IdempotencyConflict()

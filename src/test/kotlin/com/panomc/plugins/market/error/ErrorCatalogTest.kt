@@ -26,7 +26,7 @@ class ErrorCatalogTest {
         400 INVALID_CATEGORY_MOVE
         400 INVALID_PASSWORD
         400 PAYMENT_METHOD_NOT_CONFIGURED
-        502 EXCHANGE_RATE_FETCH_FAILED
+        424 EXCHANGE_RATE_FETCH_FAILED
         400 EMPTY_CART
         400 INVALID_CART lineErrors
         400 INVALID_COUPON reason
@@ -89,9 +89,9 @@ class ErrorCatalogTest {
         429 TOO_MANY_REQUESTS retryAfter
         429 CODE_ATTEMPTS_LOCKED retryAfter
         500 INVOICE_RENDER_FAILED
-        502 PAYMENT_PROVIDER_ERROR code
-        502 SHIPPING_PROVIDER_ERROR code,shipmentId
-        502 MAIL_SEND_FAILED
+        424 PAYMENT_PROVIDER_ERROR code
+        424 SHIPPING_PROVIDER_ERROR code,shipmentId
+        424 MAIL_SEND_FAILED
         503 STORE_DISABLED
         503 STORE_UNAVAILABLE
         503 STORE_BUSY
@@ -109,7 +109,7 @@ class ErrorCatalogTest {
 
     @Test
     fun `the specification table has the documented size`() {
-        // 6 existing + 34 x 400 + 1 x 403 + 24 x 409 + 2 x 429 + 1 x 500 + 3 x 502 + 3 x 503, 04 section 11.
+        // 6 existing + 34 x 400 + 1 x 403 + 24 x 409 + 2 x 429 + 1 x 500 + 3 x 424 + 3 x 503, 04 section 11.
         assertEquals(6 + 34 + 1 + 24 + 2 + 1 + 3 + 3, spec.size)
         assertEquals(spec.size, spec.map { it.first }.toSet().size, "codes in the table are unique")
     }

@@ -1222,7 +1222,7 @@ class PaymentService(
      * `POST /api/market/orders/:publicId/pay` (06 section 9.3, 07 section 6.4): a new attempt for a `PENDING` order, with the fee and the
      * credit part re-priced for the new method (items, discounts and shipping never change). [order] is the owner's order as
      * `OrderAccess` resolved it; everything is read again under the order lock. Returns the `PaymentStart`, or `null` when another request took
-     * the attempt over before the provider answered. A provider that fails, is unavailable or misses the 30 s deadline answers 502
+     * the attempt over before the provider answered. A provider that fails, is unavailable or misses the 30 s deadline answers 424
      * `PAYMENT_PROVIDER_ERROR {code, order, orderToken}` (06 section 9.2 steps 4 and 5; `GATEWAY_UNREACHABLE` for the deadline), as in checkout.
      */
     suspend fun pay(order: MarketOrder, request: PayRequest, caller: PayCaller, sqlClient: SqlClient): JsonObject? {
@@ -1504,7 +1504,7 @@ class PaymentService(
      * `POST /orders/:publicId/payment/continue` (06 section 9.3): the second step of an embedded form. Under the attempt lock the order and
      * its newest attempt are read again and must be `PENDING` with `startKind = EMBEDDED` (else 409 `ORDER_NOT_PAYABLE`); the provider is
      * called with that fresh row (30 s) and the result is stored like a start before the lock is released, so the next waiter sees the stored
-     * step (or `COMPLETED`) and answers 409 instead of calling the provider a second time. A provider error answers 502 and leaves the attempt
+     * step (or `COMPLETED`) and answers 409 instead of calling the provider a second time. A provider error answers 424 and leaves the attempt
      * as it is, so the buyer can enter the step again.
      */
     suspend fun continuePayment(order: MarketOrder, values: JsonObject, caller: PayCaller, sqlClient: SqlClient): JsonObject? = underAttemptLock(order.id) {

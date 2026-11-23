@@ -91,15 +91,15 @@ object ErrorCatalog : ErrorCatalogProvider {
         e { MailDisabled() },
         e { MailNotApplicable() },
         e { InvoiceNotIssuable() },
+        // 424
+        e { PaymentProviderError("NETWORK") },
+        e { ShippingProviderError("NETWORK", 1L) },
+        e { MailSendFailed() },
         // 429
         e { TooManyRequests(30) },
         e { CodeAttemptsLocked(30) },
         // 500
         e { InvoiceRenderFailed() },
-        // 502
-        e { PaymentProviderError("NETWORK") },
-        e { ShippingProviderError("NETWORK", 1L) },
-        e { MailSendFailed() },
         // 503
         e { StoreDisabled() },
         e { StoreUnavailable() },

@@ -192,7 +192,7 @@ private fun refundView(refund: MarketRefund): JsonObject = JsonObject()
     .put("id", refund.id).put("status", refund.status.name).put("gatewayAmount", refund.gatewayAmount / 100.0).put("creditAmount", refund.creditAmount / 100.0)
     .put("buyerActionUrl", refund.buyerActionUrl)
 
-/** A gateway that refused this very call answers 502 `PAYMENT_PROVIDER_ERROR`; the row stays `FAILED` (it was committed before the answer). */
+/** A gateway that refused this very call answers 424 `PAYMENT_PROVIDER_ERROR`; the row stays `FAILED` (it was committed before the answer). */
 private fun answer(outcome: RefundOutcome): Result {
     outcome.failure?.let { throw PaymentProviderError(it.code) }
 
@@ -225,7 +225,7 @@ class PanelRefundPreviewAPI(private val plugin: MarketPlugin) : MarketPanelApi()
 
 /**
  * `POST /api/panel/market/orders/:id/refunds` (`P:PAY`, `Idempotency-Key`, 04 section 7, 21 section 3): `refund{id, status, gatewayAmount, creditAmount, buyerActionUrl}`;
- * 400 `INVALID_REFUND_AMOUNT`, `REFUND_NOT_SUPPORTED`, `CASCADE_DECISION_REQUIRED`, `INVALID_ORDER_TRANSITION`; 409 `IDEMPOTENCY_CONFLICT`; 502 `PAYMENT_PROVIDER_ERROR`.
+ * 400 `INVALID_REFUND_AMOUNT`, `REFUND_NOT_SUPPORTED`, `CASCADE_DECISION_REQUIRED`, `INVALID_ORDER_TRANSITION`; 409 `IDEMPOTENCY_CONFLICT`; 424 `PAYMENT_PROVIDER_ERROR`.
  */
 @Endpoint
 class PanelCreateRefundAPI(private val plugin: MarketPlugin) : MarketPanelApi() {

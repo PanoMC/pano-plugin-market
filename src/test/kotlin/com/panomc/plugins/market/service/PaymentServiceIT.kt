@@ -451,11 +451,11 @@ class PaymentServiceIT : MarketDaoITBase() {
     // ===================================================================================== failure and timeout (37)
 
     @Test
-    fun `a provider error fails the attempt, keeps the order PENDING, sets the method error and answers 502 with the order`(): Unit = runBlocking {
+    fun `a provider error fails the attempt, keeps the order PENDING, sets the method error and answers 424 with the order`(): Unit = runBlocking {
         fx.paymentMethod("fake")
         fake.failNext(FakePaymentProvider.Op.START, ProviderException(ProviderErrorCode.GATEWAY_REJECTED, "rejected", adminMessage = "merchant 123 is blocked"))
 
-        val body = expect("PAYMENT_PROVIDER_ERROR", 502) { buy(fx.product(price = 1000)) }
+        val body = expect("PAYMENT_PROVIDER_ERROR", 424) { buy(fx.product(price = 1000)) }
         val order = onlyOrder()
         val attempt = ph.attempts(order.id).single()
 
@@ -479,7 +479,7 @@ class PaymentServiceIT : MarketDaoITBase() {
         fx.paymentMethod("fake")
         fake.onStart = { throw IllegalStateException("boom with secret-token-1") }
 
-        val first = expect("PAYMENT_PROVIDER_ERROR", 502) { buy(fx.product(price = 1000)) }
+        val first = expect("PAYMENT_PROVIDER_ERROR", 424) { buy(fx.product(price = 1000)) }
 
         assertEquals("INTERNAL", first.getString("code"))
         assertEquals("INTERNAL", ph.attempts(onlyOrder().id).single().failureCode)
@@ -487,7 +487,7 @@ class PaymentServiceIT : MarketDaoITBase() {
 
         ph.lookup.remove("fake")
 
-        val second = expect("PAYMENT_PROVIDER_ERROR", 502) { buy(fx.product(price = 1000)) }
+        val second = expect("PAYMENT_PROVIDER_ERROR", 424) { buy(fx.product(price = 1000)) }
 
         assertEquals("CONFIGURATION", second.getString("code"))
     }
@@ -498,7 +498,7 @@ class PaymentServiceIT : MarketDaoITBase() {
         fx.paymentMethod("fake")
         fake.delay(FakePaymentProvider.Op.START, 5_000)
 
-        val body = expect("PAYMENT_PROVIDER_ERROR", 502) { buy(fx.product(price = 1000)) }
+        val body = expect("PAYMENT_PROVIDER_ERROR", 424) { buy(fx.product(price = 1000)) }
         val order = onlyOrder()
         val attempt = ph.attempts(order.id).single()
 
@@ -1320,13 +1320,13 @@ class PaymentServiceIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `a provider error in continue answers 502 and leaves the attempt PENDING`(): Unit = runBlocking {
+    fun `a provider error in continue answers 424 and leaves the attempt PENDING`(): Unit = runBlocking {
         fx.paymentMethod("fake")
         fake.onStart = { StartPaymentResult.Embedded(JsonObject()) }
         ph.continuable.onContinue = { throw ProviderException(ProviderErrorCode.GATEWAY_REJECTED, "bad phone") }
 
         val order = orderOf(buy(fx.product(price = 1000)))
-        val body = expect("PAYMENT_PROVIDER_ERROR", 502) { ph.payments.continuePayment(order, JsonObject(), PayCaller(), pool) }
+        val body = expect("PAYMENT_PROVIDER_ERROR", 424) { ph.payments.continuePayment(order, JsonObject(), PayCaller(), pool) }
 
         assertEquals("GATEWAY_REJECTED", body.getString("code"))
         assertEquals(PaymentStatus.PENDING, ph.attempts(order.id).single().status)
@@ -1591,10 +1591,10 @@ class PaymentServiceIT : MarketDaoITBase() {
 
     // ================================================================================== review fixes (MK-076)
 
-    // ---- /pay answers a provider failure as 502 (06 section 9.2 steps 4 and 5)
+    // ---- /pay answers a provider failure as 424 (06 section 9.2 steps 4 and 5)
 
     @Test
-    fun `a provider error in pay answers 502 with the order and the token, fails the new attempt and keeps the order PENDING`(): Unit = runBlocking {
+    fun `a provider error in pay answers 424 with the order and the token, fails the new attempt and keeps the order PENDING`(): Unit = runBlocking {
         fx.paymentMethod("fake")
         fake.caps = PaymentCapabilities().also { it.cancelPending = true }
 
@@ -1602,7 +1602,7 @@ class PaymentServiceIT : MarketDaoITBase() {
 
         fake.failNext(FakePaymentProvider.Op.START, ProviderException(ProviderErrorCode.GATEWAY_REJECTED, "rejected", adminMessage = "merchant 7 is blocked"))
 
-        val body = expect("PAYMENT_PROVIDER_ERROR", 502) { pay(order) }
+        val body = expect("PAYMENT_PROVIDER_ERROR", 424) { pay(order) }
         val attempts = ph.attempts(order.id)
 
         assertEquals("GATEWAY_REJECTED", body.getString("code"))
@@ -1627,14 +1627,14 @@ class PaymentServiceIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `an unexpected exception in pay is an INTERNAL 502 that never leaks its text`(): Unit = runBlocking {
+    fun `an unexpected exception in pay is an INTERNAL 424 that never leaks its text`(): Unit = runBlocking {
         fx.paymentMethod("fake")
 
         val order = orderOf(buy(fx.product(price = 1000)))
 
         fake.onStart = { throw IllegalStateException("boom with secret-token-9") }
 
-        val internal = expect("PAYMENT_PROVIDER_ERROR", 502) { pay(order) }
+        val internal = expect("PAYMENT_PROVIDER_ERROR", 424) { pay(order) }
 
         assertEquals("INTERNAL", internal.getString("code"))
         assertFalse(internal.encode().contains("secret-token-9"))
@@ -1652,7 +1652,7 @@ class PaymentServiceIT : MarketDaoITBase() {
 
         fake.delay(FakePaymentProvider.Op.START, 5_000)
 
-        val body = expect("PAYMENT_PROVIDER_ERROR", 502) { pay(order) }
+        val body = expect("PAYMENT_PROVIDER_ERROR", 424) { pay(order) }
         val attempts = ph.attempts(order.id)
 
         assertEquals("GATEWAY_UNREACHABLE", body.getString("code"))
@@ -1673,7 +1673,7 @@ class PaymentServiceIT : MarketDaoITBase() {
         fx.paymentMethod("fake")
         fake.failNext(FakePaymentProvider.Op.START, ProviderException(ProviderErrorCode.GATEWAY_REJECTED, "rejected", adminMessage = "a".repeat(900)))
 
-        expect("PAYMENT_PROVIDER_ERROR", 502) { buy(fx.product(price = 1000)) }
+        expect("PAYMENT_PROVIDER_ERROR", 424) { buy(fx.product(price = 1000)) }
 
         val attempt = ph.attempts(onlyOrder().id).single()
 

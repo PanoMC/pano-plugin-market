@@ -502,7 +502,7 @@ class PaymentEventAdminIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `a provider that cannot be asked is 400 STATUS_QUERY_NOT_SUPPORTED, an unknown attempt 404, a gone provider 502`(): Unit = runBlocking {
+    fun `a provider that cannot be asked is 400 STATUS_QUERY_NOT_SUPPORTED, an unknown attempt 404, a gone provider 424`(): Unit = runBlocking {
         fx.paymentMethod("fake")
 
         val (_, attempt) = pending()

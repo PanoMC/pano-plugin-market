@@ -365,7 +365,7 @@ class PaymentFlowE2E : E2eTestBase() {
 
         val failed = checkout(buyer.client, cart(line(vip.id)))
 
-        assertEquals(502, failed.status, "the provider failed: ${failed.error}")
+        assertEquals(424, failed.status, "the provider failed: ${failed.error}")
         assertEquals("PAYMENT_PROVIDER_ERROR", failed.error)
         val view = failed.details.getJsonObject("order") ?: throw AssertionError("the error answer carries no order")
         val publicId = view.getString("publicId")
@@ -402,7 +402,7 @@ class PaymentFlowE2E : E2eTestBase() {
         val buyer = buyer()
 
         // the provider's own request deadline (15 s by default) must fire well before the platform's 30 s start deadline: a platform timeout
-        // leaves the attempt CREATED (06 section 9.2 step 5), a provider error closes it FAILED (step 4) and both answer 502, so the race is removed here
+        // leaves the attempt CREATED (06 section 9.2 step 5), a provider error closes it FAILED (step 4) and both answer 424, so the race is removed here
         setProviderSettings(JsonObject().put("timeoutMs", 3_000))
         gateway.hang(FakePayGateway.Op.CREATE)
 
@@ -414,7 +414,7 @@ class PaymentFlowE2E : E2eTestBase() {
             val took = System.currentTimeMillis() - started
 
             assertTrue(took < 35_000, "the answer took ${took} ms")
-            assertEquals(502, failed.status, "answer ${failed.status} ${failed.error}")
+            assertEquals(424, failed.status, "answer ${failed.status} ${failed.error}")
             assertEquals("PAYMENT_PROVIDER_ERROR", failed.error)
             publicId = failed.details.getJsonObject("order").getString("publicId")
         } finally {

@@ -365,7 +365,7 @@ internal class SubscriptionCancelIT : RenewalITBase() {
 
         sw.first.onResume = { ResumeSubscriptionResult.Failed("declined") }
         failsWith<PaymentProviderError> { actions.resume(g.sub.id, g.user.id) }
-        assertTrue(subscription(g.sub.id).cancelAtPeriodEnd, "no change on a 502")
+        assertTrue(subscription(g.sub.id).cancelAtPeriodEnd, "no change on a 424")
 
         sw.first.onResume = { ResumeSubscriptionResult.Resumed() }
 
@@ -425,7 +425,7 @@ internal class SubscriptionCancelIT : RenewalITBase() {
     // ==================================================================================== the gateway answers a cancel (52, 78, 79, 59)
 
     @Test
-    fun `52 a gateway cancel at the period end - Scheduled sets the flag, Cancelled sets it and the remote state DONE, Failed is a 502 that changes nothing`(): Unit = runBlocking {
+    fun `52 a gateway cancel at the period end - Scheduled sets the flag, Cancelled sets it and the remote state DONE, Failed is a 424 that changes nothing`(): Unit = runBlocking {
         val (scheduled, _) = gateway("Sam", "sub_s")
 
         fake.onCancelSubscription = { CancelSubscriptionResult.Scheduled(w.clock.now() + 30 * day) }
@@ -522,7 +522,7 @@ internal class SubscriptionCancelIT : RenewalITBase() {
     }
 
     @Test
-    fun `79 LocalOnly from a gateway subscription is a failure, 502 and nothing changes`(): Unit = runBlocking {
+    fun `79 LocalOnly from a gateway subscription is a failure, 424 and nothing changes`(): Unit = runBlocking {
         val (g, _) = gateway()
 
         fake.onCancelSubscription = { CancelSubscriptionResult.localOnly() }
@@ -1038,7 +1038,7 @@ internal class SubscriptionCancelIT : RenewalITBase() {
         // unsupported answer: 409
         failsWith<SubscriptionNotRetryable> { actions.retry(g.sub.id) { job.chargeOne(it, admin = true) } }
 
-        // a thrown provider error: 502
+        // a thrown provider error: 424
         sw.first.onRetry = { throw ProviderException(ProviderErrorCode.GATEWAY_UNREACHABLE, "down") }
         failsWith<PaymentProviderError> { actions.retry(g.sub.id) { job.chargeOne(it, admin = true) } }
 

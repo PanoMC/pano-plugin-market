@@ -577,7 +577,7 @@ class MailAdminIT : MarketDaoITBase() {
     // ================================================================================== retry
 
     @Test
-    fun `retry sends a FAILED or SKIPPED row right away, refuses the other states and reports a failed send as 502`(): Unit = runBlocking {
+    fun `retry sends a FAILED or SKIPPED row right away, refuses the other states and reports a failed send as 424`(): Unit = runBlocking {
         val user = owner("Steve")
         val placed = timed(user)
         val sub = subscribe(placed, user)
@@ -612,7 +612,7 @@ class MailAdminIT : MarketDaoITBase() {
         assertEquals(MailStatus.SKIPPED, row(skipped).status)
         assertEquals(MailStatus.SENT, admin.retry(skipped, pool).let { row(skipped).status })
 
-        // a send that fails: 502, the row keeps the error and goes back to PENDING with backoff
+        // a send that fails: 424, the row keeps the error and goes back to PENDING with backoff
         val flaky = enqueue(MailKind.SUBSCRIPTION_CANCELLED, MailRefType.SUBSCRIPTION, sub.id, "200", placed, "steve@example.com")!!
 
         job.runOnce()
@@ -704,7 +704,7 @@ class MailAdminIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `the test mail answers 409 when mail is off and 502 when the send fails, with the reason of neither leaking`(): Unit = runBlocking {
+    fun `the test mail answers 409 when mail is off and 424 when the send fails, with the reason of neither leaking`(): Unit = runBlocking {
         mailOn = false
         assertThrows(MailDisabled::class.java) { runBlocking { admin.sendTest(null, null, "admin@example.com") } }
         mailOn = true
@@ -720,7 +720,7 @@ class MailAdminIT : MarketDaoITBase() {
         val failure = assertThrows(MailSendFailed::class.java) { runBlocking { admin.sendTest(null, null, "admin@example.com") } }
 
         assertFalse((failure.message ?: "").contains("secret-user"))
-        assertEquals(502, failure.getStatusCode())
+        assertEquals(424, failure.getStatusCode())
     }
 
 }

@@ -68,7 +68,7 @@ class GetMySubscriptionsAPI(private val plugin: MarketPlugin) : MarketUserApi() 
 
 /**
  * `POST /api/market/me/subscriptions/:id/cancel` (`USER`, CSRF, 09 section 10.1): `atPeriodEnd?` (default `true`). Answers `{subscription}` (the same object as the list),
- * or `{action: "REDIRECT", url}` when only the buyer can cancel, at the gateway. 404 for another account's subscription; 409 `SUBSCRIPTION_NOT_CANCELLABLE`; 502 `PAYMENT_PROVIDER_ERROR`.
+ * or `{action: "REDIRECT", url}` when only the buyer can cancel, at the gateway. 404 for another account's subscription; 409 `SUBSCRIPTION_NOT_CANCELLABLE`; 424 `PAYMENT_PROVIDER_ERROR`.
  */
 @Endpoint
 class CancelMySubscriptionAPI(private val plugin: MarketPlugin) : MarketUserApi() {
@@ -98,7 +98,7 @@ class CancelMySubscriptionAPI(private val plugin: MarketPlugin) : MarketUserApi(
     }
 }
 
-/** `POST /api/market/me/subscriptions/:id/resume` (`USER`, CSRF, 09 section 10.2): undo a cancel at the period end; `{subscription}`. 409 `SUBSCRIPTION_NOT_RESUMABLE`; 502. */
+/** `POST /api/market/me/subscriptions/:id/resume` (`USER`, CSRF, 09 section 10.2): undo a cancel at the period end; `{subscription}`. 409 `SUBSCRIPTION_NOT_RESUMABLE`; 424. */
 @Endpoint
 class ResumeMySubscriptionAPI(private val plugin: MarketPlugin) : MarketUserApi() {
     override val paths = listOf(Path("/me/subscriptions/:id/resume", RouteType.POST))
@@ -123,7 +123,7 @@ class ResumeMySubscriptionAPI(private val plugin: MarketPlugin) : MarketUserApi(
 
 /**
  * `POST /api/market/me/subscriptions/:id/portal` (`USER`, CSRF, 09 section 10.4a): `purpose?` (`MANAGE` default, `UPDATE_PAYMENT_METHOD`, `CANCEL`); `{url}`, the gateway's
- * hosted page. 404 for another account's subscription; 409 `SUBSCRIPTION_NOT_MANAGEABLE`; 502.
+ * hosted page. 404 for another account's subscription; 409 `SUBSCRIPTION_NOT_MANAGEABLE`; 424.
  */
 @Endpoint
 class PortalMySubscriptionAPI(private val plugin: MarketPlugin) : MarketUserApi() {

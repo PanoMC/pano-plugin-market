@@ -2,7 +2,7 @@ package com.panomc.plugins.market.error
 
 import com.panomc.platform.model.Error
 
-// HTTP 403, 409, 429, 500, 502 and 503 codes of 04 section 11 (400 is in BadRequestErrors.kt).
+// HTTP 403, 409, 424, 429, 500 and 503 codes of 04 section 11 (400 is in BadRequestErrors.kt).
 
 // ---- 403
 
@@ -75,19 +75,26 @@ class CodeAttemptsLocked(retryAfter: Number) : Error("CODE_ATTEMPTS_LOCKED", 429
 
 class InvoiceRenderFailed : Error("INVOICE_RENDER_FAILED", 500)
 
-// ---- 502 (never carries the gateway's own text)
+// ---- 424 (never carries the gateway's own text)
+
+/**
+ * HTTP status of an error caused by an outside service (payment gateway, carrier, mail server, rate service). Not 502 / 504:
+ * Cloudflare, in front of every hosted Pano, replaces an origin's 502 and 504 answers with its own HTML page, so the
+ * front-end never saw this JSON (the order) and showed a network error instead.
+ */
+const val UPSTREAM_FAILED = 424
 
 /**
  * [code]: a `ProviderErrorCode`. Checkout answers with the order that was created (it stays `PENDING`, 04 section 3): [order]
  * is its `OrderView` and [orderToken] its access token, so the buyer can pick another method.
  */
 class PaymentProviderError(code: String, order: Any? = null, orderToken: String? = null) :
-    Error("PAYMENT_PROVIDER_ERROR", 502, extras = extrasOf("code" to code, "order" to order, "orderToken" to orderToken))
+    Error("PAYMENT_PROVIDER_ERROR", UPSTREAM_FAILED, extras = extrasOf("code" to code, "order" to order, "orderToken" to orderToken))
 
 class ShippingProviderError(code: String, shipmentId: Long? = null) :
-    Error("SHIPPING_PROVIDER_ERROR", 502, extras = extrasOf("code" to code, "shipmentId" to shipmentId))
+    Error("SHIPPING_PROVIDER_ERROR", UPSTREAM_FAILED, extras = extrasOf("code" to code, "shipmentId" to shipmentId))
 
-class MailSendFailed : Error("MAIL_SEND_FAILED", 502)
+class MailSendFailed : Error("MAIL_SEND_FAILED", UPSTREAM_FAILED)
 
 // ---- 503
 

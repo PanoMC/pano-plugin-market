@@ -462,7 +462,7 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `a provider that throws in validateSettings is a 502`(): Unit = runBlocking {
+    fun `a provider that throws in validateSettings is a 424`(): Unit = runBlocking {
         gateway { validation = { throw ProviderException(ProviderErrorCode.GATEWAY_UNREACHABLE, "down") } }
 
         assertThrows<PaymentProviderError> { runBlocking { service.save("gate", settings(), null) } }
@@ -801,7 +801,7 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
     }
 
     @Test
-    fun `a provider failure in an action is a 502 and is remembered on the row`(): Unit = runBlocking {
+    fun `a provider failure in an action is a 424 and is remembered on the row`(): Unit = runBlocking {
         val g = gateway()
         service.save("gate", settings(), null)
 

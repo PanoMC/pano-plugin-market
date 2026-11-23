@@ -103,7 +103,7 @@ class SubscriptionActions(
 
     /**
      * Buyer ([ownerUserId] set, 404 for another account) or admin cancel. [atPeriodEnd] defaults to `true` at the routes; `PAST_DUE` / `PAUSED` rows are always
-     * cancelled now. The answer is the row, or the redirect of a gateway where only the buyer can cancel; a provider that fails answers 502 and changes nothing.
+     * cancelled now. The answer is the row, or the redirect of a gateway where only the buyer can cancel; a provider that fails answers 424 and changes nothing.
      */
     suspend fun cancel(subscriptionId: Long, actor: CancelActor, ownerUserId: Long?, atPeriodEnd: Boolean, reason: String? = null): CancelOutcome {
         val plan = db.txRestartingOnOrderChange { conn -> subs.beginCancel(conn, subscriptionId, actor, ownerUserId, atPeriodEnd) }
@@ -135,7 +135,7 @@ class SubscriptionActions(
 
     private class Redirected(val url: String)
 
-    /** tx1 is written: tell the gateway. Throws 502 (after withdrawing the intent) when it cannot be done. */
+    /** tx1 is written: tell the gateway. Throws 424 (after withdrawing the intent) when it cannot be done. */
     private suspend fun askGateway(plan: SubscriptionService.CancelPlan.Begin, reason: String?): Any {
         val row = plan.row
         val handle = payments.providerHandle(row.providerId, row.testMode, sqlClient())
@@ -229,7 +229,7 @@ class SubscriptionActions(
 
     // ================================================================================================== resume (09 section 10.2)
 
-    /** Resumes a cancel at the period end of the buyer's own subscription (S10); for `GATEWAY` the provider is asked between two transactions. 502 leaves everything as it was. */
+    /** Resumes a cancel at the period end of the buyer's own subscription (S10); for `GATEWAY` the provider is asked between two transactions. 424 leaves everything as it was. */
     suspend fun resume(subscriptionId: Long, ownerUserId: Long): MarketSubscription {
         val client = sqlClient()
         val first = subscriptions.getById(subscriptionId, client) ?: throw NotFound()
