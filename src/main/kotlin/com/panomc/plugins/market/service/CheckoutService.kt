@@ -2382,7 +2382,10 @@ class CheckoutService(
     private suspend fun creatorInput(code: String, sqlClient: SqlClient): CreatorCodeInput {
         val row = creatorCodes.getByCode(code, sqlClient)
             ?: return CreatorCodeInput(false, 0, code, false, 0, DiscountUnit.PERCENT, 0, null, null, null, null, 0)
-        val creator: DirectoryUser? = row.creator.takeIf { it.isNotBlank() }?.let { users.byUsername(it, sqlClient) }
+        // the account the code belongs to is the stored creatorUserId (renames and display names do not move it); the name only for a legacy row
+        val creator: DirectoryUser? = creatorCodes.getCreatorUserId(row.id, sqlClient)
+            ?.let { id -> DirectoryUser(id, users.usernameOf(id, sqlClient) ?: row.creator) }
+            ?: row.creator.takeIf { it.isNotBlank() }?.let { users.byUsername(it, sqlClient) }
 
         return CreatorCodeInput(
             found = true, id = row.id, code = row.code, active = row.status == MarketStatus.ACTIVE, discount = row.discount, unit = row.unit,

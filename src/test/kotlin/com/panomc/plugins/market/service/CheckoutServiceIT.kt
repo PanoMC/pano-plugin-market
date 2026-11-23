@@ -659,6 +659,28 @@ class CheckoutServiceIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `the creator's own code is refused by the stored account id, even when the code's name is not their username`(): Unit = runBlocking {
+        val p = fx.product(price = 1000, stock = 5)
+
+        fx.paymentMethod("fake")
+
+        val owner = fx.user("Renamed").also { h.emails[it.id] = "renamed@example.com" }
+        // the display name is no username (or the account was renamed): only creatorUserId says whose code it is
+        val code = fx.creatorCode("SHOWNAME", "SteveTV", discount = 500, commissionPercent = 1000)
+
+        Fixtures.setColumns(pool, "market_creator_code", code.id, mapOf("creatorUserId" to owner.id))
+
+        assertEquals("CODE_NOT_FOUND", expect("INVALID_CREATOR_CODE", 400) { h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "creatorCode" to "SHOWNAME"), caller = QuoteCaller(owner.id)) }.getString("reason"))
+        assertEquals(0, rows("market_order"))
+
+        // another buyer still gets the discount
+        val (_, alice) = user("Alice")
+        val order = order(h.checkout(json("items" to listOf(line(p)), "paymentMethodId" to "fake", "creatorCode" to "SHOWNAME"), caller = alice).order.getString("publicId"))
+
+        assertEquals(950, order.totalPrice)
+    }
+
+    @Test
     fun `INVALID_RECIPIENT when gifts are off, for a bad name and for a credit pack to an unknown player`(): Unit = runBlocking {
         val p = fx.product(price = 1000)
         val pack = fx.product(slug = "pack", price = 500, columns = mapOf("kind" to "CREDIT_PACK", "creditAmount" to 50000))

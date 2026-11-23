@@ -102,6 +102,15 @@ class MarketCreatorCodeDaoImpl : MarketCreatorCodeDao() {
         return rows.toEntities().getOrNull(0)
     }
 
+    override suspend fun getCreatorUserId(id: Long, sqlClient: SqlClient): Long? {
+        val rows: RowSet<Row> = sqlClient
+            .preparedQuery("SELECT `creatorUserId` FROM `${prefix() + tableName}` WHERE `id` = ? AND `deletedAt` IS NULL")
+            .execute(Tuple.of(id))
+            .coAwait()
+
+        return rows.firstOrNull()?.getLong("creatorUserId")
+    }
+
     override suspend fun getAll(page: Long, search: String?, status: String?, sqlClient: SqlClient): List<MarketCreatorCode> {
         val offset = (page - 1) * 10
         val query = StringBuilder("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE 1=1")

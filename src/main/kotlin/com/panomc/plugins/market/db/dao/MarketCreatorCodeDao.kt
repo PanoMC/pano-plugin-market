@@ -10,6 +10,9 @@ abstract class MarketCreatorCodeDao : MarketDao<MarketCreatorCode>(MarketCreator
     abstract suspend fun deleteById(id: Long, sqlClient: SqlClient)
     abstract suspend fun getById(id: Long, sqlClient: SqlClient): MarketCreatorCode?
     abstract suspend fun getByCode(code: String, sqlClient: SqlClient): MarketCreatorCode?
+
+    /** The `creatorUserId` column (schema v4; the entity does not carry it) of a live code: the account the code belongs to, null for a legacy row. */
+    abstract suspend fun getCreatorUserId(id: Long, sqlClient: SqlClient): Long?
     abstract suspend fun getAll(page: Long, search: String?, status: String?, sqlClient: SqlClient): List<MarketCreatorCode>
     abstract suspend fun count(search: String?, status: String?, sqlClient: SqlClient): Long
 }
