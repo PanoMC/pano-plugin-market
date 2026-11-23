@@ -1687,6 +1687,23 @@ class ShippingServiceIT : MarketDaoITBase() {
     // ================================================================================================ reading
 
     @Test
+    fun `GET order shipping suggests each carrier's parcel with that carrier's default box`(): Unit = runBlocking {
+        val settings = JsonObject().put("senderCountry", "TR").put("senderCity", "Istanbul").put("senderLine1", "Depo 1").put("senderPostalCode", "34000")
+            .put("defaultParcelLengthMm", 300).put("defaultParcelWidthMm", 200).put("defaultParcelHeightMm", 100).encode()
+
+        sql("UPDATE `pano_market_shipping_carrier` SET `settings` = ? WHERE `providerId` = ?", settings, carrier.id)
+
+        val o = order(Line("Shirt", 2, weight = 400), methodId = method())
+        val full = service.orderShipping(o.id, true, pool)
+        val providers = full.getJsonArray("providers").map { it as JsonObject }
+        val own = providers.single { it.getString("id") == carrier.id }.getJsonArray("suggestedParcels").getJsonObject(0)
+
+        assertEquals(listOf(800, 300, 200, 100), listOf(own.getInteger("weightGrams"), own.getInteger("lengthMm"), own.getInteger("widthMm"), own.getInteger("heightMm")))
+        // the top-level suggestion stays as it was: no carrier box
+        assertNull(full.getJsonArray("suggestedParcels").getJsonObject(0).getInteger("lengthMm"))
+    }
+
+    @Test
     fun `GET order shipping lists the lines, the suggested parcel, the providers and the quote, the address only for OM or PAY`(): Unit = runBlocking {
         val m = method(carrierName = "Yurtici")
         val o = order(Line("Shirt", 3, weight = 400), Line("Cap", 1, weight = 100), methodId = m)

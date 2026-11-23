@@ -995,7 +995,9 @@ class ShippingService(
         val suggested = JsonArray()
         val manual = usableOrNull(ManualShippingProvider.ID, sqlClient)
 
-        if (parcelLines.isNotEmpty() && !ShippableLines.isTooHeavy(parcelLines)) {
+        val parcelable = parcelLines.isNotEmpty() && !ShippableLines.isTooHeavy(parcelLines)
+
+        if (parcelable) {
             val parcel = ParcelBuilder.forCheckout(parcelLines, null, manual?.let { parcelSize(it.settings) })
 
             suggested.add(parcelJson(parcel))
@@ -1012,6 +1014,13 @@ class ShippingService(
                     .put("capabilities", capabilitiesJson(carrier.capabilities))
                     .put("balance", balanceOf(carrier))
                     .put("suggested", resolved.id == quote?.getString("providerId"))
+                    // the parcel checkout quoted this carrier with: its own default box before the manual one
+                    .put(
+                        "suggestedParcels",
+                        JsonArray().apply {
+                            if (parcelable) add(parcelJson(ParcelBuilder.forCheckout(parcelLines, parcelSize(carrier.settings), manual?.let { parcelSize(it.settings) })))
+                        }
+                    )
             )
         }
 

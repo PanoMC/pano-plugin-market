@@ -26,6 +26,8 @@ import {
   statusChoices,
   updateRequest,
   validateParcels,
+  sameParcels,
+  suggestedParcelsFor,
 } from './shipments.js';
 import { NODE } from './permissions.js';
 
@@ -431,5 +433,36 @@ describe('shipment error text', () => {
     );
     expect(shipmentErrorText($_, 'REJECTED')).toBe(en.enums['provider-error'].REJECTED);
     expect(shipmentErrorText($_, 'NOPE_CODE')).toBe('NOPE_CODE');
+  });
+});
+
+describe('suggested parcels per provider', () => {
+  const shipping = {
+    suggestedParcels: [{ weightGrams: 500, lengthMm: null, widthMm: null, heightMm: null }],
+    providers: [
+      {
+        id: 'mng',
+        suggestedParcels: [{ weightGrams: 500, lengthMm: 300, widthMm: 200, heightMm: 100 }],
+      },
+      { id: 'other', suggestedParcels: [] },
+    ],
+  };
+
+  test("a carrier's own suggestion (its default box) wins over the top-level one", () => {
+    expect(suggestedParcelsFor(shipping, 'mng')[0].lengthMm).toBe(300);
+    expect(suggestedParcelsFor(shipping, 'other')).toBe(shipping.suggestedParcels);
+    expect(suggestedParcelsFor(shipping, 'manual')).toBe(shipping.suggestedParcels);
+  });
+
+  test('sameParcels tells an untouched form from an edited one', () => {
+    const filled = initialParcels(suggestedParcelsFor(shipping, 'mng'));
+    expect(
+      sameParcels(
+        filled.map((p) => ({ ...p })),
+        filled,
+      ),
+    ).toBe(true);
+    expect(sameParcels([{ ...filled[0], weightGrams: '600' }], filled)).toBe(false);
+    expect(sameParcels(filled, null)).toBe(false);
   });
 });

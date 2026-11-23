@@ -308,7 +308,9 @@
     providerChoices,
     rateKey,
     ratesRequest,
+    sameParcels,
     shipmentFieldErrors,
+    suggestedParcelsFor,
     validateParcels,
   } from '../../utils/shipments.js';
 
@@ -324,6 +326,8 @@
   let shipping = $state(null);
   let lines = $state([]);
   let parcels = $state([emptyParcel()]);
+  // the rows last filled from a suggestion; a provider change refills only while the form still holds them
+  let filledParcels = null;
   let providerId = $state(MANUAL_PROVIDER);
   let serviceCode = $state('');
   let manual = $state({ carrierName: '', trackingNumber: '', trackingUrl: '' });
@@ -385,8 +389,14 @@
     clearRates();
   }
 
+  function fillParcels(id) {
+    parcels = initialParcels(suggestedParcelsFor(shipping, id));
+    filledParcels = parcels.map((p) => ({ ...p }));
+  }
+
   function changeProvider(id) {
     providerId = id;
+    if (sameParcels(parcels, filledParcels)) fillParcels(id);
     serviceCode = defaultServiceCode(
       shipping?.quote,
       choices.find((p) => p.id === id),
@@ -415,8 +425,8 @@
       const body = result.body;
       shipping = body;
       lines = initialLines(body.lines);
-      parcels = initialParcels(body.suggestedParcels);
       providerId = defaultProviderId(body.quote, body.providers);
+      fillParcels(providerId);
       serviceCode = defaultServiceCode(
         body.quote,
         (body.providers ?? []).find((p) => p.id === providerId),

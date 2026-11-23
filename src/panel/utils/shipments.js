@@ -235,6 +235,25 @@ export function initialParcels(suggested) {
 export const emptyParcel = () => ({ weightGrams: '', lengthMm: '', widthMm: '', heightMm: '' });
 
 /**
+ * Suggested parcels for a provider: its own `suggestedParcels` (built with that carrier's default box), else the
+ * top-level ones of GET /orders/:id/shipping.
+ */
+export function suggestedParcelsFor(shipping, providerId) {
+  const own = (shipping?.providers ?? []).find((p) => p.id === providerId)?.suggestedParcels;
+  return Array.isArray(own) && own.length > 0 ? own : shipping?.suggestedParcels;
+}
+
+/** Same parcel rows (field by field): the form still holds what was filled in, the user did not edit it. */
+export function sameParcels(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  return a.every((row, i) =>
+    ['weightGrams', 'lengthMm', 'widthMm', 'heightMm'].every(
+      (f) => String(row?.[f] ?? '') === String(b[i]?.[f] ?? ''),
+    ),
+  );
+}
+
+/**
  * `{ parcels }` or `{ error: { parcels: [{ weightGrams?, dimensions? }] | 'REQUIRED' | 'TOO_MANY' } }`.
  * weightGrams integer 1..1e9; dimensions all three or none (each 1..5000).
  */
