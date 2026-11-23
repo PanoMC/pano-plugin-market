@@ -6,6 +6,7 @@ import com.panomc.plugins.market.core.order.BillingSnapshot
 import com.panomc.plugins.market.core.order.OrderActor
 import com.panomc.plugins.market.routes.api.payment.AttemptLocks
 import com.panomc.plugins.market.routes.api.payment.PaymentEventApplier
+import com.panomc.plugins.market.routes.api.payment.attemptViewOf
 import com.panomc.plugins.market.routes.api.payment.resolveAttemptTarget
 import com.panomc.plugins.market.routes.api.payment.withReceived
 import com.panomc.plugins.market.core.order.OrderEvent
@@ -752,7 +753,7 @@ class PaymentService(
         )
     }
 
-    private fun requestFor(
+    private suspend fun requestFor(
         order: MarketOrder, items: List<MarketOrderItem>, attempt: MarketPayment, replaces: MarketPayment?, resolved: Resolved, plan: SubscriptionPlan?
     ): StartPaymentRequest {
         val snapshot = spiSnapshot(order, items, resolved.provider.id)
@@ -794,13 +795,9 @@ class PaymentService(
         )
     }
 
-    private fun attemptView(a: MarketPayment, publicId: String) = PaymentAttemptView(
-        id = a.id, reference = a.reference, token = a.token, status = a.status.name, amount = Money(a.amount, a.currency), orderId = a.orderId, orderPublicId = publicId,
-        gatewayTransactionId = a.gatewayTransactionId, gatewayRefs = a.gatewayRefs?.let { raw -> runCatching { JsonObject(raw).map.mapValues { it.value.toString() } }.getOrNull() } ?: emptyMap(),
-        providerData = a.providerData?.let { cipher.decrypt(it) }?.let { runCatching { JsonObject(it) }.getOrNull() }, testMode = a.testMode, createdAt = a.createdAt,
-        expiresAt = a.expiresAt, subscription = null, paidAmount = a.paidAmount?.let { Money(it, a.paidCurrency ?: a.currency) }, refundedAmount = Money(a.refundedAmount, a.currency),
-        paidAt = a.paidAt
-    )
+    /** The SPI view of [a] (02 section 7.1), with the subscription it pays for (a recurring provider tells a plan payment and a renewal apart by it). */
+    private suspend fun attemptView(a: MarketPayment, publicId: String): PaymentAttemptView =
+        attemptViewOf(a, publicId, cipher, subscriptionHooks.viewOf(a, readClient()))
 
     // ===================================================================================== best-effort gateway cancel
 

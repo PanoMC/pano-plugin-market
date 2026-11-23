@@ -28,7 +28,8 @@ interface InboundAttempts {
      */
     suspend fun resolve(providerId: String, target: PaymentTarget): MarketPayment?
 
-    fun view(attempt: MarketPayment, publicId: String): PaymentAttemptView
+    /** The SPI view of [attempt], with the subscription it pays for (02 section 7.1). */
+    suspend fun view(attempt: MarketPayment, publicId: String): PaymentAttemptView
 
     /** What [event] carries on top of its kind for the attempt row (`AttemptFacts.of`). */
     fun facts(event: PaymentEvent): AttemptFacts

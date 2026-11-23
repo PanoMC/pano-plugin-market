@@ -177,7 +177,7 @@ private fun inboundAttempts(plugin: MarketPlugin): PaymentInboundAttempts {
 
     return PaymentInboundAttempts(
         context.getBean(MarketPaymentDao::class.java), orderDao, paymentService(plugin), paymentWiring(plugin).cipher,
-        MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock), locks, SystemClock
+        MarketDb({ databaseManager().getSqlClient() as Pool }, SystemClock), locks, SystemClock, context.getBean(MarketSubscriptionDao::class.java)
     ) { databaseManager().getSqlClient() }
 }
 

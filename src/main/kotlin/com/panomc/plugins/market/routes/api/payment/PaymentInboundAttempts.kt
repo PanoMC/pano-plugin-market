@@ -18,6 +18,7 @@ import com.panomc.plugins.market.provider.SecretCipher
 import com.panomc.plugins.market.service.AppliedEvent
 import com.panomc.plugins.market.service.AttemptFacts
 import com.panomc.plugins.market.service.PaymentService
+import com.panomc.plugins.market.service.attemptSubscriptionView
 import com.panomc.plugins.market.service.subscriptionViewOf
 import com.panomc.plugins.market.spi.common.Money
 import com.panomc.plugins.market.spi.payment.PaymentAttemptView
@@ -30,12 +31,15 @@ import io.vertx.kotlin.coroutines.coAwait
 import io.vertx.sqlclient.SqlClient
 import io.vertx.sqlclient.Tuple
 
-/** [MarketPayment] as the SPI shows it to a provider (02 section 7.1 `PaymentAttemptView`); [publicId] is the order's. */
-internal fun attemptViewOf(a: MarketPayment, publicId: String, cipher: SecretCipher) = PaymentAttemptView(
+/**
+ * [MarketPayment] as the SPI shows it to a provider (02 section 7.1 `PaymentAttemptView`); [publicId] is the order's, [subscription] the one the attempt
+ * pays for (`attemptSubscriptionView`), `null` for a one-off payment.
+ */
+internal fun attemptViewOf(a: MarketPayment, publicId: String, cipher: SecretCipher, subscription: SubscriptionView? = null) = PaymentAttemptView(
     id = a.id, reference = a.reference, token = a.token, status = a.status.name, amount = Money(a.amount, a.currency), orderId = a.orderId, orderPublicId = publicId,
     gatewayTransactionId = a.gatewayTransactionId, gatewayRefs = a.gatewayRefs?.let { raw -> runCatching { JsonObject(raw).map.mapValues { it.value.toString() } }.getOrNull() } ?: emptyMap(),
     providerData = a.providerData?.let { cipher.decrypt(it) }?.let { runCatching { JsonObject(it) }.getOrNull() }, testMode = a.testMode, createdAt = a.createdAt,
-    expiresAt = a.expiresAt, subscription = null, paidAmount = a.paidAmount?.let { Money(it, a.paidCurrency ?: a.currency) }, refundedAmount = Money(a.refundedAmount, a.currency),
+    expiresAt = a.expiresAt, subscription = subscription, paidAmount = a.paidAmount?.let { Money(it, a.paidCurrency ?: a.currency) }, refundedAmount = Money(a.refundedAmount, a.currency),
     paidAt = a.paidAt
 )
 
@@ -52,6 +56,8 @@ class PaymentInboundAttempts(
     private val db: MarketDb,
     private val locks: Locks,
     private val clock: Clock,
+    /** The subscriptions behind `PaymentAttemptView.subscription`; `null` shows none. */
+    private val subscriptions: MarketSubscriptionDao? = null,
     private val client: suspend () -> SqlClient
 ) : InboundAttempts {
     private fun table(name: String) = "`${orders.prefix()}$name`"
@@ -64,7 +70,8 @@ class PaymentInboundAttempts(
 
     override suspend fun resolve(providerId: String, target: PaymentTarget): MarketPayment? = resolveAttemptTarget(payments, orders, providerId, target, client())
 
-    override fun view(attempt: MarketPayment, publicId: String): PaymentAttemptView = attemptViewOf(attempt, publicId, cipher)
+    override suspend fun view(attempt: MarketPayment, publicId: String): PaymentAttemptView =
+        attemptViewOf(attempt, publicId, cipher, subscriptions?.let { attemptSubscriptionView(attempt, null, orders, it, cipher, client()) })
 
     override fun facts(event: PaymentEvent): AttemptFacts = AttemptFacts.of(event, cipher)
 
@@ -130,7 +137,9 @@ class AttemptLookup(
     private suspend fun view(a: MarketPayment?): PaymentAttemptView? {
         if (a == null || a.providerId != providerId) return null
 
-        return attemptViewOf(a, orders.getById(a.orderId, client())?.publicId.orEmpty(), cipher)
+        val order = orders.getById(a.orderId, client())
+
+        return attemptViewOf(a, order?.publicId.orEmpty(), cipher, subscriptions?.let { attemptSubscriptionView(a, order, orders, it, cipher, client()) })
     }
 
     override suspend fun byId(attemptId: Long): PaymentAttemptView? = view(payments.getById(attemptId, client()))

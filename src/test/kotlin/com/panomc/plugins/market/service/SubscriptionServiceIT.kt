@@ -36,6 +36,9 @@ import com.panomc.plugins.market.provider.CreditsProvider
 import com.panomc.plugins.market.provider.FreeProvider
 import com.panomc.plugins.market.provider.SecretCipher
 import com.panomc.plugins.market.routes.api.payment.AttemptLookup
+import com.panomc.plugins.market.routes.api.payment.PaymentInboundAttempts
+import com.panomc.plugins.market.spi.payment.PaymentAttemptView
+import com.panomc.plugins.market.spi.payment.PaymentQueryResult
 import com.panomc.plugins.market.routes.api.payment.EventNotHandled
 import com.panomc.plugins.market.routes.api.payment.InboundEventContext
 import com.panomc.plugins.market.routes.api.payment.PaymentEventSink
@@ -1794,6 +1797,39 @@ class SubscriptionServiceIT : MarketDaoITBase() {
         assertEquals("plan_1", own.providerData!!.getString("plan"))
         assertNull(foreign)
         assertNull(without)
+    }
+
+    @Test
+    fun `every attempt view a provider gets names the subscription the attempt pays for`(): Unit = runBlocking {
+        val sub = subProduct()
+
+        fx.paymentMethod("fake")
+        sw.caps(RecurringSupport.GATEWAY_MANAGED) { statusQuery = true }
+
+        val (_, caller) = user("Alex")
+        val order = buy(sub, caller)
+        val attempt = attemptOf(order)
+        val row = subscriptionOf(order)
+
+        // ctx.payments (AttemptLookup), the inbound request (PaymentInboundAttempts.view) and the query of PaymentService (subscriptionHooks.viewOf)
+        val lookedUp = AttemptLookup("fake", w.payments, w.orders, sw.cipher, w.subscriptions) { w.pool }.byId(attempt.id)
+        val inbound = PaymentInboundAttempts(w.payments, w.orders, sw.payments, sw.cipher, sw.db, sw.locks, w.clock, w.subscriptions) { w.pool }.view(attempt, order.publicId!!)
+        var queried: PaymentAttemptView? = null
+
+        sw.fake.onQuery = { queried = it.attempt; PaymentQueryResult.unknown() }
+        sw.payments.reconcileQuery(order, attempt, pool)
+
+        for (view in listOf(lookedUp, inbound, queried)) {
+            assertNotNull(view)
+            assertEquals(row.id, view!!.subscription?.id)
+            assertEquals("PENDING", view.subscription!!.status)
+        }
+
+        // a one-off order has none
+        val oneOff = buy(fx.product(), caller)
+        val plain = AttemptLookup("fake", w.payments, w.orders, sw.cipher, w.subscriptions) { w.pool }.byId(attemptOf(oneOff).id)
+
+        assertNull(plain!!.subscription)
     }
 
     // ==================================================================================== 09 section 8.5

@@ -271,7 +271,7 @@ internal class FakeAttempts : InboundAttempts {
         return found?.takeIf { it.providerId == providerId }
     }
 
-    override fun view(attempt: MarketPayment, publicId: String): PaymentAttemptView = attemptViewOf(attempt, publicId, cipher)
+    override suspend fun view(attempt: MarketPayment, publicId: String): PaymentAttemptView = attemptViewOf(attempt, publicId, cipher)
 
     override fun facts(event: PaymentEvent): AttemptFacts = AttemptFacts.of(event, cipher)
 

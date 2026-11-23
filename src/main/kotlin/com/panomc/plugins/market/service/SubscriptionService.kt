@@ -122,6 +122,9 @@ interface PaymentSubscriptions {
      */
     suspend fun onAttemptFailed(conn: SqlConnection, order: MarketOrder, attempt: MarketPayment, final: Boolean, facts: AttemptFacts) {}
 
+    /** `PaymentAttemptView.subscription` (02 section 7.1) of [attempt]: the subscription it pays for, `null` for a one-off payment. */
+    suspend fun viewOf(attempt: MarketPayment, sqlClient: SqlClient): SubscriptionView? = null
+
     companion object {
         /** A payment service without subscriptions: no plan, nothing recorded. */
         val NONE: PaymentSubscriptions = object : PaymentSubscriptions {
@@ -313,6 +316,9 @@ class SubscriptionService(
     }
 
     // ================================================================================================ the start request
+
+    override suspend fun viewOf(attempt: MarketPayment, sqlClient: SqlClient): SubscriptionView? =
+        attemptSubscriptionView(attempt, null, orders, subscriptions, cipher, sqlClient)
 
     override suspend fun pendingPlan(order: MarketOrder, sqlClient: SqlClient): PendingPlan? {
         val id = order.subscriptionId ?: return null
@@ -2520,6 +2526,18 @@ class SubscriptionEventSink(
     private companion object {
         private val logger = LoggerFactory.getLogger(SubscriptionEventSink::class.java)
     }
+}
+
+/**
+ * `PaymentAttemptView.subscription` (02 section 7.1): the subscription [attempt] pays for, `null` for a one-off payment. A charge of market names it on the
+ * attempt, the initial and the renewal order through `subscriptionId` ([order] when the caller holds it, else it is read).
+ */
+suspend fun attemptSubscriptionView(
+    attempt: MarketPayment, order: MarketOrder?, orders: MarketOrderDao, subscriptions: MarketSubscriptionDao, cipher: SecretCipher, sqlClient: SqlClient
+): SubscriptionView? {
+    val id = attempt.subscriptionId ?: (order ?: orders.getById(attempt.orderId, sqlClient))?.subscriptionId ?: return null
+
+    return subscriptions.getById(id, sqlClient)?.let { subscriptionViewOf(it, cipher) }
 }
 
 /** `ctx.payments.subscriptionByGatewayId` (02 section 5): the read-only view of a subscription a provider may see, `providerData` decrypted. */
