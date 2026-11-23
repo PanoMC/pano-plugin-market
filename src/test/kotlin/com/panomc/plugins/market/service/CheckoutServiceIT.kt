@@ -68,6 +68,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -1309,6 +1310,33 @@ class CheckoutServiceIT : MarketDaoITBase() {
         assertEquals(first.getString("orderToken"), replay.getString("orderToken"))
         assertEquals(1, rows("market_order"))
         assertEquals(1, h.starter.started.size, "the gateway was not asked again")
+    }
+
+    @Test
+    fun `the key of an expired, cancelled or failed order gives a new order, a payable one is still replayed`(): Unit = runBlocking {
+        val p = fx.product(price = 1000, stock = 9)
+
+        fx.paymentMethod("fake")
+        h.starter.failure = PaymentStartFailed("INVALID_BUYER")
+
+        val (_, caller) = user("Alice")
+        val body = json("items" to listOf(line(p)), "paymentMethodId" to "fake")
+        val first = expect("PAYMENT_PROVIDER_ERROR", 424) { h.checkout(body, key = "dead-key-000000001", caller = caller) }
+        val firstId = first.getJsonObject("order").getString("publicId")
+
+        // still PENDING: the same key is the same order (no second order from a double click)
+        h.starter.failure = null
+        expect("PAYMENT_PROVIDER_ERROR", 424) { h.checkout(body, key = "dead-key-000000001", caller = caller) }
+        assertEquals(1, rows("market_order"))
+
+        for ((i, dead) in listOf("EXPIRED", "CANCELLED", "FAILED").withIndex()) {
+            pool.query("UPDATE `pano_market_order` SET `status` = '$dead', `reservationState` = 'RELEASED' WHERE `idempotencyKey` = 'dead-key-000000001'").execute().coAwait()
+
+            val next = h.checkout(body, key = "dead-key-000000001", caller = caller)
+
+            assertNotEquals(firstId, next.order.getString("publicId"), "$dead: a new order, not the dead one")
+            assertEquals((i + 2).toLong(), rows("market_order"))
+        }
     }
 
     @Test

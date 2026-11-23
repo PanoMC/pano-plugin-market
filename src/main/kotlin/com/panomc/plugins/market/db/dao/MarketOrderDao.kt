@@ -23,6 +23,9 @@ abstract class MarketOrderDao : MarketDao<MarketOrder>(MarketOrder::class.java) 
 
     abstract suspend fun getByBuyerAndIdempotencyKey(buyerKey: String, idempotencyKey: String, sqlClient: SqlClient): MarketOrder?
 
+    /** Frees the checkout key of a dead order (expired, cancelled, failed) so the buyer's next checkout with it makes a new order; true when it was freed. */
+    abstract suspend fun releaseIdempotencyKey(orderId: Long, idempotencyKey: String, sqlClient: SqlClient): Boolean
+
     /**
      * One page of the panel order list. [searchEmail] adds the order e-mail to what [search] matches; it is true only for a caller with the
      * PII tier (`OM` or `PAY`, 11 section 14.5), so the search is no oracle for the e-mail of an order the caller sees masked.

@@ -145,6 +145,15 @@ class MarketOrderDaoImpl : MarketOrderDao() {
         return rows.toEntities().getOrNull(0)
     }
 
+    override suspend fun releaseIdempotencyKey(orderId: Long, idempotencyKey: String, sqlClient: SqlClient): Boolean {
+        val result = sqlClient
+            .preparedQuery("UPDATE `${prefix() + tableName}` SET `idempotencyKey` = NULL, `idempotencyHash` = NULL WHERE `id` = ? AND `idempotencyKey` = ?")
+            .execute(Tuple.of(orderId, idempotencyKey))
+            .coAwait()
+
+        return result.rowCount() > 0
+    }
+
     override suspend fun getByBuyerAndIdempotencyKey(buyerKey: String, idempotencyKey: String, sqlClient: SqlClient): MarketOrder? {
         val rows: RowSet<Row> = sqlClient
             .preparedQuery("SELECT ${fields.toTableQuery()} FROM `${prefix() + tableName}` WHERE `buyerKey` = ? AND `idempotencyKey` = ?")

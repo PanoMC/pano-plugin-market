@@ -830,7 +830,13 @@ class CheckoutService(
 
         limitIp(caller)
 
-        orders.getByBuyerAndIdempotencyKey(payer.key, request.idempotencyKey, sqlClient)?.let { return replay(it, request, deps, sqlClient) }
+        orders.getByBuyerAndIdempotencyKey(payer.key, request.idempotencyKey, sqlClient)?.let { existing ->
+            // A key protects against a second order while the first can still be paid (or was paid). An order that can never be paid
+            // any more (expired, cancelled, failed) gives the key back: the buyer pressing Pay again gets a new order, not the dead one.
+            if (existing.status !in DEAD_ORDER_STATUSES || !orders.releaseIdempotencyKey(existing.id, request.idempotencyKey, sqlClient)) {
+                return replay(orders.getById(existing.id, sqlClient) ?: existing, request, deps, sqlClient)
+            }
+        }
 
         limitBuyer(payer.key)
 
@@ -2806,6 +2812,9 @@ class CheckoutService(
     // -------------------------------------------------------------------------------------------------- helpers
 
     companion object {
+        /** Orders that can never be paid any more: a checkout key pointing at one is given back for a new order. */
+        private val DEAD_ORDER_STATUSES = setOf(OrderStatus.EXPIRED, OrderStatus.CANCELLED, OrderStatus.FAILED)
+
         /** L3 subject shared by every caller without a trusted address and without a session. */
         private const val ANON_ORDER_SUBJECT = "ip:anon"
 
