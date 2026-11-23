@@ -1,7 +1,9 @@
 <div class={['market-payment-method-picker', !embedded && 'card']}>
   <div class="market-payment-method-picker__body card-body p-0">
     <div class="market-payment-method-picker__header p-3 vstack gap-3">
-      <h2 class="market-payment-method-picker__title text-capitalize h5 mb-0">{$_('theme.checkout.payment')}</h2>
+      <h2 class="market-payment-method-picker__title text-capitalize h5 mb-0">
+        {$_('theme.checkout.payment')}
+      </h2>
 
       {#if alertKey}
         <div class="market-payment-method-picker__alert alert alert-warning mb-0" role="alert">
@@ -16,8 +18,7 @@
     {#if view.mode === 'NONE_NEEDED'}
       <NoContent text={$_('theme.checkout.no-payment-needed')} />
     {:else if view.mode === 'NO_METHOD'}
-      <div
-        class="p-3">
+      <div class="p-3">
         <div
           class="market-payment-method-picker__no-payment-method alert alert-warning mb-0"
           role="alert">
@@ -30,7 +31,8 @@
             {@const detail = unavailableDetail(method)}
             <li class="market-payment-method-picker__item list-group-item">
               <span class="fw-bold d-block">{method.label}</span>
-              <small class="d-block text-danger">{$_(unavailableKey(method.unavailableReason))}</small>
+              <small class="d-block text-danger"
+                >{$_(unavailableKey(method.unavailableReason))}</small>
               {#if detail}
                 <small class="d-block text-body-secondary">{detail}</small>
               {/if}
@@ -174,7 +176,11 @@
     onselect = () => {},
   } = $props();
 
-  const view = $derived(pickerView(quote));
+  const view = $derived(
+    pickerView(quote, {
+      creditChosen: payWithCredits === true || Number(quote?.credits?.applied) > 0,
+    }),
+  );
   const method = $derived(payWithCredits ? null : selectedMethod(quote, selectedId));
   const external = $derived(isExternalPricing(method));
   const notices = $derived(noticeLinks(method));

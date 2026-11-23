@@ -116,14 +116,16 @@ export function selectedMethod(quote, id) {
 
 /**
  * What the picker renders: `{ mode, methods }` with mode NONE_NEEDED (`gatewayAmount === 0`),
- * NO_METHOD (nothing available) or LIST. Methods keep the server order.
+ * NO_METHOD (nothing available) or LIST. Methods keep the server order. When the buyer's own credit choice brought the
+ * amount to 0 (`creditChosen`: pay with credits, or credits applied) the list stays, so they can switch back to a method.
  */
-export function pickerView(quote) {
+export function pickerView(quote, { creditChosen = false } = {}) {
   if (!quote) return { mode: 'LIST', methods: [] };
 
   const methods = Array.isArray(quote.paymentMethods) ? quote.paymentMethods.filter(isObject) : [];
 
-  if (Number(quote.gatewayAmount) === 0) return { mode: 'NONE_NEEDED', methods };
+  if (Number(quote.gatewayAmount) === 0 && !(creditChosen && methods.length > 0))
+    return { mode: 'NONE_NEEDED', methods };
   if (!methods.some((method) => method.available !== false)) return { mode: 'NO_METHOD', methods };
 
   return { mode: 'LIST', methods };

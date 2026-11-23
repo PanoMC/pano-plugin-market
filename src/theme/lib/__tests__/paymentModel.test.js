@@ -135,6 +135,18 @@ describe('values that end up in markup', () => {
 });
 
 describe('payment methods', () => {
+  test('pickerView: a zero amount from the buyer credit choice keeps the methods to switch back to', () => {
+    const methods = [{ id: 'card' }, { id: 'paypal' }];
+
+    expect(pickerView({ gatewayAmount: 0, paymentMethods: methods }).mode).toBe('NONE_NEEDED');
+    expect(
+      pickerView({ gatewayAmount: 0, paymentMethods: methods }, { creditChosen: true }).mode,
+    ).toBe('LIST');
+    expect(pickerView({ gatewayAmount: 0, paymentMethods: [] }, { creditChosen: true }).mode).toBe(
+      'NONE_NEEDED',
+    );
+  });
+
   test('pickerView: list, nothing available, nothing to pay', () => {
     const methods = [
       { id: 'a', available: true },
@@ -169,7 +181,12 @@ describe('payment methods', () => {
         providerCode: 'unlinked',
         unavailableDetail: 'A product in this cart has no Tebex package ID.',
       },
-      { id: 'stripe', available: false, unavailableReason: 'PROVIDER_INELIGIBLE', providerCode: 'PROVIDER_ERROR' },
+      {
+        id: 'stripe',
+        available: false,
+        unavailableReason: 'PROVIDER_INELIGIBLE',
+        providerCode: 'PROVIDER_ERROR',
+      },
       { id: 'paypal', available: false, unavailableReason: 'TEST_MODE' },
     ];
     const view = pickerView({ gatewayAmount: 10, paymentMethods: methods });
