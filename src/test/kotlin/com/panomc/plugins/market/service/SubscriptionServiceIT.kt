@@ -866,6 +866,46 @@ class SubscriptionServiceIT : MarketDaoITBase() {
     }
 
     @Test
+    fun `the order page lists a method as unavailable when pay would refuse it for the plan or the provider would not take the order`(): Unit = runBlocking {
+        val sub = subProduct()
+
+        fx.paymentMethod("fake")
+        fx.paymentMethod("second")
+        sw.caps(RecurringSupport.GATEWAY_MANAGED)
+        sw.capsOfSecond(RecurringSupport.NONE)
+
+        val (_, caller) = user("Alice")
+        val order = buy(sub, caller)
+
+        suspend fun options() = sw.payments.viewFor(order(order.id), com.panomc.plugins.market.routes.api.OrderRole.OWNER, PayCaller(), pool)
+            .getJsonArray("paymentMethods").map { it as JsonObject }.associateBy { it.getString("id") }
+
+        // fallback off: `second` cannot bill the plan, `pay` refuses it with RECURRING_NOT_SUPPORTED
+        h.config = h.config.copy(subscriptionManualFallback = false)
+        options().let {
+            assertTrue(it.getValue("fake").getBoolean("available"))
+            assertEquals("AUTO", it.getValue("fake").getString("recurring"))
+            assertFalse(it.getValue("second").getBoolean("available"))
+            assertEquals("RECURRING_NOT_SUPPORTED", it.getValue("second").getString("unavailableReason"))
+        }
+
+        // the provider's own verdict: an ineligible order is listed as such, with the provider's code
+        h.config = h.config.copy(subscriptionManualFallback = true)
+        sw.eligibility { Eligibility.ineligible("NO_PHYSICAL", com.panomc.plugins.market.spi.common.LocalizedText.of("no")) }
+        options().values.forEach {
+            assertFalse(it.getBoolean("available"), it.getString("id"))
+            assertEquals(PaymentService.PROVIDER_INELIGIBLE, it.getString("unavailableReason"))
+            assertEquals("NO_PHYSICAL", it.getString("providerCode"))
+        }
+
+        sw.eligibility(null)
+        options().let {
+            assertTrue(it.getValue("second").getBoolean("available"))
+            assertEquals("MANUAL", it.getValue("second").getString("recurring"))
+        }
+    }
+
+    @Test
     fun `the method of a credit-paid subscription and of a running or renewal order stays locked and an active row is never rewritten`(): Unit = runBlocking {
         val sub = subProduct()
 

@@ -1821,6 +1821,8 @@ class PaymentService(
         val locale = order.locale ?: site().defaultLocale
         val options = JsonArray()
         var maxApplicable = 0L
+        val pending = subscriptionHooks.pendingPlan(order, sqlClient)
+        val fallback = config().subscriptionManualFallback
 
         for (row in methods.getAll(sqlClient).filter { it.enabled }.sortedWith(compareBy({ it.position }, { it.methodId }))) {
             if (row.methodId == MethodInput.CREDITS || row.methodId == MethodInput.FREE) continue
@@ -1836,6 +1838,34 @@ class PaymentService(
             if (reason == null && resolved.testMode && !caller.canUseTestMode) reason = TEST_MODE
             if (reason == null && !resolved.caps.guests && order.userId == null) reason = GUESTS_NOT_SUPPORTED
 
+            // the same offer table and eligibility verdict `pay` asks (payTx), so the list shows only what `pay` would take
+            var providerCode: String? = null
+            var recurring: String? = null
+
+            if (reason == null && tender != null && tender.gatewayAmount > 0) {
+                var offer: ModeOffer? = pending?.let { ModeResolver.offer(resolved.caps, it.recurring, fallback) }
+
+                if (offer is ModeOffer.Unavailable) {
+                    reason = offer.reason
+                } else {
+                    val plan = if (offer is ModeOffer.Auto) pending?.at(tender.total) else null
+                    val eligibility = try {
+                        resolved.provider.checkEligibility(contexts.create(resolved.provider, resolved.settings, resolved.testMode), snapshotOf(order, items, resolved.provider.id, tender, plan))
+                    } catch (e: Exception) {
+                        null
+                    }
+
+                    if (eligibility == null || !eligibility.eligible) {
+                        reason = PROVIDER_INELIGIBLE
+                        providerCode = eligibility?.code ?: "PROVIDER_ERROR"
+                    } else {
+                        if (offer is ModeOffer.Auto) offer = ModeResolver.applyEligibility(offer, eligibility, fallback)
+
+                        if (offer is ModeOffer.Unavailable) reason = offer.reason else recurring = offer?.recurring
+                    }
+                }
+            }
+
             maxApplicable = maxOf(maxApplicable, tender?.credits?.maxApplicable ?: 0L)
 
             val descriptor = resolved.provider.descriptor
@@ -1845,9 +1875,9 @@ class PaymentService(
                     id = row.methodId, label = row.customLabel?.takeIf { it.isNotBlank() } ?: descriptor.displayName.resolve(locale),
                     description = row.customDescription?.takeIf { it.isNotBlank() } ?: descriptor.description.resolve(locale), hint = descriptor.checkoutHint?.resolve(locale),
                     icon = descriptor.icon, logoUrl = if (descriptor.logo != null) MarketPaths.site("/payment-providers/${row.methodId}/logo") else null, color = descriptor.color,
-                    feeAmount = tender?.paymentFee ?: 0L, available = reason == null, unavailableReason = reason, providerCode = null,
+                    feeAmount = tender?.paymentFee ?: 0L, available = reason == null, unavailableReason = reason, providerCode = providerCode,
                     pricing = resolved.caps.priceAuthority.let { if (it == com.panomc.plugins.market.spi.payment.PriceAuthority.MARKET) "MARKET" else it.name },
-                    recurring = null, testMode = resolved.testMode, notices = descriptor.storefrontNotices.map { it.label.resolve(locale) to it.url },
+                    recurring = recurring, testMode = resolved.testMode, notices = descriptor.storefrontNotices.map { it.label.resolve(locale) to it.url },
                     requiredBuyerFields = resolved.caps.requiredBuyerFields.map { it.name }
                 ).toJson()
             )
