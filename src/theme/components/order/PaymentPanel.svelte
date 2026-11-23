@@ -59,7 +59,7 @@
 
         {#if model.canRetry}
           <div class="vstack gap-3">
-            {#if model.otherToggle || uiFailed}
+            {#if model.otherToggle && !methodsOpen}
               <div>
                 <button
                   type="button"
