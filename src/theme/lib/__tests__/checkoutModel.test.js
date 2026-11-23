@@ -330,6 +330,47 @@ describe('billing', () => {
     expect(mapBuyerFields(['COUNTRY'], config().addressFields, '')).toEqual(new Set(['country']));
   });
 
+  test('buyer field paths as the API sends them (quote.requiredBuyerFields, BUYER_INFO_REQUIRED)', () => {
+    const set = mapBuyerFields(
+      [
+        'email',
+        'guest.email',
+        'billingInfo.type',
+        'billingInfo.phone',
+        'billingInfo.identityNumber',
+        'shippingAddress',
+      ],
+      config().addressFields,
+      'DE',
+    );
+    expect([...set].sort()).toEqual(['identityNumber', 'phone']);
+
+    const addr = mapBuyerFields(
+      ['billingInfo.country', 'billingInfo.city', 'billingInfo.line1'],
+      config().addressFields,
+      'TR',
+    );
+    expect([...addr].sort()).toEqual(
+      ['city', 'country', 'district', 'firstName', 'lastName', 'line1', 'phone'].sort(),
+    );
+
+    expect(
+      sectionsVisible({ config: config(), quote: { requiredBuyerFields: ['billingInfo.phone'] } })
+        .billing,
+    ).toBe(true);
+    expect(
+      sectionsVisible({ config: config(), quote: { requiredBuyerFields: ['email'] } }).billing,
+    ).toBe(false);
+
+    const off = billingRequirements({
+      config: config(),
+      quote: { requiredBuyerFields: ['billingInfo.phone'] },
+      info: {},
+    });
+    expect(off.visible).toBe(true);
+    expect([...off.required]).toEqual(['phone']);
+  });
+
   test('mode OFF: only the named fields are shown and required; hidden without names', () => {
     const none = billingRequirements({ config: config(), quote: {}, info: {} });
     expect(none.visible).toBe(false);

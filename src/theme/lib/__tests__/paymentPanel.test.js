@@ -986,6 +986,16 @@ describe('pay another way', () => {
     expect(done.body).toEqual({ firstName: 'Ada', phone: '+905551112233', type: 'INDIVIDUAL' });
   });
 
+  test('billingStep reads the billingInfo paths BUYER_INFO_REQUIRED sends', () => {
+    const step = billingStep(['billingInfo.firstName', 'billingInfo.phone'], {
+      type: 'INDIVIDUAL',
+    });
+
+    expect(step.open).toBe(true);
+    expect(step.req.fields.sort()).toEqual(['firstName', 'phone']);
+    expect(step.errors).toMatchObject({ firstName: 'FIELD_REQUIRED', phone: 'FIELD_REQUIRED' });
+  });
+
   test('billingStep stays closed when the server named nothing this theme can ask for', () => {
     expect(billingStep([], {}).open).toBe(false);
     expect(billingStep(['EMAIL'], {}).open).toBe(false);

@@ -256,18 +256,7 @@ export function derivePageState({
 
 // ---- sections shown (14 §10.4) ----------------------------------------------------------------------------
 
-const BILLING_BUYER_FIELDS = [
-  'FIRST_NAME',
-  'LAST_NAME',
-  'PHONE',
-  'COUNTRY',
-  'BILLING_ADDRESS',
-  'IDENTITY_NUMBER',
-];
-
-const namesBillingField = (quote) =>
-  Array.isArray(quote?.requiredBuyerFields) &&
-  quote.requiredBuyerFields.some((f) => BILLING_BUYER_FIELDS.includes(f));
+const namesBillingField = (quote) => mapBuyerFields(quote?.requiredBuyerFields).size > 0;
 
 export function sectionsVisible({ config, quote, topup = null }) {
   const mode = config?.billingInfoMode || 'OFF';
@@ -328,15 +317,27 @@ export function wireAddress(address, only = ADDRESS_FIELDS) {
 
 // ---- billing (14 §10.5) -----------------------------------------------------------------------------------
 
+/** Billing inputs a `billingInfo.<field>` path of `quote.requiredBuyerFields` / BUYER_INFO_REQUIRED can name. */
+const BILLING_PATH_FIELDS = new Set([...ADDRESS_FIELDS, ...BILLING_EXTRAS]);
+
 /**
- * Required billing fields named by `quote.requiredBuyerFields` (BuyerField of 02 §5.1) as field names.
- * EMAIL and SHIPPING_ADDRESS are handled elsewhere (guest e-mail, shipping section).
+ * Required billing fields named by `quote.requiredBuyerFields` / BUYER_INFO_REQUIRED `{fields}` as field names.
+ * The API sends paths (`billingInfo.phone`, 04 / 06 §8.2); BuyerField names of 02 §5.1 (`PHONE`) are read too.
+ * `email`, `guest.*`, `billingInfo.type`, EMAIL and SHIPPING_ADDRESS are handled elsewhere (guest e-mail, shipping
+ * section).
  */
 export function mapBuyerFields(requiredBuyerFields, addressFields, country) {
   const out = new Set();
 
   for (const name of Array.isArray(requiredBuyerFields) ? requiredBuyerFields : []) {
-    if (name === 'FIRST_NAME') out.add('firstName');
+    if (typeof name === 'string' && name.startsWith('billingInfo.')) {
+      const field = name.slice('billingInfo.'.length);
+
+      if (BILLING_PATH_FIELDS.has(field)) out.add(field);
+      // an address path also asks for the store's per-country address fields, like BILLING_ADDRESS
+      if (field === 'line1')
+        for (const f of requiredAddressFields(addressFields, country)) out.add(f);
+    } else if (name === 'FIRST_NAME') out.add('firstName');
     else if (name === 'LAST_NAME') out.add('lastName');
     else if (name === 'PHONE') out.add('phone');
     else if (name === 'COUNTRY') out.add('country');
