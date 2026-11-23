@@ -432,6 +432,7 @@
     importedCounts,
     pricingLocked,
     providerName,
+    providerReply,
     rowBehavior,
     splitProviderErrors,
     tabOfFirstClientError,
@@ -568,6 +569,18 @@
       return;
     }
 
+    // The settings are stored but the provider's own step (webhook registration, ...) failed: its message is
+    // shown inline in the settings tab instead and the modal stays open (13 §16.2).
+    if (result.body?.success === false && result.body?.message) {
+      const message = result.body.message;
+      await onRefresh();
+      const fresh = getProvider(provider.id);
+      if (fresh) seed(fresh);
+      settingsMessage = message;
+      tab = 'settings';
+      return;
+    }
+
     // The provider's own message is API text, so only the fixed key is toasted (13 §16.2).
     showSuccessToast($_('settings.payments.toast-saved'));
     hideModal(modalElement);
@@ -616,8 +629,7 @@
 
     const body = result.body;
     actionResult = {
-      success: body.success !== false,
-      message: typeof body.message === 'string' ? body.message : '',
+      ...providerReply(body, txt),
       counts: importedCounts(body),
     };
     // a SettingsPatch may have changed stored settings: reload the row and re-seed the form

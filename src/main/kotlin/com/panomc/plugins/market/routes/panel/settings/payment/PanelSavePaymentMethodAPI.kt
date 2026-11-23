@@ -75,7 +75,7 @@ class PanelSavePaymentMethodAPI(private val plugin: MarketPlugin) : MarketPanelA
 
         databaseManager.panelActivityLogDao.add(UpdatedMarketPaymentMethodLog(userId, username, id, plugin.pluginId), sqlClient)
 
-        return Successful(saved.message?.let { mapOf("message" to it.toJson()) } ?: emptyMap<String, Any>())
+        return Successful(saved.message?.let { mapOf("message" to it.toJson(), "success" to saved.success) } ?: emptyMap<String, Any>())
     }
 
     private fun optionalObject(body: JsonObject, key: String): JsonObject? {

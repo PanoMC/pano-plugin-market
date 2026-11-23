@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { resolveText } from './schema-form.js';
 import {
   actionBlocked,
   buildConfig,
@@ -9,6 +10,7 @@ import {
   effectiveTestMode,
   filterProviders,
   importedCounts,
+  providerReply,
   isHttpUrl,
   onlyBuiltIns,
   logoPath,
@@ -327,5 +329,24 @@ describe('error tabs, status rows and actions', () => {
     expect(importedCounts({ imported: { categories: 2, products: 5 } })).toEqual({ categories: 2, products: 5 });
     expect(importedCounts({})).toBeNull();
     expect(importedCounts({ imported: { categories: 'x' } })).toEqual({ categories: 0, products: 0 });
+  });
+});
+
+describe('providerReply', () => {
+  const txt = (text) => resolveText(text, 'tr', (key) => (key === 'tebex.errors.authentication' ? 'Gizli anahtar yanlış' : key));
+
+  test('a LocalizedText message is resolved in the panel locale, with fallback', () => {
+    expect(providerReply({ success: false, message: { key: 'tebex.errors.authentication', fallback: 'Wrong secret key' } }, txt))
+      .toEqual({ success: false, message: 'Gizli anahtar yanlış' });
+    expect(providerReply({ success: false, message: { key: 'unknown.key', fallback: 'Wrong secret key' } }, txt))
+      .toEqual({ success: false, message: 'Wrong secret key' });
+    expect(providerReply({ success: true, message: { default: 'Imported', translations: { tr: 'Aktarıldı' } } }, txt))
+      .toEqual({ success: true, message: 'Aktarıldı' });
+  });
+
+  test('no message is an empty text, a missing success counts as success', () => {
+    expect(providerReply({}, txt)).toEqual({ success: true, message: '' });
+    expect(providerReply(null, txt)).toEqual({ success: true, message: '' });
+    expect(providerReply({ message: 'plain' }, txt)).toEqual({ success: true, message: 'plain' });
   });
 });

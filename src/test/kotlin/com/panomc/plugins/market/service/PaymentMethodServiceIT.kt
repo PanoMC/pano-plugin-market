@@ -482,11 +482,16 @@ class PaymentMethodServiceIT : MarketDaoITBase() {
         val g = gateway()
         g.onSaved = { ActionResult.Message(LocalizedText.of("Saved, webhook registered"), true) }
         assertEquals("Saved, webhook registered", service.save("gate", settings(), null).message!!.fallback)
+        assertTrue(service.save("gate", settings(), null).success)
+
+        g.onSaved = { ActionResult.Message(LocalizedText.of("Webhook not public"), false) }
+        assertFalse(service.save("gate", settings(), null).success, "a failed Message is not shown as saved")
 
         g.failSaved = ProviderException(ProviderErrorCode.GATEWAY_REJECTED, "rejected", adminMessage = "Webhook URL refused")
         val result = service.save("gate", settings("merchantId" to "M-3"), null)
 
         assertEquals("Webhook URL refused", result.message!!.fallback)
+        assertFalse(result.success)
         assertEquals("M-3", JsonObject(row()!!.settings).getString("merchantId"), "the settings are stored")
         assertEquals("GATEWAY_REJECTED", row()!!.lastError)
         assertNotNull(row()!!.lastErrorAt)

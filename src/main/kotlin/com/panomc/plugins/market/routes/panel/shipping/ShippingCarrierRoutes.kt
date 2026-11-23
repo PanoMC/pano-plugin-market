@@ -51,7 +51,7 @@ class PanelSaveShippingCarrierAPI(plugin: MarketPlugin) : ShippingAdminRoute(plu
 
         log(context) { u, n -> UpdatedMarketShippingCarrierLog(u, n, id, plugin.pluginId) }
 
-        return Successful(saved.message?.let { mapOf("message" to it.toJson()) } ?: emptyMap<String, Any>())
+        return Successful(saved.message?.let { mapOf("message" to it.toJson(), "success" to saved.success) } ?: emptyMap<String, Any>())
     }
 }
 

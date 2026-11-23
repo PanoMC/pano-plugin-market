@@ -284,6 +284,15 @@ export function webhookRows(webhookUrls) {
 /** An action button is blocked while its provider needs saved settings and the form has unsaved edits. */
 export const actionBlocked = (action, dirty) => Boolean(action?.requiresSavedSettings) && Boolean(dirty);
 
+/**
+ * What a provider answered to an action or a save: `{ success, message }`. The backend sends `message` as a
+ * LocalizedText object, resolved here with `txt` (the modal's resolveText in the panel locale); '' when there is none.
+ */
+export function providerReply(body, txt) {
+  const message = body?.message ? txt(body.message) : '';
+  return { success: body?.success !== false, message: typeof message === 'string' ? message : '' };
+}
+
 /** Counts shown under an action result (`imported`); null when there is nothing to show. */
 export function importedCounts(result) {
   const imported = result?.imported;

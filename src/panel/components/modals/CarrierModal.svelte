@@ -247,6 +247,7 @@
   import {
     actionBlocked,
     providerName,
+    providerReply,
     splitProviderErrors,
     testModeControl,
   } from '../../utils/payment-methods.js';
@@ -366,6 +367,18 @@
       return;
     }
 
+    // The settings are stored but the carrier's own step failed: its message is shown inline in the settings
+    // tab instead and the modal stays open.
+    if (result.body?.success === false && result.body?.message) {
+      const message = result.body.message;
+      await onRefresh();
+      const fresh = getCarrier(carrier.id);
+      if (fresh) seed(fresh);
+      settingsMessage = message;
+      tab = 'settings';
+      return;
+    }
+
     // The carrier's own message is API text, so only the fixed key is toasted.
     showSuccessToast($_('settings.shipping-carriers.toast-saved'));
     hideModal(modalElement);
@@ -413,10 +426,7 @@
     }
 
     const body = result.body;
-    actionResult = {
-      success: body.success !== false,
-      message: typeof body.message === 'string' ? body.message : '',
-    };
+    actionResult = providerReply(body, txt);
     // a SettingsPatch may have changed stored settings: reload the row and re-seed the form
     await onRefresh();
     const fresh = getCarrier(current.id);

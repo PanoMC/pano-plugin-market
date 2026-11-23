@@ -71,8 +71,8 @@ class PaymentMethodService(
     /** Writes a catalogue an import action returned (`providerId`, result) ([CatalogImporter]); `null` = not available. */
     private val catalogImport: (suspend (String, ActionResult.CatalogImport) -> CatalogImporter.Result)? = null
 ) {
-    /** Outcome of [save]: the text `onSettingsSaved` returned for the admin, if any. */
-    class SaveResult(val message: LocalizedText?)
+    /** Outcome of [save]: the text `onSettingsSaved` returned for the admin, if any; [success] = false when that step failed. */
+    class SaveResult(val message: LocalizedText?, val success: Boolean = true)
 
     /** Outcome of [runAction]. */
     class ActionOutcome(val success: Boolean, val message: LocalizedText?)
@@ -196,17 +196,20 @@ class PaymentMethodService(
 
         val previous = row?.let { codec.decrypt(storedOf(it)) }
         var message: LocalizedText? = null
+        var success = true
 
         try {
             val result = provider.onSettingsSaved(contexts.create(provider, decrypted, effectiveTest), previous)
+            success = (result as? ActionResult.Message)?.success ?: true
             message = applyResult(id, codec, result)
         } catch (e: ProviderException) {
             // The settings are stored; the gateway side failed (webhook registration, ...): shown to the admin, kept on the row.
             recordError(id, e.code.name)
             message = LocalizedText.of(e.adminMessage ?: e.message ?: e.code.name)
+            success = false
         }
 
-        return SaveResult(message)
+        return SaveResult(message, success)
     }
 
     // ---- toggle

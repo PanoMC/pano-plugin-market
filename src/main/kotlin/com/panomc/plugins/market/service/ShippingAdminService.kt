@@ -82,7 +82,8 @@ class ShippingAdminService(
     private val onQuoteCacheInvalidate: (String) -> Unit = {},
     private val token: () -> String = ShippingAdminRules::newInstallToken
 ) {
-    class SaveResult(val message: LocalizedText?)
+    /** [success] = false when `onSettingsSaved` failed; [message] is then the reason for the admin. */
+    class SaveResult(val message: LocalizedText?, val success: Boolean = true)
 
     class ActionOutcome(val success: Boolean, val message: LocalizedText?)
 
@@ -403,17 +404,20 @@ class ShippingAdminService(
 
         val previous = row?.let { codec.decrypt(storedOf(it)) }
         var message: LocalizedText? = null
+        var success = true
 
         try {
             val result = provider.onSettingsSaved(contexts.create(provider, decrypted, testMode), previous)
+            success = (result as? ActionResult.Message)?.success ?: true
             message = applyResult(id, codec, result)
         } catch (e: ProviderException) {
             // The settings are stored; the carrier side failed: shown to the admin and kept on the row.
             recordError(id, e.code.name)
             message = LocalizedText.of(e.adminMessage ?: e.message ?: e.code.name)
+            success = false
         }
 
-        return SaveResult(message)
+        return SaveResult(message, success)
     }
 
     // ---- carriers: toggle

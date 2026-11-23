@@ -617,6 +617,7 @@ class ShippingAdminIT : MarketDaoITBase() {
         val first = service.saveCarrier("ups", obj("accountId" to "A", "apiKey" to "key-0123456789"), null)
         assertEquals(listOf("validate", "saved"), c.order)
         assertEquals("Saved at the carrier", first.message!!.resolve("en-US"))
+        assertTrue(first.success)
         assertNull(c.previousSeen)
 
         service.saveCarrier("ups", obj("accountId" to "B", "apiKey" to "********"), null)
@@ -642,6 +643,7 @@ class ShippingAdminIT : MarketDaoITBase() {
         val saved = service.saveCarrier("ups", obj("accountId" to "A", "apiKey" to "key-0123456789"), null)
 
         assertEquals("The carrier is down", saved.message!!.resolve("en-US"))
+        assertFalse(saved.success)
         val row = w.shippingCarriers.getByProviderId("ups", pool)!!
         assertEquals("GATEWAY_UNREACHABLE", row.lastError)
         assertNotNull(row.lastErrorAt)
