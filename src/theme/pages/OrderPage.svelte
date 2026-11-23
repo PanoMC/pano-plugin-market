@@ -4,7 +4,7 @@
     text={$_(messageKey(data.code))}
     onretry={() => location.reload()} />
 {:else if gone}
-  <div class="vstack gap-3">
+  <div class="market-order-page vstack gap-3">
     <StoreStateCard icon="fa-solid fa-receipt fa-3x" text={$_('theme.order.not-found')} />
     {#if loginHref}
       <div class="text-center">
@@ -15,7 +15,10 @@
     {/if}
   </div>
 {:else if locked}
-  <div class="market-order-page__locked text-center py-5" role="status" aria-busy="true">
+  <div
+    class="market-order-page market-order-page__locked text-center py-5"
+    role="status"
+    aria-busy="true">
     <span class="spinner-border text-body-secondary" aria-hidden="true"></span>
   </div>
 {:else}

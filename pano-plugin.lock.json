@@ -1327,7 +1327,8 @@
         "market-payment-method-picker__item",
         "market-payment-method-picker__list",
         "market-payment-method-picker__no-payment-method",
-        "market-payment-method-picker__title"
+        "market-payment-method-picker__title",
+        "market-payment-method-picker__unavailable"
       ],
       "contract": 1,
       "hooks": [],
