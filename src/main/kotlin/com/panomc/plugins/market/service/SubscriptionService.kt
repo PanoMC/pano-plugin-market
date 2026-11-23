@@ -2533,13 +2533,26 @@ class SubscriptionEventSink(
 /**
  * `PaymentAttemptView.subscription` (02 section 7.1): the subscription [attempt] pays for, `null` for a one-off payment. A charge of market names it on the
  * attempt, the initial and the renewal order through `subscriptionId` ([order] when the caller holds it, else it is read).
+ *
+ * A provider reads a non-null view as "this attempt was started with a plan or is a recurring charge", so only those get it: a charge of market, and the
+ * initial order's attempt that `planFor` gave a plan (not `MANUAL`, made for this attempt's provider). A `MANUAL` subscription's payment and a renewal order
+ * paid by hand stay one-off payments (`null`).
  */
 suspend fun attemptSubscriptionView(
     attempt: MarketPayment, order: MarketOrder?, orders: MarketOrderDao, subscriptions: MarketSubscriptionDao, cipher: SecretCipher, sqlClient: SqlClient
 ): SubscriptionView? {
-    val id = attempt.subscriptionId ?: (order ?: orders.getById(attempt.orderId, sqlClient))?.subscriptionId ?: return null
+    attempt.subscriptionId?.let { id -> return subscriptions.getById(id, sqlClient)?.let { subscriptionViewOf(it, cipher) } }
 
-    return subscriptions.getById(id, sqlClient)?.let { subscriptionViewOf(it, cipher) }
+    val owner = order ?: orders.getById(attempt.orderId, sqlClient) ?: return null
+    val id = owner.subscriptionId ?: return null
+
+    if (owner.source == OrderSource.RENEWAL) return null
+
+    val row = subscriptions.getById(id, sqlClient) ?: return null
+
+    if (row.mode == SubscriptionMode.MANUAL || row.providerId != attempt.providerId) return null
+
+    return subscriptionViewOf(row, cipher)
 }
 
 /** `ctx.payments.subscriptionByGatewayId` (02 section 5): the read-only view of a subscription a provider may see, `providerData` decrypted. */

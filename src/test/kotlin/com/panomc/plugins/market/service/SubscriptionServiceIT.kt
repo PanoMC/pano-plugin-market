@@ -1870,6 +1870,30 @@ class SubscriptionServiceIT : MarketDaoITBase() {
         val plain = AttemptLookup("fake", w.payments, w.orders, sw.cipher, w.subscriptions) { w.pool }.byId(attemptOf(oneOff).id)
 
         assertNull(plain!!.subscription)
+
+        val inboundOf = PaymentInboundAttempts(w.payments, w.orders, sw.payments, sw.cipher, sw.db, sw.locks, w.clock, w.subscriptions) { w.pool }
+
+        // a charge of market (a renewal attempt that names the subscription) is a recurring charge: it has the view
+        val renewal = sw.dw.place(user = user("Rene").first, actions = emptyList(), status = OrderStatus.PENDING, reservation = ReservationState.HELD, source = OrderSource.RENEWAL, subscriptionId = row.id)
+        val charge = MarketPayment(orderId = renewal.order.id, subscriptionId = row.id, providerId = "fake", reference = "CHARGE", currency = "EUR")
+
+        assertEquals(row.id, inboundOf.view(charge, renewal.order.publicId.orEmpty()).subscription?.id)
+
+        // the same renewal order paid by hand is a one-off payment
+        val byHand = MarketPayment(orderId = renewal.order.id, providerId = "fake", reference = "BYHAND", currency = "EUR")
+
+        assertNull(inboundOf.view(byHand, renewal.order.publicId.orEmpty()).subscription)
+
+        // a MANUAL subscription's initial payment carries no plan, so its attempt has no view either
+        val (_, bea) = user("Bea")
+
+        sw.caps(RecurringSupport.NONE)
+
+        val manual = buy(sub, bea)
+
+        assertEquals(SubscriptionMode.MANUAL, subscriptionOf(manual).mode)
+        assertNull(AttemptLookup("fake", w.payments, w.orders, sw.cipher, w.subscriptions) { w.pool }.byId(attemptOf(manual).id)!!.subscription)
+        assertNull(inboundOf.view(attemptOf(manual), manual.publicId!!).subscription)
     }
 
     // ==================================================================================== 09 section 8.5
