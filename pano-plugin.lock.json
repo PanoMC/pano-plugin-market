@@ -1073,6 +1073,8 @@
       "classes": [
         "market-order-page",
         "market-order-page__action",
+        "market-order-page__locked",
+        "market-order-page__login",
         "market-order-page__shipments",
         "market-order-page__title",
         "market-order-page__title-2"
