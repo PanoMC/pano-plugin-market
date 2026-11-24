@@ -102,10 +102,14 @@ object InvoiceTextsFactory {
             // the zone frozen in the snapshot, so a re-render never moves the date of an issued document
             dates = times.associateWith { format.date(it, locale, snapshot.getString("timeZone").orEmpty()) },
             percents = percents.associateWith { format.percent(it, locale) },
-            creditName = creditName
+            // an empty `MarketConfig.creditName` means the localized default of the document's language
+            creditName = creditName.trim().ifEmpty { if (i18n.has(locale, CREDIT_NAME_KEY)) i18n.t(locale, CREDIT_NAME_KEY) else "Credits" }
         )
     }
 }
+
+/** The localized default name of the credits (`MarketConfig.creditName` empty). */
+internal const val CREDIT_NAME_KEY = "server-format.credit-name-default"
 
 /** An invoice number may only hold these characters (12 section 8.3): it becomes a file name. */
 private val NUMBER_PATTERN = Regex("^[A-Z0-9-]{1,64}$")

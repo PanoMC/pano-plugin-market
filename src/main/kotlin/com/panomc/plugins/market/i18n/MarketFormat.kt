@@ -48,14 +48,15 @@ class MarketFormat(
         return if (number.negative) "-$text" else text
     }
 
-    /** [bp] basis points: up to two fraction digits, trailing zeros removed. */
+    /** [bp] basis points: up to two fraction digits, trailing zeros removed; `server-format.percent` places the sign (`18%`, `%18`, `18 %`). */
     suspend fun percent(bp: Long, locale: String): String {
         val digits = bp.toString().removePrefix("-").padStart(3, '0')
         val whole = digits.dropLast(2)
         val frac = digits.takeLast(2).trimEnd('0')
         val dec = setting(locale, "server-format.decimal-separator", ".")
         val body = if (frac.isEmpty()) whole else whole + dec + frac
-        return (if (bp < 0) "-" else "") + body + "%"
+        val template = setting(locale, "server-format.percent", "{value}%")
+        return (if (bp < 0) "-" else "") + MarketI18n.interpolate(template, mapOf("value" to body))
     }
 
     private class Number(val negative: Boolean, val digits: String)

@@ -127,7 +127,7 @@
     const url = URL.createObjectURL(res.blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `invoice-${order.number ?? id}.pdf`;
+    link.download = `${$_('theme.order.invoice-filename', { values: { number: order.number ?? id } })}.pdf`;
     link.rel = 'noopener';
     document.body.appendChild(link);
     link.click();

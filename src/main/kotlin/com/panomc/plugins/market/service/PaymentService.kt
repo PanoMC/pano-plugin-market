@@ -68,6 +68,7 @@ import com.panomc.plugins.market.error.OrderNotCancellable
 import com.panomc.plugins.market.error.OrderNotPayable
 import com.panomc.plugins.market.error.PaymentMethodUnavailable
 import com.panomc.plugins.market.error.PaymentProviderError
+import com.panomc.plugins.market.i18n.GatewayTexts
 import com.panomc.plugins.market.i18n.ProviderTexts
 import com.panomc.plugins.market.provider.ProviderLookup
 import com.panomc.plugins.market.provider.SecretCipher
@@ -746,7 +747,7 @@ class PaymentService(
         }
 
         return SpiOrderSnapshot(
-            id = order.id, publicId = order.publicId ?: "", description = "Order #${order.id}", currency = currency, lines = lines,
+            id = order.id, publicId = order.publicId ?: "", description = GatewayTexts.order(order.id, order.locale), currency = currency, lines = lines,
             subtotal = Money(order.subtotal, currency),
             discount = Money(order.discountTotal + order.couponDiscount + order.creatorDiscount + order.upgradeDiscount, currency),
             shipping = Money(order.shippingTotal, currency), fee = Money(order.paymentFee, currency), vat = Money(order.vatTotal, currency),

@@ -51,7 +51,7 @@ internal class ManualShippingProvider : ShippingProvider {
         text(SenderKeys.NAME) { label = LocalizedText.of("Sender name", "tr" to "Gönderici adı", "ru" to "Имя отправителя"); group = GROUP_SENDER }
         text(SenderKeys.COMPANY) { label = LocalizedText.of("Sender company", "tr" to "Gönderici firma", "ru" to "Компания отправителя"); group = GROUP_SENDER }
         text(SenderKeys.PHONE) { label = LocalizedText.of("Sender phone", "tr" to "Gönderici telefonu", "ru" to "Телефон отправителя"); group = GROUP_SENDER }
-        text(SenderKeys.EMAIL) { label = LocalizedText.of("Sender email", "tr" to "Gönderici e-postası", "ru" to "Email отправителя"); group = GROUP_SENDER }
+        text(SenderKeys.EMAIL) { label = LocalizedText.of("Sender email", "tr" to "Gönderici e-postası", "ru" to "E-mail отправителя"); group = GROUP_SENDER }
         text(SenderKeys.COUNTRY) {
             label = LocalizedText.of("Sender country (ISO code)", "tr" to "Gönderici ülkesi (ISO kodu)", "ru" to "Страна отправителя (код ISO)")
             pattern = "^[A-Za-z]{2}\$"

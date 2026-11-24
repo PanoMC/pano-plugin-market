@@ -24,6 +24,7 @@ import com.panomc.plugins.market.event.server.MarketPurchaseEvent
 import com.panomc.plugins.market.event.server.MarketQueryEvent
 import com.panomc.plugins.market.event.server.MarketSyncEvent
 import com.panomc.plugins.market.i18n.MarketI18n
+import com.panomc.plugins.market.pdf.CREDIT_NAME_KEY
 import com.panomc.plugins.market.permission.ManageMarketPermission
 import com.panomc.plugins.market.permission.MarketNode
 import com.panomc.plugins.market.routes.api.checkout.PlatformUserDirectory
@@ -80,8 +81,22 @@ private fun buildMcGameService(plugin: MarketPlugin): McGameService {
 
             (listOfNotNull(site?.takeIf { it.isNotBlank() }) + MarketI18n.BUNDLED).distinct().take(McGameService.MAX_TEXT_LOCALES)
         },
-        announce = { order, items -> mcSyncService(plugin).announce(order, items) }
+        announce = { order, items -> mcSyncService(plugin).announce(order, items) },
+        defaultCreditName = {
+            val site = runCatching { plugin.applicationContext.getBean(ConfigManager::class.java).config.locale }.getOrNull().orEmpty()
+
+            bundledText(bundles, site, CREDIT_NAME_KEY) ?: McGameService.DEFAULT_CREDIT_NAME
+        }
     )
+}
+
+/** [key] of the bundled locale files for [locale] (exact, then the same language, then en-US); `null` when none has it. */
+internal fun bundledText(bundles: Map<String, Map<String, String>>, locale: String, key: String): String? {
+    val lang = locale.substringBefore('-').substringBefore('_').lowercase()
+
+    return bundles[locale]?.get(key)
+        ?: bundles.entries.firstOrNull { it.key.substringBefore('-').lowercase() == lang }?.value?.get(key)
+        ?: bundles[MarketI18n.FALLBACK]?.get(key)
 }
 
 /** The keys of a market locale file below this prefix are the strings of `MARKET_CONFIG.texts` (19 section 7.1). */

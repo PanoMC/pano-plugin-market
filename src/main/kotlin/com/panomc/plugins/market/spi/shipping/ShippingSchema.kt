@@ -40,7 +40,7 @@ fun SettingsSchemaBuilder.senderAddress(group: String? = null) {
     text(SenderKeys.NAME) { label = lt("Sender name", "Gönderici adı", "Имя отправителя"); this.group = g }
     text(SenderKeys.COMPANY) { label = lt("Sender company", "Gönderici firma", "Компания отправителя"); this.group = g }
     text(SenderKeys.PHONE) { label = lt("Sender phone", "Gönderici telefonu", "Телефон отправителя"); this.group = g }
-    text(SenderKeys.EMAIL) { label = lt("Sender email", "Gönderici e-postası", "Email отправителя"); this.group = g }
+    text(SenderKeys.EMAIL) { label = lt("Sender email", "Gönderici e-postası", "E-mail отправителя"); this.group = g }
     text(SenderKeys.COUNTRY) {
         label = lt("Sender country (ISO code)", "Gönderici ülkesi (ISO kodu)", "Страна отправителя (код ISO)")
         required = true

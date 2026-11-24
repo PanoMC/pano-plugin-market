@@ -14,7 +14,7 @@
     class="market-filter-dropdown__menu dropdown-menu dropdown-menu-end"
     role="menu"
     aria-label={label}>
-    <div class="market-filter-dropdown__header dropdown-header text-capitalize" role="presentation">
+    <div class="market-filter-dropdown__header dropdown-header" role="presentation">
       {label}
     </div>
     {#each options as option (option.key)}
@@ -25,7 +25,7 @@
         role="menuitemradio"
         aria-checked={option.key === current}
         onclick={() => onSelect?.(option)}>
-        <span class="market-filter-dropdown__label text-capitalize">{option.label}</span>
+        <span class="market-filter-dropdown__label">{option.label}</span>
         {#if option.key === current}
           <i class="fa-solid fa-check ms-3" aria-hidden="true"></i>
         {/if}

@@ -26,6 +26,15 @@ object Msg {
     const val HISTORY_LINE = "history.line"
     const val HISTORY_EMPTY = "history.empty"
 
+    /** The local date pattern (`DateTimeFormatter`) and decimal separator of the purchase history. */
+    const val FORMAT_DATE = "format.date"
+    const val FORMAT_DECIMAL = "format.decimal"
+
+    /** The order statuses Pano sends with a purchase (`OrderStatus`); `order.status.<STATUS>`. */
+    val ORDER_STATUSES = listOf("PENDING", "REVIEW", "COMPLETED", "PARTIALLY_REFUNDED", "REFUNDED", "CHARGEBACK", "FAILED", "CANCELLED", "EXPIRED")
+
+    fun orderStatus(status: String) = "order.status.$status"
+
     const val CREDITS_BALANCE = "credits.balance"
     const val CREDITS_UNREGISTERED = "credits.unregistered"
     const val CREDITS_USAGE = "credits.usage"
@@ -127,6 +136,7 @@ object Msg {
         COMMAND_DISABLED, COMMAND_PLAYER_ONLY, COMMAND_NO_PERMISSION, COMMAND_COOLDOWN, COMMAND_UNAVAILABLE,
         ERROR_NOT_CONNECTED, ERROR_TIMEOUT, ERROR_RATE_LIMITED, ERROR_NOT_READY, ERROR_VERSION, ERROR_REFUSED,
         STORE_LINK, STORE_NO_LINK, STORE_USAGE, STORE_MENU_UNAVAILABLE, HISTORY_HEADER, HISTORY_LINE, HISTORY_EMPTY,
+        FORMAT_DATE, FORMAT_DECIMAL,
         CREDITS_BALANCE, CREDITS_UNREGISTERED, CREDITS_USAGE,
         JOIN_DELIVERED, JOIN_GIFT, JOIN_PENDING, JOIN_GIFT_PENDING,
         ADMIN_HELP_HEADER, ADMIN_HELP_CREDITS, ADMIN_HELP_GRANT, ADMIN_HELP_PURCHASES, ADMIN_HELP_STATUS, ADMIN_HELP_RECOVER,
@@ -143,5 +153,5 @@ object Msg {
         MENU_WEB_LINK, MENU_BOUGHT, MENU_UNKNOWN_OUTCOME, MENU_LEGAL_NEEDED, MENU_REGISTER, MENU_ERR_BLOCKED, MENU_ERR_STOCK, MENU_ERR_LIMIT,
         MENU_ERR_COOLDOWN, MENU_ERR_REQUIREMENT, MENU_ERR_NOT_PAYABLE, MENU_ERR_INSUFFICIENT, MENU_ERR_UNAVAILABLE, MENU_ERR_CREDITS_OFF,
         MENU_ERR_OTHER
-    )
+    ) + ORDER_STATUSES.map(::orderStatus)
 }

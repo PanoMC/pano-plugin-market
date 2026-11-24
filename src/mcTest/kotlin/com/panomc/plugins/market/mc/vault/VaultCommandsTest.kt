@@ -80,9 +80,9 @@ class VaultCommandsTest {
         assertTrue(run(VaultDirection.NONE, true).contains("direction is switched off"))
         assertTrue(run(VaultDirection.NONE, false).contains("direction is switched off"))
         assertEquals(0, rig.link.requests.size)
-        assertTrue(run(VaultDirection.TO_SERVER, true).contains("Converted"))
+        assertTrue(run(VaultDirection.TO_SERVER, true).contains("Credits converted"))
         assertTrue(run(VaultDirection.TO_CREDITS, false).contains("Deposited"))
-        assertTrue(run(VaultDirection.BOTH, true).contains("Converted"))
+        assertTrue(run(VaultDirection.BOTH, true).contains("Credits converted"))
         assertTrue(run(VaultDirection.BOTH, false).contains("Deposited"))
     }
 
@@ -159,7 +159,7 @@ class VaultCommandsTest {
         commands.convert(s, listOf("10"))
         assertEquals("40", credits())
         assertEquals("125", money())
-        assertEquals(listOf("Converted 10 credits into $25.00. New credit balance: 40"), s.plain())
+        assertEquals(listOf("Credits converted: 10, received $25.00. New credit balance: 40"), s.plain())
         assertEquals(10.0, rig.link.requests.single().amount)
         assertEquals(EconomyOp.WITHDRAW, rig.link.requests.single().op)
     }
@@ -174,7 +174,7 @@ class VaultCommandsTest {
         assertEquals("90.01", money())
         assertEquals(3.33, rig.link.requests.single().amount)
         assertTrue(rig.eco.calls.single().contains("9.99"))
-        assertEquals(listOf("Deposited $9.99 and received 3.33 credits. New credit balance: 53.33"), s.plain())
+        assertEquals(listOf("Deposited $9.99. Credits received: 3.33. New credit balance: 53.33"), s.plain())
     }
 
     @Test
@@ -193,7 +193,7 @@ class VaultCommandsTest {
         commands.convert(s, listOf("0.01"))
         commands.convert(s, listOf("2.5"))
         commands.convert(s, listOf("3.25"))
-        assertEquals(3, s.lines.count { it.contains("Converted") }, said(s))
+        assertEquals(3, s.lines.count { it.contains("Credits converted") }, said(s))
     }
 
     // ---- Pano's answers --------------------------------------------------------------------------------------------------------
@@ -308,10 +308,10 @@ class VaultCommandsTest {
         assertEquals(1, rig.link.requests.size)
         rig.link.script = { _, _ -> Delivery.Normal }
         rig.link.releaseHeld()
-        assertTrue(said(first).contains("Converted"))
+        assertTrue(said(first).contains("Credits converted"))
         val third = steve()
         commands.convert(third, listOf("1"))
-        assertTrue(said(third).contains("Converted"))
+        assertTrue(said(third).contains("Credits converted"))
         assertEquals(2, rig.link.ids().size)
     }
 
@@ -338,7 +338,7 @@ class VaultCommandsTest {
         assertTrue(said(ru).contains("Обменяно"), said(ru))
         val de = steve("de_DE")
         commands.convert(de, listOf("1"))
-        assertTrue(said(de).contains("Converted"), said(de))
+        assertTrue(said(de).contains("Credits converted"), said(de))
     }
 
     @Test

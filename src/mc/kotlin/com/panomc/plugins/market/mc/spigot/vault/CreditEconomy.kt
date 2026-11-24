@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.mc.spigot.vault
 
+import com.panomc.plugins.market.mc.core.feature.Messages
 import com.panomc.plugins.market.mc.core.platform.McClock
 import com.panomc.plugins.market.mc.core.platform.McLog
 import com.panomc.plugins.market.mc.core.platform.McScheduler
@@ -34,7 +35,11 @@ class CreditEconomy(
     private val refreshMs: Long = DEFAULT_REFRESH_MS,
     private val evictAfterMs: Long = 10 * 60_000L,
     /** Pano pushes balance changes ([onBalanceChanged]): then the timer no longer reloads balances, it only drops old entries. */
-    private val pushActive: () -> Boolean = { false }
+    private val pushActive: () -> Boolean = { false },
+    /** The error texts (Vault `errorMessage`, printed to players by other plugins); bundled [VaultTexts] by default. */
+    private val texts: VaultMessages = VaultMessages(Messages({ null })),
+    /** The locale of a player for those texts, `null` = the default chain of [Messages]. */
+    private val localeOf: (String) -> String? = { null }
 ) {
     private class Entry(val balance: Double, val registered: Boolean, val at: Long)
 
@@ -78,9 +83,9 @@ class CreditEconomy(
 
     private fun transfer(withdraw: Boolean, name: String?, amount: Double): EconomyResult {
         val known = balance(name)
-        if (name.isNullOrBlank()) return fail(0.0, "The player has no name.")
-        if (amount.isNaN() || amount.isInfinite()) return fail(known, "The amount is not a number.")
-        if (amount < 0.0) return fail(known, if (withdraw) "Cannot withdraw negative funds." else "Cannot deposit negative funds.")
+        if (name.isNullOrBlank()) return fail(0.0, say(null, VaultMsg.ECONOMY_NO_NAME))
+        if (amount.isNaN() || amount.isInfinite()) return fail(known, say(name, VaultMsg.ECONOMY_NOT_NUMBER))
+        if (amount < 0.0) return fail(known, say(name, if (withdraw) VaultMsg.ECONOMY_NEGATIVE_WITHDRAW else VaultMsg.ECONOMY_NEGATIVE_DEPOSIT))
         // Credits have two decimals: rounding never favours the player (a withdrawal is rounded up, a deposit down).
         val credits = BigDecimal.valueOf(amount).setScale(2, if (withdraw) RoundingMode.UP else RoundingMode.DOWN).toDouble()
         if (credits == 0.0) return EconomyResult(true, 0.0, known, null)
@@ -96,24 +101,30 @@ class CreditEconomy(
                     "NO_ACCOUNT" -> put(name, 0.0, false)
                     else -> outcome.balance?.let { put(name, it, true) }
                 }
-                fail(outcome.balance ?: known, refusalText(outcome.code))
+                fail(outcome.balance ?: known, refusalText(name, outcome.code))
             }
-            is ProviderOutcome.Transient -> fail(known, "Pano cannot take the request right now (${outcome.reason}).")
-            ProviderOutcome.NotConnected -> fail(known, "Pano is not connected, the credits economy is not available.")
+            is ProviderOutcome.Transient -> fail(known, say(name, VaultMsg.ECONOMY_BUSY, "reason" to outcome.reason))
+            ProviderOutcome.NotConnected -> fail(known, say(name, VaultMsg.ECONOMY_NOT_CONNECTED))
             ProviderOutcome.Unknown -> {
                 load(name) // the real balance is learned in the background, whichever way the operation ends
-                fail(known, "Pano did not answer in time; if the ledger applied the operation it is reverted automatically.")
+                fail(known, say(name, VaultMsg.ECONOMY_UNKNOWN))
             }
-            ProviderOutcome.JournalFailed -> fail(known, "The operation could not be recorded safely, so it was not run.")
-            ProviderOutcome.Stopped -> fail(known, "The Market component is stopping.")
+            ProviderOutcome.JournalFailed -> fail(known, say(name, VaultMsg.ECONOMY_JOURNAL_FAILED))
+            ProviderOutcome.Stopped -> fail(known, say(name, VaultMsg.ECONOMY_STOPPING))
         }
     }
 
-    private fun refusalText(code: String) = when (code) {
-        "INSUFFICIENT_CREDITS" -> "Insufficient credits."
-        "NO_ACCOUNT" -> "The player has no account on the website."
-        "CREDITS_DISABLED" -> "Credits are switched off in the store."
-        else -> "Pano refused the operation ($code)."
+    private fun refusalText(name: String, code: String) = when (code) {
+        "INSUFFICIENT_CREDITS" -> say(name, VaultMsg.ECONOMY_INSUFFICIENT)
+        "NO_ACCOUNT" -> say(name, VaultMsg.ECONOMY_NO_ACCOUNT)
+        "CREDITS_DISABLED" -> say(name, VaultMsg.CREDITS_OFF)
+        else -> say(name, VaultMsg.ECONOMY_REFUSED, "code" to code)
+    }
+
+    /** The text of [key] in the locale of the player [name] (the default chain when unknown). */
+    private fun say(name: String?, key: String, vararg args: Pair<String, Any?>): String {
+        val locale = name?.let { runCatching { localeOf(it) }.getOrNull() }
+        return texts.text(key, locale, *args)
     }
 
     private fun fail(balance: Double, message: String) = EconomyResult(false, 0.0, balance, message)

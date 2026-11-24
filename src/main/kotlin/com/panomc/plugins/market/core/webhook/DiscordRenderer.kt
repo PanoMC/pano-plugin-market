@@ -3,7 +3,13 @@ package com.panomc.plugins.market.core.webhook
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.math.BigDecimal
+import java.text.NumberFormat
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 /**
  * The localised texts of one Discord message (08 section 16.2). [title] and [description] are the `webhooks.discord.<event>.*` translations of the
@@ -14,7 +20,16 @@ class DiscordLabels(
     val description: String,
     val player: String,
     val total: String,
-    val items: String
+    val items: String,
+    /** The counter after the first item lines (`{count}` = the items left out). */
+    val more: String = "+{count} more",
+    /** `{phase}` text per delivery phase (`GRANT` ...); a missing phase prints lowercase. */
+    val phases: Map<String, String> = emptyMap(),
+    /** `{subscription.status}` text per subscription status; a missing status prints as sent. */
+    val subscriptionStatuses: Map<String, String> = emptyMap(),
+    /** The store locale (amounts, dates) and time zone (`MarketConfig.storeTimeZone`, empty = UTC) of the message. */
+    val locale: String = "en-US",
+    val zone: String = ""
 ) {
     companion object {
         /** English texts, used by tests and whenever no translator is wired. */
@@ -71,12 +86,12 @@ object DiscordRenderer {
     /** Every name a Discord template may use (08 sections 3.2 and 16.2); a name outside this list stays verbatim. */
     val KNOWN_TOKENS: Set<String> = setOf(
         "username", "player", "uuid", "buyer.username", "recipient.username",
-        "order.id", "order.publicId", "order.total", "order.currency", "order.url",
-        "product.id", "product.name", "product", "product.slug", "product.sku", "variant.name", "variant.sku", "quantity", "unit", "phase",
+        "order.id", "order.publicId", "order.total", "order.totalRaw", "order.currency", "order.url",
+        "product.id", "product.name", "product", "product.slug", "product.sku", "variant.name", "variant.sku", "quantity", "unit", "phase", "phase.raw",
         "expiresAt", "expiresAt.iso", "date", "time", "gift.message",
         "event.name", "event.title", "event.description", "event.color", "event.iso",
         "store.name", "store.url", "items", "items.inline", "label.player", "label.total", "label.items",
-        "refund.amount", "refund.reason", "dispute.reason", "subscription.status",
+        "refund.amount", "refund.amountRaw", "refund.reason", "dispute.reason", "subscription.status", "subscription.statusCode",
         "shipment.trackingNumber", "shipment.trackingUrl", "shipment.carrierName"
     )
 
@@ -328,7 +343,8 @@ object DiscordRenderer {
 
         put("order.id", order?.getValue("id"))
         put("order.publicId", order?.getValue("publicId"))
-        put("order.total", order?.getValue("total")?.let { plainDecimal(it) })
+        put("order.total", order?.getValue("total")?.let { money(it, labels.locale) })
+        put("order.totalRaw", order?.getValue("total")?.let { plainDecimal(it) })
         put("order.currency", order?.getValue("currency"))
         put("order.url", order?.getValue("url"))
         put("gift.message", order?.getValue("giftMessage"))
@@ -344,31 +360,41 @@ object DiscordRenderer {
         put("variant.sku", first?.getValue("sku"))
         put("quantity", data.getJsonObject("delivery")?.getValue("quantity") ?: first?.getValue("quantity"))
         put("unit", data.getJsonObject("delivery")?.getValue("unit"))
-        put("phase", data.getJsonObject("delivery")?.getValue("phase")?.toString()?.lowercase())
+        val phase = data.getJsonObject("delivery")?.getValue("phase")?.toString()
+
+        put("phase", phase?.let { labels.phases[it.uppercase()] ?: it.lowercase() })
+        put("phase.raw", phase)
         put("expiresAt", data.getJsonObject("entitlement")?.getValue("expiresAt")?.let { (it as? Number)?.let { n -> n.toLong() / 1000 } })
         put("expiresAt.iso", (data.getJsonObject("entitlement")?.getValue("expiresAt") as? Number)?.let { Instant.ofEpochMilli(it.toLong()).toString() })
 
         val createdAt = (envelope.getValue("createdAt") as? Number)?.toLong() ?: 0L
         val iso = Instant.ofEpochMilli(createdAt).toString()
 
-        put("date", iso.substring(0, 10))
-        put("time", iso.substring(11, 16))
+        val at = Instant.ofEpochMilli(createdAt).atZone(zoneOf(labels.zone))
+        val jvmLocale = Locale.forLanguageTag(labels.locale.replace('_', '-'))
+
+        put("date", DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(jvmLocale).format(at))
+        put("time", DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(jvmLocale).format(at))
         put("event.name", event)
         put("event.color", colorOf(event))
         put("event.iso", iso)
         put("store.name", store.getValue("name"))
         put("store.url", store.getValue("url"))
 
-        put("items", itemLines(itemList, "\n"))
-        put("items.inline", itemLines(itemList, ", "))
+        put("items", itemLines(itemList, "\n", labels.more))
+        put("items.inline", itemLines(itemList, ", ", labels.more))
 
         data.getJsonObject("refund")?.let {
-            put("refund.amount", it.getValue("amount")?.let { a -> plainDecimal(a) })
+            put("refund.amount", it.getValue("amount")?.let { a -> money(a, labels.locale) })
+            put("refund.amountRaw", it.getValue("amount")?.let { a -> plainDecimal(a) })
             put("refund.reason", it.getValue("reason"))
         }
 
         put("dispute.reason", data.getJsonObject("dispute")?.getValue("reason"))
-        put("subscription.status", data.getJsonObject("subscription")?.getValue("status"))
+        val subscriptionStatus = data.getJsonObject("subscription")?.getValue("status")?.toString()
+
+        put("subscription.status", subscriptionStatus?.let { labels.subscriptionStatuses[it] ?: it })
+        put("subscription.statusCode", subscriptionStatus)
 
         data.getJsonObject("shipment")?.let {
             put("shipment.trackingNumber", it.getValue("trackingNumber"))
@@ -376,7 +402,7 @@ object DiscordRenderer {
             put("shipment.carrierName", it.getValue("carrierName"))
         }
 
-        for (key in listOf("refund.amount", "refund.reason", "dispute.reason", "subscription.status", "shipment.trackingNumber", "shipment.trackingUrl", "shipment.carrierName")) {
+        for (key in listOf("refund.amount", "refund.amountRaw", "refund.reason", "dispute.reason", "subscription.status", "subscription.statusCode", "shipment.trackingNumber", "shipment.trackingUrl", "shipment.carrierName")) {
             out.putIfAbsent(key, "")
         }
 
@@ -404,7 +430,7 @@ object DiscordRenderer {
         return listOfNotNull(data.getJsonObject("item"))
     }
 
-    private fun itemLines(items: List<JsonObject>, separator: String): String {
+    private fun itemLines(items: List<JsonObject>, separator: String, more: String): String {
         if (items.isEmpty()) return ""
 
         val lines = items.take(ITEM_LINES_MAX).map { item ->
@@ -414,7 +440,7 @@ object DiscordRenderer {
             "${item.getValue("quantity") ?: 1}\u00d7 $name" + if (variant != null) " ($variant)" else ""
         }.toMutableList()
 
-        if (items.size > ITEM_LINES_MAX) lines += "+${items.size - ITEM_LINES_MAX} more"
+        if (items.size > ITEM_LINES_MAX) lines += more.replace("{count}", (items.size - ITEM_LINES_MAX).toString())
 
         return lines.joinToString(separator)
     }
@@ -423,6 +449,24 @@ object DiscordRenderer {
         is String -> value
         is Number -> plainDecimal(value)
         else -> value.toString()
+    }
+
+    /** A money amount with two decimals and the grouping / decimal separator of [locale] (`1,234.50`, `1.234,50`); not a number = as is. */
+    private fun money(value: Any, locale: String): String = try {
+        val format = NumberFormat.getNumberInstance(Locale.forLanguageTag(locale.replace('_', '-'))).apply {
+            minimumFractionDigits = 2
+            maximumFractionDigits = 2
+        }
+
+        format.format(BigDecimal(value.toString()))
+    } catch (e: NumberFormatException) {
+        value.toString()
+    }
+
+    private fun zoneOf(zone: String): ZoneId = try {
+        zone.takeIf { it.isNotBlank() }?.let { ZoneId.of(it) } ?: ZoneOffset.UTC
+    } catch (e: Exception) {
+        ZoneOffset.UTC
     }
 
     private fun plainDecimal(value: Any): String = try {

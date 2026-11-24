@@ -22,7 +22,7 @@
   <div class="card">
     <div class="card-body">
       <div class="mb-3">
-        <div class="mb-2 text-capitalize">{$_('settings.billing.info-mode')}</div>
+        <div class="mb-2">{$_('settings.billing.info-mode')}</div>
         <div class="list-group">
           {#each BILLING_INFO_MODES as mode (mode)}
             <label

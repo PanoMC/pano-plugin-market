@@ -143,12 +143,13 @@
     activeVariants,
     buildLine,
     fieldInitial,
+    fieldMeta,
     needsServerChoice,
     serverOptions,
   } from '../create-order/model.js';
 
   // products: GET /products/simple rows; servers: GET /servers; force: lifts the quantity maximum;
-  // onAdd(line, { name, variantName }) receives the validated CartLine.
+  // onAdd(line, { name, variantName, fields }) receives the validated CartLine.
   let { products = [], servers = [], force = false, onAdd = () => {} } = $props();
 
   let modalElement = $state(null);
@@ -217,7 +218,11 @@
       return;
     }
     const variant = variants.find((v) => Number(v.id) === built.line.variantId);
-    onAdd(built.line, { name: product.name, variantName: variant?.name ?? null });
+    onAdd(built.line, {
+      name: product.name,
+      variantName: variant?.name ?? null,
+      fields: fieldMeta(product),
+    });
     hideModal(modalElement);
   }
 

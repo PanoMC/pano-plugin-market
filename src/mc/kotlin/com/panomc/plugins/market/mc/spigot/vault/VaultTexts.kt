@@ -39,11 +39,27 @@ object VaultMsg {
     const val LATE_REFUNDED = "vault.lateRefunded"
     const val LATE_REFUND_STUCK = "vault.lateRefundStuck"
 
+    // the error texts of the credits economy (PROVIDER mode): other plugins (/pay, shops) print them to the player
+    const val ECONOMY_NO_NAME = "vault.economy.noName"
+    const val ECONOMY_NOT_NUMBER = "vault.economy.notNumber"
+    const val ECONOMY_NEGATIVE_WITHDRAW = "vault.economy.negativeWithdraw"
+    const val ECONOMY_NEGATIVE_DEPOSIT = "vault.economy.negativeDeposit"
+    const val ECONOMY_BUSY = "vault.economy.busy"
+    const val ECONOMY_NOT_CONNECTED = "vault.economy.notConnected"
+    const val ECONOMY_UNKNOWN = "vault.economy.unknown"
+    const val ECONOMY_JOURNAL_FAILED = "vault.economy.journalFailed"
+    const val ECONOMY_STOPPING = "vault.economy.stopping"
+    const val ECONOMY_INSUFFICIENT = "vault.economy.insufficientCredits"
+    const val ECONOMY_NO_ACCOUNT = "vault.economy.noAccount"
+    const val ECONOMY_REFUSED = "vault.economy.refused"
+
     val ALL: List<String> = listOf(
         USAGE_CONVERT, USAGE_DEPOSIT, WRONG_MODE, DIRECTION_OFF, RATE_INVALID, BAD_AMOUNT, TOO_SMALL, BUSY, NO_ECONOMY, JOURNAL_FAILED,
         CONVERTED, DEPOSITED, NO_ACCOUNT, INSUFFICIENT_CREDITS, INSUFFICIENT_MONEY, MONEY_REFUSED, CREDITS_OFF, REFUSED, NOT_APPLIED,
         UNKNOWN_TO_SERVER, PAYOUT_FAILED_RESTORED, PAYOUT_FAILED_PENDING, PENDING_TO_CREDITS, MONEY_RETURNED, MONEY_RETURN_PENDING,
-        LATE_DEPOSITED, LATE_UNDONE, LATE_REFUNDED, LATE_REFUND_STUCK
+        LATE_DEPOSITED, LATE_UNDONE, LATE_REFUNDED, LATE_REFUND_STUCK,
+        ECONOMY_NO_NAME, ECONOMY_NOT_NUMBER, ECONOMY_NEGATIVE_WITHDRAW, ECONOMY_NEGATIVE_DEPOSIT, ECONOMY_BUSY, ECONOMY_NOT_CONNECTED,
+        ECONOMY_UNKNOWN, ECONOMY_JOURNAL_FAILED, ECONOMY_STOPPING, ECONOMY_INSUFFICIENT, ECONOMY_NO_ACCOUNT, ECONOMY_REFUSED
     )
 }
 
@@ -64,8 +80,8 @@ object VaultTexts {
         VaultMsg.BUSY to "&cYour previous conversion has not finished yet.",
         VaultMsg.NO_ECONOMY to "&cThe server has no economy, so nothing can be converted.",
         VaultMsg.JOURNAL_FAILED to "&cThe conversion could not be recorded safely, so nothing was done.",
-        VaultMsg.CONVERTED to "&aConverted &e{credits}&a credits into &e{money}&a. New credit balance: &e{balance}",
-        VaultMsg.DEPOSITED to "&aDeposited &e{money}&a and received &e{credits}&a credits. New credit balance: &e{balance}",
+        VaultMsg.CONVERTED to "&aCredits converted: &e{credits}&a, received &e{money}&a. New credit balance: &e{balance}",
+        VaultMsg.DEPOSITED to "&aDeposited &e{money}&a. Credits received: &e{credits}&a. New credit balance: &e{balance}",
         VaultMsg.NO_ACCOUNT to "&cYou need an account on the website first.",
         VaultMsg.INSUFFICIENT_CREDITS to "&cYou do not have enough credits.",
         VaultMsg.INSUFFICIENT_MONEY to "&cYou do not have enough money.",
@@ -79,10 +95,22 @@ object VaultTexts {
         VaultMsg.PENDING_TO_CREDITS to "&eYour money was taken. The credits arrive as soon as the store answers.",
         VaultMsg.MONEY_RETURNED to "&aYour money was given back.",
         VaultMsg.MONEY_RETURN_PENDING to "&eYour money is being given back, this can take a moment.",
-        VaultMsg.LATE_DEPOSITED to "&aYour deposit arrived: you received &e{credits}&a credits.",
+        VaultMsg.LATE_DEPOSITED to "&aYour deposit arrived. Credits received: &e{credits}&a.",
         VaultMsg.LATE_UNDONE to "&eYour conversion could not be completed. Any credits that were taken were given back.",
         VaultMsg.LATE_REFUNDED to "&eThe store refused your deposit ({code}). Your money was given back.",
-        VaultMsg.LATE_REFUND_STUCK to "&cThe store refused your deposit ({code}) and your money could not be given back yet. It is retried automatically; ask an administrator if it does not arrive."
+        VaultMsg.LATE_REFUND_STUCK to "&cThe store refused your deposit ({code}) and your money could not be given back yet. It is retried automatically; ask an administrator if it does not arrive.",
+        VaultMsg.ECONOMY_NO_NAME to "&cThe player has no name.",
+        VaultMsg.ECONOMY_NOT_NUMBER to "&cThe amount is not a number.",
+        VaultMsg.ECONOMY_NEGATIVE_WITHDRAW to "&cCannot withdraw negative funds.",
+        VaultMsg.ECONOMY_NEGATIVE_DEPOSIT to "&cCannot deposit negative funds.",
+        VaultMsg.ECONOMY_BUSY to "&cPano cannot take the request right now ({reason}).",
+        VaultMsg.ECONOMY_NOT_CONNECTED to "&cPano is not connected, the credits economy is not available.",
+        VaultMsg.ECONOMY_UNKNOWN to "&ePano did not answer in time; if the ledger applied the operation it is reverted automatically.",
+        VaultMsg.ECONOMY_JOURNAL_FAILED to "&cThe operation could not be recorded safely, so it was not run.",
+        VaultMsg.ECONOMY_STOPPING to "&cThe Market component is stopping.",
+        VaultMsg.ECONOMY_INSUFFICIENT to "&cInsufficient credits.",
+        VaultMsg.ECONOMY_NO_ACCOUNT to "&cThe player has no account on the website.",
+        VaultMsg.ECONOMY_REFUSED to "&cPano refused the operation ({code})."
     )
 
     val TR: Map<String, String> = mapOf(
@@ -114,7 +142,19 @@ object VaultTexts {
         VaultMsg.LATE_DEPOSITED to "&aYatırdığınız para ulaştı: &e{credits}&a kredi aldınız.",
         VaultMsg.LATE_UNDONE to "&eÇevirme tamamlanamadı. Alınmış krediler varsa geri verildi.",
         VaultMsg.LATE_REFUNDED to "&eMağaza yatırma işleminizi reddetti ({code}). Paranız geri verildi.",
-        VaultMsg.LATE_REFUND_STUCK to "&cMağaza yatırma işleminizi reddetti ({code}) ve paranız henüz geri verilemedi. Otomatik olarak tekrar denenir; gelmezse bir yöneticiye sorun."
+        VaultMsg.LATE_REFUND_STUCK to "&cMağaza yatırma işleminizi reddetti ({code}) ve paranız henüz geri verilemedi. Otomatik olarak tekrar denenir; gelmezse bir yöneticiye sorun.",
+        VaultMsg.ECONOMY_NO_NAME to "&cOyuncunun adı yok.",
+        VaultMsg.ECONOMY_NOT_NUMBER to "&cMiktar bir sayı değil.",
+        VaultMsg.ECONOMY_NEGATIVE_WITHDRAW to "&cEksi bir miktar çekilemez.",
+        VaultMsg.ECONOMY_NEGATIVE_DEPOSIT to "&cEksi bir miktar yatırılamaz.",
+        VaultMsg.ECONOMY_BUSY to "&cPano şu anda isteği alamıyor ({reason}).",
+        VaultMsg.ECONOMY_NOT_CONNECTED to "&cPano bağlı değil, kredi ekonomisi kullanılamıyor.",
+        VaultMsg.ECONOMY_UNKNOWN to "&ePano zamanında yanıt vermedi; işlem uygulandıysa otomatik olarak geri alınır.",
+        VaultMsg.ECONOMY_JOURNAL_FAILED to "&cİşlem güvenli şekilde kaydedilemedi, bu yüzden yapılmadı.",
+        VaultMsg.ECONOMY_STOPPING to "&cMarket bileşeni duruyor.",
+        VaultMsg.ECONOMY_INSUFFICIENT to "&cYeterli kredi yok.",
+        VaultMsg.ECONOMY_NO_ACCOUNT to "&cOyuncunun web sitesinde hesabı yok.",
+        VaultMsg.ECONOMY_REFUSED to "&cPano işlemi reddetti ({code})."
     )
 
     val RU: Map<String, String> = mapOf(
@@ -125,11 +165,11 @@ object VaultTexts {
         VaultMsg.RATE_INVALID to "&cКурс обмена настроен неверно. Сообщите администратору.",
         VaultMsg.BAD_AMOUNT to "&cСумма должна быть числом вроде 10 или 2.5 (не более двух знаков после запятой, больше нуля).",
         VaultMsg.TOO_SMALL to "&cЭта сумма слишком мала или слишком велика для обмена.",
-        VaultMsg.BUSY to "&cПредыдущий обмен ещё не завершён.",
+        VaultMsg.BUSY to "&cПредыдущий обмен еще не завершен.",
         VaultMsg.NO_ECONOMY to "&cНа сервере нет экономики, поэтому обменять ничего нельзя.",
-        VaultMsg.JOURNAL_FAILED to "&cОбмен не удалось надёжно записать, поэтому ничего не сделано.",
-        VaultMsg.CONVERTED to "&aОбменяно &e{credits}&a кредитов на &e{money}&a. Новый баланс кредитов: &e{balance}",
-        VaultMsg.DEPOSITED to "&aВнесено &e{money}&a, получено &e{credits}&a кредитов. Новый баланс кредитов: &e{balance}",
+        VaultMsg.JOURNAL_FAILED to "&cОбмен не удалось надежно записать, поэтому ничего не сделано.",
+        VaultMsg.CONVERTED to "&aОбменяно кредитов: &e{credits}&a, получено &e{money}&a. Новый баланс кредитов: &e{balance}",
+        VaultMsg.DEPOSITED to "&aВнесено &e{money}&a, получено кредитов: &e{credits}&a. Новый баланс кредитов: &e{balance}",
         VaultMsg.NO_ACCOUNT to "&cСначала нужен аккаунт на сайте.",
         VaultMsg.INSUFFICIENT_CREDITS to "&cУ вас недостаточно кредитов.",
         VaultMsg.INSUFFICIENT_MONEY to "&cУ вас недостаточно денег.",
@@ -143,10 +183,22 @@ object VaultTexts {
         VaultMsg.PENDING_TO_CREDITS to "&eВаши деньги списаны. Кредиты придут, как только магазин ответит.",
         VaultMsg.MONEY_RETURNED to "&aВаши деньги возвращены.",
         VaultMsg.MONEY_RETURN_PENDING to "&eВаши деньги возвращаются, это может занять немного времени.",
-        VaultMsg.LATE_DEPOSITED to "&aВаш взнос дошёл: получено &e{credits}&a кредитов.",
+        VaultMsg.LATE_DEPOSITED to "&aВаш взнос дошел, получено кредитов: &e{credits}&a.",
         VaultMsg.LATE_UNDONE to "&eОбмен не удалось завершить. Списанные кредиты, если они были, возвращены.",
         VaultMsg.LATE_REFUNDED to "&eМагазин отклонил ваш взнос ({code}). Деньги возвращены.",
-        VaultMsg.LATE_REFUND_STUCK to "&cМагазин отклонил ваш взнос ({code}), и деньги пока не удалось вернуть. Попытки повторяются автоматически; если деньги не придут, спросите администратора."
+        VaultMsg.LATE_REFUND_STUCK to "&cМагазин отклонил ваш взнос ({code}), и деньги пока не удалось вернуть. Попытки повторяются автоматически; если деньги не придут, спросите администратора.",
+        VaultMsg.ECONOMY_NO_NAME to "&cУ игрока нет имени.",
+        VaultMsg.ECONOMY_NOT_NUMBER to "&cСумма не является числом.",
+        VaultMsg.ECONOMY_NEGATIVE_WITHDRAW to "&cНельзя списать отрицательную сумму.",
+        VaultMsg.ECONOMY_NEGATIVE_DEPOSIT to "&cНельзя зачислить отрицательную сумму.",
+        VaultMsg.ECONOMY_BUSY to "&cPano сейчас не может принять запрос ({reason}).",
+        VaultMsg.ECONOMY_NOT_CONNECTED to "&cPano не подключен, экономика кредитов недоступна.",
+        VaultMsg.ECONOMY_UNKNOWN to "&ePano не ответил вовремя; если операция была применена, она будет отменена автоматически.",
+        VaultMsg.ECONOMY_JOURNAL_FAILED to "&cОперацию не удалось надежно записать, поэтому она не выполнена.",
+        VaultMsg.ECONOMY_STOPPING to "&cКомпонент Market останавливается.",
+        VaultMsg.ECONOMY_INSUFFICIENT to "&cНедостаточно кредитов.",
+        VaultMsg.ECONOMY_NO_ACCOUNT to "&cУ игрока нет аккаунта на сайте.",
+        VaultMsg.ECONOMY_REFUSED to "&cPano отклонил операцию ({code})."
     )
 
     private val BY_LOCALE = mapOf("en-US" to EN, "tr" to TR, "ru" to RU)

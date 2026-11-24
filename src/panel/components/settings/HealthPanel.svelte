@@ -46,7 +46,7 @@
         <div class="col-6 col-md-4 col-xl-2">
           <div class="card text-bg-{card.variant} h-100">
             <div class="card-body">
-              <p class="m-0 text-capitalize">{$_(`settings.health.queue.${card.id}`)}</p>
+              <p class="m-0">{$_(`settings.health.queue.${card.id}`)}</p>
               <span class="fs-2 lh-1">{card.value}</span>
             </div>
           </div>
@@ -79,7 +79,7 @@
               <th scope="row" class="align-middle">{$_('settings.health.status.runtime')}</th>
               <td class="align-middle text-nowrap">
                 <span class="badge {runtimeStateClass(model.runtimeState)}">
-                  {model.runtimeState}
+                  {runtimeText}
                 </span>
               </td>
             </tr>
@@ -312,6 +312,11 @@
     model?.mail && ['OK', 'DISABLED', 'HOST_TOO_OLD'].includes(model.mail)
       ? $_(`settings.health.mail.${model.mail}`)
       : (model?.mail ?? ''),
+  );
+  const runtimeText = $derived(
+    model?.runtimeState && ['READY', 'STARTING', 'DEGRADED', 'STOPPED'].includes(model.runtimeState)
+      ? $_(`settings.health.runtime.${model.runtimeState}`)
+      : (model?.runtimeState ?? ''),
   );
   const mailClass = $derived(
     model?.mail === 'OK' ? 'success' : model?.mail === 'HOST_TOO_OLD' ? 'danger' : 'warning',

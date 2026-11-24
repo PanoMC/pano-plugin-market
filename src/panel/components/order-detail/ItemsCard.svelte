@@ -62,12 +62,16 @@
                 {#if fields.length > 0}
                   <dl class="row mb-0 small">
                     {#each fields as field (field.key)}
+                      {@const shown =
+                        field.flag === null
+                          ? field.value
+                          : $_(field.flag ? 'common.yes' : 'common.no')}
                       <dt class="col-sm-4 text-body-secondary fw-normal">{field.label}</dt>
                       <dd
                         class="col-sm-8 mb-0 text-truncate"
                         style="max-width: 240px;"
-                        title={field.value}>
-                        {field.value}
+                        title={shown}>
+                        {shown}
                       </dd>
                     {/each}
                   </dl>

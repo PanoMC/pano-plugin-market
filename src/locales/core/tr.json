@@ -2,7 +2,7 @@
   "permissions": {
     "MANAGE_MARKET": {
       "title": "Marketi Yönet",
-      "description": "Market kategorilerini, ürünleri, karşılaştırmaları, hediyeleri, indirimleri, kuponları, yaratıcı kodlarını, siparişleri ve ayarları yönetebilir."
+      "description": "Market kategorilerini, ürünleri, karşılaştırmaları, hediyeleri, indirimleri, kuponları, içerik üretici kodlarını, siparişleri ve ayarları yönetebilir."
     },
     "MANAGE_MARKET_CATALOG": {
       "title": "Market Kataloğunu Yönet",
@@ -18,11 +18,11 @@
     },
     "MANAGE_MARKET_PAYMENTS": {
       "title": "Market Ödemelerini Yönet",
-      "description": "Para hareketi yaratan her şeyi yapabilir: iadeler, siparişi ödendi olarak işaretleme, incelemeler, itirazlar, manuel siparişler, krediler, yaratıcı ödemeleri ve abonelik tahsilatları."
+      "description": "Para hareketi yaratan her şeyi yapabilir: iadeler, siparişi ödendi olarak işaretleme, incelemeler, itirazlar, manuel siparişler, krediler, içerik üretici ödemeleri ve abonelik tahsilatları."
     },
     "MANAGE_MARKET_DISCOUNTS": {
       "title": "Market İndirimlerini Yönet",
-      "description": "İndirimleri, kuponları, yaratıcı kodlarını, hediyeleri ve kullanım listelerini yönetebilir."
+      "description": "İndirimleri, kuponları, içerik üretici kodlarını, hediyeleri ve kullanım listelerini yönetebilir."
     },
     "MANAGE_MARKET_SETTINGS": {
       "title": "Market Ayarlarını Yönet",
@@ -55,11 +55,11 @@
     "CREATED_MARKET_COUPON": "<b>{username}</b> \"{name}\" market kuponunu oluşturdu.",
     "UPDATED_MARKET_COUPON": "<b>{username}</b> \"{name}\" market kuponunu güncelledi.",
     "DELETED_MARKET_COUPON": "<b>{username}</b> \"{name}\" market kuponunu sildi.",
-    "CREATED_MARKET_CREATOR_CODE": "<b>{username}</b> \"{name}\" yaratıcı kodunu oluşturdu.",
-    "UPDATED_MARKET_CREATOR_CODE": "<b>{username}</b> \"{name}\" yaratıcı kodunu güncelledi.",
-    "DELETED_MARKET_CREATOR_CODE": "<b>{username}</b> \"{name}\" yaratıcı kodunu sildi.",
-    "CREATED_MARKET_CREATOR_PAYOUT": "<b>{username}</b> \"{name}\" yaratıcı koduna {amount} ödeme yaptı ({method}).",
-    "CANCELLED_MARKET_CREATOR_PAYOUT": "<b>{username}</b> \"{name}\" yaratıcı kodunun {amount} tutarındaki ödemesini iptal etti.",
+    "CREATED_MARKET_CREATOR_CODE": "<b>{username}</b> \"{name}\" içerik üretici kodunu oluşturdu.",
+    "UPDATED_MARKET_CREATOR_CODE": "<b>{username}</b> \"{name}\" içerik üretici kodunu güncelledi.",
+    "DELETED_MARKET_CREATOR_CODE": "<b>{username}</b> \"{name}\" içerik üretici kodunu sildi.",
+    "CREATED_MARKET_CREATOR_PAYOUT": "<b>{username}</b> \"{name}\" içerik üretici koduna {amount} ödeme yaptı ({method}).",
+    "CANCELLED_MARKET_CREATOR_PAYOUT": "<b>{username}</b> \"{name}\" içerik üretici kodunun {amount} tutarındaki ödemesini iptal etti.",
     "SORTED_MARKET_CATEGORIES": "<b>{username}</b> \"{name}\" market kategorisinin konumunu değiştirdi.",
     "UPDATED_MARKET_SETTINGS": "<b>{username}</b> market ayarlarını güncelledi.",
     "UPDATED_MARKET_PAYMENT_METHOD": "<b>{username}</b> \"{name}\" ödeme yöntemini güncelledi.",
@@ -93,11 +93,11 @@
     "CANCELLED_MARKET_DELIVERY": "<b>{username}</b>, <b>#{orderId}</b> numaralı siparişin <b>#{deliveryId}</b> numaralı teslimatını iptal etti.",
     "REVOKED_MARKET_ORDER": "<b>{username}</b>, <b>#{orderId}</b> numaralı siparişin ürünlerini geri aldı ({count} geri alma teslimatı planlandı).",
     "REFUNDED_MARKET_ORDER": "<b>{username}</b>, <b>#{orderId}</b> numaralı siparişten <b>{amount}</b> iade etti (iade <b>#{refundId}</b>).",
-    "OPENED_MARKET_DISPUTE": "<b>{username}</b>, <b>#{orderId}</b> numaralı sipariş için bir ters ibraz (chargeback) kaydetti (itiraz <b>#{disputeId}</b>).",
+    "OPENED_MARKET_DISPUTE": "<b>{username}</b>, <b>#{orderId}</b> numaralı sipariş için bir ters ibraz kaydetti (itiraz <b>#{disputeId}</b>).",
     "UPDATED_MARKET_DISPUTE": "<b>{username}</b>, <b>#{orderId}</b> numaralı siparişin <b>#{disputeId}</b> numaralı itirazını \"{status}\" olarak ayarladı.",
     "CANCELLED_MARKET_SUBSCRIPTION": "<b>{username}</b>, <b>#{subscriptionId}</b> numaralı aboneliği iptal etti.",
     "RETRIED_MARKET_SUBSCRIPTION_CHARGE": "<b>{username}</b>, <b>#{subscriptionId}</b> numaralı aboneliğin ödeme çekimini yeniden denedi.",
-    "RAN_MARKET_CHARGEBACK_ACTIONS": "<b>{username}</b>, <b>#{orderId}</b> numaralı siparişin bekletilen chargeback eylemlerini çalıştırdı ({count} teslimat planlandı).",
+    "RAN_MARKET_CHARGEBACK_ACTIONS": "<b>{username}</b>, <b>#{orderId}</b> numaralı siparişin bekletilen ters ibraz eylemlerini çalıştırdı ({count} teslimat planlandı).",
     "CREATED_MARKET_BLOCK": "<b>{username}</b>, engelleme listesine bir {type} engeli ekledi (<b>{value}</b>, kaynak {source}).",
     "DELETED_MARKET_BLOCK": "<b>{username}</b>, engelleme listesinden bir {type} engelini kaldırdı (<b>{value}</b>, kaynak {source}).",
     "CREATED_MARKET_ORDER": "<b>{username}</b>, <b>{playerUsername}</b> için <b>#{orderId}</b> numaralı siparişi oluşturdu ({total}).",
@@ -182,12 +182,14 @@
     "date-time": "dd.MM.yyyy HH:mm",
     "decimal-separator": ",",
     "group-separator": ".",
-    "money": "{amount} {symbol}"
+    "money": "{amount} {symbol}",
+    "percent": "%{value}",
+    "credit-name-default": "Kredi"
   },
   "notifications": {
     "MARKET_ORDER_REVIEW": "#{orderId} numaralı sipariş incelemenizi bekliyor.",
     "MARKET_ORDER_ALERT": "{code, select, BANK_TRANSFER_NOTIFIED {#{orderId} numaralı sipariş: alıcı havaleyi yaptığını bildirdi. Hesabınızı kontrol edip ödemeyi onaylayın.} other {#{orderId} numaralı siparişte açık bir sorun var ({code}).}}",
-    "MARKET_DELIVERY_WAITING": "{kind, select, UNDO_FAILED {#{orderId} numaralı siparişin geri alınması {serverName} sunucusunda başarısız oldu. Alıcı hem parayı hem ürünü elinde tutuyor olabilir.} UNDO_FAILED_INLINE {#{orderId} numaralı siparişin geri alınması başarısız oldu. Alıcı hem parayı hem ürünü elinde tutuyor olabilir.} UNDO_WAITING_INLINE {#{orderId} numaralı siparişin geri alınması hâlâ bekliyor.} UNDO_WAITING {#{orderId} numaralı siparişin geri alınması hâlâ {serverName} sunucusunu bekliyor.} other {{count} teslimat {serverName} sunucusunu bekliyor. Oraya Pano Market eklentisini kurun veya güncelleyin.}}"
+    "MARKET_DELIVERY_WAITING": "{kind, select, UNDO_FAILED {#{orderId} numaralı siparişin geri alınması {serverName} sunucusunda başarısız oldu. Alıcı hem parayı hem ürünü elinde tutuyor olabilir.} UNDO_FAILED_INLINE {#{orderId} numaralı siparişin geri alınması başarısız oldu. Alıcı hem parayı hem ürünü elinde tutuyor olabilir.} UNDO_WAITING_INLINE {#{orderId} numaralı siparişin geri alınması hâlâ bekliyor.} UNDO_WAITING {#{orderId} numaralı siparişin geri alınması hâlâ {serverName} sunucusunu bekliyor.} other {{count} teslimat {serverName} sunucusunu bekliyor. Oraya Pano Market Minecraft pluginini kurun veya güncelleyin.}}"
   },
   "mock": {
     "saved-nothing": "Önizleme modu: hiçbir şey kaydedilmedi.",
@@ -224,5 +226,12 @@
     "reset": "Sıfırla",
     "close": "Kapat",
     "note": "Sahte verisi olmayan sayfalar gerçek sunucuyu kullanır."
+  },
+  "gateway": {
+    "order": "Sipariş #{id}",
+    "order-without-number": "Sipariş"
+  },
+  "minecraft": {
+    "broadcast-default": "&a{player}&7, &b{store}&7 mağazasından &e{product}&7 satın aldı!"
   }
 }

@@ -273,7 +273,9 @@ class McGameService(
     private val textLocales: () -> List<String> = { listOf("en-US") },
     /** After an in-game purchase completed (best effort): the purchase announcement (`McSyncService.announce`). */
     private val announce: suspend (MarketOrder, List<MarketOrderItem>) -> Unit = { _, _ -> },
-    private val ready: () -> Boolean = { MarketRuntime.isReady }
+    private val ready: () -> Boolean = { MarketRuntime.isReady },
+    /** The credit name when `MarketConfig.creditName` is empty: the localized default of the site language. */
+    private val defaultCreditName: () -> String = { DEFAULT_CREDIT_NAME }
 ) {
     private val queryBucket = McBucket(QUERY_PER_SECOND, 1_000L / QUERY_PER_SECOND, clock)
     private val adminBucket = McBucket(ADMIN_PER_MINUTE, 60_000L / ADMIN_PER_MINUTE, clock)
@@ -1066,7 +1068,7 @@ class McGameService(
 
     private fun serverLabel(server: Server): String = server.customName?.takeIf { it.isNotBlank() } ?: server.name
 
-    private fun creditName(c: MarketConfig): String = c.creditName.trim().ifEmpty { DEFAULT_CREDIT_NAME }
+    private fun creditName(c: MarketConfig): String = c.creditName.trim().ifEmpty { defaultCreditName().trim().ifEmpty { DEFAULT_CREDIT_NAME } }
 
     companion object {
         const val PROTOCOL = McSyncService.PROTOCOL

@@ -111,13 +111,17 @@ export const isDiscounted = (row) =>
 export const showCredit = (row, creditsEnabled) =>
   Boolean(creditsEnabled) && row.creditUnitPrice !== null && row.creditUnitPrice !== undefined;
 
-/** Field values as "label: value" pairs, empty values dropped, booleans as yes/no words supplied by the caller. */
-export function fieldPairs(fieldValues, labels = {}, yesNo = { true: 'yes', false: 'no' }) {
+/**
+ * Field values as "label: value" pairs, empty values dropped. A checkbox answer (a boolean, or the string
+ * `'true'` / `'false'` the cart stores) becomes the caller's translated `yesNo` word (`theme.common.yes` / `no`).
+ */
+export function fieldPairs(fieldValues, labels, yesNo) {
+  const flag = (v) => (v === true || v === 'true' ? 'true' : v === false || v === 'false' ? 'false' : null);
   return Object.entries(fieldValues || {})
     .filter(([, v]) => v !== '' && v !== null && v !== undefined)
     .map(([key, v]) => ({
-      label: labels[key] || key,
-      value: typeof v === 'boolean' ? yesNo[String(v)] : String(v),
+      label: labels?.[key] || key,
+      value: flag(v) !== null ? (yesNo?.[flag(v)] ?? flag(v)) : String(v),
     }));
 }
 

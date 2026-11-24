@@ -61,7 +61,7 @@
         </SettingRow>
 
         <div class="mb-0">
-          <div class="mb-2 text-capitalize">{$_('settings.legal.content')}</div>
+          <div class="mb-2">{$_('settings.legal.content')}</div>
           {#key editorKey}
             <ClientEditor bind:content={editor.content} />
           {/key}

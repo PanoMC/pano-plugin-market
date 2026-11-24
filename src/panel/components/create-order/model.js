@@ -51,6 +51,31 @@ function canonicalValue(value) {
   return text === '' ? null : text;
 }
 
+/** `{ fieldKey: { label, type } }` of a product's custom fields: the cart table prints labels with it. */
+export function fieldMeta(product) {
+  const out = {};
+  for (const field of product?.fields ?? []) {
+    if (field?.fieldKey)
+      out[field.fieldKey] = { label: field.label ?? null, type: field.type ?? null };
+  }
+  return out;
+}
+
+/**
+ * `[{ key, label, value, flag }]` of a cart line's custom field values for display: `label` is the
+ * field's label (the key when unknown), `flag` true / false for a CHECKBOX value (shown as Yes / No),
+ * else null. The canonical `'true'` / `'false'` stay in the payload only.
+ */
+export function lineFieldEntries(line) {
+  const meta = line?.fieldMeta ?? {};
+  return Object.entries(canonicalFieldValues(line?.fieldValues)).map(([key, value]) => {
+    const field = meta[key];
+    const label = field?.label ? String(field.label) : key;
+    const flag = field?.type === 'CHECKBOX' ? value === 'true' : null;
+    return { key, label, value, flag };
+  });
+}
+
 /** fieldValues without empty entries, keys sorted: the same payload always serialises the same. */
 export function canonicalFieldValues(fieldValues) {
   const out = {};

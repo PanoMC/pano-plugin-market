@@ -23,8 +23,9 @@
 
         {#if lineNames.length}
           <div class="form-text text-danger" id="{switchId}-error" role="alert">
-            {$_('theme.errors.GIFT_NOT_ALLOWED')}
-            {lineNames.join(', ')}
+            {$_('theme.checkout.gift-not-allowed-items', {
+              values: { count: lineNames.length, names: formatList(lineNames) },
+            })}
           </div>
         {/if}
       {/if}
@@ -56,7 +57,7 @@
                 value={recipient}
                 oninput={(event) => onchange({ recipientUsername: event.currentTarget.value })}
                 onblur={() => onblur('recipient')} />
-              <label class="market-gift-section__label text-capitalize" for={recipientId}>
+              <label class="market-gift-section__label" for={recipientId}>
                 {$_('theme.checkout.gift-recipient')}
                 <span class="text-danger" aria-hidden="true">*</span>
               </label>
@@ -78,7 +79,7 @@
                 value={message}
                 oninput={(event) => onchange({ giftMessage: event.currentTarget.value })}
                 onblur={() => onblur('message')}></textarea>
-              <label class="market-gift-section__gift-message text-capitalize" for={messageId}>
+              <label class="market-gift-section__gift-message" for={messageId}>
                 {$_('theme.checkout.gift-message')}
               </label>
             </div>
@@ -114,6 +115,7 @@
 
   const market = plugin('market');
   const { _ } = market;
+  const { formatList } = market.require('format').actions;
 
   /**
    * isGift / recipient / message: the draft values; errors: {recipient?, message?} message codes;

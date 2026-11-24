@@ -14,9 +14,12 @@ import com.panomc.plugins.market.core.webhook.DiscordRenderer
 import com.panomc.plugins.market.core.webhook.WebhookEvents
 import com.panomc.plugins.market.core.webhook.WebhookSamples
 import com.panomc.plugins.market.db.MarketTables
+import com.panomc.plugins.market.db.model.DeliveryPhase
+import com.panomc.plugins.market.db.model.SubscriptionStatus
 import com.panomc.plugins.market.i18n.MarketI18n
 import com.panomc.plugins.market.routes.api.order.deliveryService
 import com.panomc.plugins.market.routes.panel.invoice.marketI18n
+import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.routes.panel.settings.payment.paymentWiring
 import com.panomc.plugins.market.runtime.beans
 import com.panomc.plugins.market.service.SqlLegacyWebhookTables
@@ -44,7 +47,7 @@ class DiscordWebhookRenderer(private val labels: DiscordLabelSource) : WebhookDi
 }
 
 /** The `MarketI18n` translations `webhooks.discord.<event>.title` / `.description` and `webhooks.discord.label.*` in the locale [locale] (08 section 16.2). */
-class I18nDiscordLabels(private val i18n: MarketI18n, private val locale: () -> String) : DiscordLabelSource {
+class I18nDiscordLabels(private val i18n: MarketI18n, private val locale: () -> String, private val zone: () -> String = { "" }) : DiscordLabelSource {
     override suspend fun labels(event: String): DiscordLabels {
         val l = locale()
 
@@ -54,10 +57,15 @@ class I18nDiscordLabels(private val i18n: MarketI18n, private val locale: () -> 
         val title = t("webhooks.discord.$event.title", t("$generic.title", DiscordLabels.DEFAULT.title))
         val description = t("webhooks.discord.$event.description", t("$generic.description", DiscordLabels.DEFAULT.description))
 
+        val phases = DeliveryPhase.entries.associate { it.name to t("webhooks.discord.phase.${it.name}", it.name.lowercase()) }
+        val statuses = SubscriptionStatus.entries.associate { it.name to t("webhooks.discord.subscription-status.${it.name}", it.name) }
+
         return DiscordLabels(
             title, description,
             t("webhooks.discord.label.player", DiscordLabels.DEFAULT.player), t("webhooks.discord.label.total", DiscordLabels.DEFAULT.total),
-            t("webhooks.discord.label.items", DiscordLabels.DEFAULT.items)
+            t("webhooks.discord.label.items", DiscordLabels.DEFAULT.items),
+            more = t("webhooks.discord.label.more", DiscordLabels.DEFAULT.more),
+            phases = phases, subscriptionStatuses = statuses, locale = l, zone = zone()
         )
     }
 }
@@ -79,7 +87,7 @@ internal fun discordLabelSource(plugin: MarketPlugin): DiscordLabelSource {
             val context = plugin.beans
             val locale = { runCatching { context.getBean(ConfigManager::class.java).config.locale }.getOrNull()?.takeIf { it.isNotBlank() } ?: "en-US" }
 
-            I18nDiscordLabels(marketI18n(plugin).first, locale).also { cachedLabels = plugin to it }
+            I18nDiscordLabels(marketI18n(plugin).first, locale) { runCatching { currentConfig(plugin).storeTimeZone }.getOrNull().orEmpty() }.also { cachedLabels = plugin to it }
         }
     }
 }

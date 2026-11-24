@@ -510,12 +510,15 @@ export function deliveryBadge(delivery) {
 
 /**
  * The buyer's answers of an item as label / value pairs. `fieldValues` is an object (`{ label: value }`) or an
- * array of `{ label | name | key, value }`; empty values and objects are dropped, values are plain strings.
+ * array of `{ label | name | key, value }`; empty values and objects are dropped, values are plain strings. A
+ * checkbox answer (`true` / `false`, also as the strings the checkout stores) becomes the caller's `yesNo` word
+ * (`theme.common.yes` / `no`).
  */
-export function fieldPairs(fieldValues) {
+export function fieldPairs(fieldValues, yesNo = {}) {
   const text = (value) => {
     if (value === null || value === undefined || typeof value === 'object') return '';
-    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    if (value === true || value === 'true') return yesNo.true ?? 'true';
+    if (value === false || value === 'false') return yesNo.false ?? 'false';
 
     return String(value).trim().slice(0, 500);
   };

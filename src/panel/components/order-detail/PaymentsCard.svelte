@@ -32,7 +32,7 @@
         </thead>
         <tbody>
           {#each payments as payment (payment.id)}
-            {@const message = paymentMessage(payment)}
+            {@const message = paymentMessage(payment, $_)}
             <tr>
               <th scope="row" class="align-middle">
                 <ControlDropdown items={menu(payment)} />

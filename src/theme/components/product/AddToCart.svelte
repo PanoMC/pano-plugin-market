@@ -26,7 +26,7 @@
       {:else}
         <button
           type="button"
-          class="market-add-to-cart__buy-now btn btn-secondary text-capitalize"
+          class="market-add-to-cart__buy-now btn btn-secondary"
           {disabled}
           onclick={() => onbuy()}>
           {$_('theme.product.buy-now')}

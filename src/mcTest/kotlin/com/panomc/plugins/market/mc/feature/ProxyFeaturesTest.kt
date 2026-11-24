@@ -137,7 +137,7 @@ class BungeeFeaturesTest {
         val consoleWithOut = console(ok)
         MarketBungeeCommand("panomarket", "panomarket", emptyList(), rig.features, { consoleWithOut }) { true }
             .execute(consoleWithOut, arrayOf("credits", "give", "Alex", "5"))
-        assertEquals(listOf("Gave 5 credits to Alex. New balance: 9"), ok.plain())
+        assertEquals(listOf("Credits given to Alex: 5. New balance: 9"), ok.plain())
         val req = rig.link.requests.single() as com.panomc.plugins.market.mc.core.wire.MarketAdminRequest
         assertTrue(req.actor.console)
     }
@@ -281,7 +281,7 @@ class VelocityFeaturesTest {
         assertTrue(rig.link.requests.isEmpty())
         val ok = Out()
         cmd.execute(invocation(console(ok), "credits", "give", "Alex", "5"))
-        assertEquals(listOf("Gave 5 credits to Alex. New balance: 9"), ok.components.map { plain.serialize(it) })
+        assertEquals(listOf("Credits given to Alex: 5. New balance: 9"), ok.components.map { plain.serialize(it) })
         assertTrue((rig.link.requests.single() as com.panomc.plugins.market.mc.core.wire.MarketAdminRequest).actor.console)
     }
 

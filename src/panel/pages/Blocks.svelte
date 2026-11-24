@@ -106,7 +106,7 @@
                   </th>
                   <td class="text-nowrap">{typeLabel(block.type)}</td>
                   <td class="font-monospace text-nowrap"><div class="text-truncate" style="max-width: 200px;" title={block.value}>{block.value}</div></td>
-                  <td class="text-nowrap"><div class="text-truncate" style="max-width: 280px;" title={block.reason || '—'}>{block.reason || '—'}</div></td>
+                  <td class="text-nowrap"><div class="text-truncate" style="max-width: 280px;" title={reasonText(block)}>{reasonText(block)}</div></td>
                   <td class="text-nowrap">
                     {#if block.source === 'CHARGEBACK'}
                       <span class="badge text-bg-danger">{$_('enums.block-source.CHARGEBACK')}</span>
@@ -153,7 +153,7 @@
 
 <script module>
   import { loadList } from '../utils/list.js';
-  import { BLOCK_PARAMS } from '../utils/blocks.js';
+  import { BLOCK_PARAMS, blockReason } from '../utils/blocks.js';
 
   /**
    * @type {import("@sveltejs/kit").PageLoad}
@@ -245,6 +245,8 @@
     return text === key || text === `plugins.pano-plugin-market.${key}` ? value : text;
   }
   const typeLabel = (value) => enumLabel('block-type', value);
+
+  const reasonText = (block) => blockReason(block, $_);
   const sourceLabel = (value) => enumLabel('block-source', value);
 
   function askRemove(block) {

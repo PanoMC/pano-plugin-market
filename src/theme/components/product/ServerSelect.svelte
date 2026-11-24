@@ -22,7 +22,7 @@
             <option value={String(choice.id)}>{choice.name}</option>
           {/each}
         </select>
-        <label class="market-server-select__label text-capitalize" for={ID_SERVER}
+        <label class="market-server-select__label" for={ID_SERVER}
           >{$_('theme.product.server-label')}</label>
         {#if error}
           <div class="invalid-feedback">{$_(`theme.errors.${error}`)}</div>

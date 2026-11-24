@@ -29,7 +29,7 @@
       <div class="my-auto text-center">
         <NoContent text="" />
         <a
-          class="market-cart-offcanvas__action btn btn-primary text-capitalize mt-3"
+          class="market-cart-offcanvas__action btn btn-primary mt-3"
           href="{base}/store"
           onclick={close}>
           {$_('theme.cart.browse')}
@@ -65,7 +65,7 @@
 
     {#if view !== 'LOADING' && view !== 'EMPTY' && view !== 'ERROR'}
       <a
-        class="market-cart-offcanvas__checkout btn btn-secondary text-capitalize w-100"
+        class="market-cart-offcanvas__checkout btn btn-secondary w-100"
         href="{base}/store/checkout"
         onclick={close}>
         <i class="fa-solid fa-lock me-2" aria-hidden="true"></i>{$_('theme.cart.checkout')}

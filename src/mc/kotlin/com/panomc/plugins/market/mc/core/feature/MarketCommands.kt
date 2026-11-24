@@ -18,6 +18,7 @@ import com.panomc.plugins.pano.core.platform.PlatformMessageResponse
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -125,8 +126,8 @@ class MarketCommands(
             sender.send(
                 t(
                     sender, Msg.HISTORY_LINE,
-                    "id" to o.publicId, "items" to o.itemNames.joinToString(", "), "total" to number(o.total),
-                    "currency" to o.currency, "status" to o.status, "date" to date(o.createdAt)
+                    "id" to o.publicId, "items" to o.itemNames.joinToString(", "), "total" to localNumber(sender, o.total),
+                    "currency" to o.currency, "status" to statusText(sender, o.status), "date" to localDate(sender, o.createdAt)
                 )
             )
         }
@@ -376,6 +377,24 @@ class MarketCommands(
     }
 
     private fun t(sender: McSender, key: String, vararg args: Pair<String, Any?>) = messages.text(key, sender.locale, *args)
+
+    /** The order status in the sender's language; an unknown status stays as Pano sent it. */
+    private fun statusText(sender: McSender, status: String): String =
+        if (status.isNotBlank() && messages.has(Msg.orderStatus(status), sender.locale)) t(sender, Msg.orderStatus(status)) else status
+
+    /** [number] with the decimal separator of the sender's language. */
+    private fun localNumber(sender: McSender, v: Double): String = number(v).replace(".", t(sender, Msg.FORMAT_DECIMAL))
+
+    /** The date in the server's zone with the date pattern of the sender's language (ISO when the pattern is broken). */
+    private fun localDate(sender: McSender, epochMs: Long): String {
+        if (epochMs <= 0) return "-"
+        val formatter = try {
+            DateTimeFormatter.ofPattern(ChatFormat.strip(t(sender, Msg.FORMAT_DATE)))
+        } catch (e: IllegalArgumentException) {
+            DateTimeFormatter.ISO_LOCAL_DATE
+        }
+        return formatter.withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(epochMs))
+    }
 
     private fun parseAmount(raw: String?, allowZero: Boolean): BigDecimal? {
         if (raw == null || !AMOUNT.matches(raw)) return null

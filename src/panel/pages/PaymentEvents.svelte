@@ -83,7 +83,7 @@
                     </div>
                   </th>
                   <td class="text-nowrap">{event.providerId ?? '—'}</td>
-                  <td class="text-nowrap">{event.direction ?? '—'}</td>
+                  <td class="text-nowrap">{directionText(event.direction)}</td>
                   <td class="text-nowrap">{event.channel ?? '—'}</td>
                   <td class="text-nowrap">
                     <StatusBadge kind="event" value={event.status} />
@@ -237,4 +237,10 @@
       },
     });
   }
+
+  /** IN / OUT as text; an unknown direction is shown as it is, a missing one as '—'. */
+  const directionText = (direction) =>
+    direction === 'IN' || direction === 'OUT'
+      ? $_(`enums.event-direction.${direction}`)
+      : (direction ?? '—');
 </script>

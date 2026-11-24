@@ -77,9 +77,25 @@ const COLORS = {
   f: '#ffffff',
 };
 
-/** Sample values of the preview (never real buyer data). */
-export function previewValues(storeName) {
-  return { player: 'Steve', product: 'VIP Rank', quantity: '1', store: storeName || 'Store' };
+/**
+ * Sample values of the preview (never real buyer data). `samples` holds the translated sample product and the
+ * fallback store name (`settings.minecraft.preview.*`); the English ones without it.
+ */
+export function previewValues(storeName, samples = {}) {
+  return {
+    player: 'Steve',
+    product: samples.product || 'VIP Rank',
+    quantity: '1',
+    store: storeName || samples.store || 'Store',
+  };
+}
+
+/**
+ * The template the game shows: the untouched English default is announced in the site language
+ * (`minecraft.broadcast-default`, the same text Pano uses), so the preview shows that one.
+ */
+export function previewTemplate(template, localizedDefault) {
+  return template === DEFAULT_BROADCAST_TEMPLATE && localizedDefault ? localizedDefault : template;
 }
 
 /**

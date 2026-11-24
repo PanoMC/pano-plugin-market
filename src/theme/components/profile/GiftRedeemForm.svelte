@@ -21,7 +21,7 @@
         bind:this={input}
         oninput={() => (invalidKey = '')} />
       <label
-        class="market-gift-redeem-form__title market-gift-redeem-form__label text-capitalize"
+        class="market-gift-redeem-form__title market-gift-redeem-form__label"
         id="market-gift-title"
         for="market-gift-code">
         {$_('theme.profile.purchases.redeem-title')}

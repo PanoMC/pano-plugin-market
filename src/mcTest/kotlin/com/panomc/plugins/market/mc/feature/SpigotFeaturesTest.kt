@@ -255,7 +255,7 @@ class SpigotFeaturesTest {
         val ok = Recorder()
         command("panomarket").execute(sender(ok, "Admin", setOf("panomarket.admin.credits.give"), player = true), "panomarket", arrayOf("credits", "give", "Alex", "5"))
         await("ok") { ok.lines.isNotEmpty() }
-        assertEquals(listOf("Gave 5 credits to Alex. New balance: 25"), ok.plain())
+        assertEquals(listOf("Credits given to Alex: 5. New balance: 25"), ok.plain())
         assertEquals(1, w.rig.link.requests.size)
     }
 

@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { currentLanguage } from '@panomc/sdk/utils/language';
-import { formatCredits, formatMoney, formatPercent } from './format.js';
+import { formatCredits, formatMoney, formatNumber, formatPercent } from './format.js';
 
 /** Current UI locale, e.g. 'en-US'. Read when called, so it is safe outside components. */
 export function currentLocale() {
@@ -15,5 +15,6 @@ export function currentLocale() {
 export const fmt = {
   money: (amount, currency) => formatMoney(amount, currency, currentLocale()),
   credits: (amount, creditName) => formatCredits(amount, creditName, currentLocale()),
-  percent: (value) => formatPercent(value, currentLocale()),
+  percent: (value, options) => formatPercent(value, currentLocale(), options),
+  number: (value) => formatNumber(value, currentLocale()),
 };

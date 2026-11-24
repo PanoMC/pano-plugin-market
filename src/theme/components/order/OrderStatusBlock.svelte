@@ -29,7 +29,7 @@
             <i class="fa-regular fa-clock me-1" aria-hidden="true"></i>{$_(
               'theme.order.expires-in',
               {
-                values: { time: formatCountdown(left) },
+                values: { time: formatCountdown(left, $_) },
               },
             )}
           </p>

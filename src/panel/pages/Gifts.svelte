@@ -2,6 +2,7 @@
   import { buildQueryParams } from '@panomc/sdk/utils/api';
   import { api } from '@panomc/sdk/plugin-api';
   import { failureOf } from '../utils/api.js';
+  import { loadContext } from '../utils/context.js';
   import { emptyList } from '../utils/page.js';
 
   /**
@@ -32,7 +33,7 @@
         request: event,
       });
 
-    let body = await fetchPage(pageNum);
+    let [body, ctx] = await Promise.all([fetchPage(pageNum), loadContext(event)]);
 
     // A stale ?page= (bookmark / back-button after deletes) points past the last
     // page; fall back to page 1 with the same filters instead of faking an empty store.
@@ -41,9 +42,9 @@
     }
 
     const failure = failureOf(body);
-    if (failure) return { data: emptyList(failure) };
+    if (failure) return { data: emptyList(failure, { ctx }) };
 
-    return { data: body };
+    return { data: { ...body, ctx } };
   }
 </script>
 
@@ -58,7 +59,7 @@
   import { sectionsFor } from '../navigation.js';
   import { call, errorKey } from '../utils/api.js';
   import { giftRedemptionTarget, usedCell } from '../utils/category-gift.js';
-  import { currentLocale } from '../utils/locale.js';
+  import { currentLocale, fmt } from '../utils/locale.js';
   import { pageOf } from '../utils/page.js';
   import { rowLink } from '../utils/row-link.js';
 
@@ -72,6 +73,7 @@
   let totalPage = $derived(list.totalPages);
   let currentPage = $derived(list.number);
   let loadError = $derived(data.error || null);
+  const ctx = $derived(data.ctx ?? null);
 
   // All list state (page / search / status) lives in the URL query params.
   let search = $derived($page.url.searchParams.get('search') || '');
@@ -267,7 +269,7 @@
                 <td class="text-nowrap">
                   <a href="#" class="rounded text-decoration-none focus-ring d-inline-block" title={$_('common.edit')} data-bs-toggle="modal" data-bs-target="#createGiftModal" onclick={(e) => { e.preventDefault(); openEditModal(gift); }}>
                     {#if gift.type === 'CREDIT'}
-                      <span class="badge bg-primary px-2.5 py-1.5 fw-medium cursor-pointer"><i class="fas fa-coins me-1"></i>{$_('pages.gifts.credit-amount', { values: { amount: gift.creditAmount } })}</span>
+                      <span class="badge bg-primary px-2.5 py-1.5 fw-medium cursor-pointer"><i class="fas fa-coins me-1"></i>{fmt.credits(gift.creditAmount, ctx?.creditName ?? '')}</span>
                     {:else if gift.type === 'RANDOM'}
                       <span class="badge bg-primary px-2.5 py-1.5 fw-medium cursor-pointer"><i class="fas fa-shuffle me-1"></i>{$_('pages.gifts.random-gift', { values: { count: gift.productNames?.length ?? 0 } })}</span>
                     {:else}

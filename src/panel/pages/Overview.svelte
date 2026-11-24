@@ -25,7 +25,7 @@
                 {card}
                 title={$_(`pages.overview.card.${card.key}`)}
                 value={card.kind === 'count'
-                  ? String(card.count)
+                  ? fmt.number(card.count)
                   : fmt.money(card.amount, currency)}
                 secondary={secondaryOf(card)} />
             </div>
@@ -134,7 +134,7 @@
     }
     if (!card.trend) return '';
     const value = Math.round(card.trend);
-    return `${value > 0 ? '+' : ''}${value}%`;
+    return fmt.percent(value, { signed: true });
   }
 
   // The URL is the source of truth; load() re-runs on every navigation.

@@ -10,7 +10,7 @@
     },
     "VIEW_MARKET_ORDERS": {
       "title": "Просмотр заказов маркета",
-      "description": "Может просматривать заказы, доставки, отправления, подписки и платёжные события маркета и экспортировать заказы. Ничего изменять не может."
+      "description": "Может просматривать заказы, доставки, отправления, подписки и платежные события маркета и экспортировать заказы. Ничего изменять не может."
     },
     "MANAGE_MARKET_ORDERS": {
       "title": "Управление выполнением заказов маркета",
@@ -18,7 +18,7 @@
     },
     "MANAGE_MARKET_PAYMENTS": {
       "title": "Управление платежами маркета",
-      "description": "Может выполнять всё, что связано с деньгами: возвраты, отметка заказа оплаченным, проверки, споры, ручные заказы, кредиты, выплаты авторам и списания по подпискам."
+      "description": "Может выполнять все, что связано с деньгами: возвраты, отметка заказа оплаченным, проверки, споры, ручные заказы, кредиты, выплаты авторам и списания по подпискам."
     },
     "MANAGE_MARKET_DISCOUNTS": {
       "title": "Управление скидками маркета",
@@ -26,7 +26,7 @@
     },
     "MANAGE_MARKET_SETTINGS": {
       "title": "Управление настройками маркета",
-      "description": "Может управлять настройками маркета, валютами, юридическими текстами, платёжными провайдерами и их ключами, настройками доставки, вебхуками и страницей состояния."
+      "description": "Может управлять настройками маркета, валютами, юридическими текстами, платежными провайдерами и их ключами, настройками доставки, вебхуками и страницей состояния."
     },
     "VIEW_MARKET_STATS": {
       "title": "Просмотр статистики маркета",
@@ -64,7 +64,7 @@
     "UPDATED_MARKET_SETTINGS": "<b>{username}</b> обновил настройки маркета.",
     "UPDATED_MARKET_PAYMENT_METHOD": "<b>{username}</b> обновил способ оплаты \"{name}\".",
     "REVEALED_MARKET_PAYMENT_SECRET": "<b>{username}</b> раскрыл секретные ключи способа оплаты \"{name}\".",
-    "FAILED_MARKET_SECRET_REVEAL": "<b>{username}</b> ввёл неверный пароль при раскрытии секретных ключей \"{name}\".",
+    "FAILED_MARKET_SECRET_REVEAL": "<b>{username}</b> ввел неверный пароль при раскрытии секретных ключей \"{name}\".",
     "TOGGLED_MARKET_PAYMENT_METHOD": "<b>{username}</b> изменил состояние способа оплаты \"{name}\".",
     "SORTED_MARKET_PAYMENT_METHODS": "<b>{username}</b> изменил порядок способов оплаты.",
     "RAN_MARKET_PROVIDER_ACTION": "<b>{username}</b> запустил действие \"{action}\" способа оплаты \"{name}\".",
@@ -87,7 +87,7 @@
     "UPDATED_MARKET_ORDER_STATUS": "<b>{username}</b> изменил статус заказа <b>#{orderId}</b> на \"{status}\".",
     "CANCELLED_MARKET_ORDER": "<b>{username}</b> отменил заказ <b>#{orderId}</b>.",
     "REVIEWED_MARKET_ORDER": "<b>{username}</b> принял решение \"{decision}\" по проверке заказа <b>#{orderId}</b>.",
-    "ANONYMIZED_MARKET_ORDER": "<b>{username}</b> удалил(а) персональные данные заказа <b>#{orderId}</b>.",
+    "ANONYMIZED_MARKET_ORDER": "<b>{username}</b> удалил персональные данные заказа <b>#{orderId}</b>.",
     "RERAN_MARKET_DELIVERY": "<b>{username}</b> повторно запустил доставок: {count} по заказу <b>#{orderId}</b>.",
     "RETRIED_MARKET_DELIVERY": "<b>{username}</b> повторил доставку <b>#{deliveryId}</b> заказа <b>#{orderId}</b>.",
     "CANCELLED_MARKET_DELIVERY": "<b>{username}</b> отменил доставку <b>#{deliveryId}</b> заказа <b>#{orderId}</b>.",
@@ -105,7 +105,7 @@
     "REJECTED_MARKET_BANK_TRANSFER": "<b>{username}</b> отклонил банковский перевод по заказу <b>#{orderId}</b>.",
     "UPDATED_MARKET_ORDER_EXCHANGE_RATE": "<b>{username}</b> обновил обменный курс заказа <b>#{orderId}</b> на <b>{exchangeRate}</b>.",
     "REFRESHED_EXCHANGE_RATE": "<b>{username}</b> обновил обменный курс маркета до <b>{exchangeRate}</b>.",
-    "REFRESHED_MARKET_CURRENCY_RATES": "<b>{username}</b> обновил(а) курсы дополнительных валют ({currencies}).",
+    "REFRESHED_MARKET_CURRENCY_RATES": "<b>{username}</b> обновил курсы дополнительных валют ({currencies}).",
     "REGENERATED_MARKET_INVOICE": "<b>{username}</b> пересоздал документы заказа <b>#{orderId}</b> ({numbers}).",
     "UPDATED_MARKET_INVOICE_SEQUENCE": "<b>{username}</b> установил следующий номер серии счетов <b>{series}</b>: <b>{nextNumber}</b>.",
     "RESENT_MARKET_ORDER_MAIL": "<b>{username}</b> повторно отправил письмо «{kind}» по заказу магазина #{orderId}.",
@@ -117,26 +117,26 @@
     "EXPORTED_MARKET_ORDERS": "<b>{username}</b> экспортировал в CSV строк заказов магазина: {rows}.",
     "RETRIED_MARKET_REFUND": "<b>{username}</b> повторил возврат <b>#{refundId}</b> по заказу <b>#{orderId}</b>.",
     "CANCELLED_MARKET_REFUND": "<b>{username}</b> отменил возврат <b>#{refundId}</b> по заказу <b>#{orderId}</b>.",
-    "REPLAYED_MARKET_PAYMENT_EVENT": "<b>{username}</b> повторно обработал платёжное событие <b>#{eventId}</b> провайдера \"{providerId}\".",
+    "REPLAYED_MARKET_PAYMENT_EVENT": "<b>{username}</b> повторно обработал платежное событие <b>#{eventId}</b> провайдера \"{providerId}\".",
     "GRANTED_MARKET_CREDITS": "<b>{username}</b> начислил <b>{amount}</b> кредитов игроку <b>{targetUsername}</b>.",
     "REVOKED_MARKET_CREDITS": "<b>{username}</b> списал <b>{amount}</b> кредитов у игрока <b>{targetUsername}</b> (недостаток {shortfall}).",
     "GRANTED_MARKET_CREDITS_INGAME": "<b>{username}</b> начислил <b>{amount}</b> кредитов игроку <b>{targetUsername}</b> в игре.",
     "REVOKED_MARKET_CREDITS_INGAME": "<b>{username}</b> списал <b>{amount}</b> кредитов у игрока <b>{targetUsername}</b> в игре.",
     "SET_MARKET_CREDITS_INGAME": "<b>{username}</b> установил кредиты игрока <b>{targetUsername}</b> равными <b>{amount}</b> в игре.",
     "GRANTED_MARKET_PRODUCT_INGAME": "<b>{username}</b> выдал товар магазина <b>#{productId}</b> игроку <b>{targetUsername}</b> в игре (заказ <b>#{orderId}</b>).",
-    "UPDATED_MARKET_CURRENCIES": "<b>{username}</b> сохранил(а) курсы дополнительных валют ({currencies}).",
+    "UPDATED_MARKET_CURRENCIES": "<b>{username}</b> сохранил курсы дополнительных валют ({currencies}).",
     "UPDATED_MARKET_LEGAL_TEXT": "<b>{username}</b> опубликовал версию <b>{version}</b> юридического текста ({locale}).",
     "UPDATED_MARKET_SERVER_SETTINGS": "<b>{username}</b> изменил настройки магазина сервера <b>#{serverId}</b>.",
     "REDELIVERED_MARKET_WEBHOOK": "<b>{username}</b> повторно поставил в очередь доставку вебхука магазина <b>#{deliveryId}</b>."
   },
   "invoice": {
-    "title": "Счёт",
+    "title": "Счет",
     "credit-note-title": "Кредит-нота",
     "test-notice": "ТЕСТОВЫЙ ЗАКАЗ - НЕ ЯВЛЯЕТСЯ НАЛОГОВЫМ ДОКУМЕНТОМ",
     "number": "№",
     "date": "Дата",
     "order": "Заказ",
-    "for-invoice": "К счёту {number}",
+    "for-invoice": "К счету {number}",
     "refund-reason": "Причина",
     "seller": "Продавец",
     "bill-to": "Плательщик",
@@ -182,12 +182,14 @@
     "date-time": "dd.MM.yyyy HH:mm",
     "decimal-separator": ",",
     "group-separator": " ",
-    "money": "{amount} {symbol}"
+    "money": "{amount} {symbol}",
+    "percent": "{value} %",
+    "credit-name-default": "Кредиты"
   },
   "notifications": {
-    "MARKET_ORDER_REVIEW": "Заказ #{orderId} ждёт вашей проверки.",
-    "MARKET_ORDER_ALERT": "{code, select, BANK_TRANSFER_NOTIFIED {Заказ #{orderId}: покупатель сообщил, что банковский перевод выполнен. Проверьте счёт и подтвердите платёж.} other {В заказе #{orderId} есть открытая проблема ({code}).}}",
-    "MARKET_DELIVERY_WAITING": "{kind, select, UNDO_FAILED {Отзыв покупки по заказу #{orderId} не удался на сервере {serverName}. У покупателя могут остаться и деньги, и товар.} UNDO_FAILED_INLINE {Отзыв покупки по заказу #{orderId} не удался. У покупателя могут остаться и деньги, и товар.} UNDO_WAITING_INLINE {Отзыв покупки по заказу #{orderId} всё ещё ожидает выполнения.} UNDO_WAITING {Отзыв покупки по заказу #{orderId} всё ещё ждёт сервер {serverName}.} other {Доставок в ожидании сервера {serverName}: {count}. Установите или обновите там плагин Pano Market.}}"
+    "MARKET_ORDER_REVIEW": "Заказ #{orderId} ждет вашей проверки.",
+    "MARKET_ORDER_ALERT": "{code, select, BANK_TRANSFER_NOTIFIED {Заказ #{orderId}: покупатель сообщил, что банковский перевод выполнен. Проверьте счет и подтвердите платеж.} other {В заказе #{orderId} есть открытая проблема ({code}).}}",
+    "MARKET_DELIVERY_WAITING": "{kind, select, UNDO_FAILED {Отзыв покупки по заказу #{orderId} не удался на сервере {serverName}. У покупателя могут остаться и деньги, и товар.} UNDO_FAILED_INLINE {Отзыв покупки по заказу #{orderId} не удался. У покупателя могут остаться и деньги, и товар.} UNDO_WAITING_INLINE {Отзыв покупки по заказу #{orderId} все еще ожидает выполнения.} UNDO_WAITING {Отзыв покупки по заказу #{orderId} все еще ждет сервер {serverName}.} other {Доставок в ожидании сервера {serverName}: {count}. Установите или обновите там плагин Pano Market.}}"
   },
   "mock": {
     "saved-nothing": "Режим предпросмотра: ничего не сохранено.",
@@ -197,7 +199,7 @@
     "intro": "Поддельные данные для страниц магазина. В базу данных ничего не записывается; на изменения приходит только ответ об успехе.",
     "enable": "Режим предпросмотра",
     "enabled-hint": "Включено: страницы показывают поддельные данные",
-    "volume": "Объём данных",
+    "volume": "Объем данных",
     "volume-empty": "Пусто",
     "volume-few": "Мало",
     "volume-many": "Много",
@@ -206,17 +208,17 @@
     "scenario-success": "Успех",
     "scenario-failure": "Ошибка",
     "scenario-auto": "Начало выбранного способа",
-    "scenario-redirect": "Переход к платёжному шлюзу",
+    "scenario-redirect": "Переход к платежному шлюзу",
     "scenario-iframe": "Шлюз во фрейме",
     "scenario-embedded-component": "Встроенный компонент плагина",
     "scenario-embedded-form": "Встроенная общая форма",
     "scenario-instructions": "Реквизиты для перевода",
     "scenario-paid": "Оплачено сразу",
-    "scenario-PAYMENT_PROVIDER_ERROR": "Ошибка платёжного провайдера",
+    "scenario-PAYMENT_PROVIDER_ERROR": "Ошибка платежного провайдера",
     "scenario-PAYMENT_PROVIDER_ERROR-INVALID_BUYER": "Провайдер отклонил имя игрока",
     "scenario-PRICE_CHANGED": "Цена изменилась (один раз)",
     "scenario-OUT_OF_STOCK": "Нет в наличии",
-    "scenario-BUYER_INFO_REQUIRED": "Нужны платёжные данные",
+    "scenario-BUYER_INFO_REQUIRED": "Нужны платежные данные",
     "scenario-NETWORK": "Нет ответа (сеть)",
     "pages": "Доступные страницы",
     "panel": "Панель",
@@ -224,5 +226,12 @@
     "reset": "Сбросить",
     "close": "Закрыть",
     "note": "Страницы без тестовых данных используют настоящий сервер."
+  },
+  "gateway": {
+    "order": "Заказ #{id}",
+    "order-without-number": "Заказ"
+  },
+  "minecraft": {
+    "broadcast-default": "&a{player} &7купил(а) &e{product}&7 в магазине &b{store}&7!"
   }
 }

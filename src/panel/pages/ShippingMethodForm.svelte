@@ -19,7 +19,7 @@
             <h5 class="alert-heading mb-2">{$_('common.warning')}</h5>
             <div>{$_('pages.shipping-method.no-zones')}</div>
             <a
-              class="alert-link d-inline-block mt-2 text-capitalize"
+              class="alert-link d-inline-block mt-2"
               href="{base}/market/settings?section=shipping-zones">
               {$_('pages.shipping-method.open-zones')}
             </a>

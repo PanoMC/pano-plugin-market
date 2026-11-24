@@ -28,6 +28,7 @@ import com.panomc.plugins.market.provider.SettingsCodec
 import com.panomc.plugins.market.spi.MarketSpi
 import com.panomc.plugins.market.spi.common.LocalizedText
 import com.panomc.plugins.market.spi.common.ProviderAsset
+import com.panomc.plugins.market.i18n.ProviderErrorTexts
 import com.panomc.plugins.market.spi.common.ProviderException
 import com.panomc.plugins.market.spi.common.ProviderSettings
 import com.panomc.plugins.market.spi.common.ReadonlyValue
@@ -234,7 +235,7 @@ class PaymentMethodService(
         } catch (e: ProviderException) {
             // The settings are stored; the gateway side failed (webhook registration, ...): shown to the admin, kept on the row.
             recordError(id, e.code.name)
-            message = LocalizedText.of(e.adminMessage ?: e.message ?: e.code.name)
+            message = ProviderErrorTexts.of(e)
             success = false
         }
 
@@ -410,7 +411,7 @@ class PaymentMethodService(
     private val NO_CURRENCY = LocalizedText.of(
         "This payment method accepts no currency with its current settings. Save its settings again so the provider can read your account, then turn it on.",
         "tr" to "Bu ödeme yöntemi mevcut ayarlarıyla hiçbir para birimini kabul etmiyor. Sağlayıcının hesabınızı okuyabilmesi için ayarlarını yeniden kaydedin, sonra etkinleştirin.",
-        "ru" to "С текущими настройками этот способ оплаты не принимает ни одной валюты. Сохраните его настройки ещё раз, чтобы провайдер прочитал ваш аккаунт, затем включите его."
+        "ru" to "С текущими настройками этот способ оплаты не принимает ни одной валюты. Сохраните его настройки еще раз, чтобы провайдер прочитал ваш аккаунт, затем включите его."
     )
 
     private fun storedOf(row: MarketPaymentMethod): JsonObject = try {

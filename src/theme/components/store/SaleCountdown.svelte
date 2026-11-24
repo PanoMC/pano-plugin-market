@@ -2,7 +2,7 @@
   <div class="market-sale-countdown small text-danger-emphasis">
     <i class="fa-regular fa-clock me-1" aria-hidden="true"></i>
     <span class="visually-hidden">{$_('theme.store.sale-ends-in')}</span>
-    <span>{format(remaining(product.sale.endsAt, clock.state.now))}</span>
+    <span>{format(remaining(product.sale.endsAt, clock.state.now), $_)}</span>
   </div>
 {/if}
 

@@ -14,7 +14,7 @@
     },
     "MANAGE_MARKET_ORDERS": {
       "title": "Manage Market Fulfillment",
-      "description": "Can re-run or cancel deliveries, revoke purchases, manage shipments, resend order mails, edit order notes and manage the block list."
+      "description": "Can re-run or cancel deliveries, revoke purchases, manage shipments, resend order e-mails, edit order notes and manage the block list."
     },
     "MANAGE_MARKET_PAYMENTS": {
       "title": "Manage Market Payments",
@@ -182,7 +182,9 @@
     "date-time": "MMM d, yyyy HH:mm",
     "decimal-separator": ".",
     "group-separator": ",",
-    "money": "{symbol}{amount}"
+    "money": "{symbol}{amount}",
+    "percent": "{value}%",
+    "credit-name-default": "Credits"
   },
   "notifications": {
     "MARKET_ORDER_REVIEW": "Order #{orderId} is waiting for your review.",
@@ -224,5 +226,12 @@
     "reset": "Reset",
     "close": "Close",
     "note": "Pages without a fixture use the real backend."
+  },
+  "gateway": {
+    "order": "Order #{id}",
+    "order-without-number": "Order"
+  },
+  "minecraft": {
+    "broadcast-default": "&a{player} &7bought &e{product}&7 from the &b{store}&7!"
   }
 }

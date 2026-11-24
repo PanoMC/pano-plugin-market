@@ -61,19 +61,19 @@
       },
       "action": {
         "grant": {
-          "title": "Teslimat eylemi ({phase})",
+          "title": "Ürün teslim edildi",
           "description": "{username} için {product.name}"
         },
         "renew": {
-          "title": "Teslimat eylemi ({phase})",
+          "title": "Ürün yenilendi",
           "description": "{username} için {product.name}"
         },
         "expire": {
-          "title": "Teslimat eylemi ({phase})",
+          "title": "Ürünün süresi doldu",
           "description": "{username} için {product.name}"
         },
         "revoke": {
-          "title": "Teslimat eylemi ({phase})",
+          "title": "Ürün geri alındı",
           "description": "{username} için {product.name}"
         }
       },
@@ -84,7 +84,23 @@
       "label": {
         "player": "Oyuncu",
         "total": "Toplam",
-        "items": "Ürünler"
+        "items": "Ürünler",
+        "more": "+{count} daha"
+      },
+      "phase": {
+        "GRANT": "teslim",
+        "RENEW": "yenileme",
+        "EXPIRE": "süre bitimi",
+        "REVOKE": "geri alma"
+      },
+      "subscription-status": {
+        "PENDING": "Bekliyor",
+        "ACTIVE": "Etkin",
+        "PAST_DUE": "Ödemesi gecikti",
+        "PAUSED": "Duraklatıldı",
+        "EXPIRED": "Süresi doldu",
+        "CANCELLED": "İptal edildi",
+        "COMPLETED": "Tamamlandı"
       }
     }
   }

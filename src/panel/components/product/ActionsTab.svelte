@@ -97,7 +97,7 @@
                 <i class="fa-solid {TYPE_ICON[type]} fs-5" aria-hidden="true"></i>
               </span>
               <span>
-                <span class="d-block text-body text-capitalize"
+                <span class="d-block text-body"
                   >{$_(`pages.create-product.action-type.${type}`)}</span>
                 <span class="d-block text-body-secondary"
                   >{$_(`pages.create-product.action-type-desc.${type}`)}</span>

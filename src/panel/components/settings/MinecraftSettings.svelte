@@ -340,6 +340,7 @@
     activeMinecraftKeys,
     clearOverrideRequest,
     previewSegments,
+    previewTemplate,
     previewValues,
     serverRows,
     validateMinecraft,
@@ -371,7 +372,13 @@
       ?.downloadUrl ?? null,
   );
   const preview = $derived(
-    previewSegments(draft.mcBroadcastTemplate, previewValues(settings.storeName)),
+    previewSegments(
+      previewTemplate(draft.mcBroadcastTemplate, $_('minecraft.broadcast-default')),
+      previewValues(settings.storeName, {
+        product: $_('settings.minecraft.preview.product'),
+        store: $_('settings.minecraft.preview.store'),
+      }),
+    ),
   );
   const draftKey = $derived(JSON.stringify($state.snapshot(draft)));
   const clientErrors = $derived(validateMinecraft(draft));

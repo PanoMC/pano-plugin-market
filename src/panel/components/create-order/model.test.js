@@ -9,8 +9,10 @@ import {
   createQuoteRunner,
   detailPath,
   fieldError,
+  fieldMeta,
   formErrors,
   initialForm,
+  lineFieldEntries,
   lineIdentity,
   mapLineErrors,
   matchQuoteLines,
@@ -439,5 +441,26 @@ describe('line error texts', () => {
     expect(lineErrorKey('OUT_OF_STOCK')).toBe('enums.line-error.OUT_OF_STOCK');
     expect(lineErrorKey('WHATEVER')).toBe('enums.line-error.UNKNOWN');
     expect(LINE_ERROR_CODES).toContain('MAX_QUANTITY');
+  });
+});
+
+describe('cart line field display', () => {
+  test('labels come from the product fields, checkboxes are flags', () => {
+    const product = {
+      fields: [
+        { fieldKey: 'discord_id', label: 'Discord ID', type: 'DISCORD_ID' },
+        { fieldKey: 'gift_wrap', label: 'Gift Wrap', type: 'CHECKBOX' },
+      ],
+    };
+    const line = {
+      fieldValues: { discord_id: '123', gift_wrap: true, other: 'x' },
+      fieldMeta: fieldMeta(product),
+    };
+    expect(lineFieldEntries(line)).toEqual([
+      { key: 'discord_id', label: 'Discord ID', value: '123', flag: null },
+      { key: 'gift_wrap', label: 'Gift Wrap', value: 'true', flag: true },
+      { key: 'other', label: 'other', value: 'x', flag: null },
+    ]);
+    expect(lineFieldEntries({})).toEqual([]);
   });
 });

@@ -118,9 +118,9 @@
       "tab-general": "Genel",
       "tab-pricing": "Fiyatlandırma",
       "tab-restrictions": "Kısıtlamalar",
-      "tab-actions": "Aksiyonlar",
+      "tab-actions": "Eylemler",
       "remove-title": "Kaldır",
-      "add-action-title": "Aksiyon Ekle",
+      "add-action-title": "Eylem Ekle",
       "not-found": "Ürün bulunamadı. Silinmiş veya taşınmış olabilir.",
       "back-to-products": "Ürünlere Dön",
       "name-placeholder": "Ürün Başlığı",
@@ -143,8 +143,8 @@
       "action-credit": "Kredi Yükle",
       "action-permission": "Yetkilendir",
       "action-command": "Komut Çalıştır",
-      "action-default": "Aksiyon",
-      "delete-action-title": "Aksiyonu Sil",
+      "action-default": "Eylem",
+      "delete-action-title": "Eylemi Sil",
       "amount": "Miktar",
       "permission-node-label": "Yetki Node",
       "permission-node-placeholder": "Yetki yazın ve Enter'a basın...",
@@ -165,12 +165,12 @@
       "start-date": "Başlangıç Tarihi",
       "end-date": "Bitiş Tarihi",
       "priority": "Öncelik",
-      "select-action": "Aksiyon Seçin",
+      "select-action": "Eylem Seçin",
       "action-credit-desc": "Oyuncuya bakiye ekler",
       "action-permission-desc": "Yetki grubu veya node ekler",
       "action-command-desc": "Özel konsol komutu çalıştırır",
       "name-required": "Ürün adı zorunludur.",
-      "credit-amount-invalid": "Kredi yükleme aksiyonu için geçerli bir miktar girin.",
+      "credit-amount-invalid": "Kredi yükleme eylemi için geçerli bir miktar girin.",
       "slug-exists": "Bu ürün kimliği (slug) zaten kullanılıyor.",
       "save-error": "Ürün kaydedilirken bir hata oluştu.",
       "update-success": "Ürün başarıyla güncellendi.",
@@ -188,7 +188,7 @@
         "limits": "Limitler",
         "providers": "Sağlayıcılar",
         "seo": "SEO",
-        "actions": "Aksiyonlar"
+        "actions": "Eylemler"
       },
       "tab-has-errors": "Bu sekmede geçersiz alanlar var",
       "pending-tab": "{tab} bölümü yeniden hazırlanıyor.",
@@ -205,8 +205,8 @@
         "CREDIT_PACK": "Kredi Paketi"
       },
       "statuses": {
-        "ACTIVE": "Aktif",
-        "INACTIVE": "Pasif",
+        "ACTIVE": "Etkin",
+        "INACTIVE": "Devre dışı",
         "HIDDEN": "Gizli",
         "ARCHIVED": "Arşivlenmiş"
       },
@@ -311,7 +311,7 @@
         "TOO_MANY": "Çok fazla kayıt var.",
         "PHYSICAL_NOT_ALLOWED": "Yalnızca standart tek seferlik ürünler fiziksel olabilir.",
         "INVALID_DATE_RANGE": "Bitiş, başlangıçtan sonra olmalıdır.",
-        "NEEDS_ACTIVE_VARIANT": "En az bir aktif varyant ekleyin.",
+        "NEEDS_ACTIVE_VARIANT": "En az bir etkin varyant ekleyin.",
         "NEEDS_ITEMS": "En az bir ürün ekleyin.",
         "INVALID_NUMBER": "Tam sayı girin.",
         "INVALID_OPTION": "Listelenen seçeneklerden birini seçin.",
@@ -461,7 +461,6 @@
         "name": "Ad",
         "used": "Kullanılan"
       },
-      "credit-amount": "{amount} Kredi",
       "random-gift": "Rastgele Hediye ({count} Ürün Seçili)",
       "no-expiry": "Süresiz",
       "start-date-label": "Bşl: {date}",
@@ -478,11 +477,11 @@
       "sections": {
         "general": "İndirimler",
         "coupons": "Kupon Kodları",
-        "creators": "Referans Kodları"
+        "creators": "İçerik Üretici Kodları"
       },
       "create-discount": "İndirim Oluştur",
       "create-coupon": "Kupon Kodu Oluştur",
-      "create-creator-code": "Referans Kodu Oluştur",
+      "create-creator-code": "İçerik Üretici Kodu Oluştur",
       "menu-label": "İndirimler menüsü",
       "load-error": "İndirimler yüklenemedi. Lütfen sayfayı yenileyip tekrar deneyin."
     },
@@ -560,7 +559,7 @@
           "dispute-open": "{count} açık itiraz",
           "refund-failed": "{count} başarısız iade",
           "payment-review": "{count} ödeme incelemede",
-          "mail-failed": "{count} mail gönderilemedi"
+          "mail-failed": "{count} e-posta gönderilemedi"
         }
       },
       "title-with-id": "Sipariş #{id}",
@@ -627,7 +626,7 @@
         "subtotal": "Ara Toplam",
         "discounts": "İndirimler",
         "coupon": "Kupon",
-        "creator-code": "Yayıncı Kodu",
+        "creator-code": "İçerik Üretici Kodu",
         "upgrade": "Yükseltme",
         "shipping": "Kargo",
         "payment-fee": "Ödeme Ücreti",
@@ -693,7 +692,7 @@
         "rerunDelivery": "Teslimatı Yeniden Çalıştır...",
         "revoke": "Geri Al...",
         "editShippingAddress": "Teslimat Adresini Düzenle...",
-        "runChargebackActions": "Chargeback İşlemlerini Çalıştır",
+        "runChargebackActions": "Ters İbraz Eylemlerini Çalıştır",
         "anonymize": "Anonimleştir...",
         "createShipment": "Kargo Oluştur...",
         "resendMail": "E-postayı Yeniden Gönder...",
@@ -727,7 +726,7 @@
           "cta": "Geri Al"
         },
         "chargeback": {
-          "title": "Bekletilen chargeback işlemleri çalıştırılsın mı?",
+          "title": "Bekletilen ters ibraz eylemleri çalıştırılsın mı?",
           "description": "İşlemler bu siparişin alıcısı olan {player} oyuncusu üzerinde çalışır.",
           "cta": "İşlemleri Çalıştır"
         },
@@ -773,7 +772,7 @@
         },
         "dispute-LOST": {
           "title": "Bu itiraz kaybedildi olarak işaretlensin mi?",
-          "description": "Para kaybedilir ve sipariş chargeback durumuna geçer.",
+          "description": "Para kaybedilir ve sipariş ters ibraz durumuna geçer.",
           "cta": "Kaybedildi"
         },
         "dispute-CLOSED": {
@@ -791,7 +790,7 @@
         "rate-saved": "Döviz kuru kaydedildi.",
         "rate-refreshed": "Döviz kuru yenilendi.",
         "note-saved": "Not kaydedildi.",
-        "chargeback": "{count} chargeback işlemi oluşturuldu.",
+        "chargeback": "{count} ters ibraz eylemi oluşturuldu.",
         "anonymized": "Sipariş anonimleştirildi.",
         "revoked": "{count} geri alma teslimatı sıraya alındı.",
         "payment-queried": "Ödeme durumu sorgulandı.",
@@ -805,6 +804,13 @@
         "shipment-retried": "Kargo yeniden denendi.",
         "shipment-cancelled": "Kargo iptal edildi.",
         "invoice-regenerated": "Faturalar yeniden oluşturuldu."
+      },
+      "payment-failure": {
+        "failed": "Ödeme başarısız oldu.",
+        "start-failed": "Ödeme başlatılamadı."
+      },
+      "payment-notes": {
+        "environment-mismatch": "Ödeme diğer ortamdan geldi (test / canlı)"
       }
     },
     "create-order": {
@@ -843,19 +849,19 @@
         "note": "Not"
       },
       "submit": "Sipariş Oluştur",
-      "over-limit": "Bir satır limiti aşıyor veya stokta yok. Devam etmek için Limitleri Ve Stoğu Yok Say seçeneğini aç.",
+      "over-limit": "Bir satır limiti aşıyor veya stokta yok. Devam etmek için Limitleri Ve Stoğu Yok Say seçeneğini açın.",
       "default-payment-label": "Manuel ödeme",
       "toast-created": "Sipariş oluşturuldu",
       "force-alert": {
         "title": "Limit Aşıldı",
-        "body": "Sipariş bir limit, bekleme süresi, gereksinim veya stok nedeniyle reddedildi. Yine de oluşturabilirsin.",
+        "body": "Sipariş bir limit, bekleme süresi, gereksinim veya stok nedeniyle reddedildi. Yine de oluşturabilirsiniz.",
         "enable": "Limitleri Ve Stoğu Yok Saymayı Aç"
       },
       "errors": {
-        "player-invalid": "1-32 harf, rakam, \"_\", \".\" veya \"*\" kullan.",
-        "recipient-invalid": "1-32 harf, rakam, \"_\", \".\" veya \"*\" kullan.",
+        "player-invalid": "1-32 harf, rakam, \"_\", \".\" veya \"*\" kullanın.",
+        "recipient-invalid": "1-32 harf, rakam, \"_\", \".\" veya \"*\" kullanın.",
         "recipient-same": "Alıcı, satın alandan farklı olmalı.",
-        "email-invalid": "Geçerli bir e-posta adresi gir."
+        "email-invalid": "Geçerli bir e-posta adresi girin."
       }
     },
     "deliveries": {
@@ -930,7 +936,7 @@
       "transaction-count": "{count} İşlem",
       "disabled-title": "Krediler Kapalı",
       "disabled-body": "Oyuncular şu an kredi ile ödeme yapamaz. Bakiye ekleyip düşebilirsiniz.",
-      "disabled-link": "Kredi ayarlarını aç",
+      "disabled-link": "Kredi Ayarlarını Aç",
       "tab": {
         "accounts": "Hesaplar",
         "transactions": "İşlemler"
@@ -1021,14 +1027,15 @@
         "remove": "Kaldır"
       },
       "expired": "Süresi Doldu",
-      "toast-removed": "Engel kaldırıldı."
+      "toast-removed": "Engel kaldırıldı.",
+      "reason-chargeback": "#{id} numaralı siparişte ters ibraz"
     },
     "subscriptions": {
       "title": "Abonelikler",
       "count": "{count} Abonelik",
       "tab": {
         "all": "Tümü",
-        "active": "Aktif",
+        "active": "Etkin",
         "past-due": "Gecikmiş",
         "cancelled": "İptal Edilmiş"
       },
@@ -1265,8 +1272,8 @@
     "create": "Oluştur",
     "actions": "İşlemler",
     "loading": "Yükleniyor...",
-    "active": "Aktif",
-    "inactive": "Pasif",
+    "active": "Etkin",
+    "inactive": "Devre dışı",
     "hidden": "Gizli",
     "status": "Durum",
     "all": "Tümü",
@@ -1341,7 +1348,7 @@
       "nodes-placeholder": "Bir yetki veya grup yazıp Enter'a basın...",
       "via": "Uygulama Yolu",
       "via-PANO": "Pano",
-      "via-SERVER": "Sunucu yetki eklentisi",
+      "via-SERVER": "Sunucu yetki plugini",
       "via-PANO-help": "Yetki oyuncunun Pano hesabında saklanır.",
       "via-SERVER-help": "Minecraft sunucusu yetkiyi oyuncuya uygular.",
       "commands": "Komutlar",
@@ -1472,11 +1479,11 @@
       "per-customer-limit": "Kişi Başı Limit"
     },
     "creator-code": {
-      "toast-updated": "Referans kodu güncellendi.",
-      "toast-created": "Referans kodu oluşturuldu.",
-      "heading-edit": "Referans Kodu Düzenle",
-      "heading-create": "Referans Kodu Oluştur",
-      "creator-label": "Referans Oyuncu",
+      "toast-updated": "İçerik üretici kodu güncellendi.",
+      "toast-created": "İçerik üretici kodu oluşturuldu.",
+      "heading-edit": "İçerik Üretici Kodunu Düzenle",
+      "heading-create": "İçerik Üretici Kodu Oluştur",
+      "creator-label": "İçerik Üretici Oyuncu",
       "commission-label": "Komisyon Oranı (%)",
       "code-label": "Kupon Kodu",
       "generate-title": "Kodu Oluştur",
@@ -1532,7 +1539,7 @@
         "currency": "Para birimi",
         "orderTotal": "Sipariş toplamı",
         "couponCode": "Kupon kodu",
-        "creatorCode": "Yaratıcı kodu",
+        "creatorCode": "İçerik üretici kodu",
         "paymentMethod": "Ödeme yöntemi",
         "gatewayTransactionId": "Ödeme altyapısı işlem ID",
         "gatewayAmount": "Ödeme altyapısı tutarı",
@@ -1826,7 +1833,7 @@
         "INVALID": "0'dan büyük, en fazla 2 ondalıklı bir tutar girin.",
         "EXCEEDS_AVAILABLE": "Tutar kullanılabilir bakiyeden yüksek.",
         "NOTHING_AVAILABLE": "Ödenebilecek tutar yok.",
-        "TOO_MANY": "Çok fazla aksiyon var."
+        "TOO_MANY": "Çok fazla eylem var."
       }
     },
     "block": {
@@ -1873,7 +1880,7 @@
       "period-end": "Dönem Sonunda",
       "now": "Hemen",
       "hint-period-end": "Oyuncu ödenen dönem bitene kadar erişimini korur.",
-      "hint-now": "Abonelik hemen biter ve aksiyonlar ayarlara göre geri alınır.",
+      "hint-now": "Abonelik hemen biter ve eylemler ayarlara göre geri alınır.",
       "reason": "Neden (isteğe bağlı)",
       "submit": "Aboneliği İptal Et",
       "toast-cancelled": "Abonelik iptal edildi.",
@@ -1906,9 +1913,9 @@
       "imported": "{categories} kategori ve {products} ürün içe aktarıldı.",
       "custom-label": "Özel ad",
       "custom-description": "Özel açıklama",
-      "custom-description-help": "Ödeme sayfasında yöntemin adının altında alıcılara gösterilir. Boş bırakırsan açıklama gösterilmez.",
+      "custom-description-help": "Ödeme sayfasında yöntemin adının altında alıcılara gösterilir. Boş bırakırsanız açıklama gösterilmez.",
       "custom-hint": "Ödeme sayfası ipucu",
-      "custom-hint-help": "Ödeme sayfasında yöntemin altındaki kısa satır. Boş bırakırsan sağlayıcının kendi satırı kullanılır.",
+      "custom-hint-help": "Ödeme sayfasında yöntemin altındaki kısa satır. Boş bırakırsanız sağlayıcının kendi satırı kullanılır.",
       "hide-hint": "İpucunu ödeme sayfasında gizle",
       "fee-buyer": "Komisyonu Alıcıya Yansıt",
       "fee-percent": "Komisyon yüzdesi",
@@ -2213,14 +2220,14 @@
     },
     "credits": {
       "credits-label": "Krediler",
-      "credits-desc": "Sistem genelinde kredi ile ödeme ve bakiye kullanımını aktif eder.",
+      "credits-desc": "Sistem genelinde kredi ile ödeme ve bakiye kullanımını etkinleştirir.",
       "only-credits-label": "Sadece Kredi ile Ödeme Kabul Et",
       "only-credits-desc": "Kullanıcıların doğrudan ödeme yöntemleri yerine yalnızca hesap bakiyelerindeki (kredileriyle) satın alım yapabilmesini zorunlu kılar.",
       "credit-name-label": "Kredi İsmi",
       "credit-name-desc": "Kullanıcılara gösterilecek para birimi ismi.",
-      "cashback-label": "Cashback (%)",
+      "cashback-label": "Para iadesi bonusu (%)",
       "cashback-desc": "Mağazadan yapılan harcamalarda kullanıcıya geri verilecek kredi oranı.",
-      "cashback-placeholder": "Cashback %",
+      "cashback-placeholder": "Para iadesi bonusu %",
       "refund-split": {
         "title": "İadeler Bölünür",
         "body": "Kısmen kredi ile ödenen siparişler iki parça halinde iade edilir: ödeme geçidi payı ödeme yöntemi üzerinden, kredi payı alıcının bakiyesine döner. Bir iade, bir parçayı diğerine aktaramaz."
@@ -2254,8 +2261,8 @@
         "global": "Global"
       },
       "logo-alt": "{name} logosu",
-      "toast-activated": "{name} aktifleştirildi.",
-      "toast-deactivated": "{name} pasifleştirildi.",
+      "toast-activated": "{name} etkinleştirildi.",
+      "toast-deactivated": "{name} devre dışı bırakıldı.",
       "toast-saved": "Ödeme yöntemi kaydedildi.",
       "configure-first": "Önce yöntemi yapılandırın",
       "incompatible": "Bu eklenti, mağazanın desteklemediği {spiVersion} sürümlü ödeme arayüzünü kullanıyor. Eklentiyi güncelleyin.",
@@ -2414,16 +2421,16 @@
     "delivery": {
       "servers-error": {
         "title": "Sunucu Listesi Yok",
-        "body": "Sunucu listesi yüklenemedi. Sunucuları hedefleyen geri ödeme itirazı eylemleri liste yüklenene kadar denetlenemez."
+        "body": "Sunucu listesi yüklenemedi. Sunucuları hedefleyen ters ibraz eylemleri liste yüklenene kadar denetlenemez."
       },
       "revoke-on-refund": "İadede Geri Al",
       "revoke-on-refund-hint": "Bir sipariş iade edildiğinde ürünleri otomatik geri alır.",
-      "revoke-on-chargeback": "Ödeme İtirazında Geri Al",
-      "revoke-on-chargeback-hint": "Bir ödemeye itiraz edildiğinde ürünleri otomatik geri alır.",
-      "auto-block-on-chargeback": "Ödeme İtirazında Alıcıyı Engelle",
-      "auto-block-on-chargeback-hint": "İtiraz edilen siparişin alıcısını ve e-posta adresini engel listesine ekler.",
-      "revoke-credit-orders": "Kredi Yükleme İtirazından Sonra Kredi Siparişlerini Geri Al",
-      "revoke-credit-orders-hint": "İtiraz edilen bir yükleme kredi açığı bırakırsa, alıcının o günden beri kredi ile ödediği siparişler en yeniden başlayarak geri alınır.",
+      "revoke-on-chargeback": "Ters İbrazda Geri Al",
+      "revoke-on-chargeback-hint": "Bir ödeme ters ibraz edildiğinde ürünleri otomatik geri alır.",
+      "auto-block-on-chargeback": "Ters İbrazda Alıcıyı Engelle",
+      "auto-block-on-chargeback-hint": "Ters ibraz edilen siparişin alıcısını ve e-posta adresini engel listesine ekler.",
+      "revoke-credit-orders": "Kredi Yüklemesi Ters İbraz Edilince Kredi Siparişlerini Geri Al",
+      "revoke-credit-orders-hint": "Ters ibraz edilen bir yükleme kredi açığı bırakırsa, alıcının o günden beri kredi ile ödediği siparişler en yeniden başlayarak geri alınır.",
       "max-attempts": "Teslimat Denemesi",
       "max-attempts-hint": "Yeniden denenebilir bir hatadan sonra teslimatın kaç kez denendiği. 1 ile 20 arasında.",
       "online-wait-days": "Oyuncuyu Bekleme",
@@ -2435,14 +2442,14 @@
       "subscription-reminder-days": "Yenileme Hatırlatması",
       "subscription-reminder-days-hint": "Yenileme veya bitişten kaç gün önce hatırlatma gönderileceği.",
       "creator-hold-days": "İçerik Üretici Kazanç Bekletmesi",
-      "creator-hold-days-hint": "Bir kazanç ödemeden sonra bu kadar beklemede kalır, böylece ödeme itirazı onu hâlâ geri çevirebilir.",
+      "creator-hold-days-hint": "Bir kazanç ödemeden sonra bu kadar beklemede kalır, böylece bir ters ibraz onu hâlâ geri çevirebilir.",
       "days": "gün",
       "seconds": "saniye",
       "chargeback-invalid": {
-        "title": "Kayıtlı İtiraz Eylemleri Okunamıyor",
+        "title": "Kayıtlı Ters İbraz Eylemleri Okunamıyor",
         "body": "Kayıtlı değer bir eylem listesi değil. Aşağıdaki liste boş başlar ve kaydetmek kayıtlı değerin yerine geçer."
       },
-      "chargeback-actions": "{count} İtiraz Eylemi",
+      "chargeback-actions": "{count} Ters İbraz Eylemi",
       "add-ban": "Yasaklama Komutu Ekle"
     },
     "modules": {
@@ -2606,6 +2613,10 @@
         "OFFLINE": "Çevrimdışı",
         "COMPONENT_MISSING": "Minecraft Plugini Yok",
         "VERSION_MISMATCH": "Sürüm Uyuşmuyor"
+      },
+      "preview": {
+        "product": "VIP Rütbesi",
+        "store": "Mağaza"
       }
     },
     "health": {
@@ -2659,6 +2670,12 @@
         "id": "Sunucu",
         "state": "Durum",
         "waiting": "Bekleyen"
+      },
+      "runtime": {
+        "READY": "Hazır",
+        "STARTING": "Başlatılıyor",
+        "DEGRADED": "Kısıtlı çalışıyor",
+        "STOPPED": "Durduruldu"
       }
     },
     "webhooks": {
@@ -2809,13 +2826,13 @@
       "redemptions": "Kullanımlar"
     },
     "creators": {
-      "toast-load-error": "Referans kodları yüklenirken bir hata oluştu.",
-      "confirm-delete": "\"{code}\" referans kodunu silmek istediğinize emin misiniz?",
-      "toast-delete-success": "Referans kodu başarıyla silindi.",
-      "toast-delete-error": "Referans kodu silinirken bir hata oluştu.",
-      "heading-count": "{count} Referans Kodu",
+      "toast-load-error": "İçerik üretici kodları yüklenirken bir hata oluştu.",
+      "confirm-delete": "\"{code}\" içerik üretici kodunu silmek istediğinize emin misiniz?",
+      "toast-delete-success": "İçerik üretici kodu başarıyla silindi.",
+      "toast-delete-error": "İçerik üretici kodu silinirken bir hata oluştu.",
+      "heading-count": "{count} İçerik Üretici Kodu",
       "table": {
-        "creator": "Referans Oyuncu",
+        "creator": "İçerik Üretici Oyuncu",
         "code": "Kupon Kodu",
         "discount-rate": "İndirim Oranı",
         "commission": "Komisyon",
@@ -3037,7 +3054,7 @@
     },
     "subscription": {
       "PENDING": "Beklemede",
-      "ACTIVE": "Aktif",
+      "ACTIVE": "Etkin",
       "PAST_DUE": "Ödeme Gecikti",
       "PAUSED": "Duraklatıldı",
       "CANCELLED": "İptal Edildi",
@@ -3072,14 +3089,14 @@
       "CANCELLED": "İptal Edildi"
     },
     "provider": {
-      "ACTIVE": "Aktif",
+      "ACTIVE": "Etkin",
       "DISABLED": "Devre Dışı",
       "NOT_CONFIGURED": "Yapılandırılmadı",
       "INCOMPATIBLE": "Uyumsuz",
       "UNAVAILABLE": "Kullanılamıyor"
     },
     "entitlement": {
-      "ACTIVE": "Aktif",
+      "ACTIVE": "Etkin",
       "EXPIRED": "Süresi Doldu",
       "REVOKED": "Geri Alındı",
       "UPGRADED": "Yükseltildi"
@@ -3214,8 +3231,8 @@
       "NEEDS_CONFIRMATION": "Onay gerekiyor",
       "DB_ERROR": "Veritabanı hatası",
       "SERVER_OFFLINE": "Sunucu çevrimdışı",
-      "COMPONENT_MISSING": "Sunucuda Pano eklentisi yok",
-      "VERSION_MISMATCH": "Eklenti sürümü uyuşmuyor",
+      "COMPONENT_MISSING": "Sunucuda Pano Market plugini yok",
+      "VERSION_MISMATCH": "Plugin sürümü uyuşmuyor",
       "SERVER_REMOVED": "Sunucu silindi",
       "UNKNOWN_OUTCOME": "Çalışmış olabilir, yeniden çalıştırmadan önce kontrol edin",
       "ONLINE_WAIT_EXPIRED": "Oyuncu için çok beklendi",
@@ -3238,7 +3255,7 @@
       "QUANTITY_REDUCED": "Adet stoğa göre azaltıldı",
       "MAX_QUANTITY": "Sipariş başına azami adedin üzerinde",
       "PURCHASE_LIMIT_REACHED": "Satın alma limitine ulaşıldı",
-      "COOLDOWN_ACTIVE": "Bekleme süresi aktif",
+      "COOLDOWN_ACTIVE": "Bekleme süresi etkin",
       "REQUIREMENT_NOT_MET": "Gerekli ürün eksik",
       "PERMISSION_REQUIRED": "Yetki gerekli",
       "ALREADY_OWNED": "Zaten sahip",
@@ -3296,7 +3313,7 @@
     },
     "payout-method": {
       "CREDIT": "Kredi",
-      "ACTION": "Aksiyon",
+      "ACTION": "Eylem",
       "MANUAL": "Manuel"
     },
     "block-type": {
@@ -3307,7 +3324,7 @@
     },
     "block-source": {
       "MANUAL": "Manuel",
-      "CHARGEBACK": "Geri ödeme itirazı"
+      "CHARGEBACK": "Ters ibraz"
     },
     "subscription-mode": {
       "GATEWAY": "Ağ geçidi",
@@ -3327,7 +3344,7 @@
       "GATEWAY_ENDED": "Ağ geçidi sonlandırdı",
       "COMPLETED": "Tamamlandı",
       "REFUND": "İade edildi",
-      "CHARGEBACK": "Geri ödeme itirazı",
+      "CHARGEBACK": "Ters ibraz",
       "PROVIDER_UNAVAILABLE": "Sağlayıcı kullanılamıyor"
     },
     "refund-support": {
@@ -3358,15 +3375,15 @@
     "webhook-event": {
       "order-paid": "Sipariş Ödendi",
       "order-refunded": "Sipariş İade Edildi",
-      "order-chargeback": "Ödeme İtirazı Açıldı",
-      "order-chargeback-won": "Ödeme İtirazı Kazanıldı",
+      "order-chargeback": "Ters İbraz Açıldı",
+      "order-chargeback-won": "Ters İbraz Kazanıldı",
       "subscription-started": "Abonelik Başladı",
       "subscription-renewed": "Abonelik Yenilendi",
       "subscription-cancelled": "Abonelik İptal Edildi",
       "subscription-expired": "Abonelik Sona Erdi",
       "shipment-shipped": "Kargo Gönderildi",
       "shipment-delivered": "Kargo Teslim Edildi",
-      "test-ping": "Test Ping"
+      "test-ping": "Deneme Bildirimi"
     },
     "webhook-format": {
       "JSON": "JSON",
@@ -3406,6 +3423,33 @@
       "REJECTED": "Kargo firması gönderiyi reddetti.",
       "OTHER": "Kargo firması bir hata bildirdi.",
       "TIMEOUT": "Kargo firması zamanında yanıt vermedi."
+    },
+    "event-direction": {
+      "IN": "Gelen",
+      "OUT": "Giden"
+    },
+    "order-note": {
+      "MARKED_PAID": "Bir yönetici tarafından ödendi olarak işaretlendi",
+      "FORCE_OVERRIDE": "Durum bir yönetici tarafından zorla değiştirildi; kodlar, limitler ve stok yeniden denetlenmedi",
+      "TENDER_REWRITTEN": "Ödeme dağılımı bir yönetici tarafından yeniden yazıldı",
+      "DUPLICATE_PAYMENT": "Sipariş iki kez ödendi",
+      "ACCOUNT_DELETED": "Alıcı hesabı silindi",
+      "DISPUTE_EVENT_AMBIGUOUS": "Bir ters ibraz olayı tek bir ödemeyle eşleştirilemedi",
+      "REFUNDS_CANCELLED_BY_CHARGEBACK": "Açık iadeler ters ibraz nedeniyle iptal edildi",
+      "UPGRADE_CASCADE_REVOKED": "Sonraki bir yükseltmenin ürünleri ters ibraz nedeniyle geri alındı",
+      "CHARGEBACK_ACTIONS_HELD": "Ters ibraz eylemleri bekletiliyor",
+      "CREDIT_RECIPIENT_GONE": "Kredi alıcısı artık yok; siparişi iade edin",
+      "LATE_REFUND": "Abonelik kapatılmıştı, ödeme iade edildi",
+      "SUBSCRIPTION_CLOSED": "Abonelik kapatıldı",
+      "BLOCKED_BUYER": "Alıcı yasaklı",
+      "CREDIT_HOLD_MISMATCH": "Kredi blokesi siparişle eşleşmiyor",
+      "RECIPIENT_LIMIT": "Alıcı bir satın alma limitine ulaştı",
+      "DUPLICATE_SUB_CANCEL_FAILED": "Mükerrer bir ödemenin ödeme sağlayıcısındaki aboneliği iptal edilemedi; sağlayıcıda iptal edin",
+      "DOWNGRADE_MANUAL": "Sağlayıcı yinelenen ödeme verisi döndürmedi; abonelik elle yenilenir",
+      "UNSUPPORTED_MANUAL": "Sağlayıcı kayıtlı bir yöntemden ödeme alamıyor; abonelik elle yenilenir",
+      "MAIL_NOT_QUEUED": "E-posta kuyruğa alınmadı: {kind} ({reason})",
+      "INVOICE_NOT_ISSUED": "Fatura kesilmedi ({reason})",
+      "CREDIT_NOTE_NOT_ISSUED": "İade faturası kesilmedi ({reason})"
     }
   },
   "alerts": {
@@ -3487,5 +3531,18 @@
     "password-prompt": "Gizli değerleri görmek için şifrenizi girin",
     "password-placeholder": "Şifreniz",
     "reveal-confirm": "Göster"
+  },
+  "provider-errors": {
+    "CONFIGURATION": "Sağlayıcı doğru yapılandırılmamış.",
+    "AUTHENTICATION": "Sağlayıcı kimlik bilgilerini reddetti.",
+    "IP_NOT_ALLOWED": "Sağlayıcı bu sunucunun IP adresine izin vermiyor.",
+    "GATEWAY_UNREACHABLE": "Sağlayıcıya ulaşılamadı. Biraz sonra tekrar deneyin.",
+    "GATEWAY_REJECTED": "Sağlayıcı isteği reddetti.",
+    "RATE_LIMITED": "Sağlayıcı istekleri sınırlıyor. Biraz sonra tekrar deneyin.",
+    "INVALID_REQUEST": "Sağlayıcı isteği geçersiz buldu.",
+    "UNSUPPORTED": "Sağlayıcı bunu desteklemiyor.",
+    "NOT_FOUND": "Sağlayıcı kaydı bulamadı.",
+    "INTERNAL": "Sağlayıcıda bir iç hata oluştu.",
+    "INVALID_BUYER": "Sağlayıcı alıcının bilgilerini reddetti."
   }
 }

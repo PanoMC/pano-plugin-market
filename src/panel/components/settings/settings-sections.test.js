@@ -266,7 +266,8 @@ describe('locale keys built at run time by these sections', () => {
     for (const [key, names] of Object.entries(placeholders))
       for (const locale of [en, tr, ru]) {
         const text = get(locale, key);
-        for (const name of names) expect([key, text.includes(`{${name}}`)]).toEqual([key, true]);
+        for (const name of names)
+          expect([key, text.includes(`{${name}}`) || text.includes(`{${name},`)]).toEqual([key, true]);
       }
   });
 

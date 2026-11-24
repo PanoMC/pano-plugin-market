@@ -24,7 +24,7 @@
 
 <script>
   import { _ } from '../../../i18n';
-  import { fmt } from '../../utils/locale.js';
+  import { currentLocale, fmt } from '../../utils/locale.js';
   import ChartCanvas from './ChartCanvas.svelte';
   import { themeColor, withAlpha } from './chart-setup.js';
   import { currencySeries } from './summary.js';
@@ -44,7 +44,21 @@
       values: { week: parseInt(String(key).slice(-2), 10) },
     });
 
+  // `YYYY-MM` -> the short month name and year in the panel language
+  const monthLabel = (key) => {
+    const text = String(key);
+    const year = Number(text.slice(0, 4));
+    const month = Number(text.slice(5, 7));
+    if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return text;
+    return new Date(year, month - 1, 1).toLocaleDateString(currentLocale(), {
+      month: 'short',
+      year: 'numeric',
+    });
+  };
+
   const money = (context) => fmt.money(context.parsed.y ?? context.parsed, currency);
+  // Chart.js formats ticks with `options.locale`: the panel language, not the browser's
+  const moneyTick = (value) => fmt.money(value, currency);
   const PALETTE = ['primary', 'info', 'warning', 'secondary', 'success', 'danger', 'indigo'];
   const palette = (count) =>
     Array.from({ length: count }, (unused, i) => themeColor(PALETTE[i % PALETTE.length]));
@@ -67,7 +81,9 @@
         ],
       },
       options: {
+        locale: currentLocale(),
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: money } } },
+        scales: { y: { ticks: { callback: moneyTick } } },
       },
     };
   };
@@ -99,6 +115,7 @@
             datasets: [{ data: values, backgroundColor: palette(values.length), borderWidth: 0 }],
           },
           options: {
+            locale: currentLocale(),
             cutout: '65%',
             plugins: {
               legend: { position: 'bottom' },
@@ -114,7 +131,7 @@
     const currencies = currencySeries(c);
     return [
       { key: 'weekly', ...line(c.weeklyRevenue, 'primary', weekLabel) },
-      { key: 'monthly', ...line(c.monthlyRevenue, 'info') },
+      { key: 'monthly', ...line(c.monthlyRevenue, 'info', monthLabel) },
       {
         key: 'top-products',
         type: 'bar',
@@ -123,13 +140,14 @@
           datasets: [{ data: top.values, backgroundColor: themeColor('primary'), borderRadius: 6 }],
         },
         options: {
+          locale: currentLocale(),
           plugins: { legend: { display: false }, tooltip: { callbacks: { label: money } } },
-          scales: { y: { beginAtZero: true } },
+          scales: { y: { beginAtZero: true, ticks: { callback: moneyTick } } },
         },
       },
       {
         key: 'payment-methods',
-        ...doughnut(methods.labels, methods.values, (ctx) => `${ctx.label}: ${ctx.parsed}`),
+        ...doughnut(methods.labels, methods.values, (ctx) => `${ctx.label}: ${fmt.number(ctx.parsed)}`),
       },
       {
         key: 'currencies',

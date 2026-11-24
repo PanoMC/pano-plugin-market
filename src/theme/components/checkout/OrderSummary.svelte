@@ -1,7 +1,7 @@
 <div class="market-order-summary card" id="market-checkout-summary-card">
   <div class="market-order-summary__body card-body vstack gap-3">
     <div class="d-flex justify-content-between align-items-baseline gap-2">
-      <h2 class="market-order-summary__title h5 mb-0 text-capitalize">
+      <h2 class="market-order-summary__title h5 mb-0">
         {$_('theme.checkout.summary.title')}
       </h2>
       {#if !topup}

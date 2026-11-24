@@ -1,6 +1,6 @@
 {#if render}
   <div class="market-recent-buyers-widget card">
-    <div class="market-recent-buyers-widget__header card-header text-capitalize">
+    <div class="market-recent-buyers-widget__header card-header">
       {$_('theme.widgets.recent-buyers.title')}
     </div>
     <div class="market-recent-buyers-widget__list list-group list-group-flush">

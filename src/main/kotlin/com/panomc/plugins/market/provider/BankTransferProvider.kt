@@ -54,7 +54,7 @@ internal class BankTransferProvider : PaymentProvider {
         LocalizedText.of(
             "The buyer transfers the amount to the store's bank account; an admin approves the payment.",
             "tr" to "Alıcı tutarı mağazanın banka hesabına gönderir; ödemeyi yönetici onaylar.",
-            "ru" to "Покупатель переводит сумму на банковский счёт магазина, оплату подтверждает администратор."
+            "ru" to "Покупатель переводит сумму на банковский счет магазина, оплату подтверждает администратор."
         ),
         "building-columns"
     )
@@ -65,7 +65,7 @@ internal class BankTransferProvider : PaymentProvider {
             help = LocalizedText.of(
                 "A JSON list: [{\"bank\":\"...\",\"holder\":\"...\",\"iban\":\"...\",\"currency\":\"EUR\"}]. Leave the currency out to accept any currency.",
                 "tr" to "JSON listesi: [{\"bank\":\"...\",\"holder\":\"...\",\"iban\":\"...\",\"currency\":\"TRY\"}]. Her para birimi için currency alanını boş bırakın.",
-                "ru" to "Список JSON: [{\"bank\":\"...\",\"holder\":\"...\",\"iban\":\"...\",\"currency\":\"EUR\"}]. Без currency счёт принимает любую валюту."
+                "ru" to "Список JSON: [{\"bank\":\"...\",\"holder\":\"...\",\"iban\":\"...\",\"currency\":\"EUR\"}]. Без currency счет принимает любую валюту."
             )
         }
         textarea(KEY_INSTRUCTIONS) {
@@ -112,7 +112,7 @@ internal class BankTransferProvider : PaymentProvider {
 
     private fun validateAccounts(accounts: List<BankAccount>): SettingsValidation =
         if (accounts.isEmpty()) SettingsValidation.invalid(
-            mapOf(KEY_ACCOUNTS to LocalizedText.of("Add at least one bank account.", "tr" to "En az bir banka hesabı ekleyin.", "ru" to "Добавьте хотя бы один банковский счёт."))
+            mapOf(KEY_ACCOUNTS to LocalizedText.of("Add at least one bank account.", "tr" to "En az bir banka hesabı ekleyin.", "ru" to "Добавьте хотя бы один банковский счет."))
         ) else SettingsValidation.ok()
 
     override fun checkEligibility(ctx: PaymentContext, checkout: CheckoutSnapshot): Eligibility {
@@ -123,9 +123,22 @@ internal class BankTransferProvider : PaymentProvider {
             LocalizedText.of(
                 "No bank account accepts ${checkout.order.currency}.",
                 "tr" to "${checkout.order.currency} için banka hesabı yok.",
-                "ru" to "Нет банковского счёта для ${checkout.order.currency}."
+                "ru" to "Нет банковского счета для ${checkout.order.currency}."
             )
         )
+    }
+
+    /** The exact amount ([decimal], all its digits kept) with the grouping and decimal separator of the order [locale]. */
+    private fun localAmount(decimal: String, locale: String): String = try {
+        val value = java.math.BigDecimal(decimal)
+        val format = java.text.NumberFormat.getNumberInstance(java.util.Locale.forLanguageTag(locale.replace('_', '-'))).apply {
+            minimumFractionDigits = value.scale().coerceAtLeast(0)
+            maximumFractionDigits = value.scale().coerceAtLeast(0)
+        }
+
+        format.format(value)
+    } catch (e: NumberFormatException) {
+        decimal
     }
 
     override suspend fun startPayment(ctx: PaymentContext, request: StartPaymentRequest): StartPaymentResult {
@@ -139,10 +152,10 @@ internal class BankTransferProvider : PaymentProvider {
         accounts.forEachIndexed { i, a ->
             val n = if (numbered) " ${i + 1}" else ""
             fields += InstructionField(LocalizedText.of("Bank$n", "tr" to "Banka$n", "ru" to "Банк$n"), a.bank)
-            fields += InstructionField(LocalizedText.of("Account holder$n", "tr" to "Hesap sahibi$n", "ru" to "Владелец счёта$n"), a.holder)
+            fields += InstructionField(LocalizedText.of("Account holder$n", "tr" to "Hesap sahibi$n", "ru" to "Владелец счета$n"), a.holder)
             fields += InstructionField(LocalizedText.of("IBAN$n", "tr" to "IBAN$n", "ru" to "IBAN$n"), a.iban)
         }
-        fields += InstructionField(LocalizedText.of("Amount", "tr" to "Tutar", "ru" to "Сумма"), "${request.amount.toDecimalString()} $currency")
+        fields += InstructionField(LocalizedText.of("Amount", "tr" to "Tutar", "ru" to "Сумма"), "${localAmount(request.amount.toDecimalString(), request.locale)} $currency")
         fields += InstructionField(LocalizedText.of("Transfer note", "tr" to "Açıklama (havale notu)", "ru" to "Назначение платежа"), request.attempt.reference)
 
         val custom = ctx.settings.string(KEY_INSTRUCTIONS)

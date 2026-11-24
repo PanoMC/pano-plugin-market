@@ -49,7 +49,7 @@
     <PriceTag {product} {settings} showCredits={false} />
     {#if settings.creditsEnabled && Number(product.creditPrice) > 0 && Number(product.price) !== 0}
       <div class="d-flex justify-content-end">
-        <span class="market-product-card__credits badge rounded-pill text-bg-info text-capitalize text-wrap text-start">
+        <span class="market-product-card__credits badge rounded-pill text-bg-info text-wrap text-start">
           <i class="fa-solid fa-coins me-1" aria-hidden="true"></i>{formatCredits(
             product.creditPrice,
             settings.creditName || $_('theme.store.credits'),
@@ -69,18 +69,18 @@
       {#if !product.inStock}
         <button
           type="button"
-          class="market-product-card__action btn btn-secondary btn-sm w-100 text-capitalize"
+          class="market-product-card__action btn btn-secondary btn-sm w-100"
           disabled>
           {$_('theme.store.sold-out')}
         </button>
       {:else if options}
-        <a {href} class="market-product-card__choose-options btn btn-outline-primary btn-sm w-100 text-capitalize">
+        <a {href} class="market-product-card__choose-options btn btn-outline-primary btn-sm w-100">
           {$_('theme.store.choose-options')}
         </a>
       {:else}
         <button
           type="button"
-          class="market-product-card__add-to-cart btn btn-info btn-sm w-100 text-capitalize"
+          class="market-product-card__add-to-cart btn btn-info btn-sm w-100"
           onclick={add}>
           {$_('theme.store.add-to-cart')}
         </button>

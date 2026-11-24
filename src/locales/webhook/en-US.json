@@ -61,19 +61,19 @@
       },
       "action": {
         "grant": {
-          "title": "Delivery action ({phase})",
+          "title": "Item delivered",
           "description": "{product.name} for {username}"
         },
         "renew": {
-          "title": "Delivery action ({phase})",
+          "title": "Item renewed",
           "description": "{product.name} for {username}"
         },
         "expire": {
-          "title": "Delivery action ({phase})",
+          "title": "Item expired",
           "description": "{product.name} for {username}"
         },
         "revoke": {
-          "title": "Delivery action ({phase})",
+          "title": "Item revoked",
           "description": "{product.name} for {username}"
         }
       },
@@ -84,7 +84,23 @@
       "label": {
         "player": "Player",
         "total": "Total",
-        "items": "Items"
+        "items": "Items",
+        "more": "+{count} more"
+      },
+      "phase": {
+        "GRANT": "grant",
+        "RENEW": "renew",
+        "EXPIRE": "expire",
+        "REVOKE": "revoke"
+      },
+      "subscription-status": {
+        "PENDING": "Pending",
+        "ACTIVE": "Active",
+        "PAST_DUE": "Past due",
+        "PAUSED": "Paused",
+        "EXPIRED": "Expired",
+        "CANCELLED": "Canceled",
+        "COMPLETED": "Completed"
       }
     }
   }

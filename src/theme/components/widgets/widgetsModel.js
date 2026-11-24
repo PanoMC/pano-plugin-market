@@ -56,8 +56,11 @@ export function shouldRender(data, key) {
   return placementAllows(data) && hasContent(data, key);
 }
 
-/** One goal as the template needs it. `end`: countdown text within 72 h, else the end date in ms. */
-export function goalView(goal, now = 0) {
+/**
+ * One goal as the template needs it. `end`: countdown text within 72 h, else the end date in ms.
+ * `$_` (optional) is the plugin translator for the day part of the countdown.
+ */
+export function goalView(goal, now = 0, $_) {
   const percent = clampPercent(goal?.percent);
   const endsAt = num(goal?.endsAt);
   let end = null;
@@ -65,7 +68,7 @@ export function goalView(goal, now = 0) {
   if (endsAt > 0) {
     end =
       now > 0 && withinWindow(endsAt, now)
-        ? { kind: 'COUNTDOWN', text: format(remaining(endsAt, now)) }
+        ? { kind: 'COUNTDOWN', text: format(remaining(endsAt, now), $_) }
         : { kind: 'DATE', ms: endsAt };
   }
 

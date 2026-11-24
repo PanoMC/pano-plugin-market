@@ -290,8 +290,8 @@ class MarketCommandsTest {
         assertEquals(3, reqs.map { it.operationId }.toSet().size, "every command execution has its own operationId")
         assertEquals(
             listOf(
-                "Gave 50 credits to Alex. New balance: 150",
-                "Took 2.5 credits from Alex. New balance: 150",
+                "Credits given to Alex: 50. New balance: 150",
+                "Credits taken from Alex: 2.5. New balance: 150",
                 "Set the credits of Alex to 150"
             ),
             s.plain()
@@ -308,7 +308,7 @@ class MarketCommandsTest {
         assertTrue(req.actor.console)
         assertNull(req.actor.username)
         assertNull(req.actor.uuid)
-        assertTrue(c.said("Gave 10 credits"))
+        assertTrue(c.said("Credits given to Alex: 10"))
     }
 
     @Test

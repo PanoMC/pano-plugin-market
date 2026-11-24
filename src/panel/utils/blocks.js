@@ -109,3 +109,15 @@ export function blockFieldError(errorCode) {
   if (errorCode === 'INVALID_BLOCK') return { field: 'value', code: 'INVALID_BLOCK' };
   return null;
 }
+
+/**
+ * The reason column of a block: the typed reason; a chargeback block without one (or with the English text older
+ * versions stored) is worded in the panel language by `t` (the plugin `$_`).
+ */
+export function blockReason(block, t) {
+  const legacy = block?.orderId ? `Chargeback on order #${block.orderId}` : null;
+  if (block?.source === 'CHARGEBACK' && block.orderId && (!block.reason || block.reason === legacy)) {
+    return t('pages.blocks.reason-chargeback', { values: { id: block.orderId } });
+  }
+  return block?.reason || '—';
+}

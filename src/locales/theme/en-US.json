@@ -55,7 +55,8 @@
       "load-error": "The store could not be loaded. Please try again.",
       "grid-error": "The products could not be loaded.",
       "test-mode": "The store is in test mode. No real payments are taken.",
-      "toggle-categories": "Show or hide categories"
+      "toggle-categories": "Show or hide categories",
+      "sale-percent": "-{value}%"
     },
     "errors": {
       "NETWORK": "The request could not be completed. Please try again.",
@@ -313,7 +314,8 @@
         "total": "Total",
         "credits-used": "Credits used",
         "to-pay": "To pay"
-      }
+      },
+      "gift-not-allowed-items": "{count, plural, one {This product cannot be sent as a gift: {names}} other {These products cannot be sent as a gift: {names}}}"
     },
     "order": {
       "title": "Order #{number}",
@@ -419,7 +421,8 @@
         "credits-used": "Credits used",
         "to-pay": "Paid with payment method",
         "refunded": "Refunded"
-      }
+      },
+      "invoice-filename": "invoice-{number}"
     },
     "status": {
       "order": {
@@ -596,6 +599,10 @@
         "products-total": "Products"
       },
       "rank": "Rank {rank}"
-    }
+    },
+    "countdown": {
+      "with-days": "{days}d {clock}"
+    },
+    "percent": "{value}%"
   }
 }

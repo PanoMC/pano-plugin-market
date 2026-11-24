@@ -150,7 +150,7 @@ class SettingsCodec(val schema: SettingsSchema, private val cipher: SecretCipher
                     SECRET_REENTRY_REQUIRED,
                     "The address changed: enter this secret again.",
                     "Adres değişti: bu gizli bilgiyi yeniden girin.",
-                    "Адрес изменился: введите этот секрет ещё раз."
+                    "Адрес изменился: введите этот секрет еще раз."
                 )
             }
         }

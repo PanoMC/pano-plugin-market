@@ -27,7 +27,7 @@
   "pages": {
     "orders": {
       "title": "Orders",
-      "count": "{count} Orders",
+      "count": "{count, plural, one {# Order} other {# Orders}}",
       "create-order": "Create Order",
       "export-csv": "Export CSV",
       "filters": "Filters",
@@ -60,14 +60,14 @@
     "categories": {
       "title": "Categories",
       "add-category": "Add Category",
-      "category-count": "{count} Categories",
+      "category-count": "{count, plural, one {# Category} other {# Categories}}",
       "view-table": "Table",
       "view-sort": "Ordering",
       "table": {
         "category": "Category",
         "product-count": "Product Count"
       },
-      "product-count-value": "{count} Products",
+      "product-count-value": "{count, plural, one {# Product} other {# Products}}",
       "product-label": "Products",
       "sort-hint": "Choose the category position by dragging to the top, middle, or bottom of a row.",
       "drag-aria": "Move category {name}",
@@ -83,7 +83,7 @@
     "products": {
       "title": "Products",
       "add-product": "Add Product",
-      "count": "{count} Products",
+      "count": "{count, plural, one {# Product} other {# Products}}",
       "load-error": "Products could not be loaded. Please refresh the page and try again.",
       "table": {
         "icon": "Icon",
@@ -259,9 +259,9 @@
         "add-value": "Add Value",
         "generate": "Generate Variants",
         "generated": "{added} added, {kept} kept, {orphans} not in options.",
-        "too-many": "These options make {count} variants; the limit is {max}.",
+        "too-many": "These options make {count, plural, one {# variant} other {# variants}}; the limit is {max}.",
         "no-options": "Add an option with at least one value first.",
-        "title": "{count} Variants",
+        "title": "{count, plural, one {# Variant} other {# Variants}}",
         "add-variant": "Add Variant",
         "name": "Name",
         "sku": "SKU",
@@ -286,7 +286,7 @@
         "disable-confirm": "Remove Variants"
       },
       "bundle": {
-        "title": "{count} Products In This Bundle",
+        "title": "{count, plural, one {# Product} other {# Products}} In This Bundle",
         "add": "Add Product",
         "add-cta": "Add To Bundle",
         "product": "Product",
@@ -323,7 +323,7 @@
       },
       "actions": {
         "server-choices": "Servers The Buyer May Choose",
-        "title": "{count} Actions",
+        "title": "{count, plural, one {# Action} other {# Actions}}",
         "other-phase": "Other"
       },
       "action-type": {
@@ -358,7 +358,7 @@
         "PERMISSION_ADMIN_REQUIRED": "You are not allowed to save this action."
       },
       "fields": {
-        "title": "{count} Custom Fields",
+        "title": "{count, plural, one {# Custom Field} other {# Custom Fields}}",
         "add": "Add Field",
         "label": "Label",
         "key": "Key",
@@ -410,7 +410,7 @@
     "comparisons": {
       "title": "Comparisons",
       "create-comparison": "Create Comparison",
-      "count": "{count} Comparisons",
+      "count": "{count, plural, one {# Comparison} other {# Comparisons}}",
       "load-failed": "Comparisons could not be loaded. Please refresh the page and try again.",
       "table": {
         "name": "Comparison Name",
@@ -452,7 +452,7 @@
     "gifts": {
       "title": "Gift Codes",
       "create-gift": "Create Gift",
-      "gift-count": "{count} Gifts",
+      "gift-count": "{count, plural, one {# Gift} other {# Gifts}}",
       "load-error": "Failed to load gifts. Please refresh the page and try again.",
       "table": {
         "code": "Gift Code",
@@ -461,8 +461,7 @@
         "name": "Name",
         "used": "Used"
       },
-      "credit-amount": "{amount} Credits",
-      "random-gift": "Random Gift ({count} Products Selected)",
+      "random-gift": "Random Gift ({count, plural, one {# Product} other {# Products}} Selected)",
       "no-expiry": "No Expiry",
       "start-date-label": "Start: {date}",
       "end-date-label": "End: {date}",
@@ -555,12 +554,12 @@
         "title": "Open Issues",
         "view": "View",
         "items": {
-          "delivery-failed": "{count} failed deliveries",
-          "shipment-problem": "{count} shipments with a problem",
-          "dispute-open": "{count} open disputes",
-          "refund-failed": "{count} failed refunds",
-          "payment-review": "{count} payments waiting for review",
-          "mail-failed": "{count} mails could not be sent"
+          "delivery-failed": "{count, plural, one {# failed delivery} other {# failed deliveries}}",
+          "shipment-problem": "{count, plural, one {# shipment with a problem} other {# shipments with a problem}}",
+          "dispute-open": "{count, plural, one {# open dispute} other {# open disputes}}",
+          "refund-failed": "{count, plural, one {# failed refund} other {# failed refunds}}",
+          "payment-review": "{count, plural, one {# payment waiting for review} other {# payments waiting for review}}",
+          "mail-failed": "{count, plural, one {# e-mail could not be sent} other {# e-mails could not be sent}}"
         }
       },
       "title-with-id": "Order #{id}",
@@ -577,14 +576,14 @@
       "external-pricing-tip": "The payment provider is the price authority for this order.",
       "note-placeholder": "Internal note about this order",
       "cards": {
-        "items": "{count} Items",
+        "items": "{count, plural, one {# Item} other {# Items}}",
         "totals": "Totals",
-        "payments": "{count} Payment Attempts",
-        "refunds": "{count} Refunds",
-        "deliveries": "{count} Deliveries",
-        "shipments": "{count} Shipments",
-        "disputes": "{count} Disputes",
-        "mails": "{count} Mails",
+        "payments": "{count, plural, one {# Payment Attempt} other {# Payment Attempts}}",
+        "refunds": "{count, plural, one {# Refund} other {# Refunds}}",
+        "deliveries": "{count, plural, one {# Delivery} other {# Deliveries}}",
+        "shipments": "{count, plural, one {# Shipment} other {# Shipments}}",
+        "disputes": "{count, plural, one {# Dispute} other {# Disputes}}",
+        "mails": "{count, plural, one {# E-mail} other {# E-mails}}",
         "timeline": "Timeline",
         "customer": "Customer",
         "billing": "Billing",
@@ -800,11 +799,18 @@
         "delivery-retried": "Delivery queued again.",
         "delivery-cancelled": "Delivery canceled.",
         "dispute-resolved": "Dispute updated.",
-        "mail-retried": "Mail sent again.",
+        "mail-retried": "E-mail sent again.",
         "shipment-tracked": "Shipment tracking updated.",
         "shipment-retried": "Shipment retried.",
         "shipment-cancelled": "Shipment canceled.",
         "invoice-regenerated": "Invoices regenerated."
+      },
+      "payment-failure": {
+        "failed": "The payment failed.",
+        "start-failed": "The payment could not be started."
+      },
+      "payment-notes": {
+        "environment-mismatch": "The payment came from the other environment (test / live)"
       }
     },
     "create-order": {
@@ -818,7 +824,7 @@
         "email": "E-mail (optional)"
       },
       "items": {
-        "title": "{count} Items",
+        "title": "{count, plural, one {# Item} other {# Items}}",
         "add": "Add Product"
       },
       "table": {
@@ -861,7 +867,7 @@
     "deliveries": {
       "title": "Deliveries",
       "filters": "Filters",
-      "count": "{count} Deliveries",
+      "count": "{count, plural, one {# Delivery} other {# Deliveries}}",
       "tab": {
         "all": "All",
         "waiting": "Waiting",
@@ -901,7 +907,7 @@
     "goals": {
       "title": "Goals",
       "create-goal": "Create Goal",
-      "count": "{count} Goals",
+      "count": "{count, plural, one {# Goal} other {# Goals}}",
       "table": {
         "name": "Name",
         "metric": "Metric",
@@ -926,11 +932,11 @@
       "grant": "Grant",
       "revoke": "Revoke",
       "view-ledger": "View Ledger",
-      "account-count": "{count} Accounts",
-      "transaction-count": "{count} Transactions",
+      "account-count": "{count, plural, one {# Account} other {# Accounts}}",
+      "transaction-count": "{count, plural, one {# Transaction} other {# Transactions}}",
       "disabled-title": "Credits Are Disabled",
       "disabled-body": "Players cannot pay with credits right now. You can still grant and revoke balances.",
-      "disabled-link": "Open credit settings",
+      "disabled-link": "Open Credit Settings",
       "tab": {
         "accounts": "Accounts",
         "transactions": "Transactions"
@@ -963,7 +969,7 @@
     },
     "credit-account": {
       "title": "Credit Ledger",
-      "entry-count": "{count} Entries",
+      "entry-count": "{count, plural, one {# Entry} other {# Entries}}",
       "player-id": "Player #{id}",
       "table": {
         "balance-after": "Balance After"
@@ -973,8 +979,8 @@
       "title": "Creator Earnings",
       "creator-id": "Creator #{id}",
       "available": "Available: {amount}",
-      "earning-count": "{count} Earnings",
-      "payout-count": "{count} Payouts",
+      "earning-count": "{count, plural, one {# Earning} other {# Earnings}}",
+      "payout-count": "{count, plural, one {# Payout} other {# Payouts}}",
       "table": {
         "order": "Order",
         "base-amount": "Base Amount",
@@ -996,7 +1002,7 @@
     "blocks": {
       "title": "Block List",
       "add": "Add Block",
-      "count": "{count} Blocks",
+      "count": "{count, plural, one {# Block} other {# Blocks}}",
       "source": "Source",
       "source-all": "All Sources",
       "tab": {
@@ -1021,11 +1027,12 @@
         "remove": "Remove"
       },
       "expired": "Expired",
-      "toast-removed": "The block was removed."
+      "toast-removed": "The block was removed.",
+      "reason-chargeback": "Chargeback on order #{id}"
     },
     "subscriptions": {
       "title": "Subscriptions",
-      "count": "{count} Subscriptions",
+      "count": "{count, plural, one {# Subscription} other {# Subscriptions}}",
       "tab": {
         "all": "All",
         "active": "Active",
@@ -1065,8 +1072,8 @@
       "end-reason": "End Reason",
       "gateway-id": "Gateway Subscription Id",
       "copy-gateway-id": "Copy the gateway subscription id",
-      "renewal-count": "{count} Renewals",
-      "order-count": "{count} Orders",
+      "renewal-count": "{count, plural, one {# Renewal} other {# Renewals}}",
+      "order-count": "{count, plural, one {# Order} other {# Orders}}",
       "table": {
         "index": "Period",
         "period": "Dates",
@@ -1078,7 +1085,7 @@
     },
     "payment-events": {
       "title": "Payment Events",
-      "count": "{count} Events",
+      "count": "{count, plural, one {# Event} other {# Events}}",
       "tab": {
         "all": "All",
         "deferred": "Deferred",
@@ -1179,7 +1186,7 @@
     },
     "shipments": {
       "title": "Shipments",
-      "count": "{count} Shipments",
+      "count": "{count, plural, one {# Shipment} other {# Shipments}}",
       "stale": "Stale",
       "tab": {
         "all": "All",
@@ -1234,13 +1241,13 @@
         "refunded": "Refunded",
         "credits": "Credits"
       },
-      "orders": "{count} Latest Orders",
+      "orders": "{count, plural, one {# Latest Order} other {# Latest Orders}}",
       "all-orders": "All Orders",
       "create-order": "Create Order",
       "block": "Block Player",
-      "entitlements": "{count} Owned Products",
-      "subscriptions": "{count} Subscriptions",
-      "blocks": "{count} Blocks",
+      "entitlements": "{count, plural, one {# Owned Product} other {# Owned Products}}",
+      "subscriptions": "{count, plural, one {# Subscription} other {# Subscriptions}}",
+      "blocks": "{count, plural, one {# Block} other {# Blocks}}",
       "table": {
         "product": "Product",
         "starts": "Starts",
@@ -2134,7 +2141,7 @@
       "lastName": "Last name",
       "company": "Company",
       "phone": "Phone (with country code)",
-      "email": "Email",
+      "email": "E-mail",
       "country": "Country",
       "state": "State",
       "city": "City",
@@ -2248,7 +2255,7 @@
       "top-up-max-label": "Maximum Top-Up"
     },
     "payments": {
-      "method-count": "{count} Payment Methods",
+      "method-count": "{count, plural, one {# Payment Method} other {# Payment Methods}}",
       "filters": {
         "turkey": "Turkey",
         "global": "Global"
@@ -2380,7 +2387,7 @@
       },
       "preview-pdf": "Preview PDF",
       "sequences": {
-        "title": "{count} Number Sequences",
+        "title": "{count, plural, one {# Number Sequence} other {# Number Sequences}}",
         "series": "Series",
         "next-number": "Next Number"
       }
@@ -2403,7 +2410,7 @@
       },
       "toast-published": "New version published.",
       "versions": {
-        "title": "{count} Versions",
+        "title": "{count, plural, one {# Version} other {# Versions}}",
         "version": "Version",
         "locale": "Language",
         "title-column": "Title",
@@ -2442,7 +2449,7 @@
         "title": "Stored Chargeback Actions Are Unreadable",
         "body": "The saved value is not a list of actions. The list below starts empty and saving replaces the saved value."
       },
-      "chargeback-actions": "{count} Chargeback Actions",
+      "chargeback-actions": "{count, plural, one {# Chargeback Action} other {# Chargeback Actions}}",
       "add-ban": "Add Ban Command"
     },
     "modules": {
@@ -2494,34 +2501,34 @@
       }
     },
     "mail": {
-      "title": "E-Mail",
+      "title": "E-mail",
       "templates-link": {
         "title": "Mail Templates",
-        "body": "The texts and look of the mails the store sends are edited on the platform's Mail Templates page. The market templates are listed there under Pano Market.",
+        "body": "The texts and look of the e-mails the store sends are edited on the platform's Mail Templates page. The market templates are listed there under Pano Market.",
         "open": "Open Mail Templates"
       },
       "host-too-old": {
-        "title": "Pano Is Too Old For Store E-Mail"
+        "title": "Pano Is Too Old For Store E-mail"
       },
-      "open-platform-settings": "Open E-Mail Settings",
+      "open-platform-settings": "Open E-mail Settings",
       "send-test": "Send Test Mail",
-      "order-mails": "Order E-Mails",
-      "order-mails-hint": "Subscription, expiry and bank-transfer mails are always sent.",
-      "kinds": "E-Mails Sent",
-      "kinds-hint": "Uncheck a mail to stop sending it. Service mails are marked.",
+      "order-mails": "Order E-mails",
+      "order-mails-hint": "Subscription, expiry and bank-transfer e-mails are always sent.",
+      "kinds": "E-mails Sent",
+      "kinds-hint": "Uncheck an e-mail to stop sending it. Service e-mails are marked.",
       "service-badge": "Service",
       "attach-invoice": "Attach The Invoice",
       "attach-invoice-hint": "The invoice PDF is attached to the order confirmation.",
       "reply-to": "Reply-To Address",
-      "reply-to-hint": "Replies to store mails go here. Leave empty for none.",
+      "reply-to-hint": "Replies to store e-mails go here. Leave empty for none.",
       "reply-to-placeholder": "support@example.com",
-      "delivered-delay": "Delivered Mail Delay",
+      "delivered-delay": "Delivered E-mail Delay",
       "delivered-delay-hint": "How long to wait before telling the buyer the order was delivered.",
       "minutes": "minutes"
     },
     "minecraft": {
       "info": {
-        "title": "Server Settings Win",
+        "title": "Server Settings Take Priority",
         "body": "A server's local config file can still turn any feature off, and the Pano Market Minecraft plugin must be installed on each server by hand.",
         "download": "Download Minecraft Plugin"
       },
@@ -2586,7 +2593,7 @@
         "body": "The servers could not be loaded. Reload the page to try again."
       },
       "servers": {
-        "title": "{count} Servers",
+        "title": "{count, plural, one {# Server} other {# Servers}}",
         "name": "Name",
         "type": "Type",
         "state": "State",
@@ -2598,7 +2605,7 @@
         "clear-override": "Clear Override",
         "download": "Download Minecraft Plugin",
         "version-pair": "{have} / {want}",
-        "override-badge": "{count} Overrides",
+        "override-badge": "{count, plural, one {# Override} other {# Overrides}}",
         "toast-cleared": "The override was cleared."
       },
       "state": {
@@ -2606,6 +2613,10 @@
         "OFFLINE": "Offline",
         "COMPONENT_MISSING": "Minecraft Plugin Missing",
         "VERSION_MISMATCH": "Version Mismatch"
+      },
+      "preview": {
+        "product": "VIP Rank",
+        "store": "Store"
       }
     },
     "health": {
@@ -2621,7 +2632,7 @@
       "queue": {
         "deliveries-pending": "Deliveries Pending",
         "deliveries-failed": "Deliveries Failed",
-        "mails-pending": "Mails Pending",
+        "mails-pending": "E-mails Pending",
         "webhooks-pending": "Webhooks Pending",
         "deferred-events": "Deferred Events",
         "failed-events": "Failed Events"
@@ -2630,7 +2641,7 @@
         "title": "Status",
         "schema": "Database",
         "runtime": "Runtime",
-        "mail": "E-Mail",
+        "mail": "E-mail",
         "credits": "Credit Self-Check",
         "ip-trust": "Proxy Trust",
         "locked": "Locked Buyers",
@@ -2642,7 +2653,7 @@
         "HOST_TOO_OLD": "Pano Too Old"
       },
       "jobs": {
-        "title": "{count} Jobs",
+        "title": "{count, plural, one {# Job} other {# Jobs}}",
         "name": "Name",
         "last-run": "Last Run",
         "lag": "Lag",
@@ -2650,19 +2661,25 @@
         "lag-seconds": "{seconds} s"
       },
       "providers": {
-        "title": "{count} Providers",
+        "title": "{count, plural, one {# Provider} other {# Providers}}",
         "id": "Id",
         "state": "State"
       },
       "servers": {
-        "title": "{count} Servers",
+        "title": "{count, plural, one {# Server} other {# Servers}}",
         "id": "Server",
         "state": "State",
         "waiting": "Waiting"
+      },
+      "runtime": {
+        "READY": "Ready",
+        "STARTING": "Starting",
+        "DEGRADED": "Degraded",
+        "STOPPED": "Stopped"
       }
     },
     "webhooks": {
-      "count": "{count} Webhooks",
+      "count": "{count, plural, one {# Webhook} other {# Webhooks}}",
       "managed-in-platform": "Webhooks are managed in the platform settings now. Everything the store sends is listed there under the source Market.",
       "open-platform": "Open Webhooks",
       "create": "Create Webhook",
@@ -2692,7 +2709,7 @@
       }
     },
     "webhook-deliveries": {
-      "count": "{count} Deliveries",
+      "count": "{count, plural, one {# Delivery} other {# Deliveries}}",
       "tab": {
         "all": "All",
         "pending": "Pending",
@@ -2718,7 +2735,7 @@
       "toast-redelivered": "Delivery queued again."
     },
     "shipping-zones": {
-      "count": "{count} Zones",
+      "count": "{count, plural, one {# Zone} other {# Zones}}",
       "create": "Create Zone",
       "first-match-title": "Zone Matching Order",
       "first-match": "Zones are checked from top to bottom and the first zone that matches the address is used. Put specific zones above general ones.",
@@ -2733,7 +2750,7 @@
       "toast-deleted": "Zone deleted."
     },
     "shipping-methods": {
-      "count": "{count} Shipping Methods",
+      "count": "{count, plural, one {# Shipping Method} other {# Shipping Methods}}",
       "create": "Create Method",
       "no-rates": "No Rates",
       "no-rates-hint": "This method has no rate rows, so it is not offered anywhere.",
@@ -2746,7 +2763,7 @@
       "toast-deleted": "Shipping method deleted."
     },
     "shipping-carriers": {
-      "count": "{count} Carriers",
+      "count": "{count, plural, one {# Carrier} other {# Carriers}}",
       "test-mode-title": "Test Mode",
       "test-mode-hint": "Carriers in test mode are used only for orders created by staff members with settings or order permissions.",
       "no-plugins-title": "No Carrier Plugins Installed",
@@ -2774,7 +2791,7 @@
       "confirm-delete": "Are you sure you want to delete the discount \"{name}\"?",
       "toast-delete-success": "Discount deleted successfully.",
       "toast-delete-error": "An error occurred while deleting the discount.",
-      "count": "{count} Discounts",
+      "count": "{count, plural, one {# Discount} other {# Discounts}}",
       "table": {
         "name": "Discount Name",
         "value": "Value",
@@ -2795,7 +2812,7 @@
       "confirm-delete": "Are you sure you want to delete the coupon \"{code}\"?",
       "toast-delete-success": "Coupon deleted successfully.",
       "toast-delete-error": "An error occurred while deleting the coupon.",
-      "count-heading": "{count} Coupon Codes",
+      "count-heading": "{count, plural, one {# Coupon Code} other {# Coupon Codes}}",
       "table": {
         "code": "Coupon Code",
         "discount-rate": "Discount Rate",
@@ -2813,7 +2830,7 @@
       "confirm-delete": "Are you sure you want to delete the creator code \"{code}\"?",
       "toast-delete-success": "Creator code deleted successfully.",
       "toast-delete-error": "An error occurred while deleting the creator code.",
-      "heading-count": "{count} Creator Codes",
+      "heading-count": "{count, plural, one {# Creator Code} other {# Creator Codes}}",
       "table": {
         "creator": "Referrer Player",
         "code": "Coupon Code",
@@ -2831,7 +2848,7 @@
       "view-earnings": "View Earnings"
     },
     "payouts": {
-      "count": "{count} Creators",
+      "count": "{count, plural, one {# Creator} other {# Creators}}",
       "date-range": "Date Range",
       "export-csv": "Export CSV",
       "view-earnings": "View Earnings",
@@ -3406,6 +3423,33 @@
       "REJECTED": "The carrier rejected the shipment.",
       "OTHER": "The carrier reported an error.",
       "TIMEOUT": "The carrier did not answer in time."
+    },
+    "event-direction": {
+      "IN": "Incoming",
+      "OUT": "Outgoing"
+    },
+    "order-note": {
+      "MARKED_PAID": "Marked as paid by an admin",
+      "FORCE_OVERRIDE": "Status forced by an admin; codes, limits and stock were not checked again",
+      "TENDER_REWRITTEN": "Payment split rewritten by an admin",
+      "DUPLICATE_PAYMENT": "The order was paid twice",
+      "ACCOUNT_DELETED": "The buyer account was deleted",
+      "DISPUTE_EVENT_AMBIGUOUS": "A chargeback event could not be matched to one payment",
+      "REFUNDS_CANCELLED_BY_CHARGEBACK": "Open refunds were canceled by the chargeback",
+      "UPGRADE_CASCADE_REVOKED": "Items of a later upgrade were revoked by the chargeback",
+      "CHARGEBACK_ACTIONS_HELD": "Chargeback actions are on hold",
+      "CREDIT_RECIPIENT_GONE": "The credit recipient no longer exists; refund the order",
+      "LATE_REFUND": "The subscription was closed, the payment was refunded",
+      "SUBSCRIPTION_CLOSED": "The subscription is closed",
+      "BLOCKED_BUYER": "The buyer is blocked",
+      "CREDIT_HOLD_MISMATCH": "The credit hold does not match the order",
+      "RECIPIENT_LIMIT": "The recipient reached a purchase limit",
+      "DUPLICATE_SUB_CANCEL_FAILED": "The gateway subscription of a duplicate payment could not be canceled; cancel it at the gateway",
+      "DOWNGRADE_MANUAL": "The provider returned no recurring data; the subscription renews manually",
+      "UNSUPPORTED_MANUAL": "The provider cannot charge a stored method; the subscription renews manually",
+      "MAIL_NOT_QUEUED": "Mail not queued: {kind} ({reason})",
+      "INVOICE_NOT_ISSUED": "Invoice not issued ({reason})",
+      "CREDIT_NOTE_NOT_ISSUED": "Credit note not issued ({reason})"
     }
   },
   "alerts": {
@@ -3443,7 +3487,7 @@
       "body": "Pano must be updated before the store can send e-mail."
     },
     "mail-disabled": {
-      "title": "E-Mail Is Disabled",
+      "title": "E-mail Is Disabled",
       "body": "Order e-mails and invoices by mail are not sent."
     },
     "store-unavailable": {
@@ -3487,5 +3531,18 @@
     "password-prompt": "Enter your password to view secret values",
     "password-placeholder": "Your password",
     "reveal-confirm": "Show"
+  },
+  "provider-errors": {
+    "CONFIGURATION": "The provider is not configured correctly.",
+    "AUTHENTICATION": "The provider rejected the credentials.",
+    "IP_NOT_ALLOWED": "The provider does not allow this server's IP address.",
+    "GATEWAY_UNREACHABLE": "The provider could not be reached. Try again in a moment.",
+    "GATEWAY_REJECTED": "The provider refused the request.",
+    "RATE_LIMITED": "The provider is limiting requests. Try again in a moment.",
+    "INVALID_REQUEST": "The provider found the request invalid.",
+    "UNSUPPORTED": "The provider does not support this.",
+    "NOT_FOUND": "The provider could not find the record.",
+    "INTERNAL": "The provider had an internal error.",
+    "INVALID_BUYER": "The provider refused the buyer's details."
   }
 }

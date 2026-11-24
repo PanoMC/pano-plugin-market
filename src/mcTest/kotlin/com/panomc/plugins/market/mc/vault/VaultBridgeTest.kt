@@ -443,12 +443,12 @@ class VaultBridgeTest {
         b.start()
         val sender = FakeSender(name = "Steve", uuid = uuid.toString())
         rig.features.commands.execute("credits", sender, listOf("convert", "10"))
-        assertEquals(listOf("Converted 10 credits into $20.00. New credit balance: 40"), sender.plain())
+        assertEquals(listOf("Credits converted: 10, received $20.00. New credit balance: 40"), sender.plain())
         assertEquals("40", ledger.balance("Steve")!!.plain())
         assertEquals("120", serverMoney.balance("Steve").plain())
         val s2 = FakeSender(name = "Steve", uuid = uuid.toString())
         rig.features.commands.execute("credits", s2, listOf("deposit", "50"))
-        assertEquals(listOf("Deposited $50.00 and received 25 credits. New credit balance: 65"), s2.plain())
+        assertEquals(listOf("Deposited $50.00. Credits received: 25. New credit balance: 65"), s2.plain())
         assertTrue(economyRegs().filter { it.provider is ProviderEconomy }.isEmpty(), "CONVERT never registers an economy")
     }
 

@@ -77,7 +77,9 @@ class VaultBridge(
         presentNames = { tracker.presentNames() },
         timeoutMs = providerTimeoutMs,
         refreshMs = refreshMs,
-        pushActive = { features.pushActive() }
+        pushActive = { features.pushActive() },
+        texts = texts,
+        localeOf = { features.localeOf(it) }
     )
 
     private val commands = VaultCommands(ops, { settings.current() }, texts, features.messages) { serverEconomy() }

@@ -12,7 +12,7 @@
   <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content">
       <div class="market-legal-modal__header modal-header">
-        <h2 class="market-legal-modal__title text-capitalize modal-title fs-5" id="{id}-title">{title}</h2>
+        <h2 class="market-legal-modal__title modal-title fs-5" id="{id}-title">{title}</h2>
         <button
           type="button"
           class="btn-close"

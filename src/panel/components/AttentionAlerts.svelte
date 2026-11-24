@@ -41,7 +41,7 @@
       {/if}
 
       {#each alert.links as item (item.href)}
-        <a class="alert-link d-inline-block mt-2 me-3 text-capitalize" href="{base}{item.href}">{$_(`alerts.actions.${item.label}`)}</a>
+        <a class="alert-link d-inline-block mt-2 me-3" href="{base}{item.href}">{$_(`alerts.actions.${item.label}`)}</a>
       {/each}
     </div>
   </div>

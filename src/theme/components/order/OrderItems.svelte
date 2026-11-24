@@ -26,7 +26,7 @@
           {/if}
           <div class="small text-body-secondary">&times; {item.quantity}</div>
 
-          {#each fieldPairs(item.fieldValues) as pair (pair.label)}
+          {#each fieldPairs(item.fieldValues, yesNo) as pair (pair.label)}
             <div class="small text-body-secondary">{pair.label}: {pair.value}</div>
           {/each}
 
@@ -77,4 +77,6 @@
 
   /** The items of an OrderView (14 §11.4). A limited view carries names, quantities and delivery only. */
   let { items = [], currency = '', removeCents = false } = $props();
+
+  const yesNo = $derived({ true: $_('theme.common.yes'), false: $_('theme.common.no') });
 </script>

@@ -14,14 +14,14 @@
         },
         "refunded": {
           "title": "Возврат по заказу",
-          "description": "Заказ #{order.id} игрока {username} возвращён ({refund.amount} {order.currency})"
+          "description": "Заказ #{order.id} игрока {username} возвращен ({refund.amount} {order.currency})"
         },
         "chargeback": {
           "title": "Открыт чарджбэк",
           "description": "Заказ #{order.id} игрока {username} оспорен",
           "won": {
             "title": "Чарджбэк выигран",
-            "description": "Спор по заказу #{order.id} решён в пользу магазина"
+            "description": "Спор по заказу #{order.id} решен в пользу магазина"
           }
         }
       },
@@ -61,19 +61,19 @@
       },
       "action": {
         "grant": {
-          "title": "Действие доставки ({phase})",
+          "title": "Товар выдан",
           "description": "{product.name} для {username}"
         },
         "renew": {
-          "title": "Действие доставки ({phase})",
+          "title": "Товар продлен",
           "description": "{product.name} для {username}"
         },
         "expire": {
-          "title": "Действие доставки ({phase})",
+          "title": "Срок товара истек",
           "description": "{product.name} для {username}"
         },
         "revoke": {
-          "title": "Действие доставки ({phase})",
+          "title": "Товар отозван",
           "description": "{product.name} для {username}"
         }
       },
@@ -84,7 +84,23 @@
       "label": {
         "player": "Игрок",
         "total": "Итого",
-        "items": "Товары"
+        "items": "Товары",
+        "more": "и еще {count}"
+      },
+      "phase": {
+        "GRANT": "выдача",
+        "RENEW": "продление",
+        "EXPIRE": "истечение",
+        "REVOKE": "отзыв"
+      },
+      "subscription-status": {
+        "PENDING": "Ожидает",
+        "ACTIVE": "Активна",
+        "PAST_DUE": "Просрочена",
+        "PAUSED": "Приостановлена",
+        "EXPIRED": "Истекла",
+        "CANCELLED": "Отменена",
+        "COMPLETED": "Завершена"
       }
     }
   }

@@ -32,7 +32,8 @@
                 },
               })}
             </span>
-            <span class="text-body-secondary">{Math.floor(goal.percent)}%</span>
+            <span class="text-body-secondary"
+              >{$_('theme.percent', { values: { value: Math.floor(goal.percent) } })}</span>
           </div>
           {#if goal.end}
             <div class="small text-body-secondary mt-1">
@@ -73,7 +74,7 @@
 
   const market = plugin('market');
   const { _ } = market;
-  const { formatDate, formatMoney } = market.require('format').actions;
+  const { formatDate, formatMoney, formatNumber } = market.require('format').actions;
   const clock = market.require('clock');
 
   /** data: the widgets payload (`goals`, ...), plus `sidebars` / `sidebarId` when it sits in a host sidebar. */
@@ -82,7 +83,6 @@
   const payload = $derived(unwrapWidgets(data));
   const render = $derived(shouldRender(withSidebar(payload, sidebarId), 'goals'));
   // time-dependent text only once the clock runs, so the server render and the first client render match
-  const goals = $derived((payload.goals ?? []).map((goal) => goalView(goal, clock.state.now ?? 0)));
-
-  const formatNumber = (value) => String(value);
+  const goals = $derived((payload.goals ?? []).map((goal) => goalView(goal, clock.state.now ?? 0, $_)),
+  );
 </script>

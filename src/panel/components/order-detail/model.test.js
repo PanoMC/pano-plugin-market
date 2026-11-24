@@ -395,6 +395,16 @@ describe('item details', () => {
       ['e', '{\n  "k": 1\n}'],
     ]);
     expect(fieldEntries({})).toEqual([]);
+    expect(
+      fieldEntries({
+        fieldValues: { ok: true, tick: 'false', note: 'true' },
+        snapshot: { fields: [{ fieldKey: 'tick', type: 'CHECKBOX' }] },
+      }).map((e) => [e.key, e.flag]),
+    ).toEqual([
+      ['ok', true],
+      ['tick', false],
+      ['note', null],
+    ]);
     expect(fieldEntries({ fieldValues: 'x' })).toEqual([]);
   });
 

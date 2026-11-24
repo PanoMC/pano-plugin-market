@@ -186,18 +186,18 @@ class CatalogImporter(
             return LocalizedText.of(
                 "Nothing was imported: your store currency is $s but the payment provider's account uses $g. Set the store currency to $g first.",
                 "tr" to "Hiçbir şey içe aktarılmadı: mağaza para birimi $s, ödeme sağlayıcısının hesabı ise $g kullanıyor. Önce mağaza para birimini $g yapın.",
-                "ru" to "Ничего не импортировано: валюта магазина $s, а аккаунт платёжного провайдера использует $g. Сначала установите валюту магазина $g."
+                "ru" to "Ничего не импортировано: валюта магазина $s, а аккаунт платежного провайдера использует $g. Сначала установите валюту магазина $g."
             )
         }
 
         fun summary(created: Int, updated: Int, skipped: Int, failed: Int, categories: Int): LocalizedText = LocalizedText.of(
-            "Import finished: $created products created, $updated updated, $categories categories created" +
-                (if (skipped > 0) ", $skipped skipped (no name, or a subscription without a renewal period)" else "") +
-                (if (failed > 0) ", $failed could not be saved (see the log)" else "") + ".",
+            "Import finished: products created: $created, updated: $updated, categories created: $categories" +
+                (if (skipped > 0) ", skipped: $skipped (no name, or a subscription without a renewal period)" else "") +
+                (if (failed > 0) ", could not be saved: $failed (see the log)" else "") + ".",
             "tr" to "İçe aktarma bitti: $created ürün oluşturuldu, $updated güncellendi, $categories kategori oluşturuldu" +
                 (if (skipped > 0) ", $skipped atlandı (adı yok veya yenilenme süresi olmayan bir abonelik)" else "") +
                 (if (failed > 0) ", $failed kaydedilemedi (günlüğe bakın)" else "") + ".",
-            "ru" to "Импорт завершён: создано товаров: $created, обновлено: $updated, создано категорий: $categories" +
+            "ru" to "Импорт завершен: создано товаров: $created, обновлено: $updated, создано категорий: $categories" +
                 (if (skipped > 0) ", пропущено: $skipped (нет названия или подписка без периода продления)" else "") +
                 (if (failed > 0) ", не удалось сохранить: $failed (см. журнал)" else "") + "."
         )

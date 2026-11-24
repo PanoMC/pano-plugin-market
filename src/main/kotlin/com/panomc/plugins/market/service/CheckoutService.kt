@@ -145,6 +145,7 @@ import com.panomc.plugins.market.error.ShippingUnavailable
 import com.panomc.plugins.market.error.SubscriptionMustBeAlone
 import com.panomc.plugins.market.error.CodeAttemptsLocked
 import com.panomc.plugins.market.error.TooManyRequests
+import com.panomc.plugins.market.i18n.GatewayTexts
 import com.panomc.plugins.market.i18n.ProviderTexts
 import com.panomc.plugins.market.provider.ProviderLookup
 import com.panomc.plugins.market.provider.SecretCipher
@@ -2775,7 +2776,7 @@ class CheckoutService(
             val variant = if (l.variantId != 0L) ctx.catalog.variants[l.variantId] else null
 
             OrderLine(
-                orderItemId = 0, productId = l.productId, name = product?.name ?: "Credits", sku = variant?.sku ?: product?.sku, variantName = variant?.name,
+                orderItemId = 0, productId = l.productId, name = product?.name ?: GatewayTexts.credits(ctx.locale), sku = variant?.sku ?: product?.sku, variantName = variant?.name,
                 quantity = l.quantity, unitPrice = Money(l.unitPrice, currency), total = Money(l.lineTotal, currency), vatPercent = l.vatPercent,
                 physical = product?.physical == true, categoryName = null,
                 providerMeta = l.productId?.let { ctx.providerMeta[it] }?.getJsonObject(candidate.id)
@@ -2795,7 +2796,7 @@ class CheckoutService(
 
         return CheckoutSnapshot(
             order = OrderSnapshot(
-                id = 0, publicId = "", description = "Order", currency = currency, lines = lines, subtotal = Money(b.subtotal, currency),
+                id = 0, publicId = "", description = GatewayTexts.orderWithoutNumber(ctx.locale), currency = currency, lines = lines, subtotal = Money(b.subtotal, currency),
                 discount = Money(b.snapshotDiscount, currency), shipping = Money(b.shippingTotal, currency), fee = Money(fee, currency),
                 vat = Money(b.vatTotal, currency), total = Money(total, currency), creditValue = Money(b.creditValue, currency),
                 requiresShipping = b.items.requiresShipping, recipientUsername = ctx.recipient?.username ?: ctx.payerName,

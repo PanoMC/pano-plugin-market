@@ -1,5 +1,6 @@
 package com.panomc.plugins.market.routes.panel.server
 
+import com.panomc.platform.config.ConfigManager
 import com.panomc.platform.db.DatabaseManager
 import com.panomc.platform.server.ServerManager
 import com.panomc.plugins.market.MarketPlugin
@@ -12,6 +13,7 @@ import com.panomc.plugins.market.db.dao.MarketRedemptionDao
 import com.panomc.plugins.market.db.dao.MarketServerStateDao
 import com.panomc.plugins.market.db.tx.Locks
 import com.panomc.plugins.market.db.tx.MarketDb
+import com.panomc.plugins.market.i18n.MarketI18n
 import com.panomc.plugins.market.routes.api.order.deliveryService
 import com.panomc.plugins.market.routes.panel.settings.currentConfig
 import com.panomc.plugins.market.runtime.beans
@@ -19,6 +21,9 @@ import com.panomc.plugins.market.service.McGameService
 import com.panomc.plugins.market.service.McSyncService
 import com.panomc.plugins.market.service.PlatformMcServerLink
 import io.vertx.sqlclient.Pool
+
+/** The localized default of the purchase announcement (`MarketConfig.DEFAULT_BROADCAST_TEMPLATE` in the site language). */
+internal const val BROADCAST_DEFAULT_KEY = "minecraft.broadcast-default"
 
 private object McSyncWiringHolder
 
@@ -44,6 +49,7 @@ private fun buildMcSyncService(plugin: MarketPlugin): McSyncService {
     val context = plugin.beans
     val databaseManager = { context.getBean(DatabaseManager::class.java) }
     val orderDao = context.getBean(MarketOrderDao::class.java)
+    val bundles by lazy { MarketI18n.loadBundles(MarketPlugin::class.java.classLoader) }
     val locks = Locks(orderDao, context.getBean(MarketOrderItemDao::class.java), context.getBean(MarketRedemptionDao::class.java), context.getBean(MarketCreditAccountDao::class.java))
 
     return McSyncService(
@@ -62,7 +68,12 @@ private fun buildMcSyncService(plugin: MarketPlugin): McSyncService {
             }
         },
         storeName = { currentConfig(plugin).storeName },
-        push = { mcPush(plugin) }
+        push = { mcPush(plugin) },
+        defaultTemplate = {
+            val site = runCatching { plugin.applicationContext.getBean(ConfigManager::class.java).config.locale }.getOrNull().orEmpty()
+
+            bundledText(bundles, site, BROADCAST_DEFAULT_KEY)
+        }
     )
 }
 

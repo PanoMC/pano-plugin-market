@@ -1,7 +1,9 @@
 {#if badge}
   <span class="market-sale-badge market-sale-badge__badge badge text-bg-danger">
     <span class="visually-hidden">{$_('theme.store.on-sale')}</span>
-    {#if badge.kind === 'percent'}-{badge.percent}%{:else}-{formatMoney(badge.amount, currency, {
+    {#if badge.kind === 'percent'}{$_('theme.store.sale-percent', {
+        values: { value: badge.percent },
+      })}{:else}-{formatMoney(badge.amount, currency, {
         removeCents: settings.removeCents,
       })}{/if}
   </span>

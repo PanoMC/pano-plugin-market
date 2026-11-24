@@ -15,11 +15,11 @@
               </span>
               {#if event.fromStatus || event.toStatus}
                 <span class="text-body-secondary">
-                  {event.fromStatus ?? '—'} → {event.toStatus ?? '—'}
+                  {statusText(event.fromStatus)} → {statusText(event.toStatus)}
                 </span>
               {/if}
               {#if event.message}
-                <div>{event.message}</div>
+                <div>{noteText(event.message)}</div>
               {/if}
               <div class="small text-body-secondary">
                 {isKnownActor(event.actorType)
@@ -41,9 +41,27 @@
 <script>
   import { CardHeader, Date as DateComponent, NoContent } from '@panomc/sdk/components/panel';
   import { _ } from '../../../i18n';
-  import { eventActorName, isKnownActor, isKnownEventType, timelineOf } from './model.js';
+  import { MAIL_KINDS } from '../../utils/settings.js';
+  import { isKnownStatus } from '../../utils/status.js';
+  import { eventActorName, isKnownActor, isKnownEventType, orderNote, timelineOf } from './model.js';
 
   let { detail } = $props();
 
   const events = $derived(timelineOf(detail?.events));
+
+  /** Translated order status, the raw value when unknown, '—' when empty. */
+  const statusText = (status) =>
+    status === null || status === undefined || status === ''
+      ? '—'
+      : isKnownStatus('order', status)
+        ? $_(`enums.order.${status}`)
+        : status;
+
+  /** A system message in the panel language (mail kind translated when known); an admin note as typed. */
+  const noteText = (message) => {
+    const note = orderNote(message);
+    if (!note) return message;
+    const kind = MAIL_KINDS.includes(note.kind) ? $_(`enums.mail-kind.${note.kind}`) : (note.kind ?? '');
+    return $_(`enums.order-note.${note.code}`, { values: { kind, reason: note.reason ?? '' } });
+  };
 </script>

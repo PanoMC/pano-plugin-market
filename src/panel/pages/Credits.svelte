@@ -27,7 +27,7 @@
           <h5 class="alert-heading mb-2">{$_('pages.credits.disabled-title')}</h5>
           <div>{$_('pages.credits.disabled-body')}</div>
           {#if can(user, 'SET')}
-            <a class="alert-link d-inline-block mt-2 text-capitalize" href="{base}/market/settings?section=credits">
+            <a class="alert-link d-inline-block mt-2" href="{base}/market/settings?section=credits">
               {$_('pages.credits.disabled-link')}
             </a>
           {/if}

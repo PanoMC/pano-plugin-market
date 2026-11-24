@@ -58,7 +58,7 @@
                     <td class="align-middle text-nowrap">
                       <DateComponent time={event.createdAt} />
                     </td>
-                    <td class="align-middle text-nowrap">{event.direction ?? '—'}</td>
+                    <td class="align-middle text-nowrap">{directionText(event.direction)}</td>
                     <td class="align-middle text-nowrap">{event.channel ?? '—'}</td>
                     <td class="align-middle text-nowrap">
                       <div
@@ -196,4 +196,10 @@
       if (el && window.bootstrap) window.bootstrap.Modal.getInstance(el)?.dispose();
     };
   });
+
+  /** IN / OUT as text; an unknown direction is shown as it is, a missing one as '—'. */
+  const directionText = (direction) =>
+    direction === 'IN' || direction === 'OUT'
+      ? $_(`enums.event-direction.${direction}`)
+      : (direction ?? '—');
 </script>

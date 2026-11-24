@@ -33,7 +33,7 @@
 
     <section aria-labelledby="market-ledger-title">
       <h2
-        class="market-credits-page__ledger-title h5 mb-3 text-capitalize"
+        class="market-credits-page__ledger-title h5 mb-3"
         id="market-ledger-title">
         {$_('theme.profile.credits.ledger-title')}
       </h2>

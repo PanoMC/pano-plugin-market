@@ -38,6 +38,7 @@ import com.panomc.plugins.market.provider.ResolvedProvider
 import com.panomc.plugins.market.provider.SecretCipher
 import com.panomc.plugins.market.provider.SettingsCodec
 import com.panomc.plugins.market.spi.common.LocalizedText
+import com.panomc.plugins.market.i18n.ProviderErrorTexts
 import com.panomc.plugins.market.spi.common.ProviderException
 import com.panomc.plugins.market.spi.common.ProviderSettings
 import com.panomc.plugins.market.spi.common.ReadonlyValue
@@ -413,7 +414,7 @@ class ShippingAdminService(
         } catch (e: ProviderException) {
             // The settings are stored; the carrier side failed: shown to the admin and kept on the row.
             recordError(id, e.code.name)
-            message = LocalizedText.of(e.adminMessage ?: e.message ?: e.code.name)
+            message = ProviderErrorTexts.of(e)
             success = false
         }
 

@@ -14,7 +14,7 @@
   <div class="card">
     <div class="card-body">
       <div class="mb-3">
-        <div class="mb-2 text-capitalize">{$_('settings.currencies.mode')}</div>
+        <div class="mb-2">{$_('settings.currencies.mode')}</div>
         <div class="list-group">
           {#each CURRENCY_MODES as mode (mode)}
             <label
@@ -48,7 +48,7 @@
 
       {#if showRates}
         <div class="mb-3">
-          <div class="mb-2 text-capitalize">{$_('settings.currencies.additional')}</div>
+          <div class="mb-2">{$_('settings.currencies.additional')}</div>
           <div class="d-flex flex-wrap gap-2 mb-2">
             {#each draft.additionalCurrencies as code (code)}
               <span class="badge text-bg-primary d-inline-flex align-items-center">
@@ -84,7 +84,7 @@
 
         <div class="mb-3">
           <div class="d-flex align-items-center justify-content-between mb-2">
-            <span class="text-capitalize">{$_('settings.currencies.rates')}</span>
+            <span>{$_('settings.currencies.rates')}</span>
             <button
               type="button"
               class="btn btn-sm btn-link text-decoration-none"
@@ -176,7 +176,7 @@
 
       {#if draft.currencyMode === 'MULTI'}
         <div class="mb-3">
-          <div class="mb-2 text-capitalize">{$_('settings.currencies.fallback')}</div>
+          <div class="mb-2">{$_('settings.currencies.fallback')}</div>
           {#each MULTI_FALLBACKS as fallback (fallback)}
             <div class="form-check">
               <input

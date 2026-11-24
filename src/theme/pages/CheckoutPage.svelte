@@ -146,7 +146,7 @@
 
       <button
         type="button"
-        class="market-checkout-page__redirecting btn btn-secondary btn-lg w-100 text-capitalize"
+        class="market-checkout-page__redirecting btn btn-secondary btn-lg w-100"
         disabled={place.disabled || rateLocked}
         onclick={placeOrder}>
         {#if pageState === 'SUBMITTING' || pageState === 'LEAVING'}

@@ -1,5 +1,5 @@
 {
-  "nav-store": "Market",
+  "nav-store": "Mağaza",
   "theme": {
     "store": {
       "title": "Mağaza",
@@ -14,7 +14,7 @@
       "featured": "Öne Çıkanlar",
       "featured-badge": "Öne Çıkan",
       "bestsellers": "Çok Satanlar",
-      "add-to-cart": "Sepete Ekle",
+      "add-to-cart": "Sepete ekle",
       "sold-out": "Tükendi",
       "in-stock": "Stokta var",
       "stock-count": "Stokta {count} adet",
@@ -55,7 +55,8 @@
       "load-error": "Mağaza yüklenemedi. Lütfen tekrar deneyin.",
       "grid-error": "Ürünler yüklenemedi.",
       "test-mode": "Mağaza test modunda. Gerçek ödeme alınmaz.",
-      "toggle-categories": "Kategorileri göster veya gizle"
+      "toggle-categories": "Kategorileri göster veya gizle",
+      "sale-percent": "-%{value}"
     },
     "errors": {
       "NETWORK": "İstek tamamlanamadı. Lütfen tekrar deneyin.",
@@ -84,7 +85,7 @@
       "RECURRING_NOT_SUPPORTED": "Abonelikler bu ödeme yöntemiyle desteklenmiyor.",
       "BUYER_BLOCKED": "Bu ürünü satın alamazsınız.",
       "SUBSCRIPTION_MUST_BE_ALONE": "Abonelik tek başına satın alınmalıdır.",
-      "SHIPPING_UNAVAILABLE": "Sepetindeki ürünler bu adrese gönderilemiyor.",
+      "SHIPPING_UNAVAILABLE": "Sepetinizdeki ürünler bu adrese gönderilemiyor.",
       "TOO_MANY_REQUESTS": "Çok fazla istek. {seconds} saniye sonra tekrar denenecek.",
       "AMOUNT_ABOVE_MAXIMUM": "Bu tutar, bu ödeme yönteminin üst sınırını aşıyor.",
       "AMOUNT_BELOW_MINIMUM": "Bu tutar, bu ödeme yönteminin alt sınırının altında.",
@@ -213,26 +214,26 @@
     },
     "checkout": {
       "title": "Ödeme",
-      "load-error": "Ödeme sayfası yüklenemedi. Lütfen tekrar dene.",
+      "load-error": "Ödeme sayfası yüklenemedi. Lütfen tekrar deneyin.",
       "buyer": "Alıcı",
       "minecraft-username": "Minecraft kullanıcı adı",
       "email": "E-posta",
-      "have-account": "Zaten hesabın var mı?",
+      "have-account": "Zaten hesabınız var mı?",
       "sign-in": "Giriş yap",
       "register": "Kayıt ol",
-      "login-required": "Satın almayı tamamlamak için giriş yap veya hesap oluştur.",
-      "login-return-hint": "Sepetin saklanıyor. Giriş yaptıktan sonra mağazaya geri dön.",
+      "login-required": "Satın almayı tamamlamak için giriş yapın veya hesap oluşturun.",
+      "login-return-hint": "Sepetiniz saklanıyor. Giriş yaptıktan sonra mağazaya geri dönün.",
       "gift": "Hediye",
       "gift-switch": "Bu bir hediye",
       "gift-recipient": "Alıcının Minecraft kullanıcı adı",
       "gift-message": "Mesaj (isteğe bağlı)",
-      "recipient-unknown": "Bu oyuncu sunucuya hiç girmemiş. Yazımı kontrol et.",
+      "recipient-unknown": "Bu oyuncu sunucuya hiç girmemiş. Yazımı kontrol edin.",
       "gift-self": "Hediye başka bir oyuncuya gitmeli.",
-      "username-invalid": "1 ile 32 arasında harf, rakam, nokta, alt çizgi veya yıldız kullan.",
-      "email-invalid": "Geçerli bir e-posta adresi gir.",
+      "username-invalid": "1 ile 32 arasında harf, rakam, nokta, alt çizgi veya yıldız kullanın.",
+      "email-invalid": "Geçerli bir e-posta adresi girin.",
       "field-required": "Bu alan zorunlu.",
       "field-invalid": "Bu değer geçerli değil.",
-      "phone-invalid": "Telefonu ülke koduyla gir, örneğin +905551234567.",
+      "phone-invalid": "Telefonu ülke koduyla girin, örneğin +905551234567.",
       "identity-invalid": "Bu kimlik numarası geçerli değil.",
       "shipping": "Teslimat",
       "saved-addresses": "Kayıtlı adresler",
@@ -240,7 +241,7 @@
       "address-new": "Yeni adres kullan",
       "save-address": "Bu adresi kaydet",
       "shipping-method": "Kargo yöntemi",
-      "shipping-method-required": "Bir kargo yöntemi seç.",
+      "shipping-method-required": "Bir kargo yöntemi seçin.",
       "shipping-free": "Ücretsiz",
       "shipping-days": "{minDays}–{maxDays} gün",
       "shipping-days-single": "{days, plural, one {# gün} other {# gün}}",
@@ -258,7 +259,7 @@
         "phone": "Telefon",
         "phone-hint": "Ülke koduyla, örneğin +905551234567.",
         "country": "Ülke",
-        "country-choose": "Ülke seç",
+        "country-choose": "Ülke seçin",
         "state": "Eyalet / bölge",
         "city": "Şehir",
         "district": "İlçe",
@@ -277,7 +278,7 @@
       "credits-balance": "Bakiye:",
       "credits-top-up": "Yükle",
       "credits-pay": "{name} ile öde",
-      "credits-use": "Siparişin bir kısmı için {name} kullan",
+      "credits-use": "Siparişinizin bir kısmı için {name} kullanın",
       "credits-amount": "Kullanılacak {name} miktarı",
       "credits-use-max": "En fazlasını kullan",
       "credits-applied": "Siparişe uygulanan",
@@ -313,7 +314,8 @@
         "total": "Toplam",
         "credits-used": "Kullanılan kredi",
         "to-pay": "Ödenecek"
-      }
+      },
+      "gift-not-allowed-items": "{count, plural, one {Bu ürün hediye olarak gönderilemez: {names}} other {Bu ürünler hediye olarak gönderilemez: {names}}}"
     },
     "order": {
       "title": "Sipariş #{number}",
@@ -329,7 +331,7 @@
       "sign-in": "Giriş yap",
       "poll-offline": "Bağlantı koptu. Tekrar çevrimiçi olduğunuzda durum güncellenecek.",
       "refresh-status": "Durumu yenile",
-      "not-found": "Bu siparişi bulamadık. Siparişi verdiğiniz hesapla giriş yapın ya da sipariş e-postanızdaki linki açın.",
+      "not-found": "Bu siparişi bulamadık. Siparişi verdiğiniz hesapla giriş yapın ya da sipariş e-postanızdaki bağlantıyı açın.",
       "items": "Ürünler",
       "shipments": "Gönderiler",
       "shipping-address": "Teslimat adresi",
@@ -412,14 +414,15 @@
         "discounts": "İndirimler",
         "upgrade": "Yükseltme indirimi",
         "coupon": "Kupon",
-        "creator": "Yaratıcı kodu",
+        "creator": "İçerik üretici kodu",
         "shipping": "Kargo",
         "fee": "Ödeme komisyonu",
         "total": "Toplam",
         "credits-used": "Kullanılan kredi",
         "to-pay": "Ödeme yöntemiyle ödenen",
         "refunded": "İade edilen"
-      }
+      },
+      "invoice-filename": "fatura-{number}"
     },
     "status": {
       "order": {
@@ -430,11 +433,11 @@
         "REFUNDED": "İade edildi",
         "CANCELLED": "İptal edildi",
         "EXPIRED": "Süresi doldu",
-        "CHARGEBACK": "Ödeme itirazı",
+        "CHARGEBACK": "Ters ibraz",
         "FAILED": "Başarısız"
       },
       "subscription": {
-        "ACTIVE": "Aktif",
+        "ACTIVE": "Etkin",
         "PAST_DUE": "Ödeme gecikti",
         "PAUSED": "Duraklatıldı",
         "PENDING": "Beklemede",
@@ -456,16 +459,16 @@
       },
       "purchases": {
         "title": "Satın Alımlar",
-        "active-title": "Aktif ürünler",
+        "active-title": "Etkin ürünler",
         "permanent": "Süresiz",
         "valid-until": "{date} tarihine kadar geçerli",
         "subscription-link": "Abonelik",
         "redeem-title": "Hediye kodu kullan",
         "redeem-label": "Hediye kodu",
-        "redeem-placeholder": "Hediye kodunu gir",
+        "redeem-placeholder": "Hediye kodunu girin",
         "redeem-submit": "Kullan",
-        "gift-needs-options": "Bu hediye için bir sunucu veya seçenek belirlenmesi gerekiyor, bu şu an burada mümkün değil. Lütfen mağazayla iletişime geç.",
-        "gift-locked": "{seconds} saniye sonra tekrar deneyebilirsin.",
+        "gift-needs-options": "Bu hediye için bir sunucu veya seçenek belirlenmesi gerekiyor, bu şu an burada mümkün değil. Lütfen mağazayla iletişime geçin.",
+        "gift-locked": "{seconds} saniye sonra tekrar deneyebilirsiniz.",
         "orders-title": "Siparişler",
         "filter-label": "Durum",
         "filter-all": "Tümü",
@@ -477,15 +480,15 @@
         "items-more": "+{count}",
         "gift-received": "Alınan hediye",
         "gift-for": "{username} için hediye",
-        "empty": "Henüz siparişin yok."
+        "empty": "Henüz siparişiniz yok."
       },
       "credits": {
         "title": "Krediler",
-        "balance": "Bakiyen",
+        "balance": "Bakiyeniz",
         "ledger-title": "Kredi geçmişi",
         "topup-title": "Kredi yükle",
         "packs-title": "Kredi paketleri",
-        "topup-free-title": "Bir miktar seç",
+        "topup-free-title": "Bir miktar seçin",
         "topup-amount-label": "Miktar ({creditName})",
         "topup-submit": "Yükle",
         "topup-cost": "Tutar: {cost}",
@@ -526,7 +529,7 @@
         "keep": "Aboneliği sürdür",
         "cancel": "Aboneliği iptal et",
         "cancel-title": "Bu abonelik iptal edilsin mi?",
-        "cancel-confirm": "Aboneliğiniz {date} tarihine kadar aktif kalır ve sonrasında yenilenmez.",
+        "cancel-confirm": "Aboneliğiniz {date} tarihine kadar etkin kalır ve sonrasında yenilenmez.",
         "cancel-yes": "Aboneliği iptal et",
         "cancel-keep": "Vazgeç",
         "empty": "Hiç aboneliğiniz yok."
@@ -565,8 +568,8 @@
           "CANCELLED": "İptal edildi"
         },
         "code-status": {
-          "ACTIVE": "Aktif",
-          "INACTIVE": "Pasif"
+          "ACTIVE": "Etkin",
+          "INACTIVE": "Devre dışı"
         },
         "method": {
           "CREDIT": "Mağaza kredisi",
@@ -596,6 +599,10 @@
         "products-total": "Ürünler"
       },
       "rank": "{rank}. sıra"
-    }
+    },
+    "countdown": {
+      "with-days": "{days}g {clock}"
+    },
+    "percent": "%{value}"
   }
 }

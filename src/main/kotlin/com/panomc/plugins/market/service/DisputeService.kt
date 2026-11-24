@@ -619,7 +619,8 @@ class DisputeService(
 
         suspend fun put(type: BlockType, core: com.panomc.plugins.market.core.abuse.BlockType, raw: String?) {
             val value = BlockValue.normalize(core, raw) ?: return
-            val reason = "Chargeback on order #${order.id}"
+            // no stored text: the panel shows "Chargeback on order #<orderId>" in its own language from `source` + `orderId`
+            val reason: String? = null
             val id = blocks.add(
                 MarketBlock(type = type, value = value, reason = reason, source = BlockSource.CHARGEBACK, orderId = order.id, createdBy = null, expiresAt = null, createdAt = now, updatedAt = now),
                 conn

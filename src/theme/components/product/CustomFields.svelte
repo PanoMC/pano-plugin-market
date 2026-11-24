@@ -16,7 +16,7 @@
           aria-describedby={described}
           onchange={(event) => onchange(field.fieldKey, event.currentTarget.checked)}
           onblur={() => onblur(field.fieldKey)} />
-        <label class="form-check-label text-capitalize" for={id}>
+        <label class="form-check-label" for={id}>
           {field.label}{#if field.required}<span class="text-danger" aria-hidden="true">
               *</span
             >{/if}
@@ -73,7 +73,7 @@
                 oninput={(event) => onchange(field.fieldKey, event.currentTarget.value)}
                 onblur={() => onblur(field.fieldKey)} />
             {/if}
-            <label class="market-custom-fields__label text-capitalize" for={id}>
+            <label class="market-custom-fields__label" for={id}>
               {field.label}{#if field.required}<span class="text-danger" aria-hidden="true">
                   *</span
                 >{/if}

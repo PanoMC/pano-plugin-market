@@ -4,6 +4,7 @@ import {
   formatCredits,
   formatDuration,
   formatMoney,
+  formatNumber,
   formatPercent,
   parseInteger,
   parseMoney,
@@ -64,6 +65,11 @@ describe('format helpers', () => {
     expect(formatCredits(3, '', 'en-US')).toBe('3');
     expect(formatPercent(20, 'en-US')).toBe('20%');
     expect(formatPercent(12.345, 'en-US')).toBe('12.35%');
+    expect(formatPercent(20, 'tr')).toBe('%20');
+    expect(formatPercent(5, 'en-US', { signed: true })).toBe('+5%');
+    expect(formatPercent(0, 'en-US', { signed: true })).toBe('0%');
+    expect(formatNumber(12345, 'en-US')).toBe('12,345');
+    expect(formatNumber(12345, 'tr')).toBe('12.345');
   });
 
   test('formatDuration asks the i18n function for the ICU plural', () => {

@@ -136,7 +136,7 @@
                     {#each lines as row, index (row.id)}
                       {@const q = matched[index]}
                       {@const codes = lineErrorCodes(q, serverErrors[index])}
-                      {@const entries = Object.entries(canonicalFieldValues(row.fieldValues))}
+                      {@const entries = lineFieldEntries(row)}
                       <tr>
                         <td class="align-middle">
                           <button
@@ -157,7 +157,12 @@
                           {/if}
                           {#if entries.length > 0}
                             <div class="text-body-secondary">
-                              {entries.map(([k, v]) => `${k}: ${v}`).join(', ')}
+                              {entries
+                                .map(
+                                  (e) =>
+                                    `${e.label}: ${e.flag === null ? e.value : $_(e.flag ? 'common.yes' : 'common.no')}`,
+                                )
+                                .join(', ')}
                             </div>
                           {/if}
                           {#each codes as code (code)}
@@ -379,7 +384,6 @@
     addLine,
     buildBody,
     canSendMail,
-    canonicalFieldValues,
     createQuoteRunner,
     detailPath,
     effectiveRunDeliveries,
@@ -387,6 +391,7 @@
     initialForm,
     lineErrorCodes,
     lineErrorKey,
+    lineFieldEntries,
     matchQuoteLines,
     quantityError,
     removeLine,
@@ -483,7 +488,12 @@
   });
 
   function addProduct(line, meta) {
-    const withMeta = { ...line, name: meta.name, variantName: meta.variantName };
+    const withMeta = {
+      ...line,
+      name: meta.name,
+      variantName: meta.variantName,
+      fieldMeta: meta.fields ?? {},
+    };
     const merged = addLine(
       lines.map((l) => $state.snapshot(l)),
       withMeta,

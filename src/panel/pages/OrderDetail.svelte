@@ -63,7 +63,7 @@
                 {#if item.tab !== tab}
                   <button
                     type="button"
-                    class="btn btn-link alert-link p-0 align-baseline ms-2 text-capitalize"
+                    class="btn btn-link alert-link p-0 align-baseline ms-2"
                     onclick={() => selectTab(item.tab)}>
                     {$_('pages.order-detail.attention.view')}
                   </button>

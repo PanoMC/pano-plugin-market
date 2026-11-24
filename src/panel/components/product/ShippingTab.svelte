@@ -6,7 +6,7 @@
         <h5 class="alert-heading mb-2">{$_('pages.create-product.shipping.disabled-title')}</h5>
         <div>{$_('pages.create-product.shipping.disabled-body')}</div>
         {#if can(user, 'SET')}
-          <a class="alert-link d-inline-block mt-2 text-capitalize" href="{base}/market/settings?section=shipping-methods">
+          <a class="alert-link d-inline-block mt-2" href="{base}/market/settings?section=shipping-methods">
             {$_('pages.create-product.shipping.disabled-link')}
           </a>
         {/if}

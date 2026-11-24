@@ -306,8 +306,8 @@
                     ><div
                       class="text-truncate"
                       style="max-width: 280px;"
-                      title={block.reason || '—'}>
-                      {block.reason || '—'}
+                      title={blockReason(block, $_)}>
+                      {blockReason(block, $_)}
                     </div></td>
                   <td class="align-middle text-nowrap">
                     {block.expiresAt ? dateText(block.expiresAt) : $_('common.never')}
@@ -329,6 +329,7 @@
   import { CardHeader, Date as DateComponent, NoContent } from '@panomc/sdk/components/panel';
   import { base, page } from '@panomc/sdk/svelte';
   import { _ } from '../../../i18n';
+  import { blockReason } from '../../utils/blocks.js';
   import LoadError from '../LoadError.svelte';
   import StatusBadge from '../StatusBadge.svelte';
   import CreditAdjustModal from '../modals/CreditAdjustModal.svelte';

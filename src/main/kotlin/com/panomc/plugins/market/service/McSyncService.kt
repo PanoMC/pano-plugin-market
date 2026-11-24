@@ -188,7 +188,9 @@ class McSyncService(
     private val storeName: () -> String = { "" },
     val broadcasts: McBroadcastOutbox = McBroadcastOutbox(clock),
     /** `MARKET_WAKE`: a queued announcement goes out at once, a paid order refreshes the placeholders (last buyer, top supporter, goals). */
-    private val push: (() -> McPush?)? = null
+    private val push: (() -> McPush?)? = null,
+    /** The announcement default in the site language; used while the template is still the English default. `null` = keep it. */
+    private val defaultTemplate: () -> String? = { null }
 ) {
     private class Session(val version: String, val accepted: Boolean, val lastSyncAt: Long)
 
@@ -678,8 +680,11 @@ class McSyncService(
         }
 
         // the per-server `mcBroadcastTemplate` override wins over the panel default (19 section 9), so the text is rendered for each server
+        val localizedDefault = if (targets.any { it.second == MarketConfig.DEFAULT_BROADCAST_TEMPLATE }) defaultTemplate()?.takeIf { it.isNotBlank() } else null
+
         for ((id, serverTemplate) in targets) {
-            val text = renderAnnouncement(serverTemplate, player, products, quantity, store)
+            val chosen = if (serverTemplate == MarketConfig.DEFAULT_BROADCAST_TEMPLATE) localizedDefault ?: serverTemplate else serverTemplate
+            val text = renderAnnouncement(chosen, player, products, quantity, store)
 
             if (text.isBlank()) continue
 

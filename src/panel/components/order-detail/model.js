@@ -223,6 +223,50 @@ export function timelineOf(events) {
 export const isKnownEventType = (type) => ORDER_EVENT_TYPES.includes(type);
 export const isKnownActor = (type) => ACTOR_TYPES.includes(type);
 
+/** Timeline messages the backend writes itself (codes and fixed sentences) → `enums.order-note.<code>`. */
+const ORDER_NOTES = {
+  MARKED_PAID: 'MARKED_PAID',
+  FORCE_OVERRIDE: 'FORCE_OVERRIDE',
+  TENDER_REWRITTEN: 'TENDER_REWRITTEN',
+  DUPLICATE_PAYMENT: 'DUPLICATE_PAYMENT',
+  ACCOUNT_DELETED: 'ACCOUNT_DELETED',
+  DISPUTE_EVENT_AMBIGUOUS: 'DISPUTE_EVENT_AMBIGUOUS',
+  REFUNDS_CANCELLED_BY_CHARGEBACK: 'REFUNDS_CANCELLED_BY_CHARGEBACK',
+  UPGRADE_CASCADE_REVOKED: 'UPGRADE_CASCADE_REVOKED',
+  CHARGEBACK_ACTIONS_HELD: 'CHARGEBACK_ACTIONS_HELD',
+  'credit recipient no longer exists': 'CREDIT_RECIPIENT_GONE',
+  'subscription closed, refunded': 'LATE_REFUND',
+  'subscription closed': 'SUBSCRIPTION_CLOSED',
+  'blocked buyer': 'BLOCKED_BUYER',
+  'credit hold mismatch': 'CREDIT_HOLD_MISMATCH',
+  'recipient limit': 'RECIPIENT_LIMIT',
+  'a gateway subscription of a duplicate payment could not be cancelled, cancel it at the gateway':
+    'DUPLICATE_SUB_CANCEL_FAILED',
+  'provider returned no recurring data; subscription renews manually': 'DOWNGRADE_MANUAL',
+  'provider cannot charge a stored method; subscription renews manually': 'UNSUPPORTED_MANUAL',
+};
+
+export const ORDER_NOTE_CODES = [...new Set(Object.values(ORDER_NOTES))];
+export const ORDER_NOTE_PREFIXES = ['MAIL_NOT_QUEUED', 'INVOICE_NOT_ISSUED', 'CREDIT_NOTE_NOT_ISSUED'];
+
+/**
+ * A known system message as `{ code, kind, reason }` (`kind` only for `MAIL_NOT_QUEUED:<KIND>:<reason>`,
+ * `reason` for the prefixed codes); null for any other text (an admin note), which the view prints as is.
+ */
+export function orderNote(message) {
+  const text = String(message ?? '').trim();
+  if (!text) return null;
+  if (ORDER_NOTES[text]) return { code: ORDER_NOTES[text], kind: null, reason: null };
+  const parts = text.split(':');
+  if (parts[0] === 'MAIL_NOT_QUEUED' && parts.length === 3) {
+    return { code: parts[0], kind: parts[1], reason: parts[2] };
+  }
+  if ((parts[0] === 'INVOICE_NOT_ISSUED' || parts[0] === 'CREDIT_NOTE_NOT_ISSUED') && parts.length === 2) {
+    return { code: parts[0], kind: null, reason: parts[1] };
+  }
+  return null;
+}
+
 const ADDRESS_ORDER = [
   'company',
   'line1',
@@ -285,7 +329,27 @@ export const eventActorName = (event) => (event?.actorUsername ? String(event.ac
 
 /** Latest-first dates for the table cells. */
 export const paymentDate = (p) => p?.paidAt ?? p?.createdAt ?? null;
-export const paymentMessage = (p) => p?.adminMessage ?? p?.failureMessage ?? '';
+/** Locale keys of the fixed failure texts the server stores (`payment.failed`, `payment.start-failed`). */
+const PAYMENT_FAILURE_KEYS = {
+  'payment.failed': 'pages.order-detail.payment-failure.failed',
+  'payment.start-failed': 'pages.order-detail.payment-failure.start-failed',
+};
+/** Notes the market itself adds to `adminMessage` (joined with `; `) → locale keys; gateway texts stay as sent. */
+const PAYMENT_NOTE_KEYS = {
+  'environment mismatch': 'pages.order-detail.payment-notes.environment-mismatch',
+};
+/** Gateway / admin text first, else the failure text; a fixed server text goes through `t` (a translator). */
+export const paymentMessage = (p, t = (key) => key) => {
+  if (p?.adminMessage) {
+    return String(p.adminMessage)
+      .split('; ')
+      .map((part) => (PAYMENT_NOTE_KEYS[part] ? t(PAYMENT_NOTE_KEYS[part]) : part))
+      .join('; ');
+  }
+  const failure = p?.failureMessage;
+  if (!failure) return '';
+  return PAYMENT_FAILURE_KEYS[failure] ? t(PAYMENT_FAILURE_KEYS[failure]) : failure;
+};
 
 // ---- item details -----------------------------------------------------------------------------
 
@@ -300,7 +364,31 @@ export function fieldLabel(item, key) {
   return present(label) ? String(label) : key;
 }
 
-/** `[{ key, label, value }]` of an item's custom field values; empty values are skipped, values are text. */
+/** Type of a custom field from the snapshot (`CHECKBOX`, ...), null when the snapshot does not carry it. */
+function fieldType(item, key) {
+  const fields = Array.isArray(item?.snapshot?.fields) ? item.snapshot.fields : [];
+  const hit = fields.find((f) => f?.fieldKey === key || f?.key === key);
+  return present(hit?.type) ? String(hit.type) : null;
+}
+
+/**
+ * true / false for a checkbox value: a boolean, or `'true'` / `'false'` of a CHECKBOX / SWITCH field, or of any
+ * field when the snapshot carries no field types at all (older orders); else null.
+ */
+function fieldFlag(item, key, value) {
+  if (typeof value === 'boolean') return value;
+  const type = fieldType(item, key);
+  const untyped = !Array.isArray(item?.snapshot?.fields);
+  if ((untyped || type === 'CHECKBOX' || type === 'SWITCH') && (value === 'true' || value === 'false')) {
+    return value === 'true';
+  }
+  return null;
+}
+
+/**
+ * `[{ key, label, value, flag }]` of an item's custom field values; empty values are skipped, values
+ * are text. `flag` is true / false for a checkbox value (the view prints Yes / No), else null.
+ */
 export function fieldEntries(item) {
   const values = item?.fieldValues;
   if (!values || typeof values !== 'object') return [];
@@ -310,6 +398,7 @@ export function fieldEntries(item) {
       key,
       label: fieldLabel(item, key),
       value: typeof v === 'object' ? asText(v) : String(v),
+      flag: fieldFlag(item, key, v),
     }));
 }
 

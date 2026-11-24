@@ -20,6 +20,15 @@ function formatCurrency(locale, value, currency, digits) {
   }
 }
 
+/** A number with the locale's separators and exactly [digits] decimals (the money fallback without a usable currency). */
+function plainNumber(locale, value, digits) {
+  try {
+    return new Intl.NumberFormat(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
+  } catch {
+    return value.toFixed(digits);
+  }
+}
+
 function formatTime(locale, ms, options) {
   const n = Number(ms);
   if (!Number.isFinite(n) || n <= 0) return '';
@@ -46,7 +55,7 @@ export default defineController({
         if (text !== null) return text;
       }
 
-      return `${settings.currencySymbol || ''}${value.toFixed(digits)}`;
+      return `${settings.currencySymbol || ''}${plainNumber(locale(), value, digits)}`;
     }
 
     /** Same path as formatPrice with an explicit currency (orders and quotes carry their own). */
@@ -59,7 +68,7 @@ export default defineController({
         if (text !== null) return text;
       }
 
-      return `${value.toFixed(digits)} ${currency || ''}`.trim();
+      return `${plainNumber(locale(), value, digits)} ${currency || ''}`.trim();
     }
 
     /** "<number with at most 2 decimals> <creditName>". */
@@ -74,6 +83,26 @@ export default defineController({
       }
 
       return `${text} ${creditName}`.trim();
+    }
+
+    /** A plain count with the site language's grouping ("12.500" in tr, "12 500" in ru). */
+    function formatNumber(amount) {
+      try {
+        return new Intl.NumberFormat(locale()).format(toNumber(amount));
+      } catch (e) {
+        return String(toNumber(amount));
+      }
+    }
+
+    /** Names joined as a list in the site language ("A, B and C"); a plain ", " join without Intl.ListFormat. */
+    function formatList(items) {
+      const list = (items ?? []).map(String);
+
+      try {
+        return new Intl.ListFormat(locale(), { style: 'long', type: 'conjunction' }).format(list);
+      } catch (e) {
+        return list.join(', ');
+      }
     }
 
     const formatDate = (ms) => formatTime(locale(), ms, { dateStyle: 'medium' });
@@ -101,6 +130,8 @@ export default defineController({
       formatPrice,
       formatMoney,
       formatCredits,
+      formatNumber,
+      formatList,
       formatDate,
       formatDateTime,
       formatPeriod,

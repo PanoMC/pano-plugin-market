@@ -1,7 +1,7 @@
 <div class={['market-credits-section', !embedded && 'card']}>
   <div class="market-credits-section__body card-body p-0">
     <div class="market-credits-section__header p-3">
-      <h2 class="market-credits-section__title text-capitalize h5 mb-0">
+      <h2 class="market-credits-section__title h5 mb-0">
         {$_('theme.checkout.credits', { values: { name: credits.name } })}
       </h2>
     </div>

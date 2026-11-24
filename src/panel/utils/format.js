@@ -3,8 +3,17 @@
 
 const DASH = '—';
 
-function fallbackMoney(amount, currency) {
-  return `${Number(amount).toFixed(2)} ${currency ?? ''}`.trim();
+/** No currency, or a code Intl rejects: the number in the locale's separators, then the code. */
+function fallbackMoney(amount, currency, locale) {
+  let text;
+  try {
+    text = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
+      Number(amount),
+    );
+  } catch {
+    text = Number(amount).toFixed(2);
+  }
+  return `${text} ${currency ?? ''}`.trim();
 }
 
 /** `removeCents` is deliberately not applied in the panel: admins see exact amounts. */
@@ -12,11 +21,11 @@ export function formatMoney(amount, currency, locale) {
   if (amount === null || amount === undefined) return DASH;
   const value = Number(amount);
   if (!Number.isFinite(value)) return DASH;
-  if (!currency) return fallbackMoney(value, '');
+  if (!currency) return fallbackMoney(value, '', locale);
   try {
     return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(value);
   } catch {
-    return fallbackMoney(value, currency);
+    return fallbackMoney(value, currency, locale);
   }
 }
 
@@ -26,10 +35,27 @@ export function formatCredits(amount, creditName, locale) {
   return creditName ? `${text} ${creditName}` : text;
 }
 
-/** The API percent is a plain number: 20 = 20 %. */
-export function formatPercent(value, locale) {
+/**
+ * The API percent is a plain number: 20 = 20 %. The locale places the sign (`20%`, `%20`);
+ * `signed` adds `+` to positive values (trends).
+ */
+export function formatPercent(value, locale, { signed = false } = {}) {
   if (value === null || value === undefined) return DASH;
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(value)) + '%';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return DASH;
+  return new Intl.NumberFormat(locale, {
+    style: 'percent',
+    maximumFractionDigits: 2,
+    ...(signed ? { signDisplay: 'exceptZero' } : {}),
+  }).format(n / 100);
+}
+
+/** A plain count with locale grouping (`12,345`, `12.345`, `12 345`). */
+export function formatNumber(value, locale) {
+  if (value === null || value === undefined) return DASH;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return DASH;
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(n);
 }
 
 /**

@@ -1,6 +1,6 @@
 {#if render}
   <div class="market-stats-widget card">
-    <div class="market-stats-widget__header card-header text-capitalize">
+    <div class="market-stats-widget__header card-header">
       {$_('theme.widgets.stats.title')}
     </div>
     <div class="market-stats-widget__body card-body">
@@ -42,7 +42,9 @@
 <script>
   import { shouldRender, statsRows, unwrapWidgets, withSidebar } from './widgetsModel.js';
 
-  const { _ } = plugin('market');
+  const market = plugin('market');
+  const { _ } = market;
+  const { formatNumber } = market.require('format').actions;
 
   /** data: the widgets payload (`stats`), plus `sidebars` / `sidebarId` in a host sidebar. */
   let { data = {}, sidebarId = '' } = $props();
@@ -50,12 +52,4 @@
   const payload = $derived(unwrapWidgets(data));
   const render = $derived(shouldRender(withSidebar(payload, sidebarId), 'stats'));
   const rows = $derived(statsRows(payload.stats));
-
-  const formatNumber = (value) => {
-    try {
-      return new Intl.NumberFormat().format(value);
-    } catch (e) {
-      return String(value);
-    }
-  };
 </script>

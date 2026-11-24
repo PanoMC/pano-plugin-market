@@ -14,8 +14,9 @@ const pad = (n) => String(n).padStart(2, '0');
 /**
  * Milliseconds as "2d 03:04:05"; the day part is omitted when it is 0 ("03:04:05").
  * A negative, zero or non-numeric value renders "00:00:00". Seconds are rounded down.
+ * `$_` (the plugin translator, optional) renders the day part through theme.countdown.with-days.
  */
-export function format(ms) {
+export function format(ms, $_) {
   const total = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
   const days = Math.floor(total / 86400);
   const hours = Math.floor((total % 86400) / 3600);
@@ -23,7 +24,9 @@ export function format(ms) {
   const seconds = total % 60;
   const clock = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 
-  return days > 0 ? `${days}d ${clock}` : clock;
+  if (days <= 0) return clock;
+
+  return $_ ? $_('theme.countdown.with-days', { values: { days, clock } }) : `${days}d ${clock}`;
 }
 
 /** Milliseconds left until `endsAt` (epoch ms); 0 when unknown or already over. */

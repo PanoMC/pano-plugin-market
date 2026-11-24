@@ -961,7 +961,7 @@ class DisputeServiceIT : MarketDaoITBase() {
         assertEquals(order, revived.orderId)
         assertNull(revived.expiresAt, "it blocks now")
         assertNull(revived.createdBy)
-        assertEquals("Chargeback on order #$order", revived.reason)
+        assertNull(revived.reason, "the panel words a chargeback block itself")
         assertEquals(BlockSource.MANUAL, w.blocks.getById(live, pool)!!.source, "an unexpired row is left untouched")
         assertNull(w.blocks.getById(live, pool)!!.orderId)
         assertEquals(liveUntil, w.blocks.getById(live, pool)!!.expiresAt)

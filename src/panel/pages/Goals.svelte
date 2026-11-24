@@ -89,7 +89,9 @@
                       aria-valuenow={percent}
                       aria-valuemin="0"
                       aria-valuemax="100">
-                      <div class="progress-bar" style="width: {percent}%">{percent}%</div>
+                      <div class="progress-bar" style="width: {percent}%">
+                        {fmt.percent(percent)}
+                      </div>
                     </div>
                   </td>
                   <td class="text-nowrap">{$_(`enums.goal-period.${goal.period}`)}</td>
@@ -168,7 +170,7 @@
       const currency = goal.currency ?? ctx?.currency;
       return `${fmt.money(goal.progress ?? 0, currency)} / ${fmt.money(goal.target, currency)}`;
     }
-    return `${goal.progress ?? 0} / ${goal.target}`;
+    return `${fmt.number(goal.progress ?? 0)} / ${fmt.number(goal.target)}`;
   }
 
   function deleteGoal(goal) {
